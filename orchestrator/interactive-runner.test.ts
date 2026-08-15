@@ -98,7 +98,7 @@ import {
   lstatSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 // RED-NOW: this module does not exist yet — see the report for the exact
 // failure this import produces.
@@ -1713,4 +1713,111 @@ test('R4-19-F2 (positive control): the real kb-cleanup descriptor\'s drafting ph
 
   assert.equal(result.phase, 'awaiting-approval', 'the real kb-cleanup turnSpec\'s drafting row must declare next: awaiting-approval');
   assert.equal(readSessionStatus<KbCleanupTestStatus>(fx.sessionDir)?.phase, 'awaiting-approval', 'status.json on disk must reflect the advanced phase');
+});
+
+
+// ===========================================================================
+// bead forge-eip (W6-CR-3) — the writeRoots fence, driven end to end through
+// runInteractiveTurn for the REAL "community-refresh" descriptor (REPO_ROOT).
+// Proves the WIRING (resolveWriteRoots deriving sessionDir/staging from the
+// real turnSpec row, runAgentTurn installing the fence from it) — the pure
+// canUseTool logic itself is pinned independently in
+// interactive-session.test.ts. This is the "integration-shaped" test: the
+// session's own status.json carries an absolute `registryPath` OUTSIDE its
+// staging/ write root (the exact real shape `/api/studio/community-refresh/
+// start` seeds, cli/ui-bridge.ts) — a Write to it must be refused even
+// though the prompt hands the agent that path directly.
+// ===========================================================================
+
+type RealCommunityRefreshFixture = {
+  root: string;
+  forgeRoot: string;
+  projectRoot: string;
+  logsRoot: string;
+  sessionId: string;
+  sessionDir: string;
+  descriptor: SessionKindDescriptor;
+  registryPath: string;
+};
+
+/** Loads the REAL "community-refresh" descriptor from REPO_ROOT — mirrors
+ *  `setupRealAuthoring`/`setupRealKbCleanup` exactly (never a hardcoded
+ *  kindDir literal, so a drift in the real yaml surfaces as a containment
+ *  failure here, not a silently-mismatched fixture path). Seeds a
+ *  `registryPath` outside the session dir entirely, matching the real
+ *  `/api/studio/community-refresh/start` route's own status.json shape. */
+function setupRealCommunityRefresh(): RealCommunityRefreshFixture {
+  const descriptor = loadSessionKinds(REPO_ROOT).find((d) => d.id === 'community-refresh');
+  if (!descriptor) throw new Error('test fixture bug: REPO_ROOT/studio/session-kinds.yaml has no "community-refresh" descriptor at all');
+  if (!descriptor.turnSpec) {
+    throw new Error('REPO_ROOT/studio/session-kinds.yaml "community-refresh" row has no turnSpec');
+  }
+  const root = mkdtempSync(join(tmpdir(), 'interactive-runner-real-community-refresh-'));
+  const forgeRoot = join(root, 'forge');
+  mkdirSync(forgeRoot, { recursive: true });
+  const projectRoot = join(root, 'project');
+  mkdirSync(projectRoot, { recursive: true });
+  const logsRoot = join(root, '_logs');
+  const sessionId = '2026-08-15T00-00-00';
+  const sessionDir = join(projectRoot, descriptor.turnSpec.kindDir, sessionId);
+  // The sensitive absolute path — OUTSIDE sessionDir entirely, matching the
+  // real registry.yaml's own forge-root-anchored location.
+  const registryPath = join(forgeRoot, 'studio', 'community', 'registry.yaml');
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(registryPath, 'meta: { schemaVersion: 1, lastRefresh: null }\nitems: []\n');
+  return { root, forgeRoot, projectRoot, logsRoot, sessionId, sessionDir, descriptor, registryPath };
+}
+
+test('bead forge-eip: the REAL community-refresh turn installs a canUseTool that denies a Write to its own registryPath (the sensitive absolute path handed to the agent via status.json), while still allowing the legitimate staging/ write', async () => {
+  const fx = setupRealCommunityRefresh();
+  mkdirSync(fx.sessionDir, { recursive: true });
+  writeSessionStatus(fx.sessionDir, {
+    session_id: fx.sessionId,
+    phase: 'gathering',
+    updated_at: new Date().toISOString(),
+    package_id: 'community-registry',
+    registryPath: fx.registryPath,
+    hubsPath: join(fx.forgeRoot, 'studio', 'community', 'hubs.yaml'),
+  });
+
+  let capturedOptions: Record<string, unknown> | undefined;
+  const queryFn: QueryFn = ({ options }) => {
+    capturedOptions = options;
+    async function* gen(): AsyncGenerator<unknown> {
+      // The turn must still produce SOMETHING under staging/ (the P1
+      // declared-data-fails-open check) so runInteractiveTurn completes
+      // normally and this test can inspect the REAL options it built.
+      mkdirSync(join(fx.sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(fx.sessionDir, 'staging', 'registry.yaml'), 'meta: { schemaVersion: 1, lastRefresh: null }\nitems: []\n');
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  const result = await runInteractiveTurn(fx.descriptor, {
+    sessionId: fx.sessionId,
+    projectRoot: fx.projectRoot,
+    forgeRoot: fx.forgeRoot,
+    logsRoot: fx.logsRoot,
+    queryFn,
+    logger: logger(fx.logsRoot, fx.sessionId),
+  });
+  assert.equal(result.phase, 'awaiting-review', 'arrange: the real gathering row must still advance normally');
+
+  assert.ok(capturedOptions, 'queryFn must have been invoked');
+  const canUseTool = capturedOptions!.canUseTool as
+    | ((toolName: string, input: Record<string, unknown>, options: Record<string, unknown>) => Promise<{ behavior: string; message?: string }>)
+    | undefined;
+  assert.ok(canUseTool, 'runAgentTurn must have installed a REAL canUseTool for this turn (resolveWriteRoots derived it from the real writes:[staging] row)');
+
+  const registryWrite = await canUseTool!('Write', { file_path: fx.registryPath, content: 'items: [{id: "exfiltrated"}]' }, {});
+  assert.equal(registryWrite.behavior, 'deny', 'a Write to the real registryPath must be refused by the fence');
+  assert.equal(
+    readFileSync(fx.registryPath, 'utf8'),
+    'meta: { schemaVersion: 1, lastRefresh: null }\nitems: []\n',
+    'the real registry.yaml must be byte-unchanged — the fence denies BEFORE any write happens',
+  );
+
+  const stagingWrite = await canUseTool!('Write', { file_path: join(fx.sessionDir, 'staging', 'evidence.md'), content: 'x' }, {});
+  assert.equal(stagingWrite.behavior, 'allow', 'a Write inside the real staging/ write root must still be allowed');
 });

@@ -6,9 +6,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
 import {
   runStructuredTurn,
@@ -24,8 +24,10 @@ import {
   REASONING_CAPPED_MARKER,
   SINK_ROW_CAP,
   MAX_THINKING_TEXT,
+  makeWriteRootCanUseTool,
   type TextSinkContext,
   type QueryFn,
+  type WriteRootCanUseTool,
 } from './interactive-session.ts';
 import type { EventLogEntry, EventLogger } from './logging.ts';
 
@@ -358,4 +360,122 @@ test('makeHeartbeatWriter writes a timestamp to .heartbeat', () => {
   const hbPath = join(hbDir, '.heartbeat');
   assert.ok(existsSync(hbPath));
   assert.match(readFileSync(hbPath, 'utf8'), /^\d{4}-\d{2}-\d{2}T/);
+});
+
+// ---------------------------------------------------------------------------
+// makeWriteRootCanUseTool — the writeRoots fence (bead forge-eip, W6-CR-3).
+// A tool-name allowlist alone is NOT a fence: this is the real, per-call
+// enforcement against the actual filesystem every Write/Edit/MultiEdit/
+// NotebookEdit call goes through when a turn supplies `writeRoots`.
+// ---------------------------------------------------------------------------
+
+function makeFenceFixture(prefix: string): { root: string; writeRoot: string } {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  const writeRoot = join(root, 'staging');
+  mkdirSync(writeRoot, { recursive: true });
+  return { root, writeRoot };
+}
+
+test('makeWriteRootCanUseTool: allows a Write to a NEW (not-yet-existing) file inside the write root', async () => {
+  const { writeRoot } = makeFenceFixture('fence-allow-new-');
+  const canUseTool: WriteRootCanUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Write', { file_path: join(writeRoot, 'registry.yaml'), content: 'x' }, {});
+  assert.equal(result.behavior, 'allow');
+});
+
+test('makeWriteRootCanUseTool: allows an Edit to an EXISTING file inside the write root', async () => {
+  const { writeRoot } = makeFenceFixture('fence-allow-existing-');
+  const target = join(writeRoot, 'evidence.md');
+  writeFileSync(target, 'seed');
+  const canUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Edit', { file_path: target, old_string: 'seed', new_string: 'updated' }, {});
+  assert.equal(result.behavior, 'allow');
+});
+
+test('makeWriteRootCanUseTool: denies a Write to an absolute path OUTSIDE the write root — the registryPath shape', async () => {
+  const { root, writeRoot } = makeFenceFixture('fence-deny-outside-');
+  // Mirrors the real shape: a session's own status.json carries an absolute
+  // `registryPath` sitting OUTSIDE its `staging/` write root — exactly the
+  // sensitive path a prompt-injected agent might be steered into writing.
+  const registryPath = join(root, 'studio', 'community', 'registry.yaml');
+  mkdirSync(dirname(registryPath), { recursive: true });
+  writeFileSync(registryPath, 'meta: {}\nitems: []\n');
+  const canUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Write', { file_path: registryPath, content: 'items: [{id: "exfiltrated"}]' }, {});
+  assert.equal(result.behavior, 'deny');
+  assert.match((result as { message: string }).message, /outside this session's writable root/);
+  // The real file must be byte-unchanged — the fence denies BEFORE any write happens.
+  assert.equal(readFileSync(registryPath, 'utf8'), 'meta: {}\nitems: []\n');
+});
+
+test('makeWriteRootCanUseTool: denies a write whose target is reached through a SYMLINK escaping the write root', async (t) => {
+  const { root, writeRoot } = makeFenceFixture('fence-deny-symlink-');
+  const secretDir = mkdtempSync(join(tmpdir(), 'fence-secret-'));
+  const linkPath = join(writeRoot, 'escape-link');
+  try {
+    symlinkSync(secretDir, linkPath, 'dir');
+  } catch {
+    t.skip('platform cannot create symlinks in this environment');
+    return;
+  }
+  const canUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Write', { file_path: join(linkPath, 'planted.txt'), content: 'x' }, {});
+  assert.equal(result.behavior, 'deny');
+  assert.equal(existsSync(join(secretDir, 'planted.txt')), false, 'nothing may be written through the symlink');
+  void root;
+});
+
+test('makeWriteRootCanUseTool: denies when the tool input carries no resolvable file path', async () => {
+  const { writeRoot } = makeFenceFixture('fence-deny-nopath-');
+  const canUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Write', { content: 'no path field at all' }, {});
+  assert.equal(result.behavior, 'deny');
+});
+
+test('makeWriteRootCanUseTool: passes every NON-gated tool through unmodified, even naming an out-of-root path', async () => {
+  const { root, writeRoot } = makeFenceFixture('fence-passthrough-');
+  const canUseTool = makeWriteRootCanUseTool([writeRoot]);
+  const result = await canUseTool('Read', { file_path: join(root, 'anything', 'anywhere.txt') }, {});
+  assert.equal(result.behavior, 'allow');
+});
+
+test('runAgentTurn: writeRoots installs a REAL canUseTool on options that denies an out-of-root Write — proves the wiring, not just the pure function', async () => {
+  const { root, writeRoot } = makeFenceFixture('fence-wired-');
+  let capturedOptions: Record<string, unknown> | undefined;
+  const queryFn: QueryFn = ({ options }) => {
+    capturedOptions = options;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  await runAgentTurn({
+    queryFn, prompt: 'p', cwd: writeRoot, model: MODEL, allowedTools: TOOLS,
+    writeRoots: [writeRoot],
+  });
+
+  assert.ok(capturedOptions, 'queryFn must have been invoked');
+  const canUseTool = capturedOptions!.canUseTool as WriteRootCanUseTool | undefined;
+  assert.ok(canUseTool, 'runAgentTurn must install options.canUseTool when writeRoots is supplied');
+
+  const registryPath = join(root, 'studio', 'community', 'registry.yaml');
+  const outside = await canUseTool!('Write', { file_path: registryPath, content: 'x' }, {});
+  assert.equal(outside.behavior, 'deny', 'a Write to the sensitive out-of-root registryPath must be refused');
+
+  const inside = await canUseTool!('Write', { file_path: join(writeRoot, 'registry.yaml'), content: 'x' }, {});
+  assert.equal(inside.behavior, 'allow', 'a Write inside the declared write root must still be allowed');
+});
+
+test('runAgentTurn: writeRoots absent/empty installs NO canUseTool — byte-identical prior behaviour for every non-opted-in caller', async () => {
+  let capturedOptions: Record<string, unknown> | undefined;
+  const queryFn: QueryFn = ({ options }) => {
+    capturedOptions = options;
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+  await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: TOOLS });
+  assert.equal(capturedOptions!.canUseTool, undefined);
 });

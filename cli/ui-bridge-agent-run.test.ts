@@ -10,11 +10,15 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
+
+// mirrors cli/bridge-studio-affordances.test.ts's own REPO_ROOT derivation.
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -58,6 +62,19 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'skills', 'test-interactive'), { recursive: true });
   writeFileSync(join(forgeRoot, 'skills', 'test-runnable', 'SKILL.md'), studioAgent('test-runnable', 'unattended'));
   writeFileSync(join(forgeRoot, 'skills', 'test-interactive', 'SKILL.md'), studioAgent('test-interactive', 'interactive'));
+  // W6-CR-3 (bead forge-eip): the REAL, checked-in community-refresh
+  // SKILL.md — copied verbatim, not a synthetic fixture, so this suite
+  // proves the boundary against the actual shipped agent (the FIRST
+  // `library: true` interactive agent in the roster — see
+  // orchestrator/agent-dispatch.test.ts's COMPLEMENT PIN for why that
+  // matters: it is now genuinely reachable through listAgentDefinitions,
+  // unlike creation-agent/brain-maintenance, which the pre-existing
+  // synthetic "test-interactive" fixture above already covers generically).
+  mkdirSync(join(forgeRoot, 'skills', 'community-refresh'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'skills', 'community-refresh', 'SKILL.md'),
+    readFileSync(join(REPO_ROOT, 'skills', 'community-refresh', 'SKILL.md'), 'utf8'),
+  );
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
@@ -83,6 +100,19 @@ test('POST /api/agents/<slug>/run: unknown slug → 400 (no runnable agent)', as
 test('POST /api/agents/<slug>/run: an interactive agent is refused → 400', async () => {
   const res = await fetch(`${url}/api/agents/test-interactive/run`, { method: 'POST', headers: CSRF, body: '{}' });
   assert.equal(res.status, 400);
+  assert.match((await res.json() as { error: string }).error, /is interactive/);
+});
+
+// W6-CR-3 (bead forge-eip, LOW item 3): community-refresh is a real,
+// turnSpec-driven interactive session-kind agent — it runs EXCLUSIVELY
+// through runInteractiveTurn (its own session-kickoff route + the generic
+// affordance write route), never through this one-shot generic run host.
+// Proves the REAL shipped agent — not just the synthetic "test-interactive"
+// fixture above — is refused here, closing the same class as that test for
+// the one agent in the roster this initiative made newly reachable.
+test('POST /api/agents/community-refresh/run: the REAL community-refresh agent is refused → 4xx (interactive session-kind agents run only through their own kickoff route)', async () => {
+  const res = await fetch(`${url}/api/agents/community-refresh/run`, { method: 'POST', headers: CSRF, body: '{}' });
+  assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx refusal, got ${res.status}`);
   assert.match((await res.json() as { error: string }).error, /is interactive/);
 });
 

@@ -77,7 +77,7 @@ import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -123,7 +123,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -2077,7 +2077,7 @@ async function handleHttp(
  *  future rename of either side drifts silently: ensureSessionTail just
  *  no-ops (ensureTailFor's existsSync guard swallows the miss), so a
  *  session's WS tail would quietly stop activating with no error anywhere. */
-export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
+export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup' | 'community-refresh';
 
 export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
   architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
@@ -2089,6 +2089,10 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
   // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
   // kb-cleanup <sid> --project <p>`.
   'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
+  // W6-CR-3 — the community-refresh session, riding the SAME generic
+  // runInteractiveTurn spine (ADR-043 §3): `forge agent run
+  // community-refresh <sid> --project <p>`.
+  'community-refresh': { argvPrefix: ['agent', 'run', 'community-refresh'], logPrefix: 'community-refresh' },
 };
 
 /** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
@@ -2639,8 +2643,9 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * COMPLETE set of `/start`-family routes that accept an optional
  * caller-supplied `modelTier`: `/api/architect/start`,
  * `/api/instructions/start`, `/api/project-brain/start`,
- * `/api/demo-builder/start`, `/api/studio/authoring/start`, and
- * `POST /api/studio/kbs/:id/cleanup/start`. Each MUST validate it through
+ * `/api/demo-builder/start`, `/api/studio/authoring/start`,
+ * `POST /api/studio/kbs/:id/cleanup/start`, and (W6-CR-3)
+ * `POST /api/studio/community-refresh/start`. Each MUST validate it through
  * this helper BEFORE any mkdir/status write, and persist the returned
  * `tier` (when present) verbatim into the session's initial `status.json`
  * as `modelTier` — every turn runner (the four legacy runners +
@@ -4522,6 +4527,84 @@ async function handleDemoBuilder(
         return true;
       }
       sendJson(res, 200, { ok: true, runId: outcome.runId }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/studio/community-refresh/start {modelTier?} — W6-CR-3, the
+  // community-refresh session's kickoff route. Unlike EVERY other
+  // interactive kind's `/start` route, this one takes NO project/prompt at
+  // all: the community registry is forge's own single, forge-wide file, not
+  // a per-project artifact, so there is nothing for the operator to select.
+  // The session anchors under the ONE fixed pseudo-project
+  // `COMMUNITY_REFRESH_PROJECT_ANCHOR` (mirrors kb-cleanup's own non-project
+  // `.kb-<id>` anchor precedent — `cli/bridge-studio-sessions.ts`'s
+  // `invalidProjectReason` carve-out — but unparameterized, since there is
+  // exactly one community registry, not N per-id KBs).
+  //
+  // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
+  // here (same reasoning as kb-cleanup/start immediately above):
+  // `guardedWriteSessionStatus` (orchestrator/interactive-session.ts) already
+  // realpath-guards the whole `[COMMUNITY_REFRESH_PROJECT_ANCHOR,
+  // '_community-refresh', sessionId, 'status.json']` path AND creates the
+  // session dir as part of the SAME guarded write — the anchor pseudo-project
+  // need not pre-exist.
+  //
+  // `registryPath`/`hubsPath` — the generic `runInteractiveTurn` spine's
+  // `buildTurnPrompt` inlines the WHOLE session status as read-only context
+  // (orchestrator/interactive-runner.ts), so these two absolute, server-
+  // resolved paths are how `skills/community-refresh/SKILL.md`'s agent finds
+  // the real registry + hub list to read from — it never guesses a relative
+  // path against its own session-scoped `cwd`.
+  if (method === 'POST' && url === '/api/studio/community-refresh/start') {
+    try {
+      const body = (await readJson(req)) as { modelTier?: unknown };
+
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // community-refresh SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('community-refresh', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
+        return true;
+      }
+
+      const sessionId = newArchitectSessionId();
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const written = guardedWriteSessionStatus(
+        projectsRoot,
+        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId],
+        {
+          session_id: sessionId,
+          project: COMMUNITY_REFRESH_PROJECT_ANCHOR,
+          phase: 'gathering',
+          // A fixed, SLUG_RE-valid packageId — this session commits to ONE
+          // forge-wide file, never a per-package library entry, so the
+          // generic runner's packageId/libraryRoot machinery
+          // (orchestrator/interactive-runner.ts's runFinalizeStep) is inert
+          // plumbing here; `commitRegistryDraft` itself ignores both fields
+          // (see that finalizer's own header). This constant only exists to
+          // satisfy that machinery's SLUG_RE check — the real session
+          // identity `commitRegistryDraft` actually uses is derived from
+          // `basename(sessionDir)`, independent of this value.
+          package_id: 'community-registry',
+          registryPath: communityRegistryPath(ctx.forgeRoot),
+          hubsPath: join(ctx.forgeRoot, 'studio', 'community', 'hubs.yaml'),
+          ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        },
+      );
+      if (written === null) {
+        sendJson(res, 500, { error: 'community-refresh start: session status.json failed containment' }, origin);
+        return true;
+      }
+
+      spawnAgentTurn(ctx.forgeRoot, 'community-refresh', COMMUNITY_REFRESH_PROJECT_ANCHOR, sessionId);
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, project: COMMUNITY_REFRESH_PROJECT_ANCHOR, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/community-refresh/start', sessionId) },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -61,7 +61,12 @@ import type { Finding } from './validate.ts';
  *  token, appended at the end, backing the new single-stage `authoring`
  *  session kind (creation-agent). It is unrelated to the ordered onboarding
  *  sequence (contract→instructions→secrets→demo→roadmap→brain) the other six
- *  tokens encode. */
+ *  tokens encode.
+ *
+ *  W6-CR-3: 'community' is the SECOND extension, an 8th token, mirroring
+ *  'authoring's own precedent exactly — a single-stage session kind
+ *  (community-refresh) with no natural fit among the ordered onboarding
+ *  sequence, appended at the end rather than squeezed into that ordering. */
 export const SESSION_STAGES = Object.freeze([
   'contract',
   'instructions',
@@ -70,6 +75,7 @@ export const SESSION_STAGES = Object.freeze([
   'roadmap',
   'brain',
   'authoring',
+  'community',
 ] as const);
 export type SessionStage = (typeof SESSION_STAGES)[number];
 
@@ -177,12 +183,19 @@ export type TurnStep = (typeof TURN_STEPS)[number]['id'];
  *  (orchestrator/interactive-runner.ts) never has to implement them; adding
  *  them here does not reopen the "gains no new row for kb-cleanup" ratchet's
  *  intent (that test pinned kb-cleanup's OWN phase table needing none, not a
- *  blanket freeze on this registry's size — see its updated comment). Typed
- *  `readonly`, as TURN_STYLES. */
+ *  blanket freeze on this registry's size — see its updated comment).
+ *
+ *  W6-CR-3: `commitRegistryDraft` is added alongside — it IS dispatched via
+ *  `turnSpec` (the `community-refresh` kind's `committing` phase), so it
+ *  lives in `FINALIZERS` too (`orchestrator/interactive-finalizers.ts`) and
+ *  therefore also in `DISPATCHABLE_FINALIZER_IDS` below, unlike
+ *  `writeToRepoRoot`/`recordLockedDemo` immediately above. Typed `readonly`,
+ *  as TURN_STYLES. */
 export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
   Object.freeze({ id: 'copyStagingToLibrary' }),
   Object.freeze({ id: 'writeToRepoRoot' }),
   Object.freeze({ id: 'recordLockedDemo' }),
+  Object.freeze({ id: 'commitRegistryDraft' }),
 ]);
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 

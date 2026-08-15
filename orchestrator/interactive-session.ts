@@ -15,6 +15,17 @@
  *     idle-deadline, throttled heartbeat, tool_use streaming, and a fenced-JSON
  *     fallback. The model + tool allow-list are parameters (each runner derives
  *     them from its own SKILL.md, ADR-024).
+ *   - `runAgentTurn`'s `writeRoots` fence (bead forge-eip, W6-CR-3) — see its
+ *     own doc comment below for the mechanism. This is UNRELATED to ADR 020's
+ *     ruling above: that ruling is about never using `canUseTool` to PAUSE a
+ *     turn for operator interactivity (file handoff owns that); this fence
+ *     never pauses anything — it is a synchronous, silent allow/deny decided
+ *     entirely from the real filesystem, the SAME shape as the containment
+ *     guards every write route in this codebase already uses. A tool-name
+ *     allowlist (`allowedTools`/`disallowed-tools` in a SKILL.md) is NOT a
+ *     fence: it is advisory prose the model can still be steered around by
+ *     untrusted content it reads (a fetched web page, a finding message) —
+ *     this is the actual per-call enforcement point against the real disk.
  *   - session-dir status I/O (`readSessionStatus` / `writeSessionStatus`).
  *   - a throttled heartbeat writer (`makeHeartbeatWriter`).
  *
@@ -24,8 +35,8 @@
  * stream loop has exactly one home.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from 'node:fs';
+import { join, dirname, basename, sep } from 'node:path';
 
 import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
@@ -328,12 +339,146 @@ export async function runStructuredTurn<T>(args: {
   return { output, reads };
 }
 
+
+// ---------------------------------------------------------------------------
+// writeRoots fence (bead forge-eip, W6-CR-3) — a REAL, per-call containment
+// check on every Write/Edit/MultiEdit/NotebookEdit a `runAgentTurn` turn
+// attempts, closing the class this bead names: "a tool-name allowlist is
+// NOT a fence" (a SKILL.md's `allowed-tools`/`disallowed-tools` is advisory
+// prose the model can be steered around by untrusted content it reads —
+// e.g. a fetched web page telling it to "save a copy to
+// /forge/studio/community/registry.yaml") and "when the prompt hands an
+// agent a sensitive absolute path, an unfenced Write reaches it" (this
+// turn's own `buildTurnPrompt` inlines the WHOLE session status as JSON —
+// community-refresh's own `registryPath`/`hubsPath` fields included).
+//
+// Generic, not community-refresh-specific: this lives in the shared spine
+// because the gap is the WHOLE turnSpec roster's (authoring's `staging/`,
+// kb-cleanup's `plan/`, community-refresh's `staging/` all reach it), not
+// one kind's. `writeRoots` is caller-supplied, TRUSTED, already-realpath-
+// resolved, ALREADY-EXISTING absolute directory paths — this module
+// performs no mkdir and no identity check on the roots themselves (mirrors
+// how `cwd` is already trusted); `orchestrator/interactive-runner.ts`
+// derives them from each phase row's OWN declared `writes:` entries
+// (never hardcoded), GUARD-TERMINAL-provisioning each one via
+// `resolveGuardedPath` before the turn starts.
+// ---------------------------------------------------------------------------
+
+/** Tool names whose input names a file this fence must evaluate — mirrors
+ *  `loops/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS` (kept as an
+ *  independent literal here, not imported, so this spine file's only
+ *  cross-subsystem edge stays the pre-existing type-only one). Every OTHER
+ *  tool call passes through this fence unmodified — it never gates reads. */
+const FENCE_GATED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/** Extract the target file path from a gated tool's input — mirrors
+ *  `loops/ralph/claude-agent.ts`'s own `extractPath` (`file_path` for
+ *  Write/Edit/MultiEdit, `notebook_path` for NotebookEdit, `path` as a
+ *  belt-and-suspenders fallback). Returns `null` for a malformed/missing
+ *  field — the caller DENIES on `null` (fail closed: "couldn't find a
+ *  path" is never treated as "so allow it"). */
+function extractGatedToolPath(input: Record<string, unknown>): string | null {
+  const candidate = input.file_path ?? input.notebook_path ?? input.path;
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
+}
+
+/**
+ * True iff `candidatePath` resolves (realpath of its PARENT directory +
+ * its own literal basename — the file itself may not exist yet, e.g. a
+ * `Write` creating a new file) to somewhere under one of `realWriteRoots`
+ * (already realpath-resolved by the caller). A parent directory that
+ * cannot be realpath-resolved at all (ENOENT/ELOOP/a permission error) is a
+ * hard DENY, never "not created yet, allow it": every `writeRoots` entry is
+ * pre-provisioned (mkdir'd) by the caller before the turn starts, so a
+ * write naming a not-yet-existing INTERMEDIATE directory below an
+ * already-provisioned root has no legitimate reason to exist. This closes
+ * the symlink-swap shape too — `realpathSync` fully resolves the parent, so
+ * a directory symlink planted at (or below) the root cannot redirect a
+ * write to somewhere the root's own real location does not cover.
+ */
+function isUnderWriteRoot(candidatePath: string, realWriteRoots: readonly string[]): boolean {
+  let realParent: string;
+  try {
+    realParent = realpathSync(dirname(candidatePath));
+  } catch {
+    return false;
+  }
+  const realCandidate = join(realParent, basename(candidatePath));
+  return realWriteRoots.some((root) => realCandidate === root || realCandidate.startsWith(root + sep));
+}
+
+/** The subset of the real SDK's `CanUseTool`/`PermissionResult` shape this
+ *  fence needs — kept local (not imported from the SDK package) so this
+ *  spine file's fence logic is exercisable against the SAME loose `QueryFn`
+ *  test seam every other turn in this module already uses, without pulling
+ *  the SDK's real types into a value position here. Structurally compatible
+ *  with the SDK's own `CanUseTool`/`PermissionResult` (verified by the SDK
+ *  accepting this function at `options.canUseTool` — a plain, untyped
+ *  `Record<string, unknown>` bag from this module's own perspective, per
+ *  `QueryFn`'s doc comment above). */
+export type WriteRootCanUseTool = (
+  toolName: string,
+  input: Record<string, unknown>,
+  options: Record<string, unknown>,
+) => Promise<{ behavior: 'allow'; updatedInput: Record<string, unknown> } | { behavior: 'deny'; message: string }>;
+
+/**
+ * Build the `canUseTool` callback `runAgentTurn` installs at `options.canUseTool`
+ * when `writeRoots` is non-empty. Synchronous decision, no operator pause —
+ * see this file's header note on why this does NOT reopen ADR 020's ruling.
+ */
+// Exported for direct unit tests (interactive-session.test.ts) — the
+// integration shape (a fake `queryFn` capturing `options.canUseTool`) is
+// ALSO covered, but a direct export lets the deny/allow/symlink-escape
+// matrix be pinned without threading every case through a full turn.
+export function makeWriteRootCanUseTool(writeRoots: readonly string[]): WriteRootCanUseTool {
+  // Resolved ONCE, at turn start, not per tool call — every root was already
+  // provisioned by the caller (see this section's own header), so a root
+  // that still fails to realpath here is a caller bug: fail THAT ONE root
+  // closed (it can never match anything, so every write claiming it is
+  // denied) rather than throwing out of a factory function with no
+  // sensible call-site catch.
+  const realRoots = writeRoots
+    .map((root) => {
+      try {
+        return realpathSync(root);
+      } catch {
+        return null;
+      }
+    })
+    .filter((root): root is string => root !== null);
+
+  return async (toolName, input, _options) => {
+    if (!FENCE_GATED_TOOLS.has(toolName)) {
+      return { behavior: 'allow', updatedInput: input };
+    }
+    const candidate = extractGatedToolPath(input);
+    if (candidate === null) {
+      return {
+        behavior: 'deny',
+        message: `${toolName}: no resolvable file path in tool input — refused by the write-root fence.`,
+      };
+    }
+    if (!isUnderWriteRoot(candidate, realRoots)) {
+      return {
+        behavior: 'deny',
+        message:
+          `${toolName} to "${candidate}" is outside this session's writable root(s) ` +
+          `(${writeRoots.join(', ')}) — refused by the write-root fence.`,
+      };
+    }
+    return { behavior: 'allow', updatedInput: input };
+  };
+}
+
 /**
  * Run one NON-structured agent turn with write tools — the brain-fix / demo-builder
  * shape (the agent edits files via its tool stream, there is no structured result).
  * Streams tool_use to `onToolUse`, throttles `onHeartbeat`, forwards reasoning text
  * to `onText`, and returns the turn's total cost. Read-only vs write is decided by
- * the caller's `allowedTools` (the runner verifies the agent's file output itself).
+ * the caller's `allowedTools` (the runner verifies the agent's file output itself),
+ * and — when `writeRoots` is supplied — enforced for real against the filesystem
+ * by the `canUseTool` fence above (bead forge-eip, W6-CR-3).
  */
 export async function runAgentTurn(args: {
   queryFn: QueryFn;
@@ -344,6 +489,15 @@ export async function runAgentTurn(args: {
   allowedTools: readonly string[];
   disallowedTools?: readonly string[];
   maxTurns?: number;
+  /** W6-CR-3 (bead forge-eip) — when non-empty, installs the `canUseTool`
+   *  write-root fence above: every Write/Edit/MultiEdit/NotebookEdit whose
+   *  resolved target falls outside one of these TRUSTED, already-realpath-
+   *  resolved, ALREADY-EXISTING absolute directory paths is denied. Absent
+   *  or empty preserves this function's EXACT prior behaviour (no
+   *  `canUseTool` at all) — every caller that does not opt in is
+   *  unaffected. See `makeWriteRootCanUseTool`'s own doc comment for the
+   *  mechanism and why this does not reopen ADR 020. */
+  writeRoots?: readonly string[];
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
@@ -363,6 +517,9 @@ export async function runAgentTurn(args: {
     maxTurns: args.maxTurns ?? 16,
     abortController,
   };
+  if (args.writeRoots && args.writeRoots.length > 0) {
+    options.canUseTool = makeWriteRootCanUseTool(args.writeRoots);
+  }
 
   let costUsd = 0;
   let toolSeq = 0;

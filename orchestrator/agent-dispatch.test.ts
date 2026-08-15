@@ -301,16 +301,30 @@ test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgen
   // that only shows up on a specific real def's actual shape (an absent
   // `surface` field, or `surface: both`).
   //
-  // MEASURED FACT this pin also records, and the reason forge-4y7 deleted the
-  // mirror rather than wiring it: the real roster today contains ZERO
-  // interactive defs, so `resolveInteractiveAgent` accepted NOTHING on the
-  // live roster for its whole life. (`creation-agent` declares
-  // `surface: interactive` but `library: false`, so it never enters this
-  // roster at all.) The interactive-refusal branch of the boundary is
-  // therefore proven by the synthesized-def test earlier in this file, not by
-  // a roster member. If a future change puts a genuinely interactive agent in
-  // the roster, the assertion below goes red ON PURPOSE — that is the trigger
-  // to revisit the deletion, not a test to relax.
+  // UPDATED (W6-CR-3): the precondition this test's own header used to record
+  // — "the real roster today contains ZERO interactive defs" — is no longer
+  // true, ON PURPOSE, per this test's own standing instruction ("the trigger
+  // to revisit the deletion, not a test to relax"). `community-refresh`
+  // (skills/community-refresh/SKILL.md) is the FIRST interactive session-kind
+  // agent to declare `library: true` rather than following creation-agent/
+  // brain-maintenance/demo-builder/instructions-creator/project-brain-
+  // builder's `library: false` convention — a deliberate choice (it is the
+  // one interactive agent meant to be operator-discoverable as a real forge
+  // capability, kicked off from its own /community entry point, not an
+  // internal bridge-dispatched setup helper) — so it now enters
+  // `listAgentDefinitions`'s roster. REVISITING THE DELETION, as instructed:
+  // `resolveInteractiveAgent` itself is NOT resurrected — community-refresh
+  // is a `turnSpec`-bearing session kind, dispatched exclusively through
+  // `runInteractiveTurn` (ADR-043 §2/§3), never through any generic
+  // "interactive host" the deleted mirror would have served; nothing calls
+  // it in production today, same as when forge-4y7 deleted it. The boundary
+  // this pin actually protects — the ONE-SHOT generic run host
+  // (`resolveDispatchableAgent`) must still refuse every interactive def —
+  // is UNCHANGED and still verified below, per-def, for `community-refresh`
+  // exactly as for every other roster member; only the trailing
+  // "sawInteractive must be false" assertion (a MEASURED FACT about the
+  // roster's contents, not a boundary check) is updated to match the new,
+  // deliberate roster shape.
   const defs = listAgentDefinitions(SKILLS);
   assert.ok(defs.length > 0, 'precondition: the real roster must be non-empty for this test to mean anything');
   let sawInteractive = false;
@@ -334,12 +348,19 @@ test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgen
     );
   }
   assert.ok(sawNonInteractive, 'precondition: the real roster must contain at least one non-interactive def for this pin to be non-vacuous');
-  assert.equal(
-    sawInteractive,
-    false,
-    'the real roster gained an INTERACTIVE agent def. That is the precondition R4-22 named for wiring ' +
-      'ADR-043 §4\'s interactive host, which R4-23 (bead forge-4y7) deleted as dead surface — revisit ' +
-      'that deletion and the ADR-043 amendment rather than relaxing this assertion.',
+  // W6-CR-3: the roster now DELIBERATELY contains exactly one interactive
+  // def (community-refresh — see this test's header for why). This is no
+  // longer "the trigger to revisit the deletion" this assertion used to
+  // guard for — that revisit happened (see the header comment above); a
+  // SECOND interactive def entering the roster with no matching rationale
+  // recorded here would still be worth a fresh look, which is why this stays
+  // a named, explained assertion rather than a bare `assert.ok(true)`.
+  assert.ok(sawInteractive, 'precondition: the real roster must contain at least one interactive def (community-refresh) for the per-def refusal loop above to actually exercise the interactive branch, not just assume it');
+  assert.deepEqual(
+    defs.filter((d) => agentCapabilityDescriptor(d).interactive).map((d) => d.slug),
+    ['community-refresh'],
+    'the real roster\'s interactive-def membership must be EXACTLY community-refresh — a different or additional ' +
+      'interactive def entering the roster deserves the same deliberate review this one got, not a silent widening',
   );
 });
 
