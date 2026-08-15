@@ -416,11 +416,26 @@ export function aggregateRun(args: {
   queueState: QueueState;
   manifestPath: string;
   nowMs: number;
+  /**
+   * ADR-044 P1 (`cli/run-list-cache.ts`) additive-optional escape hatch: a
+   * caller deriving MANY runs in one pass (the mtime-keyed cached list
+   * builder) can build buildNodeMapping/buildFlowNodeSets/
+   * buildAgentSlugToNodeId ONCE for the whole pass instead of once per
+   * manifest — mirroring how listRuns() below already does for its own
+   * loop. Omitted (the default) → unchanged behavior: every existing call
+   * site, including listRuns itself, builds its own and is untouched.
+   * ADR-042 disclosure: additive-optional fields on an already-exported
+   * function signature, not a new orchestrator export.
+   */
+  nodeMapping?: Map<string, string | null>;
+  flowNodeSets?: Map<string, Set<string>>;
+  agentSlugToNodeId?: Map<string, string>;
 }): Run {
-  // Build mapping once per call from flow.yaml + registry (falls back if unavailable)
-  const nodeMapping = buildNodeMapping(args.root);
-  const flowNodeSets = buildFlowNodeSets(args.root);
-  const agentSlugToNodeId = buildAgentSlugToNodeId(args.root);
+  // Build mapping once per call from flow.yaml + registry (falls back if unavailable),
+  // unless the caller already built one for a shared pass (see doc above).
+  const nodeMapping = args.nodeMapping ?? buildNodeMapping(args.root);
+  const flowNodeSets = args.flowNodeSets ?? buildFlowNodeSets(args.root);
+  const agentSlugToNodeId = args.agentSlugToNodeId ?? buildAgentSlugToNodeId(args.root);
   return aggregateRunWithMapping({ ...args, nodeMapping, flowNodeSets, agentSlugToNodeId });
 }
 
