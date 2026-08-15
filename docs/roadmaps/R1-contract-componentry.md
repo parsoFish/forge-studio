@@ -103,6 +103,16 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
   - **R1-03-F2 — Demo process tied directly into the UI.** The **demo-builder** (`/demo/[sid]` — see R1-B6's naming disambiguation; the surgery here is owned solely by this feature, R4-07-F3 only consumes its output) folds into the project editor surface (`/projects/[id]`), with the save-time `skills/demo-design` generation step preserved as part of the same save path — simplify per the diagram: brief → generate → lock per element stays, but entry/exit is the project page, not a detached session route; `[data-demo-design-state]` already lives on the project page root. Acceptance:
     - Editing/locking a demo design updates `demoProcess` in `project.json` through the canonical writer; `ContractReadiness` demoProcess row reacts live.
     - `demo-builder` journey updated (journey-sync same PR); old detached-route behaviour removed or redirected (no back-compat fork).
+    - **F2 REVERSED (2026-08-15, wave-6 W6-B10, PR #165).** The operator
+      reversed this feature's core call: the demo builder is once again a
+      dedicated session screen (`/sessions/demo/<sid>`), not the inline
+      `DemoBuilderPanel` on `/projects/[id]`. B10 also found and fixed a real
+      defect surfaced by the un-reversal: the demo `briefing` phase had no
+      panel row, so the dedicated screen could not start the agent. Capacity
+      lost in the reversal (a revise/feedback loop) is tracked as bead
+      `forge-4ei`, not silently dropped. See
+      `docs/forge-ui-dom-and-harness.md`'s demo-builder entry for the
+      as-built contract.
   - **R1-03-F3 — Demo-builds-off-testing alignment check (advisory).** New advisory readiness check: each `demoProcess` capture step SHOULD reference a `testProcess` artifact or command where one exists (the diagram's "alignment recommended — demo should largely build off testing"); divergence is flagged, not blocked (demo may legitimately differ, e.g. live REST evidence per the betterado tier). Acceptance: check visible in `ContractReadiness` + preflight advisory output; flagged-not-hard on betterado's live-evidence demo.
   - **R1-03-F4 — Dual-boundary full-suite gate relocation ⚠ FOR OPERATOR REVIEW.** With the unifier retired (Q3-B), its dual-boundary full-suite gate — the known-gaps "strength worth preserving" ("the unifier catches a red full-suite baseline the scoped per-WI gates can't see; nothing ships red") — **relocates to orchestrator-owned gate execution** (ADR-036 pattern: `composedUnifierGate`'s full-suite run becomes a flow-engine merge-boundary gate keyed off `testProcess.local`/`ci`, executed by the orchestrator, with results flowing TO the demo/review agents via the `.forge/last-gate-failure.md` seam). This relocation is flagged **for operator review** per the locked Q3-B decision — the design lands here as the contract-side spec; the runnable-side execution home is R4-10's flow. Acceptance:
     - A written relocation spec section in `docs/forge-project-contract.md` + an ADR-036 amendment note, explicitly marked "operator review required before implementation".
@@ -177,7 +187,16 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 
 ### R1-06 KB create & maintain (band-scoped binding + agent-seeded creation)
 
-- **Status:** planned  ·  **Wave:** 5 (module: kb-create/maintain)
+- **Status:** **implemented** (F1/F2/F3 all landed 2026-08-09/10, PR #107 —
+  band-scoped binding contract + read-policy guard extension, agent-seeded
+  creation hand-off, and the maintenance-session `consolidate` op).
+  **Wave-6 evolution (2026-08-15):** F3's maintenance entry point evolved
+  from the session-based `consolidate` op into **drain-to-green** — B12's
+  bridge job (lint → auto-fix → agent-fix-per-residual → re-lint, PR #164)
+  behind B13's one-button replacement for the old `LintResolutionPanel` on
+  the Health tab (PR #166) — this is the KB-maintain flow operators actually
+  use today. The negative AC (no ingest affordance anywhere) still holds.
+  ·  **Wave:** 5 (module: kb-create/maintain)
 - **Depends on:** R1-01 (the binding contract this extends, done). **Depended
   on by:** R4-19 (the brain-creation/maintenance agents create against this
   contract), R6-08 (soft — the explore surface links into maintenance).
@@ -267,3 +286,10 @@ The C7-holistic-metrics clause (measurement command + locked baselines + regress
   R1-01/R1-03 depended-on-by gain the wave-5 reverse edges (R1-06, R4-14);
   R1-06-F3's Health-tab maintenance entry explicitly timed on R6-08 landing
   (KB-page entry is the build-time AC).
+- 2026-08-15 — **Wave-6 docs-sync correction.** R1-06 was stale `planned`
+  despite shipping before wave 6 opened (PR #107, 2026-08-09/10) — flipped
+  to `implemented`, with a note on how wave-6's drain-to-green (B12/B13,
+  PRs #164/#166) evolved F3's maintenance entry point. R1-03-F2 gains its
+  "F2 REVERSED" note (wave-6 W6-B10, PR #165) — `docs/roadmaps/README.md`'s
+  2026-08-03 entry already cited this note by name and was dangling until
+  now; this entry closes it.

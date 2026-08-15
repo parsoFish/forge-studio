@@ -394,9 +394,20 @@ through the live `aggregateRun` rather than invented.
 
 ### R6-03 IA & convention stewardship
 
-- **Status:** F1/F2 planned; **F3 IMPLEMENTED** (2026-08-14, PR #121 `7dd423b6` —
-  six-pillar nav, one shared shell proven by deletion, redirects RED-pinned,
-  self-hosted font; batch F, not batch E as originally sequenced)  ·  **Wave:** 5
+- **Status:** **F1/F2/F3 all implemented.** F3 implemented 2026-08-14 (PR #121
+  `7dd423b6` — six-pillar nav, one shared shell proven by deletion, redirects
+  RED-pinned, self-hosted font; batch F, not batch E as originally
+  sequenced), **superseded 2026-08-15 by wave-6 IA-5** (nav repointed from
+  hardcoded deep-links to every pillar's own real browse index, PR #151).
+  **F1** (DOM-convention contract doc) is satisfied by this repo's own
+  discipline: every wave-6 UI PR updates `docs/forge-ui-dom-and-harness.md`
+  in the same PR (journey-sync). **F2** (navigation/IA pass — library
+  ordering, cross-linking, dead-path sweep in CI cadence) implemented across
+  wave-6's IA batches: IA-1 projects index (#138), IA-2 flows index (#139),
+  IA-3 agents index (#137), IA-4 Library rebuild (#148), IA-6 single-tab
+  policy (#141), IA-7 mislabel/duplication sweep (#143), IA-8 redirects +
+  shim deletion (#153); `ui:deadpaths` ran clean at wave-6 close (30 routes,
+  both passes).  ·  **Wave:** 5
 - **Depends on:** — (grows as R3/R4 add surfaces). **Depended on by:** R6-07
   (F3's Home pillar precedes the dashboard — satisfied, R6-07 shipped PR #124).
 - **Context:** The set adds routes and pillars (skills library R3-01-F3, KB
@@ -614,6 +625,51 @@ through the live `aggregateRun` rather than invented.
   `views-knowledge.jsx`.
 - **Out of scope:** KB creation/binding + maintenance sessions (R1's wave-5
   entry); brain-creation agent content (R4); lint check *content* changes.
+- **Wave-6 partial delivery (2026-08-15, note only — status stays
+  `planned`).** B12/B13 (PRs #164/#166) built the KB drain-to-green job and
+  its one-button UI — the maintenance-ops shape this initiative's F2 and
+  R1-06-F3 both named, delivered on `/knowledge`'s Health tab rather than a
+  dedicated maintenance session. IA-4 (#148) rebuilt the Knowledge page's
+  empty-states and New-KB CTA. The **combined graph+reader surface (F1)**
+  and the **itemized-by-name lint checks + ingest-activity tabs (F2)** this
+  initiative specs remain unbuilt.
+
+### R6-09 Performance (minted wave-6, 2026-08-15)
+
+- **Status:** **P0–P4 implemented; P5 deferred**  ·  **Wave:** 6 (module:
+  perf)
+- **Depends on:** — (cross-cutting; P4 depends on IA-4 for the Knowledge
+  fetch fan-in).
+- **Context:** Unowned before wave-6 — the wave-6 planning pass found no
+  roadmap initiative tracking forge-ui performance, despite it being one of
+  the operator's original complaint categories ("pages slow to load
+  overall"). R6 is the natural home. Ranked causes at open: `GET /api/runs`
+  walking the whole `_queue/` tree per request (507MB/request on the real
+  corpus); `GET /api/studio/kbs` running a full-tree brain lint per request;
+  `next dev` with no production build path; no SSR/prefetch (6-7 client
+  fetches per page); repeated whole-queue scans with no shared cache.
+- **Features (delivered as PR-sized batches — see `docs/roadmaps/README.md`'s
+  wave-6 section for the full stream table):**
+  - **P0** perf-snapshot measurement harness (curl timings + Playwright
+    nav-timing to data-ready) — PR #140.
+  - **P1** `/api/runs` mtime/hash-keyed memoized derivation — PR #145.
+  - **P2** `/api/studio/kbs` full-tree lint memoized behind a repo
+    fingerprint — PR #147 (regression fix P2b, fingerprint walk excluding
+    `.claude/worktrees`/campaign dirs on the operator's real tree — PR
+    #161).
+  - **P3** `forge studio` serves a production build by default, `--dev`
+    opt-out — PR #142.
+  - **P4** zero-RTT bridge URL + Knowledge fetch fan-in — PR #160.
+  - **P5** events tail-reads (`?since=` offset) — **deferred**: the events
+    endpoint's 80MB/1.2s payload is a run-detail-only path, not
+    daily-driver-critical; noted for a later wave.
+- **Measured delta (baseline → post-wave-6, prod serve):** `/api/runs` 848 →
+  15ms · `/api/studio/kbs` 102 → 53ms · pages ~3× faster (prod build +
+  fewer round-trips).
+- **Out of scope:** the `derived-never-stored-run-model` posture itself —
+  memoizing the single derivation keyed on input mtimes is NOT a second
+  derivation ([ADR 044](../decisions/044-read-path-memoization.md) is the
+  amendment that rules on this).
 
 ## Deferred
 
@@ -727,3 +783,10 @@ R4-11-F4 attention strip during real multi-project operation.
   shared function), `forge-2w4` (a third home of the parse-body-before-status
   class), `forge-aug` (the standalone scan is unbounded and `_agent-*` dirs
   are never pruned), and `forge-mqf` (`cli/ui-bridge.ts` at 3998 lines).
+- 2026-08-15 — **Wave-6 docs-sync pass.** R6-03-F1/F2 flipped `planned` →
+  `implemented` (delivered by the IA-1..8 batches; F3 superseded by IA-5).
+  R6-08 gains a delivery note (B12/B13/IA-4) without flipping its own
+  status — the combined explore surface and itemized health checks it specs
+  remain unbuilt. **R6-09 Performance minted and implemented (P0-P4; P5
+  deferred)** — perf was unowned before wave 6; the plan's coverage pass
+  flagged it and R6 is its natural home.

@@ -2432,12 +2432,13 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 15 user-story journeys in
-[`scripts/journeys/`](./scripts/journeys/) — `skills`, `hooks`, `templates`,
-`connections`, `stand-up-onboard`, `stand-up-create`, `knowledge`, `agents`,
-`flows-author`, `flows-run`, `flows-onboard`, `roadmap`, `demo-showcase`,
-`demo-builder`, `community`
-(RUN_ORDER's own sequence, `index.mjs`) — one file per journey (plus
+is a thin runner over 17 user-story journeys in
+[`scripts/journeys/`](./scripts/journeys/) — `home`, `sessions-index`,
+`skills`, `hooks`, `templates`, `connections`, `stand-up-onboard`,
+`stand-up-create`, `knowledge`, `agents`, `flows-author`, `flows-run`,
+`flows-onboard`, `roadmap`, `demo-showcase`, `demo-builder`, `community`
+(RUN_ORDER's own sequence, `index.mjs`; `sessions-index` added W6-B11) — one
+file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
 linear cycle. The standalone `swap-runtime` journey was retired
