@@ -1,0 +1,138 @@
+/**
+ * AgentsIndexView — pure, props-driven view for the `/agents` index route
+ * (T2 lane W6-IA-3). Mirrors the `RunView` precedent
+ * (`components/studio/agent-builder/RunView.tsx`): the actual
+ * `app/agents/page.tsx` is a thin client shell that fetches the agent
+ * roster (`fetchStudioAgents` — the SAME fetch `/library` already makes)
+ * and this section's "recent agent runs" ledger (`lib/agents-index.ts`'s
+ * `fetchRecentAgentRuns`) and renders `<AgentsIndexView .../>` with the
+ * resolved data. `StudioNav` stays OUT of this component (it lives in the
+ * page shell) so this component stays renderable via `renderToStaticMarkup`
+ * in tests — see `../../lib/agents-index-render.test.ts`'s header for the
+ * full rationale (the same one `run-view-render.test.ts` documents for its
+ * own sibling split).
+ *
+ * Two sections:
+ *   - `agent-roster` — the full agent roster as `AgentCard`s, reused
+ *     UNCHANGED from `LibraryCard.tsx` (D2 — the SAME card `/library`
+ *     already renders for its own agents pillar), plus a "+ New agent" CTA
+ *     to `/agents/new`.
+ *   - `recent-agent-runs` — `HistoryLedger` (`./HistoryLedger.tsx`), reused
+ *     UNCHANGED (D2), over the merged, newest-first, bounded ledger
+ *     `lib/agents-index.ts` builds by fetching each agent's OWN
+ *     already-shipped `GET /api/agents/:slug/history` in parallel — there
+ *     is no aggregate "all agents" bridge route yet (out of scope for this
+ *     lane; see `lib/agents-index.ts`'s header for the follow-up note).
+ *
+ * `ready` / `recentRunsReady` are two INDEPENDENT facts, not one shared
+ * "loading" flag — the roster and the runs ledger are two different
+ * fetches with different latencies (the runs fetch fans out to N parallel
+ * per-agent requests), and collapsing them would either show a stale
+ * "loading" runs ledger after the roster is already interactive, or gate
+ * the whole page behind the slower of the two for no reason. Each section
+ * renders its own honest loading / empty state independently — never a
+ * fabricated claim about data that has not resolved yet (the same
+ * declared-data-fails-open discipline `HistoryLedger`'s own three-state
+ * fetch-outcome convention already establishes on `/agents/[id]`).
+ */
+
+import { AgentCard } from '@/components/studio/LibraryCard';
+import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import type { Agent } from '@/lib/studio-client';
+import type { LedgerRow } from '@/lib/history-ledger';
+
+export type AgentsIndexViewProps = {
+  /** Whether the agent-roster fetch has resolved. */
+  ready: boolean;
+  agents: Agent[];
+  /** Whether the merged "recent agent runs" fetch has resolved. */
+  recentRunsReady: boolean;
+  recentRuns: LedgerRow[];
+  /** Threaded through to `HistoryLedger`'s own required `nowMs` prop (D7)
+   *  — never `Date.now()` read inside this component. */
+  nowMs: number;
+};
+
+export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, nowMs }: AgentsIndexViewProps) {
+  return (
+    <main
+      data-page="agents-index"
+      data-page-ready={ready ? 'true' : 'false'}
+      data-agent-count={agents.length}
+      style={{ minHeight: '100vh', background: 'var(--bg)' }}
+    >
+      <div className="page-wrap" style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 28px 64px' }}>
+
+        {/* ===== AGENT ROSTER ===== */}
+        <section
+          className="lib-section"
+          data-section="agent-roster"
+          data-count={agents.length}
+          style={{ marginBottom: 40 }}
+        >
+          <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
+            <span className="badge badge-agent">Agent</span>
+            <span
+              className="lib-count"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--faint)',
+                background: 'var(--panel-2)',
+                border: '1px solid var(--line)',
+                borderRadius: 4,
+                padding: '1px 7px',
+              }}
+            >
+              {agents.length}
+            </span>
+            <span style={{ flex: 1 }} />
+            <a className="btn btn-primary" href="/agents/new" data-action="new-agent" style={{ textDecoration: 'none' }}>
+              + New agent
+            </a>
+          </div>
+
+          {!ready ? (
+            <div data-component="agent-roster-loading" className="muted" style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}>
+              Loading agents…
+            </div>
+          ) : agents.length === 0 ? (
+            <div data-component="agent-roster-empty" className="muted" style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}>
+              No agents yet — create your first one.
+            </div>
+          ) : (
+            <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
+              {agents.map((a, i) => (
+                <AgentCard key={a.id} agent={a} index={i} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '44px 0 40px' }} />
+
+        {/* ===== RECENT AGENT RUNS ===== */}
+        <section className="lib-section" data-section="recent-agent-runs" style={{ marginBottom: 40 }}>
+          <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+              Recent agent runs
+            </span>
+          </div>
+
+          {!recentRunsReady ? (
+            <div
+              data-component="recent-agent-runs-loading"
+              className="muted"
+              style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}
+            >
+              Loading recent runs…
+            </div>
+          ) : (
+            <HistoryLedger rows={recentRuns} nowMs={nowMs} />
+          )}
+        </section>
+
+      </div>
+    </main>
+  );
+}

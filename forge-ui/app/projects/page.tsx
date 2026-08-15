@@ -1,23 +1,45 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { fetchStudioProjects } from '@/lib/studio-client';
-import { StudioNav } from '@/components/StudioNav';
+import { fetchStudioKbs, fetchStudioProjects, type Kb, type Project } from '@/lib/studio-client';
+import { ProjectsIndexBody } from '@/components/studio/ProjectsIndex';
+
+// ---------------------------------------------------------------------------
+// /projects — the real projects index (W6-IA-1).
+//
+// Was a 23-line shim that fetched the roster only to `router.replace()` onto
+// the FIRST registered project (an arbitrary already-onboarded project's
+// editor, never an index) and rendered dead-end "No projects registered."
+// text with no CTA when the roster was empty. `app/page.tsx`'s Home
+// dashboard linked its "Onboard a project" CTA straight at this route, so
+// the operator's one onboarding entry point from Home landed on a random
+// project instead of the onboarding form.
+//
+// This page now owns ONLY the fetch (mirrors `app/library/page.tsx`'s
+// `loadAll` shape, scoped to just projects+kbs) and renders the pure,
+// props-driven `ProjectsIndexBody` (`components/studio/ProjectsIndex.tsx`) —
+// the piece unit-tested via `lib/projects-index-render.test.ts`.
+// ---------------------------------------------------------------------------
 
 export default function ProjectsIndexPage() {
-  const router = useRouter();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [kbs, setKbs] = useState<Kb[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    fetchStudioProjects().then((projects) => {
-      if (projects.length > 0) {
-        router.replace(`/projects/${encodeURIComponent(projects[0].id)}`);
-      } else {
-        setReady(true);
+    const signal = { cancelled: false };
+    (async () => {
+      try {
+        const [p, k] = await Promise.all([fetchStudioProjects(), fetchStudioKbs()]);
+        if (signal.cancelled) return;
+        setProjects(p);
+        setKbs(k);
+      } finally {
+        if (!signal.cancelled) setReady(true);
       }
-    }).catch(() => setReady(true));
-  }, [router]);
+    })();
+    return () => { signal.cancelled = true; };
+  }, []);
 
-  if (!ready) return <main data-page="projects-index" style={{ minHeight: '100vh', background: 'var(--bg)' }}><StudioNav /><div style={{ padding: 40, color: 'var(--dim)' }}>Loading…</div></main>;
-  return <main data-page="projects-index" style={{ minHeight: '100vh', background: 'var(--bg)' }}><StudioNav /><div style={{ padding: 40, color: 'var(--dim)' }}>No projects registered.</div></main>;
+  return <ProjectsIndexBody projects={projects} kbs={kbs} ready={ready} />;
 }
