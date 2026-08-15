@@ -10,10 +10,9 @@
  * looked eternally in-flight with no signal the poll itself had given up.
  * `pollAgentRun` makes that condition an explicit `'timed-out'` state
  * instead, delivered through the same `onUpdate` callback both call sites
- * already render from.
- *
- * RED-first: `./agent-dispatch.ts` does not exist yet — every test below is
- * a legitimate RED (module not found) until the implementer creates it.
+ * already render from. It also wraps the fetch in a try/catch: a throwing
+ * `fetchStatus` counts as one failed attempt and keeps polling — never an
+ * unhandled rejection.
  *
  * Pure logic, no DOM — testable with plain fake timers + an injected
  * `fetchStatus` (default: `getAgentRunStatus`, `./studio-client.ts`), no
@@ -111,6 +110,35 @@ test('pollAgentRun: the returned cleanup function stops all future polling and o
 test('pollAgentRun: default interval/attempt-ceiling constants match the ~3-minute-at-2s bound both original call sites used', () => {
   expect(DEFAULT_POLL_INTERVAL_MS).toBe(2000);
   expect(DEFAULT_POLL_MAX_ATTEMPTS).toBe(90);
+});
+
+test('pollAgentRun: a throwing fetchStatus counts as a failed attempt and keeps polling — never an unhandled rejection', async () => {
+  const fetchStatus = vi.fn()
+    .mockRejectedValueOnce(new Error('network blip'))
+    .mockResolvedValue(status({ state: 'done', costUsd: 2, events: 3 }));
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 10 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  expect(onUpdate).not.toHaveBeenCalled(); // the throw itself reports no fabricated status
+  await vi.advanceTimersByTimeAsync(10);
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(2));
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ state: 'done', costUsd: 2, events: 3 }));
+  stop();
+});
+
+test('pollAgentRun: an ALWAYS-throwing fetchStatus still gives up at maxAttempts with an explicit "timed-out" — bounded even with zero real status ever observed', async () => {
+  const fetchStatus = vi.fn().mockRejectedValue(new Error('down'));
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  for (let i = 0; i < 5; i++) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ state: 'timed-out' }));
+  const callsAtTimeout = fetchStatus.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetchStatus).toHaveBeenCalledTimes(callsAtTimeout); // no further polling
+  stop();
 });
 
 test('pollAgentRun: with no fetchStatus override, the default resolves through the real studio-client getAgentRunStatus', async () => {

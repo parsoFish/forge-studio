@@ -12,10 +12,20 @@
  *
  * `pollAgentRun` fixes that by making the ceiling an explicit `'timed-out'`
  * state, delivered through the same `onUpdate` callback the two call sites
- * already render `status` from — no other visible behaviour changes: the
- * fetch cadence, the attempt ceiling (90 attempts @ 2s ≈ 3 min, both
- * call sites' own prior constants), and the immediate first poll are all
- * preserved exactly.
+ * already render `status` from. It keeps both call sites' cadence constants
+ * (poll immediately, then every 2s, give up after 90 non-terminal polls ≈
+ * 3 min) but is NOT a byte-identical port of the mechanics — two deliberate
+ * differences:
+ *   - the originals drove `setInterval` (which can pile up overlapping
+ *     fetches if a single poll takes longer than `intervalMs`); this uses a
+ *     sequential `setTimeout` chain instead, scheduling each next poll only
+ *     after the current one resolves.
+ *   - that sequencing means giving up costs one fewer real fetch than
+ *     before: the originals fired a 91st fetch (the immediate poll plus 90
+ *     interval fetches) whose still-'running' result was the stale value
+ *     left on screen forever; here the 90th fetch's result is what's
+ *     relabelled `'timed-out'` — no wasted 91st fetch chasing a decision
+ *     already made.
  */
 import { getAgentRunStatus, type AgentRunStatus } from './studio-client';
 
@@ -64,10 +74,31 @@ export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => vo
   let cancelled = false;
   let attempts = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Preserved across ticks so a timeout reached via a THROWING poll (below)
+  // can still report the last real cost/events, rather than fabricating
+  // zeros for a status this loop never actually saw.
+  let lastStatus: AgentRunStatus | null = null;
 
   const tick = async (): Promise<void> => {
-    const s = await fetchStatus(runId);
+    let s: AgentRunStatus;
+    try {
+      s = await fetchStatus(runId);
+    } catch {
+      // A throwing fetch counts as one failed attempt and keeps polling —
+      // never an unhandled rejection, and never a status this loop didn't
+      // actually observe. Bounded by the same maxAttempts ceiling as a
+      // still-'running' poll.
+      if (cancelled) return;
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        onUpdate({ ...(lastStatus ?? { ok: false, costUsd: 0, events: 0 }), state: 'timed-out' });
+        return;
+      }
+      timer = setTimeout(() => { void tick(); }, intervalMs);
+      return;
+    }
     if (cancelled) return;
+    lastStatus = s;
     onUpdate(s);
     if (s.state !== 'running') return; // terminal (or honestly unknown) — stop
 

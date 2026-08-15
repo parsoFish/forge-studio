@@ -767,19 +767,28 @@ inventory rather than one shared page-level contract:
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
   **`[data-section="contract-resolution"]` agent-tier buttons**
-  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]`, one per
-  agent-tier clause — `ContractResolutionPanel.tsx`) navigate to the matching
-  builder or KB tab; they never dispatch an agent turn themselves, so their
-  label is route-honest per clause (`instructions`/`demo-builder`/`brain-fix`
-  → "Open in instructions builder…"/"Open in demo builder…"/"Open in
+  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
+  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  they never dispatch an agent turn themselves, so their label is
+  route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
+  "Open in instructions builder…"/"Open in demo builder…"/"Open in
   Knowledge…", `contract-resolution-view.ts`'s `agentResolveLabel`). The
   `brain-fix` route (the BRAIN clause) navigates to
-  `/knowledge?id=<projectId>&tab=health` — the project's own Brain 3 KB
-  declares `id: <projectId>` in its `kb.yaml` (ADR 035), so the id is derived
-  from the projectId already in scope, no separate lookup. The USER-tier
-  `[data-action="apply-clause-decision"]` button genuinely dispatches +
-  polls a preflight-fix agent (~90s bounded) and is labelled "Apply with
-  agent" accordingly.
+  `/knowledge?id=<boundKbId>&tab=health`, where `boundKbId` is the project's
+  REAL bound KB id — the `kb` state `KbBind.tsx` owns, threaded into the
+  panel as its `boundKbId` prop, NEVER derived from the project id (a
+  project's KB binding is operator-rebindable to any KB, or unbound
+  entirely — `cli/bridge-studio-writes.ts` deliberately leaves it `null`
+  when no KB seed landed on create). When `boundKbId` is `null` the
+  brain-fix button renders `data-resolve-blocked="true"` and disabled, with
+  an honest `[data-component="brain-fix-unbound-hint"]` row explaining why,
+  instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
+  resolution silently falls back to the first KB in the list on an unknown
+  id — a wrong destination with no indication anything went wrong). The
+  USER-tier `[data-action="apply-clause-decision"]` button genuinely
+  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
+  "Apply with agent" accordingly.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN

@@ -483,6 +483,10 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               <ContractResolutionPanel
                 projectId={id}
                 clauses={preflight.clauses}
+                // The REAL binding (KbBind's own `kb` state, just above) —
+                // never re-derived from the project id (a project's KB is
+                // operator-rebindable to any KB, or unbound entirely).
+                boundKbId={kb}
                 onChanged={() => void loadPreflight({ cancelled: false })}
                 onDemoSessionStarted={handleDemoSessionStarted}
               />
