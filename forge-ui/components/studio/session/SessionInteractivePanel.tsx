@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 
-import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload } from '@/lib/session-client';
+import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload, type FilePackageFile } from '@/lib/session-client';
+import { ActivityLog } from '@/components/studio/ActivityLog';
+import type { EventLogEntry } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -18,13 +20,12 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 // 409s exactly as a forged one would; this panel is a thin, honest renderer
 // over that already-derived contract, not a second source of truth.
 //
-// THIS BATCH (W6-B6): wired into the session shell for `demo` and
-// `onboarding` only — architect/instructions/kb-cleanup/authoring keep their
-// bespoke panels (`SessionArchitectPanel` / `SessionInstructionsPanel` /
-// `SessionCleanupPanel` / `SessionAuthoringPanel`) until B8/B9 migrate them
-// onto this generic surface. Architect never migrates (ADR-043 amendment §4
-// — its branching council/interview control flow has no linear phase-table
-// seam); it stays permanently bespoke.
+// W6-B6 wired `demo`/`onboarding` onto this surface; W6-B8 adds `kb-cleanup`
+// and `authoring` (deleting their bespoke `SessionCleanupPanel`/
+// `SessionAuthoringPanel`) — architect/instructions keep their own panels
+// (instructions is a future migration; architect never migrates, ADR-043
+// amendment §4 — its branching council/interview control flow has no linear
+// phase-table seam).
 //
 // Per-affordance-kind rendering:
 //   - `question-form` — a free-text answer box (this batch's B4/B6 pass has
@@ -50,7 +51,24 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 //     `handleDemoVerdict` accepts an optional `generation`) whenever the
 //     session's own artifact IS a real `generation-gallery` with at least
 //     one generation — driven by the wire artifact kind, never a `kind ===
-//     'demo'` compare.
+//     'demo'` compare. W6-B8: when the artifact IS a real `file-package`
+//     (authoring's shape — again driven by `artifact.kind`, never `kind ===
+//     'authoring'`), Approve ALSO requires a package id: `handleAuthoringVerdict`
+//     (cli/bridge-studio-affordances.ts) needs `{kind:'skill'|'hook', id}` in
+//     the body, and `id` (the library directory name) is an operator decision
+//     the drafted package cannot make for itself (D4) — so a
+//     `[data-field="session-package-id"]` text input renders alongside the
+//     button, and Approve stays disabled until it is non-empty AND the
+//     draft's shape is resolved (detected purely by file PRESENCE — a
+//     `SKILL.md` at the package root ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒
+//     still drafting, honestly disabled rather than a button known in
+//     advance to 400). On a successful package-shaped approve,
+//     `onPackageFinalized` fires with the server's own `{kind, id}` echo —
+//     bubbled up so the PAGE (not this panel) navigates to
+//     `/skills/<id>`/`/hooks/<id>`, mirroring why `onChanged` is a callback
+//     rather than a `useRouter()` call here: `useRouter()` throws "invariant
+//     expected app router to be mounted" under `renderToStaticMarkup`, the
+//     harness this file's own DOM regression suite renders with.
 //   - `staged-review` / `next-turn` — rendered DISABLED, honestly labelled
 //     "not yet wired" — B4 returns 501 `UnhandledAffordanceBody` for both
 //     (they describe what an `agent` step already did / where it advances
@@ -60,11 +78,31 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 // + the currently-available set), 422, 501 UnhandledAffordanceBody — reaches
 // the operator VERBATIM via `data-affordance-error`, never swallowed and
 // never replaced by a generic "failed" string.
+//
+// W6-B8 — the shared `ActivityLog` bottom drawer (W6-B7) now renders here
+// too, gated on `!terminal`: `terminal` (session-client.ts, mirroring the
+// server's own `isTerminalPhase`) is a session-level fact, not derived from
+// `affordances.length` (a working, non-terminal phase can legitimately have
+// zero affordances — onboarding's `running` phase is exactly that case, the
+// one this gate most needs to cover). Every GENERIC_PANEL_KINDS kind gets
+// this identically — never a per-kind branch.
 // ---------------------------------------------------------------------------
 
 /** Affordance kinds this route has no write handler for at all (B4's
  *  `unhandledAffordanceBody` fallthrough) — rendered disabled, honestly. */
 const NOT_YET_WIRED_KINDS: ReadonlySet<SessionAffordance['kind']> = new Set(['staged-review', 'next-turn']);
+
+/** Detects a drafted authoring package's shape purely by file PRESENCE
+ *  (skills/creation-agent/SKILL.md's own two package shapes) — mirrors the
+ *  retired `SessionAuthoringPanel`'s identical helper. `unknown` covers
+ *  "still drafting" (neither marker file has landed yet). */
+type DraftShape = 'skill' | 'hook' | 'unknown';
+
+function draftShapeOf(files: readonly FilePackageFile[]): DraftShape {
+  if (files.some((f) => f.path === 'SKILL.md')) return 'skill';
+  if (files.some((f) => f.path === 'hook.yaml')) return 'hook';
+  return 'unknown';
+}
 
 function generationOptions(artifact: SessionArtifactPayload | null): number[] {
   if (!artifact || artifact.kind !== 'generation-gallery') return [];
@@ -79,7 +117,10 @@ export function SessionInteractivePanel({
   affordances,
   artifact = null,
   modelTier = null,
+  events,
+  terminal,
   onChanged,
+  onPackageFinalized,
 }: {
   /** The session-kind id (e.g. 'demo', 'onboarding') — the POST route's own
    *  `:kind` segment. */
@@ -96,13 +137,29 @@ export function SessionInteractivePanel({
    *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
+  /** W6-B8 — this session's live event stream (the same `useCycleEvents(cycleId)`
+   *  feed the page already computes for the StageHex burst chips), handed
+   *  straight to the shared `ActivityLog` drawer. */
+  events: EventLogEntry[];
+  /** W6-B8 — session-client.ts's `terminal` (mirrors the server's own
+   *  `isTerminalPhase`), gating the ActivityLog drawer: it renders only
+   *  while `!terminal` — a settled session has nothing left to watch work. */
+  terminal: boolean;
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
    *  DOM-pin test never passes one. */
   onChanged?: () => void;
+  /** W6-B8 — called when a verdict-approve's response echoes back a real
+   *  `{kind:'skill'|'hook', id}` (the `file-package` artifact's finalize
+   *  shape, `runFinalize`'s own response) — the PAGE navigates to the landed
+   *  package's own detail page; this panel never calls `useRouter()` itself
+   *  (see this file's header). Optional — a panel under a DOM-pin test never
+   *  passes one, and no other affordance shape ever triggers it. */
+  onPackageFinalized?: (packageKind: 'skill' | 'hook', id: string) => void;
 }): JSX.Element {
   const [answerText, setAnswerText] = useState('');
   const [pickedGeneration, setPickedGeneration] = useState<string>('');
+  const [packageId, setPackageId] = useState('');
   const [busyAffordanceId, setBusyAffordanceId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -112,6 +169,11 @@ export function SessionInteractivePanel({
   // simply the only kind that will ever have one, without this component
   // needing to know its name.
   const generations = generationOptions(artifact);
+
+  // W6-B8 — same discipline, for authoring's file-package shape: driven by
+  // `artifact.kind`, never `kind === 'authoring'`.
+  const packageArtifact = artifact !== null && artifact.kind === 'file-package' ? artifact : null;
+  const packageShape = packageArtifact ? draftShapeOf(packageArtifact.files) : null;
 
   async function submit(affordance: SessionAffordance, body: Record<string, unknown>): Promise<void> {
     if (!project) {
@@ -132,8 +194,22 @@ export function SessionInteractivePanel({
       return;
     }
     setAnswerText('');
+    setPackageId('');
+    // W6-B8 — a package-shaped verdict response (`runFinalize`'s own
+    // `{ok:true, kind, id}`) bubbles up to the page for navigation. Driven by
+    // the RESPONSE shape, not by `kind`/`affordance` — any future affordance
+    // whose write handler happens to echo the same two fields gets the same
+    // treatment, for free.
+    const data = result.data;
+    const packageKind = data['kind'];
+    const packageIdEcho = data['id'];
+    if ((packageKind === 'skill' || packageKind === 'hook') && typeof packageIdEcho === 'string') {
+      onPackageFinalized?.(packageKind, packageIdEcho);
+    }
     onChanged?.();
   }
+
+  const drawer = !terminal && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />;
 
   if (affordances.length === 0) {
     return (
@@ -142,6 +218,7 @@ export function SessionInteractivePanel({
         <div data-section="session-no-affordances" style={{ fontSize: 12.5, color: 'var(--faint)', padding: '10px 0' }}>
           No operator action available for this session kind right now.
         </div>
+        {drawer}
       </div>
     );
   }
@@ -188,6 +265,13 @@ export function SessionInteractivePanel({
           // always attaches it); the empty-array fallback is defensive only
           // (a malformed/older payload), never a fabricated "both" default.
           const verdicts = affordance.meta?.verdicts ?? [];
+          // W6-B8 — the file-package id field: required (non-empty) AND the
+          // draft's shape must have resolved (never 'unknown') before Approve
+          // is enabled. `packageArtifact`/`packageShape` are computed once,
+          // outside this map, from `artifact.kind` — never from `affordance`
+          // or `kind`.
+          const packageIdReady = packageArtifact === null || (packageShape !== 'unknown' && packageId.trim().length > 0);
+          const approveDisabled = busy || !packageIdReady;
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="verdict" style={sectionStyle}>
               {generations.length > 0 && (
@@ -208,6 +292,23 @@ export function SessionInteractivePanel({
                   </select>
                 </div>
               )}
+              {packageArtifact && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={labelStyle}>{packageShape === 'hook' ? 'Hook id (directory name)' : 'Skill id (directory name)'}</div>
+                  <input
+                    value={packageId}
+                    onChange={(e) => setPackageId(e.target.value)}
+                    placeholder="e.g. pr-diff-summary"
+                    data-field="session-package-id"
+                    style={inputStyle}
+                  />
+                  {packageShape === 'unknown' && (
+                    <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>
+                      Waiting for the draft to include a SKILL.md or hook.yaml before this can be saved.
+                    </div>
+                  )}
+                </div>
+              )}
               {error && <ErrorLine message={error} />}
               <div style={{ display: 'flex', gap: 8 }}>
                 {verdicts.includes('approve') && (
@@ -215,14 +316,15 @@ export function SessionInteractivePanel({
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-approve"
-                    disabled={busy}
+                    disabled={approveDisabled}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'approve',
                         ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
+                        ...(packageArtifact ? { kind: packageShape === 'hook' ? 'hook' : 'skill', id: packageId.trim() } : {}),
                       })
                     }
-                    style={{ opacity: busy ? 0.5 : 1 }}
+                    style={{ opacity: approveDisabled ? 0.5 : 1 }}
                   >
                     {busy ? 'Working…' : 'Approve'}
                   </button>
@@ -265,6 +367,7 @@ export function SessionInteractivePanel({
           </div>
         );
       })}
+      {drawer}
     </div>
   );
 }

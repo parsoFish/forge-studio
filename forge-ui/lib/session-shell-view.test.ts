@@ -118,6 +118,10 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
     { index: 2, role: 'operator', stage: 'roadmap', text: 'gitpulse', source: 'answers.json#round-1' },
   ],
   artifact: { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
+  affordances: [],
+  modelTier: null,
+  // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
+  terminal: false,
 };
 
 // Mandatory multi-stage fixture — no shipped kind is multi-stage today, but
@@ -145,6 +149,10 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
     { index: 6, role: 'operator', stage: 'roadmap', text: 'roadmap turn 1', source: 'f.md' },
   ],
   artifact: { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '# draft', hasDraft: true },
+  affordances: [],
+  modelTier: null,
+  // W6-B8 — a synthetic 'in-progress' phase, not terminal.
+  terminal: false,
 };
 
 // ===========================================================================
@@ -483,5 +491,26 @@ test('AT-99: sessionShellState: two payloads sharing EVERY OTHER field but a DIF
   expect(switched.ok).toBe(true);
   if (switched.ok) {
     expect(switched.state.title).toBe('Future multi-stage session');
+  }
+});
+
+// ===========================================================================
+// W6-B8 — state.terminal threads through verbatim from payload.terminal, and
+// survives a selectStage switch unchanged (same discipline as title/
+// artifactLabel above — a phase-scoped, session-level fact, not a
+// per-stage one).
+// ===========================================================================
+
+test('AT-100: sessionShellState: "terminal" threads through verbatim from the payload, both true and false', () => {
+  expect(sessionShellState(SINGLE_STAGE_PAYLOAD).terminal).toBe(false);
+  expect(sessionShellState({ ...SINGLE_STAGE_PAYLOAD, terminal: true }).terminal).toBe(true);
+});
+
+test('AT-101: selectStage: "terminal" is UNCHANGED across a stage switch — a session-level fact, not a per-stage one', () => {
+  const initial = sessionShellState({ ...MULTI_STAGE_PAYLOAD, terminal: true });
+  const switched = selectStage(initial, 'demo');
+  expect(switched.ok).toBe(true);
+  if (switched.ok) {
+    expect(switched.state.terminal).toBe(true);
   }
 });

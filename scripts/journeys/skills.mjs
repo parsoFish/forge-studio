@@ -698,8 +698,19 @@ export const journey = defineJourney({
               await page.waitForFunction(
                 () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'awaiting-review',
                 null, { timeout: 10000 }).catch(() => {});
-              check(await page.evaluate(() => document.querySelector('[data-section="authoring-status"]')?.getAttribute('data-authoring-shape')) === 'skill',
-                'SK-6: the panel detects the drafted shape by file PRESENCE (SKILL.md at the package root)');
+              // W6-B8 — authoring now renders the GENERIC SessionInteractivePanel
+              // (its bespoke SessionAuthoringPanel/[data-authoring-shape] is
+              // deleted); the drafted shape (skill vs hook) is detected the
+              // SAME way — file PRESENCE, SKILL.md at the package root — but
+              // surfaces as the package-id field's own label text, since the
+              // generic panel carries no per-kind status section.
+              check(await page.locator('[data-affordance-kind="verdict"]').count() > 0,
+                'SK-6: awaiting-review derives a verdict affordance');
+              check(await page.locator('[data-field="session-package-id"]').count() > 0,
+                'SK-6: the package-id field renders (artifact.kind === "file-package")');
+              const idFieldLabel = await page.evaluate(() => document.querySelector('[data-field="session-package-id"]')?.previousElementSibling?.textContent ?? '');
+              check(idFieldLabel === 'Skill id (directory name)',
+                `SK-6: the panel detects the drafted shape by file PRESENCE (SKILL.md at the package root) — got label "${idFieldLabel}"`);
               check(await page.locator('[data-section="session-artifact"] [data-component="file-package"]').count() > 0,
                 'SK-6: the real file-package artifact pane renders the drafted SKILL.md');
               const draftedText = await page.evaluate(() =>
@@ -707,8 +718,8 @@ export const journey = defineJourney({
               check(draftedText.includes('Live Proof Skill'), 'SK-6: the pane shows the REAL captured turn\'s content, not a placeholder');
               await frame(page, 'sk-11-drafted', 'Part 2 (skills) — the drafted SKILL.md in the real file-package pane', { key: true });
 
-              await page.locator('[data-field="authoring-id"]').fill(AUTH_SKILL_ID).catch(() => {});
-              await page.locator('[data-action="finalize-authoring"]').click().catch(() => {});
+              await page.locator('[data-field="session-package-id"]').fill(AUTH_SKILL_ID).catch(() => {});
+              await page.locator('[data-action="verdict-approve"]').click().catch(() => {});
               await page.waitForURL(new RegExp(`/skills/${AUTH_SKILL_ID}`), { timeout: 15000 }).catch(() => {});
               await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
               check(existsSync(join(AUTH_SKILL_DIR, 'SKILL.md')), `SK-6: finalize lands the real skills/${AUTH_SKILL_ID}/SKILL.md`);

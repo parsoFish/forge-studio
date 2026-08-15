@@ -30,9 +30,10 @@ export function AuthoringLauncher({
   knownProjects?: string[];
   /** `project` is passed alongside `sessionId` because the generic session
    *  shell (`/sessions/authoring/<sessionId>?project=<p>`) needs it in the
-   *  URL — "authoring" has no per-kind summary fetch to resolve it from
-   *  (see `SessionAuthoringPanel`'s own header note), so the caller must
-   *  carry it through explicitly. */
+   *  URL — "authoring" has no per-kind summary fetch to resolve it from (the
+   *  generic `SessionInteractivePanel` works entirely off the shell's own
+   *  `file-package` artifact), so the caller must carry it through
+   *  explicitly. */
   onStarted?: (sessionId: string, project: string) => void;
 }) {
   const [project, setProject] = useState('');

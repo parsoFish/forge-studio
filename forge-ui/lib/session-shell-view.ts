@@ -110,6 +110,10 @@ export type SessionShellReadyState = {
   /** W6-B6 — the session's own kickoff-selected model tier, or `null` when
    *  none was recorded. Carried through verbatim, never guessed. */
   modelTier: string | null;
+  /** W6-B8 — the payload's own `terminal` (server-derived, see session-
+   *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
+   *  session-level fact (like `phase`), never a per-stage one. */
+  terminal: boolean;
   dataAttrs: SessionShellDataAttrs;
 };
 
@@ -174,6 +178,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     artifact: payload.artifact,
     affordances: payload.affordances,
     modelTier: payload.modelTier,
+    terminal: payload.terminal,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
       stage,

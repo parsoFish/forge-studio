@@ -194,6 +194,9 @@ const WELL_FORMED_PAYLOAD = {
   // model-tier seam, so modelTier is honestly null.
   affordances: [] as { id: string; kind: string; phase: string }[],
   modelTier: null as string | null,
+  // W6-B8 — REQUIRED on every wire payload (never omitted): architect's
+  // fixture session sits at 'awaiting-verdict', a non-terminal phase.
+  terminal: false,
 };
 
 // ===========================================================================
@@ -461,6 +464,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     artifact: WELL_FORMED_MARKDOWN_ARTIFACT,
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
     modelTier: 'sonnet',
+    terminal: false,
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -477,8 +481,28 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     artifact: WELL_FORMED_BRAIN_ARTIFACT,
     affordances: [],
     modelTier: null,
+    terminal: false,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
+});
+
+// ===========================================================================
+// W6-B8 — parseSessionShellPayload gains "terminal" (boolean, REQUIRED, never
+// omitted or defaulted) — mirrors "affordances"' own hard-required treatment
+// immediately above (AT-95..97's own precedent for a field added after the
+// original AT-1..32 sequence): a non-array/missing wire field throws by name.
+// ===========================================================================
+
+test('AT-127: parseSessionShellPayload: "terminal" round-trips true/false verbatim', () => {
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: true }).terminal).toBe(true);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: false }).terminal).toBe(false);
+});
+
+test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS — never defaulted to false', () => {
+  const { terminal: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/terminal/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: 'true' })).toThrow(/terminal/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: null })).toThrow(/terminal/);
 });
 
 // ===========================================================================
