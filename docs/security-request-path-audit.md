@@ -312,6 +312,55 @@ writes are TRUSTED-AT-CONSTRUCTION (server/linter-derived, not request-body
 derived), the scaffold mkdir is an unchanged already-allowlisted
 CREATE-LITERAL-SUBDIR, and the session write is fully guard-terminal.
 
+### Extended in W6-B12 — KB drain-to-green (`op`-less `/drain` routes, `[read]`)
+
+W6-B12 added `cli/bridge-studio-kb-drain.ts` (a NEW module, picked up
+automatically by `check-raw-fs-guarded.mjs`'s `cli/bridge-studio*.ts` glob):
+`POST /api/studio/kbs/:id/drain` (dispatch), `GET /api/studio/kbs/:id/drain/:runId`
+(one run's status), and `GET /api/studio/kbs/:id/drain` (active-or-latest
+reattach) — an iterate-to-green drain loop over a KB's `forge brain lint`
+findings, built on the SAME per-kbId serialization queue (`enqueueConsolidate`)
+and the SAME `runBrainFixTurn` per-finding agent dispatch the existing
+`op=consolidate` path (R1-06, above) already uses. Every new fs sink is in this
+one new file:
+
+- **`writeKbDrainStatus`/`readKbDrainStatus`** (`_logs/_kb-drain-<runId>/status.json`,
+  `mkdirSync`+`writeFileSync` / `existsSync`+`readFileSync`) — SAME
+  TRUSTED-AT-CONSTRUCTION class as `writeConsolidateTerminalEvent`/
+  `readBrainFixState` above: both helpers take a bare `runId` parameter (the
+  raw-fs-guarded lint's curated taint-list name), but at every real call site
+  the value is either freshly minted by `POST .../drain` as
+  `` `${kbId}-drain-${Date.now().toString(36)}` `` (`kbId` already `SLUG_RE`-gated
+  at that same route, strictly before this is ever called), or read back via
+  `isSafeRunId(runId) && runId.startsWith(\`${kbId}-drain-\`)` at the two GET
+  routes — charset AND kbId-prefix gated, never trusted on charset alone (a
+  syntactically-valid but foreign-kb runId is treated identically to an unknown
+  one: the same generic 404, no oracle on which check failed). `_kb-drain-<runId>`
+  is a single validated path segment under trusted `forgeRoot/_logs`.
+  Allowlisted in `check-raw-fs-guarded.mjs`.
+- **`findKbDrainRuns`** (`readdirSync`/`existsSync` on `_logs/`, filtered to this
+  kb's own `_kb-drain-<kbId>-drain-*` prefix) — NOT flagged at all: the local
+  variable is literally named `logsRoot` (a `TRUSTED_ROOTS` name), and the
+  per-entry `readFileSync` inside it goes through `readKbDrainStatus` with a
+  `runId` reconstructed from a `readdirSync`-ENUMERATED directory name, never a
+  caller-supplied string — same "server-enumerated names, holding no client
+  string" class as `cli/metrics.ts`'s `listCycles` (used by the pre-existing
+  `GET /:id/ingest-activity` route, `cli/bridge-studio-kbs.ts`).
+- **`readBrainFixTurnCostUsd`** (`existsSync`/`readFileSync` on
+  `_logs/_brainfix-<subRunId>/events.jsonl`, reading back a real agent turn's
+  own `cost_usd` for the drain's running cost-ceiling total) — NOT flagged:
+  `subRunId` is never request-derived, always synthesized in-loop as
+  `` `${runId}__r${round}__${i}` `` (never the route's own `runId` bound
+  directly), so no curated taint-list name reaches it.
+
+None of the five is a new *unguarded* sink: the status-file read/write pair is
+TRUSTED-AT-CONSTRUCTION (server-minted or charset+prefix-gated, never raw
+request-body derived), and the two enumeration helpers reach their sinks only
+through server-enumerated names or a purely-synthesized sub-id — never a raw
+caller string. `--write`-accepted below (baseline: `existsSync` 0→3, `mkdirSync`
+0→1, `readdirSync` 0→1, `readFileSync` 0→2, `writeFileSync` 0→1, all in this one
+new file).
+
 ### Fixed in R4-16 — the four `/start` routes' `projectRepoPath`
 
 Recorded here because leaving the row below in "unguarded" after R4-16 shipped

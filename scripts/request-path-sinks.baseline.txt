@@ -29,6 +29,11 @@ cli/bridge-studio-connections.ts spawnSync 1
 cli/bridge-studio-hooks.ts mkdirSync 1
 cli/bridge-studio-hooks.ts readFileSync 2
 cli/bridge-studio-hooks.ts writeFileSync 2
+cli/bridge-studio-kb-drain.ts existsSync 3
+cli/bridge-studio-kb-drain.ts mkdirSync 1
+cli/bridge-studio-kb-drain.ts readdirSync 1
+cli/bridge-studio-kb-drain.ts readFileSync 2
+cli/bridge-studio-kb-drain.ts writeFileSync 1
 cli/bridge-studio-kbs.ts appendFileSync 2
 cli/bridge-studio-kbs.ts existsSync 5
 cli/bridge-studio-kbs.ts mkdirSync 6
