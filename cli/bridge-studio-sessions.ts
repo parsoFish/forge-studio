@@ -77,7 +77,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
@@ -214,6 +214,49 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
 }
 
 // ---------------------------------------------------------------------------
+// W6-B2 review fix (MEDIUM 2) — terminal-phase gate for ensureSessionTail
+// ---------------------------------------------------------------------------
+
+/**
+ * True iff `phase` is a TERMINAL phase for this session kind — a session at
+ * a terminal phase never appends further events, so tailing it would spin a
+ * permanent, never-stopping 200ms poll (ensureTailFor's `setInterval`) that
+ * only stops when the LAST WS client of the whole bridge disconnects (there
+ * is no per-tail teardown), not when this one session is done. Mirrors the
+ * legacy per-kind list routes' existing terminal-phase filter
+ * (`cli/ui-bridge.ts`'s four `if (s.phase !== ...) ctx.ensureSessionTail(...)`
+ * guards) — this is the SAME gate, applied at this route's own choke point,
+ * not a re-invented one.
+ *
+ * Derives, never hand-writes a new list:
+ *   - A descriptor WITH a `turnSpec` (kb-cleanup, authoring) derives its
+ *     terminal set from the turnSpec's own phase table — any phase whose row
+ *     declares `step: 'terminal'` (the ADR-043 state-machine's own "this is
+ *     where it stops" marker, already validated by validateSessionKinds to
+ *     have at least one such row — CHECK_TURNSPEC_NO_TERMINAL_PHASE). A
+ *     rename/addition of a terminal phase in studio/session-kinds.yaml is
+ *     picked up automatically, with no code change here.
+ *   - A descriptor with NO `turnSpec` (architect/instructions/demo/
+ *     project-brain — the four kinds that predate the turnSpec table) falls
+ *     back to `LEGACY_SESSION_TERMINAL_PHASES` (cli/bridge-studio.ts) — the
+ *     SAME constant the four legacy list routes now import instead of
+ *     hand-writing their own inline literals.
+ *   - Any OTHER kind (e.g. 'onboarding': no turnSpec, no
+ *     LEGACY_SESSION_TERMINAL_PHASES row) has no terminal-phase source at
+ *     all — treated as never-terminal (returns false), so its tail activates
+ *     on every GET exactly as before this fix (ensureSessionTail's own
+ *     no-op-on-missing-log-dir guard is what actually keeps its cost at
+ *     zero, since 'onboarding' never writes to this naming convention's log
+ *     dir in the first place — see ensureSessionTail's doc comment).
+ */
+function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
+  if (descriptor.turnSpec) {
+    return descriptor.turnSpec.phases.some((p) => p.step === 'terminal' && p.phase === phase);
+  }
+  return LEGACY_SESSION_TERMINAL_PHASES[descriptor.id]?.has(phase) ?? false;
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -318,13 +361,15 @@ export async function handleStudioSessionsRoutes(
     // W6-B2 — live-tail this session's event log (idempotent; no-ops for a
     // kind whose runner never writes `_logs/_<kind>-<sid>/events.jsonl`, e.g.
     // 'onboarding', which dispatches through a different, already-streaming
-    // mechanism — see cli/ui-bridge.ts's ensureSessionTail doc comment). No
-    // terminal-phase filter: terminal phases are a per-kind closed
-    // vocabulary (committed/rejected/locked/abandoned/applied/...) and
-    // hardcoding that set here would reintroduce the exact second mapping
-    // this generalization removes; the tail's own cost is bounded and stops
-    // once every WS client disconnects.
-    ctx.ensureSessionTail(descriptor.id, sessionId);
+    // mechanism — see cli/ui-bridge.ts's ensureSessionTail doc comment).
+    // Gated on isTerminalPhase (review fix, MEDIUM 2): a terminal session
+    // never appends further events, so tailing it would spin a permanent
+    // 200ms poll with no per-tail teardown (ensureTailFor only stops ALL
+    // tails together, on the last WS client disconnecting from the whole
+    // bridge) — mirrors the legacy per-kind list routes' own terminal-phase
+    // filter, derived (not re-invented) from the turnSpec table or
+    // LEGACY_SESSION_TERMINAL_PHASES; see isTerminalPhase's own doc comment.
+    if (!isTerminalPhase(descriptor, phase)) ctx.ensureSessionTail(descriptor.id, sessionId);
 
     const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir, phase });
     if (!transcriptResult.ok) {

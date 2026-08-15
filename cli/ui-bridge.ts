@@ -62,6 +62,7 @@ import {
   allowedOrigin,
   CSRF_HEADER,
   SAFE_ID_RE,
+  LEGACY_SESSION_TERMINAL_PHASES,
 } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import {
@@ -2047,10 +2048,20 @@ async function handleHttp(
  *  byte-equivalent to their pre-existing argv — `['architect','run']`,
  *  `['instructions','run']`, `['demo-builder','run']`,
  *  `['project-brain','run']` are the SAME tokens the old `{verb}+'run'`
- *  construction produced, just spelled as a literal array. */
-type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
+ *  construction produced, just spelled as a literal array.
+ *
+ *  W6-B2 review fix (MEDIUM 1) — exported (with SPAWN_AGENT_SPECS below) so
+ *  cli/session-tail-kind-parity.test.ts can import the real table directly
+ *  and assert, for every studio/session-kinds.yaml descriptor with a
+ *  corresponding entry here, that `logPrefix === descriptor.id` — the
+ *  coincidence ensureSessionTail's `_${kind}-${sessionId}` derivation
+ *  (this file, near ensureTailFor) relies on. Without this ratchet, a
+ *  future rename of either side drifts silently: ensureSessionTail just
+ *  no-ops (ensureTailFor's existsSync guard swallows the miss), so a
+ *  session's WS tail would quietly stop activating with no error anywhere. */
+export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
 
-const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
+export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
   architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
   instructions: { argvPrefix: ['instructions', 'run'], logPrefix: 'instructions' },
   'demo-builder': { argvPrefix: ['demo-builder', 'run'], logPrefix: 'demo' },
@@ -2671,7 +2682,7 @@ async function handleArchitect(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureSessionTail(SPAWN_AGENT_SPECS.architect.logPrefix, s.session_id);
+      if (!LEGACY_SESSION_TERMINAL_PHASES.architect.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS.architect.logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — this used a RAW `architectSessionDir` join and
@@ -3012,7 +3023,7 @@ async function handleInstructions(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureSessionTail(SPAWN_AGENT_SPECS.instructions.logPrefix, s.session_id);
+      if (!LEGACY_SESSION_TERMINAL_PHASES.instructions.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS.instructions.logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 — resolve through the shared guard (the enumeration is already
@@ -3559,7 +3570,7 @@ async function handleDemoBuilder(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'locked' && s.phase !== 'abandoned') ctx.ensureSessionTail(SPAWN_AGENT_SPECS['demo-builder'].logPrefix, s.session_id);
+      if (!LEGACY_SESSION_TERMINAL_PHASES.demo.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS['demo-builder'].logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
@@ -3897,7 +3908,7 @@ async function handleDemoBuilder(
   if (method === 'GET' && url === '/api/project-brain/sessions') {
     const statuses = listProjectBrainSessions(ctx.projectsRoot);
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'abandoned') ctx.ensureSessionTail(SPAWN_AGENT_SPECS['project-brain'].logPrefix, s.session_id);
+      if (!LEGACY_SESSION_TERMINAL_PHASES['project-brain'].has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS['project-brain'].logPrefix, s.session_id);
     }
     sendJson(res, 200, { sessions: statuses }, origin);
     return true;

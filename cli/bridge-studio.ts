@@ -78,6 +78,30 @@ export type StudioContext = {
 // Safe-ID guard: blocks path traversal in run/gate IDs
 export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
+/** W6-B2 review fix (MEDIUM 2) — terminal-phase sets for the four legacy
+ *  session kinds that predate `studio/session-kinds.yaml`'s `turnSpec`
+ *  table (architect/instructions/demo/project-brain never declare a
+ *  `turnSpec`, so there is no `step: terminal` row to derive a terminal set
+ *  from for them, unlike kb-cleanup/authoring). This is the SAME
+ *  terminal-phase knowledge cli/ui-bridge.ts's four per-kind list routes
+ *  already gate `ensureSessionTail` on — extracted here, into ONE named
+ *  constant BOTH cli/ui-bridge.ts (those four routes) and
+ *  cli/bridge-studio-sessions.ts (the generic `/api/studio/sessions/:kind/
+ *  :id` route) import, so neither hand-writes its own copy. Lives in this
+ *  shared, dependency-free module (not cli/ui-bridge.ts) specifically to
+ *  avoid a cli/bridge-studio-sessions.ts → cli/ui-bridge.ts → cli/
+ *  bridge-studio-sessions.ts import cycle (ui-bridge.ts already imports
+ *  handleStudioSessionsRoutes FROM bridge-studio-sessions.ts). Keyed by
+ *  session-kind id — the SAME string SPAWN_AGENT_SPECS's `logPrefix` uses
+ *  (cli/ui-bridge.ts's `ensureSessionTail` doc comment), so `descriptor.id`
+ *  indexes directly with no translation. */
+export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
+  architect: new Set(['committed', 'rejected']),
+  instructions: new Set(['committed', 'rejected']),
+  demo: new Set(['locked', 'abandoned']),
+  'project-brain': new Set(['committed', 'abandoned']),
+};
+
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
 // ---------------------------------------------------------------------------

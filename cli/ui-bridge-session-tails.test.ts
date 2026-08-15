@@ -43,6 +43,9 @@ let close: () => Promise<void>;
 
 const KB_CLEANUP_SESSION = '2026-08-15T10-00-00';
 const AUTHORING_SESSION = '2026-08-15T11-00-00';
+// W6-B2 review fix (MEDIUM 2 / LOW) — a session already at its turnSpec's
+// terminal phase ('applied', step: 'terminal' in the fixture yaml above).
+const KB_CLEANUP_TERMINAL_SESSION = '2026-08-15T12-00-00';
 const KB_ID = 'session-tails-fixture-kb';
 const PROJECT = 'demoproj';
 
@@ -128,8 +131,11 @@ function writeResolvableKb(root: string, id: string): void {
 }
 
 /** Plants a kb-cleanup session directly on disk (never through a route) —
- *  mirrors cli/bridge-studio-sessions.test.ts's `writeCleanupSessionWithResolvableKb`. */
-function writeCleanupSession(projectsRoot: string, project: string, sessionId: string, kbId: string): void {
+ *  mirrors cli/bridge-studio-sessions.test.ts's `writeCleanupSessionWithResolvableKb`.
+ *  `phase` defaults to 'awaiting-approval' (non-terminal, per the turnSpec
+ *  fixture above) — the terminal-phase gating test below plants a SECOND
+ *  session at phase 'applied' (the turnSpec's own `step: 'terminal'` row). */
+function writeCleanupSession(projectsRoot: string, project: string, sessionId: string, kbId: string, phase = 'awaiting-approval'): void {
   const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
@@ -137,7 +143,7 @@ function writeCleanupSession(projectsRoot: string, project: string, sessionId: s
     JSON.stringify({
       session_id: sessionId,
       project,
-      phase: 'awaiting-approval',
+      phase,
       kb_id: kbId,
       kb_binding: { kind: 'unique' },
       findings: [],
@@ -194,6 +200,14 @@ before(async () => {
   writeCleanupSession(projectsRoot, PROJECT, KB_CLEANUP_SESSION, KB_ID);
   seedEventLog(forgeRoot, 'kb-cleanup', KB_CLEANUP_SESSION);
 
+  // W6-B2 review fix (MEDIUM 2 / LOW) — the terminal-phase fixture: the
+  // event log is seeded BEFORE any GET, exactly like the non-terminal
+  // fixture above, so a tail that started (wrongly) would replay it on its
+  // first 200ms poll — the negative test below proves no such replay
+  // happens.
+  writeCleanupSession(projectsRoot, PROJECT, KB_CLEANUP_TERMINAL_SESSION, KB_ID, 'applied');
+  seedEventLog(forgeRoot, 'kb-cleanup', KB_CLEANUP_TERMINAL_SESSION);
+
   const authoringParent = join(projectsRoot, PROJECT, '_authoring');
   mkdirSync(authoringParent, { recursive: true });
   writeAuthoringSession(authoringParent, AUTHORING_SESSION, PROJECT, `_agent-creation-agent-${AUTHORING_SESSION}`, 'Build a fixture thing.');
@@ -248,4 +262,30 @@ test('GET /api/studio/sessions/authoring/<id>?project=<p> live-tails the session
   const received = await got;
   ws.close();
   assert.ok(received, 'expected a tool_use event over the WS for the authoring session');
+});
+
+// W6-B2 review fix (MEDIUM 2 / LOW) — pins isTerminalPhase's gate: a session
+// already at a TERMINAL phase must NOT get a tail started at all, even
+// though its own GET still 200s and its events.jsonl already carries an
+// event that a (wrongly) started tail would immediately replay on its first
+// 200ms poll. Waits several poll intervals past the GET with no event
+// arriving — the same negative-wait technique, applied to the ABSENCE of
+// the positive tests' own proof.
+test('GET /api/studio/sessions/kb-cleanup/<id>?project=<p> for a session already at a TERMINAL phase (applied) does NOT start a tail — no WS event arrives even though events.jsonl already carries one', async () => {
+  const ws = new WebSocket(`${url.replace(/^http/, 'ws')}/ws`);
+  const gotUnexpectedEvent = waitForToolUseEvent(ws, `_kb-cleanup-${KB_CLEANUP_TERMINAL_SESSION}`, 700);
+  await new Promise<void>((r) => ws.on('open', () => r()));
+
+  const res = await fetch(`${url}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_TERMINAL_SESSION}?project=${PROJECT}`);
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200 (the GET itself must still succeed for a terminal session), got ${res.status}: ${text}`);
+  assert.equal((JSON.parse(text) as { phase: string }).phase, 'applied', 'arrange: the fixture session must genuinely be at the terminal "applied" phase');
+
+  const received = await gotUnexpectedEvent;
+  ws.close();
+  assert.equal(
+    received,
+    false,
+    'a terminal-phase session GET must NOT start a tail: the pre-seeded tool_use event would have replayed on the first ~200ms poll if ensureSessionTail had (wrongly) been called for it',
+  );
 });
