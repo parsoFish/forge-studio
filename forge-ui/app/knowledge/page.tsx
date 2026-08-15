@@ -155,11 +155,34 @@ function KnowledgePageInner() {
       });
       return () => { signal.cancelled = true; };
     }
-    // Only trust the URL id while it still exists — after deleting the open
-    // KB the stale ?id= would otherwise resurrect a phantom selection that
-    // renders like the first item being re-selected.
-    if (idParam && allKbs.some((k) => k.id === idParam)) {
-      setCurrentId(idParam);
+    if (idParam) {
+      // W6-P4: trust a direct ?id= OPTIMISTICALLY the instant the URL is
+      // parsed, instead of queuing it a full round-trip behind the kbs-list
+      // fetch. The roster fetch still fires first (unchanged, above) — this
+      // only stops a KNOWN id from waiting on it before kb-detail (and, on a
+      // ?tab=ingest-activity deep link, IngestActivityPanel) can start.
+      if (!kbListReady) {
+        if (!currentId) setCurrentId(idParam);
+        return;
+      }
+      // Roster has settled — this is the ONLY place validation/correction
+      // can happen now that the optimistic set above may have run ahead of
+      // it. Same outcome as before W6-P4: a stale ?id= (e.g. the KB was
+      // deleted since the link was made) never resurrects a phantom
+      // selection — it falls back to the first KB, exactly as it did when
+      // this check ran unconditionally before the roster arrived.
+      if (allKbs.some((k) => k.id === idParam)) {
+        if (currentId !== idParam) setCurrentId(idParam);
+        return;
+      }
+      if (allKbs.length > 0) {
+        setCurrentId(allKbs[0].id);
+        return;
+      }
+      // Roster is genuinely empty — no KB to fall back to. Clear a stale
+      // optimistic pick so the dedicated empty-state branch below still
+      // reaches `ready` on `currentId === ''`, same as an id-less visit.
+      if (currentId) setCurrentId('');
       return;
     }
     if (allKbs.length > 0 && !currentId) {

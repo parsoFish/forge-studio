@@ -66,23 +66,48 @@ export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridg
 
 // ---- runtime bridge URL --------------------------------------------------
 
+// W6-P4: `app/layout.tsx` inlines the bridge PORT (never a host — see the
+// function doc below) as this global, synchronously, before any client
+// script runs — the zero-RTT fast path `resolveBridgeUrl` reads first.
+declare global {
+  interface Window {
+    __FORGE_BRIDGE_PORT__?: number | null;
+  }
+}
+
 // Cache the PROMISE rather than the value so concurrent callers
 // (Strict Mode double-mount, two effects running on the same tick)
 // share a single network request.
 let cachedBridgeUrl: Promise<string> | null = null;
 
 /**
- * Build the bridge base URL from `window.location` + the port the
- * server-side API route resolved. Same-hostname-as-the-browser is
- * essential for WSL2 + Windows browser: the Windows browser sees
- * `localhost` (forwarded into WSL by WSL2), while a Linux/WSL browser
- * sees the actual WSL hostname. Either way, the bridge port piggybacks
- * on the same hostname-forwarding the UI port already uses.
+ * Build the bridge base URL from `window.location` + the bridge port.
+ * Same-hostname-as-the-browser is essential for WSL2 + Windows browser:
+ * the Windows browser sees `localhost` (forwarded into WSL by WSL2), while
+ * a Linux/WSL browser sees the actual WSL hostname. Either way, the bridge
+ * port piggybacks on the same hostname-forwarding the UI port already uses
+ * — the host segment ALWAYS comes from `window.location.hostname`, never
+ * from any server-supplied value (global or fetched), on either path below.
+ *
+ * Resolution order (W6-P4):
+ *   1. `window.__FORGE_BRIDGE_PORT__` — inlined by the root layout
+ *      (`app/layout.tsx`) into the initial HTML, so the common case
+ *      resolves with ZERO network round-trips.
+ *   2. `/api/forge-config` — the pre-W6-P4 fetch, kept as a fallback for
+ *      whenever the global is absent (e.g. a build predating this change).
  */
 export function resolveBridgeUrl(): Promise<string> {
   if (cachedBridgeUrl) return cachedBridgeUrl;
   cachedBridgeUrl = (async () => {
     try {
+      const loc = typeof window !== 'undefined' ? window.location : null;
+      if (!loc) return ''; // SSR — client-only code path
+
+      const globalPort = typeof window !== 'undefined' ? window.__FORGE_BRIDGE_PORT__ : undefined;
+      if (typeof globalPort === 'number') {
+        return `${loc.protocol}//${loc.hostname}:${globalPort}`;
+      }
+
       const res = await fetch('/api/forge-config', { cache: 'no-store' });
       if (!res.ok) throw new Error(`forge-config → ${res.status}`);
       const body = (await res.json()) as { bridgePort: number | null };
@@ -90,8 +115,6 @@ export function resolveBridgeUrl(): Promise<string> {
       // Same hostname as the page so WSL2 (or any other localhost-
       // forwarding scheme) routes the request the same way it routed
       // the UI's HTTP fetch.
-      const loc = typeof window !== 'undefined' ? window.location : null;
-      if (!loc) return ''; // SSR — client-only code path
       return `${loc.protocol}//${loc.hostname}:${body.bridgePort}`;
     } catch {
       return '';
