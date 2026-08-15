@@ -234,8 +234,11 @@ function cmdBrain(rest: string[]): void | Promise<void> {
 
 /**
  * `forge brain fix --kb <id> --file <abs> --check <c> --kind <k> [--hint <h>] [--message <m>] [--run-id <id>]`
- * Runs ONE agent-tier brain-fix turn (the detached child the bridge spawns for
- * the lint-resolution UI's "Fix with agent"). Streams to _logs/_brainfix-<runId>/.
+ * Runs ONE agent-tier brain-fix turn (the detached child the bridge spawns
+ * for KbDrainPanel's "needs-you" per-finding walkthrough, W6-B13 —
+ * forge-ui/components/studio/knowledge/KbDrainPanel.tsx; retired the old
+ * LintResolutionPanel's "Fix with agent" button). Streams to
+ * _logs/_brainfix-<runId>/.
  */
 async function cmdBrainFix(rest: string[]): Promise<void> {
   const flag = (name: string): string | undefined => {

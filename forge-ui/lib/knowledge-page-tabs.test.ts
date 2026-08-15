@@ -12,8 +12,13 @@
  *       data-tab="explore" | "health" | "ingest-activity" + data-tab-active.
  *     RED-J (tab half): page.tsx reads the tab param from searchParams
  *       (`?tab=`).
- *   F1 (LintResolutionPanel/GuidancePanel/KbHealth move under Health tab) —
- *     RED-I: `<LintResolutionPanel` (today gated ONLY by `{currentId && (`,
+ *   F1 (LintResolutionPanel/GuidancePanel/KbHealth move under Health tab;
+ *   W6-B13 replaces LintResolutionPanel with KbDrainPanel — the anchor below
+ *   was updated in place rather than dropped, since the STRUCTURAL claim it
+ *   pins (the Health-tab component is nested under a `tab === 'health'`
+ *   conditional, not merely gated on `currentId`) is unchanged by which
+ *   component fills that slot) —
+ *     RED-I: `<KbDrainPanel` (today gated ONLY by `{currentId && (`,
  *       page.tsx:278-279 — unconditional with respect to any tab) is
  *       textually nested under a health-tab conditional.
  *   RULING 1 (`?theme=` thin alias onto the existing `?node=` machinery,
@@ -99,12 +104,12 @@ describe('knowledge page — Health tab gating (R6-08 WI-3, F1)', () => {
   const source = readFileSync(PAGE_PATH, 'utf8');
   const block = extractFunctionBody(source, 'KnowledgePageInner');
 
-  it('precondition: LintResolutionPanel really is rendered in KnowledgePageInner today (regression-anchors the extraction before trusting the RED below)', () => {
-    expect(block).toContain('<LintResolutionPanel');
+  it('precondition: KbDrainPanel really is rendered in KnowledgePageInner today (regression-anchors the extraction before trusting the RED below)', () => {
+    expect(block).toContain('<KbDrainPanel');
   });
 
-  it('RED: <LintResolutionPanel is nested under a health-tab conditional, not merely gated on currentId', () => {
-    const idx = block.indexOf('<LintResolutionPanel');
+  it('RED: <KbDrainPanel is nested under a health-tab conditional, not merely gated on currentId', () => {
+    const idx = block.indexOf('<KbDrainPanel');
     expect(idx).toBeGreaterThan(-1);
     const before = block.slice(Math.max(0, idx - 250), idx);
     // Today (RED): the ONLY gate is `{currentId && (` (page.tsx:278) — no tab

@@ -2052,6 +2052,10 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       demo.panel,
       {
         phases: [
+          // W6-B10: every demo session is minted straight into 'briefing'
+          // (POST /api/demo-builder/start) — this row is what lets the
+          // dedicated /sessions/demo/<sid> screen actually get one started.
+          { phase: 'briefing', step: 'noop', awaits: 'questions' },
           { phase: 'generating', step: 'agent', writes: ['demo'], next: 'awaiting-review' },
           { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
           { phase: 'locking', step: 'finalize', finalizer: 'recordLockedDemo', next: 'locked' },
@@ -2059,7 +2063,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
           { phase: 'abandoned', step: 'terminal' },
         ],
       },
-      `demo's panel must deep-equal the generating->awaiting-review->locking->locked/abandoned table mirroring demo-builder-runner.ts:15-20, got: ${JSON.stringify(demo.panel)}`,
+      `demo's panel must deep-equal the briefing->generating->awaiting-review->locking->locked/abandoned table mirroring demo-builder-runner.ts:15-20, got: ${JSON.stringify(demo.panel)}`,
     );
 
     const instructions = byId(descs, 'instructions');

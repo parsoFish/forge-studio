@@ -216,6 +216,16 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
   { method: 'POST', route: '/api/runs', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
+  // ---- exempt-local: kb drain-to-green (W6-B12) --------------------------
+  // Same reasoning as /api/studio/kbs/:id/cleanup/apply above: this route
+  // dispatches runKbDrain (cli/bridge-studio-kb-drain.ts), which carries its
+  // OWN noSpawn guard (`FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
+  // mirroring runBrainConsolidateNow's identical guard) — under dry-bridge
+  // the drain loop still runs its local auto-tier fixes and lint scans to a
+  // real (honest) terminal state, just with agent-tier turns skipped rather
+  // than the whole route refusing outright.
+  { method: 'POST', route: '/api/studio/kbs/:id/drain', classification: 'exempt-local',
+    reason: 'runs the KB drain-to-green loop (runKbDrain) — that loop already self-suppresses its own agent-tier spawn under dry-bridge, so this route is never suppressed further (mirrors op=consolidate|lint|fix-auto|index and /cleanup/apply above)' },
   { method: 'POST', route: '/api/review-comments/:cycleId', classification: 'exempt-local', reason: 'appends to the local review-comments sidecar' },
   { method: 'POST', route: '/api/review-comments/:cycleId/resolve', classification: 'exempt-local', reason: 'marks a local review-comments sidecar entry resolved' },
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },

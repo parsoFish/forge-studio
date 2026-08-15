@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
@@ -61,16 +61,25 @@ function isKickoffKind(kind: string): kind is KickoffKindId {
   return kind in KICKOFF_KINDS;
 }
 
-export default function SessionKickoffPage({ params }: { params: { kind: string } }): JSX.Element {
+function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // W6-B10: the roadmap's "demo builder →" entrypoint (and any other
+  // deep-link into this kickoff screen) can hand over a known project up
+  // front — `resolveDemoEntryHref` (lib/demo-entry-view.ts) is the one
+  // sender today, but the prefill is generic over every kind, not demo-only.
+  // `initiative` rides along for context ONLY (shown in the context card,
+  // never used to look anything up — sessions here are project-scoped).
+  const prefillProject = searchParams.get('project') ?? '';
+  const prefillInitiative = searchParams.get('initiative');
 
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [ready, setReady] = useState(false);
 
-  const [project, setProject] = useState('');
+  const [project, setProject] = useState(prefillProject);
   const [kbId, setKbId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
@@ -214,6 +223,12 @@ export default function SessionKickoffPage({ params }: { params: { kind: string 
             ? `projects/<forge-anchor>/_${kind}/<sessionId>`
             : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`}
         </div>
+        {prefillInitiative && (
+          <div data-section="kickoff-initiative-context" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
+            Opened from initiative <span style={mono}>{prefillInitiative}</span> — sessions here are
+            project-scoped, not tied to it; this is context only.
+          </div>
+        )}
       </div>
 
       {spec.selector !== 'none' && (
@@ -300,6 +315,26 @@ export default function SessionKickoffPage({ params }: { params: { kind: string 
         {submitting ? 'Starting…' : 'Start session'}
       </button>
     </StudioArchitectShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exported page — wraps the inner component in Suspense (required by Next.js
+// 14 when useSearchParams() is used anywhere in the render tree; mirrors
+// app/artifact/page.tsx's ArtifactPageInner/ArtifactPage split).
+// ---------------------------------------------------------------------------
+
+export default function SessionKickoffPage(props: { params: { kind: string } }): JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 13 }}>
+          Loading…
+        </div>
+      }
+    >
+      <SessionKickoffPageInner {...props} />
+    </Suspense>
   );
 }
 
