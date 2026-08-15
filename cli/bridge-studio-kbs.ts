@@ -52,6 +52,7 @@ import {
   computeKbLintChecks,
   attachKbLintSummaries,
   runBrainLintFullMemoized,
+  runBrainLintFullFresh,
   type CheckHealthEntry,
 } from './kb-lint-summary.ts';
 import {
@@ -469,10 +470,15 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
     // `cleared` signal is scoped to its `file` argument, which for a grouped,
     // multi-finding session is the shared INDEX file — not the theme files
     // the original findings are keyed by — so it would report a vacuous
-    // "cleared" that never actually re-checked anything.
+    // "cleared" that never actually re-checked anything. MUST be the FRESH
+    // path, never the memo: this read has to observe the writes this same
+    // function just made (applyDeterministicConsolidateFixes above, and any
+    // runBrainFixTurn calls), which a memo entry the INITIAL scan (line ~432)
+    // may have just seeded cannot be trusted to reflect (reviewer-flagged,
+    // W6-P2 round 2).
     let clearedCount = 0;
     try {
-      const { findings: after } = runBrainLintFullMemoized(forgeRoot);
+      const { findings: after } = runBrainLintFullFresh(forgeRoot);
       const stillPresent = new Set(
         scopeFindingsToKb(forgeRoot, kbId, after)
           .filter((f) => f.resolution === 'agent')

@@ -329,43 +329,71 @@ function stripComments(src: string): string {
  * generic constraint (`<T extends {id:string}>`) and not an inline
  * return-type object annotation (`): { checks: ...; lintErrors: number }`),
  * both of which the exact spec signatures carry and both of which contain
- * their OWN balanced `{...}` before the real body opens. The body is the
- * LAST top-level (depth 0→1→0) brace block within the span from the
- * signature to the next top-level `export`.
+ * their OWN balanced `{...}` before the real body opens.
+ *
+ * Scans forward from the signature tracking `(`/`)`, `<`/`>`, and `[`/`]`
+ * nesting ONLY (never `{`/`}`) — the body's opening `{` is the first `{`
+ * encountered while that nesting is EMPTY, i.e. not inside the parameter
+ * list, a generic constraint, or a bracketed return-type annotation. Any `{`
+ * hit while still inside an unclosed `(`/`<`/`[` (e.g. the `{ id: string }`
+ * inside `<T extends { id: string }>`, or the `{ lint: KbLintSummary }`
+ * inside a `(T & {...})[]` return type) is correctly invisible to this scan,
+ * so it can never be mistaken for the real body opening.
+ *
+ * Deliberately NOT a "last top-level block within some guessed boundary"
+ * heuristic — an earlier version bounded the search at the next `\nexport `
+ * (or later, `\nexport `/`\nfunction `/`\nasync function `) and picked the
+ * LAST top-level `{...}` before that boundary, which broke twice in the same
+ * session (W6-P2 round 2): once when the non-exported `buildKbHealth`
+ * function sat between `runBrainConsolidateNow` and the next `export`, and
+ * again when a `type KbHealth = {...}` alias sat between
+ * `runBrainConsolidateNow` and `buildKbHealth`'s own `function` keyword —
+ * ANY intervening top-level brace-bearing construct hijacks a
+ * boundary-guessing heuristic. Tracking the signature's own bracket nesting
+ * instead has no such guessing to get wrong.
  */
 function extractFunctionBody(src: string, fnName: string, fileLabel: string): string {
   const clean = stripComments(src);
   const sigIdx = clean.indexOf(`function ${fnName}`);
   assert.ok(sigIdx >= 0, `expected a "function ${fnName}" declaration in ${fileLabel}`);
-  let nextIdx = clean.indexOf('\nexport ', sigIdx + 1);
-  if (nextIdx === -1) nextIdx = clean.length;
-  const span = clean.slice(sigIdx, nextIdx);
+
+  const closerFor: Record<string, string> = { '(': ')', '<': '>', '[': ']' };
+  const stack: string[] = [];
+  let bodyStart = -1;
+  for (let i = sigIdx; i < clean.length; i++) {
+    const ch = clean[i];
+    if (ch in closerFor) {
+      stack.push(closerFor[ch]);
+    } else if (stack.length > 0 && ch === stack[stack.length - 1]) {
+      stack.pop();
+    } else if (ch === '{' && stack.length === 0) {
+      bodyStart = i;
+      break;
+    }
+  }
+  assert.ok(bodyStart >= 0, `could not locate the opening { for ${fnName} in ${fileLabel}`);
 
   let depth = 0;
-  let blockStart = -1;
-  let lastBlock: [number, number] | null = null;
-  for (let i = 0; i < span.length; i++) {
-    if (span[i] === '{') {
-      if (depth === 0) blockStart = i;
-      depth++;
-    } else if (span[i] === '}') {
+  let bodyEnd = -1;
+  for (let j = bodyStart; j < clean.length; j++) {
+    if (clean[j] === '{') depth++;
+    else if (clean[j] === '}') {
       depth--;
-      if (depth === 0 && blockStart >= 0) {
-        lastBlock = [blockStart, i];
-        blockStart = -1;
+      if (depth === 0) {
+        bodyEnd = j;
+        break;
       }
     }
   }
-  assert.ok(lastBlock, `could not locate a { } body for ${fnName} in ${fileLabel}`);
-  const [start, end] = lastBlock as [number, number];
-  return span.slice(start, end + 1);
+  assert.ok(bodyEnd >= 0, `could not locate the closing } for ${fnName} in ${fileLabel}`);
+  return clean.slice(bodyStart, bodyEnd + 1);
 }
 
 describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => {
   const KB_LINT_SUMMARY_FILE = join(ROOT, 'cli', 'kb-lint-summary.ts');
   const BRIDGE_KBS_FILE = join(ROOT, 'cli', 'bridge-studio-kbs.ts');
 
-  test('AT-4a: cli/kb-lint-summary.ts contains exactly ONE literal runBrainLint( call site, and it lives inside runBrainLintFullMemoized (W6-P2 memo) — not computeKbLintChecks or attachKbLintSummaries directly', () => {
+  test('AT-4a: cli/kb-lint-summary.ts contains exactly TWO literal runBrainLint( call sites — one inside runBrainLintFullMemoized, one inside runBrainLintFullFresh — never inside computeKbLintChecks or attachKbLintSummaries', () => {
     assert.ok(
       existsSync(KB_LINT_SUMMARY_FILE),
       `cli/kb-lint-summary.ts must exist (RED at base — forge-2am not yet implemented) at ${KB_LINT_SUMMARY_FILE}`,
@@ -375,14 +403,17 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
     // Kills: an N-fan-out that re-runs the full brain lint once per KB — the
     // exact cost _wave5/parks/R6-07-kb-skew-report-dont-patch.md option (a)
     // refused. W6-P2 (ADR 044) moved the ONE call site behind
-    // runBrainLintFullMemoized's cache; attachKbLintSummaries now calls THAT
-    // wrapper instead of runBrainLint directly, but the invariant this test
-    // guards — one real lint per list call at most — still holds.
+    // runBrainLintFullMemoized's cache; W6-P2 round 2 added a SECOND,
+    // deliberately-uncached sibling (runBrainLintFullFresh) for post-mutation
+    // re-lints that cannot trust the memo — attachKbLintSummaries and every
+    // pre-mutation reader still go through the memoized wrapper, never
+    // runBrainLint directly, so the invariant this test guards — the real
+    // lint runs only where a human decided it must — still holds.
     const callSites = src.match(/\brunBrainLint\s*\(/g) ?? [];
     assert.equal(
       callSites.length,
-      1,
-      `expected exactly ONE literal runBrainLint( call site in cli/kb-lint-summary.ts (the memo wraps it — one real full-corpus lint per cache miss, not one per KB), found ${callSites.length}`,
+      2,
+      `expected exactly TWO literal runBrainLint( call sites in cli/kb-lint-summary.ts (runBrainLintFullMemoized's cache-miss path + runBrainLintFullFresh's always-fresh path), found ${callSites.length}`,
     );
 
     const computeBody = extractFunctionBody(src, 'computeKbLintChecks', 'cli/kb-lint-summary.ts');
@@ -406,6 +437,16 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
       /\brunBrainLint\s*\(/.test(memoBody),
       'runBrainLintFullMemoized must be the ONE place that calls the real runBrainLint, on a cache miss',
     );
+
+    const freshBody = extractFunctionBody(src, 'runBrainLintFullFresh', 'cli/kb-lint-summary.ts');
+    assert.ok(
+      /\brunBrainLint\s*\(/.test(freshBody),
+      'runBrainLintFullFresh must call the real runBrainLint unconditionally (never consult the cache first)',
+    );
+    assert.ok(
+      !/brainLintFullMemoByRoot\.get\(/.test(freshBody),
+      'runBrainLintFullFresh must never READ the memo map — only WRITE (replace) its entry after the fresh run',
+    );
   });
 
   test("AT-4b: cli/bridge-studio-kbs.ts's loadKbDescriptors body still has NO runBrainLint( call (the other 4 call sites stay cheap)", () => {
@@ -415,6 +456,48 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
     assert.ok(
       !/\brunBrainLint\s*\(/.test(body),
       'loadKbDescriptors must stay cheap — the resolve-node route, the node-article route, the create-KB flow, and the guidance route all call it and must not pay the full lint cost',
+    );
+  });
+
+  // Reviewer-flagged (W6-P2 round 2, 2026-08-15): a direct `runBrainLint(`
+  // call anywhere in cli/bridge-studio-kbs.ts would bypass BOTH the memo
+  // (runBrainLintFullMemoized) and the mandatory-fresh path
+  // (runBrainLintFullFresh) — this pins the file to going through one or the
+  // other, always, mirroring AT-4a's regex-pin style one level up the call
+  // graph.
+  test('AT-4c: cli/bridge-studio-kbs.ts contains ZERO direct runBrainLint( calls, and at least 5 runBrainLintFullMemoized(/runBrainLintFullFresh( call sites', () => {
+    assert.ok(existsSync(BRIDGE_KBS_FILE), `cli/bridge-studio-kbs.ts must exist at ${BRIDGE_KBS_FILE}`);
+    const src = stripComments(readFileSync(BRIDGE_KBS_FILE, 'utf8'));
+
+    const directCallSites = src.match(/\brunBrainLint\s*\(/g) ?? [];
+    assert.equal(
+      directCallSites.length,
+      0,
+      `cli/bridge-studio-kbs.ts must never call runBrainLint( directly — every full-scope read must go through runBrainLintFullMemoized (pre-mutation / no-write reads) or runBrainLintFullFresh (post-mutation reads), found ${directCallSites.length} direct call(s)`,
+    );
+
+    const memoizedSites = src.match(/\brunBrainLintFullMemoized\s*\(/g) ?? [];
+    const freshSites = src.match(/\brunBrainLintFullFresh\s*\(/g) ?? [];
+    const total = memoizedSites.length + freshSites.length;
+    assert.ok(
+      total >= 5,
+      `expected at least 5 combined runBrainLintFullMemoized(/runBrainLintFullFresh( call sites in cli/bridge-studio-kbs.ts (attachKbLintSummaries's caller aside, this file's own known sites: runBrainConsolidateNow x2, buildKbHealth, computeAgentCleanupFindings, the maintenance op:'lint' route), found memoized=${memoizedSites.length} fresh=${freshSites.length} total=${total}`,
+    );
+
+    // The post-mutation re-lint inside runBrainConsolidateNow specifically
+    // MUST be the fresh path — this is the exact site the reviewer flagged.
+    const consolidateBody = extractFunctionBody(src, 'runBrainConsolidateNow', 'cli/bridge-studio-kbs.ts');
+    const consolidateMemoized = consolidateBody.match(/\brunBrainLintFullMemoized\s*\(/g) ?? [];
+    const consolidateFresh = consolidateBody.match(/\brunBrainLintFullFresh\s*\(/g) ?? [];
+    assert.equal(
+      consolidateMemoized.length,
+      1,
+      `runBrainConsolidateNow must call runBrainLintFullMemoized exactly once (the PRE-mutation initial scan), found ${consolidateMemoized.length}`,
+    );
+    assert.equal(
+      consolidateFresh.length,
+      1,
+      `runBrainConsolidateNow must call runBrainLintFullFresh exactly once (the POST-mutation re-lint for an accurate clearedCount), found ${consolidateFresh.length}`,
     );
   });
 });

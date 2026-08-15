@@ -1,18 +1,32 @@
 /**
  * PROOF TESTS — W6-P2 (ADR 044, read-path memoization): memoizing the
  * full-tree brain lint behind `cli/kb-lint-summary.ts`'s
- * `runBrainLintFullMemoized`.
+ * `runBrainLintFullMemoized`/`runBrainLintFullFresh`.
  *
  * ADR 044's four rules, and where each is proven here:
- *   1. Same derivation      → "rule 1 — output is byte-identical..."
+ *   1. Same derivation      → "rule 1 — output is byte-identical...".
  *   2. Real-input keying    → the fingerprint unit tests below (count/mtime/
- *                              size isolated individually) + the `_queue/done`
- *                              invalidation test (checkReflectorLoss's OTHER
- *                              real input, outside `brain/`).
+ *                              size isolated individually, node_modules/.git
+ *                              always skipped, all-extensions outside
+ *                              brain/) + the invalidation tests covering
+ *                              EVERY check that reaches outside brain/, per
+ *                              the completeness table in
+ *                              cli/kb-lint-summary.ts: `_queue/done`
+ *                              (checkReflectorLoss), `docs/`+`orchestrator/`
+ *                              (checkStaleness's bounded 4-prefix allowlist),
+ *                              and a relative-markdown-link target under
+ *                              `scripts/` (checkSourceLinks' UNBOUNDED
+ *                              resolution — the reviewer-flagged round-2
+ *                              gap that forced the walk from a curated root
+ *                              list to the whole forgeRoot tree).
  *   3. Memory only           → implicit: no snapshot file is ever written;
  *                              every test drives the in-process export
  *                              directly.
- *   4. Fail open             → "fails open to a direct runBrainLint call...".
+ *   4. Fail open             → "fails open to a direct runBrainLint call...",
+ *                              plus a dedicated `runBrainLintFullFresh` proof
+ *                              that a post-mutation re-lint cannot trust a
+ *                              memo entry a same-millisecond, size-neutral
+ *                              write can collide with.
  *
  * RUN: node --test --experimental-strip-types cli/kb-lint-summary-memo.test.ts
  */
@@ -24,7 +38,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { runBrainLint } from './brain-lint.ts';
-import { statWalkFingerprint, runBrainLintFullMemoized } from './kb-lint-summary.ts';
+import { statWalkFingerprint, runBrainLintFullMemoized, runBrainLintFullFresh } from './kb-lint-summary.ts';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers
@@ -198,13 +212,57 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
     }
   });
 
-  test('throws when brain/ is not a directory (the fail-open signal runBrainLintFullMemoized relies on)', () => {
-    const forgeRoot = tmp('fp-notdir-');
+  test('counts ALL file types OUTSIDE brain/ — a non-.md file under docs/ (checkStaleness/checkSourceLinks domain) DOES change the fingerprint', () => {
+    const { forgeRoot } = makeCleanRoot('fp-outside-allext-');
     try {
-      writeFileSync(join(forgeRoot, 'brain'), 'not a directory');
-      assert.throws(() => statWalkFingerprint(forgeRoot));
+      const before = statWalkFingerprint(forgeRoot);
+      mkdirSync(join(forgeRoot, 'docs'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'docs', 'config.json'), '{}');
+      const after = statWalkFingerprint(forgeRoot);
+      assert.notDeepEqual(
+        after,
+        before,
+        'unlike brain/ (checked: brain-lint.ts only ever reads .md there), docs/ can be cited by checkStaleness with ANY extension — a .json file there must still move the fingerprint',
+      );
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('skips node_modules and .git anywhere in the tree, even under a walked root', () => {
+    const { forgeRoot } = makeCleanRoot('fp-skipdirs-');
+    try {
+      const before = statWalkFingerprint(forgeRoot);
+      mkdirSync(join(forgeRoot, 'docs', 'node_modules', 'some-pkg'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'docs', 'node_modules', 'some-pkg', 'index.js'), 'module.exports = {};');
+      mkdirSync(join(forgeRoot, '.git'), { recursive: true });
+      writeFileSync(join(forgeRoot, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      const after = statWalkFingerprint(forgeRoot);
+      assert.deepEqual(
+        after,
+        before,
+        'node_modules/ and .git/ must never be walked, however deep — no check reads them and they can be arbitrarily large',
+      );
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('throws when forgeRoot itself is not a directory (the fail-open signal runBrainLintFullMemoized/FullFresh rely on)', () => {
+    // Under the whole-forgeRoot walk, a single misbehaving CHILD directory
+    // (e.g. brain/ replaced by a file) no longer throws — the walker treats
+    // whatever readdirSync/Dirent reports each entry as being, generically,
+    // rather than assuming any specific child must be a directory. The one
+    // thing that DOES still throw is forgeRoot itself being unreadable as a
+    // directory, since that is the very first readdirSync call the walk
+    // makes.
+    const parent = tmp('fp-notdir-');
+    try {
+      const notAForgeRoot = join(parent, 'not-a-directory.txt');
+      writeFileSync(notAForgeRoot, 'i am a file, not a forge root');
+      assert.throws(() => statWalkFingerprint(notAForgeRoot));
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
     }
   });
 });
@@ -335,6 +393,103 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
     }
   });
 
+  test('invalidates when a checkStaleness-cited target under docs/ is CREATED (checkStaleness resolves docs/ prefixes — cli/brain-lint.ts:601)', () => {
+    const { forgeRoot, cyclesDir } = makeCleanRoot('memo-docs-create-');
+    try {
+      writeFileSync(
+        join(cyclesDir, 'themes', 'cites-docs.md'),
+        themeContent({ title: 'Cites Docs', valid: true }).replace(
+          'Fixture body — no links, no keywords.',
+          'Cites `docs/some-new-doc.md` as a source.',
+        ),
+      );
+      const first = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        first.findings.filter((f) => f.check === 'checkStaleness').length,
+        1,
+        'fixture precondition: docs/some-new-doc.md does not exist yet, so checkStaleness must flag the citation as stale',
+      );
+
+      mkdirSync(join(forgeRoot, 'docs'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'docs', 'some-new-doc.md'), '# Some New Doc\n');
+      const second = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        second.findings.filter((f) => f.check === 'checkStaleness').length,
+        0,
+        'creating the cited docs/ target must clear the stale-citation finding on the very next call — a fingerprint scoped to only brain/+_queue/done would miss this',
+      );
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('invalidates when a checkStaleness-cited target under orchestrator/ is DELETED (checkStaleness resolves orchestrator/ prefixes — cli/brain-lint.ts:601)', () => {
+    const { forgeRoot, cyclesDir } = makeCleanRoot('memo-orch-delete-');
+    try {
+      mkdirSync(join(forgeRoot, 'orchestrator'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'orchestrator', 'some-module.ts'), 'export const x = 1;\n');
+      writeFileSync(
+        join(cyclesDir, 'themes', 'cites-orchestrator.md'),
+        themeContent({ title: 'Cites Orchestrator', valid: true }).replace(
+          'Fixture body — no links, no keywords.',
+          'Cites `orchestrator/some-module.ts` as a source.',
+        ),
+      );
+      const first = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        first.findings.filter((f) => f.check === 'checkStaleness').length,
+        0,
+        'fixture precondition: orchestrator/some-module.ts exists, so checkStaleness must NOT flag the citation',
+      );
+
+      rmSync(join(forgeRoot, 'orchestrator', 'some-module.ts'));
+      const second = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        second.findings.filter((f) => f.check === 'checkStaleness').length,
+        1,
+        'deleting the cited orchestrator/ target must surface a stale-citation finding on the very next call',
+      );
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("invalidates when a checkSourceLinks-cited target OUTSIDE brain/ (a relative markdown link, not a checkStaleness backtick citation) is CREATED — the UNBOUNDED domain that forces the whole-forgeRoot walk (cli/brain-lint.ts:525)", () => {
+    const { forgeRoot, cyclesDir } = makeCleanRoot('memo-sourcelinks-', );
+    try {
+      // 3 `../` from brain/cycles/themes/ reaches forgeRoot itself, then
+      // descends into scripts/ — a path checkStaleness's 4-prefix allowlist
+      // does NOT cover (scripts/ is not docs/orchestrator/skills/loops/) but
+      // checkSourceLinks' unbounded relative-link resolution does, and the
+      // real corpus already exercises exactly this shape (grep-verified
+      // against cli/ and scripts/ citations in brain/cycles/themes/).
+      writeFileSync(
+        join(cyclesDir, 'themes', 'cites-scripts.md'),
+        themeContent({ title: 'Cites Scripts', valid: true }).replace(
+          'Fixture body — no links, no keywords.',
+          '[a script](../../../scripts/some-new-script.mjs)',
+        ),
+      );
+      const first = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        first.findings.filter((f) => f.check === 'checkSourceLinks').length,
+        1,
+        'fixture precondition: scripts/some-new-script.mjs does not exist yet, so checkSourceLinks must report a broken link',
+      );
+
+      mkdirSync(join(forgeRoot, 'scripts'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'scripts', 'some-new-script.mjs'), 'console.log("hi");\n');
+      const second = runBrainLintFullMemoized(forgeRoot);
+      assert.equal(
+        second.findings.filter((f) => f.check === 'checkSourceLinks').length,
+        0,
+        'creating the linked scripts/ target must clear the broken-link finding on the very next call',
+      );
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
   test("invalidates when _queue/done changes — checkReflectorLoss's OTHER real input outside brain/ (ADR 044 rule 2)", () => {
     const { forgeRoot } = makeCleanRoot('memo-queue-');
     try {
@@ -359,35 +514,82 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
   });
 
   test('fails open to a direct runBrainLint call when the fingerprint walk throws, and does not poison the memo for the next good call', () => {
-    const forgeRoot = tmp('memo-failopen-');
+    // forgeRoot itself is the thing that must be unreadable-as-a-directory to
+    // force statWalkFingerprint to throw under the whole-forgeRoot walk (see
+    // the matching statWalkFingerprint unit test above for why a misbehaving
+    // CHILD like brain/ no longer throws).
+    const parent = tmp('memo-failopen-');
     try {
-      writeFileSync(join(forgeRoot, 'brain'), 'not a directory'); // forces statWalkFingerprint to throw (ENOTDIR)
+      const brokenForgeRoot = join(parent, 'not-a-directory.txt');
+      writeFileSync(brokenForgeRoot, 'i am a file, not a forge root');
       assert.doesNotThrow(
-        () => runBrainLintFullMemoized(forgeRoot),
+        () => runBrainLintFullMemoized(brokenForgeRoot),
         'a broken fingerprint walk must fall through to an uncached run, never throw (ADR 044 rule 4)',
       );
-      const broken = runBrainLintFullMemoized(forgeRoot);
+      const broken = runBrainLintFullMemoized(brokenForgeRoot);
       assert.equal(typeof broken.exitCode, 'number');
       assert.ok(Array.isArray(broken.findings));
 
-      // Fix the tree and confirm the NEXT call reflects the real state —
-      // proves the failed fingerprint attempt never wrote a bogus cache entry.
-      rmSync(join(forgeRoot, 'brain'));
-      mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
-      writeFileSync(
-        join(forgeRoot, 'brain', 'cycles', 'themes', 'ok.md'),
-        themeContent({ title: 'Recovered Theme', valid: true }),
+      // A DIFFERENT, real forgeRoot (memo is keyed per forgeRoot) confirms the
+      // failed fingerprint attempt above never wrote a bogus cache entry that
+      // could bleed into a legitimate root.
+      const { forgeRoot: goodRoot } = makeCleanRoot('memo-failopen-good-');
+      try {
+        const recovered = runBrainLintFullMemoized(goodRoot);
+        const direct = runBrainLint({ cwd: goodRoot, scope: 'full' });
+        assert.deepEqual(
+          recovered,
+          direct,
+          'a broken fingerprint attempt on one forgeRoot must never corrupt the memo for a different, real forgeRoot',
+        );
+      } finally {
+        rmSync(goodRoot, { recursive: true, force: true });
+      }
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  test('runBrainLintFullFresh bypasses AND replaces a stale memo entry even when a write is invisible to the fingerprint (the exact same-ms/same-size collision runBrainLintFullMemoized cannot see)', () => {
+    const { forgeRoot, themeFile } = makeCleanRoot('memo-fresh-');
+    try {
+      // Same pin-then-edit-then-pin-back technique as the "genuine cache HIT"
+      // test above — proven reliable there for making a real content change
+      // invisible to the fingerprint on this filesystem.
+      const pinned = new Date('2026-08-01T00:00:00.000Z');
+      utimesSync(themeFile, pinned, pinned);
+
+      const preMutationRead = runBrainLintFullMemoized(forgeRoot); // seeds the memo
+      assert.equal(preMutationRead.findings.filter((f) => f.check === 'checkFrontmatter').length, 0);
+
+      const validContent = themeContent({ title: 'Memo Fixture Theme', valid: true });
+      const brokenContent = themeContent({ title: 'Memo Fixture Theme', valid: false });
+      assert.equal(brokenContent.length, validContent.length, 'fixture precondition: byte-identical length');
+      writeFileSync(themeFile, brokenContent); // the "mutation this same request just made"
+      utimesSync(themeFile, pinned, pinned); // ...landing in the same fingerprint bucket as the pre-mutation read
+
+      // Reviewer-named danger: a memoized read right now would still be
+      // stale (this mirrors the "genuine cache HIT" test — reconfirmed here
+      // as the SETUP this test's real point builds on, not the point itself).
+      const staleIfMemoized = runBrainLintFullMemoized(forgeRoot);
+      assert.deepEqual(staleIfMemoized, preMutationRead, 'setup precondition: the memoized path would serve stale data here');
+
+      // The fresh path must NOT be fooled by the collision.
+      const freshResult = runBrainLintFullFresh(forgeRoot);
+      assert.equal(
+        freshResult.findings.filter((f) => f.check === 'checkFrontmatter').length,
+        1,
+        'runBrainLintFullFresh must see the mutation regardless of the fingerprint collision — this is the exact clearedCount-accuracy guarantee runBrainConsolidateNow needs',
       );
-      writeFileSync(
-        join(forgeRoot, 'brain', 'cycles', 'patterns.md'),
-        '# Cycles — Patterns\n\n## Theme pages\n\n- [Recovered Theme](./themes/ok.md)\n',
-      );
-      const recovered = runBrainLintFullMemoized(forgeRoot);
-      const direct = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+
+      // And it must have RE-SEEDED the memo: a subsequent memoized read (same
+      // colliding fingerprint) must now return the FRESH value, not fall back
+      // to the old stale one.
+      const postFreshMemoizedRead = runBrainLintFullMemoized(forgeRoot);
       assert.deepEqual(
-        recovered,
-        direct,
-        'after recovery the memo must reflect the real tree, not a value cached from the broken attempt',
+        postFreshMemoizedRead,
+        freshResult,
+        'runBrainLintFullFresh must replace the memo entry so the NEXT memoized reader sees the fresh value too, despite the unchanged fingerprint key',
       );
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
