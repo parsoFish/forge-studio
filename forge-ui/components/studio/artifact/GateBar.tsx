@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { postGate } from '@/lib/bridge-client';
+import { buildGateVerdictBody } from '@/lib/gate-verdict-body';
 
 export type GateState = 'idle' | 'approved' | 'sent-back';
 
@@ -11,8 +12,14 @@ export type GateState = 'idle' | 'approved' | 'sent-back';
  *
  * Approve is disabled until decisionsResolved is true (plan gate: all design
  * decisions selected; demo gate: no decisions, always enabled).
- * On approve → POST /api/runs/:id/gates/:gateId {verdict:'approve', rationale}
- * On send-back → requires notes → POST {verdict:'send-back', notes}
+ * On approve → POST /api/runs/:id/gates/:gateId {verdict:'approve', ...}
+ * On send-back → requires notes → POST {verdict:'send-back', ...}
+ *
+ * The exact body shape differs by gateId — see `buildGateVerdictBody`
+ * (lib/gate-verdict-body.ts, W6-SW-3): a plan gate's send-back additionally
+ * needs `kind:'revise'` (the route maps `kind` from `verdict` only for
+ * 'approve'|'revise'|'reject') and re-keys `notes` to `rationale` (the only
+ * field the route reads for the feedback text).
  */
 export function GateBar({
   runId,
@@ -56,7 +63,7 @@ export function GateBar({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await postGate(runId, gateId, 'approve', gateId === 'plan' ? { project } : {});
+      const res = await postGate(runId, gateId, 'approve', buildGateVerdictBody(gateId, 'approve', { project }));
       if (!res.ok) { setError(res.error ?? 'approve failed'); return; }
       transition('approved');
     } finally {
@@ -73,7 +80,7 @@ export function GateBar({
         runId,
         gateId,
         'send-back',
-        gateId === 'plan' ? { notes: notes.trim(), project } : { notes: notes.trim() },
+        buildGateVerdictBody(gateId, 'send-back', { notes: notes.trim(), project }),
       );
       if (!res.ok) { setError(res.error ?? 'send-back failed'); return; }
       transition('sent-back');

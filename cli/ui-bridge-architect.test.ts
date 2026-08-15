@@ -569,3 +569,77 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local s
     else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
   }
 });
+
+// ===========================================================================
+// W6-SW-3 reviewer HIGH finding: POST /api/runs/:id/gates/plan had NO test
+// coverage at all (the route is documented at this file's own top-of-header
+// comment, but never actually exercised here — /api/plan-verdict, the sibling
+// alias route, has coverage above; this route did not). GateBar's fix maps
+// verdict:'send-back' to an explicit kind:'revise' client-side (see
+// forge-ui/lib/gate-verdict-body.ts) — these three tests pin the route's
+// actual behaviour for both the direct-match ('revise') and GateBar's own
+// wire shape ('send-back' + kind:'revise'), plus the negative case that
+// proves the client-side kind mapping is load-bearing, not decorative.
+// ===========================================================================
+
+function postGatesPlan(sid: string, body: Record<string, unknown>): Promise<Response> {
+  return fetch(`${url}/api/runs/${encodeURIComponent(sid)}/gates/plan`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('POST /api/runs/:id/gates/plan verdict:"revise" + project + rationale → 200, phase→interviewing, round+1, feedback.md written', async () => {
+  const sid6 = '2026-05-29T17-00-00';
+  const dir6 = seedVerdictSession(sid6); // seeded at round:2, phase:'awaiting-verdict'
+
+  const res = await postGatesPlan(sid6, { verdict: 'revise', project: 'demo', rationale: 'needs another pass' });
+  assert.equal(res.status, 200, `revise must succeed (got ${res.status}: ${JSON.stringify(await res.json().catch(() => null))})`);
+
+  const status = JSON.parse(readFileSync(join(dir6, 'status.json'), 'utf8'));
+  assert.equal(status.phase, 'interviewing');
+  assert.equal(status.round, 3);
+  assert.equal(readFileSync(join(dir6, 'feedback.md'), 'utf8').trim(), 'needs another pass');
+});
+
+test('POST /api/runs/:id/gates/plan verdict:"send-back" + kind:"revise" (GateBar\'s own wire shape) + project + rationale → 200, same state change', async () => {
+  const sid7 = '2026-05-29T18-00-00';
+  const dir7 = seedVerdictSession(sid7);
+
+  // This is EXACTLY the body forge-ui/lib/gate-verdict-body.ts's
+  // buildGateVerdictBody produces for a plan-gate send-back — GateBar's
+  // `notes` textarea state re-keyed to `rationale` on the wire.
+  const res = await postGatesPlan(sid7, {
+    verdict: 'send-back',
+    kind: 'revise',
+    project: 'demo',
+    rationale: 'needs another pass',
+  });
+  assert.equal(
+    res.status,
+    200,
+    `send-back must NOT 400 — GateBar's Send-back control must reach the route successfully (got ${res.status}: ${JSON.stringify(await res.json().catch(() => null))})`,
+  );
+
+  const status = JSON.parse(readFileSync(join(dir7, 'status.json'), 'utf8'));
+  assert.equal(status.phase, 'interviewing');
+  assert.equal(status.round, 3);
+  assert.equal(readFileSync(join(dir7, 'feedback.md'), 'utf8').trim(), 'needs another pass');
+});
+
+test('POST /api/runs/:id/gates/plan verdict:"send-back" WITHOUT kind → 400 "unknown kind" (pins the bug the client-side kind mapping repairs; session state untouched)', async () => {
+  const sid8 = '2026-05-29T19-00-00';
+  const dir8 = seedVerdictSession(sid8);
+
+  // The pre-fix GateBar body: verdict:'send-back' alone. The route maps
+  // `kind` from `verdict` only for 'approve'|'revise'|'reject' — 'send-back'
+  // matches none of those and falls through to body.kind (absent here), so
+  // applyPlanVerdict receives kind:'' and rejects it before writing anything.
+  const res = await postGatesPlan(sid8, { verdict: 'send-back', project: 'demo', rationale: 'needs another pass' });
+  assert.equal(res.status, 400, 'a bare send-back (no kind) must still 400 — this is why the client-side mapping is required, not optional');
+
+  const status = JSON.parse(readFileSync(join(dir8, 'status.json'), 'utf8'));
+  assert.equal(status.phase, 'awaiting-verdict', 'a 400 must leave the session state untouched — no partial write');
+  assert.ok(!existsSync(join(dir8, 'feedback.md')), 'a 400 must never write feedback.md');
+});

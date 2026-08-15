@@ -45,7 +45,14 @@ function pickDefaultRun(runs: Run[]): Run | null {
 }
 
 // W6-SW-3 (sweep C3#6): ConnectionState → the shared status-dot vocabulary
-// (globals.css only styles pending/active/complete/retrying/failed).
+// (globals.css only styles pending/active/complete/retrying/failed). Both
+// maps are exhaustive `Record<ConnectionState, ...>` — 'daemon-stalled' is
+// carried for completeness even though this page's own `subscribe()` call
+// never emits it today (bridge-client.ts's WS onState setState() calls only
+// ever pass 'connecting'|'open'|'reconnecting'|'no-bridge'; 'daemon-stalled'
+// is declared on the shared ConnectionState type for "Feature #8" — a
+// separate scheduler-heartbeat health signal, not yet wired to this
+// component's subscribe() — see bridge-client.ts:62-65's own comment).
 const CONNECTION_DOT_STATUS: Record<ConnectionState, 'pending' | 'active' | 'complete' | 'retrying' | 'failed'> = {
   connecting: 'pending',
   open: 'complete',
