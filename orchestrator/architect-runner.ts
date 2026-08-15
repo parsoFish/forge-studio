@@ -48,7 +48,7 @@ import { join, resolve, dirname } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
-import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
+import { runStructuredTurn, makeReasoningSink, makeThinkingSink, type QueryFn } from './interactive-session.ts';
 export type { QueryFn };
 
 import {
@@ -287,12 +287,20 @@ export async function runArchitectTurn(
   // Per-tool telemetry so the architect hex streams live bursts (ADR 020). The
   // runner drives its own SDK stream (`runStructured`), so it feeds the sink
   // the same way the PM does — `extractLiveToolDetails` → `sink.onToolUse`.
-  const sink = makeToolEventSink(logger, {
-    initiativeId: `architect-session-${input.sessionId}`,
-    parentEventId: startEv.event_id,
-    phase: 'architect',
-    skill: 'architect-runner',
-  });
+  // W6-B1: interactive sessions are operator-attended, low-volume turns —
+  // unlike the unattended dev-loop/PM/reflector phases (unchanged, keep the
+  // sampler's defaults), pass the same {readOnlySampleRate:1, cap:200}
+  // "unsampled" opts as every other interactive runner.
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId: `architect-session-${input.sessionId}`,
+      parentEventId: startEv.event_id,
+      phase: 'architect',
+      skill: 'architect-runner',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onToolUse = sink.onToolUse;
 
   // Heartbeat: write an ISO timestamp to <logsRoot>/_architect-<sid>/.heartbeat
@@ -305,26 +313,20 @@ export async function runArchitectTurn(
     try { writeFileSync(heartbeatPath, new Date().toISOString()); } catch { /* best-effort */ }
   };
 
-  // P3: Emit each non-empty reasoning text block from the agent stream as a log
-  // event so the operator's activity panel can show live architect reasoning.
-  // Cap at 400 chars to keep the event log readable; skip pure-whitespace blocks.
-  const MAX_REASONING_TEXT = 400;
+  // P3 / W6-B1: forward reasoning + thinking blocks from the agent stream to
+  // the event log so the operator's activity panel can show live architect
+  // reasoning — the ONE shared sink pair (interactive-session.ts), which owns
+  // the per-block char caps, the per-turn row ceiling, and (thinking only)
+  // raw-text coalescing.
   const initiativeIdForLog = `architect-session-${input.sessionId}`;
-  const onText = (text: string): void => {
-    const capped = text.length > MAX_REASONING_TEXT
-      ? `${text.slice(0, MAX_REASONING_TEXT)}…`
-      : text;
-    logger.emit({
-      initiative_id: initiativeIdForLog,
-      phase: 'architect',
-      skill: 'architect-runner',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: input.sessionId, kind: 'reasoning' },
-    });
+  const sinkCtx = {
+    initiativeId: initiativeIdForLog,
+    phase: 'architect' as const,
+    skill: 'architect-runner',
+    idMeta: { session_id: input.sessionId },
   };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   let result: RunArchitectTurnResult;
 
@@ -341,6 +343,7 @@ export async function runArchitectTurn(
       onToolUse,
       onHeartbeat,
       onText,
+      onThinking,
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(input.projectRoot, input.sessionId, decision.questions);
@@ -397,6 +400,7 @@ export async function runArchitectTurn(
         onToolUse,
         onHeartbeat,
         onText,
+        onThinking,
       });
     } catch (err) {
       exploreCrash = err instanceof Error ? err.message : String(err);
@@ -436,9 +440,10 @@ export async function runArchitectTurn(
       onToolUse,
       onHeartbeat,
       onText,
+      onThinking,
     });
   } else if (phase === 'finalizing') {
-    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat, onText });
+    result = await runFinalizeStep({ input, paths, status, queryFn, logger, brainIndex, onToolUse, onHeartbeat, onText, onThinking });
   } else if (phase === 'rejected') {
     // ARCH-6: wire archiveSessionDir into the reject path. The bridge sets
     // phase=rejected before spawning this turn; we move the session dir to
@@ -513,8 +518,10 @@ async function runInterviewStep(args: {
   onHeartbeat?: () => void;
   /** Forward reasoning text blocks to the event log (P3 live activity panel). */
   onText?: (text: string) => void;
+  /** Forward extended-thinking blocks to the event log (W6-B1). */
+  onThinking?: (text: string) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
+  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'interview', skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -550,6 +557,7 @@ async function runInterviewStep(args: {
     onToolUse,
     onHeartbeat,
     onText,
+    onThinking,
   });
   const questions = Array.isArray(out?.questions) ? out!.questions! : [];
   return { done: out?.done === true, questions };
@@ -643,8 +651,9 @@ async function runExploreStep(args: {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  onThinking?: (text: string) => void;
 }): Promise<ExploreFindings | null> {
-  const { status, projectRoot, sessionId, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
+  const { status, projectRoot, sessionId, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'explore', skillPromptPath });
   const interview = readInterview(projectRoot, sessionId);
   const priorQa = interview.length
@@ -681,6 +690,7 @@ async function runExploreStep(args: {
     onToolUse,
     onHeartbeat,
     onText,
+    onThinking,
   });
   if (!output || !Array.isArray(output.edgeCases) || !Array.isArray(output.brainConstraints)) {
     return null;
@@ -805,8 +815,10 @@ async function runDraftStep(args: {
   onHeartbeat?: () => void;
   /** Forward reasoning text blocks to the event log (P3 live activity panel). */
   onText?: (text: string) => void;
+  /** Forward extended-thinking blocks to the event log (W6-B1). */
+  onThinking?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
-  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText } = args;
+  const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
   const interview = readInterview(input.projectRoot, input.sessionId);
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'draft', skillPromptPath: input.skillPromptPath });
 
@@ -847,6 +859,7 @@ async function runDraftStep(args: {
     onToolUse,
     onHeartbeat,
     onText,
+    onThinking,
   });
   let draftInitiatives = Array.isArray(draft?.initiatives) ? draft!.initiatives! : [];
   // Convergence backstop: if the model still returns zero initiatives (e.g. it did not
@@ -874,6 +887,7 @@ async function runDraftStep(args: {
       onToolUse,
       onHeartbeat,
       onText,
+      onThinking,
     });
     if (Array.isArray(retry.output?.initiatives) && retry.output!.initiatives!.length > 0) {
       draft = retry.output;
@@ -1115,6 +1129,8 @@ async function runFinalizeStep(args: {
   onHeartbeat?: () => void;
   /** Forward reasoning text blocks to the event log (P3 live activity panel). */
   onText?: (text: string) => void;
+  /** Forward extended-thinking blocks to the event log (W6-B1). */
+  onThinking?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, logger } = args;
   const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);
@@ -1311,6 +1327,7 @@ async function runStructured<T>(args: {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  onThinking?: (text: string) => void;
 }): Promise<StructuredResult<T>> {
   const { output, reads } = await runStructuredTurn<T>({
     queryFn: args.queryFn,
@@ -1321,6 +1338,7 @@ async function runStructured<T>(args: {
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,
     onText: args.onText,
+    onThinking: args.onThinking,
     label: 'architect-structured',
   });
   return { output, brainReads: reads.filter((p) => p.includes('brain/')) };

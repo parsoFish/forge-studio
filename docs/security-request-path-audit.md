@@ -968,6 +968,74 @@ prompt); the shared loader throws.
 
 ---
 
+### W6-P2 — `statWalkFingerprint`'s `readdirSync`/`statSync` (`cli/kb-lint-summary.ts`, `[read]`)
+
+W6-P2 (ADR 044, read-path memoization) added `statWalkFingerprint(forgeRoot)` to
+`cli/kb-lint-summary.ts`, memoizing `runBrainLint({ scope: 'full' })` behind a
+cheap stat-walk key. `check-request-path-sinks` reports `cli/kb-lint-summary.ts
+readdirSync: baseline 0 -> now 1` and `statSync: baseline 0 -> now 1`,
+`--write`-accepted below.
+
+**Round 2 (reviewer-flagged, same day):** the first version walked only
+`brain/` and `_queue/done/`, matching `checkStaleness`'s 4-prefix allowlist
+(`docs/`/`orchestrator/`/`skills/`/`loops/`) but missing that
+`checkSourceLinks` (`cli/brain-lint.ts:513`) resolves a theme's relative
+markdown-link targets (`resolve(dirname(themeFile), relLink)`) with NO prefix
+filter at all — real theme content today already climbs `../../../` out of
+`brain/cycles/themes/` to cite `PRINCIPLES.md`, `ARCHITECTURE.md`, `cli/`,
+`docs/`, `forge-ui/`, `orchestrator/`, `scripts/`, and `.github/` (grep-
+verified). That domain is unbounded by design — a theme author can cite any
+relative path — so a curated root list is provably incomplete and would rot
+the next time a theme cites a new top-level path `checkSourceLinks` can
+already resolve today. `statWalkFingerprint` now walks `forgeRoot` itself
+(see the completeness table in its own doc comment, cli/kb-lint-summary.ts,
+for the per-check enumeration this is derived from), skipping only:
+`node_modules`/`.git` (anywhere, dir or file), and the top-level
+`_logs`/`projects`/`.forge` plus `_queue`'s non-`done` siblings (gitignored
+runtime/managed-project state no check reads and that grows without bound
+over a campaign). Measured at ~2200 files, ~11ms median.
+
+Classification: **no request-derived path reaches either sink.**
+`statWalkFingerprint` takes exactly one argument, `forgeRoot` — the same
+trusted, server-configured root every other function in this file already
+receives; no caller (`attachKbLintSummaries`, `runBrainConsolidateNow`,
+`buildKbHealth`, `computeAgentCleanupFindings`, or the `POST
+/api/studio/kbs/:id/maintenance` `op:'lint'` branch) ever threads a request-
+derived id, kbId, or file path into it. `forgeRoot` itself is the only literal
+root; every path below it is built by recursing into names `readdirSync`
+itself enumerates from the filesystem, never from caller input, filtered
+through a fixed, hardcoded exclude-list — not through anything request- or
+theme-content-derived. This is the identical shape already audited for
+`collectAllThemeSlugs` in the R4-19-F2 section above (fixed root +
+`readdirSync`-enumerated names + no caller-supplied segment), one level more
+contained even: unlike `buildKbHealth`/`computeAgentCleanupFindings`, which
+resolve a request-derived `kbId` through `resolveKbBrainDir`'s realpath choke
+point before reading anything, `statWalkFingerprint` never receives a `kbId`
+at all — walking wider (whole-forgeRoot vs. brain/-only) does not change WHO
+can influence WHICH path gets walked, which stays "nobody, ever."
+
+`runBrainLintFullFresh` (added same round, W6-P2 round 2 — the
+`runBrainConsolidateNow` post-mutation re-lint reviewer-flagged separately)
+calls the exact same `statWalkFingerprint`/`runBrainLint` pair as
+`runBrainLintFullMemoized`, just unconditionally — no new sink, no new
+classification needed.
+
+Residual, disclosed rather than claimed away: symlink-blind, same as every
+other whole-tree walk in this family (`readThemeFiles`,
+`collectAllThemeSlugs`) — a symlinked directory anywhere under the walked
+tree would be walked if `entry.isDirectory()` reported it as one (it does
+not: `Dirent.isDirectory()` reflects the link itself under `withFileTypes`,
+not its target, so a symlinked directory is simply skipped, narrower than the
+residual it mirrors rather than wider). Everything under `forgeRoot` this
+walk now reaches (`docs/`, `orchestrator/`, `cli/`, `scripts/`, `.github/`,
+top-level files, etc.) is read-only here (never written) and is either
+checked-in repo content or the same gitignored, operator-owned `_queue/done/`
+content `checkReflectorLoss` (`cli/brain-lint.ts`) already reads unguarded
+today — no new trust boundary is crossed, only a wider READ of the same
+trust class.
+
+---
+
 ### W6-P3 — the production-build freshness scan (`cli/forge-watch.ts`)
 
 W6-P3 made `forge studio` serve a production Next.js build (`next build` once,

@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioRoutes } from './bridge-studio.ts';
+import { _resetRunListCacheForTest } from './run-list-cache.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -270,6 +271,14 @@ let bridgeUrl: string;
 let closeBridge: () => Promise<void>;
 
 before(async () => {
+  // ADR-044 P1: this file's /api/runs + findRun assertions route through
+  // cachedListRuns's module-level memo (cli/run-list-cache.ts). Reset it
+  // before building this file's fixture so no residual entry from an
+  // earlier test/module use can leak a stale hit into this file's (fresh
+  // tmp forgeRoot, therefore fresh manifest paths) assertions — including
+  // any FUTURE test added here that edits a manifest in place.
+  _resetRunListCacheForTest();
+
   // Create tmp forge-root
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-'));
 

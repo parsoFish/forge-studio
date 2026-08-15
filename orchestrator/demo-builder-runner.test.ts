@@ -20,7 +20,7 @@ import {
   DEMO_LOCK_REL_PATH,
   type DemoBuilderStatus,
 } from './demo-builder-runner.ts';
-import { writeSessionStatus, readSessionStatus, type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
@@ -144,6 +144,53 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   assert.match(captured, /demo-design\/SKILL\.md/, 'directs authoring the reusable demo skill');
   assert.match(captured, /INITIATIVE'S CHANGES|before\/after/i, 'scopes the demo to an initiative\'s changes');
   assert.match(captured, /git (log|diff)/i, 'directs sampling from a real recent change');
+});
+
+test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const READ_CALLS = 6;
+  const queryFn: QueryFn = ({ options }) => {
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+        type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+      }));
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  weighing the demo layout  ' },
+            { type: 'redacted_thinking', data: 'opaque-1' },
+            { type: 'redacted_thinking', data: 'opaque-2' }, // consecutive — must coalesce
+            ...reads,
+          ],
+        },
+      };
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
+      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design\n');
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn, logger: logger(logsRoot, sessionId), logsRoot,
+  });
+
+  const events = readFileSync(join(logsRoot, `_demo-${sessionId}`, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+
+  const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+  assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+  assert.equal(thinkingEvents[0].message, 'weighing the demo layout');
+  assert.equal(thinkingEvents[1].message, REDACTED_THINKING_MARKER);
+
+  const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+  assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
 });
 
 test('locking → writes demo.lock.json + status locked', async () => {

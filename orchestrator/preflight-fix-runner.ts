@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
+import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
@@ -84,12 +85,29 @@ export async function runPreflightFixTurn(
     metadata: { runId: input.runId, clause: input.clause },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId: cycleId,
-    parentEventId: startEv.event_id,
-    phase: 'orchestrator',
-    skill: 'preflight-fix',
-  });
+  // W6-B1: preflight-fix mirrors brain-fix — an operator-triggered, low-volume,
+  // single fix turn — pass the same {readOnlySampleRate:1, cap:200}
+  // "unsampled" opts as every interactive runner (the unattended
+  // dev-loop/PM/reflector phases are unchanged and keep the sampler's
+  // defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId: cycleId,
+      parentEventId: startEv.event_id,
+      phase: 'orchestrator',
+      skill: 'preflight-fix',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
+
+  // W6-B1: preflight-fix drives its own raw SDK stream loop (not
+  // runStructuredTurn/runAgentTurn), so it had NO text/thinking sink at all
+  // before this change — wired inline below onto the ONE shared sink pair
+  // (interactive-session.ts), keyed by runId (this file's own id convention).
+  const sinkCtx = { initiativeId: cycleId, phase: 'orchestrator' as const, skill: 'preflight-fix', idMeta: { runId: input.runId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   const skillFile = skillPath('preflight-fix', input.forgeRoot);
   let skillPrompt = 'You are the forge preflight-fix agent.';
@@ -148,7 +166,9 @@ export async function runPreflightFixTurn(
       if (typeof msg !== 'object' || msg === null) continue;
       const m = msg as {
         type?: string;
-        message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        message?: {
+          content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+        };
         total_cost_usd?: number;
       };
 
@@ -156,6 +176,19 @@ export async function runPreflightFixTurn(
         const details = extractLiveToolDetails(m.message, toolSeq);
         for (const d of details) sink.onToolUse(d);
         toolSeq += details.length;
+        for (const block of m.message?.content ?? []) {
+          if (block?.type === 'text' && typeof block.text === 'string') {
+            const trimmed = block.text.trim();
+            if (trimmed) onText(trimmed);
+          }
+          if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+            const trimmed = block.thinking.trim();
+            if (trimmed) onThinking(trimmed);
+          }
+          if (block?.type === 'redacted_thinking') {
+            onThinking(REDACTED_THINKING_MARKER);
+          }
+        }
         continue;
       }
       if (m.type !== 'result') continue;

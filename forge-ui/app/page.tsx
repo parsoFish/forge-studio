@@ -27,6 +27,7 @@ import {
   type HomeStatus,
 } from '@/lib/home-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
+import { debounceLeadingTrailing } from '@/lib/debounce';
 
 // ---------------------------------------------------------------------------
 // Home — the operator dashboard at `/` (R6-07).
@@ -107,18 +108,25 @@ export default function HomePage() {
 
     // Subscribe to bridge WS to re-fetch runs on cycle-list-changed — the one
     // live-refresh transport Studio has; Home adds no second poll loop.
+    // ADR-044 P1: debounce leading+trailing 500ms (forge-ui/lib/debounce.ts)
+    // so a burst of cycle-list-changed messages collapses into at most two
+    // /api/runs round-trips instead of one per message.
+    const debouncedRefreshRuns = debounceLeadingTrailing(() => {
+      void refreshRuns(signal);
+    }, 500);
     const sub = subscribe({
       onState: () => { /* page does not show connection state */ },
       onMessage: (msg) => {
         if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
-          void refreshRuns(signal);
+          debouncedRefreshRuns();
         }
       },
     });
 
     return () => {
       signal.cancelled = true;
+      debouncedRefreshRuns.cancel();
       sub.close();
     };
   }, []);

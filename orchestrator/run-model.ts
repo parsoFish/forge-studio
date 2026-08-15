@@ -416,11 +416,26 @@ export function aggregateRun(args: {
   queueState: QueueState;
   manifestPath: string;
   nowMs: number;
+  /**
+   * ADR-044 P1 (`cli/run-list-cache.ts`) additive-optional escape hatch: a
+   * caller deriving MANY runs in one pass (the mtime-keyed cached list
+   * builder) can build buildNodeMapping/buildFlowNodeSets/
+   * buildAgentSlugToNodeId ONCE for the whole pass instead of once per
+   * manifest — mirroring how listRuns() below already does for its own
+   * loop. Omitted (the default) → unchanged behavior: every existing call
+   * site, including listRuns itself, builds its own and is untouched.
+   * ADR-042 disclosure: additive-optional fields on an already-exported
+   * function signature, not a new orchestrator export.
+   */
+  nodeMapping?: Map<string, string | null>;
+  flowNodeSets?: Map<string, Set<string>>;
+  agentSlugToNodeId?: Map<string, string>;
 }): Run {
-  // Build mapping once per call from flow.yaml + registry (falls back if unavailable)
-  const nodeMapping = buildNodeMapping(args.root);
-  const flowNodeSets = buildFlowNodeSets(args.root);
-  const agentSlugToNodeId = buildAgentSlugToNodeId(args.root);
+  // Build mapping once per call from flow.yaml + registry (falls back if unavailable),
+  // unless the caller already built one for a shared pass (see doc above).
+  const nodeMapping = args.nodeMapping ?? buildNodeMapping(args.root);
+  const flowNodeSets = args.flowNodeSets ?? buildFlowNodeSets(args.root);
+  const agentSlugToNodeId = args.agentSlugToNodeId ?? buildAgentSlugToNodeId(args.root);
   return aggregateRunWithMapping({ ...args, nodeMapping, flowNodeSets, agentSlugToNodeId });
 }
 
@@ -814,7 +829,21 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
   };
 }
 
-function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
+/**
+ * Build the degraded placeholder Run for a manifest that failed to parse
+ * (corrupt YAML frontmatter, unreadable file, …) — pure, total, no I/O of
+ * its own; `state` alone picks the reported status via the same
+ * queue-dir→RunStatus table `aggregateRunWithMapping` uses. `listRuns`
+ * below calls this in its per-file catch so one bad manifest degrades
+ * instead of crashing the whole list.
+ *
+ * ADR-042 disclosure: exported per the ratified boundary "a pure function
+ * with an explicit error contract may be exported for direct tests" — its
+ * second caller is `cli/run-list-cache.ts`'s `deriveFresh` fail path, which
+ * needs the IDENTICAL degraded shape `listRuns` produces rather than a
+ * hand-duplicated twin that can drift from this one.
+ */
+export function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
   return {
     id: initiativeId,
     flowId: FALLBACK_FLOW_ID,

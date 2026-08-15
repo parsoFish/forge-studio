@@ -16,6 +16,7 @@ import { join, resolve, relative } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
+import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
@@ -102,12 +103,28 @@ export async function runBrainFixTurn(
     metadata: { runId: input.runId, kbId: input.kbId, kind: input.kind, check: input.check },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId: cycleId,
-    parentEventId: startEv.event_id,
-    phase: 'reflection',
-    skill: 'brain-fix',
-  });
+  // W6-B1: brain-fix is an operator/reflector-triggered, low-volume, single
+  // fix turn — pass the same {readOnlySampleRate:1, cap:200} "unsampled"
+  // opts as every interactive runner (the unattended dev-loop/PM/reflector
+  // phases are unchanged and keep the sampler's defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId: cycleId,
+      parentEventId: startEv.event_id,
+      phase: 'reflection',
+      skill: 'brain-fix',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
+
+  // W6-B1: brain-fix drives its own raw SDK stream loop (not
+  // runStructuredTurn/runAgentTurn), so it had NO text/thinking sink at all
+  // before this change — wired inline below onto the ONE shared sink pair
+  // (interactive-session.ts), keyed by runId (this file's own id convention).
+  const sinkCtx = { initiativeId: cycleId, phase: 'reflection' as const, skill: 'brain-fix', idMeta: { runId: input.runId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   // Load skill prompt (ADR 003 — prompt is skill content, not re-baked TS).
   const skillFile = skillPath('brain-fix', input.forgeRoot);
@@ -165,7 +182,9 @@ export async function runBrainFixTurn(
       if (typeof msg !== 'object' || msg === null) continue;
       const m = msg as {
         type?: string;
-        message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        message?: {
+          content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+        };
         total_cost_usd?: number;
       };
 
@@ -173,6 +192,19 @@ export async function runBrainFixTurn(
         const details = extractLiveToolDetails(m.message, toolSeq);
         for (const d of details) sink.onToolUse(d);
         toolSeq += details.length;
+        for (const block of m.message?.content ?? []) {
+          if (block?.type === 'text' && typeof block.text === 'string') {
+            const trimmed = block.text.trim();
+            if (trimmed) onText(trimmed);
+          }
+          if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+            const trimmed = block.thinking.trim();
+            if (trimmed) onThinking(trimmed);
+          }
+          if (block?.type === 'redacted_thinking') {
+            onThinking(REDACTED_THINKING_MARKER);
+          }
+        }
         continue;
       }
       if (m.type !== 'result') continue;

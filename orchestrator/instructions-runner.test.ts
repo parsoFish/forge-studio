@@ -18,7 +18,7 @@ import {
   DRAFT_FILENAME,
   type InstructionsStatus,
 } from './instructions-runner.ts';
-import { writeSessionStatus, readSessionStatus, type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus, readSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 
 function makeQueryFn(spec: { interview?: unknown; draft?: unknown }): QueryFn {
@@ -108,6 +108,46 @@ test('interviewing → done flows straight through to drafting → awaiting-verd
   assert.ok(existsSync(draftPath));
   assert.match(readFileSync(draftPath, 'utf8'), /Demo CLI/);
   assert.equal(readSessionStatus<InstructionsStatus>(sessionDir)?.phase, 'awaiting-verdict');
+});
+
+test('W6-B1: drafting turn forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting' });
+  const READ_CALLS = 6;
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+        type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+      }));
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  weighing the AGENTS.md structure  ' },
+            { type: 'redacted_thinking', data: 'opaque-1' },
+            { type: 'redacted_thinking', data: 'opaque-2' }, // consecutive — must coalesce
+            ...reads,
+          ],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0, structured_output: { agents_md: '# Demo CLI\n' } };
+    }
+    return gen();
+  };
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  const events = readFileSync(join(logsRoot, `_instructions-${sessionId}`, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+
+  const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+  assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+  assert.equal(thinkingEvents[0].message, 'weighing the AGENTS.md structure');
+  assert.equal(thinkingEvents[1].message, REDACTED_THINKING_MARKER);
+
+  const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+  assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
 });
 
 test('finalizing: writes the approved draft to <repo>/AGENTS.md + status committed', async () => {
