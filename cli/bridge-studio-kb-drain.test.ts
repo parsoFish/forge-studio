@@ -287,33 +287,27 @@ test('runKbDrain: NO-PROGRESS via cumulative oscillation — a round\'s after-st
   );
 });
 
-test('runKbDrain: under FORGE_DRY_BRIDGE=1, the configured runFixTurn is NEVER called (spy = zero calls) — the auto-fix loop still runs, terminal state stays honest', async () => {
+test('runKbDrain: under FORGE_DRY_BRIDGE=1 the DEFAULT fix turn never spawns — the auto-fix loop still runs, cost stays 0, terminal state stays honest (an INJECTED runFixTurn is by definition not a spawn and is honored regardless — that is how the termination matrix above is testable under CI\'s global FORGE_ARCHITECT_NO_SPAWN=1)', async () => {
   const { root, brainDir } = makeDrainRoot('drybridge-kb');
   const prior = process.env.FORGE_DRY_BRIDGE;
   process.env.FORGE_DRY_BRIDGE = '1';
   try {
     const stuck = fixtureFinding(brainDir, 'stuck-under-dry-bridge', 'agent');
-    let spyCalls = 0;
     let autoFixCalls = 0;
+    // NO runFixTurn injected: exercise the default selection. Under dry-bridge
+    // that resolves to the no-spawn stand-in — a real SDK spawn here would
+    // either fail (no SDK in CI) or cost money; both are the outcome this test
+    // exists to rule out.
     const opts: KbDrainOpts = {
       lint: scriptedLint([[stuck], [stuck]]),
       applyAutoFixes: () => {
         autoFixCalls += 1;
         return { ...EMPTY_AUTO_RESULT, remaining: [stuck] };
       },
-      runFixTurn: async (input) => {
-        spyCalls += 1;
-        // If this were ever actually invoked it would falsely clear the
-        // finding and blow the cost budget — the assertions below prove it
-        // never runs under dry-bridge, defense-in-depth even for an
-        // explicitly-configured (not just the default) turn function.
-        return { runId: input.runId, cleared: true, costUsd: 5 };
-      },
     };
     const status = await runKbDrain(root, 'drybridge-kb', 'drybridge-kb-drain-t1', opts);
-    assert.equal(spyCalls, 0, 'expected runFixTurn to be called ZERO times under FORGE_DRY_BRIDGE=1');
     assert.ok(autoFixCalls >= 1, 'expected the local auto-fix/lint loop to still run under dry-bridge (not a whole-route refusal)');
-    assert.equal(status.costUsd, 0, 'no cost may accrue when the turn is never dispatched');
+    assert.equal(status.costUsd, 0, 'no cost may accrue when the default turn is the no-spawn stand-in');
     // Honest terminal: the finding never actually cleared (identical before
     // and after — it was never touched) — no-progress, NOT a fabricated green.
     assert.equal(status.state, 'no-progress', JSON.stringify(status));

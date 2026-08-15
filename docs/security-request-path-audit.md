@@ -333,7 +333,7 @@ one new file:
   the value is either freshly minted by `POST .../drain` as
   `` `${kbId}-drain-${Date.now().toString(36)}` `` (`kbId` already `SLUG_RE`-gated
   at that same route, strictly before this is ever called), or read back via
-  `isSafeRunId(runId) && runId.startsWith(\`${kbId}-drain-\`)` at the two GET
+  `` isSafeRunId(runId) && runId.startsWith(`${kbId}-drain-`) `` at the two GET
   routes — charset AND kbId-prefix gated, never trusted on charset alone (a
   syntactically-valid but foreign-kb runId is treated identically to an unknown
   one: the same generic 404, no oracle on which check failed). `_kb-drain-<runId>`
@@ -1362,6 +1362,7 @@ DOES scan the fence's own implementation (it is plain TypeScript calling
 `orchestrator/interactive-runner.ts` `mkdirSync` at 2 (up from 1 — the
 pre-existing `libraryRootGuard` row plus this new one), and
 `orchestrator/interactive-session.ts` `realpathSync` at 2.
+
 ### Guarded in W6-B14 — two reattach-discovery GET routes (close-the-fragile-poll-loop batch)
 
 Two new `[exec]` sinks, both routed through `resolveGuardedPath`/`guardedReadDir`
@@ -1372,7 +1373,7 @@ retrofit):
   (`mkdirSync` ×1, `check-request-path-sinks.mjs` baseline 6 → 7 for this
   file).** The `op=consolidate` maintenance branch now stakes out its run's
   log dir *synchronously*, before the fire-and-forget `runBrainConsolidateNow`
-  call: `resolveGuardedPath(ctx.forgeRoot, ['_logs', \`_brainfix-${runId}\`])`,
+  call: `` resolveGuardedPath(ctx.forgeRoot, ['_logs', `_brainfix-${runId}`]) ``,
   `mkdirSync(guarded.realPath, {recursive:true})` only if `guarded.ok`. `runId`
   is `${kbId}-consolidate-${Date.now().toString(36)}` — `kbId` is `SLUG_RE`-
   gated a few lines above (so the compound name cannot itself carry a `/`),
