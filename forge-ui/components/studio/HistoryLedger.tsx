@@ -51,7 +51,10 @@
  * `onClick` bolted on, which is invisible to keyboard nav, screen readers,
  * and cmd-click/open-in-new-tab, and which the render tests below
  * explicitly assert the tag name to catch (attribute-only assertions
- * cannot distinguish `<a>` from `<div>`).
+ * cannot distinguish `<a>` from `<div>`). (W6-IA-6: rendered via `next/link`'s
+ * `Link` for same-tab client-side routing instead of a full page reload —
+ * `Link` still renders a real `<a>`, so amendment 29's tag-name contract is
+ * unchanged.)
  *
  * `data-run-when` carries the raw ISO `row.when` verbatim (D7); the
  * human-readable relative text is rendered separately via
@@ -72,6 +75,7 @@
  * verbatim — reused here on the ROW element instead of a page-level section.
  */
 
+import Link from 'next/link';
 import { formatWhen } from '@/lib/history-ledger';
 import type { LedgerRow } from '@/lib/history-ledger';
 
@@ -108,7 +112,7 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
         </div>
       ) : (
         rows.map((row) => (
-          <a
+          <Link
             key={row.id}
             data-ledger-row="true"
             data-run-id={row.id}
@@ -149,7 +153,7 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
             {row.costUsd !== null && (
               <span style={{ color: 'var(--ember)', flexShrink: 0, marginLeft: 'auto' }}>${row.costUsd.toFixed(2)}</span>
             )}
-          </a>
+          </Link>
         ))
       )}
     </section>

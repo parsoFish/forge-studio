@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
@@ -46,6 +48,7 @@ type PageTab = 'monitor' | 'build';
 
 export default function FlowMonitorPage({ params }: { params: { id: string } }) {
   const { id } = params;
+  const router = useRouter();
   // A brand-new flow: start in BUILD, seed the canvas from the basic starter,
   // and on save derive a slug from the name + redirect to the real flow.
   const isNew = id === 'new';
@@ -263,10 +266,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     }
     // New flow saved → navigate to its real route so subsequent edits target it.
     if (result.ok && isNew) {
-      window.location.href = `/flows/${encodeURIComponent(saveId)}`;
+      router.push(`/flows/${encodeURIComponent(saveId)}`);
     }
     return result;
-  }, [id, isNew, headerState]);
+  }, [id, isNew, headerState, router]);
 
   // ---- start / resume ----
 
@@ -379,7 +382,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
             onFlowSelect={(newId) => {
               if (newId !== id) {
                 // Navigate to the selected flow
-                window.location.href = `/flows/${encodeURIComponent(newId)}`;
+                router.push(`/flows/${encodeURIComponent(newId)}`);
               }
             }}
           />
@@ -430,7 +433,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   <select
                     data-field="monitor-flow-selector"
                     value={id}
-                    onChange={(e) => { if (e.target.value !== id) window.location.href = `/flows/${encodeURIComponent(e.target.value)}`; }}
+                    onChange={(e) => { if (e.target.value !== id) router.push(`/flows/${encodeURIComponent(e.target.value)}`); }}
                     style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', outline: 'none' }}
                   >
                     {candidates.map((f) => (
@@ -535,13 +538,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   }}
                 >
                   <strong>Reflection ready</strong> — review the retro &amp; answer the agent&apos;s questions.
-                  <a
+                  <Link
                     data-action="review-reflection"
                     href={`/artifact?run=${encodeURIComponent(view.activeRun.id)}&type=reflection&mode=view`}
                     style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 12px', background: 'var(--violet)', color: '#fff', borderRadius: 4, textDecoration: 'none' }}
                   >
                     Review reflection →
-                  </a>
+                  </Link>
                 </div>
               )}
 

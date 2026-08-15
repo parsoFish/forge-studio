@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 import type { Run } from '@/lib/studio-client';
 
@@ -250,7 +251,7 @@ function RunCard({
       )}
 
       {isGated && (
-        <a
+        <Link
           href={`/artifact?run=${encodeURIComponent(run.id)}&type=verdict&mode=gate`}
           onClick={(e) => e.stopPropagation()}
           style={{
@@ -270,7 +271,7 @@ function RunCard({
           }}
         >
           Open gate →
-        </a>
+        </Link>
       )}
 
       {isFailed && run.failNote && (
@@ -316,7 +317,7 @@ function RunCard({
           it) nor shifts ahead of that anchor in DOM order for a gated row —
           a `[data-run-id][data-run-status="gated"] a` selector elsewhere
           must keep matching "Open gate →" first. */}
-      <a
+      <Link
         href={`/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`}
         onClick={(e) => e.stopPropagation()}
         data-action="open-run-detail"
@@ -329,7 +330,7 @@ function RunCard({
         }}
       >
         Run detail →
-      </a>
+      </Link>
     </div>
   );
 }
