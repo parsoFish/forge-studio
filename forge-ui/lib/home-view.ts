@@ -266,7 +266,11 @@ export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
       text: `${kb.name} · ${parts.join(' · ')}`,
       sub: `${lint.checksRun}/${lint.checksTotal} checks run`,
       status,
-      href: `/knowledge?id=${kb.id}`,
+      // Deep-link straight into the Health tab — this row exists BECAUSE of
+      // a lint finding, so the click should land where that finding lives,
+      // not the default Explore tab the operator would then have to find
+      // their own way out of.
+      href: `/knowledge?id=${kb.id}&tab=health`,
       kbId: kb.id,
       lint,
     });

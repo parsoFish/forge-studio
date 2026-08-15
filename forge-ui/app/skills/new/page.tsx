@@ -38,7 +38,11 @@ export default function SkillBuilderPage() {
     setError(null);
     const r = await createSkill({ name: name.trim(), description: description.trim(), body: body.trim() });
     if (r.ok) {
-      router.push('/agents/new');
+      // The library (/skills) is the one home for a created skill — it now
+      // shows up there, not in the agent builder (which has no created-skill
+      // of its own to compose; the operator picks it from the library into
+      // whichever agent build they choose next).
+      router.push('/skills');
     } else {
       setError(r.error ?? 'could not create the skill');
       setSaving(false);

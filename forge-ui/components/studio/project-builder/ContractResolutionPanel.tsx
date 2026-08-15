@@ -5,15 +5,31 @@ import { useRouter } from 'next/navigation';
 
 import { preflightFixAuto, preflightFixAgent, preflightFixStatus, type PreflightClause } from '@/lib/studio-client';
 import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
+import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND_HINT } from '@/lib/contract-resolution-view';
 
 /**
  * Stage D — guided contract-resolution panel. Mirrors LintResolutionPanel for
  * preflight clauses: each FAILING clause is grouped by its resolution tier.
  *   - AUTO  → one click applies every deterministic fixer.
  *   - AGENT → routes the clause to the matching builder (C8→instructions,
- *             DEMO→demo-builder) or the brain UI; the operator drives it there.
+ *             DEMO→demo-builder) or the project's OWN bound KB's health tab
+ *             (BRAIN→brain-fix, `/knowledge?id=<boundKbId>&tab=health`); the
+ *             operator drives resolution there. `boundKbId` is the REAL
+ *             binding threaded down from the project page's own `kb` state
+ *             (`KbBind.tsx`) — never derived from the project id (a
+ *             project's KB is operator-rebindable to any KB, or unbound
+ *             entirely — see `contract-resolution-view.ts`'s `brainFixHref`
+ *             header for why guessing here is unsafe). When there is no
+ *             bound KB the brain-fix button is disabled with an honest hint
+ *             (`isAgentRouteBlocked` / `BRAIN_FIX_UNBOUND_HINT`) rather than
+ *             navigating to a guess. NONE of these three routes runs an
+ *             agent turn from the click itself — see `agentResolveLabel`
+ *             (./contract-resolution-view.ts), which the button label uses so
+ *             it never claims "with agent" for a click that only navigates.
  *   - USER  → the operator's decision drives the preflight-fix agent, which
- *             applies it and re-runs preflight to confirm the clause cleared.
+ *             applies it and re-runs preflight to confirm the clause cleared
+ *             (this tier — and only this tier — genuinely dispatches + polls
+ *             an agent turn, ~90s bounded; see `poll` below).
  * Load-bearing state is mirrored to data-* for the harness.
  */
 
@@ -36,11 +52,18 @@ const btn: React.CSSProperties = {
 export function ContractResolutionPanel({
   projectId,
   clauses,
+  boundKbId,
   onChanged,
   onDemoSessionStarted,
 }: {
   projectId: string;
   clauses: PreflightClause[];
+  /** The project's REAL bound KB id, or `null` if none is bound —
+   *  `KbBind.tsx`'s own `kb` state, threaded straight through (never
+   *  re-derived from `projectId`; see this file's header +
+   *  `contract-resolution-view.ts`'s `brainFixHref`). Drives whether the
+   *  brain-fix agent-tier button is navigable or must render disabled. */
+  boundKbId: string | null;
   onChanged?: () => void;
   /** R1-03-F2: a demo-builder resolution spawned a session — the project page
    *  shows it inline via DemoBuilderPanel rather than navigating to the
@@ -82,9 +105,14 @@ export function ContractResolutionPanel({
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
       if (s.ok && s.sessionId) onDemoSessionStarted?.(s.sessionId);
     } else if (r.route === 'brain-fix') {
-      setMsg('Resolve the stale brain citation from the Knowledge tab → Resolve Lint.');
+      // Defense in depth: the button itself is disabled whenever
+      // boundKbId is null (isAgentRouteBlocked, below) so this branch
+      // should be unreachable without one — but never navigate on a guess
+      // if it somehow fires anyway; say why instead.
+      if (boundKbId) router.push(brainFixHref(boundKbId));
+      else setMsg(BRAIN_FIX_UNBOUND_HINT);
     }
-  }, [projectId, router, onDemoSessionStarted]);
+  }, [projectId, router, onDemoSessionStarted, boundKbId]);
 
   const submitUser = useCallback(async (c: PreflightClause) => {
     const instruction = (notes[c.id] ?? '').trim();
@@ -130,14 +158,32 @@ export function ContractResolutionPanel({
       {agent.length > 0 && (
         <div data-resolution-stage="agent" style={{ marginBottom: 12 }}>
           <Stage title={`Agent-resolvable (${agent.length})`} sub="Routes to the matching builder (AGENTS.md / demo) to author it." />
-          {agent.map((c) => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <ClauseRow c={c} state={runState[c.id]} />
-              <button data-action="resolve-clause-agent" data-resolve-clause-id={c.id} style={btn} disabled={busy !== null} onClick={() => void resolveAgent(c)}>
-                {busy === `agent:${c.id}` ? 'Routing…' : 'Resolve with agent'}
-              </button>
-            </div>
-          ))}
+          {agent.map((c) => {
+            const blocked = isAgentRouteBlocked(c.route, boundKbId);
+            return (
+              <div key={c.id} style={{ marginBottom: blocked ? 6 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ClauseRow c={c} state={runState[c.id]} />
+                  <button
+                    data-action="resolve-clause-agent"
+                    data-resolve-clause-id={c.id}
+                    data-resolve-blocked={blocked ? 'true' : 'false'}
+                    style={btn}
+                    disabled={busy !== null || blocked}
+                    title={blocked ? BRAIN_FIX_UNBOUND_HINT : undefined}
+                    onClick={() => void resolveAgent(c)}
+                  >
+                    {busy === `agent:${c.id}` ? 'Routing…' : agentResolveLabel(c.route)}
+                  </button>
+                </div>
+                {blocked && (
+                  <div data-component="brain-fix-unbound-hint" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 3 }}>
+                    {BRAIN_FIX_UNBOUND_HINT}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -164,7 +210,7 @@ export function ContractResolutionPanel({
                 disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
                 onClick={() => void submitUser(c)}
               >
-                {busy === `user:${c.id}` ? 'Applying…' : 'Apply decision'}
+                {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
               </button>
             </div>
           ))}
