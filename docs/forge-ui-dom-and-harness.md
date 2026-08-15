@@ -1147,9 +1147,10 @@ inventory rather than one shared page-level contract:
   — an explicit, visible failure state naming the offending kind, never any
   specific renderer.
   **Every per-kind operator affordance keeps its original `data-*` name** so
-  the harness drives it unchanged: the architect hex
+  the harness drives it unchanged, **with one exception (W6-B7, below):**
+  the architect hex
   (`[data-component="architect-hex"][data-architect-phase][data-architect-active]`,
-  `[data-tool-burst]` chips), `[data-section="architect-interview"|"architect-activity"|"architect-status"]`
+  `[data-tool-burst]` chips), `[data-section="architect-interview"|"architect-status"]`
   with `[data-architect-round][data-questions-answered]`, per-question
   `[data-question-index][data-question-resolved]`, per-option
   `[data-option-label][data-option-selected]`; the stale warning
@@ -1247,6 +1248,56 @@ inventory rather than one shared page-level contract:
   session lives on `/knowledge` (see the KB maintenance panel entry, below)
   — `[data-action="start-kb-cleanup"]`, POSTing
   `POST /api/studio/kbs/:id/cleanup/start`.
+- **`ActivityLog` — the shared live thinking/working drawer (W6-B7,
+  2026-08-15).** `components/studio/ActivityLog.tsx`, generalized off the
+  retired `ArchitectActivityLog.tsx` inline panel (deleted once every
+  consumer below adopted this — no dual paths). Operator round-3 decision:
+  a **full-width collapsible BOTTOM DRAWER** (`position: fixed`, spans the
+  page), not the `mockups/session-surface-v1/session-live.html` mock's
+  bottom-left inline placement — the mock's row-content design (thinking
+  italic + ~200-char clamp with per-block expand, tool rows always full,
+  the literal `[thinking redacted]` marker, phase chip + cost ticker in the
+  header) carries over verbatim; only the placement changed. Root:
+  `[data-component="activity-drawer"][data-drawer-open="true"|"false"]
+  [data-activity-count=<N>]`. Header: `[data-component="activity-phase-chip"]
+  [data-phase-active]` (optional — a caller with no phase concept omits it),
+  `[data-action="toggle-activity-drawer"]` (flips open/collapsed),
+  `[data-action="expand-all-thinking"]` (expands/collapses every clampable
+  row at once — mirrors the mock's own any-collapsed → expand-all-else-
+  collapse-all toggle). Collapsed state renders
+  `[data-component="activity-last-line"]` — the phase chip + a one-line
+  summary of the newest row + the cost ticker, the mock's "slim bar" — INSTEAD
+  of the row list (never both). Each row: `[data-activity-kind="tool"
+  |"tool-coalesced"|"thinking"|"thinking-redacted"|"reasoning"|"capped"]`
+  (`data-activity-kind` is the ONE name carried over unchanged from the
+  retired panel — the value vocabulary widened, the attribute didn't). A
+  clampable row (`thinking`/`reasoning` over ~200 chars) carries a per-block
+  `[data-action="expand-activity-row"][data-activity-expanded]`. Row
+  derivation is a PURE function, `lib/activity-log-view.ts`'s
+  `toActivityRows` (unit-tested independent of any DOM) — reads the W6-B1
+  event shapes directly: `tool_use` rows from `metadata.{tool,input_summary}`
+  (never `metadata.input`, which the retired panel read and which the real
+  wire shape never actually populated — a latent no-op this rewrite fixes
+  in passing), the sampler's `metadata.coalesced` summary row from
+  `metadata.{coalesced_count,sampled_out_count}`, and `log`+
+  `metadata.kind:"thinking"|"reasoning"` rows, splitting the literal
+  `[thinking redacted]` marker and a `metadata.capped` per-sink cap-marker
+  row into their own kinds rather than rendering them as ordinary
+  clamped text. The cost ticker (`$0.18 · 41.3k tok · 3m 12s`) is rendered
+  ONLY from caller-supplied `costUsd`/`tokensTotal`/`elapsedMs` props —
+  never fabricated when absent (today only `RunPanel` has a real `costUsd`
+  source; the architect/instructions session-summary types carry no cost
+  field yet, a disclosed gap, not papered over). Adopted by
+  `SessionArchitectPanel`, `SessionInstructionsPanel`, `DemoBuilderPanel`
+  (all three during their working phases, subscribed via the SAME
+  `useCycleEvents(cycleId)` seam they already held), and `RunPanel`
+  (`components/studio/agent-builder/RunPanel.tsx`) — for a standalone
+  dispatched agent run, whose `runId` (minted `_agent-<slug>-<stamp>`,
+  `cli/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
+  (`createLogger(runId, ...)` writes straight to `_logs/<runId>/
+  events.jsonl`, the exact path `GET /api/events/<cycleId>` reads), so
+  `RunPanel` opens its own `useCycleEvents(runId)` socket with no extra id
+  derivation.
 - **Session-shell read contract (R2-10-F1/F2, 2026-08-05) — the API side.**
   The three session routes above converge on one shared shell. Its data comes
   from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`

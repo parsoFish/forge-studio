@@ -40,6 +40,12 @@
  * verified by `tsc` + the pure-logic unit tests in `run-panel-view.test.ts`
  * only; a real-browser journey beat (a later work item) is what proves
  * clicking Run actually calls `dispatchAgentRun` with the chosen values.
+ *
+ * W6-B7 adds the shared `ActivityLog` bottom drawer, mounted once `runId` is
+ * set. `runId` doubles as the run's cycle id (`cli/ui-bridge.ts` mints it
+ * `_agent-<slug>-<stamp>` and logs straight into `_logs/<runId>/` — see the
+ * `useCycleEvents` call site's own comment below), so no extra id derivation
+ * is needed to wire the drawer's live event subscription.
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
@@ -57,6 +63,8 @@ import {
 } from '@/lib/run-panel-view';
 import { StandingTriggers } from './StandingTriggers';
 import type { StandingTrigger } from '@/lib/standing-triggers';
+import { ActivityLog } from '@/components/studio/ActivityLog';
+import { useCycleEvents } from '@/lib/use-cycle-events';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -155,6 +163,18 @@ export function RunPanel({
     if (!runId) return;
     return pollAgentRun(runId, { onUpdate: setStatus });
   }, [runId]);
+
+  // W6-B7: `runId` (minted `_agent-<slug>-<stamp>` — `cli/ui-bridge.ts`'s
+  // `POST /api/agents/:slug/run`) IS the run's cycle id — `createLogger`
+  // there writes straight to `_logs/<runId>/events.jsonl`, the exact path
+  // `GET /api/events/<cycleId>` reads. So the shared live drawer just
+  // subscribes to `runId` directly, no separate derivation needed. Called
+  // unconditionally (hooks rule) with `''` before a run is dispatched — the
+  // empty-cycleId fetch 404s and is caught silently (`use-cycle-events.ts`),
+  // and no WS `event` message can ever carry `cycleId: ''`, so this is inert
+  // until `runId` is actually set, at which point the effect's `[cycleId]`
+  // dependency cleanly re-subscribes.
+  const events = useCycleEvents(runId ?? '');
 
   // R6-01 WI-4: what already starts this agent WITHOUT an operator is a fact
   // about the agent, not about its dispatchability — so it renders on BOTH
@@ -344,6 +364,18 @@ export function RunPanel({
       )}
 
       {standingTriggersList}
+
+      {/* W6-B7: the shared live thinking/working drawer — mounted only once
+          a run actually exists (no cycle id to subscribe to before then). */}
+      {runId && (
+        <ActivityLog
+          label={`agent run · ${slug}`}
+          events={events}
+          phaseLabel={runState}
+          phaseActive={runState === 'running'}
+          costUsd={status?.costUsd}
+        />
+      )}
     </section>
   );
 }
