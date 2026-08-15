@@ -777,3 +777,83 @@ test('R4-17 AT-17 (BLOCKER, pin 5 item 1, id-entropy): two onboarding starts fir
     rmSync(projectDir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W6-B14 — GET /api/studio/projects/:id/onboarding/active: reattach
+// discovery for a client that lost its onboarding runId (nav-away, reload).
+// `OnboardWithAgent` (forge-ui) only ever knew its dispatched runId from its
+// OWN component state, with no way back to a still-running server-side
+// dispatch — even though the session's own status.json already carries
+// everything needed.
+// ---------------------------------------------------------------------------
+
+test('W6-B14: GET .../onboarding/active on a project that has never onboarded -> {ok:true, sessionId:null, runId:null, phase:null}, never a guess', async () => {
+  const project = 'never-onboarded-proj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true });
+  try {
+    const res = await fetch(`${url}/api/studio/projects/${project}/onboarding/active`);
+    const body = await res.json() as { ok: boolean; sessionId: string | null; runId: string | null; phase: string | null };
+    assert.equal(res.status, 200, JSON.stringify(body));
+    assert.equal(body.ok, true);
+    assert.equal(body.sessionId, null);
+    assert.equal(body.runId, null);
+    assert.equal(body.phase, null);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('W6-B14: GET .../onboarding/active rediscovers the sessionId/runId/phase of a just-started onboarding session — the exact runId POST returned', async () => {
+  const project = 'reattach-probe-proj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true });
+  try {
+    const start = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'reattach probe' } }),
+    });
+    assert.equal(start.status, 200);
+    const startBody = (await start.json()) as { sessionId: string; runId: string };
+
+    const active = await fetch(`${url}/api/studio/projects/${project}/onboarding/active`);
+    const activeBody = await active.json() as { ok: boolean; sessionId: string | null; runId: string | null; phase: string | null };
+    assert.equal(active.status, 200, JSON.stringify(activeBody));
+    assert.equal(activeBody.ok, true);
+    assert.equal(activeBody.sessionId, startBody.sessionId);
+    assert.equal(activeBody.runId, startBody.runId, 'active discovery must rediscover the SAME runId POST /start returned');
+    assert.equal(activeBody.phase, 'running', 'a freshly-started session has not reached a terminal phase yet');
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('W6-B14: GET .../onboarding/active picks the MOST RECENT of two onboarding sessions for the same project', async () => {
+  const project = 'reattach-latest-proj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true });
+  try {
+    await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'first run' } }),
+    });
+    const second = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'second run' } }),
+    });
+    const secondBody = (await second.json()) as { sessionId: string };
+
+    const active = await fetch(`${url}/api/studio/projects/${project}/onboarding/active`);
+    const activeBody = await active.json() as { sessionId: string | null };
+    assert.equal(activeBody.sessionId, secondBody.sessionId, 'must pick the MOST RECENT session, not the first one found');
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('W6-B14: GET .../onboarding/active for an unknown project -> 404', async () => {
+  const res = await fetch(`${url}/api/studio/projects/no-such-project-xyz/onboarding/active`);
+  assert.equal(res.status, 404);
+});
+
+test('W6-B14: GET .../onboarding/active for a malformed project slug -> 400', async () => {
+  const res = await fetch(`${url}/api/studio/projects/${encodeURIComponent('not a slug!')}/onboarding/active`);
+  assert.equal(res.status, 400);
+});

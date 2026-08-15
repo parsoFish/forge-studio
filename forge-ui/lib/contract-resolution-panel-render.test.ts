@@ -94,3 +94,23 @@ test('user-tier clause: the apply button honestly says "Apply with agent" (this 
   expect(html).toMatch(/Apply with agent/);
   expect(html).not.toMatch(/>Apply decision</);
 });
+
+// ---------------------------------------------------------------------------
+// NEW (W6-B14) — the shared three-state poll contract for the user tier's
+// submit-and-poll flow. A fresh render has never dispatched anything, so
+// NO clause carries a data-poll-state and no re-check button exists yet;
+// the 'timed-out' -> re-check-button wiring is state-driven
+// (runStatus/pollPreflightFix) and is exercised by pollPreflightFix's own
+// pinned contract in agent-dispatch.test.ts.
+// ---------------------------------------------------------------------------
+
+test('W6-B14: fresh render of a user-tier clause -> NO data-poll-state attribute and NO [data-action="re-check"] button', () => {
+  const html = render([clause({ id: 'C1', resolution: 'user', route: undefined })]);
+  expect(html).not.toContain('data-poll-state=');
+  expect(html).not.toContain('data-action="re-check"');
+});
+
+test('W6-B14: data-agent-run-state is empty on a fresh render (no run dispatched) — never a fabricated state', () => {
+  const html = render([clause({ id: 'C1', resolution: 'user', route: undefined })]);
+  expect(html).toContain('data-agent-run-state=""');
+});

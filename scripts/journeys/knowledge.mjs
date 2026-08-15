@@ -1503,9 +1503,17 @@ export const journey = defineJourney({
 
               let consolidateState = '';
               try {
+                // W6-B14: consolidate now routes through the shared
+                // pollUntilTerminal core (KbMaintenancePanel.tsx), which
+                // renders its FIRST 'running' poll almost immediately — a
+                // bare "non-empty" wait would resolve on that intermediate
+                // value instead of the real terminal one. Wait for the new
+                // generic three-state contract's 'terminal' bucket instead
+                // (never 'watching'/'timed-out'), then read the
+                // domain-specific data-consolidate-state for the exact value.
                 await page.waitForFunction(() => {
-                  const v = document.querySelector('[data-component="kb-maintenance"]')?.getAttribute('data-consolidate-state');
-                  return v !== null && v !== '';
+                  const v = document.querySelector('[data-component="kb-maintenance"]')?.getAttribute('data-poll-state');
+                  return v === 'terminal';
                 }, null, { timeout: 20000 });
                 consolidateState = await page.evaluate(() => document.querySelector('[data-component="kb-maintenance"]')?.getAttribute('data-consolidate-state') ?? '');
               } catch { /* checked below */ }

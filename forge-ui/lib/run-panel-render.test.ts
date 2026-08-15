@@ -330,3 +330,23 @@ test('exactly one Run affordance for a non-interactive, unblocked agent: one dat
   expect(count(html, 'data-action="run-agent"')).toBe(1);
   expect(count(html, 'data-action="go-to-session"')).toBe(0);
 });
+
+// ---------------------------------------------------------------------------
+// NEW (W6-B14) — the shared three-state poll contract. `useEffect` (the
+// reattach fetch, the poll itself) does not run under `renderToStaticMarkup`,
+// so a fresh mount has no runId and no status: `data-poll-state` must be
+// ABSENT (never a fabricated 'watching'/idle value), and no re-check button.
+// The 'timed-out' -> re-check-button-renders wiring is pure-state-driven
+// (pollState/setPollNonce) and is exercised by RunPanel's own dynamic
+// behaviour via pollAgentRun's pinned contract in agent-dispatch.test.ts.
+// ---------------------------------------------------------------------------
+
+test('W6-B14: fresh mount (no run dispatched, no reattach resolved yet) -> NO data-poll-state attribute at all', () => {
+  const html = render({ interactive: false });
+  expect(html).not.toContain('data-poll-state=');
+});
+
+test('W6-B14: fresh mount -> NO [data-action="re-check"] button', () => {
+  const html = render({ interactive: false });
+  expect(html).not.toContain('data-action="re-check"');
+});

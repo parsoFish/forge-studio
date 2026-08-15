@@ -539,6 +539,47 @@ test('R1-06 WI-3 group A companion: pre-existing single-finding lint-resolution 
 });
 
 // ---------------------------------------------------------------------------
+// W6-B14 — GET /api/studio/kbs/:id/consolidate/active: reattach discovery
+// for a client that lost its consolidate runId (nav-away, reload). The old
+// `lib/kb-consolidate.ts` `runConsolidateToTerminal` awaited its OWN bounded
+// poll loop directly inside the dispatching click handler, so the run's
+// result (though the run itself kept going server-side) was simply
+// unreachable again once that handler's closure was gone.
+// ---------------------------------------------------------------------------
+
+test('W6-B14: GET .../consolidate/active on a kb that has never consolidated -> {ok:true, runId:null}, never a guess', async () => {
+  // HEALTH_KB_ID (unlike CONSOLIDATE_KB_ID) is never dispatched through
+  // op=consolidate anywhere else in this file — genuinely untouched.
+  const { status, json } = await get(`/api/studio/kbs/${HEALTH_KB_ID}/consolidate/active`);
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.equal(json['runId'], null);
+});
+
+test('W6-B14: GET .../consolidate/active rediscovers the runId of a just-dispatched consolidate run, and its state matches the SAME fix-agent GET the runId itself is pollable through', async () => {
+  const dispatch = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+  assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
+  const runId = dispatch.json['runId'] as string;
+  assert.equal(typeof runId, 'string');
+
+  const active = await get(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/consolidate/active`);
+  assert.equal(active.status, 200, JSON.stringify(active.json));
+  assert.equal(active.json['ok'], true);
+  assert.equal(active.json['runId'], runId, 'active discovery must rediscover the SAME runId the dispatch minted');
+
+  // The rediscovered runId polls to a terminal state through the byte-
+  // identical fix-agent route the consolidate ratchet test above already
+  // proves — never a dead end.
+  const terminal = await pollUntilTerminal(CONSOLIDATE_KB_ID, runId);
+  assert.notEqual(terminal.state, 'running');
+});
+
+test('W6-B14: GET .../consolidate/active with an invalid (non-slug) kb id -> 400', async () => {
+  const { status, json } = await get(`/api/studio/kbs/${encodeURIComponent('Not A Slug!')}/consolidate/active`);
+  assert.equal(status, 400, JSON.stringify(json));
+});
+
+// ---------------------------------------------------------------------------
 // R1-06 WI-3 review MAJOR 1 (mis-scoped health count / declared-data-fails-open):
 // buildKbHealth scoped its lint filter with the HARDCODED
 // `resolve(forgeRoot,'brain',<id>)` prefix (= brain/<id>), so for a project KB

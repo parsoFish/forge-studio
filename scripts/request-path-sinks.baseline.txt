@@ -37,7 +37,7 @@ cli/bridge-studio-kb-drain.ts renameSync 1
 cli/bridge-studio-kb-drain.ts writeFileSync 1
 cli/bridge-studio-kbs.ts appendFileSync 2
 cli/bridge-studio-kbs.ts existsSync 5
-cli/bridge-studio-kbs.ts mkdirSync 6
+cli/bridge-studio-kbs.ts mkdirSync 7
 cli/bridge-studio-kbs.ts openSync 1
 cli/bridge-studio-kbs.ts readdirSync 2
 cli/bridge-studio-kbs.ts readFileSync 2

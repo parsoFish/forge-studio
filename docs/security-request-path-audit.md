@@ -1199,3 +1199,51 @@ All three resolve the identical fixed `<uiDir>/.next/FORGE_BUILD_OK` path —
 `uiDir` is `resolve(forgeRoot, 'forge-ui')` as above, never request-derived;
 the leaf segments `.next` and `FORGE_BUILD_OK` are literals. No caller-
 supplied value reaches any of the three.
+
+### Guarded in W6-B14 — two reattach-discovery GET routes (close-the-fragile-poll-loop batch)
+
+Two new `[exec]` sinks, both routed through `resolveGuardedPath`/`guardedReadDir`
+from the outset (no unguarded-then-fixed round for either — new code, not a
+retrofit):
+
+- **`cli/bridge-studio-kbs.ts` — `GET /api/studio/kbs/:id/consolidate/active`
+  (`mkdirSync` ×1, `check-request-path-sinks.mjs` baseline 6 → 7 for this
+  file).** The `op=consolidate` maintenance branch now stakes out its run's
+  log dir *synchronously*, before the fire-and-forget `runBrainConsolidateNow`
+  call: `resolveGuardedPath(ctx.forgeRoot, ['_logs', \`_brainfix-${runId}\`])`,
+  `mkdirSync(guarded.realPath, {recursive:true})` only if `guarded.ok`. `runId`
+  is `${kbId}-consolidate-${Date.now().toString(36)}` — `kbId` is `SLUG_RE`-
+  gated a few lines above (so the compound name cannot itself carry a `/`),
+  but the whole string is still request-derived text, hence routed through the
+  guard rather than trusted by construction the way `spawnBrainFix`'s sibling
+  `mkdirSync(logDir, ...)` a few lines above already is (that one predates
+  this guard's introduction and is a pre-existing, separately-audited row).
+  Without this, `GET .../consolidate/active` (the new discovery route itself,
+  below) could not see a just-dispatched run for the whole window before
+  `runBrainConsolidateNow` reaches its own terminal write — a client that
+  dispatched, then immediately reloaded, would see "no run" instead of
+  "watching".
+- **`cli/ui-bridge.ts` — `GET /api/studio/projects/:id/onboarding/active`**
+  (new route; reads via `guardedReadDir`, `existsSync`/`readdirSync` counts
+  unchanged in the baseline since neither raw sink is called). Reattach
+  discovery for `OnboardWithAgent` (forge-ui): finds a project's most recent
+  `_onboarding/<sessionId>` and reads its `status.json` back. `project` is
+  request-derived (a URL path segment); `_onboarding` is a fixed literal, but
+  — per this doc's own established reasoning for the SAME directory's WRITE
+  side (`writeOnboardingSession`'s guard, "Guarded in R4-17" section above) —
+  a `_onboarding` entry beneath an otherwise-contained project dir is still
+  attacker-supplied content (a checked-out repo can commit a symlink named
+  `_onboarding`), so the LISTING is routed through `guardedReadDir(ctx.
+  projectsRoot, [project, '_onboarding'])` rather than a raw `existsSync`+
+  `readdirSync` off `join(realProjectDir, '_onboarding')` (the shape this
+  route's first draft used, caught by `check-raw-fs-guarded`/
+  `check-request-path-sinks`/the two `projects-root-fold-*` scanners before
+  landing). Each candidate `sessionId` is then read via the pre-existing
+  `guardedReadSessionStatus(projectsRoot, [project, '_onboarding', sessionId])`
+  — the SAME choke point `listInstructionsSessions`'s per-session reads
+  already use, unchanged by this addition.
+
+`scripts/request-path-sinks.baseline.txt` regenerated (`--write`) for the
+`cli/bridge-studio-kbs.ts` `mkdirSync` count only — the `cli/ui-bridge.ts`
+addition introduces a new *route*, not a new raw sink (both its fs calls go
+through the guard).

@@ -1473,6 +1473,45 @@ export async function handleStudioKbRoutes(
     return true;
   }
 
+  // ---- GET /api/studio/kbs/:id/consolidate/active — reattach discovery ----
+  // W6-B14: a consolidate run mints its own runId
+  // (`${kbId}-consolidate-<base36-Date.now()-stamp>`, the maintenance route's
+  // op==='consolidate' branch below) and its terminal state already lives at
+  // `_logs/_brainfix-<runId>/events.jsonl` — the SAME file `readBrainFixState`
+  // reads for the fix-agent GET above. The one thing that was missing: a way
+  // to REDISCOVER that runId once a client has forgotten it (nav-away,
+  // reload) — `lib/kb-consolidate.ts`'s old `runConsolidateToTerminal` used
+  // to `await` its own bounded poll loop inside the SAME click handler that
+  // dispatched it, so a nav-away lost the result outright even though the
+  // consolidate run itself kept going server-side. This is that tiny GET:
+  // scan `_logs/` for this kb's own `_brainfix-<kbId>-consolidate-*` dirs and
+  // report the MOST RECENT one's state — the base36 timestamp embedded right
+  // after the fixed `-consolidate-` token sorts chronologically as a plain
+  // string for a long time yet (Date.now().toString(36) stays the same
+  // length until year ~2059), so `.sort().reverse()` picks the latest.
+  // `runId: null` means this kb has never consolidated — never a guess.
+  // Excludes `<runId>__<i>` — `runBrainConsolidateNow`'s own PER-FINDING
+  // sub-runIds (never the exposed one; see that function's own header) —
+  // which would otherwise sort AFTER their parent runId (a longer string
+  // that has the shorter one as a prefix sorts greater) and be picked
+  // instead of the real top-level run.
+  const consolidateActiveMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/consolidate\/active$/);
+  if (consolidateActiveMatch && method === 'GET') {
+    const kbId = decodeURIComponent(consolidateActiveMatch[1]);
+    if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+    const prefix = `_brainfix-${kbId}-consolidate-`;
+    const runIds = subDirs(join(ctx.forgeRoot, '_logs'))
+      .filter((d) => d.startsWith(prefix))
+      .map((d) => d.slice('_brainfix-'.length))
+      .filter((id) => !id.includes('__'))
+      .sort()
+      .reverse();
+    const runId = runIds[0] ?? null;
+    if (!runId) { sendJson(res, 200, { ok: true, runId: null, state: null, cleared: false }, origin); return true; }
+    sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
+    return true;
+  }
+
   // ---- GET /api/studio/kbs/:id/ingest-activity (R6-08 WI-2) — READ-ONLY -----
   // Lists real `reflect.kb-ingest` events (orchestrator/kb-health.ts) for this
   // KB, discovered via a listCycles-style walk of `_logs/<cycleId>/events.jsonl`
@@ -1616,6 +1655,27 @@ export async function handleStudioKbRoutes(
         }
 
         const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+        // W6-B14: stake out this run's log dir SYNCHRONOUSLY, before the
+        // fire-and-forget work below ever runs — `runBrainConsolidateNow`
+        // only creates `_logs/_brainfix-<runId>/` itself once it reaches its
+        // OWN terminal write (writeConsolidateTerminalEvent), which can be
+        // seconds away. Without this, `GET .../consolidate/active`'s
+        // reattach discovery (which finds a run by scanning `_logs/` for
+        // this kb's `_brainfix-<kbId>-consolidate-*` dirs) could not see a
+        // just-dispatched run at all for that whole window — a client that
+        // dispatched, then immediately reloaded, would see "no run" instead
+        // of "watching" (readBrainFixState already reports an empty/absent
+        // events.jsonl as the honest 'running' default; this only makes the
+        // DIRECTORY itself exist immediately, so the scan can find it).
+        // SEC-04 — route through the shared guard (`resolveGuardedPath`,
+        // same primitive the fix-agent GET above relies on via
+        // `readBrainFixState`'s own log dir): `runId` embeds `kbId`
+        // (SLUG_RE-validated above, so it cannot itself carry a `/`), but
+        // the whole compound directory name is still built from
+        // request-derived text, so this creates it through the guard rather
+        // than a raw `mkdirSync` on a hand-joined path.
+        const brainfixLogGuard = resolveGuardedPath(ctx.forgeRoot, ['_logs', `_brainfix-${runId}`]);
+        if (brainfixLogGuard.ok) mkdirSync(brainfixLogGuard.realPath, { recursive: true });
         // Fire-and-forget: dispatched async like fix-agent, pollable via the
         // existing GET .../fix-agent/:runId route. Queued per-kbId (not run
         // directly) so an overlapping dispatch against the same KB never
