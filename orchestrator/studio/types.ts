@@ -494,6 +494,51 @@ export type CommunitySkill = {
   desc?: string;
 };
 
+// ---------------------------------------------------------------------------
+// Community registry (W6-CR-1) — studio/community/registry.yaml, the
+// declared-list source of truth for community items (skill/hook/mcp/tool),
+// superseding catalog.yaml's former `community-skills:` section (which only
+// ever covered kind:skill). Loaded by orchestrator/studio/registry.ts
+// (`loadCommunityRegistry`); validated by orchestrator/studio/validate.ts
+// (`validateCommunityRegistry`), wired into `forge studio lint` via
+// cli/studio-lint.ts.
+// ---------------------------------------------------------------------------
+
+export const COMMUNITY_REGISTRY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
+export type CommunityRegistryKind = (typeof COMMUNITY_REGISTRY_KINDS)[number];
+
+/** Adoption signals for a registry item. `stars` is the parsed NUMERIC value
+ *  (null when the curated display string names a different unit, e.g. "156k
+ *  installs" — never fabricated); `starsDisplay` is the curated free-form
+ *  string shown to operators; `attributedTo` is the curated attribution. */
+export type CommunityRegistrySignals = {
+  stars: number | null;
+  starsDisplay: string | null;
+  attributedTo: string | null;
+};
+
+export type CommunityRegistryItem = {
+  id: string;
+  kind: CommunityRegistryKind;
+  name: string;
+  desc?: string;
+  category: string;
+  sourceUrl: string;
+  provenance: string;
+  tier?: string; // recommended model tier (haiku | sonnet | opus) — skill items only
+  signals: CommunityRegistrySignals;
+  upstreamUpdatedAt: string | null;
+  fetchedAt: string | null; // null until a refresh pass has actually run
+  fetchedBy: string; // e.g. "seed"
+};
+
+export type CommunityRegistry = {
+  schemaVersion: number;
+  lastRefresh: string | null;
+  items: CommunityRegistryItem[];
+  path: string;
+};
+
 export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
 export type DemoStepKind = (typeof DEMO_STEP_KINDS)[number];
 /**
@@ -593,7 +638,10 @@ export type Catalog = {
   tools: CatalogConnectionEntry[];
   mcps: CatalogConnectionEntry[];
   guards: CatalogGuardEntry[];
-  communitySkills?: CommunitySkill[];
+  // communitySkills REMOVED (W6-CR-1 reviewer fix): catalog.yaml's
+  // `community-skills:` section moved to studio/community/registry.yaml —
+  // see CommunityRegistry/CommunityRegistryItem above and
+  // registry.ts's communitySkillsFromRegistry, the field's replacement.
   path: string;
 };
 

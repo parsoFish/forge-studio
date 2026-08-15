@@ -46,6 +46,7 @@ import {
   listFlowIds,
   discoverProjects,
   loadCatalog,
+  communitySkillsFromRegistry,
   listDemoElements,
   listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
@@ -821,7 +822,11 @@ export async function handleStudioRoutes(
       // — e.g. one authored via `/skills/new` — so it appears in the palette on
       // the next fetch with no bridge restart (known-gaps §4.11). Community
       // entries win on an id collision (they carry provenance/stars metadata).
-      const community = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      // W6-CR-1: community skills are declared in studio/community/registry.yaml,
+      // not catalog.yaml — tolerant of a missing registry (mirrors loadCatalog's
+      // own tolerance a few lines up: a MISSING file degrades gracefully, a
+      // MALFORMED one surfaces its real error rather than a silent []).
+      const community = communitySkillsFromRegistry(ctx.forgeRoot).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
       const seen = new Set(community.map((s) => s.id));
       const local = listPlainSkills(ctx.forgeRoot).filter((s) => !seen.has(s.id));
       const skills = [...community, ...local];

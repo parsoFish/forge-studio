@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
 
 import {
   isStudioAgent,
@@ -23,6 +24,9 @@ import {
   serializeKbDescriptor,
   resolveKbProcesses,
   loadCatalog,
+  loadCommunityRegistry,
+  communitySkillsFromRegistry,
+  communityRegistryPath,
   discoverProjects,
 } from './registry.ts';
 import type { KbBinding, KbDescriptor } from './types.ts';
@@ -1406,6 +1410,286 @@ describe('loadCatalog', () => {
     assert.deepEqual(catalog.tools, []);
     assert.deepEqual(catalog.mcps, []);
     assert.deepEqual(catalog.guards, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadCommunityRegistry / communitySkillsFromRegistry / communityRegistryPath
+// (W6-CR-1) — studio/community/registry.yaml, superseding catalog.yaml's
+// former `community-skills:` section.
+// ---------------------------------------------------------------------------
+
+const REGISTRY_FIXTURE = `meta:
+  schemaVersion: 1
+  lastRefresh: null
+items:
+  - id: handoff
+    kind: skill
+    name: Handoff
+    desc: Compress a session into a transfer doc.
+    category: memory
+    sourceUrl: "https://github.com/obra/superpowers"
+    provenance: "obra/superpowers + Matt Pocock"
+    tier: haiku
+    signals: { stars: 228000, starsDisplay: "228k", attributedTo: "obra/superpowers + Matt Pocock" }
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+  - id: security-review
+    kind: skill
+    name: Security Review
+    desc: Static-analysis security audit.
+    category: review
+    sourceUrl: "https://github.com/travisvn/awesome-claude-skills"
+    provenance: "Trail of Bits"
+    signals: { stars: null, starsDisplay: null, attributedTo: "Trail of Bits" }
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+`;
+
+describe('communityRegistryPath', () => {
+  it('resolves under studio/community/registry.yaml of the given forgeRoot', () => {
+    assert.equal(communityRegistryPath('/x/forge'), join('/x/forge', 'studio', 'community', 'registry.yaml'));
+  });
+});
+
+describe('loadCommunityRegistry', () => {
+  it('parses meta + items, preserving every field', () => {
+    const p = writeFixture('registry.yaml', REGISTRY_FIXTURE);
+    const registry = loadCommunityRegistry(p);
+    assert.equal(registry.schemaVersion, 1);
+    assert.equal(registry.lastRefresh, null);
+    assert.equal(registry.items.length, 2);
+    const handoff = registry.items.find((i) => i.id === 'handoff');
+    assert.ok(handoff);
+    assert.equal(handoff!.kind, 'skill');
+    assert.equal(handoff!.name, 'Handoff');
+    assert.equal(handoff!.category, 'memory');
+    assert.equal(handoff!.sourceUrl, 'https://github.com/obra/superpowers');
+    assert.equal(handoff!.provenance, 'obra/superpowers + Matt Pocock');
+    assert.equal(handoff!.tier, 'haiku');
+    assert.deepEqual(handoff!.signals, { stars: 228000, starsDisplay: '228k', attributedTo: 'obra/superpowers + Matt Pocock' });
+    assert.equal(handoff!.fetchedBy, 'seed');
+    const noStars = registry.items.find((i) => i.id === 'security-review');
+    assert.deepEqual(noStars!.signals, { stars: null, starsDisplay: null, attributedTo: 'Trail of Bits' });
+    assert.equal(noStars!.tier, undefined, 'a registry item with no curated tier must not fabricate one');
+  });
+
+  it('throws naming the file + a real detail on an invalid kind', () => {
+    const bad = REGISTRY_FIXTURE.replace('kind: skill\n    name: Handoff', 'kind: bogus\n    name: Handoff');
+    const p = writeFixture('registry-bad-kind.yaml', bad);
+    assert.throws(() => loadCommunityRegistry(p), (err: unknown) => {
+      const message = (err as Error).message;
+      assert.match(message, /registry-bad-kind\.yaml/);
+      assert.match(message, /kind/);
+      return true;
+    });
+  });
+
+  it('throws on a missing required field (fetchedBy)', () => {
+    const bad = REGISTRY_FIXTURE.replace('    fetchedBy: seed\n  - id: security-review', '  - id: security-review');
+    const p = writeFixture('registry-missing-field.yaml', bad);
+    assert.throws(() => loadCommunityRegistry(p), /fetchedBy/);
+  });
+
+  it('throws on a malformed signals block (stars not a number or null)', () => {
+    const bad = REGISTRY_FIXTURE.replace('stars: 228000', 'stars: "not-a-number"');
+    const p = writeFixture('registry-bad-signals.yaml', bad);
+    assert.throws(() => loadCommunityRegistry(p), /signals\.stars/);
+  });
+
+  it('throws on a non-existent file (never a silent empty registry)', () => {
+    assert.throws(() => loadCommunityRegistry(join(tmpDir, 'does-not-exist.yaml')), /cannot read file/);
+  });
+});
+
+describe('communitySkillsFromRegistry', () => {
+  it('projects every kind:skill item onto the legacy CommunitySkill shape (stars = the curated DISPLAY string)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'community-registry-'));
+    try {
+      mkdirSync(join(root, 'studio', 'community'), { recursive: true });
+      writeFileSync(join(root, 'studio', 'community', 'registry.yaml'), REGISTRY_FIXTURE, 'utf8');
+      const skills = communitySkillsFromRegistry(root);
+      assert.equal(skills.length, 2);
+      const handoff = skills.find((s) => s.id === 'handoff');
+      assert.ok(handoff);
+      assert.equal(handoff!.source, 'https://github.com/obra/superpowers', 'sourceUrl projects onto the legacy `source` field');
+      assert.equal(handoff!.stars, '228k', 'stars is the curated DISPLAY string, never the parsed numeric signals.stars');
+      const noStars = skills.find((s) => s.id === 'security-review');
+      assert.equal(noStars!.stars, undefined, 'no starsDisplay ⇒ CommunitySkill.stars is undefined, never a fabricated value');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('a MISSING studio/community/registry.yaml degrades to [] — never a throw', () => {
+    const root = mkdtempSync(join(tmpdir(), 'community-registry-missing-'));
+    try {
+      assert.deepEqual(communitySkillsFromRegistry(root), []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('a MALFORMED studio/community/registry.yaml throws loud, naming the file — never renders as an honest empty list', () => {
+    const root = mkdtempSync(join(tmpdir(), 'community-registry-malformed-'));
+    try {
+      mkdirSync(join(root, 'studio', 'community'), { recursive: true });
+      writeFileSync(join(root, 'studio', 'community', 'registry.yaml'), 'items: [unclosed\n  bad: [[[ yaml', 'utf8');
+      assert.throws(() => communitySkillsFromRegistry(root), (err: unknown) => {
+        const message = (err as Error).message;
+        assert.match(message, /registry\.yaml/i);
+        return true;
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Migration parity (W6-CR-1) — the REAL studio/community/registry.yaml must
+// carry every one of the 9 pre-migration studio/catalog.yaml community-skills
+// entries, byte-faithful on the fields that carried forward.
+// ---------------------------------------------------------------------------
+
+describe('W6-CR-1 migration parity — the real studio/community/registry.yaml', () => {
+  const REPO_ROOT_FOR_MIGRATION = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  // Reviewer fix: the original version of this test only diffed name/
+  // category/source across a hand-copied EXPECTED array — exactly the shape
+  // that let a single dropped field (security-review's `tier: sonnet`) go
+  // unnoticed, since nothing here checked `tier` or `stars` at all. A
+  // count-level or partial-field check can never catch a single dropped
+  // field on one item; only a FULL field-by-field diff, across EVERY item,
+  // against a frozen snapshot of the real pre-migration source can. This is
+  // the literal `community-skills:` section of studio/catalog.yaml as it
+  // stood on main immediately before this migration (`git show
+  // main:studio/catalog.yaml`), embedded verbatim rather than re-read live —
+  // main can (and will) drift after this branch merges, and the point is a
+  // snapshot of the PRE-migration source, not whatever main happens to say
+  // when the test runs.
+  const PRE_MIGRATION_CATALOG_COMMUNITY_SKILLS_YAML = `
+community-skills:
+  - id: handoff
+    name: Handoff
+    provenance: obra/superpowers + Matt Pocock
+    source: https://github.com/obra/superpowers
+    category: memory
+    tier: haiku
+    stars: "228k"
+    desc: Compress the current session into a markdown transfer doc (open threads, decisions) for delegation.
+  - id: pre-impl-interview
+    name: Pre-implementation Interview
+    provenance: Matt Pocock (Grill Me)
+    source: https://www.firecrawl.dev/blog/best-claude-code-skills
+    category: planning
+    tier: haiku
+    stars: "156k installs"
+    desc: Interview the developer on a WI spec before any code — surfaces gaps and false assumptions early.
+  - id: superpowers-tdd
+    name: Test-Driven Development
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: testing
+    tier: sonnet
+    stars: "228k"
+    desc: Strict red-green-refactor loop with an explicit failing-test-first gate.
+  - id: systematic-debugging
+    name: Systematic Debugging
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: debugging
+    tier: sonnet
+    stars: "228k"
+    desc: Hypothesis-list approach to bugs; never brute-force.
+  - id: webapp-testing
+    name: Webapp Testing
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: testing
+    tier: sonnet
+    stars: "151k"
+    desc: Playwright-based browser testing of a local app — spec to test to run to report.
+  - id: security-review
+    name: Security Review
+    provenance: Trail of Bits
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: review
+    tier: sonnet
+    desc: Static-analysis security audit (CodeQL/Semgrep patterns).
+  - id: skill-creator
+    name: Skill Creator
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: meta
+    tier: sonnet
+    stars: "151k"
+    desc: Q&A that produces a new SKILL.md with full frontmatter.
+  - id: agent-browser
+    name: Agent Browser
+    provenance: vercel-labs
+    source: https://github.com/vercel-labs/agent-browser
+    category: browser
+    tier: sonnet
+    stars: "14k"
+    desc: Headless browser CLI with ref-based element targeting and parallel sessions.
+  - id: output-compress
+    name: Output Compression
+    provenance: Julius Brussee (Caveman)
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: meta
+    tier: haiku
+    desc: Encode a terse output contract — cuts output tokens (median ~65%); works for SDK-spawned agents.
+`;
+
+  it('EVERY field of EVERY pre-migration item survives byte-faithfully (frozen-fixture diff, not counts/names)', () => {
+    const frozen = (
+      yaml.load(PRE_MIGRATION_CATALOG_COMMUNITY_SKILLS_YAML) as { 'community-skills': Array<Record<string, unknown>> }
+    )['community-skills'];
+    assert.equal(frozen.length, 9, 'frozen-fixture sanity: 9 pre-migration community-skill entries');
+
+    const skills = communitySkillsFromRegistry(REPO_ROOT_FOR_MIGRATION);
+    assert.equal(
+      skills.length,
+      frozen.length,
+      `migrated registry must carry exactly the ${frozen.length} frozen entries, no more/fewer — got ${skills.map((s) => s.id).join(', ')}`,
+    );
+
+    for (const old of frozen) {
+      const id = old['id'] as string;
+      const actual = skills.find((s) => s.id === id);
+      assert.ok(actual, `frozen id "${id}" must still be present after migration`);
+      // Every field the legacy CommunitySkill shape carries, checked — not a
+      // hand-picked subset. This is what would have caught security-review's
+      // dropped `tier`.
+      assert.equal(actual!.name, old['name'], `"${id}".name dropped/changed vs pre-migration`);
+      assert.equal(actual!.provenance, old['provenance'], `"${id}".provenance dropped/changed vs pre-migration`);
+      assert.equal(actual!.source, old['source'], `"${id}".source dropped/changed vs pre-migration`);
+      assert.equal(actual!.category, old['category'], `"${id}".category dropped/changed vs pre-migration`);
+      assert.equal(actual!.tier, old['tier'], `"${id}".tier dropped/changed vs pre-migration`);
+      assert.equal(actual!.stars, old['stars'], `"${id}".stars dropped/changed vs pre-migration`);
+      assert.equal(actual!.desc, old['desc'], `"${id}".desc dropped/changed vs pre-migration`);
+    }
+  });
+
+  it('a stars value that is pure k-notation ("228k") parses to a real number; "156k installs" (a different unit) stays null, never fabricated', () => {
+    const registry = loadCommunityRegistry(communityRegistryPath(REPO_ROOT_FOR_MIGRATION));
+    const handoff = registry.items.find((i) => i.id === 'handoff');
+    assert.deepEqual(handoff!.signals, { stars: 228000, starsDisplay: '228k', attributedTo: 'obra/superpowers + Matt Pocock' });
+    const installs = registry.items.find((i) => i.id === 'pre-impl-interview');
+    assert.equal(installs!.signals.stars, null, '"156k installs" names a different unit — never fabricated as a star count');
+    assert.equal(installs!.signals.starsDisplay, '156k installs', 'the original curated display string is preserved verbatim');
+  });
+
+  it('the full cross-kind community index still totals 20 items post-migration (9 registry skills + 1 vendored-only skill + 1 hook + 3 tools + 6 mcps)', () => {
+    // Independent, direct re-derivation over the real committed files — never
+    // a re-read of listCommunityIndex's own claim (mirrors this repo's
+    // standing "recompute, don't re-read" convention for count assertions).
+    const skills = communitySkillsFromRegistry(REPO_ROOT_FOR_MIGRATION);
+    const catalog = loadCatalog(join(REPO_ROOT_FOR_MIGRATION, 'studio', 'catalog.yaml'));
+    assert.equal(skills.length + catalog.tools.length + catalog.mcps.length, 18, 'sanity: 9 registry skills + 3 tools + 6 mcps = 18 (the vendored skill + hook are on-disk, not catalog/registry-declared, counted separately by listCommunityIndex)');
   });
 });
 

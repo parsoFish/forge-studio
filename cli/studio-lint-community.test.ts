@@ -55,7 +55,8 @@ function seedValidProject(root: string, id = 'my-project'): void {
 
 /** A base root with everything runStudioLint needs to lint clean EXCEPT the
  *  community fixtures the caller adds afterwards — mirrors
- *  cli/studio-lint-hooks.test.ts's `buildBaseRoot`. */
+ *  cli/studio-lint-hooks.test.ts's `buildBaseRoot`. W6-CR-1: community
+ *  skills live in studio/community/registry.yaml, not catalog.yaml. */
 function buildBaseRoot(): string {
   const root = tmpRoot();
   mkdirSync(join(root, 'skills'), { recursive: true }); // runStudioLint errors if skills/ is missing entirely
@@ -69,8 +70,27 @@ models:
 tools: []
 mcps: []
 guards: []
-community-skills:
-  - { id: colliding-community-skill, name: Colliding, provenance: "Test Author", source: "https://example.com/colliding", category: testing, desc: "A community skill whose id a vendored package also claims." }
+`,
+    'utf8',
+  );
+  mkdirSync(join(root, 'studio', 'community'), { recursive: true });
+  writeFileSync(
+    join(root, 'studio', 'community', 'registry.yaml'),
+    `meta:
+  schemaVersion: 1
+  lastRefresh: null
+items:
+  - id: colliding-community-skill
+    kind: skill
+    name: Colliding
+    provenance: "Test Author"
+    sourceUrl: "https://example.com/colliding"
+    category: testing
+    desc: "A community skill whose id a vendored package also claims."
+    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
 `,
     'utf8',
   );
