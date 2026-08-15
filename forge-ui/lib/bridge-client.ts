@@ -228,6 +228,15 @@ export type RoadmapInitiative = {
   ready: boolean;
   blockedBy: string[];
   workItems?: RoadmapWorkItem[];
+  /**
+   * W6-RV-2: the real cycle-completion instant (ISO), sourced from
+   * `Run.completedAt` (orchestrator/run-model.ts) via `buildProjectRoadmap`
+   * (cli/bridge-studio.ts). Drives the roadmap canvas's completion-time X
+   * axis — absent (never fabricated) for a still-open initiative, or one
+   * whose cycle log carries no derivable completion; such a card lands in
+   * the canvas's projected zone with an honest "no date" marker instead.
+   */
+  completedAt?: string;
 };
 
 export type ProjectRoadmap = {

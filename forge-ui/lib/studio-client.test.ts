@@ -1037,7 +1037,7 @@ test('RED (R1-06 WI-2 group B, T1 Q3): bootstrapKb must be REMOVED from studio-c
 // renders at all and (b) what it's populated with.
 //
 // Why a pure function rather than a `*-render.test.ts` DOM assertion: unlike
-// RunPanel/FlowRunDetail/RoadmapDag (the components this repo's
+// RunPanel/FlowRunDetail/RoadmapCanvas (the components this repo's
 // `*-render.test.ts` files render via `renderToStaticMarkup`), NewKbPage
 // (forge-ui/app/knowledge/new/page.tsx) is the `app/` ROUTE component
 // itself, not a props-driven presentational component — it calls

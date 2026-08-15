@@ -16,12 +16,12 @@ let INIT_RECOVERY;                          // roadmap-recovery only (R4-11-T3, 
 export const journey = defineJourney({
     id: 'roadmap',
     title: 'Project roadmap',
-    story: 'As an operator, I browse a project\'s roadmap as a dependency DAG — initiatives laid out left→right by build order, one edge per prerequisite→dependent pair — and click "Start development" on a ready one, proving the roadmap actually drives what forge builds next, not just a passive history view.',
+    story: 'As an operator, I browse a project\'s roadmap as a completion-time canvas — done initiatives on a real day-by-day time axis in the order they actually merged, pending work banded right of the now-line by dependency-feasibility (no invented dates) — click a card to open its detail drawer, and click "Start development" on a ready one, proving the roadmap actually drives what forge builds next, not just a passive history view.',
     beats: [
       {
         id: 'roadmap-tab',
         title: 'Per-project Roadmap tab',
-        narration: 'The Roadmap tab renders the project\'s initiatives as a dependency DAG — each initiative a node placed by dependency depth, with one edge per prerequisite→dependent pair (edge-correctness the retired serpentine timeline carried no data for). Each node\'s detail card lists its real work items and run links, and a completed initiative links straight to the project\'s demo surface (R4-07-F3), so demo upkeep is one click from initiative state. The roadmap is read straight off real cycle history, not a hand-maintained list.',
+        narration: 'The Roadmap tab renders the project\'s initiatives as a completion-time canvas (W6-RV-2) — done initiatives placed on a real day-by-day time axis in completion order, one edge per prerequisite→dependent pair (edge-correctness the retired serpentine timeline carried no data for). Clicking a card opens its detail drawer (canvas geometry never reflows) listing its real work items and run links; a completed initiative\'s drawer links straight to the project\'s demo surface (R4-07-F3), so demo upkeep is one click from initiative state. The roadmap is read straight off real cycle history, not a hand-maintained list.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── R6: Per-project Roadmap tab (S6 DEC-3) ───────────────────────────────
@@ -187,25 +187,26 @@ export const journey = defineJourney({
               if (await roadmapTab.count() > 0) {
                 await roadmapTab.click();
                 await sleep(1500); // allow bridge fetch to settle
-                await caption(page, 'Per-project Roadmap — a dependency DAG: initiatives laid out by build order, one edge per prerequisite → dependent pair. Each node’s card carries its work items, run links, and triggers.');
-                await frame(page, 'r6-0-roadmap-tab', 'R4-13 — per-project Roadmap tab: the initiatives as a dependency DAG, edges drawn prerequisite → dependent', { key: true });
+                await caption(page, 'Per-project Roadmap — a completion-time canvas: initiatives that really finished sit on a day-by-day time axis; pending work continues right of the now-line, banded by dependency-feasibility (no invented dates). Click a card to open its detail drawer.');
+                await frame(page, 'r6-0-roadmap-tab', 'W6-RV-2 — per-project Roadmap tab: the completion-time canvas, edges drawn prerequisite → dependent', { key: true });
                 const roadmapSection = await page.evaluate(() =>
                   document.querySelector('[data-section="project-roadmap"]') !== null);
                 check(roadmapSection, 'roadmap: [data-section="project-roadmap"] rendered');
-                // R4-13: the DAG container + one [data-roadmap-node] per initiative.
-                const dagPresent = await page.evaluate(() =>
-                  document.querySelector('[data-roadmap-dag]') !== null);
-                check(dagPresent, 'roadmap: the DAG container [data-roadmap-dag] renders');
+                // W6-RV-2: the canvas container + one [data-roadmap-node] per initiative.
+                const canvasPresent = await page.evaluate(() =>
+                  document.querySelector('[data-roadmap-canvas]') !== null);
+                check(canvasPresent, 'roadmap: the canvas container [data-roadmap-canvas] renders');
                 const initCount = await page.evaluate(() =>
-                  document.querySelectorAll('[data-roadmap-dag] [data-roadmap-node]').length);
-                check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the DAG (got ${initCount})`);
-                // R4-13: the DAG draws one edge per (prerequisite → dependent) pair —
-                // a correctness proof the serpentine arcs carried ZERO data-* for.
+                  document.querySelectorAll('[data-roadmap-canvas] [data-roadmap-node]').length);
+                check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the canvas (got ${initCount})`);
+                // W6-RV-2: the canvas still draws one edge per (prerequisite → dependent)
+                // pair (faint at rest, highlighted on selection) — a correctness proof
+                // the serpentine arcs carried ZERO data-* for, carried forward from R4-13.
                 // The seeded INIT_DEV depends on the completed INIT (both in the
                 // roadmap), so a genuine [data-dep-edge] must render with
                 // data-dep-from=prerequisite / data-dep-to=dependent.
                 const edgeInfo = await page.evaluate((ids) => {
-                  const edges = Array.from(document.querySelectorAll('[data-roadmap-dag] [data-dep-edge]'));
+                  const edges = Array.from(document.querySelectorAll('[data-roadmap-canvas] [data-dep-edge]'));
                   return {
                     count: edges.length,
                     matched: edges.some((e) =>
@@ -213,7 +214,7 @@ export const journey = defineJourney({
                       e.getAttribute('data-dep-to') === ids.to),
                   };
                 }, { from: INIT, to: INIT_DEV });
-                check(edgeInfo.count >= 1, `roadmap: the DAG renders ≥1 dependency edge [data-dep-edge] (got ${edgeInfo.count})`);
+                check(edgeInfo.count >= 1, `roadmap: the canvas renders ≥1 dependency edge [data-dep-edge] (got ${edgeInfo.count})`);
                 check(edgeInfo.matched, `roadmap: the ${INIT} → ${INIT_DEV} dependency renders a [data-dep-edge] with data-dep-from=prerequisite / data-dep-to=dependent`);
                 // R4-11-F1: the seeded `merged/` initiative renders its own node with
                 // the merged status — proves the roadmap surfaces the transient
@@ -263,36 +264,29 @@ export const journey = defineJourney({
                   document.querySelector('[data-component="project-architect-entry"]')?.getAttribute('data-architect-entry-open') ?? null);
                 check(collapsed === 'false', `R4-15: the revealed idea box collapses again (got ${collapsed})`);
                 if (roadmapSeeded) {
-                  // W6-RV-1: the node's detail card renders COLLAPSED by default (a
-                  // uniform, scannable card — title/id/status + micro-badges); the
-                  // detail region itself is still ALWAYS in the DOM (display:none
-                  // while collapsed), so a page.evaluate() querySelector still finds
-                  // its content without needing a click first. Assert INIT's node
-                  // carries its real work items inline.
+                  // W6-RV-2: the canvas card is ALWAYS collapsed (no more inline
+                  // expand — canvas geometry never reflows on selection); clicking
+                  // it selects the initiative and opens the RIGHT PUSH DRAWER
+                  // instead. The drawer hosts InitiativeDetail (RV-1's affordances,
+                  // byte-identical) under [data-drawer-initiative]. Click INIT's
+                  // card (safe — it carries no destructive trigger) and assert its
+                  // real work items render inside the opened drawer.
                   const initNode = `[data-roadmap-node][data-initiative-id="${INIT}"]`;
+                  await page.locator(initNode).click().catch(() => {});
+                  await page.waitForSelector(`[data-drawer-initiative="${INIT}"]`, { timeout: 5000 }).catch(() => {});
+                  const drawerOpen = await page.evaluate(() =>
+                    document.querySelector('[data-roadmap-drawer]')?.getAttribute('data-drawer-open') ?? null);
+                  check(drawerOpen === 'true', `roadmap: clicking a card opens the drawer [data-drawer-open="true"] (got ${drawerOpen})`);
+                  const drawerSel = `[data-drawer-initiative="${INIT}"]`;
                   const wiCount = await page.evaluate((sel) =>
-                    document.querySelectorAll(`${sel} [data-work-item-id]`).length, initNode);
-                  check(wiCount >= 1, `roadmap: the ${INIT} DAG node lists its real work items inline (≥1 [data-work-item-id], got ${wiCount})`);
-                  // The node header is an interactive toggle for its detail card.
-                  // Exercise it on the COMPLETED node (safe — it carries no
-                  // destructive trigger): expand it (from its default-collapsed
-                  // state), collapse, then pop back open, and make sure it ends
-                  // expanded before framing — a real click needs it visible.
-                  const initToggle = page.locator(`${initNode} [data-action="toggle-node-detail"]`);
-                  await initToggle.click().catch(() => {}); // expand
-                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                  await initToggle.click().catch(() => {}); // collapse
-                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="true"]`, { timeout: 5000 }).catch(() => {});
-                  await initToggle.click().catch(() => {}); // re-expand / pop
-                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                  const expanded = await initToggle.getAttribute('aria-expanded').catch(() => null);
-                  if (expanded !== 'true') { await initToggle.click().catch(() => {}); await sleep(200); }
-                  await frame(page, 'r6-0b-popover', 'R4-13 — a DAG node\'s detail card: its real work items, run links, and demo tie-in, laid out inline');
-                  // R4-07-F3: the node's card links straight to the project's demo
+                    document.querySelectorAll(`${sel} [data-work-item-id]`).length, drawerSel);
+                  check(wiCount >= 1, `roadmap: the ${INIT} drawer lists its real work items (≥1 [data-work-item-id], got ${wiCount})`);
+                  await frame(page, 'r6-0b-popover', 'W6-RV-2 — a card\'s detail drawer: its real work items, run links, and demo tie-in — canvas geometry unchanged behind it');
+                  // R4-07-F3: the drawer links straight to the project's demo
                   // surface — click it and land on the editor tab's Demo Timeline.
-                  const demoLink = page.locator(`${initNode} [data-link="demo-builder"]`);
+                  const demoLink = page.locator(`${drawerSel} [data-link="demo-builder"]`);
                   const demoLinkPresent = (await demoLink.count()) >= 1;
-                  check(demoLinkPresent, 'roadmap: the DAG node\'s card carries [data-link="demo-builder"] (R4-07-F3 demo tie-in)');
+                  check(demoLinkPresent, 'roadmap: the drawer carries [data-link="demo-builder"] (R4-07-F3 demo tie-in)');
                   if (demoLinkPresent) {
                     await demoLink.first().click().catch(() => {});
                     await sleep(500);
@@ -300,9 +294,9 @@ export const journey = defineJourney({
                       document.querySelector('[data-tab="editor"][data-tab-active="true"]') !== null &&
                       document.querySelector('[data-section="demo-source"]') !== null);
                     check(demoSurface, 'roadmap: demo-builder link lands on the editor tab\'s Demo Timeline ([data-section="demo-source"])');
-                    await frame(page, 'r6-0c-demo-link', 'R4-07-F3 — the DAG node\'s card links straight to the demo surface');
+                    await frame(page, 'r6-0c-demo-link', 'R4-07-F3 — the drawer links straight to the demo surface');
                     // Return to the roadmap tab so the following assertions/beats
-                    // keep driving the DAG.
+                    // keep driving the canvas.
                     await page.locator('[data-tab="roadmap"]').click().catch(() => {});
                     await sleep(500);
                   }
@@ -318,43 +312,65 @@ export const journey = defineJourney({
         },
       },
       {
-        id: 'roadmap-collapse-expand-all',
-        title: 'Collapse-all / expand-all toolbar (W6-RV-1)',
-        narration: 'Every DAG node card defaults to a uniform, scannable collapsed state; the DAG header\'s Collapse all / Expand all buttons bulk-toggle every node at once — a bulk affordance the per-node toggle alone can\'t give once a roadmap holds many initiatives.',
+        id: 'roadmap-canvas-controls',
+        title: 'Canvas pan/zoom toolbar (W6-RV-2)',
+        narration: 'Every canvas card is now permanently collapsed — geometry never reflows on selection, so RV-1\'s per-node collapse-all/expand-all toolbar has nothing left to bulk-toggle. Its replacement is a canvas-wide view reset: zoom in/out, fit-to-view, and jump-to-now — the same "one click, everything resets to a sane baseline" affordance, ported onto the new surface.',
         drive: async (ctx) => {
               const { page, check, frame } = ctx;
-              // ── W6-RV-1: collapse-all / expand-all toolbar ────────────────────────────
-              console.log('\n[W6-RV-1] Collapse-all / expand-all toolbar');
+              // ── W6-RV-2: canvas pan/zoom toolbar ──────────────────────────────────────
+              console.log('\n[W6-RV-2] Canvas pan/zoom toolbar');
 
-              // The roadmap tab is already showing (left there by roadmap-tab); sample a
-              // real, already-present node (INIT) to assert the bulk toggle actually
-              // reaches it, not just that the buttons exist.
-              const sampleNode = `[data-roadmap-node][data-initiative-id="${INIT}"]`;
-              await page.waitForSelector('[data-roadmap-dag]', { timeout: 10000 }).catch(() => {});
+              await page.waitForSelector('[data-roadmap-canvas]', { timeout: 10000 }).catch(() => {});
 
-              const collapseAllBtn = page.locator('[data-action="roadmap-collapse-all"]');
-              const expandAllBtn = page.locator('[data-action="roadmap-expand-all"]');
-              const collapseAllPresent = (await collapseAllBtn.count()) > 0;
-              const expandAllPresent = (await expandAllBtn.count()) > 0;
-              check(collapseAllPresent, 'roadmap: the DAG header carries [data-action="roadmap-collapse-all"]');
-              check(expandAllPresent, 'roadmap: the DAG header carries [data-action="roadmap-expand-all"]');
+              const zoomInBtn = page.locator('[data-action="roadmap-zoom-in"]');
+              const zoomOutBtn = page.locator('[data-action="roadmap-zoom-out"]');
+              const fitBtn = page.locator('[data-action="roadmap-zoom-fit"]');
+              const nowBtn = page.locator('[data-action="roadmap-jump-now"]');
+              check((await zoomInBtn.count()) > 0, 'roadmap: the canvas toolbar carries [data-action="roadmap-zoom-in"]');
+              check((await zoomOutBtn.count()) > 0, 'roadmap: the canvas toolbar carries [data-action="roadmap-zoom-out"]');
+              check((await fitBtn.count()) > 0, 'roadmap: the canvas toolbar carries [data-action="roadmap-zoom-fit"]');
+              check((await nowBtn.count()) > 0, 'roadmap: the canvas toolbar carries [data-action="roadmap-jump-now"]');
 
-              if (collapseAllPresent && expandAllPresent) {
-                // Expand all — the sampled card flips to [data-initiative-collapsed="false"].
-                await expandAllBtn.click();
-                await page.waitForSelector(`${sampleNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                const afterExpandAll = await page.locator(sampleNode).getAttribute('data-initiative-collapsed').catch(() => null);
-                check(afterExpandAll === 'false', `roadmap: expand-all flips a sampled card to [data-initiative-collapsed="false"] (got ${afterExpandAll})`);
-                await caption(page, 'Expand all pops every DAG node\'s detail card open at once.');
-                await frame(page, 'r6-2-expand-all', 'W6-RV-1 — expand-all bulk-opens every roadmap node\'s detail card', { key: true });
+              // data-canvas-scale is the real view state (not a label) — prove a
+              // click genuinely changes it, the same "bulk toggle actually reaches
+              // real state" proof the old collapse-all/expand-all beat pinned.
+              const scaleBefore = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+              await zoomInBtn.click();
+              await sleep(200);
+              const scaleAfterZoomIn = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+              check(scaleAfterZoomIn !== scaleBefore, `roadmap: zoom-in changes [data-canvas-scale] (before ${scaleBefore}, after ${scaleAfterZoomIn})`);
+              await caption(page, 'Zoom in on the completion-time canvas — the amber now-line and the projected zone stay anchored as the view scales.');
+              await frame(page, 'r6-2-zoom-in', 'W6-RV-2 — zooming the canvas changes real view state (data-canvas-scale)', { key: true });
 
-                // Collapse all — the sampled card flips back to [data-initiative-collapsed="true"].
-                await collapseAllBtn.click();
-                await page.waitForSelector(`${sampleNode}[data-initiative-collapsed="true"]`, { timeout: 5000 }).catch(() => {});
-                const afterCollapseAll = await page.locator(sampleNode).getAttribute('data-initiative-collapsed').catch(() => null);
-                check(afterCollapseAll === 'true', `roadmap: collapse-all flips a sampled card back to [data-initiative-collapsed="true"] (got ${afterCollapseAll})`);
-                await caption(page, 'Collapse all folds every DAG node back down to its uniform, scannable card.');
-                await frame(page, 'r6-2b-collapse-all', 'W6-RV-1 — collapse-all folds every roadmap node back to its uniform card');
+              await fitBtn.click();
+              await sleep(200);
+              const scaleAfterFit = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+              check(!!scaleAfterFit, `roadmap: fit-to-view resets [data-canvas-scale] to a real value (got ${scaleAfterFit})`);
+              await caption(page, 'Fit resets the canvas to show every initiative — done work on its real time axis, pending work banded right of the now-line.');
+              await frame(page, 'r6-2b-fit', 'W6-RV-2 — fit-to-view resets the canvas to a sane baseline');
+
+              await nowBtn.click();
+              await sleep(200);
+              await caption(page, 'Jump-to-now pans straight to the amber now-line, the boundary between real history and projected work.');
+              await frame(page, 'r6-2c-jump-now', 'W6-RV-2 — jump-to-now pans the canvas to the amber now-line');
+
+              // A real wheel dispatch over the viewport — proves the canvas
+              // zooms on scroll (not just the toolbar buttons above), and
+              // implicitly that the viewport's wheel handler is attached
+              // NATIVELY with { passive: false } (React's root wheel
+              // listener is passive, so a JSX onWheel's preventDefault()
+              // would be a silent no-op and the page would scroll under the
+              // canvas instead of zooming it).
+              const viewportBox = await page.locator('[data-roadmap-viewport]').boundingBox();
+              if (viewportBox) {
+                const scaleBeforeWheel = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+                await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+                await page.mouse.wheel(0, -200); // negative deltaY = zoom in
+                await sleep(200);
+                const scaleAfterWheel = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+                check(scaleAfterWheel !== scaleBeforeWheel, `roadmap: wheel-to-zoom changes [data-canvas-scale] (before ${scaleBeforeWheel}, after ${scaleAfterWheel})`);
+              } else {
+                check(false, 'roadmap: [data-roadmap-viewport] has a bounding box to dispatch a wheel event over');
               }
 
         },
@@ -368,31 +384,32 @@ export const journey = defineJourney({
               // ── R4-11-F2: Plan trigger + blocked-until-planned lock ──────────────────
               console.log('\n[R4-11-F2] Plan trigger + blocked-until-planned lock');
 
-              // W6-RV-1: DAG node cards render COLLAPSED by default now — the counts/
-              // locators below all read on hidden DOM fine (count()/getAttribute() do
-              // not care about visibility), but a real Playwright .click() on the Plan
-              // button requires it visible, so expand this one card first.
-              // The card div is uniquely identified by data-plan-state (the Plan button
-              // also carries data-initiative-id, so select the div explicitly).
+              // W6-RV-2: canvas cards are ALWAYS collapsed (data-plan-state lives on
+              // the [data-roadmap-node] button itself, so this locator still resolves
+              // to the real card — unchanged). Clicking the card selects it and opens
+              // the drawer instead of inline-expanding; the Plan affordance lives
+              // inside the drawer now.
               const planCard = page.locator(`[data-initiative-id="${INIT_PLAN}"][data-plan-state]`);
-              const planBtn = planCard.locator('[data-action="plan-initiative"]');
-              if (await planBtn.count() > 0) {
+              const planCardPresent = (await planCard.count()) > 0;
+              if (planCardPresent) {
                 const initialState = await planCard.getAttribute('data-plan-state');
                 check(initialState === 'unplanned', `roadmap: a WI-less pending initiative renders [data-plan-state="unplanned"] (got ${initialState})`);
 
-                const lockCount = await planCard.locator('[data-section="initiative-blocked-until-planned"]').count();
-                check(lockCount > 0, 'roadmap: the blocked-until-planned lock badge is present on a WI-less initiative');
-
-                const developCount = await planCard.locator('[data-action="start-development"]').count();
-                check(developCount === 0, 'roadmap: "start development" is withheld until the initiative is planned');
-
                 await planCard.scrollIntoViewIfNeeded().catch(() => {});
-                // Expand the card so the Plan affordance inside its (collapsed-by-
-                // default) detail region becomes visible/clickable.
-                await planCard.locator('[data-action="toggle-node-detail"]').click().catch(() => {});
-                await page.waitForSelector(`[data-initiative-id="${INIT_PLAN}"][data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                await caption(page, 'A WI-less initiative offers "Plan" instead of "Start development" — the blocked-until-planned lock withholds development until it is decomposed.');
-                await frame(page, 'r4-11-2-plan-trigger', 'R4-11-F2 — the Plan trigger + blocked-until-planned lock on a WI-less initiative', { key: true });
+                await planCard.click().catch(() => {});
+                await page.waitForSelector(`[data-drawer-initiative="${INIT_PLAN}"]`, { timeout: 5000 }).catch(() => {});
+                const drawerSel = `[data-drawer-initiative="${INIT_PLAN}"]`;
+
+                const lockCount = await page.locator(`${drawerSel} [data-section="initiative-blocked-until-planned"]`).count();
+                check(lockCount > 0, 'roadmap: the blocked-until-planned lock badge is present in the drawer for a WI-less initiative');
+
+                const developCount = await page.locator(`${drawerSel} [data-action="start-development"]`).count();
+                check(developCount === 0, 'roadmap: "start development" is withheld in the drawer until the initiative is planned');
+
+                const planBtn = page.locator(`${drawerSel} [data-action="plan-initiative"]`);
+                check((await planBtn.count()) > 0, `roadmap: [data-action="plan-initiative"] present in the drawer for ${INIT_PLAN}`);
+                await caption(page, 'A WI-less initiative\'s drawer offers "Plan" instead of "Start development" — the blocked-until-planned lock withholds development until it is decomposed.');
+                await frame(page, 'r4-11-2-plan-trigger', 'R4-11-F2 — the Plan trigger + blocked-until-planned lock, now in the drawer', { key: true });
 
                 await planBtn.click();
                 await page.waitForSelector(`[data-initiative-id="${INIT_PLAN}"][data-plan-state="planning"]`, { timeout: 12000 }).catch(() => {});
@@ -424,17 +441,18 @@ export const journey = defineJourney({
       {
         id: 'roadmap-start-development',
         title: 'Start development trigger (DEC-3)',
-        narration: 'A decomposed-but-not-yet-built initiative offers "Start development" right on its DAG node; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the roadmap node itself is the trigger, not a separate queue command.',
+        narration: 'A decomposed-but-not-yet-built initiative offers "Start development" on its drawer; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the roadmap card itself is the trigger, not a separate queue command.',
         drive: async (ctx) => {
               const { page, watch, browser, recordClip, check, frame } = ctx;
               // ── R6.1: Start development — the trigger flips the manifest onto forge-develop ──
               console.log('\n[R6.1] Start development trigger (DEC-3)');
 
               // Clip: a fresh, isolated context drives the roadmap the way an operator
-              // would — dwell on the dependency DAG (nodes by build order, edges drawn
-              // prerequisite → dependent), toggle the completed initiative's card, then
-              // settle on the pending initiative's "Start development" trigger, focused
-              // and ready to fire.
+              // would — dwell on the completion-time canvas (done work on its real
+              // time axis, edges drawn prerequisite → dependent), select the
+              // completed initiative's card (opens its drawer, then closes it), then
+              // select the pending initiative and settle on its "Start development"
+              // trigger inside the drawer, focused and ready to fire.
               // SAFETY (S5): the real trigger repoints ${INIT_DEV}'s manifest onto the
               // forge-develop flow — a live scheduler (`forge studio` spawns `serve` for
               // real; only FORGE_ARCHITECT_NO_SPAWN-guarded routes are stubbed) polls
@@ -442,61 +460,59 @@ export const journey = defineJourney({
               // cycle. The main beat below already performs that click exactly once (on
               // the outer `page`) and its own tail already cleans up the manifest it
               // creates — reusing it here would be a second live-fire window for a demo
-              // clip. W6-RV-1: node cards now render COLLAPSED by default, so this clip
-              // toggles the completed node open (safe — no destructive trigger), then
-              // EXPANDS the pending node too (so the demo actually shows its button) and
-              // only SCROLLS to it, never clicks it. The single real click stays owned
-              // by the code that follows, on the outer page.
+              // clip. W6-RV-2: canvas cards never inline-expand, so this clip selects
+              // the pending card (opens its drawer) and only SCROLLS to the button
+              // inside it, never clicks it. The single real click stays owned by the
+              // code that follows, on the outer page.
               await recordClip(browser, watch, 'roadmap-drive', `/projects/${PROJECT}`, async (p) => {
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
                 await p.locator('button[data-tab="roadmap"]').click().catch(() => {});
-                await p.waitForSelector('[data-roadmap-dag] [data-roadmap-node]', { timeout: 10000 }).catch(() => {});
-                await sleep(WORK); // dwell on the dependency DAG + its prerequisite → dependent edges
-                // Toggle the completed initiative's detail card (safe — no destructive
-                // trigger, starts collapsed by default): pop it open, then collapse
-                // again.
-                const initToggle = p.locator(`[data-roadmap-node][data-initiative-id="${INIT}"] [data-action="toggle-node-detail"]`);
-                await initToggle.click().catch(() => {}); // expand / pop
+                await p.waitForSelector('[data-roadmap-canvas] [data-roadmap-node]', { timeout: 10000 }).catch(() => {});
+                await sleep(WORK); // dwell on the completion-time canvas + its prerequisite → dependent edges
+                // Select the completed initiative's card (safe — no destructive
+                // trigger): opens its drawer, then close it again.
+                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT}"]`).click().catch(() => {});
                 await sleep(THINK);
-                await initToggle.click().catch(() => {}); // collapse
+                await p.locator('[data-action="drawer-close"]').click().catch(() => {});
                 await sleep(WORK);
-                // Expand the pending node too — its Start-development button lives
-                // inside the (collapsed-by-default) detail region.
-                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"] [data-action="toggle-node-detail"]`)
-                  .click().catch(() => {});
+                // Select the pending node too — its Start-development button lives
+                // inside its drawer.
+                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"]`).click().catch(() => {});
+                await p.waitForSelector(`[data-drawer-initiative="${INIT_DEV}"]`, { timeout: 5000 }).catch(() => {});
                 await sleep(THINK);
                 // Settle on the pending initiative's "Start development" trigger — we
                 // only SCROLL to the button, never click it (see SAFETY note above).
-                await p.locator(`[data-roadmap-node][data-initiative-id="${INIT_DEV}"] [data-action="start-development"]`)
+                await p.locator(`[data-drawer-initiative="${INIT_DEV}"] [data-action="start-development"]`)
                   .scrollIntoViewIfNeeded().catch(() => {});
                 await sleep(WORK);
               }, {
                 readySel: '[data-page="projects"]',
-                caption: 'The operator reads the dependency DAG, toggles a finished initiative’s card, then eyes the "Start development" trigger on the initiative queued up next',
+                caption: 'The operator reads the completion-time canvas, opens a finished initiative’s drawer, then eyes the "Start development" trigger on the initiative queued up next',
               });
 
-              // W6-RV-1: DAG node cards render COLLAPSED by default — count()/
-              // getAttribute() below work on hidden DOM fine, but the real
-              // .click() on Start-development needs it visible, so expand first.
-              // The card div is uniquely identified by data-develop-state (the button also
-              // carries data-initiative-id, so select the div explicitly to avoid a match clash).
+              // W6-RV-2: canvas cards never inline-expand — click the card to select
+              // it and open its drawer, then find Start-development inside the
+              // drawer (not the card). The card is uniquely identified by
+              // data-develop-state (the button also carries data-initiative-id, so
+              // select the button explicitly to avoid a match clash).
               const devCard = page.locator(`[data-initiative-id="${INIT_DEV}"][data-develop-state]`);
-              const startBtn = devCard.locator('[data-action="start-development"]');
-              if (await startBtn.count() > 0) {
+              const devCardPresent = (await devCard.count()) > 0;
+              if (devCardPresent) {
                 check(
                   await devCard.getAttribute('data-initiative-status') === 'pending',
                   'roadmap: the decomposed initiative is pending (develop-able)',
                 );
                 await devCard.scrollIntoViewIfNeeded().catch(() => {});
-                // Expand the card so Start-development, inside its (collapsed-by-
-                // default) detail region, becomes visible/clickable.
-                await devCard.locator('[data-action="toggle-node-detail"]').click().catch(() => {});
-                await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                await caption(page, 'A decomposed, dependency-satisfied initiative offers "Start development" right on its DAG node — it runs the Forge Develop flow.');
-                await frame(page, 'r6-1-start-development', 'R4-13 — the "start development" trigger on a ready DAG node');
+                await devCard.click().catch(() => {});
+                await page.waitForSelector(`[data-drawer-initiative="${INIT_DEV}"]`, { timeout: 5000 }).catch(() => {});
+                const drawerSel = `[data-drawer-initiative="${INIT_DEV}"]`;
+                const startBtn = page.locator(`${drawerSel} [data-action="start-development"]`);
+                check((await startBtn.count()) > 0, `roadmap: [data-action="start-development"] present in the drawer for ${INIT_DEV}`);
+                await caption(page, 'A decomposed, dependency-satisfied initiative\'s drawer offers "Start development" — it runs the Forge Develop flow.');
+                await frame(page, 'r6-1-start-development', 'W6-RV-2 — the "start development" trigger, now in the drawer');
                 await startBtn.click();
                 await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});
                 const devState = await devCard.getAttribute('data-develop-state');
@@ -527,8 +543,8 @@ export const journey = defineJourney({
       },
       {
         id: 'roadmap-recovery',
-        title: 'Recovery affordances on a stuck initiative\'s card (R4-11-T3)',
-        narration: 'A recoverable initiative — in-flight, ready-for-review, or failed (never `merged`, a transient pass-through) — gets inspect/requeue/abandon right on its roadmap card, folded off the retired standalone /recovery page. Inspect reads the preserved worktree; under the harness\'s dry-bridge safety seam, requeue/abandon correctly refuse rather than perform a real git operation — the affordance\'s honest failure path, not a faked success.',
+        title: 'Recovery affordances in a stuck initiative\'s drawer (R4-11-T3)',
+        narration: 'A recoverable initiative — in-flight, ready-for-review, or failed (never `merged`, a transient pass-through) — gets inspect/requeue/abandon in its roadmap drawer, folded off the retired standalone /recovery page. Inspect reads the preserved worktree; under the harness\'s dry-bridge safety seam, requeue/abandon correctly refuse rather than perform a real git operation — the affordance\'s honest failure path, not a faked success.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── R4-11-T3: recovery affordances on the roadmap card ───────────────────
@@ -557,50 +573,53 @@ export const journey = defineJourney({
               await page.locator('button[data-tab="roadmap"]').click().catch(() => {});
               await sleep(1500);
 
-              // W6-RV-1: on a recoverable node the recovery block renders unconditionally
-              // inside the detail card (present on first paint even though the card is
-              // collapsed by default — count()/getAttribute() work on hidden DOM). A real
-              // Playwright click on Inspect/Requeue/Abandon needs the region visible, so
-              // expand the node first (a blind node-center click could otherwise fire
-              // requeue/abandon — always go through the explicit toggle button).
+              // W6-RV-2: the recovery block now lives in the DRAWER (not the card) —
+              // click the card to select it and open the drawer, then look for
+              // [data-recovery-item] inside [data-drawer-initiative].
               const recoveryNode = page.locator(`[data-roadmap-node][data-initiative-id="${INIT_RECOVERY}"]`);
-              const recoveryItem = recoveryNode.locator(`[data-recovery-item][data-recovery-initiative="${INIT_RECOVERY}"]`);
-              if (await recoveryItem.count() > 0) {
-                const status = await recoveryItem.getAttribute('data-recovery-status');
-                check(status === 'failed', `roadmap: the failed initiative's card renders [data-recovery-status="failed"] (got ${status})`);
-                const attemptCount = await recoveryItem.getAttribute('data-recovery-attempt-count');
-                check(!!attemptCount && Number(attemptCount) >= 1, `roadmap: [data-recovery-attempt-count] present (got ${attemptCount})`);
-
+              const recoveryNodePresent = (await recoveryNode.count()) > 0;
+              if (recoveryNodePresent) {
                 await recoveryNode.scrollIntoViewIfNeeded().catch(() => {});
-                await recoveryNode.locator('[data-action="toggle-node-detail"]').click().catch(() => {});
-                await page.waitForSelector(`[data-initiative-id="${INIT_RECOVERY}"][data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
-                await caption(page, 'A recoverable (failed) initiative offers Inspect / Requeue / Abandon right on its roadmap card — no separate /recovery page.');
-                await frame(page, 'r4-11-t3-0-recovery-affordances', 'R4-11-T3 — inspect/requeue/abandon on a recoverable initiative\'s roadmap card', { key: true });
+                await recoveryNode.click().catch(() => {});
+                await page.waitForSelector(`[data-drawer-initiative="${INIT_RECOVERY}"]`, { timeout: 5000 }).catch(() => {});
+                const drawerSel = `[data-drawer-initiative="${INIT_RECOVERY}"]`;
+                const recoveryItem = page.locator(`${drawerSel} [data-recovery-item][data-recovery-initiative="${INIT_RECOVERY}"]`);
+                const recoveryItemPresent = (await recoveryItem.count()) > 0;
+                check(recoveryItemPresent, `roadmap: [data-recovery-item] present in the drawer for the seeded failed initiative ${INIT_RECOVERY}`);
+                if (recoveryItemPresent) {
+                  const status = await recoveryItem.getAttribute('data-recovery-status');
+                  check(status === 'failed', `roadmap: the failed initiative's drawer renders [data-recovery-status="failed"] (got ${status})`);
+                  const attemptCount = await recoveryItem.getAttribute('data-recovery-attempt-count');
+                  check(!!attemptCount && Number(attemptCount) >= 1, `roadmap: [data-recovery-attempt-count] present (got ${attemptCount})`);
 
-                // Inspect — read-only; asserts the detail section renders for this initiative.
-                await recoveryItem.locator('[data-action="recovery-inspect"]').click();
-                await page.waitForSelector(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`, { timeout: 8000 }).catch(() => {});
-                const detailCount = await recoveryItem.locator(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`).count();
-                check(detailCount > 0, 'roadmap: recovery-inspect renders [data-section="recovery-detail"] for the initiative');
-                await frame(page, 'r4-11-t3-1-inspect', 'R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)');
+                  await caption(page, 'A recoverable (failed) initiative\'s drawer offers Inspect / Requeue / Abandon — no separate /recovery page.');
+                  await frame(page, 'r4-11-t3-0-recovery-affordances', 'R4-11-T3 — inspect/requeue/abandon on a recoverable initiative\'s drawer', { key: true });
 
-                // Requeue — under the harness's FORGE_DRY_BRIDGE seam this route hard-refuses
-                // (real git ops); assert the HONEST refusal renders, not a faked success, and
-                // that the manifest genuinely never moved off `_queue/failed/`.
-                await recoveryItem.locator('[data-action="recovery-requeue"]').click();
-                await page.waitForSelector(`[data-recovery-initiative="${INIT_RECOVERY}"] [data-recovery-note]`, { timeout: 8000 }).catch(() => {});
-                const requeueNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
-                check(!!requeueNote && /requeue failed/.test(requeueNote), `roadmap: recovery-requeue honestly reports the dry-bridge refusal (got ${requeueNote})`);
-                check(existsSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`)), 'roadmap: the manifest stays in failed/ — dry-bridge genuinely refused the git ops, not just the UI message');
-                await frame(page, 'r4-11-t3-2-requeue-refused', 'R4-11-T3 — under the harness\'s safety seam, requeue honestly refuses rather than faking success');
+                  // Inspect — read-only; asserts the detail section renders for this initiative.
+                  await recoveryItem.locator('[data-action="recovery-inspect"]').click();
+                  await page.waitForSelector(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`, { timeout: 8000 }).catch(() => {});
+                  const detailCount = await recoveryItem.locator(`[data-section="recovery-detail"][data-recovery-detail-initiative="${INIT_RECOVERY}"]`).count();
+                  check(detailCount > 0, 'roadmap: recovery-inspect renders [data-section="recovery-detail"] for the initiative');
+                  await frame(page, 'r4-11-t3-1-inspect', 'R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)');
 
-                // Abandon — same dry-bridge refusal path.
-                await recoveryItem.locator('[data-action="recovery-abandon"]').click();
-                await sleep(500);
-                const abandonNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
-                check(!!abandonNote && /abandon failed/.test(abandonNote), `roadmap: recovery-abandon honestly reports the dry-bridge refusal (got ${abandonNote})`);
+                  // Requeue — under the harness's FORGE_DRY_BRIDGE seam this route hard-refuses
+                  // (real git ops); assert the HONEST refusal renders, not a faked success, and
+                  // that the manifest genuinely never moved off `_queue/failed/`.
+                  await recoveryItem.locator('[data-action="recovery-requeue"]').click();
+                  await page.waitForSelector(`[data-recovery-initiative="${INIT_RECOVERY}"] [data-recovery-note]`, { timeout: 8000 }).catch(() => {});
+                  const requeueNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                  check(!!requeueNote && /requeue failed/.test(requeueNote), `roadmap: recovery-requeue honestly reports the dry-bridge refusal (got ${requeueNote})`);
+                  check(existsSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`)), 'roadmap: the manifest stays in failed/ — dry-bridge genuinely refused the git ops, not just the UI message');
+                  await frame(page, 'r4-11-t3-2-requeue-refused', 'R4-11-T3 — under the harness\'s safety seam, requeue honestly refuses rather than faking success');
+
+                  // Abandon — same dry-bridge refusal path.
+                  await recoveryItem.locator('[data-action="recovery-abandon"]').click();
+                  await sleep(500);
+                  const abandonNote = await recoveryItem.locator('[data-recovery-note]').textContent().catch(() => null);
+                  check(!!abandonNote && /abandon failed/.test(abandonNote), `roadmap: recovery-abandon honestly reports the dry-bridge refusal (got ${abandonNote})`);
+                }
               } else {
-                check(false, `roadmap: [data-recovery-item] present on the seeded failed initiative ${INIT_RECOVERY}`);
+                check(false, `roadmap: [data-roadmap-node] present for the seeded failed initiative ${INIT_RECOVERY}`);
               }
 
               try { rmSync(join(QDIR('failed'), `${INIT_RECOVERY}.md`), { force: true }); } catch { /* */ }
