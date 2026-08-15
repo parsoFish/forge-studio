@@ -30,7 +30,8 @@ import { basename, join, resolve, sep } from 'node:path';
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
-import { listRuns, buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { cachedListRuns } from './run-list-cache.ts';
 import { eventToNodeId } from '../orchestrator/run-model-derive.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
@@ -276,9 +277,12 @@ function classifyEvent(e: EventLogEntry): LogLine {
 // Runs helpers
 // ---------------------------------------------------------------------------
 
-/** Find a Run by id (cycleId or initiativeId). Returns null if not found. */
+/** Find a Run by id (cycleId or initiativeId). Returns null if not found.
+ *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
+ *  — same derivation, same contract as listRuns, but terminal runs skip
+ *  re-parsing their events.jsonl once cached. */
 function findRun(forgeRoot: string, id: string): Run | null {
-  const runs = listRuns(forgeRoot, Date.now());
+  const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? null;
 }
 
@@ -482,7 +486,8 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const flowFilter = qs.get('flow');
-      let runs = listRuns(ctx.forgeRoot, Date.now());
+      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      let runs = cachedListRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
         // Match by lineage, not just current flowId: a run whose manifest was
         // repointed mid-saga (architect→develop hand-off) stays visible on
