@@ -7,10 +7,12 @@
  * function that could do any of that (D2).
  *
  * D1 — three sources, no fourth declared list:
- *   kind skill    ← studio/catalog.yaml `community-skills:` UNION vendored
- *                   packages under studio/community/skills/ with no matching
- *                   catalog id (E-1, mirrors skill-library.ts's own local-dir
- *                   ∪ catalog union one level up).
+ *   kind skill    ← studio/community/registry.yaml `kind: skill` items
+ *                   (W6-CR-1; moved off studio/catalog.yaml's former
+ *                   `community-skills:` section) UNION vendored packages
+ *                   under studio/community/skills/ with no matching registry
+ *                   id (E-1, mirrors skill-library.ts's own local-dir ∪
+ *                   catalog union one level up).
  *   kind hook     ← vendored packages under studio/community/hooks/.
  *   kind tool/mcp ← listConnections(forgeRoot) (R3-04), 1:1, never re-parsed.
  *
@@ -49,7 +51,7 @@ import { listConnections } from './connection-library.ts';
 import type { ConnectionDefinition } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
-import { loadCatalog } from './registry.ts';
+import { communityRegistryPath, communitySkillsFromRegistry } from './registry.ts';
 import { reqString, loadYaml } from './yaml-fields.ts';
 import { guardedFile, guardedReadFile } from '../../cli/studio-path-guard.ts';
 import type { CommunitySkill } from './types.ts';
@@ -467,27 +469,41 @@ export function buildConnectionItem(hubs: readonly CommunityHub[], conn: Connect
   };
 }
 
-/** Tolerant catalog read shared by listCommunityIndex and communityItem
+/** Tolerant registry read shared by listCommunityIndex and communityItem
  *  (skill branch) — MAJOR 2's missing-vs-malformed split applies identically
- *  to both: a missing catalog.yaml degrades to `[]`; a malformed one throws
- *  loud via loadCatalog's own unguarded call. */
-function communitySkillsSource(forgeRoot: string): { exists: boolean; communitySkills: CommunitySkill[] } {
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  const exists = existsSync(catalogPath);
-  return { exists, communitySkills: exists ? (loadCatalog(catalogPath).communitySkills ?? []) : [] };
+ *  here (W6-CR-1: community skills moved from catalog.yaml's `community-skills:`
+ *  section to studio/community/registry.yaml): a missing registry.yaml
+ *  degrades to `[]` with a loud console.warn (this seam's own semantics, kept
+ *  distinct from communitySkillsFromRegistry's silent tolerance — every OTHER
+ *  caller of that shared helper has its own established tolerance policy, see
+ *  registry.ts's doc comment); a registry.yaml that EXISTS but fails to parse
+ *  throws loud via communitySkillsFromRegistry's own unguarded
+ *  loadCommunityRegistry call — a corrupt registry must never render
+ *  identically to an honest empty one. */
+function registrySource(forgeRoot: string): { exists: boolean; communitySkills: CommunitySkill[] } {
+  const registryPath = communityRegistryPath(forgeRoot);
+  const exists = existsSync(registryPath);
+  if (!exists) {
+    console.warn(`community-index: ${registryPath} not found — community skills degrade to vendored packages + connections only`);
+  }
+  return { exists, communitySkills: communitySkillsFromRegistry(forgeRoot) };
 }
 
 export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   const hubs = listCommunityHubs(forgeRoot);
-  // MAJOR 2 (T2 round 4 adversarial review): a MISSING catalog.yaml is the
-  // fresh/half-onboarded shape — mirrors listCommunityHubs's own documented
-  // fresh-root precedent above — and degrades to the sources that don't need
-  // it (vendored skills + vendored hooks), never a throw. A catalog.yaml that
-  // EXISTS but fails to parse is a genuinely broken registry: loadCatalog is
-  // called unguarded (inside communitySkillsSource) and its real parse error
-  // propagates uncaught, on purpose — a corrupt registry must never render
-  // identically to an honest empty one.
-  const { exists: catalogExists, communitySkills } = communitySkillsSource(forgeRoot);
+  // MAJOR 2 (T2 round 4 adversarial review), now split across TWO independent
+  // files (W6-CR-1 decoupled community-skill sourcing from catalog.yaml):
+  //  - registrySource: a MISSING studio/community/registry.yaml is the
+  //    fresh/half-onboarded shape — mirrors listCommunityHubs's own
+  //    documented fresh-root precedent above — and degrades to [], never a
+  //    throw. A registry.yaml that EXISTS but fails to parse throws loud (via
+  //    communitySkillsFromRegistry's own unguarded loadCommunityRegistry
+  //    call, inside registrySource) — a corrupt registry must never render
+  //    identically to an honest empty one.
+  //  - catalogExists (below): studio/catalog.yaml's own existence, gating
+  //    ONLY the mcp/tool connections loop — listConnections reads catalog.yaml
+  //    independently of the community-skill registry above.
+  const { communitySkills } = registrySource(forgeRoot);
   const items: CommunityItem[] = [];
 
   // --- skill: catalog community-skills ∪ vendored-with-no-catalog-id (E-1) ---
@@ -509,13 +525,13 @@ export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   }
 
   // --- mcp / tool: listConnections(forgeRoot), 1:1, never re-parsed (D1) ---
-  // Skipped entirely when the catalog is absent (MAJOR 2) — there is nothing
-  // to source a connection from without it; never fabricated. Each
+  // Skipped entirely when studio/catalog.yaml is absent (MAJOR 2) — there is
+  // nothing to source a connection from without it; never fabricated. Each
   // connection is probed EXACTLY ONCE here (T2 round 5/6 probe-budget fix —
   // this loop used to be re-entered independently by hubsWithCounts and by
   // the bridge's own second listCommunityIndex call; both now derive from
   // ONE computation, see hubCountsFrom below and cli/bridge-studio-community.ts).
-  if (catalogExists) {
+  if (existsSync(join(forgeRoot, 'studio', 'catalog.yaml'))) {
     for (const conn of listConnections(forgeRoot)) {
       items.push(buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn)));
     }
@@ -533,7 +549,7 @@ export function communityItem(forgeRoot: string, kind: CommunityKind, id: string
   const hubs = listCommunityHubs(forgeRoot);
 
   if (kind === 'skill') {
-    const { communitySkills } = communitySkillsSource(forgeRoot);
+    const { communitySkills } = registrySource(forgeRoot);
     const cs = communitySkills.find((c) => c.id === id);
     const isVendored = existsSync(join(vendoredPackageDir(forgeRoot, 'skill', id), 'SKILL.md'));
     if (cs) return buildCatalogSkillItem(forgeRoot, hubs, cs, isVendored);
@@ -573,20 +589,19 @@ export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
 
 // ---------------------------------------------------------------------------
 // lintCommunityIndex — README rule: a vendored skill id must never collide
-// with a community-skills catalog id (that would claim third-party bytes as
-// forge's own). Wired into the real `forge studio lint` entry point in
-// cli/studio-lint.ts.
+// with a studio/community/registry.yaml `kind: skill` id (that would claim
+// third-party bytes as forge's own). Wired into the real `forge studio lint`
+// entry point in cli/studio-lint.ts.
 // ---------------------------------------------------------------------------
 
-/** Tolerant catalog read — an absent or malformed catalog.yaml is already
- *  surfaced as its own `studio:catalog`/`load` finding by runStudioLint's own
- *  section 3; re-throwing the SAME error here would crash the whole lint run
- *  instead of reporting it once (mirrors skill-library.ts's loadCatalogSafely). */
+/** Tolerant registry read — an absent or malformed studio/community/registry.yaml
+ *  is already surfaced as its own `community-registry`/`load` finding by
+ *  runStudioLint's own community-registry section; re-throwing the SAME error
+ *  here would crash the whole lint run instead of reporting it once (mirrors
+ *  skill-library.ts's loadCommunitySkillsSafely). */
 function communitySkillIdsSafely(forgeRoot: string): Set<string> {
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  if (!existsSync(catalogPath)) return new Set();
   try {
-    return new Set((loadCatalog(catalogPath).communitySkills ?? []).map((cs) => cs.id));
+    return new Set(communitySkillsFromRegistry(forgeRoot).map((cs) => cs.id));
   } catch {
     return new Set();
   }
@@ -601,7 +616,7 @@ export function lintCommunityIndex(forgeRoot: string): Finding[] {
         level: 'error',
         object: `community-skill:${id}`,
         check: 'community/vendored-catalog-collision',
-        message: `Vendored community skill package "${id}" collides with a studio/catalog.yaml community-skills entry of the same id — a vendored id may never collide with a community-skills id (that would be claiming third-party bytes as forge's own)`,
+        message: `Vendored community skill package "${id}" collides with a studio/community/registry.yaml community-skills entry of the same id — a vendored id may never collide with a community-skills id (that would be claiming third-party bytes as forge's own)`,
       });
     }
   }

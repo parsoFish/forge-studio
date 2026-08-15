@@ -95,19 +95,39 @@ function writeSkillFile(root: string, id: string, relPath: string, content: stri
   return p;
 }
 
-/** Write studio/catalog.yaml with a given raw community-skills array (kebab-case key). */
+/** W6-CR-1: community skills live in studio/community/registry.yaml, not
+ *  catalog.yaml — converts each raw fixture record's LEGACY field names
+ *  (source → sourceUrl, stars → signals.starsDisplay) into a registry item
+ *  doc, mirroring community-index.test.ts's own communityRegistryItemDoc. */
+function communityRegistryItemDoc(s: Record<string, unknown>): Record<string, unknown> {
+  const { source, stars, provenance, ...rest } = s;
+  return {
+    ...rest,
+    kind: 'skill',
+    provenance: provenance ?? 'Test Author',
+    sourceUrl: source ?? `https://example.com/${s['id']}`,
+    signals: { stars: null, starsDisplay: stars ?? null, attributedTo: provenance ?? 'Test Author' },
+    upstreamUpdatedAt: null,
+    fetchedAt: null,
+    fetchedBy: 'seed',
+  };
+}
+
+/** Write studio/catalog.yaml (community-skills MOVED off it, W6-CR-1) plus its
+ *  companion studio/community/registry.yaml built from the same raw
+ *  community-skills array the pre-migration fixture used. */
 function writeCatalogYaml(root: string, communitySkills: Array<Record<string, unknown>> = []): void {
   const studioDir = join(root, 'studio');
   mkdirSync(studioDir, { recursive: true });
-  const lines: string[] = ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills:'];
-  if (communitySkills.length === 0) {
-    lines[lines.length - 1] = 'community-skills: []';
-  } else {
-    for (const s of communitySkills) {
-      lines.push(`  - ${JSON.stringify(s)}`);
-    }
-  }
-  writeFileSync(join(studioDir, 'catalog.yaml'), lines.join('\n') + '\n', 'utf8');
+  writeFileSync(join(studioDir, 'catalog.yaml'), ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []'].join('\n') + '\n', 'utf8');
+
+  const communityDir = join(studioDir, 'community');
+  mkdirSync(communityDir, { recursive: true });
+  const doc = {
+    meta: { schemaVersion: 1, lastRefresh: null },
+    items: communitySkills.map(communityRegistryItemDoc),
+  };
+  writeFileSync(join(communityDir, 'registry.yaml'), yaml.dump(doc), 'utf8');
 }
 
 /** A minimal, valid studio-agent AgentDefinition fixture (no disk I/O). */

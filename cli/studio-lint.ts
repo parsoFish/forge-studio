@@ -7,6 +7,7 @@
  *   1. Agent definitions  — every studio SKILL.md in skills/
  *   2. Flow definitions   — every studio/flows/<id>/flow.yaml
  *   3. Catalog            — studio/catalog.yaml
+ *   3b. Community registry — studio/community/registry.yaml (W6-CR-1; absent = NOT an error)
  *   4. Projects           — auto-discovered from `<projectsDir>/*` (B1; no registry file)
  *   5. KB descriptors     — brain/<name>/kb.yaml (tolerate zero; duplicates are
  *                           errors; R1-01 also cross-checks binding.ref against
@@ -33,6 +34,8 @@ import {
   listInstructionSeeds,
   loadAgentDefinition,
   loadCatalog,
+  loadCommunityRegistry,
+  communityRegistryPath,
   loadFlowDefinition,
   loadKbDescriptor,
   discoverProjects,
@@ -46,6 +49,7 @@ import {
   validateArtifactRef,
   validateArtifactTemplate,
   validateCatalog,
+  validateCommunityRegistry,
   validateFlow,
   validateInstructionSeed,
   validateKb,
@@ -391,6 +395,32 @@ export function runStudioLint(root: string): StudioLintResult {
         object: 'studio:catalog',
         check: 'load',
         message: `Cannot load catalog.yaml — ${(err as Error).message}`,
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 3b. Community registry (studio/community/registry.yaml, W6-CR-1) — the
+  //     declared-list source of truth for community items, superseding
+  //     catalog.yaml's former `community-skills:` section. A MISSING file is
+  //     NOT an error (mirrors hubs.yaml's own fresh/half-onboarded-root
+  //     tolerance, orchestrator/studio/community-index.ts); a file that
+  //     EXISTS but fails to parse (missing required field, bad kind vocab,
+  //     malformed signals) surfaces as a loud `load` finding, naming the real
+  //     underlying error, never silently treated as an honest empty registry.
+  // ------------------------------------------------------------------
+
+  const registryPath = communityRegistryPath(root);
+  if (existsSync(registryPath)) {
+    try {
+      const registry = loadCommunityRegistry(registryPath);
+      findings.push(...validateCommunityRegistry(registry));
+    } catch (err) {
+      findings.push({
+        level: 'error',
+        object: 'studio:community-registry',
+        check: 'load',
+        message: `Cannot load studio/community/registry.yaml — ${(err as Error).message}`,
       });
     }
   }

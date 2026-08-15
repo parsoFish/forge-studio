@@ -148,23 +148,48 @@ type RawCommunitySkill = {
   desc?: string;
 };
 
-function communitySkillDoc(s: RawCommunitySkill): Record<string, unknown> {
-  const doc: Record<string, unknown> = {
+/** W6-CR-1: community skills live in studio/community/registry.yaml, not
+ *  catalog.yaml — this builds one registry item's YAML doc, migrated field
+ *  names (source → sourceUrl, stars → signals.starsDisplay). */
+function communityRegistryItemDoc(s: RawCommunitySkill): Record<string, unknown> {
+  return {
     id: s.id,
+    kind: 'skill',
     name: s.name ?? s.id,
     provenance: s.provenance ?? 'Test Author',
-    source: s.source ?? `https://example.com/${s.id}`,
+    sourceUrl: s.source ?? `https://example.com/${s.id}`,
     category: s.category ?? 'testing',
     desc: s.desc ?? `${s.id} description`,
+    ...(s.tier !== undefined ? { tier: s.tier } : {}),
+    signals: { stars: null, starsDisplay: s.stars ?? null, attributedTo: s.provenance ?? 'Test Author' },
+    upstreamUpdatedAt: null,
+    fetchedAt: null,
+    fetchedBy: 'seed',
   };
-  if (s.tier !== undefined) doc['tier'] = s.tier;
-  if (s.stars !== undefined) doc['stars'] = s.stars;
-  return doc;
+}
+
+/** Writes studio/community/registry.yaml from the same `communitySkills`
+ *  option `writeCatalog` used to embed into catalog.yaml's `community-skills:`
+ *  section pre-W6-CR-1 — written UNCONDITIONALLY (even empty) alongside
+ *  catalog.yaml, mirroring writeCatalog's own "every section, even when
+ *  empty" discipline, so registry.yaml exists in every fixture that calls
+ *  writeCatalog and a genuinely MISSING registry.yaml stays confined to the
+ *  tests that deliberately never call writeCatalog at all. */
+function writeRegistry(root: string, communitySkills: RawCommunitySkill[]): void {
+  const dir = join(root, 'studio', 'community');
+  mkdirSync(dir, { recursive: true });
+  const doc = {
+    meta: { schemaVersion: 1, lastRefresh: null },
+    items: communitySkills.map(communityRegistryItemDoc),
+  };
+  writeFileSync(join(dir, 'registry.yaml'), yaml.dump(doc), 'utf8');
 }
 
 /** Writes a full studio/catalog.yaml — every section loadCatalog requires,
  *  even when empty (mirrors skill-library.test.ts's writeCatalogYaml, but
- *  generalized to also carry tools:/mcps: connection metadata). */
+ *  generalized to also carry tools:/mcps: connection metadata). ALSO writes
+ *  studio/community/registry.yaml from `opts.communitySkills` (W6-CR-1 moved
+ *  community skills off catalog.yaml — see writeRegistry above). */
 function writeCatalog(
   root: string,
   opts: { tools?: RawTool[]; mcps?: RawTool[]; communitySkills?: RawCommunitySkill[] } = {},
@@ -175,10 +200,10 @@ function writeCatalog(
     tools: (opts.tools ?? []).map(toolDoc),
     mcps: (opts.mcps ?? []).map(mcpDoc),
     guards: [],
-    'community-skills': (opts.communitySkills ?? []).map(communitySkillDoc),
   };
   mkdirSync(join(root, 'studio'), { recursive: true });
   writeFileSync(join(root, 'studio', 'catalog.yaml'), yaml.dump(doc), 'utf8');
+  writeRegistry(root, opts.communitySkills ?? []);
 }
 
 function writeHubs(root: string, hubs: Array<{ id: string; name: string; url: string; kinds: string }>): void {
@@ -450,13 +475,13 @@ describe('communityInstallState — connection (mcp/tool) (D3)', () => {
 // ===========================================================================
 
 describe('listCommunityIndex — D1: derived from real registries, no fourth declared file', () => {
-  it('a NEW community-skills catalog entry appears in the index by editing ONLY catalog.yaml — no community-specific file touched', () => {
+  it('a NEW registry.yaml community-skills entry appears in the index by editing ONLY registry.yaml — no vendored package needed (W6-CR-1)', () => {
     const root = makeForgeRoot();
     writeCatalog(root, { communitySkills: [{ id: 'brand-new-skill', stars: '42' }] });
     // Deliberately: no hubs.yaml write, no studio/community/skills/ write.
     const items = listCommunityIndex(root);
     const found = items.find((i) => i.kind === 'skill' && i.id === 'brand-new-skill');
-    assert.ok(found, 'a catalog-only community-skills entry must appear in the index without any community-specific data file');
+    assert.ok(found, 'a registry-only community-skills entry must appear in the index without any vendored package on disk');
     assert.equal(found!.vendored, false, 'no vendored package exists on disk for this id — vendored must be false');
   });
 

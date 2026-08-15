@@ -34,7 +34,7 @@ import { assertSkillSlug, skillPath } from '../skill-path.ts';
 import { hooksDir } from './hook-library.ts';
 import { guardedFile } from '../../cli/studio-path-guard.ts';
 import { listConnections } from './connection-library.ts';
-import { loadCatalog } from './registry.ts';
+import { communitySkillsFromRegistry } from './registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
 import type { CommunityKind } from './community-index.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
@@ -75,10 +75,8 @@ function collisionReason(id: string): string {
   return `Local skill "${id}" already exists at this id (occupied) but carries no community-install provenance — refusing to touch a file that merely happens to share this id`;
 }
 
-function skillKnownInCatalog(forgeRoot: string, id: string): boolean {
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  if (!existsSync(catalogPath)) return false;
-  return (loadCatalog(catalogPath).communitySkills ?? []).some((cs) => cs.id === id);
+function skillKnownInRegistry(forgeRoot: string, id: string): boolean {
+  return communitySkillsFromRegistry(forgeRoot).some((cs) => cs.id === id);
 }
 
 export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id: string): CommunityInstallRoute {
@@ -95,7 +93,7 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
       }
       return { pipeline: 'skill', packageDir: dir, upstream: { source: VENDORED_UPSTREAM_SOURCE } };
     }
-    if (skillKnownInCatalog(forgeRoot, id)) {
+    if (skillKnownInRegistry(forgeRoot, id)) {
       return { pipeline: 'none', reason: notVendoredReason(id) };
     }
     return { pipeline: 'none', reason: unknownItemReason('skill', id) };

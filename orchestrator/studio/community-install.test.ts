@@ -80,21 +80,35 @@ after(() => {
 });
 
 /** community-skills shape mirrors community-index.test.ts's own
- *  `communitySkillDoc` exactly (T2 round 3: "make them consistent") — every
- *  field `registry.ts`'s `parseCommunitySkills` (reqString: id/name/
- *  provenance/source/category) actually requires, with sensible defaults so
- *  a caller can pass just `{ id }`. */
+ *  `communityRegistryItemDoc` exactly (T2 round 3: "make them consistent",
+ *  carried forward by W6-CR-1) — every field `registry.ts`'s
+ *  `loadCommunityRegistry` actually requires, with sensible defaults so a
+ *  caller can pass just `{ id }`. */
 function communitySkillDoc(s: Record<string, unknown>): Record<string, unknown> {
   return {
     id: s['id'],
+    kind: 'skill',
     name: s['name'] ?? s['id'],
     provenance: s['provenance'] ?? 'Test Author',
-    source: s['source'] ?? `https://example.com/${s['id']}`,
+    sourceUrl: s['source'] ?? `https://example.com/${s['id']}`,
     category: s['category'] ?? 'testing',
     desc: s['desc'] ?? `${s['id']} description`,
     ...(s['tier'] !== undefined ? { tier: s['tier'] } : {}),
-    ...(s['stars'] !== undefined ? { stars: s['stars'] } : {}),
+    signals: { stars: null, starsDisplay: s['stars'] ?? null, attributedTo: s['provenance'] ?? 'Test Author' },
+    upstreamUpdatedAt: null,
+    fetchedAt: null,
+    fetchedBy: 'seed',
   };
+}
+
+/** W6-CR-1: community skills live in studio/community/registry.yaml, written
+ *  UNCONDITIONALLY (even empty) alongside catalog.yaml, mirroring
+ *  writeCatalog's own "every section, even when empty" discipline. */
+function writeRegistry(root: string, communitySkills: Array<Record<string, unknown>>): void {
+  const dir = join(root, 'studio', 'community');
+  mkdirSync(dir, { recursive: true });
+  const doc = { meta: { schemaVersion: 1, lastRefresh: null }, items: communitySkills.map(communitySkillDoc) };
+  writeFileSync(join(dir, 'registry.yaml'), yaml.dump(doc), 'utf8');
 }
 
 function writeCatalog(
@@ -113,10 +127,10 @@ function writeCatalog(
       probe: { kind: 'npm-package' }, provenance: 'https://example.com', config: [],
     })),
     guards: [],
-    'community-skills': (opts.communitySkills ?? []).map(communitySkillDoc),
   };
   mkdirSync(join(root, 'studio'), { recursive: true });
   writeFileSync(join(root, 'studio', 'catalog.yaml'), yaml.dump(doc), 'utf8');
+  writeRegistry(root, opts.communitySkills ?? []);
 }
 
 function vendorSkillPackage(root: string, id: string): void {

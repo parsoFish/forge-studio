@@ -1,0 +1,171 @@
+# Community registry (W6-CR-1) — the declared-list SOURCE OF TRUTH for
+# community items forge showcases in its OOTB library, superseding
+# studio/catalog.yaml's now-removed `community-skills:` section.
+#
+# Every fact in `items[]` below is hand-curated (fetchedBy: seed) — the same
+# discipline studio/catalog.yaml's community-skills section followed before
+# this migration: `which forge agents actually compose a skill` stays DERIVED
+# from real agent composition.skills (never declared here, see
+# orchestrator/studio/skill-library.ts's deriveSkillUsage); nothing here is a
+# verified LIVE signal from the upstream host — `signals.stars` is parsed only
+# where the curated display string is unambiguously a pure k/M-notation number
+# (e.g. "228k" → 228000); a display string that names a different unit (e.g.
+# "156k installs") is NOT a star count and is left `stars: null` — never
+# fabricated — while `starsDisplay` still preserves the original curated text
+# verbatim for rendering.
+#
+# `meta.lastRefresh` stays null until a real automated refresh pass exists —
+# this migration seeds data only, it does not add a refresh mechanism.
+#
+# Read by orchestrator/studio/registry.ts's `loadCommunityRegistry` /
+# `communitySkillsFromRegistry` — see that module for the schema's structural
+# enforcement (required fields, kind vocab, signals shape).
+meta:
+  schemaVersion: 1
+  lastRefresh: null
+
+items:
+  - id: handoff
+    kind: skill
+    name: Handoff
+    desc: "Compress the current session into a markdown transfer doc (open threads, decisions) for delegation."
+    category: memory
+    sourceUrl: "https://github.com/obra/superpowers"
+    provenance: "obra/superpowers + Matt Pocock"
+    tier: haiku
+    signals:
+      stars: 228000
+      starsDisplay: "228k"
+      attributedTo: "obra/superpowers + Matt Pocock"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: pre-impl-interview
+    kind: skill
+    name: Pre-implementation Interview
+    desc: "Interview the developer on a WI spec before any code — surfaces gaps and false assumptions early."
+    category: planning
+    sourceUrl: "https://www.firecrawl.dev/blog/best-claude-code-skills"
+    provenance: "Matt Pocock (Grill Me)"
+    tier: haiku
+    signals:
+      # "156k installs" names a DIFFERENT unit (installs, not stars) — not a
+      # pure k-notation star count, so left unparsed rather than fabricated.
+      stars: null
+      starsDisplay: "156k installs"
+      attributedTo: "Matt Pocock (Grill Me)"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: superpowers-tdd
+    kind: skill
+    name: Test-Driven Development
+    desc: "Strict red-green-refactor loop with an explicit failing-test-first gate."
+    category: testing
+    sourceUrl: "https://github.com/obra/superpowers"
+    provenance: "obra/superpowers"
+    tier: sonnet
+    signals:
+      stars: 228000
+      starsDisplay: "228k"
+      attributedTo: "obra/superpowers"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: systematic-debugging
+    kind: skill
+    name: Systematic Debugging
+    desc: "Hypothesis-list approach to bugs; never brute-force."
+    category: debugging
+    sourceUrl: "https://github.com/obra/superpowers"
+    provenance: "obra/superpowers"
+    tier: sonnet
+    signals:
+      stars: 228000
+      starsDisplay: "228k"
+      attributedTo: "obra/superpowers"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: webapp-testing
+    kind: skill
+    name: Webapp Testing
+    desc: "Playwright-based browser testing of a local app — spec to test to run to report."
+    category: testing
+    sourceUrl: "https://github.com/anthropics/skills"
+    provenance: "anthropics/skills"
+    tier: sonnet
+    signals:
+      stars: 151000
+      starsDisplay: "151k"
+      attributedTo: "anthropics/skills"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: security-review
+    kind: skill
+    name: Security Review
+    desc: "Static-analysis security audit (CodeQL/Semgrep patterns)."
+    category: review
+    sourceUrl: "https://github.com/travisvn/awesome-claude-skills"
+    provenance: "Trail of Bits"
+    signals:
+      stars: null
+      starsDisplay: null
+      attributedTo: "Trail of Bits"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: skill-creator
+    kind: skill
+    name: Skill Creator
+    desc: "Q&A that produces a new SKILL.md with full frontmatter."
+    category: meta
+    sourceUrl: "https://github.com/anthropics/skills"
+    provenance: "anthropics/skills"
+    tier: sonnet
+    signals:
+      stars: 151000
+      starsDisplay: "151k"
+      attributedTo: "anthropics/skills"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: agent-browser
+    kind: skill
+    name: Agent Browser
+    desc: "Headless browser CLI with ref-based element targeting and parallel sessions."
+    category: browser
+    sourceUrl: "https://github.com/vercel-labs/agent-browser"
+    provenance: vercel-labs
+    tier: sonnet
+    signals:
+      stars: 14000
+      starsDisplay: "14k"
+      attributedTo: vercel-labs
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+
+  - id: output-compress
+    kind: skill
+    name: Output Compression
+    desc: "Encode a terse output contract — cuts output tokens (median ~65%); works for SDK-spawned agents."
+    category: meta
+    sourceUrl: "https://github.com/travisvn/awesome-claude-skills"
+    provenance: "Julius Brussee (Caveman)"
+    tier: haiku
+    signals:
+      stars: null
+      starsDisplay: null
+      attributedTo: "Julius Brussee (Caveman)"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed

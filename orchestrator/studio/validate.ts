@@ -22,6 +22,7 @@ import type {
   AgentDefinition,
   ArtifactTemplate,
   Catalog,
+  CommunityRegistry,
   FlowDefinition,
   InstructionSeed,
   KbDescriptor,
@@ -827,6 +828,50 @@ export function validateCatalog(c: Catalog): Finding[] {
     if (s.tier !== undefined && !TIERS.has(s.tier)) {
       findings.push(
         err(obj, 'community-skill/tier', `Community skill "${s.id}" tier "${s.tier}" must be one of haiku|sonnet|opus`),
+      );
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// validateCommunityRegistry (W6-CR-1)
+// ---------------------------------------------------------------------------
+
+/**
+ * studio/community/registry.yaml (W6-CR-1) — the declared-list source of
+ * truth for community items (skill/hook/mcp/tool), superseding catalog.yaml's
+ * former `community-skills:` section. Schema shape, the kind vocabulary, and
+ * `fetchedBy` presence are all enforced at LOAD time — `loadCommunityRegistry`
+ * (registry.ts) throws on any of those violations, and the caller
+ * (cli/studio-lint.ts) surfaces the throw as a `load` finding naming the real
+ * underlying error. This function covers the semantic checks that need the
+ * full item roster instead: (kind, id) uniqueness across the registry, and
+ * the recommended-tier vocabulary (mirrors validateCatalog's now-retired
+ * community-skill/tier check, same TIERS set).
+ */
+export function validateCommunityRegistry(registry: CommunityRegistry): Finding[] {
+  const findings: Finding[] = [];
+  const obj = 'studio:community-registry';
+
+  const keys = registry.items.map((item) => `${item.kind}:${item.id}`);
+  for (const dup of findDuplicates(keys)) {
+    const [kind, id] = dup.split(':');
+    findings.push(
+      err(obj, 'unique-ids', `Duplicate (kind, id) pair "${kind}, ${id}" in studio/community/registry.yaml`),
+    );
+  }
+
+  const TIERS = new Set(['haiku', 'sonnet', 'opus']);
+  for (const item of registry.items) {
+    if (item.tier !== undefined && !TIERS.has(item.tier)) {
+      findings.push(
+        err(
+          obj,
+          'community-registry/tier',
+          `Community registry item "${item.id}" tier "${item.tier}" must be one of haiku|sonnet|opus`,
+        ),
       );
     }
   }
