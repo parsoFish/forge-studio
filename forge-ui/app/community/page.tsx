@@ -4,19 +4,44 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { StudioPage } from '@/components/StudioPage';
 import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind } from '@/lib/community-client';
-import { filterByKind, filterCommunityItems, installStateLabel, signalsLabel, hubLabel } from '@/lib/community-view';
+import {
+  filterByKind,
+  filterCommunityItems,
+  installStateLabel,
+  signalsLabel,
+  hubLabel,
+  sortCommunityItems,
+  freshnessBadge,
+  COMMUNITY_SORT_KEYS,
+  DEFAULT_COMMUNITY_SORT_KEY,
+  DEFAULT_COMMUNITY_SORT_DIRECTION,
+  type CommunitySortKey,
+  type CommunitySortDirection,
+} from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
-// Community browser — /community (R3-07-F1). The ONE cross-kind browse
-// surface over skills, hooks, MCPs and tools — the per-kind marketplace
-// stubs this initiative retires (F1/F2 on /skills). Every hub, item, install
-// state and signal below is exactly what the bridge computed — no re-derived
-// state, no fabricated default (house rule, restated per this initiative's
-// own D2: this page owns ZERO trust decisions — install ROUTES to the
-// owning pipeline's page, it never approves or overrides anything itself).
+// Community browser — /community (R3-07-F1; sort + freshness W6-CR-2). The
+// ONE cross-kind browse surface over skills, hooks, MCPs and tools — the
+// per-kind marketplace stubs this initiative retires (F1/F2 on /skills).
+// Every hub, item, install state and signal below is exactly what the bridge
+// computed — no re-derived state, no fabricated default (house rule,
+// restated per this initiative's own D2: this page owns ZERO trust
+// decisions — install ROUTES to the owning pipeline's page, it never
+// approves or overrides anything itself).
+//
+// W6-CR-2, operator-locked: ordering is SIMPLE SORTS ONLY (name / stars /
+// updated / source) — no search/facets/tags sort. Default is name/asc,
+// deterministic (documented in docs/forge-ui-dom-and-harness.md).
 // ---------------------------------------------------------------------------
 
 const KIND_FILTERS: Array<CommunityKind | 'all'> = ['all', ...COMMUNITY_KINDS];
+
+const SORT_KEY_LABEL: Record<CommunitySortKey, string> = {
+  name: 'Name',
+  stars: 'Stars',
+  updated: 'Updated',
+  source: 'Source',
+};
 
 const KIND_LABEL: Record<CommunityKind | 'all', string> = {
   all: 'All',
@@ -33,6 +58,9 @@ export default function CommunityBrowserPage() {
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<CommunityKind | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState<CommunitySortKey>(DEFAULT_COMMUNITY_SORT_KEY);
+  const [sortDir, setSortDir] = useState<CommunitySortDirection>(DEFAULT_COMMUNITY_SORT_DIRECTION);
+  const [nowMs] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +84,8 @@ export default function CommunityBrowserPage() {
   }, []);
 
   const byKind = filterByKind(items, kind);
-  const filtered = filterCommunityItems(byKind, query);
+  const searched = filterCommunityItems(byKind, query);
+  const filtered = sortCommunityItems(searched, sortKey, sortDir);
 
   return (
     <StudioPage
@@ -66,6 +95,8 @@ export default function CommunityBrowserPage() {
         'data-item-count': filtered.length,
         'data-kind-filter': kind,
         'data-hub-count': hubs.length,
+        'data-sort-key': sortKey,
+        'data-sort-dir': sortDir,
       }}
       title="Community"
       lede={
@@ -124,6 +155,31 @@ export default function CommunityBrowserPage() {
               {KIND_LABEL[k]}
             </button>
           ))}
+          <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)', margin: '0 2px' }} />
+          <select
+            data-community-sort
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as CommunitySortKey)}
+            className="btn btn-sm"
+            style={{ cursor: 'pointer' }}
+            aria-label="Sort the community index by"
+          >
+            {COMMUNITY_SORT_KEYS.map((k) => (
+              <option key={k} value={k}>
+                Sort: {SORT_KEY_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-action="toggle-sort-direction"
+            data-sort-direction={sortDir}
+            className="btn btn-sm"
+            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+          >
+            {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
+          </button>
         </div>
 
         {status === 'loading' && (
@@ -149,7 +205,7 @@ export default function CommunityBrowserPage() {
         {status === 'ready' && filtered.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
             {filtered.map((item) => (
-              <CommunityCard key={`${item.kind}/${item.id}`} item={item} />
+              <CommunityCard key={`${item.kind}/${item.id}`} item={item} nowMs={nowMs} />
             ))}
           </div>
         )}
@@ -161,7 +217,8 @@ export default function CommunityBrowserPage() {
 // CommunityCard
 // ---------------------------------------------------------------------------
 
-function CommunityCard({ item }: { item: CommunityItem }) {
+function CommunityCard({ item, nowMs }: { item: CommunityItem; nowMs: number }) {
+  const freshness = freshnessBadge(item.fetchedAt, nowMs);
   return (
     <Link
       href={`/community/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`}
@@ -172,6 +229,7 @@ function CommunityCard({ item }: { item: CommunityItem }) {
       data-item-hub={item.hub?.id}
       data-install-state={item.installState}
       data-has-signals={item.signals !== null ? 'true' : 'false'}
+      data-fetched-at={item.fetchedAt ?? undefined}
       style={{ display: 'block' }}
     >
       <div className="card-top">
@@ -183,6 +241,14 @@ function CommunityCard({ item }: { item: CommunityItem }) {
         <span className="card-stat">{hubLabel(item.hub)}</span>
         <span className="card-stat">{signalsLabel(item.signals)}</span>
         <span className="card-stat">{installStateLabel(item.installState)}</span>
+        <span
+          className="card-stat"
+          data-component="freshness-badge"
+          data-freshness={freshness.state}
+          style={freshness.state === 'seed' ? { color: 'var(--faint)', fontStyle: 'italic' } : undefined}
+        >
+          {freshness.label}
+        </span>
       </div>
     </Link>
   );

@@ -486,8 +486,9 @@ inventory rather than one shared page-level contract:
   (a PR to `studio/catalog.yaml` / a vendored package under
   `studio/community/`), mirroring `/connections`'s own D1 negative AC.
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
-  [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]`, a
-  search field `[data-field="community-search"]`, kind-filter buttons
+  [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
+  [data-sort-key="name"|"stars"|"updated"|"source"][data-sort-dir="asc"|"desc"]`,
+  a search field `[data-field="community-search"]`, kind-filter buttons
   `[data-action="filter-kind"][data-kind]`, and
   `[data-component="fetch-error"]` when the bridge is unreachable (never
   rendered the same as a genuinely empty index — the same discipline
@@ -502,6 +503,32 @@ inventory rather than one shared page-level contract:
   unaffiliated item (the rendered label is the spec-literal "unaffiliated",
   never invented as an attribute value), and `data-has-signals="false"`
   renders "no signals published" rather than a fabricated zero.
+
+  **Sorting (W6-CR-2), operator-locked — SIMPLE SORTS ONLY**: `name`,
+  `stars`, `updated`, `source`; there is deliberately no search/facets/tags
+  sort. A native `select[data-community-sort]` picks the key, and
+  `[data-action="toggle-sort-direction"][data-sort-direction="asc"|"desc"]`
+  flips direction — both mirrored onto the root's own `data-sort-key`/
+  `data-sort-dir` (the same "state lives on the root too" convention
+  `data-kind-filter` already holds). Default is `name`/`asc`, deterministic
+  (`forge-ui/lib/community-view.ts`'s `sortCommunityItems`, pure, returns a
+  NEW array). `stars` sorts on `signals.starsNumeric`; `updated` sorts on
+  `fetchedAt` — the SAME fact the freshness badge below renders, deliberately
+  never `upstreamUpdatedAt` (a different claim: upstream's own change date,
+  not forge's own last-verified date) — a null value in EITHER sorts LAST
+  regardless of direction, never a fabricated zero/epoch. `source` groups by
+  the item's hub label, then breaks ties by name.
+
+  Each card additionally carries `[data-fetched-at]` — the item's real ISO
+  `fetchedAt`, structurally ABSENT (never an empty string) when null — and a
+  `[data-component="freshness-badge"][data-freshness="seed"|"stale"|"fresh"]`
+  span (`forge-ui/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
+  null` renders the spec-literal "seed — never verified" (every item sourced
+  from `studio/community/registry.yaml` today, since no refresh pass has
+  ever run — see that file's own header); a `fetchedAt` older than 30 days
+  reads "stale"; anything fresher renders a relative time ("3h ago", "2d
+  ago"). **A raw date is NEVER rendered for a null `fetchedAt`** — this is
+  the freshness-honesty contract the badge exists to enforce.
   `/community/[kind]/[id]` root: `main[data-page="community-detail"]
   [data-item-id][data-page-ready]` plus, **present ONLY once the item
   resolves** (`[data-item-kind][data-install-state]` are ABSENT while
