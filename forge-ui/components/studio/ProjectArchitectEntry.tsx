@@ -117,7 +117,7 @@ export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX
 }
 
 /** Terminal architect phases (bridge-client.ts `ArchitectPhase`) — the same
- *  set `SessionArchitectPanel`/`SessionInstructionsPanel` already branch on
- *  to distinguish a finished session from one still in flight. Anything not
- *  in this set is a session an operator could resume. */
+ *  set `SessionArchitectPanel` already branches on to distinguish a finished
+ *  session from one still in flight. Anything not in this set is a session
+ *  an operator could resume. */
 const ARCHITECT_TERMINAL_PHASES = new Set<ArchitectPhase>(['committed', 'rejected']);

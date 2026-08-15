@@ -79,7 +79,7 @@ import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
-import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
+import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -3553,6 +3553,17 @@ async function handleInstructions(
         return true;
       }
       const brief = body.brief ?? '';
+      // W6-B9 reviewer fix (parity): the generic `briefing-question-form`
+      // affordance's equivalent field (`handleInstructionsBrief`,
+      // cli/bridge-studio-affordances.ts) already caps at
+      // MAX_ANSWER_FIELD_BYTES — this bespoke route writes the SAME
+      // prompt.md/status.prompt target and must cap identically, one shared
+      // constant, not two hand-kept limits (one bounded, one not).
+      const briefBytes = Buffer.byteLength(brief, 'utf8');
+      if (briefBytes > MAX_ANSWER_FIELD_BYTES) {
+        sendJson(res, 400, { error: `brief is ${briefBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+        return true;
+      }
       if (
         guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
         guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null

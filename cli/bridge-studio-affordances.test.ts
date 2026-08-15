@@ -373,6 +373,90 @@ test('TBL-instructions-4: verdict reject at awaiting-verdict -> 200, phase -> re
 });
 
 // ===========================================================================
+// TABLE TEST — instructions (W6-B9: the 'briefing' question-form row)
+// ===========================================================================
+
+test("TBL-instructions-brief-1: question-form (brief) at 'briefing' -> 200, prompt.md written, phase -> interviewing, round -> 1", async () => {
+  const project = 'tblinstrbrief1';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'Use targeted package builds.' }],
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; phase: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, 'interviewing');
+  assert.equal(readPhase(sessionDir), 'interviewing');
+  assert.ok(existsSync(join(sessionDir, 'prompt.md')), 'prompt.md must be written');
+  assert.equal(readFileSync(join(sessionDir, 'prompt.md'), 'utf8'), 'Use targeted package builds.');
+  const status = readStatus(sessionDir);
+  assert.equal(status.round, 1);
+  assert.equal(status.prompt, 'Use targeted package builds.');
+  // The briefing checkpoint must NOT touch answers.json — a different
+  // on-disk target from the awaiting-answers question-form.
+  assert.equal(existsSync(join(sessionDir, 'answers.json')), false);
+});
+
+test("TBL-instructions-brief-2: question-form (brief) at 'briefing' with an EMPTY answer -> 200 (an empty brief is a legal 'no notes' submission)", async () => {
+  const project = 'tblinstrbrief2';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: '' }],
+  });
+  assert.equal(res.status, 200);
+  assert.equal(readPhase(sessionDir), 'interviewing');
+  assert.equal(readFileSync(join(sessionDir, 'prompt.md'), 'utf8'), '');
+});
+
+test("TBL-instructions-brief-3: question-form (brief) with a malformed answers[] shape -> 400, nothing written, phase unchanged", async () => {
+  const project = 'tblinstrbrief3';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), { project, answers: [{ question: 'Operator response' }] });
+  assert.equal(res.status, 400);
+  assert.equal(existsSync(join(sessionDir, 'prompt.md')), false);
+  assert.equal(readPhase(sessionDir), 'briefing');
+});
+
+test("TBL-instructions-brief-4: question-form (brief) with an over-8KB answer -> 400 naming the cap, nothing written", async () => {
+  const project = 'tblinstrbrief4';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const huge = 'x'.repeat(9 * 1024);
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), { project, answers: [{ question: 'Operator response', answer: huge }] });
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 400);
+  assert.match(body.error, /8192|8\s*KB|byte/i);
+  assert.equal(existsSync(join(sessionDir, 'prompt.md')), false);
+  assert.equal(readPhase(sessionDir), 'briefing');
+});
+
+test("PARITY-instructions-brief: generic question-form at 'briefing' and the bespoke /api/instructions/brief route reach the SAME phase + prompt.md content", async () => {
+  const project = 'parityinstrbrief';
+  const bespokeId = freshSessionId();
+  const genericId = freshSessionId();
+  const bespokeDir = seedSession(project, '_instructions', bespokeId, { session_id: bespokeId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const genericDir = seedSession(project, '_instructions', genericId, { session_id: genericId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+
+  const bespokeRes = await postJson(`${bridgeUrl}/api/instructions/brief`, { project, sessionId: bespokeId, brief: 'Keep commits conventional.' });
+  assert.equal(bespokeRes.status, 200);
+  const genericRes = await postJson(affordanceUrl('instructions', genericId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'Keep commits conventional.' }],
+  });
+  assert.equal(genericRes.status, 200);
+
+  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
+  assert.equal(readPhase(genericDir), 'interviewing');
+  assert.equal(readFileSync(join(bespokeDir, 'prompt.md'), 'utf8'), readFileSync(join(genericDir, 'prompt.md'), 'utf8'));
+});
+
+// ===========================================================================
 // TABLE TEST — demo (question-form: brief; verdict: lock/abandon)
 // ===========================================================================
 
@@ -968,6 +1052,67 @@ test('HARDEN-3: exactly at the caps (64 entries, 8KB fields) still succeeds — 
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200 at the exact cap boundary, got ${res.status}: ${text}`);
   assert.equal(readPhase(sessionDir), 'interviewing');
+});
+
+// ===========================================================================
+// W6-B9 reviewer fix — every spawn-triggering handler in this file
+// (answer/brief/verdict-instructions/verdict-demo) spreads
+// dryBridgeAgentTurnMarker into its 200 body, exactly like every bespoke
+// per-kind spawn route already does. This whole file runs under
+// FORGE_DRY_BRIDGE=1 (see `before()`, above), so every 200 in every OTHER
+// test in this file already implicitly carries this marker too — these
+// tests just assert it explicitly, once per handler.
+// ===========================================================================
+
+test('DRYBRIDGE-1: question-form (answer) at awaiting-answers — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge1';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form'), {
+    project,
+    answers: [{ question: 'Q?', answer: 'A.' }],
+  });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-2: question-form (brief) at briefing — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge2';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'notes' }],
+  });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-3: verdict approve at awaiting-verdict (instructions) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge3';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), { project, verdict: 'approve' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-4: verdict approve at awaiting-review (demo, lock path) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge4';
+  const sessionId = freshSessionId();
+  seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'awaiting-review', iteration: 1 });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-5: verdict reject at awaiting-review (demo, abandon path) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge5';
+  const sessionId = freshSessionId();
+  seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'awaiting-review', iteration: 1 });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'awaiting-review-verdict'), { project, verdict: 'reject' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
 });
 
 test('STRUCT-1: cli/bridge-studio-affordances.ts makes ZERO raw fs sink calls, and no such call (if one is ever added) may take "kind" or "affordanceId" directly — every read/write must go through a guarded primitive', () => {

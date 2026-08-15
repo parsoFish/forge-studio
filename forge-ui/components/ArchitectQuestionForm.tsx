@@ -4,10 +4,16 @@ import { useState } from 'react';
 
 import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-client';
 
-/** The shape every kind's answer-submission endpoint shares
- *  (`postArchitectAnswers` / `answerInstructions` in `@/lib/bridge-client`) —
- *  parameterising `onSubmitAnswers` on this instead of a name lets this one
- *  component drive both kinds' interview forms. */
+/** The shape a kind's answer-submission endpoint shares
+ *  (`postArchitectAnswers` in `@/lib/bridge-client`) — parameterising
+ *  `onSubmitAnswers` on this rather than a name keeps this component
+ *  reusable by any other kind's bespoke interview form (W6-B9: instructions,
+ *  its one-time second consumer, migrated onto the generic
+ *  `SessionInteractivePanel`'s single-box `question-form` affordance
+ *  instead — see that file's own header note — so architect is this
+ *  component's only consumer today; the parameterisation stays, since
+ *  architect is permanently bespoke, ADR-043 amendment §4, and any FUTURE
+ *  bespoke kind would want the same interview-round UI). */
 export type QuestionFormSubmitFn = (input: {
   project: string;
   sessionId: string;
@@ -26,17 +32,15 @@ export type QuestionFormSubmitFn = (input: {
  * any selected radio option. Selecting a radio clears the free-text field for
  * that question.
  *
- * Shared across two session kinds (R2-10 PR2, WI-8 — absorbed the former
- * `InstructionsQuestionForm`, a verbatim copy whose only real differences were
- * the submit function and the outer `data-section` name): `onSubmitAnswers`
- * defaults to the architect's `postArchitectAnswers`; the instructions kind
- * passes `answerInstructions` instead. `sectionName`/`heading` default to the
- * architect's values; the instructions kind overrides both. Every per-question
- * / per-option `data-*` anchor (`data-question-index`, `data-question-resolved`,
+ * Parameterised on `onSubmitAnswers`/`sectionName`/`heading` (all default to
+ * architect's own values) rather than hardcoded — originally shared with the
+ * instructions kind (R2-10 PR2, WI-8; W6-B9 migrated instructions off it, see
+ * this file's header note), so a future bespoke kind can reuse it the same
+ * way without a copy/paste fork. Every per-question / per-option `data-*`
+ * anchor (`data-question-index`, `data-question-resolved`,
  * `data-option-label`, `data-option-selected`, `data-question-freetext`,
- * `data-questions-answered`, `data-architect-round`, `data-action="submit-
- * answers"`) is unparameterised and identical for both kinds — the journeys
- * that drive either form by name need no change.
+ * `data-questions-answered`, `data-architect-round`,
+ * `data-action="submit-answers"`) stays unparameterised either way.
  */
 export function ArchitectQuestionForm({
   project,
