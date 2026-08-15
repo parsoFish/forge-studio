@@ -482,11 +482,11 @@ test('buildKbAttention: checksRun < checksTotal is surfaced on the row verbatim 
   expect(row.lint.checksRun < row.lint.checksTotal).toBe(true);
 });
 
-test('buildKbAttention: row id is kb-<id>, href is /knowledge?id=<id>', () => {
+test('buildKbAttention: row id is kb-<id>, href is /knowledge?id=<id>&tab=health (deep-links straight to the tab the finding lives on)', () => {
   const kbs = [makeKb('my-kb', { lint: makeLint({ errors: 1 }) })];
   const items = buildKbAttention(kbs);
   expect(items[0].id).toBe('kb-my-kb');
-  expect(items[0].href).toBe('/knowledge?id=my-kb');
+  expect(items[0].href).toBe('/knowledge?id=my-kb&tab=health');
 });
 
 test('buildKbAttention: gate rows from buildHomeAttention are unaffected by KB rows — the two functions tag `kind` independently and neither leaks into the other', () => {

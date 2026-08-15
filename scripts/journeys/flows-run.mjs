@@ -494,7 +494,7 @@ export const journey = defineJourney({
                 watch.uiUrl + `/artifact?run=_architect-${encodeURIComponent(sid)}&type=plan&mode=gate`,
                 { waitUntil: 'domcontentloaded' },
               );
-              await page.waitForSelector('[data-page="flows"][data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
+              await page.waitForSelector('[data-page="artifact"][data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
               await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
               await caption(page, 'The plan is Given/When/Then — the PM uses it verbatim.');
               check(await page.locator('[data-plan-iframe]').count() > 0, 'plan gate renders the rich PLAN.html iframe');
