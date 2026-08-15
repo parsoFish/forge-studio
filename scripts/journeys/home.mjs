@@ -300,87 +300,110 @@ export const journey = defineJourney({
         cleanHomeFixture(); // crash-safe leading sweep — a prior interrupted run's leftovers
         writeHomeFixture();
 
-        await gotoHomeReady(page, watch);
-        const ready = await page.evaluate(() =>
-          document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
-        check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
+        // Review fix (LOW): everything below writes/reads a REAL session
+        // under mdtoc's own `_instructions/` dir (HOME_SESSION_SID) — the
+        // SAME shared reference project other journeys (instructions.mjs,
+        // knowledge.mjs, etc.) also enumerate sessions under. Unlike this
+        // journey's three OTHER fixtures (HOME_GATED_PROJECT/
+        // HOME_ACTIVE_PROJECT/HOME_LINT_KB — self-contained scratch dirs
+        // this journey alone ever touches, so a leftover from an
+        // interrupted run is harmless until the next `home-landing`
+        // sweep, per this file's own header), a thrown exception ANYWHERE
+        // in this beat (a failed `check`, a `page` timeout, …) would leave
+        // HOME_SESSION_SID sitting in the SHARED mdtoc tree until whenever
+        // this journey next runs — polluting a project other journeys
+        // depend on staying exactly as THEY left it. Wrapping the whole
+        // beat body closes that window: on any throw, the shared-mdtoc
+        // fixture is swept before the error propagates; the three
+        // self-contained scratch fixtures are deliberately left for the
+        // existing leading-sweep design (widening their cleanup here too
+        // is out of scope for this fix — see the class note above).
+        try {
+          await gotoHomeReady(page, watch);
+          const ready = await page.evaluate(() =>
+            document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
+          check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
 
-        // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
-        // onboarding entry point from Home — it must land on the real
-        // onboarding form (/projects/new), never the bare /projects index
-        // (the retired shim used to redirect there to an arbitrary
-        // already-onboarded project). `data-action="onboard-project-cta"`
-        // (not "onboard-project") — that id is reserved for
-        // ProjectOnboardForm's own submit button on /projects/new, so a
-        // page-scoped selector can never match both at once.
-        const onboardCta = await page.evaluate(() => {
-          const el = document.querySelector('[data-action="onboard-project-cta"]');
-          return el ? { href: el.getAttribute('href') } : null;
-        });
-        check(onboardCta?.href === '/projects/new',
-          `HOME.1: the "Onboard a project" CTA targets the real onboarding form, /projects/new (got "${onboardCta?.href}")`);
+          // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
+          // onboarding entry point from Home — it must land on the real
+          // onboarding form (/projects/new), never the bare /projects index
+          // (the retired shim used to redirect there to an arbitrary
+          // already-onboarded project). `data-action="onboard-project-cta"`
+          // (not "onboard-project") — that id is reserved for
+          // ProjectOnboardForm's own submit button on /projects/new, so a
+          // page-scoped selector can never match both at once.
+          const onboardCta = await page.evaluate(() => {
+            const el = document.querySelector('[data-action="onboard-project-cta"]');
+            return el ? { href: el.getAttribute('href') } : null;
+          });
+          check(onboardCta?.href === '/projects/new',
+            `HOME.1: the "Onboard a project" CTA targets the real onboarding form, /projects/new (got "${onboardCta?.href}")`);
 
-        await caption(page, 'Home — everything running, at a glance: live flows/agents, the portfolio, and what needs the operator now.');
-        await sleep(READ);
+          await caption(page, 'Home — everything running, at a glance: live flows/agents, the portfolio, and what needs the operator now.');
+          await sleep(READ);
 
-        const hexCount = await page.evaluate(() =>
-          parseInt(document.querySelector('[data-page="home"]')?.getAttribute('data-hex-count') ?? '0', 10));
-        check(hexCount >= 2, `HOME.1: constellation data-hex-count reflects the seeded live objects (got ${hexCount})`);
-        await countAtLeast(page, 'section[data-section="constellation"] a.home-hex', 1, 'HOME.1: the constellation renders ≥1 clickable hex');
+          const hexCount = await page.evaluate(() =>
+            parseInt(document.querySelector('[data-page="home"]')?.getAttribute('data-hex-count') ?? '0', 10));
+          check(hexCount >= 2, `HOME.1: constellation data-hex-count reflects the seeded live objects (got ${hexCount})`);
+          await countAtLeast(page, 'section[data-section="constellation"] a.home-hex', 1, 'HOME.1: the constellation renders ≥1 clickable hex');
 
-        // Ruling-49: hex status == the REAL run-model status just seeded — never
-        // a fabricated color. Two independently-derived hexes off the ONE
-        // active-build run, plus the gated project hex off the attention aggregate.
-        const flowHexStatus = await page.evaluate(() =>
-          document.querySelector('a.home-hex[data-hex-kind="flow"][data-hex-id="forge-develop"]')?.getAttribute('data-hex-status') ?? null);
-        check(flowHexStatus === 'active',
-          `HOME.1: the forge-develop flow hex reads the REAL seeded run-model status (data-hex-status="active", got "${flowHexStatus}")`);
+          // Ruling-49: hex status == the REAL run-model status just seeded — never
+          // a fabricated color. Two independently-derived hexes off the ONE
+          // active-build run, plus the gated project hex off the attention aggregate.
+          const flowHexStatus = await page.evaluate(() =>
+            document.querySelector('a.home-hex[data-hex-kind="flow"][data-hex-id="forge-develop"]')?.getAttribute('data-hex-status') ?? null);
+          check(flowHexStatus === 'active',
+            `HOME.1: the forge-develop flow hex reads the REAL seeded run-model status (data-hex-status="active", got "${flowHexStatus}")`);
 
-        const agentHexStatus = await page.evaluate(() =>
-          document.querySelector('a.home-hex[data-hex-kind="agent"][data-hex-id="developer-ralph"]')?.getAttribute('data-hex-status') ?? null);
-        check(agentHexStatus === 'active',
-          `HOME.1: the developer-ralph agent hex ALSO reads active — same seeded run, independently derived (data-hex-status="active", got "${agentHexStatus}")`);
+          const agentHexStatus = await page.evaluate(() =>
+            document.querySelector('a.home-hex[data-hex-kind="agent"][data-hex-id="developer-ralph"]')?.getAttribute('data-hex-status') ?? null);
+          check(agentHexStatus === 'active',
+            `HOME.1: the developer-ralph agent hex ALSO reads active — same seeded run, independently derived (data-hex-status="active", got "${agentHexStatus}")`);
 
-        const gatedProjectHexStatus = await page.evaluate((pid) =>
-          document.querySelector(`a.home-hex[data-hex-kind="project"][data-hex-id="${pid}"]`)?.getAttribute('data-hex-status') ?? null,
-        HOME_GATED_PROJECT);
-        check(gatedProjectHexStatus === 'gated',
-          `HOME.1: the seeded gated project's own hex reads "gated" too, off the same attention aggregate (got "${gatedProjectHexStatus}")`);
+          const gatedProjectHexStatus = await page.evaluate((pid) =>
+            document.querySelector(`a.home-hex[data-hex-kind="project"][data-hex-id="${pid}"]`)?.getAttribute('data-hex-status') ?? null,
+          HOME_GATED_PROJECT);
+          check(gatedProjectHexStatus === 'gated',
+            `HOME.1: the seeded gated project's own hex reads "gated" too, off the same attention aggregate (got "${gatedProjectHexStatus}")`);
 
-        // The activity section (HistoryLedger) — structural presence only; the
-        // ledger's own DOM contract is pinned elsewhere (flows-run.mjs).
-        await countAtLeast(page, 'section[data-section="activity"] section[data-section="history-ledger"]', 1,
-          'HOME.1: the activity section wraps a real HistoryLedger');
-        const ledgerCount = await page.evaluate(() =>
-          parseInt(document.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0', 10));
-        check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
+          // The activity section (HistoryLedger) — structural presence only; the
+          // ledger's own DOM contract is pinned elsewhere (flows-run.mjs).
+          await countAtLeast(page, 'section[data-section="activity"] section[data-section="history-ledger"]', 1,
+            'HOME.1: the activity section wraps a real HistoryLedger');
+          const ledgerCount = await page.evaluate(() =>
+            parseInt(document.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0', 10));
+          check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
 
-        // W6-B11 — the active-sessions strip (IA-4's marked slot): a real
-        // in-flight session (HOME_SESSION_SID, seeded above at
-        // `awaiting-verdict`) renders its own card, needs-you flagged via a
-        // REAL deriveSessionAffordances verdict affordance — never a
-        // fabricated dot.
-        const stripCount = await page.locator('section[data-section="active-sessions"]').count();
-        check(stripCount === 1, `HOME.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
-        const stripAttrs = await page.evaluate(() => {
-          const el = document.querySelector('[data-section="active-sessions"]');
-          return el ? {
-            count: el.getAttribute('data-active-session-count'),
-            needsYou: el.getAttribute('data-needs-you-count'),
-          } : null;
-        });
-        check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `HOME.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
-        check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `HOME.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
-        const seededCard = await page.evaluate((sid) => {
-          const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
-          return el ? { kind: el.getAttribute('data-session-kind'), needsYou: el.getAttribute('data-needs-you') } : null;
-        }, HOME_SESSION_SID);
-        check(seededCard?.kind === 'instructions', `HOME.1: the seeded session's own card renders with the real kind (got "${seededCard?.kind}")`);
-        check(seededCard?.needsYou === 'true', `HOME.1: the seeded card is flagged needs-you (got "${seededCard?.needsYou}")`);
-        const overflowHref = await page.evaluate(() => document.querySelector('[data-action="view-all-sessions"]')?.getAttribute('href') ?? null);
-        check(overflowHref === '/sessions', `HOME.1: the strip's overflow link targets the real /sessions index (got "${overflowHref}")`);
+          // W6-B11 — the active-sessions strip (IA-4's marked slot): a real
+          // in-flight session (HOME_SESSION_SID, seeded above at
+          // `awaiting-verdict`) renders its own card, needs-you flagged via a
+          // REAL deriveSessionAffordances verdict affordance — never a
+          // fabricated dot.
+          const stripCount = await page.locator('section[data-section="active-sessions"]').count();
+          check(stripCount === 1, `HOME.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+          const stripAttrs = await page.evaluate(() => {
+            const el = document.querySelector('[data-section="active-sessions"]');
+            return el ? {
+              count: el.getAttribute('data-active-session-count'),
+              needsYou: el.getAttribute('data-needs-you-count'),
+            } : null;
+          });
+          check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `HOME.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
+          check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `HOME.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+          const seededCard = await page.evaluate((sid) => {
+            const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
+            return el ? { kind: el.getAttribute('data-session-kind'), needsYou: el.getAttribute('data-needs-you') } : null;
+          }, HOME_SESSION_SID);
+          check(seededCard?.kind === 'instructions', `HOME.1: the seeded session's own card renders with the real kind (got "${seededCard?.kind}")`);
+          check(seededCard?.needsYou === 'true', `HOME.1: the seeded card is flagged needs-you (got "${seededCard?.needsYou}")`);
+          const overflowHref = await page.evaluate(() => document.querySelector('[data-action="view-all-sessions"]')?.getAttribute('href') ?? null);
+          check(overflowHref === '/sessions', `HOME.1: the strip's overflow link targets the real /sessions index (got "${overflowHref}")`);
 
-        await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
+          await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
+        } catch (err) {
+          cleanInstructionsSession(HOME_SESSION_SID); // shared-mdtoc fixture — never leak it on a throw
+          throw err;
+        }
       },
     },
     {

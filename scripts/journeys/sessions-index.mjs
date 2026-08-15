@@ -63,37 +63,48 @@ export const journey = defineJourney({
         cleanSessionsIndexFixture(); // crash-safe leading sweep
         seedSessionsIndexFixture();
 
-        await gotoHomeReady(page, watch);
-        await caption(page, 'The active-sessions strip: a real in-flight session that needs the operator, surfaced right on Home.');
-        await sleep(READ);
+        // Review fix (same class as home.mjs's home-landing beat): the
+        // fixture lives under mdtoc's SHARED `_instructions/` dir, so a
+        // thrown exception anywhere below would leak it there until this
+        // journey's next run — polluting a project other journeys also
+        // depend on. Wraps the whole beat body so the seed is always swept
+        // before the error propagates.
+        try {
+          await gotoHomeReady(page, watch);
+          await caption(page, 'The active-sessions strip: a real in-flight session that needs the operator, surfaced right on Home.');
+          await sleep(READ);
 
-        const stripCount = await page.locator('section[data-section="active-sessions"]').count();
-        check(stripCount === 1, `SESSIONS-IDX.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+          const stripCount = await page.locator('section[data-section="active-sessions"]').count();
+          check(stripCount === 1, `SESSIONS-IDX.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
 
-        const stripAttrs = await page.evaluate(() => {
-          const el = document.querySelector('[data-section="active-sessions"]');
-          return el ? {
-            count: el.getAttribute('data-active-session-count'),
-            needsYou: el.getAttribute('data-needs-you-count'),
-          } : null;
-        });
-        check(stripAttrs !== null, 'SESSIONS-IDX.1: the strip carries data-active-session-count and data-needs-you-count');
-        check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
-        check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+          const stripAttrs = await page.evaluate(() => {
+            const el = document.querySelector('[data-section="active-sessions"]');
+            return el ? {
+              count: el.getAttribute('data-active-session-count'),
+              needsYou: el.getAttribute('data-needs-you-count'),
+            } : null;
+          });
+          check(stripAttrs !== null, 'SESSIONS-IDX.1: the strip carries data-active-session-count and data-needs-you-count');
+          check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
+          check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
 
-        const seededCard = await page.evaluate((sid) => {
-          const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
-          return el ? {
-            kind: el.getAttribute('data-session-kind'),
-            phase: el.getAttribute('data-session-phase'),
-            needsYou: el.getAttribute('data-needs-you'),
-          } : null;
-        }, SESSIONS_INDEX_SID);
-        check(seededCard !== null, 'SESSIONS-IDX.1: the seeded session renders its own card in the strip');
-        check(seededCard?.kind === 'instructions', `SESSIONS-IDX.1: the seeded card is the real instructions kind (got "${seededCard?.kind}")`);
-        check(seededCard?.needsYou === 'true', `SESSIONS-IDX.1: the seeded card is flagged needs-you — a REAL derived affordance, not fabricated (got "${seededCard?.needsYou}")`);
+          const seededCard = await page.evaluate((sid) => {
+            const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
+            return el ? {
+              kind: el.getAttribute('data-session-kind'),
+              phase: el.getAttribute('data-session-phase'),
+              needsYou: el.getAttribute('data-needs-you'),
+            } : null;
+          }, SESSIONS_INDEX_SID);
+          check(seededCard !== null, 'SESSIONS-IDX.1: the seeded session renders its own card in the strip');
+          check(seededCard?.kind === 'instructions', `SESSIONS-IDX.1: the seeded card is the real instructions kind (got "${seededCard?.kind}")`);
+          check(seededCard?.needsYou === 'true', `SESSIONS-IDX.1: the seeded card is flagged needs-you — a REAL derived affordance, not fabricated (got "${seededCard?.needsYou}")`);
 
-        await frame(page, 'sessions-idx-0-home-strip', 'Home — the active-sessions strip: a real needs-you session, surfaced without hunting for it', { key: true });
+          await frame(page, 'sessions-idx-0-home-strip', 'Home — the active-sessions strip: a real needs-you session, surfaced without hunting for it', { key: true });
+        } catch (err) {
+          cleanSessionsIndexFixture(); // shared-mdtoc fixture — never leak it on a throw
+          throw err;
+        }
       },
     },
     {

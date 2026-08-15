@@ -1286,13 +1286,24 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     modelTier: string | null,
     updatedAt: string,
   ): void => {
+    // Review fix: `terminal` is derived FIRST, and short-circuits `needsYou`
+    // to `false` without even calling `deriveSessionAffordances` — cheap (a
+    // terminal phase never has an affordance-table row anyway, since
+    // `deriveSessionAffordances` itself returns `[]` for any `step:
+    // 'terminal'` row), but it also honors the STATED intent verbatim
+    // (`SessionIndexRow.needsYou`'s own header: "a derivable operator
+    // affordance exists at this phase") — a terminal session, by
+    // definition, needs nothing further from the operator, so this ordering
+    // makes that true structurally rather than merely as an observed
+    // consequence of the affordance table's own shape.
+    const terminal = isTerminalPhase(descriptor, phase);
     rows.push({
       kind: descriptor.id,
       sessionId,
       project,
       phase,
-      terminal: isTerminalPhase(descriptor, phase),
-      needsYou: deriveSessionAffordances(descriptor, phase).length > 0,
+      terminal,
+      needsYou: !terminal && deriveSessionAffordances(descriptor, phase).length > 0,
       modelTier,
       updatedAt,
       href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,

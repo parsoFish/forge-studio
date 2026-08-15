@@ -7,6 +7,7 @@ import { fetchRecentAgentRuns } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import {
   buildConstellation,
@@ -145,90 +146,11 @@ export default function HomePage() {
       }
     >
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
-          (W6-B11, IA-4's marked slot). Mirrors mockups/session-surface-v1/
-          sessions-index.html's "Home active-sessions strip" variant: ≤4
-          cards, needs-you first, "N need you" in the header, overflow to
-          /sessions. Renders ONLY when there is at least one in-flight
-          session — a real condition, mirroring the attention-strip's own
-          "never on mere existence" rule immediately below. ===== */}
-      {sessionsStrip.totalCount > 0 && (
-        <section
-          data-section="active-sessions"
-          aria-label="Active in-flight sessions"
-          data-active-session-count={sessionsStrip.totalCount}
-          data-needs-you-count={sessionsStrip.needsYouCount}
-          style={{ marginBottom: 32 }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
-              Active sessions
-            </h2>
-            {sessionsStrip.needsYouCount > 0 && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--ember)',
-                  background: 'var(--panel-2)',
-                  border: '1px solid var(--ember)',
-                  borderRadius: 999,
-                  padding: '1px 8px',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                {sessionsStrip.needsYouCount} need you
-              </span>
-            )}
-            <Link
-              href="/sessions"
-              data-action="view-all-sessions"
-              style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
-            >
-              all sessions ({sessionsStrip.totalCount}) →
-            </Link>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {sessionsStrip.cards.map((s) => (
-              <Link
-                key={`${s.kind}-${s.sessionId}`}
-                href={s.href}
-                data-session-card
-                data-session-kind={s.kind}
-                data-session-phase={s.phase}
-                data-needs-you={s.needsYou}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  padding: '10px 12px',
-                  background: 'var(--panel)',
-                  border: `1px solid ${s.needsYou ? 'var(--ember)' : 'var(--line)'}`,
-                  borderRadius: 'var(--radius-sm)',
-                  textDecoration: 'none',
-                  color: 'var(--text)',
-                  position: 'relative',
-                }}
-              >
-                {s.needsYou && (
-                  <span
-                    className="status-dot"
-                    data-status="retrying"
-                    title="needs you"
-                    style={{ position: 'absolute', top: 10, right: 10 }}
-                  />
-                )}
-                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)', textTransform: 'capitalize' }}>
-                  {s.kind}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{s.project}</span>
-                <span style={{ fontSize: 11, color: s.needsYou ? 'var(--ember)' : 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
-                  {s.phase}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+          (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip
+          (review fix) so its data-* contract gets a renderToStaticMarkup
+          pin — see components/studio/HomeSessionsStrip.tsx for the full
+          contract description. ===== */}
+      <HomeSessionsStrip strip={sessionsStrip} />
 
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (
