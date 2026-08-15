@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveAgentSpec, executionPathForSurface, agentCapabilityDescriptor, FORGE_ROOT } from './derive.ts';
-import { listAgentDefinitions } from './registry.ts';
+import { listAgentDefinitions, loadAgentDefinition } from './registry.ts';
 import type { AgentDefinition } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -124,6 +124,35 @@ test('deriveAgentSpec: strategy:range with opus+haiku derives at haiku (cheapest
     const skillPath = writeTmpSkill(dir, fm);
     const spec = deriveAgentSpec(skillPath, process.cwd());
     assert.equal(spec.tier, 'haiku');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// allowedTiers — ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// ---------------------------------------------------------------------------
+
+test('deriveAgentSpec: strategy:range populates allowedTiers cheapest-first', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
+  try {
+    const fm = VALID_BASE
+      .replace('strategy: fixed', 'strategy: range')
+      .replace('model: claude-sonnet-4-6', 'range:\n  - claude-opus-4-8\n  - claude-sonnet-4-6');
+    const skillPath = writeTmpSkill(dir, fm);
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.deepEqual(spec.allowedTiers, ['sonnet', 'opus']);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('deriveAgentSpec: strategy:fixed omits allowedTiers entirely (not just undefined)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-fixed-'));
+  try {
+    const skillPath = writeTmpSkill(dir, VALID_BASE);
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.ok(!('allowedTiers' in spec), 'allowedTiers key must be entirely absent for strategy:fixed');
   } finally {
     rmSync(dir, { recursive: true });
   }
@@ -277,6 +306,35 @@ test('agentCapabilityDescriptor: runtimeSdks is a one-element set from runtime.s
 test('agentCapabilityDescriptor: empty-string runtime.sdk yields empty runtimeSdks (defensive)', () => {
   const def = baseAgentDefFixture({ runtime: { sdk: '', strategy: 'fixed', model: 'x' } });
   assert.deepEqual(agentCapabilityDescriptor(def).runtimeSdks, []);
+});
+
+// ---------------------------------------------------------------------------
+// agentCapabilityDescriptor — allowedTiers (ADR-043 §3 amendment, B5 reviewer
+// fix): present + cost-sorted cheapest-first for strategy:range, entirely
+// absent for strategy:fixed.
+// ---------------------------------------------------------------------------
+
+test('agentCapabilityDescriptor: strategy:range populates allowedTiers cheapest-first (reused rangeTiers, not declaration order)', () => {
+  // Declared opus-before-sonnet on purpose: if the implementation merely
+  // mapped declaration order it would report ['opus','sonnet'] — asserting
+  // ['sonnet','opus'] proves it actually reuses the SAME cost-sorted
+  // rangeTiers computation deriveAgentSpec uses for PhaseAgentSpec.allowedTiers.
+  const def = baseAgentDefFixture({ runtime: { sdk: 'claude', strategy: 'range', range: ['claude-opus-4-8', 'claude-sonnet-4-6'] } });
+  assert.deepEqual(agentCapabilityDescriptor(def).allowedTiers, ['sonnet', 'opus']);
+});
+
+test('agentCapabilityDescriptor: strategy:fixed leaves allowedTiers entirely absent (not just undefined)', () => {
+  const def = baseAgentDefFixture(); // strategy:fixed (default fixture)
+  assert.ok(!('allowedTiers' in agentCapabilityDescriptor(def)), 'allowedTiers key must be entirely absent for strategy:fixed');
+});
+
+test('agentCapabilityDescriptor: on the REAL creation-agent skill (widened to strategy:range), allowedTiers is [sonnet, opus]', () => {
+  // creation-agent declares `library: false` (an operator-dispatched
+  // interactive helper, not a Studio-roster/palette chip), so it is NOT in
+  // listAgentDefinitions' filtered roster — load it directly, the same way
+  // deriveAgentSpec/loadAgentDefinition resolve it in production.
+  const def = loadAgentDefinition(join(FORGE_ROOT, 'skills', 'creation-agent', 'SKILL.md'));
+  assert.deepEqual(agentCapabilityDescriptor(def).allowedTiers, ['sonnet', 'opus']);
 });
 
 // Real-roster guard: every in-tree studio agent computes without throwing, and

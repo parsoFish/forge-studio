@@ -132,7 +132,9 @@ import {
 } from '../orchestrator/studio/materials.ts';
 import { stageMaterials, MaterialsStagingError } from './materials-staging.ts';
 import type { AgentDefinition } from '../orchestrator/studio/types.ts';
-import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
+import { skillsDir, MAX_SKILL_ID_LENGTH, skillPathRelative } from '../orchestrator/skill-path.ts';
+import { deriveAgentSpec } from '../orchestrator/studio/derive.ts';
+import { resolveSessionModel, type ModelTier } from '../orchestrator/phase-agent.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
   guardedReadSessionStatus,
@@ -2611,6 +2613,50 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
   return isContainedProjectRepoPath(candidate, roots) ? null : candidate;
 }
 
+/**
+ * Wave-6 kickoff model-tier seam (ADR-043 §3 amendment, 2026-08-15) — the
+ * COMPLETE set of `/start`-family routes that accept an optional
+ * caller-supplied `modelTier`: `/api/architect/start`,
+ * `/api/instructions/start`, `/api/project-brain/start`,
+ * `/api/demo-builder/start`, `/api/studio/authoring/start`, and
+ * `POST /api/studio/kbs/:id/cleanup/start`. Each MUST validate it through
+ * this helper BEFORE any mkdir/status write, and persist the returned
+ * `tier` (when present) verbatim into the session's initial `status.json`
+ * as `modelTier` — every turn runner (the four legacy runners +
+ * `runInteractiveTurn`) reads it back from there and resolves it through
+ * `resolveSessionModel` on EVERY turn (ADR 024's SKILL.md-is-the-envelope
+ * contract, not just at kickoff).
+ *
+ * The allowed set is derived from the agent's OWN `SKILL.md` (via
+ * `deriveAgentSpec` + `resolveSessionModel`) — NEVER a client-supplied list
+ * — so a request naming a tier outside the skill's declared envelope
+ * (`strategy:range`'s `range:`, or the single tier a `strategy:fixed` skill
+ * pins) is rejected naming both the offending value and the real allowed
+ * set, exactly per `resolveSessionModel`'s own error contract. Never trust a
+ * wider set than the skill itself declares.
+ *
+ * `candidate` is `unknown`, not `string | undefined` — same untrusted-JSON
+ * discipline as `invalidProjectRepoPath` above (request bodies are `JSON.parse`
+ * output, so a non-string `modelTier` — `0`, `null`, `{}` — is a real shape
+ * that must fail closed with a 400 naming it, not a raw `TypeError`).
+ */
+function resolveKickoffModelTier(
+  agentSlug: string,
+  candidate: unknown,
+): { ok: true; tier: ModelTier | undefined } | { ok: false; error: string } {
+  if (candidate === undefined) return { ok: true, tier: undefined };
+  if (typeof candidate !== 'string') {
+    return { ok: false, error: `modelTier must be a string (got ${describeRejectedValue(candidate)})` };
+  }
+  try {
+    const spec = deriveAgentSpec(skillPathRelative(agentSlug));
+    resolveSessionModel(spec, candidate as ModelTier);
+    return { ok: true, tier: candidate as ModelTier };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** Cap on the rendered offending value interpolated into a 400 body. Two
  *  independent reasons, both measured: (1) `JSON.stringify` THROWS
  *  `RangeError: Maximum call stack size exceeded` on a deeply nested value —
@@ -2778,7 +2824,7 @@ async function handleArchitect(
   // session and kick off the first interview turn.
   if (method === 'POST' && url === '/api/architect/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string };
+      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project || !body.idea) {
         sendJson(res, 400, { error: 'project and idea are required' }, origin);
         return true;
@@ -2788,6 +2834,13 @@ async function handleArchitect(
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // architect SKILL.md envelope. See resolveKickoffModelTier's header.
+      const modelTierResult = resolveKickoffModelTier('architect', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
       const sessionId = newArchitectSessionId();
@@ -2808,6 +2861,7 @@ async function handleArchitect(
         round: 1,
         idea: body.idea,
         updated_at: new Date().toISOString(),
+        ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
       };
       // SEC-04 (bd forge-ebj) — route both leaf writes (`idea.md`, `status.json`)
       // through the guard (leaf included) rather than raw-appending onto the
@@ -3121,7 +3175,7 @@ async function handleInstructions(
   // notes; POST /api/instructions/brief then kicks off the agent.
   if (method === 'POST' && url === '/api/instructions/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string };
+      const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
@@ -3133,6 +3187,13 @@ async function handleInstructions(
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // instructions-creator SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('instructions-creator', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
       // forge-osz — the `projectRepoPath || join(projectsRoot, project)` fallback
@@ -3175,6 +3236,7 @@ async function handleInstructions(
         round: 1,
         prompt: '',
         updated_at: new Date().toISOString(),
+        ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
@@ -3539,6 +3601,12 @@ export function writeAuthoringSession(
   project: string,
   runId: string,
   prompt: string,
+  /** ADR-043 §3 amendment (wave-6 kickoff model-tier seam): already validated
+   *  by the caller (`resolveKickoffModelTier` against the real creation-agent
+   *  SKILL.md envelope) before this ever runs. Absent ⇒ unchanged default
+   *  behavior — the key is omitted from status.json entirely, not written
+   *  as `undefined`. */
+  modelTier?: ModelTier,
 ): { sessionDir: string } {
   if (!SAFE_ID_RE.test(sessionId)) {
     throw new Error(`invalid authoring sessionId: ${JSON.stringify(sessionId)}`);
@@ -3549,7 +3617,18 @@ export function writeAuthoringSession(
   mkdirSync(sessionDir);
   writeFileSync(
     join(sessionDir, 'status.json'),
-    JSON.stringify({ phase: 'analyzing', project, runId, prompt, startedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      {
+        phase: 'analyzing',
+        project,
+        runId,
+        prompt,
+        startedAt: new Date().toISOString(),
+        ...(modelTier ? { modelTier } : {}),
+      },
+      null,
+      2,
+    ),
     { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
   );
   writeFileSync(join(sessionDir, 'prompt.md'), `${prompt}\n`, { encoding: 'utf8', flag: 'wx' });
@@ -3936,13 +4015,20 @@ async function handleDemoBuilder(
   }
   if (method === 'POST' && url === '/api/project-brain/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; projectRepoPath?: string };
+      const body = (await readJson(req)) as { project?: string; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // project-brain-builder SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('project-brain-builder', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
       const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
@@ -3957,6 +4043,7 @@ async function handleDemoBuilder(
       if (guardedWriteSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, [body.project, '_project-brain', sessionId], {
         session_id: sessionId, project: body.project, project_repo_path: repoPath,
         phase: 'briefing', prompt: '', updated_at: new Date().toISOString(),
+        ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
@@ -4171,7 +4258,7 @@ async function handleDemoBuilder(
   // through the generic spine rather than a bespoke `*-runner.ts`.
   if (method === 'POST' && url === '/api/studio/authoring/start') {
     try {
-      const body = (await readJson(req)) as { project?: unknown; prompt?: unknown };
+      const body = (await readJson(req)) as { project?: unknown; prompt?: unknown; modelTier?: unknown };
       if (typeof body.project !== 'string') {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
@@ -4192,6 +4279,14 @@ async function handleDemoBuilder(
         return true;
       }
       const prompt = body.prompt;
+
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // creation-agent SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('creation-agent', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
+        return true;
+      }
 
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const realProjectDir = resolveContainedProjectDir(projectsRoot, project);
@@ -4214,7 +4309,7 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: `authoring session directory for project "${project}" resolves outside the project` }, origin);
         return true;
       }
-      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt);
+      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt, modelTierResult.tier);
 
       spawnAgentTurn(ctx.forgeRoot, 'authoring', project, sessionId);
       sendJson(
@@ -4269,6 +4364,16 @@ async function handleDemoBuilder(
         return true;
       }
 
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // brain-maintenance SKILL.md envelope (the kb-cleanup session's agent —
+      // see studio/session-kinds.yaml's `kb-cleanup` row).
+      const body = (await readJson(req)) as { modelTier?: unknown };
+      const modelTierResult = resolveKickoffModelTier('brain-maintenance', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
+        return true;
+      }
+
       const sessionProject = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
       const sessionId = newArchitectSessionId();
 
@@ -4296,6 +4401,7 @@ async function handleDemoBuilder(
           kb_id: kbId,
           kb_binding: kb.binding,
           findings,
+          ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
         },
       );
       if (written === null) {
@@ -4450,7 +4556,7 @@ async function handleDemoBuilder(
   // `mkdirSync`, or spawn.
   if (method === 'POST' && url === '/api/demo-builder/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string };
+      const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
@@ -4460,6 +4566,13 @@ async function handleDemoBuilder(
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // demo-builder SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('demo-builder', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
       // The CREATE case — `dirOutcome.dir` does not exist on disk yet;
@@ -4511,6 +4624,7 @@ async function handleDemoBuilder(
         iteration: 1,
         prompt: '',
         updated_at: new Date().toISOString(),
+        ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
       }) === null) {
         sendJson(res, 400, { error: 'invalid session path' }, origin);
         return true;
