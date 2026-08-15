@@ -344,7 +344,10 @@ function ViewStampStrip({ verdictDoc }: { verdictDoc: VerdictDoc | null }) {
 const PHASE_FOR_TYPE: Record<ArtifactKey, string> = {
   plan:       'Architect',
   workitems:  'Project Manager',
-  pr:         'Unifier',
+  // W6-SW-3 (sweep C8#4): the unifier phase was fully retired (R4-01-F4,
+  // PHASE_EXECUTOR_KINDS=[]) — pr-description.md is now produced by the
+  // demo-agent phase.
+  pr:         'Demo Agent',
   demo:       'Reviewer',
   verdict:    'Reviewer',
   reflection: 'Reflector',
@@ -923,6 +926,11 @@ function ArtifactPageInner() {
           decisionsResolved={decisionsResolved}
           label={gateLabel}
           hint={gateHint}
+          // W6-SW-3 (sweep C8#1): thread the run's project through so a
+          // plan-gate Approve/Send-back doesn't 400 (applyPlanVerdict
+          // requires it). Fall back to the architect session's project for
+          // a plan gate reached before a manifest/cycle exists.
+          project={run?.project ?? archSession?.project}
           onStateChange={(s) => setGateState(s)}
         />
       )}

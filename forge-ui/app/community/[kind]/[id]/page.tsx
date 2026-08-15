@@ -365,7 +365,15 @@ function InstallSection({
   installOutcome: CommunityInstallOutcome | null;
   onInstall: () => void;
 }) {
-  const canRoute = item.kind === 'mcp' || item.kind === 'tool' || item.vendored;
+  // W6-SW-3 (sweep C5#1): for a connection-kind item (mcp/tool), routing is
+  // only real when forge actually installs it (install.method === 'npm') —
+  // 'system-provided'/'external' are explicitly "forge does not install
+  // this" per the text rendered just above (mirrors /connections/[id]'s
+  // `installable` gate). Non-connection kinds (skill/hook) keep the
+  // pre-existing vendored-on-disk check.
+  const canRoute = isConnectionDetail(item)
+    ? item.install.method !== 'system-provided' && item.install.method !== 'external'
+    : item.vendored;
   const alreadyPresent = item.installState !== 'not-installed';
   const owningHref = owningHrefFor(item);
   const routedTo = routedToForKind(item.kind);
@@ -407,7 +415,13 @@ function InstallSection({
         </div>
       )}
 
-      {!canRoute && (
+      {!canRoute && isConnectionDetail(item) && (
+        <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
+          Nothing to install from this page — see the install method above.
+        </p>
+      )}
+
+      {!canRoute && !isConnectionDetail(item) && (
         <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
           This {item.kind} is a curated catalog reference with no vendored package on disk yet — install cannot
           be driven from this page.

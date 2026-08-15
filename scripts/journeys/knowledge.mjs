@@ -1189,7 +1189,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-create-kb-band-scope-commit',
         title: 'Band-scoped KB — real commit + brain write (R4-19 WI-1/WI-2)',
-        narration: 'Approving is real (a real POST flips phase to committing); the commit itself is the deterministic runCommitStep (R1-06, generalized to any kb_binding) — invoked directly here since the harness suppresses the detached spawn that would normally trigger it — so a genuine brain write lands: themes physically committed into brain/<kbId>, the KB\'s own graph gets a real index hub with real links off them, and forge brain lint stays clean with the new KB present. The accept affordance (bind-and-return) is offered, byte-identical to the project-scoped panel.',
+        narration: 'Approving is real (a real POST flips phase to committing); the commit itself is the deterministic runCommitStep (R1-06, generalized to any kb_binding) — invoked directly here since the harness suppresses the detached spawn that would normally trigger it — so a genuine brain write lands: themes physically committed into brain/<kbId>, the KB\'s own graph gets a real index hub with real links off them, and forge brain lint stays clean with the new KB present. The accept affordance (return-to-project, W6-SW-3 sweep C6#1 rename of bind-and-return — it only ever navigated) is offered, byte-identical to the project-scoped panel.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               console.log('\n[R4-19] Band-scoped KB — real commit + brain write');
@@ -1235,8 +1235,8 @@ export const journey = defineJourney({
 
               const committed = await page.waitForSelector('[data-section="brain-committed"]', { timeout: 12000 }).then(() => true).catch(() => false);
               check(committed, 'kb-band-commit: brain-committed section renders after the real commit (client poll picked up the disk write)');
-              check(await page.locator('[data-action="bind-and-return"]').count() > 0, 'kb-band-commit: bind-and-return offered — same accept affordance as the project-scoped panel (SessionProjectBrainPanel is shared, byte-identical)');
-              await frame(page, 'kb-band-commit-0-committed', 'R4-19 — the band-scoped KB, real commit landed; bind-and-return offered');
+              check(await page.locator('[data-action="return-to-project"]').count() > 0, 'kb-band-commit: return-to-project offered — same accept affordance as the project-scoped panel (SessionProjectBrainPanel is shared, byte-identical)');
+              await frame(page, 'kb-band-commit-0-committed', 'R4-19 — the band-scoped KB, real commit landed; return-to-project offered');
 
               // Real brain write, on disk.
               const themesDir = join(SCRATCH_KB_BAND_DIR, 'themes');

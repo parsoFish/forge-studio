@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { rerunArchitectSession, type ArchitectSessionSummary, type EventLogEntry } from '@/lib/bridge-client';
 import { StageHex } from '@/components/StageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
-import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
+import { ActivityLog } from '@/components/studio/ActivityLog';
 import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
 
 // ---------------------------------------------------------------------------
@@ -17,6 +17,12 @@ import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/arch
 // rejected terminal states. Every `data-action`/`data-section`/`data-component`
 // name below is byte-identical to the retired page's — the journeys that
 // drive it by name must not need to change when this panel replaces it.
+//
+// W6-B7: the working-phase activity log is now the shared full-width bottom
+// `ActivityLog` drawer (`components/studio/ActivityLog.tsx`), replacing the
+// retired `ArchitectActivityLog` inline panel — `data-section="architect-
+// activity"` is gone, superseded by the drawer's own `data-component=
+// "activity-drawer"` contract (`docs/forge-ui-dom-and-harness.md`).
 // ---------------------------------------------------------------------------
 
 export function SessionArchitectPanel({
@@ -54,14 +60,21 @@ export function SessionArchitectPanel({
       <div style={{ flex: 1, minWidth: 0 }}>
         {stale && <StuckWarning session={session} />}
 
-        {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
-          <ArchitectQuestionForm
-            project={session.project}
-            sessionId={session.sessionId}
-            round={session.round}
-            questions={session.questions}
-          />
-        ) : null}
+        {session.phase === 'awaiting-answers' && (
+          session.questions && session.questions.length > 0 ? (
+            <ArchitectQuestionForm
+              project={session.project}
+              sessionId={session.sessionId}
+              round={session.round}
+              questions={session.questions}
+            />
+          ) : (
+            // W6-SW-3 (sweep C6#3): questions can be empty/undefined while
+            // phase is still 'awaiting-answers' — every other phase branch
+            // renders explicit Status() text; this one used to render nothing.
+            <Status label="Waiting on the next question…" />
+          )
+        )}
 
         {(session.phase === 'interviewing' || session.phase === 'exploring' || session.phase === 'drafting' || session.phase === 'finalizing') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -76,7 +89,7 @@ export function SessionArchitectPanel({
                   : `The architect is thinking… (round ${session.round})`
               }
             />
-            <ArchitectActivityLog events={events} />
+            <ActivityLog label="architect activity" events={events} phaseLabel={session.phase} phaseActive={active} />
           </div>
         )}
 

@@ -350,7 +350,7 @@ export const RUN_ORDER = [
   ['flows-onboard', 'flows-onboard-gate'],
 
   ['roadmap', 'roadmap-tab'],
-  ['roadmap', 'roadmap-collapse-expand-all'],
+  ['roadmap', 'roadmap-canvas-controls'],
   ['roadmap', 'roadmap-plan-trigger'],
   ['roadmap', 'roadmap-start-development'],
   ['roadmap', 'roadmap-recovery'],

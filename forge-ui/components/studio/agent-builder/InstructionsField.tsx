@@ -18,11 +18,20 @@ type Props = {
   value: string;
   isDraft: boolean;
   pending: boolean;
+  /**
+   * W6-SW-3 (sweep C7#1): the instructions-draft route composes from the
+   * saved agent (it 404s on an unknown slug), so "Generate draft" is
+   * guaranteed to fail on a brand-new, not-yet-saved agent. Threaded from
+   * the page's `state.slug` — false disables the button instead of letting
+   * it fail every click.
+   */
+  canGenerate: boolean;
   onGenerate: () => void;
   onChange: (text: string) => void;
 };
 
-export function InstructionsField({ value, isDraft, pending, onGenerate, onChange }: Props) {
+export function InstructionsField({ value, isDraft, pending, canGenerate, onGenerate, onChange }: Props) {
+  const disabled = pending || !canGenerate;
   return (
     <div
       className="field-group"
@@ -37,9 +46,13 @@ export function InstructionsField({ value, isDraft, pending, onGenerate, onChang
           className="btn btn-ghost"
           data-action="generate-instructions"
           onClick={onGenerate}
-          disabled={pending}
+          disabled={disabled}
           style={{ fontSize: 11, padding: '2px 8px' }}
-          title="Compose a deterministic instructions draft from the current (possibly unsaved) purpose, composition, interactivity and brain-access fields."
+          title={
+            !canGenerate
+              ? 'Save the agent once before generating an instructions draft.'
+              : 'Compose a deterministic instructions draft from the current (possibly unsaved) purpose, composition, interactivity and brain-access fields.'
+          }
         >
           {pending ? 'Generating…' : 'Generate draft'}
         </button>

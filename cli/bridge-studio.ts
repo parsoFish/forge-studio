@@ -1031,6 +1031,18 @@ export type RoadmapInitiative = {
    * it is otherwise a normal, readable queue entry.
    */
   workItems?: RoadmapWorkItem[];
+  /**
+   * W6-RV-2: the real cycle-completion instant (ISO), for the roadmap
+   * canvas's completion-time X axis — `Run.completedAt`
+   * (orchestrator/run-model.ts) threaded straight through via the SAME
+   * memoized derivation `GET /api/runs` already uses (`cachedListRuns`,
+   * cli/run-list-cache.ts) rather than a second events.jsonl parser. Absent
+   * (never fabricated) whenever the run carries no derivable completion —
+   * still-open initiatives, and the rare cycle dir with neither a cycle-end
+   * event nor ANY non-reflection event at all. An absent completedAt places
+   * the card in the canvas's projected zone with an honest "no date" marker.
+   */
+  completedAt?: string;
 };
 
 export type ProjectRoadmap = {
@@ -1135,9 +1147,29 @@ function deriveInitiativeTitle(initId: string, manifestTitle: string | undefined
   return initId;
 }
 
+/**
+ * W6-RV-2: initiativeId → real cycle-completion instant, sourced from the
+ * SAME memoized run derivation `GET /api/runs` already uses
+ * (`cachedListRuns`, cli/run-list-cache.ts) — reusing it here means the
+ * roadmap's completedAt column costs nothing beyond what that route already
+ * pays (a warm per-manifest cache hits for free; a cold one pays the exact
+ * same events.jsonl parse `aggregateRun` performs either way), rather than a
+ * second bespoke events reader. `cachedListRuns` walks the FULL forge-wide
+ * queue tree (it has no project filter), so this is a superset scan — cheap
+ * because it's the memo's job, not a second parse of anything roadmap-local.
+ */
+function completedAtByInitiative(forgeRoot: string): Map<string, string> {
+  const byInitiative = new Map<string, string>();
+  for (const run of cachedListRuns(forgeRoot, Date.now())) {
+    if (run.completedAt !== undefined) byInitiative.set(run.initiativeId, run.completedAt);
+  }
+  return byInitiative;
+}
+
 function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const entries = scanProjectManifests(projectId, forgeRoot);
+  const completedAtById = completedAtByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
     const title = deriveInitiativeTitle(initId, manifest.title, manifest.body);
@@ -1146,6 +1178,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
     const workItems = items.length > 0 ? items : undefined;
 
     const blockedBy = checkInitiativeDeps(file, queuePaths);
+    const completedAt = completedAtById.get(initId);
 
     return {
       initiativeId: initId,
@@ -1155,6 +1188,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       ready: blockedBy.length === 0,
       blockedBy,
       ...(workItems !== undefined ? { workItems } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}),
     };
   });
 
