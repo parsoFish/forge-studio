@@ -71,7 +71,6 @@ import {
   handleStudioKbRoutes,
   loadKbDescriptors,
   computeAgentCleanupFindings,
-  approveKbCleanup,
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
@@ -79,7 +78,7 @@ import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason, isTerminalPhase } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, isTerminalPhase } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -4687,92 +4686,6 @@ async function handleDemoBuilder(
         { ok: true, sessionId, project: sessionProject, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/kbs/:id/cleanup/start', sessionId) },
         origin,
       );
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // POST /api/studio/kbs/:id/cleanup/apply {project, sessionId} — R4-19-F2,
-  // the kb-cleanup session's approval-gated apply route. The gate itself
-  // (`awaiting-approval` carries no `next` in the turnSpec table,
-  // studio/session-kinds.yaml) means the ORDINARY turn-dispatch path can
-  // never write `phase: 'applied'` — this route is the ONLY writer, and it
-  // enforces the SAME gate independently by checking `phase ===
-  // 'awaiting-approval'` itself before doing anything real-acting (409
-  // otherwise — belt-and-suspenders on top of the turn spine's own refusal,
-  // never trusting a single enforcement point for an approval boundary).
-  //
-  // SECURITY INVARIANT (do not regress — AT-13): the KB to drain is read
-  // from the session's OWN recorded `kb_id` (status.json), never the URL's
-  // `:id` segment — the session is the authoritative record of which KB its
-  // approved plan is for; trusting the URL instead would let a caller with
-  // a legitimate {project, sessionId} point the drain at an unrelated KB by
-  // varying the path alone. The `:id` == `status.kb_id` equality check
-  // below (DEFECT B) makes the two identical by construction from this
-  // point on — that does NOT make it safe to swap the drain's source to
-  // `:id`; see the comment at the actual drain call site.
-  const kbCleanupApplyMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/apply$/);
-  if (method === 'POST' && kbCleanupApplyMatch) {
-    try {
-      // DEFECT B (adversarial-review fix): the URL's ":id" was parsed and
-      // never referenced anywhere in this handler — ANY value, including a
-      // bogus or traversal-shaped one, reached the session lookup below and
-      // silently 200'd. Validated FIRST — a cheap format check (SLUG_RE, no
-      // I/O), before the request body is even read — mirroring the sibling
-      // /cleanup/start route's own first check, ~40 lines above.
-      const urlKbId = decodeURIComponent(kbCleanupApplyMatch[1]);
-      if (!SLUG_RE.test(urlKbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
-
-      const body = (await readJson(req)) as { project?: unknown; sessionId?: unknown };
-      if (typeof body.project !== 'string' || typeof body.sessionId !== 'string') {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      // DEFECT B: `project`/`sessionId` gain the SAME charset+length
-      // validation cli/bridge-studio-sessions.ts's stated convention
-      // applies to its own session-shell route — BOTH checked before any fs
-      // call. Reused verbatim (not re-implemented) via that file's own
-      // exported helpers, so the KB-seeding dot-anchor carve-out
-      // (`.kb-<id>` project values — every non-project-bound kb-cleanup
-      // session in this file anchors under one) stays defined in exactly
-      // one place.
-      const projectReason = invalidProjectReason(body.project);
-      if (projectReason !== null) {
-        sendJson(res, 400, { error: projectReason }, origin);
-        return true;
-      }
-      const sessionIdReason = invalidSessionIdReason(body.sessionId);
-      if (sessionIdReason !== null) {
-        sendJson(res, 400, { error: sessionIdReason }, origin);
-        return true;
-      }
-      const { project, sessionId } = body;
-
-      // W6-B4 adversarial-review fix: the ENTIRE choreography below (read
-      // status -> check phase/kb_id -> claim phase:'applying' -> drain ->
-      // write phase:'applied') used to live inline here, duplicated
-      // byte-for-byte in cli/bridge-studio-affordances.ts's generic sibling
-      // — a check-then-await-then-write race, live-reproduced (two
-      // concurrent approves ran two independent runBrainConsolidateNow
-      // drains). Both routes now delegate to the ONE shared, atomically-
-      // correct `approveKbCleanup` (cli/bridge-studio-kbs.ts) — the
-      // duplicated choreography is deleted, not merely mirrored. `urlKbId`
-      // rides as `expectedKbId`, preserving DEFECT B's URL/status.kb_id
-      // identity check; the SECURITY INVARIANT it protects (the drain's
-      // sole source of truth is `status.kb_id`, never the URL) is enforced
-      // inside `approveKbCleanup` itself now.
-      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const dirSegs = [project, '_kb-cleanup', sessionId];
-      const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, { expectedKbId: urlKbId });
-      if (!outcome.ok) {
-        sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
-        return true;
-      }
-      sendJson(res, 200, { ok: true, runId: outcome.runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

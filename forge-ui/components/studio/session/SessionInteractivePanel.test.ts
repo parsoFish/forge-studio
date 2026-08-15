@@ -303,9 +303,20 @@ test('a phase yielding multiple affordances (question-form + next-turn) renders 
 // 'file-package'`, never by `kind === 'authoring'` (the panel is generic
 // over every session kind — a future kind whose artifact happens to be a
 // file-package gets the SAME id field, for free). `handleAuthoringVerdict`
-// (cli/bridge-studio-affordances.ts) requires `body.kind` ('skill'|'hook')
-// and a non-empty `body.id` — this is the ONLY affordance-kind shape whose
-// verdict submit needs more than `{verdict}`.
+// (cli/bridge-studio-affordances.ts) needs a non-empty `body.id` — this is
+// the ONLY affordance-kind shape whose verdict submit needs more than
+// `{verdict}`. `kind` is NEVER sent (W6-B9): the write route derives it
+// server-side from the real staged files.
+//
+// W6-B9 (reviewer finding on W6-B8): the Approve gate is now driven by
+// `affordance.meta.requires` (server-derived, wire data) — NOT by a
+// client-side "file-package implies an id is needed" assumption. Two
+// verdict fixtures below make this explicit: `APPROVE_ONLY_VERDICT` (no
+// `requires`, kb-cleanup's real shape) vs
+// `APPROVE_ONLY_VERDICT_REQUIRES_ID` (authoring's real shape) — the SAME
+// `file-package` artifact under the FORMER would leave Approve enabled with
+// no id typed (nothing is required), proving the gate reads the wire
+// field, never the artifact kind directly.
 // ---------------------------------------------------------------------------
 
 function filePackage(files: { path: string; body: string }[]): SessionArtifactPayload {
@@ -319,11 +330,18 @@ const APPROVE_ONLY_VERDICT: SessionAffordance = {
   meta: { verdicts: ['approve'] },
 };
 
-test('a file-package artifact with a SKILL.md renders the package-id field labelled for a skill, and Approve stays disabled until an id is entered', () => {
+const APPROVE_ONLY_VERDICT_REQUIRES_ID: SessionAffordance = {
+  id: 'awaiting-review-verdict',
+  kind: 'verdict',
+  phase: 'awaiting-review',
+  meta: { verdicts: ['approve'], requires: ['id'] },
+};
+
+test('a file-package artifact with a SKILL.md renders the package-id field labelled for a skill, and Approve stays disabled (meta.requires:["id"]) until an id is entered', () => {
   const html = render({
     kind: 'authoring',
     phase: 'awaiting-review',
-    affordances: [APPROVE_ONLY_VERDICT],
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
     artifact: filePackage([{ path: 'SKILL.md', body: '# A skill' }]),
   });
   expect(html).toContain('data-field="session-package-id"');
@@ -332,11 +350,22 @@ test('a file-package artifact with a SKILL.md renders the package-id field label
   expect(tag).toContain('disabled=""');
 });
 
+test('the SAME file-package artifact under a verdict affordance with NO meta.requires leaves Approve ENABLED with no id typed — the gate reads the wire field, never a client-side "file-package needs an id" assumption', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    affordances: [APPROVE_ONLY_VERDICT],
+    artifact: filePackage([{ path: 'SKILL.md', body: '# A skill' }]),
+  });
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).not.toContain('disabled=""');
+});
+
 test('a file-package artifact with a hook.yaml renders the package-id field labelled for a hook (never a kind==="authoring" compare)', () => {
   const html = render({
     kind: 'not-actually-authoring',
     phase: 'awaiting-review',
-    affordances: [APPROVE_ONLY_VERDICT],
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
     artifact: filePackage([{ path: 'hook.yaml', body: 'on: pre-commit' }]),
   });
   expect(html).toContain('data-field="session-package-id"');
@@ -347,7 +376,7 @@ test('a file-package artifact with NEITHER SKILL.md nor hook.yaml yet (shape "un
   const html = render({
     kind: 'authoring',
     phase: 'awaiting-review',
-    affordances: [APPROVE_ONLY_VERDICT],
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
     artifact: filePackage([{ path: 'README.md', body: 'not a package marker file' }]),
   });
   expect(html).toContain('data-field="session-package-id"');

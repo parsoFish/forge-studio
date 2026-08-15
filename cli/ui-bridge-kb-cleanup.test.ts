@@ -1,15 +1,22 @@
 /**
- * Acceptance tests for the kb-cleanup session's two new bridge routes
- * (R4-19-F2 — the `kb-cleanup` interactive session kind, ADR-043 §1/§3):
+ * Acceptance tests for the kb-cleanup session's start route (R4-19-F2 — the
+ * `kb-cleanup` interactive session kind, ADR-043 §1/§3):
  *
  *   POST /api/studio/kbs/:id/cleanup/start
- *   POST /api/studio/kbs/:id/cleanup/apply {project, sessionId}
  *
- * Neither route exists yet — this file is RED at branch base (every
- * assertion below fails against a 404 fallthrough on the un-added routes;
- * `startBridge` itself exists today, so this is NOT a module-not-found red
- * — mirrors `cli/ui-bridge-onboarding-start.test.ts`'s own header note for
- * the identical situation).
+ * W6-B9 (reviewer finding on W6-B8): the sibling apply route this file used
+ * to cover, `POST /api/studio/kbs/:id/cleanup/apply`, is DELETED —
+ * kb-cleanup migrated onto the generic SessionInteractivePanel (W6-B8),
+ * whose approve affordance goes through the GENERIC write route (`POST
+ * /api/studio/sessions/kb-cleanup/:sid/:affordance`, cli/bridge-studio-
+ * affordances.ts), which already delegates to the SAME `approveKbCleanup`
+ * helper (cli/bridge-studio-kbs.ts) this bespoke route only ever wrapped —
+ * once its one caller (`SessionCleanupPanel.tsx`) was deleted, the bespoke
+ * route had no production caller left, and forge does not carry dual paths.
+ * The AT-6..AT-15 tests that used to pin its behaviour (phase gate, DEFECT
+ * A/B regressions) are deleted with it — `approveKbCleanup` itself keeps its
+ * own direct coverage in `cli/bridge-studio-kbs.test.ts`, and the generic
+ * route's own dispatch is covered by `cli/bridge-studio-affordances.test.ts`.
  *
  * Mirrors `POST /api/studio/authoring/start` (`cli/ui-bridge-authoring-
  * start.test.ts`) and the KB-create hand-off (`cli/bridge-studio-kbs.ts`
@@ -19,19 +26,13 @@
  * (`<projectsRoot>/.kb-<id>/`) so `discoverProjects` never surfaces a
  * phantom project for it.
  *
- * DESIGN CALLS this file makes explicit (task brief left them open —
- * report to the implementer, not silently resolved):
+ * DESIGN CALL this file makes explicit:
  *   - The start route's `findings` are asserted to be a real, non-fabricated
  *     array reflecting an ACTUAL on-disk lint defect (a theme file missing a
  *     required frontmatter field) — never a hardcoded shape. The EXACT
  *     scoping mechanism (`runBrainLint`+`scopeFindingsToKb` vs.
  *     `lintThemeFiles`+`listOwnThemeFiles` vs. something new) is an
  *     implementation choice this file does not dictate.
- *   - The apply route's exact request/response shape beyond `{project,
- *     sessionId}` -> `{ok:true}` and the phase transition is not over-
- *     specified; classification of its dry-bridge row is pinned separately
- *     in `cli/dry-bridge-coverage.test.ts` (deliberately without hardcoding
- *     WHICH classification — see that file's own comment).
  */
 
 import { test, before, after } from 'node:test';
@@ -182,10 +183,6 @@ function rawPost(rawPath: string, bodyText = '{}'): Promise<{ status: number; te
     req.on('error', reject);
     req.end(bodyText);
   });
-}
-
-function apply(kbId: string, body: unknown): Promise<Response> {
-  return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
 }
 
 type CleanupStatus = {
@@ -378,403 +375,3 @@ test('AT-5: findings reflect a REAL on-disk lint defect for this KB — not a fa
   assert.match(serialized, /frontmatter|description/i, `expected a finding describing the missing-frontmatter-field defect, got: ${serialized}`);
 });
 
-// ---------------------------------------------------------------------------
-// POST /api/studio/kbs/:id/cleanup/apply
-// ---------------------------------------------------------------------------
-
-/** Plants a kb-cleanup session's status.json DIRECTLY on disk (never through
- *  the start route) at the exact shape the start route is expected to
- *  produce — keeps the apply-route tests below independent of whether the
- *  start route itself is implemented correctly yet. */
-function plantCleanupSession(sessionProject: string, sessionId: string, phase: string, kbId: string): string {
-  const sessionDir = join(forgeRoot, 'projects', sessionProject, '_kb-cleanup', sessionId);
-  mkdirSync(sessionDir, { recursive: true });
-  const status: CleanupStatus = {
-    session_id: sessionId,
-    project: sessionProject,
-    phase,
-    kb_id: kbId,
-    kb_binding: { kind: 'unique' },
-    findings: [],
-    updated_at: new Date().toISOString(),
-  };
-  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
-  return sessionDir;
-}
-
-// Kills: an apply route that applies the plan regardless of the session's
-// current phase — the whole point of the approval gate (item #11 in the
-// turn-spine suite) is worthless if the APPLY route itself doesn't also
-// enforce it.
-test('AT-6: apply refuses with 409 when the session\'s phase is NOT exactly awaiting-approval (e.g. still "drafting")', async () => {
-  writeKb('apply-wrongphase-kb', '{ kind: unique }');
-  const sessionId = 'apply-wrongphase-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-wrongphase-kb`;
-  const sessionDir = plantCleanupSession(sessionProject, sessionId, 'drafting', 'apply-wrongphase-kb');
-  // Precondition, asserted before reading any verdict.
-  assert.equal(JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase, 'drafting', 'arrange: seeded status must start in drafting');
-
-  const res = await apply('apply-wrongphase-kb', { project: sessionProject, sessionId });
-  assert.equal(res.status, 409, `expected 409 for a session not at awaiting-approval, got ${res.status}: ${await res.text()}`);
-  assert.equal(
-    JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase,
-    'drafting',
-    'a refused apply must leave status.json byte-identical in its load-bearing field — phase must NOT have moved',
-  );
-});
-
-// Kills: an apply route with no real "session not found" handling (e.g. a
-// 500 crash, or worse, a 200 that silently no-ops).
-test('AT-7: apply against an unknown sessionId -> 404 (or another explicit non-2xx/non-409), never a silent 200', async () => {
-  writeKb('apply-unknown-kb', '{ kind: unique }');
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-unknown-kb`;
-  const res = await apply('apply-unknown-kb', { project: sessionProject, sessionId: 'no-such-session-at-all' });
-  assert.notEqual(res.status, 200, 'applying against a session that was never started must never silently 200');
-});
-
-// Kills: an apply route that never actually flips the phase to "applied" on
-// success (e.g. it drains the deterministic fixes but forgets the terminal
-// status write), leaving the session stuck at awaiting-approval forever.
-test('AT-8: apply from awaiting-approval succeeds and writes phase:applied to status.json on disk', async () => {
-  writeKb('apply-success-kb', '{ kind: unique }');
-  const sessionId = 'apply-success-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-success-kb`;
-  const sessionDir = plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', 'apply-success-kb');
-  // Precondition, asserted before reading any verdict.
-  assert.equal(JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase, 'awaiting-approval', 'arrange: seeded status must start in awaiting-approval');
-
-  const res = await apply('apply-success-kb', { project: sessionProject, sessionId });
-  const text = await res.text();
-  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
-  assert.equal(
-    JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase,
-    'applied',
-    'status.json on disk must reflect phase:applied after a successful apply — the ONLY route allowed to write this phase',
-  );
-});
-
-// ---------------------------------------------------------------------------
-// POST /api/studio/kbs/:id/cleanup/apply — DEFECT A: the apply route calls
-// `runBrainConsolidateNow` DIRECTLY (cli/ui-bridge.ts ~:4324) instead of via
-// `enqueueConsolidate` (cli/bridge-studio-kbs.ts), the per-kbId serialization
-// queue every OTHER caller of that function goes through (the pre-existing
-// `POST /api/studio/kbs/:id/maintenance` op=consolidate route,
-// cli/bridge-studio-kbs.ts:1587). Nothing dedups two dispatches against the
-// SAME kbId, so an apply can race an overlapping apply, or the existing
-// Consolidate button, against the same on-disk category-index file.
-// ---------------------------------------------------------------------------
-
-function maintenanceConsolidate(kbId: string): Promise<Response> {
-  return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/maintenance`, {
-    method: 'POST',
-    headers: CSRF,
-    body: JSON.stringify({ op: 'consolidate' }),
-  });
-}
-
-/**
- * DEFECT A proof note — read before touching AT-9/AT-10 (report this
- * honestly, do not weaken):
- *
- * `runBrainConsolidateNow`'s own body (cli/bridge-studio-kbs.ts:488-556) has
- * NO internal `await` on the code path this whole suite runs under
- * (FORGE_DRY_BRIDGE=1 forces `noSpawn`, skipping the ONE `await
- * runBrainFixTurn(...)` in the function — the real SDK turn no test in this
- * campaign may invoke). That means, in THIS CI-safe environment, a single
- * call to `runBrainConsolidateNow` runs its entire critical section
- * synchronously to completion before yielding — so two concurrent calls to
- * it literally CANNOT be observed interleaving at the statement level
- * regardless of whether the queue is used: Node's single-threaded event loop
- * already guarantees no two synchronous blocks overlap. A test that fires
- * two overlapping calls and checks "did the writes interleave" would pass
- * trivially either way, which is exactly the decorative shape this file's
- * own tests are written to reject — so that shape is NOT what AT-9/AT-10
- * assert.
- *
- * The queue DOES introduce one real, controllable async boundary outside
- * `runBrainConsolidateNow` itself: `enqueueConsolidate`'s `deferToNextTick()`
- * (`CONSOLIDATE_DISPATCH_DEFER_MS` = 50ms, cli/bridge-studio-kbs.ts, private —
- * not re-declared here) always elapses before a queued run's `run()`
- * executes, including for the FIRST run enqueued against an empty queue.
- * That defer is the seam these two tests actually observe:
- *
- *   AT-9  (cross-route, BEHAVIOURAL, existence-based — the PRIMARY proof): a
- *         `maintenance` op=consolidate dispatch (which DOES go through
- *         `enqueueConsolidate`) is fired first. If `apply` shares the same
- *         queue, apply's own run cannot even START until the maintenance
- *         run's queued 50ms defer AND its run have both finished — so by the
- *         time apply's response returns (apply's own route AWAITS its run
- *         inline before responding — see AT-8), the maintenance run's
- *         terminal event must already exist on disk. The CURRENT bug (a
- *         direct `runBrainConsolidateNow` call, bypassing the queue) lets
- *         apply's own zero-defer run race ahead and complete before the
- *         still-deferred maintenance run has even started — an observable,
- *         non-flaky (existence, not a timing threshold) difference.
- *   AT-10 (same-route, TIMING-based fallback, explicitly labelled as such):
- *         two applies against the SAME kbId, fired concurrently. If BOTH
- *         correctly route through the shared per-kbId queue, the queue's own
- *         50ms defer means EVERY apply against a busy kbId takes >= ~50ms
- *         end to end (never near-zero), and the SECOND one queued must wait
- *         for the FIRST's full defer+run before its own defer even starts —
- *         driving its total latency to roughly double. This is the fallback
- *         the task brief allows when a real interleave cannot be forced:
- *         per the note above, two same-shaped concurrent calls have no
- *         non-timing signal available in this CI-safe mode. Generous
- *         margins (well inside the 50ms/100ms floors) are used specifically
- *         to avoid CI flakiness while staying far above the near-zero
- *         latency the current, unqueued implementation actually produces.
- */
-
-// Kills: an apply route that calls `runBrainConsolidateNow` directly instead
-// of `enqueueConsolidate` — proves the CROSS-ROUTE half of the hazard (an
-// apply racing the existing Consolidate button against the same kbId).
-test('AT-9 (DEFECT A, cross-route serialization, BEHAVIOURAL): a maintenance op=consolidate dispatched FIRST against a kbId must have its run complete before a LATER apply against the SAME kbId is allowed to complete its own — kills an apply route that calls runBrainConsolidateNow directly and races ahead of an already-queued dispatch', async () => {
-  const kbId = 'serialize-cross-kb';
-  writeKb(kbId, '{ kind: unique }');
-  const sessionId = 'serialize-cross-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', kbId);
-
-  const maintRes = await maintenanceConsolidate(kbId);
-  const maintText = await maintRes.text();
-  assert.equal(maintRes.status, 200, `arrange: maintenance op=consolidate dispatch must 200, got ${maintRes.status}: ${maintText}`);
-  const maintBody = JSON.parse(maintText) as { runId: string };
-
-  // Real (not artificial-for-timing) gap: only large enough that the two
-  // runIds (`${kbId}-consolidate-${Date.now().toString(36)}`, millisecond
-  // resolution) cannot collide on the same millisecond — a collision would
-  // make both routes append to the SAME events.jsonl file, destroying the
-  // two-distinct-runId signal this test reads. NOT load-bearing for the
-  // ordering assertion itself, which rests on the 50ms queue defer (~10x
-  // this gap).
-  await new Promise((r) => setTimeout(r, 5));
-
-  const applyRes = await apply(kbId, { project: sessionProject, sessionId });
-  const applyText = await applyRes.text();
-  assert.equal(applyRes.status, 200, `arrange: apply must 200, got ${applyRes.status}: ${applyText}`);
-  const applyBody = JSON.parse(applyText) as { runId: string };
-  assert.notEqual(applyBody.runId, maintBody.runId, 'arrange: the two dispatches must land distinct runIds (see the gap comment above)');
-
-  const maintTerminal = join(forgeRoot, '_logs', `_brainfix-${maintBody.runId}`, 'events.jsonl');
-  const applyTerminal = join(forgeRoot, '_logs', `_brainfix-${applyBody.runId}`, 'events.jsonl');
-  assert.ok(existsSync(applyTerminal), 'sanity: apply\'s own route AWAITS its consolidate run inline before responding (cli/ui-bridge.ts\'s apply handler, see AT-8), so its own terminal event must already exist the moment this response is received');
-  assert.ok(
-    existsSync(maintTerminal),
-    'DEFECT A: apply\'s response arrived before the EARLIER-dispatched maintenance consolidate run\'s terminal event was written to disk. The maintenance run only reaches its critical section after enqueueConsolidate\'s own 50ms deferToNextTick (cli/bridge-studio-kbs.ts) — for apply\'s run to have already finished by now, it must have called runBrainConsolidateNow DIRECTLY (cli/ui-bridge.ts ~:4324), bypassing the shared per-kbId queue and racing ahead of the already-queued maintenance dispatch instead of serializing behind it',
-  );
-});
-
-// Kills: an apply route with no queue at all for two overlapping applies
-// against the SAME kbId. TIMING-based fallback — see the DEFECT A proof note
-// above for why a non-timing signal is not available here.
-test('AT-10 (DEFECT A, same-route serialization, TIMING-based fallback — see the proof note above): two applies against the SAME kbId, fired concurrently, must both incur the shared queue\'s dispatch defer and must NOT both complete at near-zero latency — kills an apply route that calls runBrainConsolidateNow directly with no queue at all', async () => {
-  const kbId = 'serialize-two-apply-kb';
-  writeKb(kbId, '{ kind: unique }');
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  const sessionA = 'serialize-two-apply-A';
-  const sessionB = 'serialize-two-apply-B';
-  plantCleanupSession(sessionProject, sessionA, 'awaiting-approval', kbId);
-  plantCleanupSession(sessionProject, sessionB, 'awaiting-approval', kbId);
-
-  async function timedApply(sessionId: string): Promise<{ status: number; elapsedMs: number; text: string }> {
-    const t0 = Date.now();
-    const res = await apply(kbId, { project: sessionProject, sessionId });
-    const text = await res.text();
-    return { status: res.status, elapsedMs: Date.now() - t0, text };
-  }
-
-  const [a, b] = await Promise.all([timedApply(sessionA), timedApply(sessionB)]);
-  assert.equal(a.status, 200, `arrange: apply A must 200, got ${a.status}: ${a.text}`);
-  assert.equal(b.status, 200, `arrange: apply B must 200, got ${b.status}: ${b.text}`);
-
-  const faster = Math.min(a.elapsedMs, b.elapsedMs);
-  const slower = Math.max(a.elapsedMs, b.elapsedMs);
-
-  // Margins: enqueueConsolidate's own deferToNextTick is 50ms
-  // (CONSOLIDATE_DISPATCH_DEFER_MS, cli/bridge-studio-kbs.ts — private, not
-  // re-declared here). A properly-queued apply cannot finish faster than one
-  // full defer; a SECOND apply queued behind the first cannot finish faster
-  // than two. Thresholds are set well inside those floors (30ms / 70ms) to
-  // absorb setTimeout/scheduling jitter without weakening the signal: the
-  // CURRENT buggy code (direct, unqueued calls) finishes BOTH applies in low
-  // single-digit milliseconds, nowhere close to either floor.
-  assert.ok(faster >= 30, `DEFECT A: the FASTER of the two concurrent applies against the same kbId completed in ${faster}ms — too fast to have gone through the shared queue's dispatch defer at all, proving at least one apply call bypasses enqueueConsolidate entirely`);
-  assert.ok(slower >= 70, `DEFECT A: the SLOWER of the two concurrent applies against the same kbId completed in ${slower}ms — too fast to have been queued BEHIND the faster one's own full defer+run, proving the two applies are not chained through the same per-kbId queue (or reflect a "defer without real chaining" partial fix)`);
-});
-
-// ---------------------------------------------------------------------------
-// POST /api/studio/kbs/:id/cleanup/apply — DEFECT B: the apply route's ":id"
-// URL segment is parsed (`kbCleanupApplyMatch[1]`) and never referenced
-// anywhere in the handler (cli/ui-bridge.ts ~:4287) — live-verified: ANY
-// value there, including a totally bogus non-existent kb id, currently 200s
-// and drains the session's real kb_id. Separately, `body.project` and
-// `body.sessionId` are checked only for `typeof === 'string' && length > 0`
-// — no charset check, no length cap, unlike the stated convention in
-// cli/bridge-studio-sessions.ts ("BOTH are validated (length cap + charset)
-// BEFORE any fs call"). Containment still holds via resolveGuardedPath in
-// both cases (defense-in-depth, not a live escape) — these tests pin the
-// EARLY, EXPLICIT rejection this file's own conventions call for, not an
-// escape.
-// ---------------------------------------------------------------------------
-
-// Kills: an apply route that never validates its own ":id" URL segment at
-// all (the CURRENT shape). Mirrors AT-1's raw-wire technique (see rawPost's
-// own doc comment) for the traversal-shaped probe — fetch() cannot deliver a
-// literal ".." segment to the real route at all. Status code pinned to 400
-// "invalid kb id" specifically: this file's OWN sibling route on the
-// identical URL prefix (`/api/studio/kbs/:id/cleanup/start`, ~40 lines above
-// in this same file) checks `!SLUG_RE.test(kbId)` -> 400 "invalid kb id" as
-// its FIRST check, before any KB lookup — the natural, directly-precedented
-// shape for this route's own (currently missing) equivalent check. An empty
-// ":id" cannot be constructed as a distinct probe: the route's own regex
-// requires at least one non-slash character in that position (`([^/]+)`), so
-// `//cleanup/apply` never matches this handler at all (falls through to a
-// generic 404 elsewhere) — reported here, not invented as a fake positive.
-test('AT-11 (DEFECT B, RAW WIRE): a traversal-shaped ":id" (literal ".." and its "%2e%2e" percent-encoded equivalent) -> 400 "invalid kb id" before any filesystem call — nothing created on disk, canary byte-unchanged, the real session untouched', async () => {
-  writeKb('apply-badid-kb', '{ kind: unique }');
-  const sessionId = 'apply-badid-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-badid-kb`;
-  plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', 'apply-badid-kb');
-
-  const canaryPath = join(forgeRoot, 'CANARY-ROOT-OUTSIDE-KB-CLEANUP-APPLY.txt');
-  const canaryContent = 'SENTINEL-kb-cleanup-apply-at11-canary-must-never-change';
-  writeFileSync(canaryPath, canaryContent, 'utf8');
-  const before = snapshotFileList(forgeRoot);
-
-  const body = JSON.stringify({ project: sessionProject, sessionId });
-  const literal = await rawPost('/api/studio/kbs/../cleanup/apply', body);
-  assert.equal(literal.status, 400, `expected 400 "invalid kb id" for the raw ".." kb id, got ${literal.status}: ${literal.text}`);
-  assert.match(literal.text, /invalid kb id/, `expected the SLUG_RE validation's own error message, mirroring the sibling /cleanup/start route — got: ${literal.text}`);
-
-  const percentEncoded = await rawPost('/api/studio/kbs/%2e%2e/cleanup/apply', body);
-  assert.equal(percentEncoded.status, 400, `expected 400 for the "%2e%2e" percent-encoded equivalent, got ${percentEncoded.status}: ${percentEncoded.text}`);
-  assert.equal(percentEncoded.text, literal.text, 'the percent-encoded and literal traversal shapes must produce a byte-identical response body');
-
-  assert.deepEqual(snapshotFileList(forgeRoot), before, 'a rejected apply must create nothing on disk — the ARTIFACT, not merely the status code');
-  assert.equal(readFileSync(canaryPath, 'utf8'), canaryContent, 'the canary file must be byte-unchanged after both probes');
-  assert.equal(
-    JSON.parse(readFileSync(join(forgeRoot, 'projects', sessionProject, '_kb-cleanup', sessionId, 'status.json'), 'utf8')).phase,
-    'awaiting-approval',
-    'the real session must remain untouched at awaiting-approval after both rejected traversal probes',
-  );
-});
-
-// Kills: a fixed ":id" check that validates charset (SLUG_RE) but never caps
-// length — a value 50x any known id-length convention in this codebase
-// (MAX_SKILL_ID_LENGTH = 100, orchestrator/skill-path.ts) so this probe is
-// robust to whatever specific cap (if any) the fix picks. Status code is
-// deliberately NOT pinned to one exact value (400 vs 404) — see the report:
-// this could legitimately be caught either by an explicit length cap (400,
-// mirroring AT-11) or by the mismatch check in AT-13 below (404), since a
-// 5000-char value can never equal any real (short) kb_id either way. What
-// must NEVER happen is a silent 200.
-test('AT-12 (DEFECT B): an absurdly over-long ":id" (5000 chars) is rejected 4xx, never a 200 — the real session is left untouched', async () => {
-  writeKb('apply-overlong-kb', '{ kind: unique }');
-  const sessionId = 'apply-overlong-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-overlong-kb`;
-  plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', 'apply-overlong-kb');
-
-  const overlong = 'a'.repeat(5000);
-  const res = await apply(overlong, { project: sessionProject, sessionId });
-  const text = await res.text();
-  assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx for a 5000-char ":id", got ${res.status}: ${text}`);
-  assert.equal(
-    JSON.parse(readFileSync(join(forgeRoot, 'projects', sessionProject, '_kb-cleanup', sessionId, 'status.json'), 'utf8')).phase,
-    'awaiting-approval',
-    'the real session must remain untouched after the over-long ":id" is rejected',
-  );
-});
-
-// Kills: the LIVE-VERIFIED defect itself — "POST .../kbs/totally-bogus-not-
-// a-real-kb/cleanup/apply with a valid body returns 200 and drains the
-// session's real kb_id" — generalized to a WELL-FORMED, REAL, but WRONG kb
-// id (not just a nonsense string), the sharper attack shape: a caller who
-// knows a legitimate {project, sessionId} pair can vary ONLY the URL's :id
-// across every other real kb id in the system and always get a silent 200.
-//
-// Status code chosen: 404. This file's OWN vocabulary already treats "the
-// requested kb-scoped resource does not resolve" as 404 twice — the sibling
-// /cleanup/start route's "unknown kb: <id>" (AT-2) and this very route's own
-// "session not found" (AT-7). A mismatched :id is exactly that shape: no
-// (kbId, project, sessionId) triple naming this pairing exists. 409 is
-// reserved in this file for a VALID, correctly-identified session in the
-// WRONG STATE (AT-6, phase !== awaiting-approval) — a different failure mode
-// (right resource, wrong state) than "wrong resource entirely".
-//
-// REGRESSION LOCK, kept explicit: this is also the strongest available
-// black-box proof that the drain still uses the session's OWN recorded
-// kb_id, never the URL's :id. A fix that doesn't validate at all (silently
-// 200s and drains kb_id, today's actual behaviour) is killed by the
-// status-code assertion below. A fix that validates the mismatch case
-// correctly (this test) but then, in the MATCHING case, swaps the drain's
-// source from `status.kb_id` to the (now validated-equal) `:id` value is
-// UNOBSERVABLE black-box — the two values are identical by construction the
-// moment validation requires them to match. That residual is reported, not
-// invented, in the task write-up rather than pinned by a test that cannot
-// actually distinguish it.
-test('AT-13 (DEFECT B): a well-formed ":id" naming a REAL but DIFFERENT kb than the session\'s own kb_id -> 404, never a silent 200 that drains either kb — the mismatch itself must be refused', async () => {
-  writeKb('apply-mismatch-owner-kb', '{ kind: unique }');
-  writeKb('apply-mismatch-decoy-kb', '{ kind: unique }');
-  const sessionId = 'apply-mismatch-001';
-  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-mismatch-owner-kb`;
-  plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', 'apply-mismatch-owner-kb');
-
-  const before = snapshotFileList(forgeRoot);
-
-  // The URL names the DECOY kb; the body's {project, sessionId} names the
-  // REAL session, which belongs to the OWNER kb, not the decoy.
-  const res = await apply('apply-mismatch-decoy-kb', { project: sessionProject, sessionId });
-  const text = await res.text();
-  assert.equal(res.status, 404, `expected 404 for a well-formed but mismatched ":id" (see the status-code rationale above), got ${res.status}: ${text}`);
-
-  assert.equal(
-    JSON.parse(readFileSync(join(forgeRoot, 'projects', sessionProject, '_kb-cleanup', sessionId, 'status.json'), 'utf8')).phase,
-    'awaiting-approval',
-    'a refused mismatched apply must leave the real session untouched — phase must NOT have moved to applied',
-  );
-  assert.deepEqual(snapshotFileList(forgeRoot), before, 'a refused mismatched apply must create nothing on disk (no _brainfix-* run log for either kb) — the ARTIFACT, not merely the status code');
-});
-
-// Kills: an apply route whose `project` validation is only `typeof ===
-// 'string' && length > 0` (the CURRENT shape) — no charset check, no length
-// cap, unlike cli/bridge-studio-sessions.ts's stated convention. Status code
-// pinned to 400 specifically, mirroring that convention (invalidProjectReason
-// -> `sendJson(res, 400, ...)`); TODAY, none of these three values name any
-// real on-disk session, so the CURRENT code's only check
-// (`guardedReadSessionStatus` returning null) reports 404 "session not
-// found" for all three — a genuinely different (and less actionable) code
-// than the 400 this test requires, so this is a real red, not a vacuous 4xx
-// check.
-test('AT-14 (DEFECT B): "project" is charset- and length-validated (400) before any filesystem call — a traversal-shaped, non-slug, and 5000-char project all -> 400, nothing created on disk', async () => {
-  writeKb('apply-badproject-kb', '{ kind: unique }');
-  const canaryPath = join(forgeRoot, 'CANARY-APPLY-PROJECT-VALIDATION.txt');
-  const canaryContent = 'SENTINEL-apply-project-validation-canary';
-  writeFileSync(canaryPath, canaryContent, 'utf8');
-
-  for (const badProject of ['../../../etc', 'Has Spaces AND Caps', 'a'.repeat(5000)]) {
-    const before = snapshotFileList(forgeRoot);
-    const res = await apply('apply-badproject-kb', { project: badProject, sessionId: 'whatever-001' });
-    const text = await res.text();
-    assert.equal(res.status, 400, `expected 400 for project=${JSON.stringify(badProject.slice(0, 30))}…, got ${res.status}: ${text}`);
-    assert.deepEqual(snapshotFileList(forgeRoot), before, `a rejected project value must create nothing on disk (project=${JSON.stringify(badProject.slice(0, 30))}…)`);
-  }
-  assert.equal(readFileSync(canaryPath, 'utf8'), canaryContent, 'canary must be byte-unchanged after every malformed-project probe');
-});
-
-// Kills: an apply route whose `sessionId` validation is only `typeof ===
-// 'string' && length > 0` — same rationale as AT-14, for the sibling field.
-test('AT-15 (DEFECT B): "sessionId" is charset- and length-validated (400) before any filesystem call — a traversal-shaped, non-slug, and 5000-char sessionId all -> 400, nothing created on disk', async () => {
-  writeKb('apply-badsession-kb', '{ kind: unique }');
-  const canaryPath = join(forgeRoot, 'CANARY-APPLY-SESSIONID-VALIDATION.txt');
-  const canaryContent = 'SENTINEL-apply-sessionid-validation-canary';
-  writeFileSync(canaryPath, canaryContent, 'utf8');
-
-  for (const badSessionId of ['../../../etc', 'has spaces', 'a'.repeat(5000)]) {
-    const before = snapshotFileList(forgeRoot);
-    const res = await apply('apply-badsession-kb', { project: `${KB_SEEDING_ANCHOR_PREFIX}apply-badsession-kb`, sessionId: badSessionId });
-    const text = await res.text();
-    assert.equal(res.status, 400, `expected 400 for sessionId=${JSON.stringify(badSessionId.slice(0, 30))}…, got ${res.status}: ${text}`);
-    assert.deepEqual(snapshotFileList(forgeRoot), before, `a rejected sessionId value must create nothing on disk (sessionId=${JSON.stringify(badSessionId.slice(0, 30))}…)`);
-  }
-  assert.equal(readFileSync(canaryPath, 'utf8'), canaryContent, 'canary must be byte-unchanged after every malformed-sessionId probe');
-});

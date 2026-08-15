@@ -51,23 +51,31 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 //     `handleDemoVerdict` accepts an optional `generation`) whenever the
 //     session's own artifact IS a real `generation-gallery` with at least
 //     one generation — driven by the wire artifact kind, never a `kind ===
-//     'demo'` compare. W6-B8: when the artifact IS a real `file-package`
-//     (authoring's shape — again driven by `artifact.kind`, never `kind ===
-//     'authoring'`), Approve ALSO requires a package id: `handleAuthoringVerdict`
-//     (cli/bridge-studio-affordances.ts) needs `{kind:'skill'|'hook', id}` in
-//     the body, and `id` (the library directory name) is an operator decision
-//     the drafted package cannot make for itself (D4) — so a
+//     'demo'` compare. W6-B9 (reviewer finding on W6-B8, replacing this
+//     batch's original hardcoded shape): Approve's extra-fields gate is now
+//     GENERIC — driven by `affordance.meta.requires` (the row's authored
+//     `requires:` list, e.g. authoring's `awaiting-review` row declares
+//     `['id']`), never a client-side "file-package needs an id" assumption.
+//     When the artifact IS a real `file-package` (again driven by
+//     `artifact.kind`, never `kind === 'authoring'`), a
 //     `[data-field="session-package-id"]` text input renders alongside the
-//     button, and Approve stays disabled until it is non-empty AND the
-//     draft's shape is resolved (detected purely by file PRESENCE — a
-//     `SKILL.md` at the package root ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒
-//     still drafting, honestly disabled rather than a button known in
-//     advance to 400). On a successful package-shaped approve,
-//     `onPackageFinalized` fires with the server's own `{kind, id}` echo —
-//     bubbled up so the PAGE (not this panel) navigates to
-//     `/skills/<id>`/`/hooks/<id>`, mirroring why `onChanged` is a callback
-//     rather than a `useRouter()` call here: `useRouter()` throws "invariant
-//     expected app router to be mounted" under `renderToStaticMarkup`, the
+//     button — `id` (the library directory name) is an operator decision the
+//     drafted package cannot make for itself (D4) — and Approve stays
+//     disabled until every field `meta.requires` names is filled AND the
+//     draft's shape is resolved (a client-side ADVISORY check ONLY, detected
+//     purely by file PRESENCE — a `SKILL.md` at the package root ⇒ skill,
+//     `hook.yaml` ⇒ hook, neither ⇒ still drafting — never a duplicate of a
+//     server-enforced rule, unlike the old id-required gate this replaces).
+//     `kind` itself is NEVER sent in the body — the write route
+//     (cli/bridge-studio-affordances.ts) derives it server-side from the
+//     REAL staged files, closing the class of defect where a client could
+//     claim a kind that disagrees with what actually landed. On a successful
+//     package-shaped approve, `onPackageFinalized` fires with the server's
+//     own `{kind, id}` echo — bubbled up so the PAGE (not this panel)
+//     navigates to `/skills/<id>`/`/hooks/<id>`, mirroring why `onChanged`
+//     is a callback rather than a `useRouter()` call here: `useRouter()`
+//     throws "invariant expected app router to be mounted" under
+//     `renderToStaticMarkup`, the
 //     harness this file's own DOM regression suite renders with.
 //   - `staged-review` / `next-turn` — rendered DISABLED, honestly labelled
 //     "not yet wired" — B4 returns 501 `UnhandledAffordanceBody` for both
@@ -299,13 +307,29 @@ export function SessionInteractivePanel({
           // always attaches it); the empty-array fallback is defensive only
           // (a malformed/older payload), never a fabricated "both" default.
           const verdicts = affordance.meta?.verdicts ?? [];
-          // W6-B8 — the file-package id field: required (non-empty) AND the
-          // draft's shape must have resolved (never 'unknown') before Approve
-          // is enabled. `packageArtifact`/`packageShape` are computed once,
-          // outside this map, from `artifact.kind` — never from `affordance`
-          // or `kind`.
-          const packageIdReady = packageArtifact === null || (packageShape !== 'unknown' && packageId.trim().length > 0);
-          const approveDisabled = busy || !packageIdReady;
+          // W6-B9 (reviewer finding on W6-B8) — Approve's gate is now
+          // GENERIC, driven by the server-derived `affordance.meta.requires`
+          // (studio/session-kinds.yaml's authored `requires:` list — e.g.
+          // authoring's `awaiting-review` row declares `['id']`), never a
+          // hardcoded "file-package needs an id" assumption. `providedFields`
+          // is the panel's own (currently sole) source of collected extra
+          // values — today only the package-id input below, mapped to the
+          // field name `'id'`; a `requires` field this panel has no UI to
+          // collect for simply never satisfies, honestly disabling Approve
+          // rather than guessing. `packageArtifact`/`packageShape` are
+          // computed once, outside this map, from `artifact.kind` — never
+          // from `affordance` or `kind`.
+          const requiresFields = affordance.meta?.requires ?? [];
+          const providedFields: Record<string, string> = packageArtifact !== null ? { id: packageId } : {};
+          const requiresSatisfied = requiresFields.every((field) => (providedFields[field] ?? '').trim().length > 0);
+          // The "shape unresolved" advisory stays a SEPARATE, artifact-driven
+          // check (never a duplicate of the server's own requirement): it is
+          // UX-only heads-up data ("this will 409 — the draft has no
+          // SKILL.md/hook.yaml yet"), not a business rule the server also
+          // enforces via a wire signal — same distinction the label text
+          // ("Skill id" vs "Hook id") already relies on.
+          const shapeResolved = packageArtifact === null || packageShape !== 'unknown';
+          const approveDisabled = busy || !requiresSatisfied || !shapeResolved;
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="verdict" style={sectionStyle}>
               {generations.length > 0 && (
@@ -355,7 +379,13 @@ export function SessionInteractivePanel({
                       void submit(affordance, {
                         verdict: 'approve',
                         ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
-                        ...(packageArtifact ? { kind: packageShape === 'hook' ? 'hook' : 'skill', id: packageId.trim() } : {}),
+                        // Generic: every field the server's own meta.requires
+                        // names rides along, sourced from providedFields —
+                        // never a per-kind {kind,id} literal. `kind` itself is
+                        // NOT sent at all (W6-B9): the write route derives it
+                        // server-side from the REAL staged files, never a
+                        // client-supplied guess.
+                        ...Object.fromEntries(requiresFields.map((field) => [field, (providedFields[field] ?? '').trim()])),
                       })
                     }
                     style={{ opacity: approveDisabled ? 0.5 : 1 }}
