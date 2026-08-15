@@ -15,8 +15,10 @@ composition:
   guards: [event-log]
 runtime:
   sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
+  strategy: range
+  range:
+    - claude-sonnet-4-6
+    - claude-opus-4-8
 brainAccess: none
 interactivity: Operator-driven; asks clarifying questions one round at a time and writes only after the operator approves.
 allowed-tools: [Read, Grep, Glob, Bash]

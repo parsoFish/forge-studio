@@ -611,21 +611,29 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
-    assert.deepEqual(architect.legacyRoutes, ['/architect/[sessionId]', '/architect/[sessionId]/interview']);
+    // W6-IA-8: /architect/[sessionId] + /architect/[sessionId]/interview were
+    // pure path-shape moves, converted to next.config.mjs `redirects()`
+    // entries with their page directories deleted outright — legacyRoutes is
+    // now honestly [] (see studio/session-kinds.yaml's own comment).
+    assert.deepEqual(architect.legacyRoutes, []);
     assert.deepEqual(architect.stages, ['roadmap']);
     assert.equal(architect.defaultStage, 'roadmap');
     assert.deepEqual(architect.artifact, { kind: 'roadmap-draft', label: 'Roadmap draft' });
 
     const instructions = byId(descs, 'instructions');
     assert.equal(instructions.agent, 'instructions-creator');
-    assert.deepEqual(instructions.legacyRoutes, ['/instructions/[sessionId]']);
+    // W6-IA-8: /instructions/[sessionId] converted to a next.config.mjs
+    // `redirects()` entry, page directory deleted — legacyRoutes is now [].
+    assert.deepEqual(instructions.legacyRoutes, []);
     assert.deepEqual(instructions.stages, ['instructions']);
     assert.equal(instructions.defaultStage, 'instructions');
     assert.deepEqual(instructions.artifact, { kind: 'markdown-draft', label: 'AGENTS.md draft' });
 
     const projectBrain = byId(descs, 'project-brain');
     assert.equal(projectBrain.agent, 'project-brain-builder');
-    assert.deepEqual(projectBrain.legacyRoutes, ['/project-brain/[sessionId]']);
+    // W6-IA-8: /project-brain/[sessionId] converted to a next.config.mjs
+    // `redirects()` entry, page directory deleted — legacyRoutes is now [].
+    assert.deepEqual(projectBrain.legacyRoutes, []);
     assert.deepEqual(projectBrain.stages, ['brain']);
     assert.equal(projectBrain.defaultStage, 'brain');
     assert.deepEqual(projectBrain.artifact, { kind: 'brain-structure', label: 'Seeded structure' });

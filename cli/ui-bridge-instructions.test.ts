@@ -93,6 +93,35 @@ test('POST /api/instructions/brief records notes + transitions briefing → inte
   assert.equal(st.prompt, 'Keep it short; document the lint gate.');
 });
 
+// --- ADR-043 §3 amendment (wave-6 kickoff model-tier seam) -----------------
+
+test('POST /api/instructions/start with a valid modelTier ("opus", within the widened range) is persisted into status.json', async () => {
+  const { status, json } = await post('/api/instructions/start', { project: 'demo', modelTier: 'opus' });
+  assert.equal(status, 200);
+  assert.equal(readInstrStatus(json.sessionId as string).modelTier, 'opus');
+});
+
+test('POST /api/instructions/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set — no session dir created', async () => {
+  const before = existsSync(join(repoDir(), '_instructions')) ? readdirSync(join(repoDir(), '_instructions')).length : 0;
+  const { status, json } = await post('/api/instructions/start', { project: 'demo', modelTier: 'haiku' });
+  assert.equal(status, 400);
+  assert.match(String(json.error), /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
+  const after = existsSync(join(repoDir(), '_instructions')) ? readdirSync(join(repoDir(), '_instructions')).length : 0;
+  assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
+});
+
+test('POST /api/instructions/start with a non-string modelTier 400s naming the offending value', async () => {
+  const { status, json } = await post('/api/instructions/start', { project: 'demo', modelTier: 0 });
+  assert.equal(status, 400);
+  assert.match(String(json.error), /modelTier must be a string/);
+});
+
+test('POST /api/instructions/start with modelTier absent leaves status.json without the key entirely', async () => {
+  const { status, json } = await post('/api/instructions/start', { project: 'demo' });
+  assert.equal(status, 200);
+  assert.ok(!('modelTier' in readInstrStatus(json.sessionId as string)), 'absent modelTier must not be written at all');
+});
+
 // --- demo-builder ----------------------------------------------------------
 
 test('POST /api/demo-builder/start succeeds without a prompt → briefing, mode=create', async () => {
@@ -112,6 +141,21 @@ test('POST /api/demo-builder/start defaults mode=update when a demo is locked', 
   } finally {
     rmSync(join(repoDir(), '.forge', 'demo', 'demo.lock.json'), { force: true });
   }
+});
+
+test('POST /api/demo-builder/start with a valid modelTier ("opus", within the widened range) is persisted into status.json', async () => {
+  const { status, json } = await post('/api/demo-builder/start', { project: 'demo', modelTier: 'opus' });
+  assert.equal(status, 200);
+  assert.equal(readDemoStatus(json.sessionId as string).modelTier, 'opus');
+});
+
+test('POST /api/demo-builder/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set — no session dir created', async () => {
+  const before = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
+  const { status, json } = await post('/api/demo-builder/start', { project: 'demo', modelTier: 'haiku' });
+  assert.equal(status, 400);
+  assert.match(String(json.error), /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
+  const after = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
+  assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
 test('demo sessions surface per-element fragments + the fragment endpoint serves them', async () => {

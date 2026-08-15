@@ -110,6 +110,7 @@ type RoadmapBody = {
       ready: boolean;
       blockedBy: string[];
       workItems?: Array<{ id: string }>;
+      completedAt?: string;
     }>;
   };
 };
@@ -241,6 +242,53 @@ test('roadmap: a frontmatter title: field wins over heading scrape entirely', as
   } finally {
     rmSync(path, { force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// W6-RV-2: completedAt threaded from the memoized run derivation (no second
+// events.jsonl parser) — cli/run-list-cache.ts::cachedListRuns.
+// ---------------------------------------------------------------------------
+
+test('roadmap: a done initiative with a real cycle.end event carries completedAt', async () => {
+  const cycleId = 'cycle-init-e';
+  writeFileSync(
+    join(forgeRoot, '_queue', 'done', 'INIT-E.md'),
+    makeManifest('INIT-E', { cycleId }),
+  );
+  mkdirSync(join(forgeRoot, '_logs', cycleId), { recursive: true });
+  const completedIso = '2026-06-20T03:15:00.000Z';
+  writeFileSync(
+    join(forgeRoot, '_logs', cycleId, 'events.jsonl'),
+    [
+      JSON.stringify({
+        event_id: 'EV_1', cycle_id: cycleId, initiative_id: 'INIT-E',
+        phase: 'orchestrator', skill: 'cycle', event_type: 'start',
+        input_refs: [], output_refs: [], started_at: '2026-06-20T02:00:00.000Z', message: 'cycle.start',
+      }),
+      JSON.stringify({
+        event_id: 'EV_2', cycle_id: cycleId, initiative_id: 'INIT-E',
+        phase: 'orchestrator', skill: 'cycle', event_type: 'end',
+        input_refs: [], output_refs: [], started_at: completedIso, message: 'cycle.end',
+        metadata: { status: 'done' },
+      }),
+    ].join('\n') + '\n',
+  );
+  try {
+    const roadmap = await fetchRoadmap();
+    const e = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-E');
+    assert.ok(e, 'INIT-E present in roadmap');
+    assert.equal(e!.completedAt, completedIso, 'completedAt is the real cycle.end started_at');
+  } finally {
+    rmSync(join(forgeRoot, '_queue', 'done', 'INIT-E.md'), { force: true });
+    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
+  }
+});
+
+test('roadmap: a pending initiative with no cycle log has no completedAt (never fabricated)', async () => {
+  const roadmap = await fetchRoadmap();
+  const a = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-A');
+  assert.ok(a, 'INIT-A present in roadmap');
+  assert.equal(a!.completedAt, undefined, 'no cycle log yet — completedAt stays honestly absent');
 });
 
 test('roadmap: dep moves to done/ → dependent initiative flips to ready', async () => {

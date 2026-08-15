@@ -80,7 +80,12 @@ const ROUTES = [
   { path: '/templates', name: 'templates library' },
   { path: '/templates/plan', name: 'template detail (real planning template)' },
   { path: '/architect/new', name: 'architect launcher' },
-  { path: '/recovery', name: 'recovery (DEC-6 operator surface)' },
+  // W6-IA-8: `/recovery` is now a wire redirect (next.config.mjs) to
+  // `/library`, not a client-shim page — `page.goto` follows the 308 at the
+  // network level before this crawler ever inspects the DOM, so this row's
+  // [data-page]/dead-CTA/nav-link assertions land on `/library` and are the
+  // honest post-redirect check, unchanged from when it was a client shim.
+  { path: '/recovery', name: 'recovery (DEC-6 operator surface, now a wire redirect -> /library)' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

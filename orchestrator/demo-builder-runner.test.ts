@@ -336,6 +336,59 @@ test('ADR-024: demoBuilderAgentSpec derives phase (unifier), tier (sonnet), and 
 });
 
 // ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// ---------------------------------------------------------------------------
+
+/** Like makeWritingQueryFn, but also captures the model handed to queryFn. */
+function makeWritingQueryFnCapturingModel(onModel: (model: string | undefined) => void): QueryFn {
+  return ({ options }) => {
+    onModel((options as { model?: string }).model);
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
+      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design');
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
+      yield { type: 'result', total_cost_usd: 0.05 };
+    }
+    return gen();
+  };
+}
+
+test('status.modelTier is honored: an operator-requested "opus" reaches queryFn as options.model', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ modelTier: 'opus' });
+  let capturedModel: string | undefined;
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeWritingQueryFnCapturingModel((m) => { capturedModel = m; }),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(capturedModel, 'claude-opus-4-8');
+});
+
+test('status.modelTier absent resolves to the unchanged default (sonnet) — byte-identical prior behavior', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  let capturedModel: string | undefined;
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeWritingQueryFnCapturingModel((m) => { capturedModel = m; }),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(capturedModel, DEMO_BUILDER_MODEL);
+  assert.equal(capturedModel, 'claude-sonnet-4-6');
+});
+
+test('status.modelTier outside the declared range throws naming the value and the allowed set', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ modelTier: 'haiku' });
+  await assert.rejects(
+    () => runDemoBuilderTurn({
+      sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+    }),
+    /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // R4-16 — generation snapshots + choose-a-generation lock.
 //
 // TEST-FIRST PIN: none of this exists yet at branch base. `runGenerateStep`

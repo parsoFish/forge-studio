@@ -118,15 +118,19 @@ export function SessionProjectBrainPanel({
       )}
       {session.phase === 'committed' && (
         <div data-section="brain-committed" style={{ marginTop: 12, fontSize: 13 }}>
+          {/* W6-SW-3 (sweep C6#1): this click only navigates — the per-project
+              brain is already bound at onboarding time (kb.yaml's
+              binding:{kind:project}), not by any step here. The old copy and
+              data-action name ("bind-and-return") promised a bind step that
+              never existed. */}
           ✓ Brain committed.{' '}
           <button
-            data-action="bind-and-return"
+            data-action="return-to-project"
             onClick={() => router.push(`/projects/${encodeURIComponent(session.project)}`)}
             style={linkBtn}
           >
             Return to the project
-          </button>{' '}
-          and bind the <code>{session.project}</code> brain.
+          </button>.
         </div>
       )}
       {session.phase === 'abandoned' && (
