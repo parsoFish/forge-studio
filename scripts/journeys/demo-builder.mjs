@@ -263,8 +263,17 @@ export const journey = defineJourney({
           const startEnabled = await page.locator('[data-action="start-session"]:not([disabled])').count() > 0;
           check(startEnabled, 'DB-4: Start enables once a project is filled in');
           await page.locator('[data-action="start-session"]').click().catch(() => {});
+          // W6-B6 fix follow-up: the kickoff screen's OWN url is already
+          // `/sessions/demo/new`, which trivially satisfies a bare
+          // `/^\/sessions\/demo\/[^/]+$/` test — a waitForFunction on that
+          // pattern alone resolves immediately, before router.push ever
+          // fires, so `kickoffSid` below was captured from the STALE
+          // pre-navigation url ("new" is not a real session id). The
+          // pattern must also assert the url has moved OFF the kickoff
+          // route's own "new" segment — real navigation, not a coincidental
+          // match against where we already were.
           const navigated = await page.waitForFunction(
-            () => /^\/sessions\/demo\/[^/]+$/.test(window.location.pathname),
+            () => /^\/sessions\/demo\/[^/]+$/.test(window.location.pathname) && !window.location.pathname.endsWith('/demo/new'),
             null, { timeout: 15000 },
           ).then(() => true).catch(() => false);
           check(navigated, 'DB-4: Start POSTs the real /api/demo-builder/start route and navigates onto the shared session shell');

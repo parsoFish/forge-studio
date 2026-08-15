@@ -304,6 +304,20 @@ const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, prese
 
 function cleanScratchKbDrain() {
   try { rmSync(SCRATCH_KB_DRAIN_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  // Also drop this scratch KB's prior DRAIN RUNS (`_logs/_kb-drain-<kb>-drain-*`).
+  // KbDrainPanel reattaches on mount to the active-or-LATEST run — a leftover
+  // terminal run from a previous journey execution made the reattach beat read
+  // a STALE runId as its "before" (waitForTerminalDrainState was satisfied
+  // instantly by the old terminal state), so its own fresh dispatch became the
+  // "after" and the same-run assertion failed. Fixture hygiene rule 3: each
+  // beat owns ALL of its state, including server-side run dirs.
+  try {
+    const logsDir = join(FORGE_ROOT, '_logs');
+    const prefix = `_kb-drain-${SCRATCH_KB_DRAIN_ID}-drain-`;
+    for (const d of readdirSync(logsDir)) {
+      if (d.startsWith(prefix)) { try { rmSync(join(logsDir, d), { recursive: true, force: true }); } catch { /* */ } }
+    }
+  } catch { /* best-effort */ }
 }
 
 /** Mirrors seedScratchKbMaintain's own shape exactly — see that function's
@@ -1056,12 +1070,19 @@ export const journey = defineJourney({
                 check(drainPanelPresent > 0, 'kb-drain: KbDrainPanel renders on the Health tab ([data-component="kb-drain-panel"])');
                 await frame(page, 'kb-0-drain-idle', 'Part 2 (knowledge) — KB health: the drain-to-green panel, not yet run');
 
+                const preClickRunId = (await readDrainAttrs(page)).runId;
                 await page.locator('[data-action="drain-to-green"]').click().catch(() => {});
                 await caption(page, 'ONE button — forge iteratively fixes every auto/agent lint finding, round by round, on the server.');
 
                 let drainState = '';
                 let runIdBefore = '';
                 try {
+                  // The click mints a NEW run; wait until the panel shows a runId that is
+                  // not whatever it may have reattached to on mount, THEN wait for terminal —
+                  // otherwise a pre-existing terminal run satisfies the terminal wait instantly.
+                  await page.waitForFunction(
+                    (prev) => { const el = document.querySelector('[data-drain-run-id]'); const id = el?.getAttribute('data-drain-run-id') ?? ''; return id.length > 0 && id !== prev; },
+                    preClickRunId, { timeout: 15000 });
                   await waitForTerminalDrainState(page, 30000);
                   ({ state: drainState, runId: runIdBefore } = await readDrainAttrs(page));
                 } catch { /* checked below */ }

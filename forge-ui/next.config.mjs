@@ -33,8 +33,14 @@ const nextConfig = {
         destination: '/sessions/architect/:sessionId',
         permanent: true,
       },
+      // `/architect/new` is a LIVE page (the architect's own kickoff — ADR-043
+      // amendment §4: architect never migrates onto the generic surface), NOT
+      // a legacy session id. Without the negative lookahead, `new` matched
+      // `:sessionId` and every "Plan with Architect" entry landed on the
+      // generic /sessions/architect/new kickoff instead (wave-6 final gate,
+      // flows-run R1.0 timeout waiting for data-page="architect-new").
       {
-        source: '/architect/:sessionId',
+        source: '/architect/:sessionId((?!new$)[^/]+)',
         destination: '/sessions/architect/:sessionId',
         permanent: true,
       },

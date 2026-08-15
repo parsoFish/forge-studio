@@ -14,6 +14,11 @@ import { test, expect, vi, afterEach } from 'vitest';
 
 import {
   parseCapability,
+  // W6-B6 fix (wave-6 final gate, journey demo-builder DB-4) — the
+  // UNFILTERED per-slug capability parse/fetch pair, sibling to
+  // parseCapability's roster-shaped 3-key parse above.
+  parseAgentCapability,
+  fetchAgentCapability,
   // review round (GAP 1/GAP 2, R6-07 batch-H honesty pass): pinned directly
   // at the wire boundary, alongside parseCapability's own precedent above —
   // both are "carry-through-or-reject-whole-object" parsers.
@@ -159,6 +164,82 @@ test('parseCapability: malformed shapes return undefined without throwing (older
   expect(parseCapability({ interactive: true })).toBeUndefined();
   expect(parseCapability('not-an-object')).toBeUndefined();
   expect(parseCapability(42)).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// parseAgentCapability / fetchAgentCapability (W6-B6 fix — wave-6 final
+// gate, journey demo-builder DB-4) — the UNFILTERED per-slug capability
+// route's client parse + fetch. `GET /api/studio/agents/:slug/capability`
+// resolves ONE named slug directly against the bridge's unfiltered SKILL.md
+// defs, bypassing the `library:false` roster gate `fetchStudioAgents()`
+// applies — the roster silently drops every kickoff-only system agent
+// (demo-builder and its four siblings), which is the root cause of the
+// model-tier picker rendering as the read-only 'fixed' chip for all of them.
+// ---------------------------------------------------------------------------
+
+test('parseAgentCapability: a well-formed range descriptor is carried through verbatim, allowedTiers included', () => {
+  expect(parseAgentCapability({
+    interactive: false, runtimeSdks: ['claude'], fanoutCapable: false,
+    materials: [], costCeilingEnforceable: false, allowedTiers: ['sonnet', 'opus'],
+  })).toEqual({
+    interactive: false, runtimeSdks: ['claude'], fanoutCapable: false,
+    materials: [], costCeilingEnforceable: false, allowedTiers: ['sonnet', 'opus'],
+  });
+});
+
+test('parseAgentCapability: a fixed-strategy descriptor has no allowedTiers key — stays absent, never fabricated as []', () => {
+  const parsed = parseAgentCapability({
+    interactive: false, runtimeSdks: ['claude'], fanoutCapable: false,
+    materials: [], costCeilingEnforceable: false,
+  });
+  expect(parsed).not.toBeNull();
+  expect(parsed && 'allowedTiers' in parsed).toBe(false);
+});
+
+test('parseAgentCapability: undefined/absent/malformed input returns null, never a fabricated stand-in', () => {
+  expect(parseAgentCapability(undefined)).toBeNull();
+  expect(parseAgentCapability(null)).toBeNull();
+  expect(parseAgentCapability({})).toBeNull();
+  expect(parseAgentCapability({ interactive: 'yes', runtimeSdks: ['claude'] })).toBeNull();
+  expect(parseAgentCapability({ interactive: true, runtimeSdks: 'claude' })).toBeNull();
+  expect(parseAgentCapability('not-an-object')).toBeNull();
+  expect(parseAgentCapability(42)).toBeNull();
+});
+
+test('parseAgentCapability: an allowedTiers array with ANY unrecognised element degrades the WHOLE array to absent, not a partial list', () => {
+  const parsed = parseAgentCapability({
+    interactive: false, runtimeSdks: ['claude'], fanoutCapable: false,
+    materials: [], costCeilingEnforceable: false, allowedTiers: ['sonnet', 'not-a-real-tier'],
+  });
+  expect(parsed && 'allowedTiers' in parsed).toBe(false);
+});
+
+test('fetchAgentCapability: issues one GET to /api/studio/agents/:slug/capability and returns the parsed descriptor', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      slug: 'demo-builder',
+      capability: {
+        interactive: true, runtimeSdks: ['claude'], fanoutCapable: false,
+        materials: [], costCeilingEnforceable: false, allowedTiers: ['sonnet', 'opus'],
+      },
+    }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const capability = await fetchAgentCapability('demo-builder');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy).toHaveBeenCalledWith(`${BRIDGE_BASE}/api/studio/agents/demo-builder/capability`);
+  expect(capability?.allowedTiers).toEqual(['sonnet', 'opus']);
+});
+
+test('fetchAgentCapability: a 404 (unknown slug) resolves to null, never throws', async () => {
+  const fetchSpy = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'unknown agent' }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  expect(await fetchAgentCapability('no-such-agent')).toBeNull();
 });
 
 // ---------------------------------------------------------------------------

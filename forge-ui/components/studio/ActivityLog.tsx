@@ -90,8 +90,27 @@ export function ActivityLog({
 
   const ticker = formatActivityCostTicker({ costUsd, tokensTotal, elapsedMs });
 
+  // The drawer is position:fixed at the page bottom. Without reserving space
+  // it OVERLAYS whatever sits at the bottom of the page — the wave-6 final
+  // journey gate found the agent builder's Save button unclickable ("Waiting
+  // for activity…" intercepted pointer events, agents.mjs:848). Reserve its
+  // rendered height on document.body while mounted (and re-measure on open /
+  // row-count change) so page content scrolls above it, never under it.
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = drawerRef.current;
+    if (!el || typeof document === 'undefined') return;
+    const prev = document.body.style.paddingBottom;
+    const apply = () => { document.body.style.paddingBottom = `${el.getBoundingClientRect().height}px`; };
+    apply();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    ro?.observe(el);
+    return () => { ro?.disconnect(); document.body.style.paddingBottom = prev; };
+  }, [open, rows.length]);
+
   return (
     <div
+      ref={drawerRef}
       data-component="activity-drawer"
       data-drawer-open={open ? 'true' : 'false'}
       data-activity-count={rows.length}

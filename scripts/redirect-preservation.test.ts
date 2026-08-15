@@ -55,7 +55,12 @@ const MOVED_ROUTES: ReadonlyArray<{ from: string; to: string; permanent: boolean
   // W6-IA-8: `/interview` listed before its parent so a request never chains
   // through two redirect hops (both land on the same destination anyway).
   { from: '/architect/:sessionId/interview', to: '/sessions/architect/:sessionId', permanent: true },
-  { from: '/architect/:sessionId', to: '/sessions/architect/:sessionId', permanent: true },
+  // The param EXCLUDES the literal `new`: `/architect/new` is the architect's
+  // own live kickoff page (never a session id), and an unscoped `:sessionId`
+  // swallowed it — every "Plan with Architect" entry landed on the generic
+  // /sessions/architect/new kickoff (wave-6 final gate). Old bookmarks
+  // (`/architect/<real-sid>`) still redirect; the live page stays live.
+  { from: '/architect/:sessionId((?!new$)[^/]+)', to: '/sessions/architect/:sessionId', permanent: true },
   { from: '/instructions/:sessionId', to: '/sessions/instructions/:sessionId', permanent: true },
   { from: '/project-brain/:sessionId', to: '/sessions/project-brain/:sessionId', permanent: true },
   // W6-B10: /demo/[sessionId] graduates from a data-dependent client shim to
@@ -90,6 +95,23 @@ test('every currently-moved route has a wire redirect old-path -> new-path', asy
       moved.permanent,
       `redirect ${moved.from} -> ${moved.to} must be permanent:${moved.permanent}`,
     );
+  }
+});
+
+test('W6: /architect/new stays a LIVE page — no redirect source may match it (architect never migrates, ADR-043 §4)', async () => {
+  const mod = await import('../forge-ui/next.config.mjs');
+  const cfg = (mod.default ?? mod) as { redirects?: () => Promise<Array<{ source: string }>> };
+  const redirects = typeof cfg.redirects === 'function' ? await cfg.redirects() : [];
+  for (const r of redirects) {
+    // Cheap structural guard independent of path-to-regexp availability: any
+    // source rooted at /architect/ must not be a bare single param, and if it
+    // carries a custom param regex it must exclude `new`.
+    if (typeof r.source === 'string' && r.source.startsWith('/architect/')) {
+      assert.ok(!/^\/architect\/:[A-Za-z]+$/.test(r.source), `unscoped architect redirect ${r.source} would swallow /architect/new`);
+      if (r.source.includes('(')) {
+        assert.ok(r.source.includes('(?!new$)'), `architect redirect ${r.source} must exclude the literal 'new' segment`);
+      }
+    }
   }
 });
 

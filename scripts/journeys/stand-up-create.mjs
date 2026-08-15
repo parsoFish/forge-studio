@@ -464,7 +464,7 @@ export const journey = defineJourney({
               // (the generic panel renders one free-text box), but the
               // transcript pane (SessionTranscript.tsx, W6-B9 reviewer fix)
               // now splits a questions.json turn's joined text back into one
-              // [data-question-index] element PER real question — a
+              // [data-transcript-question-index] element PER real question — a
               // structural proof, not a text-substring sniff.
               await page.waitForFunction(
                 () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
@@ -476,7 +476,7 @@ export const journey = defineJourney({
               });
               check(instrTurn0 !== null && instrTurn0.role === 'agent' && instrTurn0.source === 'questions.json',
                 `AI-1: transcript derives a real turn from questions.json (got ${JSON.stringify(instrTurn0)})`);
-              await countAtLeast(page, '[data-turn-index="0"] [data-question-index]', 2, 'AI-1: ≥2 instructions questions — structurally distinct [data-question-index] entries in the transcript pane');
+              await countAtLeast(page, '[data-turn-index="0"] [data-transcript-question-index]', 2, 'AI-1: ≥2 instructions questions — structurally distinct [data-transcript-question-index] entries in the transcript pane');
               await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
               // answer → draft → verdict — the generic single free-text box
               // (data-action="submit-answers" is the ONE action name shared with
