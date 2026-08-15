@@ -168,9 +168,11 @@ async function sweepOnce(page, baseUrl, check, pass) {
     // W6-IA-5: Flows/Agents now point at their own index (/flows, /agents),
     // not a deep-link into a specific flow/agent — kept in sync with
     // StudioNav's NAV_ITEMS hrefs.
+    // Exact membership, not startsWith — '/' as a prefix made the old check a
+    // no-op (every absolute href passed). Nav hrefs are a closed set.
     const known = ['/', '/projects', '/flows', '/agents', '/library', '/knowledge'];
     for (const href of navHrefs) {
-      const ok = typeof href === 'string' && known.some((k) => href === k || href.startsWith(k));
+      const ok = typeof href === 'string' && known.includes(href);
       check(ok, `[pass ${pass}] route ${route.path}: nav link "${href}" targets a real route`);
     }
   }

@@ -4,8 +4,8 @@
  * Agents index — `/agents` (T2 lane W6-IA-3).
  *
  * Ground truth this route fills: no `/agents` index existed before this —
- * `StudioNav`'s "Agents" nav item points at `/agents/new` (the blank
- * builder, IA-5's concern, untouched here) and the only way to an agent's
+ * `StudioNav`'s "Agents" nav item now points here (repointed in
+ * W6-IA-5) and previously the only way to an agent's
  * run-history ledger was via the per-agent builder's own `HistoryLedger`
  * section (`app/agents/[id]/page.tsx:838-864`). This route gives agents
  * their own browsable index — a roster (mirroring `/library`'s own agents
