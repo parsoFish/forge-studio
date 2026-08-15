@@ -192,6 +192,42 @@ describe('KbHealth — "n/a" check status renders honestly, distinct from "pass"
 // (4) REGRESSION companion — the EXISTING prose rendering (lint error/warning
 // counts) this WI must not break while adding the data-* hooks above.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// W6-B13 — the Lint/Checks counts are ACTIONABLE (KbDrainPanel is what
+// actually clears them), so they link into it rather than sitting as orphan
+// numbers with no path to a fix (sweep C9, "KbHealth counts → the drain
+// panel").
+// ---------------------------------------------------------------------------
+describe('KbHealth — lint/checks counts link to the drain panel (W6-B13)', () => {
+  it('the Lint section links to #kb-drain-panel via [data-action="goto-drain-panel"]', () => {
+    const html = render(baseHealth({ lintErrors: 1, lintFlags: 0 }));
+    expect(html).toContain('data-action="goto-drain-panel"');
+    expect(html).toContain('href="#kb-drain-panel"');
+  });
+
+  it('the Lint section link WRAPS the actual count text, not a decorative sibling', () => {
+    const html = render(baseHealth({ lintErrors: 2, lintFlags: 0 }));
+    const anchorStart = html.indexOf('data-action="goto-drain-panel"');
+    const anchorEnd = html.indexOf('</a>', anchorStart);
+    const anchorContent = html.slice(anchorStart, anchorEnd);
+    expect(anchorContent).toContain('2 lint errors');
+  });
+
+  it('the per-check itemization block ALSO links to #kb-drain-panel', () => {
+    // @ts-expect-error — `checks` widened locally, same rationale as the RED-D block above.
+    const html = render(baseHealth({
+      lintErrors: 0, lintFlags: 0,
+      checks: [{ check: 'checkFrontmatter', status: 'pass', errorCount: 0, flagCount: 0 }],
+    }));
+    expect(html).toContain('data-action="goto-drain-panel"');
+  });
+
+  it('no goto-drain-panel link renders when there is nothing to act on (zero lint counts, no checks)', () => {
+    const html = render(baseHealth({ lintErrors: 0, lintFlags: 0 }));
+    expect(html).not.toContain('data-action="goto-drain-panel"');
+  });
+});
+
 describe('KbHealth — lint count rendering (companion, must stay green)', () => {
   it('renders the singular lint-error sentence for count === 1', () => {
     const html = render(baseHealth({ lintErrors: 1, lintFlags: 0 }));
