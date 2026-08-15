@@ -35,6 +35,8 @@ import {
   writeQuestions,
   readAnswerRounds,
   makeHeartbeatWriter,
+  makeReasoningSink,
+  makeThinkingSink,
   type QueryFn,
   type InterviewQuestion,
   type InterviewAnswer,
@@ -232,8 +234,9 @@ export async function runInstructionsTurn(
   );
   const onToolUse = sink.onToolUse;
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const onText = makeReasoningSink(logger, initiativeId, input.sessionId);
-  const onThinking = makeThinkingSink(logger, initiativeId, input.sessionId);
+  const sinkCtx = { initiativeId, phase: 'architect' as const, skill: 'instructions-runner', idMeta: { session_id: input.sessionId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   let result: RunInstructionsTurnResult;
   let phase = status.phase;
@@ -568,44 +571,6 @@ function readFeedback(projectRoot: string, sessionId: string): string | null {
   return trimmed || null;
 }
 
-const MAX_REASONING_TEXT = 400;
-
-/** Forward each non-empty reasoning text block to the event log (live panel). */
-function makeReasoningSink(
-  logger: EventLogger,
-  initiativeId: string,
-  sessionId: string,
-): (text: string) => void {
-  return (text: string) => {
-    const capped = text.length > MAX_REASONING_TEXT ? `${text.slice(0, MAX_REASONING_TEXT)}…` : text;
-    logger.emit({
-      initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
-      event_type: 'log', input_refs: [], output_refs: [],
-      message: capped, metadata: { session_id: sessionId, kind: 'reasoning' },
-    });
-  };
-}
-
-const MAX_THINKING_TEXT = 700;
-
-/** W6-B1: forward extended-thinking blocks the same way as `makeReasoningSink`,
- *  at a wider per-block cap, and coalescing a run of consecutive IDENTICAL
- *  rows (the shape of several `redacted_thinking` blocks in a row) into one
- *  emitted row instead of flooding the log with repeats. */
-function makeThinkingSink(
-  logger: EventLogger,
-  initiativeId: string,
-  sessionId: string,
-): (text: string) => void {
-  let lastEmitted: string | null = null;
-  return (text: string) => {
-    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
-    if (capped === lastEmitted) return;
-    lastEmitted = capped;
-    logger.emit({
-      initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
-      event_type: 'log', input_refs: [], output_refs: [],
-      message: capped, metadata: { session_id: sessionId, kind: 'thinking' },
-    });
-  };
-}
+// W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates
+// were removed — this file now consumes the ONE shared pair exported from
+// interactive-session.ts (imported above).

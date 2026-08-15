@@ -91,6 +91,8 @@ import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   makeHeartbeatWriter,
+  makeReasoningSink,
+  makeThinkingSink,
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger, type Phase } from './logging.ts';
@@ -132,11 +134,6 @@ const INTERACTIVE_LIBRARY_DIRNAME = '_interactive-library';
  *  is the generic, non-committal bucket for cross-cutting spine plumbing. */
 const RUNNER_PHASE: Phase = 'orchestrator';
 const RUNNER_SKILL = 'interactive-runner';
-const MAX_REASONING_TEXT = 400;
-/** W6-B1: per-block cap for forwarded `thinking` text — the operator-approved
- *  default, wider than MAX_REASONING_TEXT because a thinking trace is denser
- *  and less redundant with the turn's other logged output. */
-const MAX_THINKING_TEXT = 700;
 
 // W6-B1: interactive sessions are operator-attended, low-volume turns (one
 // turn per bridge action) — unlike the unattended dev-loop/PM/reflector phases
@@ -291,8 +288,9 @@ export async function runInteractiveTurn(
     { readOnlySampleRate: 1, cap: 200 },
   );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const onText = makeReasoningSink(logger, initiativeId, ctx.sessionId);
-  const onThinking = makeThinkingSink(logger, initiativeId, ctx.sessionId);
+  const sinkCtx = { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, idMeta: { session_id: ctx.sessionId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   let result: RunInteractiveTurnResult;
 
@@ -669,52 +667,10 @@ function buildTurnPrompt(
   ].join('\n');
 }
 
-/** Forward each non-empty reasoning text block to the event log (live panel),
- *  capped to keep the durable log bounded — mirrors
- *  `instructions-runner.ts`'s own `makeReasoningSink`. */
-function makeReasoningSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
-  return (text: string) => {
-    const capped = text.length > MAX_REASONING_TEXT ? `${text.slice(0, MAX_REASONING_TEXT)}…` : text;
-    logger.emit({
-      initiative_id: initiativeId,
-      phase: RUNNER_PHASE,
-      skill: RUNNER_SKILL,
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: sessionId, kind: 'reasoning' },
-    });
-  };
-}
-
-/**
- * W6-B1: forward each non-empty `thinking` block (and each `redacted_thinking`
- * block's literal marker — see `onThinking` on `runStructuredTurn`/`runAgentTurn`
- * in interactive-session.ts) to the event log, capped at MAX_THINKING_TEXT chars
- * — mirrors `makeReasoningSink` above with one addition: a run of consecutive,
- * IDENTICAL rows (the common shape when the model emits several
- * `redacted_thinking` blocks back to back) coalesces to a single emitted row
- * rather than flooding the durable log with repeats.
- */
-function makeThinkingSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
-  let lastEmitted: string | null = null;
-  return (text: string) => {
-    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
-    if (capped === lastEmitted) return;
-    lastEmitted = capped;
-    logger.emit({
-      initiative_id: initiativeId,
-      phase: RUNNER_PHASE,
-      skill: RUNNER_SKILL,
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: sessionId, kind: 'thinking' },
-    });
-  };
-}
+// W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates
+// were removed — this file now consumes the ONE shared pair exported from
+// interactive-session.ts (imported above), which also owns the per-turn
+// SINK_ROW_CAP backstop and the raw-text (not truncated-text) coalescing fix.
 
 // Re-export so callers don't need a second import for the shared QueryFn type.
 export type { QueryFn } from './interactive-session.ts';

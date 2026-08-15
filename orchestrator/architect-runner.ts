@@ -48,7 +48,7 @@ import { join, resolve, dirname } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
-import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
+import { runStructuredTurn, makeReasoningSink, makeThinkingSink, type QueryFn } from './interactive-session.ts';
 export type { QueryFn };
 
 import {
@@ -313,50 +313,20 @@ export async function runArchitectTurn(
     try { writeFileSync(heartbeatPath, new Date().toISOString()); } catch { /* best-effort */ }
   };
 
-  // P3: Emit each non-empty reasoning text block from the agent stream as a log
-  // event so the operator's activity panel can show live architect reasoning.
-  // Cap at 400 chars to keep the event log readable; skip pure-whitespace blocks.
-  const MAX_REASONING_TEXT = 400;
+  // P3 / W6-B1: forward reasoning + thinking blocks from the agent stream to
+  // the event log so the operator's activity panel can show live architect
+  // reasoning — the ONE shared sink pair (interactive-session.ts), which owns
+  // the per-block char caps, the per-turn row ceiling, and (thinking only)
+  // raw-text coalescing.
   const initiativeIdForLog = `architect-session-${input.sessionId}`;
-  const onText = (text: string): void => {
-    const capped = text.length > MAX_REASONING_TEXT
-      ? `${text.slice(0, MAX_REASONING_TEXT)}…`
-      : text;
-    logger.emit({
-      initiative_id: initiativeIdForLog,
-      phase: 'architect',
-      skill: 'architect-runner',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: input.sessionId, kind: 'reasoning' },
-    });
+  const sinkCtx = {
+    initiativeId: initiativeIdForLog,
+    phase: 'architect' as const,
+    skill: 'architect-runner',
+    idMeta: { session_id: input.sessionId },
   };
-
-  // W6-B1: forward extended-thinking blocks the same way, at a wider
-  // per-block cap (thinking is denser, less redundant with the rest of the
-  // logged turn) and with consecutive-duplicate coalescing so a run of
-  // `redacted_thinking` blocks doesn't flood the log with identical rows.
-  const MAX_THINKING_TEXT = 700;
-  let lastThinkingEmitted: string | null = null;
-  const onThinking = (text: string): void => {
-    const capped = text.length > MAX_THINKING_TEXT
-      ? `${text.slice(0, MAX_THINKING_TEXT)}…`
-      : text;
-    if (capped === lastThinkingEmitted) return;
-    lastThinkingEmitted = capped;
-    logger.emit({
-      initiative_id: initiativeIdForLog,
-      phase: 'architect',
-      skill: 'architect-runner',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: input.sessionId, kind: 'thinking' },
-    });
-  };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   let result: RunArchitectTurnResult;
 

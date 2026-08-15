@@ -20,6 +20,7 @@ import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   makeHeartbeatWriter,
+  makeThinkingSink,
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
@@ -153,7 +154,9 @@ export async function runProjectBrainTurn(
     { readOnlySampleRate: 1, cap: 200 },
   );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const onThinking = makeThinkingSink(logger, initiativeId, input.sessionId);
+  const onThinking = makeThinkingSink(logger, {
+    initiativeId, phase: 'reflection', skill: 'project-brain-builder', idMeta: { session_id: input.sessionId },
+  });
 
   let result: RunProjectBrainTurnResult;
 
@@ -385,30 +388,10 @@ function runCommitStep(args: {
   return { phase: 'committed', wrote, themes: staged };
 }
 
-const MAX_THINKING_TEXT = 700;
-
-/**
- * W6-B1: forward extended-thinking blocks to the event log — this runner had
- * NO reasoning/text sink at all before this change (unlike its siblings), so
- * there is no existing `makeReasoningSink` to mirror the shape of; this
- * follows the SAME shape those other runners' sinks use (event_type 'log',
- * metadata.kind, session_id), just for 'thinking' only. Per-block cap of
- * MAX_THINKING_TEXT chars; a run of consecutive IDENTICAL rows (the shape of
- * several `redacted_thinking` blocks in a row) coalesces to one emitted row.
- */
-function makeThinkingSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
-  let lastEmitted: string | null = null;
-  return (text: string) => {
-    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
-    if (capped === lastEmitted) return;
-    lastEmitted = capped;
-    logger.emit({
-      initiative_id: initiativeId, phase: 'reflection', skill: 'project-brain-builder',
-      event_type: 'log', input_refs: [], output_refs: [],
-      message: capped, metadata: { session_id: sessionId, kind: 'thinking' },
-    });
-  };
-}
+// W6-B1 review round 2: the local makeThinkingSink duplicate was removed —
+// this file now consumes the ONE shared sink exported from
+// interactive-session.ts (imported above). This runner still has no
+// reasoning sink (it never had one before W6-B1; unchanged scope).
 
 /** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir
  *  included) — a symlinked `themes/` collapses to null → []. */

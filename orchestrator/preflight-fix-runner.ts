@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
-import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
+import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
@@ -103,39 +103,11 @@ export async function runPreflightFixTurn(
 
   // W6-B1: preflight-fix drives its own raw SDK stream loop (not
   // runStructuredTurn/runAgentTurn), so it had NO text/thinking sink at all
-  // before this change — added inline below, same event shape every other
-  // runner's sink uses (event_type 'log', metadata.kind, runId).
-  const MAX_REASONING_TEXT = 400;
-  const onText = (text: string): void => {
-    const capped = text.length > MAX_REASONING_TEXT ? `${text.slice(0, MAX_REASONING_TEXT)}…` : text;
-    logger.emit({
-      initiative_id: cycleId,
-      phase: 'orchestrator',
-      skill: 'preflight-fix',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { runId: input.runId, kind: 'reasoning' },
-    });
-  };
-  const MAX_THINKING_TEXT = 700;
-  let lastThinkingEmitted: string | null = null;
-  const onThinking = (text: string): void => {
-    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
-    if (capped === lastThinkingEmitted) return;
-    lastThinkingEmitted = capped;
-    logger.emit({
-      initiative_id: cycleId,
-      phase: 'orchestrator',
-      skill: 'preflight-fix',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { runId: input.runId, kind: 'thinking' },
-    });
-  };
+  // before this change — wired inline below onto the ONE shared sink pair
+  // (interactive-session.ts), keyed by runId (this file's own id convention).
+  const sinkCtx = { initiativeId: cycleId, phase: 'orchestrator' as const, skill: 'preflight-fix', idMeta: { runId: input.runId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   const skillFile = skillPath('preflight-fix', input.forgeRoot);
   let skillPrompt = 'You are the forge preflight-fix agent.';
