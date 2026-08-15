@@ -30,8 +30,9 @@
  *
  * ── SCOPE NOTE ──────────────────────────────────────────────────────────────
  * This file asserts the serpentine is GONE. It intentionally does NOT assert
- * the DAG is PRESENT (its `data-roadmap-dag` container, topo layout, run-link
- * joins) — those positive contracts are pinned by the DAG render/journey ATs in
+ * the replacement is PRESENT (its container, layout, run-link joins — W6-RV-2:
+ * `data-roadmap-canvas`, formerly `data-roadmap-dag`) — those positive
+ * contracts are pinned by that replacement's own render/journey ATs in
  * sibling files, not here. Keeping this gate one-sided (absence only) is what
  * lets it be a clean, un-rottable retirement lock.
  *
@@ -163,8 +164,9 @@ test('AT6-SERPENTINE-RETIRED: no non-test forge-ui source references SerpentineT
 // referenced `data-roadmap-timeline` (that attr lives only on the serpentine's
 // own container, SerpentineTimeline.tsx:157, which F1 deletes). It is included
 // here — not as a red→green pin — as a standing guard so that when the DAG
-// lands with its own `data-roadmap-dag` container, nobody re-introduces or
-// leaves a `data-roadmap-timeline` selector behind to rot a journey.
+// (and later, W6-RV-2's canvas) lands with its own container attribute,
+// nobody re-introduces or leaves a `data-roadmap-timeline` selector behind
+// to rot a journey.
 //
 // EXPIRY: this test flips RED the moment any journey starts matching
 // `data-roadmap-timeline` again. It never needs updating for the DAG cutover
