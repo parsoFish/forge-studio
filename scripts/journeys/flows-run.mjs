@@ -884,10 +884,20 @@ export const journey = defineJourney({
                   () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                await caption(p, 'From the library — the Flows nav is where a run in progress is watched.');
+                await caption(p, 'From the library — the Flows nav opens the flows index, where a run in progress is watched.');
                 await p.locator('[data-nav="flows"]').scrollIntoViewIfNeeded().catch(() => {});
                 await sleep(THINK);
+                // W6-IA-5: the Flows nav item now points at the flows INDEX
+                // (/flows), not straight at forge-develop's own monitor — click
+                // through the real index card to reach it, same as an operator
+                // would.
                 await p.locator('[data-nav="flows"]').click().catch(() => {});
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                ).catch(() => {});
+                await caption(p, 'The flows index — click through to forge-develop, the flow already running this cycle.');
+                await p.locator('[data-card-type="flow"][data-card-id="forge-develop"]').click().catch(() => {});
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
@@ -908,7 +918,7 @@ export const journey = defineJourney({
                   ).catch(() => {});
                 }
                 await sleep(WORK);
-              }, { readySel: '[data-page="library"]', caption: 'From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing' });
+              }, { readySel: '[data-page="library"]', caption: 'From the library, through the flows index, into the flow monitor — WI fan-out, demo own-node, cost pills accruing' });
 
         },
       },
