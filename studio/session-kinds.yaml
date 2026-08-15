@@ -57,6 +57,22 @@
   # primitive), so this is its ONLY source of derivable affordances.
   panel:
     phases:
+      # W6-B9 — the pre-interview briefing checkpoint. `POST
+      # /api/instructions/start` (cli/ui-bridge.ts:3193-3197) lands EVERY new
+      # instructions session here, phase 'briefing', WITHOUT spawning the
+      # agent; the operator's (optional) brief/change-notes gate the first
+      # real turn. Modeled as `awaits: questions` — reused, not a new
+      # affordance kind: structurally identical to `awaiting-answers` below
+      # (operator supplies free text -> phase advances -> agent spawns), just
+      # a different on-disk target (`prompt.md`, not `answers.json`) and
+      # transition source (`briefing`, not an interview round). Dispatched by
+      # `handleInstructionsBrief` (cli/bridge-studio-affordances.ts),
+      # phase-selected off this SAME `question-form` affordance id alongside
+      # `handleInstructionsAnswer` — mirrors `POST /api/instructions/brief`
+      # (cli/ui-bridge.ts:3275), which stays live as a bespoke, un-migrated
+      # route (no remaining frontend caller after this batch, but a real,
+      # independently-tested bridge surface, not removed by this initiative).
+      - { phase: briefing, step: noop, awaits: questions, next: interviewing }
       # orchestrator/instructions-runner.ts:18, runInterviewStep (agent turn,
       # orchestrator/instructions-runner.ts:310) — branches (needs input ->
       # awaiting-answers; ready -> drafting), so no single `next` here.

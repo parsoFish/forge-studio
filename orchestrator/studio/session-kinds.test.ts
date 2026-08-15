@@ -2024,6 +2024,10 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       instructions.panel,
       {
         phases: [
+          // W6-B9 — the pre-interview briefing checkpoint (POST
+          // /api/instructions/start lands every new session here); reuses
+          // `question-form` (`awaits: 'questions'`), same as awaiting-answers.
+          { phase: 'briefing', step: 'noop', awaits: 'questions', next: 'interviewing' },
           { phase: 'interviewing', step: 'agent' },
           { phase: 'awaiting-answers', step: 'noop', awaits: 'questions', next: 'interviewing' },
           { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
@@ -2033,7 +2037,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
           { phase: 'rejected', step: 'terminal' },
         ],
       },
-      `instructions' panel must deep-equal the interviewing->...->committed/rejected table mirroring instructions-runner.ts:17-24, got: ${JSON.stringify(instructions.panel)}`,
+      `instructions' panel must deep-equal the briefing->interviewing->...->committed/rejected table mirroring instructions-runner.ts:17-24 + W6-B9's briefing row, got: ${JSON.stringify(instructions.panel)}`,
     );
 
     const onboarding = byId(descs, 'onboarding');

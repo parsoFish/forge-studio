@@ -20,22 +20,32 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // 409s exactly as a forged one would; this panel is a thin, honest renderer
 // over that already-derived contract, not a second source of truth.
 //
-// W6-B6 wired `demo`/`onboarding` onto this surface; W6-B8 adds `kb-cleanup`
+// W6-B6 wired `demo`/`onboarding` onto this surface; W6-B8 added `kb-cleanup`
 // and `authoring` (deleting their bespoke `SessionCleanupPanel`/
-// `SessionAuthoringPanel`) — architect/instructions keep their own panels
-// (instructions is a future migration; architect never migrates, ADR-043
-// amendment §4 — its branching council/interview control flow has no linear
-// phase-table seam).
+// `SessionAuthoringPanel`); W6-B9 adds `instructions` (deleting its bespoke
+// `SessionInstructionsPanel`) — architect is now the ONLY kind that keeps its
+// own panel, permanently (ADR-043 amendment §4 — its branching
+// council/interview control flow has no linear phase-table seam).
 //
 // Per-affordance-kind rendering:
-//   - `question-form` — a free-text answer box (this batch's B4/B6 pass has
-//     no per-question granularity on the wire yet — the operator reads the
-//     actual question text in the transcript pane to the LEFT of this panel
-//     and replies here; a future batch that threads structured
-//     `questions.json` rows onto the shell payload can replace this single
-//     box with per-question fields without touching the POST contract).
-//     Submits `{answers: [{question, answer}]}` — B4's
-//     `handleInstructionsAnswer`'s exact body shape.
+//   - `question-form` — a free-text answer box (no per-question granularity
+//     on the wire — the operator reads the actual question text in the
+//     transcript pane to the LEFT of this panel and replies here; the
+//     transcript already surfaces the FULL pending question text at
+//     `awaiting-answers` — `deriveSessionTranscript`,
+//     orchestrator/studio/session-transcript.ts — so this box does not
+//     duplicate it). Submits `{answers: [{question, answer}]}` — B4's
+//     `handleInstructionsAnswer`'s exact body shape. instructions (W6-B9) is
+//     this affordance kind's first real consumer, and derives it from TWO
+//     phases: `awaiting-answers` (a real interview round) and `briefing` (the
+//     pre-interview checkpoint every new session starts at,
+//     `handleInstructionsBrief`, cli/bridge-studio-affordances.ts) — the Send
+//     button therefore does NOT require non-empty text (unlike an earlier
+//     revision of this file): a briefing note is genuinely optional (the
+//     bespoke route it replaces, `POST /api/instructions/brief`, always
+//     accepted an empty brief), and an empty interview answer is harmless —
+//     the agent can simply re-ask. No per-phase special-casing here; the
+//     button reads the SAME rule for both.
 //   - `verdict` — approve/reject buttons, rendered from `affordance.meta.
 //     verdicts` ONLY (W6-B6 post-merge review) — the server-derived, single
 //     source of "which verdict values are legal here"
@@ -248,9 +258,9 @@ export function SessionInteractivePanel({
                 type="button"
                 className="btn btn-primary"
                 data-action="submit-answers"
-                disabled={busy || answerText.trim().length === 0}
+                disabled={busy}
                 onClick={() => void submit(affordance, { answers: [{ question: 'Operator response', answer: answerText.trim() }] })}
-                style={{ opacity: busy || answerText.trim().length === 0 ? 0.5 : 1 }}
+                style={{ opacity: busy ? 0.5 : 1 }}
               >
                 {busy ? 'Sending…' : 'Send answer'}
               </button>

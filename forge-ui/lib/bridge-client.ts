@@ -796,7 +796,12 @@ export async function listInstructionsSessions(): Promise<InstructionsSessionSum
 /**
  * Open a new instructions session in phase 'briefing' (does NOT spawn the agent).
  * `mode: 'edit'` carries the existing AGENTS.md as context; `'init'` creates one.
- * The operator reviews on the briefing screen, then kicks off via {@link instructionsBrief}.
+ * The operator reviews on the session shell, then kicks off via the generic
+ * `question-form` affordance the `briefing` phase derives (W6-B9,
+ * `postSessionAffordance('instructions', sessionId, 'briefing-question-form', ...)`,
+ * `@/lib/session-client`) — `POST /api/instructions/brief` (the bespoke route
+ * this used to read a dedicated `instructionsBrief` client function for) is
+ * unchanged server-side but has no remaining forge-ui caller.
  */
 export async function startInstructions(input: {
   project: string;
@@ -819,31 +824,14 @@ export async function startInstructions(input: {
   };
 }
 
-/** Record briefing notes and kick off the instructions agent (briefing → interviewing). */
-export async function instructionsBrief(input: {
-  project: string;
-  sessionId: string;
-  brief: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/instructions/brief', input);
-}
-
-export async function answerInstructions(input: {
-  project: string;
-  sessionId: string;
-  answers: { question: string; answer: string }[];
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/instructions/answer', input);
-}
-
-export async function instructionsVerdict(input: {
-  project: string;
-  sessionId: string;
-  kind: 'approve' | 'revise' | 'reject';
-  feedback?: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  return bridgePost('/api/instructions/verdict', input);
-}
+// W6-B9 — `instructionsBrief`/`answerInstructions`/`instructionsVerdict`
+// (the bespoke `/api/instructions/{brief,answer,verdict}` client wrappers)
+// are RETIRED here — their sole caller, `SessionInstructionsPanel`, is
+// deleted; every instructions affordance now POSTs through the generic
+// `postSessionAffordance` (`@/lib/session-client`) instead. The three bridge
+// routes themselves are unchanged server-side (still real, independently
+// tested bridge surface — cli/ui-bridge-instructions.test.ts) — only their
+// forge-ui client wrappers had no remaining caller.
 
 // ---- Demo-builder (Stage B) ----------------------------------------------
 //

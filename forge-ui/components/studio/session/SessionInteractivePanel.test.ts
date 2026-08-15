@@ -95,7 +95,7 @@ test('provenance strip reads "derived from phase <phase>" verbatim, and the mode
 // question-form
 // ---------------------------------------------------------------------------
 
-test('question-form affordance renders an answer field + disabled submit-answers button until text is entered', () => {
+test('question-form affordance renders an answer field + an ENABLED submit-answers button on initial render (W6-B9: no non-empty requirement — a briefing note is genuinely optional)', () => {
   const html = render({
     kind: 'instructions',
     phase: 'awaiting-answers',
@@ -104,7 +104,19 @@ test('question-form affordance renders an answer field + disabled submit-answers
   expect(html).toContain('data-affordance-kind="question-form"');
   expect(html).toContain('data-field="session-answer"');
   const tag = actionTag(html, 'submit-answers');
-  expect(tag).toContain('disabled=""');
+  expect(tag).not.toContain('disabled=""');
+});
+
+test("question-form affordance renders identically for instructions' 'briefing' phase (same reused affordance kind, different phase)", () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'briefing',
+    affordances: [{ id: 'briefing-question-form', kind: 'question-form', phase: 'briefing' }],
+  });
+  expect(html).toContain('data-affordance-kind="question-form"');
+  expect(html).toContain('data-field="session-answer"');
+  const tag = actionTag(html, 'submit-answers');
+  expect(tag).not.toContain('disabled=""');
 });
 
 // ---------------------------------------------------------------------------

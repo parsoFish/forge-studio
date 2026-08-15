@@ -24,16 +24,16 @@ import {
 import { SessionTranscript } from '@/components/studio/session/SessionTranscript';
 import { SessionArtifactPane } from '@/components/studio/session/SessionArtifactPane';
 import { SessionArchitectPanel } from '@/components/studio/session/SessionArchitectPanel';
-import { SessionInstructionsPanel } from '@/components/studio/session/SessionInstructionsPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
 
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
- *  adds `kb-cleanup` and `authoring`, deleting their bespoke
- *  `SessionCleanupPanel`/`SessionAuthoringPanel` (no dual paths). architect/
- *  instructions keep their own panels — instructions is a future migration;
- *  architect never migrates (ADR-043 amendment §4). */
-const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring']);
+ *  added `kb-cleanup`/`authoring`; W6-B9 adds `instructions`, deleting its
+ *  bespoke `SessionInstructionsPanel` (no dual paths) — architect is now the
+ *  ONLY kind left on its own panel, permanently (ADR-043 amendment §4: its
+ *  branching council/interview control flow has no linear phase-table seam
+ *  a generic ladder could express). */
+const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring', 'instructions']);
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -51,12 +51,14 @@ const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 
  *   - the PRE-EXISTING per-kind session-summary endpoint
  *     (fetchArchitectSessions / listInstructionsSessions /
  *     fetchProjectBrainSessions[+fetchStagedThemes]) — unchanged from the
- *     three retired pages. This is what still powers every LIVE operator
- *     affordance (question forms, briefing, verdict, theme review): the new
- *     read route's payload carries no `questions`/`draftUrl`/`staleMs`/
- *     `mode` — those fields live only on the older, richer summary shape,
- *     and every one of those affordances is a T2-mandated carry-over, wired
- *     to the SAME endpoints/clients as before, not reinvented here.
+ *     three retired pages. Still powers architect's and project-brain's own
+ *     bespoke panels (question forms, briefing, verdict, theme review — the
+ *     new read route's payload carries no `questions`/`draftUrl`/`staleMs`/
+ *     `mode`, fields that live only on this older, richer summary shape).
+ *     W6-B9: instructions keeps ITS branch here too, but ONLY to resolve
+ *     `project` for a deep link that omits `?project=` (mirrors the W6-B6
+ *     demo fix, below) — every instructions affordance now renders from the
+ *     generic `SessionInteractivePanel` instead.
  *
  * `project` is required by `fetchSessionShell` but not by the per-kind list
  * endpoints (which return every session, `.project` included) — so `project`
@@ -210,31 +212,51 @@ export default function SessionShellPage({
       }}
     >
       {viewState.status === 'ready' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
-          <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>
-            {summary && summary.kind === 'architect' ? (
-              <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
-            ) : summary && summary.kind === 'instructions' ? (
-              <SessionInstructionsPanel session={summary.data} events={events} nowMs={nowMs} onRefresh={refreshSummary} />
-            ) : summary && summary.kind === 'project-brain' ? (
-              <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
-            ) : GENERIC_PANEL_KINDS.has(kind) ? (
-              <SessionInteractivePanel
-                kind={kind}
-                sessionId={sessionId}
-                project={project}
-                phase={viewState.phase}
-                affordances={viewState.affordances}
-                artifact={viewState.artifact}
-                modelTier={viewState.modelTier}
-                events={events}
-                terminal={viewState.terminal}
-                onChanged={refreshShell}
-                onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
-              />
-            ) : null}
-          </SessionTranscript>
-          <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />
+        <div>
+          {/* W6-B9 — a GENERIC "back to project" link for every kind, rendered
+              from the shell itself (never a per-panel one-off): whenever a
+              session has settled (`viewState.terminal`, the SAME server-derived
+              fact SessionInteractivePanel already gates its ActivityLog drawer
+              on) AND `project` is known, there is nothing left for the operator
+              to do here — closes the gap instructions' retired bespoke panel
+              used to close ONLY for itself (its own committed/rejected states'
+              `data-action="back-to-project"` link), now true for demo/
+              onboarding/kb-cleanup/authoring/instructions alike. architect and
+              project-brain keep their own additional bespoke nav (unaffected,
+              unremoved) — this is purely additive. */}
+          {viewState.terminal && project && (
+            <Link
+              href={`/projects/${encodeURIComponent(project)}`}
+              data-action="back-to-project"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}
+            >
+              ← Back to project
+            </Link>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+            <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>
+              {summary && summary.kind === 'architect' ? (
+                <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
+              ) : summary && summary.kind === 'project-brain' ? (
+                <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
+              ) : GENERIC_PANEL_KINDS.has(kind) ? (
+                <SessionInteractivePanel
+                  kind={kind}
+                  sessionId={sessionId}
+                  project={project}
+                  phase={viewState.phase}
+                  affordances={viewState.affordances}
+                  artifact={viewState.artifact}
+                  modelTier={viewState.modelTier}
+                  events={events}
+                  terminal={viewState.terminal}
+                  onChanged={refreshShell}
+                  onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+                />
+              ) : null}
+            </SessionTranscript>
+            <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />
+          </div>
         </div>
       ) : viewState.status === 'error' ? (
         <div data-section="session-error" style={{ fontSize: 13, color: '#f85149' }}>

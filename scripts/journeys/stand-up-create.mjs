@@ -420,7 +420,7 @@ export const journey = defineJourney({
         title: 'instructions-creator — generate AGENTS.md (AI-assisted)',
         narration: 'The operator launches the instructions-creator agent, answers its two clarifying questions, and approves the AGENTS.md it drafts — a new project gets its onboarding contract written for it, with a human still signing off.',
         drive: async (ctx) => {
-              const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
+              const { page, watch, browser, frame, recordClip, check } = ctx;
               // ════════════════════════════════════════════════════════════════════════
               // PART 1 — STAND UP (AI-assisted generation). The project's AGENTS.md and its
               // seed brain, generated WITH AI ASSISTANCE, plus aligning an existing repo to
@@ -451,26 +451,38 @@ export const journey = defineJourney({
               await instrBurst(instrSid, ['Glob', 'Read', 'Grep', 'Bash']);
               writeInstrQuestions(instrSid);
               writeInstrStatus(instrSid, { phase: 'awaiting-answers', round: 1 });
-              await page.waitForSelector('[data-section="instructions-interview"]', { timeout: 15000 }).catch(() => {});
-              check(await page.locator('[data-section="instructions-interview"]').count() > 0, 'AI-1: interview returns clarifying questions');
-              await countAtLeast(page, '[data-question-index]', 2, 'AI-1: ≥2 instructions questions');
+              // W6-B9: instructions now renders the GENERIC SessionInteractivePanel
+              // (its bespoke SessionInstructionsPanel/ArchitectQuestionForm pairing
+              // is retired) — the operator's affordance is the single-box
+              // `question-form` section, not a per-question fieldset list.
+              await page.waitForSelector('[data-affordance-kind="question-form"]', { timeout: 15000 }).catch(() => {});
+              check(await page.locator('[data-affordance-kind="question-form"]').count() > 0, 'AI-1: interview returns a question-form affordance');
               // R2-10: at least one turn, derived from a REAL checkpoint file —
               // questions.json contributes a pending AGENT turn while phase is
-              // exactly 'awaiting-answers' (never invented).
+              // exactly 'awaiting-answers' (never invented). Per-question DOM
+              // elements no longer exist (the generic panel doesn't render one
+              // fieldset per question) — the transcript pane is now the ONLY
+              // place BOTH real questions' text is observable, so the "≥2
+              // instructions questions" proof moves there.
               await page.waitForFunction(
                 () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
                 null, { timeout: 8000 },
               ).catch(() => {});
               const instrTurn0 = await page.evaluate(() => {
                 const el = document.querySelector('[data-turn-index="0"]');
-                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source') } : null;
+                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source'), text: el.textContent ?? '' } : null;
               });
               check(instrTurn0 !== null && instrTurn0.role === 'agent' && instrTurn0.source === 'questions.json',
                 `AI-1: transcript derives a real turn from questions.json (got ${JSON.stringify(instrTurn0)})`);
+              check(
+                Boolean(instrTurn0?.text.includes('primary audience') && instrTurn0?.text.includes('quality gate')),
+                'AI-1: ≥2 instructions questions — both real question strings reach the transcript pane',
+              );
               await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
-              // answer → draft → verdict
-              await page.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
-              await page.locator('[data-question-index="1"] input[type="radio"]').first().check().catch(() => {});
+              // answer → draft → verdict — the generic single free-text box
+              // (data-action="submit-answers" is the ONE action name shared with
+              // the retired bespoke form, so this line is unchanged).
+              await page.locator('[data-field="session-answer"]').fill('Humans + agents, npm test.').catch(() => {});
               await page.locator('[data-action="submit-answers"]').click().catch(() => {});
               await sleep(ACT);
               writeInstrStatus(instrSid, { phase: 'drafting', round: 2 });
@@ -478,8 +490,12 @@ export const journey = defineJourney({
               await instrBurst(instrSid, ['Read', 'Write']);
               writeInstrDraft(instrSid);
               writeInstrStatus(instrSid, { phase: 'awaiting-verdict', round: 2 });
-              await page.waitForSelector('[data-component="instructions-verdict"]', { timeout: 15000 }).catch(() => {});
-              check(await page.locator('[data-component="instructions-verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
+              // W6-B9: the generic verdict affordance (retires the bespoke
+              // InstructionsVerdict component) — the drafted AGENTS.md itself
+              // is checked below via the (unchanged) markdown-draft artifact
+              // pane, not this control.
+              await page.waitForSelector('[data-affordance-kind="verdict"]', { timeout: 15000 }).catch(() => {});
+              check(await page.locator('[data-affordance-kind="verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
               // R2-10: the artifact pane — instructions' declared renderer is
               // markdown-draft, with the drafted AGENTS.md rendering as real
               // content (not the no-draft placeholder) and a non-empty label
@@ -523,9 +539,13 @@ export const journey = defineJourney({
                 if (instrClipSid) {
                   // The real button: a genuine bridge session at 'briefing' — brief it
                   // for real too (the flip to 'interviewing' is real; the spawn is not).
-                  await p.waitForSelector('[data-section="session-briefing"]', { timeout: 10000 }).catch(() => {});
-                  await p.locator('[data-field="briefing-notes"]').fill('Keep it short; document the build + test gate.').catch(() => {});
-                  await p.locator('[data-action="submit-brief"]').click().catch(() => {});
+                  // W6-B9: 'briefing' now derives the SAME generic `question-form`
+                  // affordance as an interview round (handleInstructionsBrief,
+                  // cli/bridge-studio-affordances.ts) — the bespoke SessionBriefing
+                  // form this used to drive is retired.
+                  await p.waitForSelector('[data-affordance-kind="question-form"]', { timeout: 10000 }).catch(() => {});
+                  await p.locator('[data-field="session-answer"]').fill('Keep it short; document the build + test gate.').catch(() => {});
+                  await p.locator('[data-action="submit-answers"]').click().catch(() => {});
                 } else {
                   // Fallback — the real trigger didn't land this run; an honest brief
                   // pause onto a clip-only session rather than a silent jump-cut.
@@ -555,17 +575,28 @@ export const journey = defineJourney({
                 await sleep(WORK);
                 writeInstrDraft(instrClipSid);
                 writeInstrStatus(instrClipSid, { phase: 'awaiting-verdict', round: 2 });
-                await p.waitForSelector('[data-component="instructions-verdict"]', { timeout: 12000 }).catch(() => {});
+                await p.waitForSelector('[data-affordance-kind="verdict"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
               }, { readySel: 'main[data-page="projects"]', caption: 'clicking "Generate AGENTS.md with the instructions agent" on the project page — briefing → interviewing → drafting → the generated draft' });
               if (instrClipSid) cleanInstructionsSession(instrClipSid);
-              // approve → committed
-              await page.locator('[data-component="instructions-verdict"] [data-action="approve-instructions"]').click().catch(() => {});
-              await page.waitForSelector('[data-component="instructions-verdict"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
+              // approve → committed. The generic verdict-approve is a REAL POST
+              // (handleInstructionsVerdict, cli/bridge-studio-affordances.ts) that
+              // advances phase to 'finalizing' server-side — wait for that before
+              // the fixture layer emulates the (no-spawn) finalize step landing on
+              // 'committed', so the click's real effect is proven, not assumed.
+              await page.locator('[data-affordance-kind="verdict"] [data-action="verdict-approve"]').click().catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'finalizing',
+                null, { timeout: 10000 },
+              ).catch(() => {});
               writeInstrStatus(instrSid, { phase: 'committed', round: 2 });
               instrEvent(instrSid, 'log', 'instructions-committed (AGENTS.md written)');
               await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
               await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).catch(() => {});
+              // W6-B9: the GENERIC terminal "back to project" link, rendered by
+              // the session shell itself for every kind once `terminal && project`
+              // (app/sessions/[kind]/[sessionId]/page.tsx) — not a per-kind
+              // affordance any more.
               await page.waitForSelector('[data-action="back-to-project"]', { timeout: 8000 }).catch(() => {});
               check(await page.locator('[data-action="back-to-project"]').count() > 0, 'AI-1: AGENTS.md committed — back-to-project offered');
               await frame(page, 'instr-2-committed', 'Part 1 — AGENTS.md generated + approved (AI-assisted)');

@@ -208,9 +208,12 @@ function safeParseJson<T>(raw: string): T | null {
 
 // ---------------------------------------------------------------------------
 // question-form — instructions' interview-answer round
-// (`awaiting-answers-question-form`, the ONLY `awaits:questions` row in the
-// whole registry — mirrors `POST /api/instructions/answer`,
-// `cli/ui-bridge.ts:3236`).
+// (`awaiting-answers-question-form` — mirrors `POST /api/instructions/answer`,
+// `cli/ui-bridge.ts:3236`). W6-B9 — instructions' `briefing` phase ALSO
+// derives a `question-form` row (`briefing-question-form`, same reused
+// `awaits: 'questions'` shape) — dispatched to `handleInstructionsBrief`
+// below instead, by `affordance.phase`, since the two share a `kind` but
+// write to different files with different semantics.
 // ---------------------------------------------------------------------------
 
 /** Hardening (W6-B4 adversarial-review round): `answers[]` is an
@@ -285,6 +288,62 @@ async function handleInstructionsAnswer(
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
   sendJson(res, 200, { ok: true, round }, origin);
+}
+
+// ---------------------------------------------------------------------------
+// question-form — instructions' PRE-interview briefing checkpoint
+// (`briefing-question-form`, the phase `POST /api/instructions/start` lands
+// EVERY new session in — cli/ui-bridge.ts:3193-3197 — without spawning the
+// agent). Mirrors `POST /api/instructions/brief` (cli/ui-bridge.ts:3275):
+// writes `prompt.md` (NOT `answers.json` — a different on-disk target from
+// `handleInstructionsAnswer` above) and sets `status.prompt`/`round: 1`/
+// `phase: 'interviewing'`, then spawns the same turn.
+// ---------------------------------------------------------------------------
+
+async function handleInstructionsBrief(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const answersRaw = body.answers;
+  if (!Array.isArray(answersRaw) || !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).answer === 'string')) {
+    sendJson(res, 400, { error: 'body.answers must be an array of {question: string, answer: string}' }, origin);
+    return;
+  }
+  // W6-B9 — the generic single-box question-form UI submits at most one
+  // entry (SessionInteractivePanel's hardcoded `[{question:'Operator
+  // response', answer: answerText}]`); only the free text itself is the
+  // brief — this phase is not a real interview round, so there is no
+  // question to echo back. An empty submission (no entries, or a lone
+  // empty-string answer) is a legal "no notes" brief — mirrors the bespoke
+  // route's own `body.brief ?? ''` default, and is WHY the generic panel's
+  // Send button no longer requires non-empty text (see that file's own note).
+  const brief = (answersRaw[0] as { answer?: string } | undefined)?.answer ?? '';
+  const briefBytes = Buffer.byteLength(brief, 'utf8');
+  if (briefBytes > MAX_ANSWER_FIELD_BYTES) {
+    sendJson(res, 400, { error: `body.answers[0].answer is ${briefBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+    return;
+  }
+
+  // SYNC INVARIANT: no await between this function's writes and the
+  // caller's own status read above — see this file's header note.
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+
+  ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
+  ctx.broadcastInstructionsChanged();
+  sendJson(res, 200, { ok: true, phase: 'interviewing' }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +623,16 @@ export async function handleStudioAffordanceRoutes(
     // --- 4. body -> per-affordance-kind schema, then per session kind. ---
     if (affordance.kind === 'question-form') {
       if (descriptor.id === 'instructions') {
-        await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        // W6-B9 — 'briefing' and 'awaiting-answers' both derive a
+        // `question-form` affordance (same `kind`, different `phase`,
+        // different on-disk target) — dispatch on `affordance.phase`, the
+        // SAME server-derived field the client already reads, never a
+        // second phase read.
+        if (affordance.phase === 'briefing') {
+          await handleInstructionsBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        } else {
+          await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        }
         return true;
       }
       // Structurally unreachable today (instructions is the only descriptor

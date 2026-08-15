@@ -207,4 +207,6 @@ New requirement (operator, wave-6): pick the model at session kickoff. The seam 
 
 The frontend mirror of the 2026-08-14 amendment §1: architect is never migrated onto the generic panel. `SessionArchitectPanel` stays bespoke for the same reasons its runner does (branching control flow, council/interview affordances a linear phase table cannot express without per-kind creep). Every other kind's panel migrates: demo + onboarding first (they render nothing today), then kb-cleanup + authoring, then instructions. The bespoke panels are deleted as each kind migrates — no dual paths.
 
+**STATUS (2026-08-15): DONE.** demo + onboarding — W6-B6 (PR #162); kb-cleanup + authoring — W6-B8 (`feat/w6-b8-migrate-cleanup-authoring`); instructions — W6-B9 (`feat/w6-b9-migrate-instructions`, this branch). Architect is now the only kind on its own panel, permanently, exactly as this section describes.
+
 One consequence restated for the panel axis: the wedge disclosed in the 2026-08-14 amendment §4 (a runner throw leaves `status.json` at its pre-turn phase) becomes operator-visible on the generic panel; writing a terminal `failed` phase on that path is in wave-6 scope (bead `forge-poc`) rather than deferred indefinitely.

@@ -10,11 +10,14 @@ import {
 } from '@/lib/bridge-client';
 
 /**
- * Stage B — the DEMO.html review gate. Mirrors {@link InstructionsVerdict}'s
- * visual style, but renders the generated demo itself: on mount it absolutises
- * the bridge-relative `demoUrl` through {@link architectFileUrl} (the same
- * `base + relative` resolver InstructionsVerdict uses for its draft) and shows
- * the rendered DEMO.html in a `sandbox=""` iframe (the PLAN.html gate pattern).
+ * Stage B — the DEMO.html review gate. Renders the generated demo itself: on
+ * mount it absolutises the bridge-relative `demoUrl` through
+ * {@link architectFileUrl} (a generic `base + relative` resolver) and shows
+ * the rendered DEMO.html in a `sandbox=""` iframe (the PLAN.html gate
+ * pattern). (W6-B9: the sibling draft-preview gate this comment used to
+ * mirror, `InstructionsVerdict`, was retired when instructions migrated onto
+ * the generic `SessionInteractivePanel` — its draft preview lives on
+ * `SessionArtifactPane`'s `markdown-draft` renderer now.)
  *
  * Three actions wired to the demo-builder client:
  *   - Apply feedback & regenerate → demoBuilderFeedback({ feedback }) (→ generating)
