@@ -1411,7 +1411,8 @@ inventory rather than one shared page-level contract:
   `data-session-phase`, `data-turn-index`, `data-turn-role`,
   `data-turn-stage`, `data-artifact-kind` — is named here as the contract;
   the surface that attaches it lands with the shell route itself.
-- **The generic session-affordance WRITE endpoint (W6-B4) — the API side.**
+- **The generic session-affordance WRITE endpoint (W6-B4; W6-B9 adds the
+  generic `meta.requires` check) — the API side.**
   `POST /api/studio/sessions/:kind/:sessionId/:affordance`
   (`cli/bridge-studio-affordances.ts`) — `:affordance` is always one of the
   READ route's own `affordances[].id` values, re-validated against the
@@ -1421,15 +1422,23 @@ inventory rather than one shared page-level contract:
   `question-form`, `{verdict: 'approve'|'reject', ...}` for `verdict`
   (`demo`'s approve additionally accepts an optional integer `generation`).
   `kb-cleanup` and `authoring` accept `verdict: 'approve'` ONLY — a `reject`
-  422s (neither kind's `awaiting-*` gate declares a rejection path).
-  `instructions` is the only kind whose `question-form` dispatch itself
-  branches — by `affordance.phase`, not a second body field — between
-  `handleInstructionsAnswer` (`awaiting-answers`) and `handleInstructionsBrief`
-  (`briefing`, W6-B9: writes `prompt.md`, not `answers.json`); both accept the
-  identical `{answers: [...]}` body shape. Every
-  affordance kind this route has no write handler for at all — `staged-review`
-  / `next-turn`, which describe what an `agent` step already did rather than
-  something to trigger — 501s with `UnhandledAffordanceBody`
+  422s (neither kind's `awaiting-*` gate declares a rejection path). A
+  `verdict` body is ALSO checked GENERICALLY against `affordance.meta.requires`
+  (W6-B9, reviewer finding on W6-B8 — `studio/session-kinds.yaml`'s authored
+  `requires:` list on the source phase row; authoring's `awaiting-review` row
+  declares `requires: [id]`): each named field must be present as a
+  non-empty string, or the FIRST missing one 400s naming it — ONE check for
+  every session kind, never a hand-kept per-kind field list (this replaced
+  authoring's OWN hardcoded `{kind,id}` check — `kind` itself is no longer
+  read from the body at all; `handleAuthoringVerdict` derives it server-side
+  from the real staged files). `instructions` is the only kind whose
+  `question-form` dispatch itself branches — by `affordance.phase`, not a
+  second body field — between `handleInstructionsAnswer` (`awaiting-answers`)
+  and `handleInstructionsBrief` (`briefing`, W6-B9: writes `prompt.md`, not
+  `answers.json`); both accept the identical `{answers: [...]}` body shape.
+  Every affordance kind this route has no write handler for at all —
+  `staged-review` / `next-turn`, which describe what an `agent` step already
+  did rather than something to trigger — 501s with `UnhandledAffordanceBody`
   (`{ok:false, kind, error}`, mirroring `SessionArtifactPane`'s
   `UnhandledArtifactBody`), never a silent 200. Delegates to the SAME
   underlying write+spawn helpers every bespoke per-kind route already uses
@@ -1488,27 +1497,43 @@ inventory rather than one shared page-level contract:
   (`[data-field="session-package-id"]`, labelled "Skill id (directory name)"
   or "Hook id (directory name)" per the draft's shape — detected purely by
   file PRESENCE, `SKILL.md` ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒ still
-  drafting) — `handleAuthoringVerdict` (cli/bridge-studio-affordances.ts)
-  requires `{kind:'skill'|'hook', id}` in the approve body (D4: the library
-  directory name is an operator decision the drafted package cannot make for
-  itself), so Approve stays disabled until the field is non-empty AND the
-  shape has resolved — honestly, never a button known in advance to 400. On
-  a successful package-shaped approve the panel's `onPackageFinalized`
-  callback fires with the server's own `{kind, id}` echo, and the PAGE (not
-  the panel — `useRouter()` throws under the `renderToStaticMarkup` harness
-  this file's DOM regression suite uses) navigates to `/skills/<id>` or
-  `/hooks/<id>`, mirroring the retired `SessionAuthoringPanel`'s own
-  `onFinalized` behaviour. `staged-review`/`next-turn` are HIDDEN entirely
-  (W6-B9 reviewer fix; previously rendered disabled, labelled "not yet
-  wired" — B4 returns 501 for both). `isRenderableAffordance` filters
-  `affordances[]` down to `question-form`/`verdict` before this component
-  ever maps over it — `[data-affordance-count]` and the
-  `[data-section="session-no-affordances"]` empty-state gate both read the
-  FILTERED count, so a phase deriving only a `next-turn` row (instructions'
-  own `briefing`/`awaiting-answers` rows both legitimately do, via their
-  `next:` field) renders the honest no-affordances state, not a disabled
-  placeholder — clutter on the FIRST screen an operator sees is a real cost,
-  a control that can never work either way. Every endpoint error —
+  drafting, an ADVISORY-only client check, never a duplicate of a
+  server-enforced rule). **W6-B9 (reviewer finding on W6-B8):** which extra
+  POST body fields a verdict needs beyond `verdict` itself is now WIRE DATA
+  — `affordance.meta.requires` (`orchestrator/studio/session-kinds.ts`'s
+  `deriveSessionAffordances`, sourced from the row's authored `requires:`
+  list, `studio/session-kinds.yaml` — authoring's `awaiting-review` row
+  declares `requires: [id]`; omitted when a row needs nothing extra). Approve
+  stays disabled until every named field is filled (from the panel's own
+  `providedFields` map — today just `{id: packageId}`) AND the file-package
+  shape has resolved — honestly, never a button known in advance to 400.
+  This REPLACES the batch's original hardcoded "file-package needs an id"
+  client assumption: the write route (`cli/bridge-studio-affordances.ts`)
+  validates the SAME `meta.requires` list generically, in the shared
+  verdict-dispatch code (before any per-kind handler runs) — a missing/empty
+  named field 400s naming it, e.g. `body.id is required for verdict
+  "approve" on session kind "authoring" at phase "awaiting-review"`. `kind`
+  itself is NEVER sent in the approve body any more — `handleAuthoringVerdict`
+  derives it server-side from the REAL staged files (`staging/SKILL.md` /
+  `staging/hook.yaml`, via `guardedReadFile`), never a client-supplied guess
+  that could disagree with what actually lands; a request claiming the wrong
+  kind is silently corrected, never trusted. On a successful package-shaped
+  approve the panel's `onPackageFinalized` callback fires with the server's
+  own `{kind, id}` echo, and the PAGE (not the panel — `useRouter()` throws
+  under the `renderToStaticMarkup` harness this file's DOM regression suite
+  uses) navigates to `/skills/<id>` or `/hooks/<id>`, mirroring the retired
+  `SessionAuthoringPanel`'s own `onFinalized` behaviour. `staged-review`/
+  `next-turn` are HIDDEN entirely (W6-B9 reviewer fix; previously rendered
+  disabled, labelled "not yet wired" — B4 returns 501 for both).
+  `isRenderableAffordance` filters `affordances[]` down to
+  `question-form`/`verdict` before this component ever maps over it —
+  `[data-affordance-count]` and the `[data-section="session-no-affordances"]`
+  empty-state gate both read the FILTERED count, so a phase deriving only a
+  `next-turn` row (instructions' own `briefing`/`awaiting-answers` rows both
+  legitimately do, via their `next:` field) renders the honest
+  no-affordances state, not a disabled placeholder — clutter on the FIRST
+  screen an operator sees is a real cost, a control that can never work
+  either way. Every endpoint error —
   409 wrong-phase (naming the offending affordance id + the
   currently-available set), 422, 501 `UnhandledAffordanceBody` — surfaces
   verbatim via `[data-affordance-error]`, never swallowed.

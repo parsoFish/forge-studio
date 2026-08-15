@@ -121,10 +121,12 @@ const ONBOARDING_SESSION = '2026-08-10T09-00-00';
 const ONBOARDING_BAD_CONFIG_SESSION = '2026-08-10T09-01-00';
 // R4-19-F2 — kb-cleanup read-branch fixture (an unresolvable kb_id).
 const KB_CLEANUP_UNRESOLVABLE_SESSION = '2026-08-14T10-00-00';
-// R4-19-F2 WI-4c BLOCKER fix — a kb-cleanup session whose kb_id DOES resolve
-// (companion to KB_CLEANUP_UNRESOLVABLE_SESSION above), for pinning that the
-// 200 payload carries `kbId` on the wire (SessionCleanupPanel's
-// applyKbCleanup call-site defect — see AT-KBID-1 below).
+// R4-19-F2 WI-4c — a kb-cleanup session whose kb_id DOES resolve (companion
+// to KB_CLEANUP_UNRESOLVABLE_SESSION above). Originally seeded to pin the
+// `kbId` wire field (since removed, W6-B9 — see the retired AT-KBID-1/2
+// block, below the terminal-field tests); reused by the W6-B8 terminal/
+// affordances tests, which need a 200 (not the 409 the unresolvable fixture
+// deliberately produces).
 const KB_CLEANUP_RESOLVABLE_SESSION = '2026-08-14T10-02-00';
 const KB_CLEANUP_RESOLVABLE_KB_ID = 'kb-cleanup-wire-kb';
 // W6-B8 — the `terminal` wire-field pins: a kb-cleanup session already at its
@@ -132,6 +134,13 @@ const KB_CLEANUP_RESOLVABLE_KB_ID = 'kb-cleanup-wire-kb';
 // panel's terminal phase ('complete').
 const KB_CLEANUP_APPLIED_SESSION = '2026-08-14T10-03-00';
 const ONBOARDING_COMPLETE_SESSION = '2026-08-10T09-02-00';
+// LOW (reviewer finding on W6-B8) — the panel's OTHER terminal row
+// ('failed', alongside 'complete' above) needs its own pin: both are
+// declared `step: 'terminal'` in the real studio/session-kinds.yaml
+// onboarding panel, and nothing before this fixture distinguished
+// "only the FIRST terminal row happens to work" from "the whole table is
+// read correctly".
+const ONBOARDING_FAILED_SESSION = '2026-08-10T09-03-00';
 // W6-B6 — a session whose status.json genuinely carries a kickoff-selected
 // `modelTier` (W6-B5's write side), proving the read route threads it
 // through rather than the stale `null` placeholder.
@@ -371,6 +380,16 @@ function writeOnboardingCompleteSession(projectsRoot: string, project: string, s
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'complete' }), 'utf8');
 }
 
+/** LOW (reviewer finding on W6-B8) — the panel's OTHER terminal row
+ *  ('failed', studio/session-kinds.yaml's onboarding panel), a sibling of
+ *  writeOnboardingCompleteSession's 'complete' row above. */
+function writeOnboardingFailedSession(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'failed' }), 'utf8');
+}
+
 function writeArchitectSession(projectsRoot: string, project: string, sessionId: string): void {
   const dir = join(projectsRoot, project, '_architect', sessionId);
   mkdirSync(dir, { recursive: true });
@@ -585,6 +604,7 @@ before(async () => {
   // own doc comments above).
   writeCleanupSessionApplied(projectsRoot, 'demoproj', KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
   writeOnboardingCompleteSession(projectsRoot, 'onboardedproj', ONBOARDING_COMPLETE_SESSION);
+  writeOnboardingFailedSession(projectsRoot, 'onboardedproj', ONBOARDING_FAILED_SESSION);
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
@@ -1295,71 +1315,15 @@ test('R4-19-F2: GET /api/studio/sessions/kb-cleanup/<id>?project=<p> whose store
   );
 });
 
-// ===========================================================================
-// R4-19-F2 WI-4c BLOCKER FIX — `kbId` on the session-shell read route's 200
-// wire payload (the SHIPPED defect: `SessionCleanupPanel.tsx` calls
-// `applyKbCleanup(sessionId, {project, sessionId})` — the session id, not the
-// KB id, as the URL's `:id` segment, because this route never put a `kbId`
-// anywhere on the wire for the panel to read; `applyKbCleanup`'s FIRST
-// argument builds `POST /api/studio/kbs/<id>/cleanup/apply`, and a
-// timestamp-shaped session id fails `SLUG_RE` server-side, cli/ui-bridge.ts's
-// `kbCleanupApplyMatch` handler — "Approve" always 400s "invalid kb id").
-//
-// ORCHESTRATOR RULING pinned here: the 200 payload gains `kbId`, sourced from
-// the already-read `status.kb_id` (this route reads `statusParsed` once,
-// well before the `descriptor.artifact.kind === 'cleanup-plan'` branch —
-// lines ~283-298 above), present when the status carries one and OMITTED
-// otherwise — never a fabricated `''`/`null` for a session whose status
-// genuinely has no `kb_id` (the exact "declared-data-fails-open" shape this
-// whole campaign guards against, just for a NEW field this time).
-// ===========================================================================
-
-test('R4-19-F2 WI-4c AT-KBID-1 (RED — the shipped-defect regression lock): GET /api/studio/sessions/kb-cleanup/<id>?project=<p> for a session whose kb_id DOES resolve carries "kbId" on the 200 payload, equal to the session\'s OWN status.json kb_id — kills a payload that omits it, which is the exact reason SessionCleanupPanel had nothing correct to pass to applyKbCleanup and instead fell back to (mis)using the session id', async () => {
-  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_RESOLVABLE_SESSION}?project=demoproj`);
-  const text = await res.text();
-  assert.equal(res.status, 200, `arrange: the fixture's kb_id ("${KB_CLEANUP_RESOLVABLE_KB_ID}") must genuinely resolve (a real brain/<id>/kb.yaml exists) — a non-200 here means the fixture itself is broken, not the kbId pin, got ${res.status}: ${text}`);
-  const body = JSON.parse(text) as SessionShellBody & { kbId?: unknown };
-  assert.equal(body.ok, true);
-  assert.equal(body.kind, 'kb-cleanup');
-  assert.equal(
-    body.kbId,
-    KB_CLEANUP_RESOLVABLE_KB_ID,
-    `the 200 payload must carry "kbId" equal to the session's own status.json "kb_id" (${JSON.stringify(KB_CLEANUP_RESOLVABLE_KB_ID)}) — got kbId: ${JSON.stringify(body.kbId)}. This is the field SessionCleanupPanel needs and today's route never puts on the wire at all.`,
-  );
-
-  // W6-B3 — a TURNSPEC kind (kb-cleanup) at phase "awaiting-approval"
-  // ({ step: noop }, no writes/next — that absence IS the approval gate)
-  // must derive exactly a "verdict" affordance — proves the bridge threads
-  // turnSpec.phases through deriveSessionAffordances, the counterpart to the
-  // AT-39 instructions (panel-kind) affordance assertion above.
-  assert.deepEqual(
-    (body as SessionShellBody).affordances,
-    [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval', meta: { verdicts: ['approve'] } }],
-    `expected the turnSpec-derived affordances for phase "awaiting-approval", got: ${JSON.stringify((body as SessionShellBody).affordances)}`,
-  );
-});
-
-// Companion guard (see this WI's task report for why this specific
-// assertion is NOT independently red at branch base — today's route emits
-// NO "kbId" key under ANY condition, for ANY kind, so "absent" is trivially
-// already true before AT-KBID-1's fix lands too). Its value is as a
-// permanent regression lock ALONGSIDE AT-KBID-1: a naive fix for AT-KBID-1
-// that broadcasts `kbId: typeof statusParsed.kb_id === 'string' ?
-// statusParsed.kb_id : ''` (or `?? null`) unconditionally, for every session
-// kind, would flip AT-KBID-1 green while making THIS test fail — proving the
-// two tests together, not either alone, pin the full "present when present,
-// OMITTED (not defaulted) otherwise" contract the ORCHESTRATOR RULING states.
-test('R4-19-F2 WI-4c AT-KBID-2 (companion guard, not independently red — see comment above): GET /api/studio/sessions/architect/<id>?project=<p>, a kind whose status.json genuinely has no "kb_id" field at all, must NOT gain a fabricated "kbId" on the wire — no own-property, not "" and not null', async () => {
-  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}?project=demoproj`);
-  const text = await res.text();
-  assert.equal(res.status, 200, text);
-  const body = JSON.parse(text) as Record<string, unknown>;
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(body, 'kbId'),
-    false,
-    `a session kind with no real "kb_id" in status.json must never gain an invented "kbId" key (not even "" or null) — got: ${JSON.stringify(body['kbId'])}`,
-  );
-});
+// W6-B9 (reviewer finding on W6-B8): the `kbId` field these two tests used
+// to pin (R4-19-F2 WI-4c) is REMOVED from the session-shell read route's 200
+// wire payload — its one reader, SessionCleanupPanel.tsx, is deleted (W6-B8
+// migrated kb-cleanup onto the generic session shell; the generic write
+// route reads `status.kb_id` server-side, never off this wire field). The
+// AT-KBID-1 affordances assertion this block also carried (kb-cleanup's
+// turnSpec-derived verdict shape at "awaiting-approval") is preserved below,
+// folded into the existing W6-B8 terminal:false test against the SAME
+// fixture session, rather than dropped.
 
 // ===========================================================================
 // W6-B8 — `terminal` on the session-shell read route's 200 payload. Threads
@@ -1387,6 +1351,18 @@ test('W6-B8: GET /api/studio/sessions/kb-cleanup/<id> — terminal:false at a no
   assert.equal(res.status, 200, text);
   const body = JSON.parse(text) as SessionShellBody;
   assert.equal(body.terminal, false, `phase "awaiting-approval" (step: noop) is not terminal — got terminal=${JSON.stringify(body.terminal)}`);
+
+  // Folded in from the retired AT-KBID-1 (W6-B9): a TURNSPEC kind
+  // (kb-cleanup) at phase "awaiting-approval" ({ step: noop }, no
+  // writes/next — that absence IS the approval gate) must derive exactly a
+  // "verdict" affordance — proves the bridge threads turnSpec.phases through
+  // deriveSessionAffordances, the counterpart to the AT-39 instructions
+  // (panel-kind) affordance assertion above.
+  assert.deepEqual(
+    body.affordances,
+    [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval', meta: { verdicts: ['approve'] } }],
+    `expected the turnSpec-derived affordances for phase "awaiting-approval", got: ${JSON.stringify(body.affordances)}`,
+  );
 });
 
 test('W6-B8: GET /api/studio/sessions/kb-cleanup/<id> — terminal:true at the turnSpec\'s own terminal phase ("applied")', async () => {
@@ -1414,6 +1390,15 @@ test('W6-B8 (the panel-fallback fix): GET /api/studio/sessions/onboarding/<id> �
   const body = JSON.parse(text) as SessionShellBody;
   assert.equal(body.phase, 'complete');
   assert.equal(body.terminal, true, `phase "complete" (the panel's own step:'terminal' row) must report terminal=true — got ${JSON.stringify(body.terminal)}`);
+});
+
+test('LOW (reviewer finding on W6-B8): GET /api/studio/sessions/onboarding/<id> — terminal:true at the panel\'s OTHER terminal phase ("failed") — proves the fix reads the whole panel.phases table, not just the first terminal row it happens to find', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_FAILED_SESSION}?project=onboardedproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'failed');
+  assert.equal(body.terminal, true, `phase "failed" (the panel's OTHER step:'terminal' row) must report terminal=true — got ${JSON.stringify(body.terminal)}`);
 });
 
 test('W6-B8: GET /api/studio/sessions/instructions/<id> — terminal:false at "drafting" (a panel-derived kind whose legacy-table set already agreed — proves the fix is a no-op here)', async () => {

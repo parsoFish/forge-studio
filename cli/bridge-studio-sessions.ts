@@ -6,7 +6,7 @@
  *
  *   GET /api/studio/sessions/:kind/:sessionId?project=<p>
  *     → { ok, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
- *         affordances, modelTier, [kbId] }
+ *         affordances, modelTier, terminal }
  *
  * W6-B3 (ADR-043 2026-08-15 amendment §1/§2) data-contract additions:
  *   - `affordances` — `deriveSessionAffordances(descriptor, phase)`
@@ -25,6 +25,11 @@
  *     never writes one (the model chip renders the descriptor's fixed model
  *     instead) — never fabricated, never defaulted to a guessed tier. The
  *     key is always present (never omitted) either way.
+ *   - `terminal` (W6-B8) — `isTerminalPhase(descriptor, phase)`, the SAME
+ *     derivation this route already used internally to gate `ensureSessionTail`,
+ *     now also threaded onto the wire so the generic `SessionInteractivePanel`
+ *     can gate its ActivityLog drawer without a second, hand-kept
+ *     terminal-phase table client-side. ALWAYS present (never omitted).
  *
  * Mirrors bridge-studio-templates.ts's contract exactly: a single
  * `handleStudioSessionsRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
@@ -527,19 +532,6 @@ export async function handleStudioSessionsRoutes(
         // `SessionInteractivePanel` can gate its ActivityLog drawer without a
         // second, hand-kept terminal-phase table client-side.
         terminal: isTerminalPhase(descriptor, phase),
-        // R4-19-F2 WI-4c BLOCKER fix — `kbId`, sourced from the already-read
-        // `statusParsed.kb_id`, threaded the same way `title` is threaded
-        // above: present ONLY when the status genuinely carries a string
-        // kb_id, spread in rather than assigned, so kinds with no kb_id
-        // (e.g. architect) get no `kbId` key at all — not `''`, not `null`.
-        // This is the field the bespoke `applyKbCleanup` route's `:id` URL
-        // segment needs (W6-B8 retired the panel that consumed it directly —
-        // the generic write route, cli/bridge-studio-affordances.ts, reads
-        // `status.kb_id` server-side instead); broadcasting a fabricated
-        // default here would be the exact declared-data-fails-open shape
-        // this campaign guards against, just for a new field (AT-KBID-2 pins
-        // the omission).
-        ...(typeof statusParsed.kb_id === 'string' ? { kbId: statusParsed.kb_id } : {}),
       },
       origin,
     );

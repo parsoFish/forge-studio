@@ -157,20 +157,6 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/kbs/:id/cleanup/start', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/onboarding-start rows above' },
 
-  // ---- exempt-local: kb-cleanup apply (R4-19-F2) -------------------------
-  // NOT a spawn-helper row: this route runs `runBrainConsolidateNow`
-  // directly (the SAME local consolidate drain `/api/studio/kbs/:id/
-  // maintenance (op=consolidate)` already dispatches), and that helper
-  // ALREADY self-suppresses its own agent-tier spawn under dry-bridge
-  // (`const noSpawn = FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
-  // cli/bridge-studio-kbs.ts:502) — running deterministic in-process fixes
-  // only. This is exactly how the existing kb-maintain journey beat reaches
-  // a real `cleared` terminal under FORGE_DRY_BRIDGE=1 (the R1-06 lesson):
-  // suppressing this route further would refuse the approval path from ever
-  // being driven end-to-end under the dry-bridge harness, rather than
-  // exercising its real (locally-bounded) behaviour.
-  { method: 'POST', route: '/api/studio/kbs/:id/cleanup/apply', classification: 'exempt-local',
-    reason: 'runs the KB\'s existing local consolidate drain (runBrainConsolidateNow) — that helper already self-suppresses its own agent-tier spawn under dry-bridge, so this route is never suppressed further (mirrors /api/studio/kbs/:id/maintenance (op=consolidate|lint|fix-auto|index) below)' },
 
   // ---- stub-actions: connections install (R3-04, D6/D7) -----------------
   // installArgvFor derives the real `npm install` argv from the catalog pin
