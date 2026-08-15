@@ -107,6 +107,24 @@ export type Run = {
   origin: 'architect' | 'human-directed' | 'triggered';
   costUsd: number;
   startedAt?: string;
+  /**
+   * W6-RV-2: the real cycle-completion instant, for the roadmap canvas's
+   * time axis (`cli/bridge-studio.ts::buildProjectRoadmap`). Derived the same
+   * way `startedAt` is (a forward scan of THIS cycle's already-parsed
+   * `events`, no second events.jsonl read) — the `started_at` of the
+   * `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event, which
+   * `orchestrator/cycle.ts::runCycle` emits exactly once per cycle, strictly
+   * BEFORE any out-of-band reflector rerun ever appends to the same log
+   * (`forge-reflect-rerun.ts` only ever emits `phase:'reflection'` events).
+   * Falls back to the last non-`'reflection'` event when no such event exists
+   * (a crash-then-requeue tail whose process died before the emit) — the
+   * `'reflection'` exclusion matters ONLY on this fallback path, so a
+   * standalone reflector rerun (e.g. the 2026-07-10 boot-reconcile flood)
+   * can never smear a stale cycle's completion date onto its rerun date.
+   * Additive-optional and honestly absent (never fabricated) when neither
+   * source yields a timestamp — see `findCompletedAt` below.
+   */
+  completedAt?: string;
   phases: Record<string, RunPhaseStatus>;       // keyed by FLOW NODE id
   phaseMeta: Record<string, RunPhaseMeta>;
   artifactsReady: Partial<Record<'plan' | 'work-items' | 'pr' | 'demo' | 'verdict' | 'reflection', 'view' | 'gate'>>;
@@ -576,6 +594,10 @@ function buildRun(args: {
   // --- startedAt from first orchestrator start or first event ---
   const startedAt = findStartedAt(events);
 
+  // --- completedAt (W6-RV-2): the real cycle-end instant, or its
+  // crash-tail fallback — see the Run.completedAt doc comment above. ---
+  const completedAt = findCompletedAt(events);
+
   // --- Origin from cycle.start event or manifest ---
   const origin = findOrigin(events) ?? manifest.origin;
 
@@ -648,6 +670,7 @@ function buildRun(args: {
     origin: validatedOrigin,
     costUsd,
     startedAt,
+    ...(completedAt !== undefined ? { completedAt } : {}),
     phases,
     phaseMeta,
     artifactsReady,
@@ -673,6 +696,26 @@ function findStartedAt(events: readonly EventLogEntry[]): string | undefined {
     if (e.phase === 'orchestrator' && e.event_type === 'start') return e.started_at;
   }
   return events[0]?.started_at;
+}
+
+/**
+ * W6-RV-2: the real cycle-completion instant — see the `Run.completedAt`
+ * doc comment for the full provenance rule. Primary: the FIRST (there is
+ * only ever one) `{phase:'orchestrator', skill:'cycle', event_type:'end'}`
+ * event's `started_at`. Fallback (crash-then-requeue tail with no such
+ * event): the LAST event whose `phase` is not `'reflection'` — the
+ * exclusion matters only here, since it's the only path that can otherwise
+ * walk into a standalone reflector-rerun event appended to the same log
+ * long after the cycle itself finished (or failed to).
+ */
+function findCompletedAt(events: readonly EventLogEntry[]): string | undefined {
+  for (const e of events) {
+    if (e.phase === 'orchestrator' && e.skill === 'cycle' && e.event_type === 'end') return e.started_at;
+  }
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].phase !== 'reflection') return events[i].started_at;
+  }
+  return undefined;
 }
 
 function findOrigin(events: readonly EventLogEntry[]): string | undefined {

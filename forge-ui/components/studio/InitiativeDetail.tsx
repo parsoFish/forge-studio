@@ -20,6 +20,15 @@
  * always-mounted / display-toggled contract (AT5: the recovery-detail region
  * must never be reachable only through a click, or it silently vanishes from
  * a re-homed subtree).
+ *
+ * W6-RV-2: hosted inside `RoadmapCanvas`'s push drawer now (always rendered
+ * `expanded={true}` there — the canvas itself never inline-expands a card).
+ * One small ADDITIVE change for the canvas world: `onDepJump`, when passed,
+ * turns the "Depends on" line's ids into individually-clickable
+ * `[data-dep-jump]` spans (the b-prime mock's dep-chip jump/pan behaviour) —
+ * every existing data-* attribute and the rest of the DOM shape are
+ * untouched; omitting the prop (no consumer does, post-RV-2) falls back to
+ * the original plain-text join.
  */
 
 import * as React from 'react';
@@ -29,7 +38,7 @@ import Link from 'next/link';
 import type { RoadmapWorkItem, RecoveryInspect } from '@/lib/bridge-client';
 import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
-import type { DevelopCardState, PlanCardState } from './RoadmapDag';
+import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -56,6 +65,9 @@ export type InitiativeDetailProps = {
   recoveryNote: string;
   onInspectRecovery: () => void | Promise<void>;
   onRecoveryAction: (kind: 'requeue' | 'abandon') => void | Promise<void>;
+  /** W6-RV-2: when present, each dependency id in the "Depends on" line
+   *  becomes a `[data-dep-jump]` click target instead of plain text. */
+  onDepJump?: (initiativeId: string) => void;
 };
 
 export function InitiativeDetail({
@@ -80,10 +92,25 @@ export function InitiativeDetail({
   recoveryNote,
   onInspectRecovery,
   onRecoveryAction,
+  onDepJump,
 }: InitiativeDetailProps) {
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
   const handleRequeue = useCallback(() => void onRecoveryAction('requeue'), [onRecoveryAction]);
   const handleAbandon = useCallback(() => void onRecoveryAction('abandon'), [onRecoveryAction]);
+  // Reviewer finding (MEDIUM): a dep-jump chip is a real interactive
+  // control (it selects + pans the canvas), not decorative text, so it
+  // needs the same activation contract a native <button> gets for free —
+  // a bare <span onClick> is mouse/pointer-only and invisible to keyboard
+  // navigation and screen readers.
+  const handleDepJumpKeyDown = useCallback(
+    (depId: string) => (e: React.KeyboardEvent<HTMLSpanElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onDepJump?.(depId);
+      }
+    },
+    [onDepJump],
+  );
 
   return (
     <div
@@ -92,7 +119,24 @@ export function InitiativeDetail({
     >
       {dependsOnInitiatives.length > 0 && (
         <div style={{ fontSize: 11, color: 'var(--dim)' }}>
-          Depends on: {dependsOnInitiatives.join(', ')}
+          Depends on:{' '}
+          {onDepJump
+            ? dependsOnInitiatives.map((depId, idx) => (
+                <React.Fragment key={depId}>
+                  {idx > 0 && ', '}
+                  <span
+                    data-dep-jump={depId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onDepJump(depId)}
+                    onKeyDown={handleDepJumpKeyDown(depId)}
+                    style={{ color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline', cursor: 'pointer' }}
+                  >
+                    {depId}
+                  </span>
+                </React.Fragment>
+              ))
+            : dependsOnInitiatives.join(', ')}
         </div>
       )}
 

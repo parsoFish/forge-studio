@@ -24,7 +24,7 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { PageHeader } from '@/components/StudioPage';
-import { RoadmapDag } from '@/components/studio/RoadmapDag';
+import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -1116,8 +1116,9 @@ function RoadmapView({
     );
   }
 
-  // Dependency depth is surfaced on the section (data-dep-count) for tooling;
-  // <RoadmapDag> below lays the initiatives out left → right by that same depth.
+  // Dependency depth is surfaced on the section (data-dep-count) for tooling
+  // and feeds <RoadmapCanvas>'s pending-band secondary sort (W6-RV-2) — the
+  // canvas's PRIMARY axis is real completion time, not dependency depth.
   const initLevels = topoLevels(
     initiatives,
     (i) => i.initiativeId,
@@ -1131,14 +1132,16 @@ function RoadmapView({
       data-dep-count={String(initLevels.maxLevel)}
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
-      {/* R4-13: the roadmap is a dependency DAG — initiatives laid out left → right
-          by dependency depth, one edge per prerequisite → dependent pair. */}
+      {/* W6-RV-2: the roadmap is a completion-time canvas — done initiatives
+          placed on a real day-by-day time axis in completion order, pending
+          work banded right of the now-line by dependency-feasibility (no
+          invented dates). One edge per prerequisite → dependent pair. */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-            Dependency graph
+            Roadmap
             <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
-              left → right by dependency depth
+              real completion time · pending work projected right of the now-line
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1191,7 +1194,7 @@ function RoadmapView({
             </button>
           </div>
         </div>
-        <RoadmapDag
+        <RoadmapCanvas
           roadmap={roadmap}
           cycleGroups={cycleGroups}
           developByInitiative={developByInitiative}
