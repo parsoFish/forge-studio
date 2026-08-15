@@ -630,8 +630,13 @@ export type SessionAffordance = {
   /** Present only when the source phase-table row carried the corresponding
    *  field (`writes` for `staged-review`, `next` for `next-turn`) — omitted,
    *  never defaulted, mirroring the server's own omit-don't-default
-   *  discipline (session-kinds.ts's `deriveSessionAffordances`). */
-  meta?: { writes?: string[]; next?: string };
+   *  discipline (session-kinds.ts's `deriveSessionAffordances`). `verdicts`
+   *  (W6-B6 post-merge review) is the ONE exception: the server ALWAYS
+   *  attaches it to a `verdict`-kind affordance (the row's authored list, or
+   *  the ADR default `['approve','reject']`) — this is the single source of
+   *  "which verdict values are legal here"; the panel renders its buttons
+   *  from THIS field only, never a client-side per-kind table. */
+  meta?: { writes?: string[]; next?: string; verdicts?: string[] };
 };
 
 function parseSessionAffordanceKind(raw: unknown): SessionAffordanceKind {
@@ -660,8 +665,9 @@ function parseSessionAffordance(raw: unknown): SessionAffordance {
   if (isPlainObject(metaRaw)) {
     const writes = Array.isArray(metaRaw['writes']) && metaRaw['writes'].every((w) => typeof w === 'string') ? (metaRaw['writes'] as string[]) : undefined;
     const next = typeof metaRaw['next'] === 'string' ? metaRaw['next'] : undefined;
-    if (writes !== undefined || next !== undefined) {
-      meta = { ...(writes !== undefined ? { writes } : {}), ...(next !== undefined ? { next } : {}) };
+    const verdicts = Array.isArray(metaRaw['verdicts']) && metaRaw['verdicts'].every((v) => typeof v === 'string') ? (metaRaw['verdicts'] as string[]) : undefined;
+    if (writes !== undefined || next !== undefined || verdicts !== undefined) {
+      meta = { ...(writes !== undefined ? { writes } : {}), ...(next !== undefined ? { next } : {}), ...(verdicts !== undefined ? { verdicts } : {}) };
     }
   }
   return { id, kind, phase, ...(meta !== undefined ? { meta } : {}) };

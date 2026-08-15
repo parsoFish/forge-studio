@@ -328,7 +328,7 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-kickoff',
       title: 'Kick off a brand-new demo session from the generic kickoff screen',
-      narration: 'Every interactive kind now shares ONE kickoff screen (W6-B6, /sessions/<kind>/new) — the operator picks a project and a model tier within the demo-builder skill\'s own declared envelope, hits Start, and lands on the real, server-minted session, straight on the shared shell. This is a SEPARATE, self-contained session — it never touches demoSid or the shared .forge/demo/ lock this journey\'s own beats already exercised above.',
+      narration: 'Every interactive kind now shares ONE kickoff screen (W6-B6, /sessions/<kind>/new) — the operator picks a project AND a model tier within the demo-builder skill\'s own declared range (sonnet/opus), hits Start, and lands on the real, server-minted session, straight on the shared shell, with the picked tier persisted to its status.json. This is a SEPARATE, self-contained session — it never touches demoSid or the shared .forge/demo/ lock this journey\'s own beats already exercised above.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[DB-6] demo-builder — the generic kickoff screen');
@@ -342,7 +342,18 @@ export const journey = defineJourney({
           check(ready, 'DB-6: the generic kickoff screen renders ([data-page="session-kickoff"])');
           await caption(page, 'One kickoff screen for every session kind — project, model tier, Start.');
           await page.locator('[data-field="kickoff-project"]').fill(PROJECT).catch(() => {});
-          await frame(page, 'demo-6-kickoff', 'The generic kickoff screen — demo, ready to start');
+
+          // W6-B6 post-merge review (MEDIUM): demo-builder is a
+          // strategy:range skill (range: [sonnet, opus]) — the picker must
+          // render as a radio group, never the read-only fixed chip.
+          const pickerKind = await page.evaluate(
+            () => document.querySelector('[data-section="kickoff-model-tier"]')?.getAttribute('data-model-tier-picker') ?? null,
+          );
+          check(pickerKind === 'range', `DB-6: demo-builder's model-tier picker renders as a RANGE radio group (got "${pickerKind}")`);
+          const opusOption = page.locator('[data-field="kickoff-model-tier-option"] input[value="opus"]');
+          check(await opusOption.count() > 0, 'DB-6: the "opus" tier — the top of demo-builder\'s declared range — is offered as a real radio option');
+          await opusOption.check().catch(() => {});
+          await frame(page, 'demo-6-kickoff', 'The generic kickoff screen — demo, model tier picked, ready to start');
           const startEnabled = await page.locator('[data-action="start-session"]:not([disabled])').count() > 0;
           check(startEnabled, 'DB-6: Start enables once a project is filled in');
           await page.locator('[data-action="start-session"]').click().catch(() => {});
@@ -359,6 +370,14 @@ export const journey = defineJourney({
           ).then(() => true).catch(() => false);
           check(shellReady, 'DB-6: the freshly-kicked-off session opens live on the shared session shell');
           await frame(page, 'demo-7-kickoff-session', 'The freshly-kicked-off demo session — briefing, on the shared shell', { key: true });
+
+          // W6-B6 post-merge review (MEDIUM): the picked tier must round-trip
+          // all the way through — POST /api/demo-builder/start persisted it
+          // to status.json, and the shell GET reads it straight back as
+          // "modelTier", never silently dropped.
+          const shellRes = await fetch(`${watch.bridgeUrl}/api/studio/sessions/demo/${encodeURIComponent(kickoffSid)}?project=${encodeURIComponent(PROJECT)}`);
+          const shellBody = shellRes.ok ? await shellRes.json() : null;
+          check(shellBody?.modelTier === 'opus', `DB-6: the kicked-off session's own modelTier reads back as "opus" (the picked tier), got: ${JSON.stringify(shellBody?.modelTier)}`);
         } finally {
           // Self-contained (mirrors demo-builder-lock's own tail). This is
           // the LAST beat in this journey, so cleanDemoBuilderSession's

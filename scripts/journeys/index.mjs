@@ -268,6 +268,10 @@ export const RUN_ORDER = [
   ['stand-up-create', 'su-create-orientation'],
   ['stand-up-create', 'su-create-instructions'],
   ['stand-up-create', 'su-create-project-brain'],
+  // W6-B6 post-merge review — a light, self-contained beat: the generic
+  // kickoff screen renders project-brain-builder's fixed-strategy chip
+  // (never a session-creation path of its own).
+  ['stand-up-create', 'su-create-project-brain-kickoff-chip'],
   ['stand-up-create', 'su-create-project-builder'],
 
   ['knowledge', 'knowledge-graph'],

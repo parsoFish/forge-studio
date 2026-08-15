@@ -668,6 +668,29 @@ export const journey = defineJourney({
         },
       },
       {
+        id: 'su-create-project-brain-kickoff-chip',
+        title: 'The generic kickoff screen — project-brain-builder is fixed-strategy, so it renders a read-only chip',
+        narration: 'project-brain-builder pins ONE model (strategy:fixed, no declared range) — unlike demo-builder\'s range picker (see demo-builder.mjs\'s own kickoff beat), the SAME generic kickoff screen renders a read-only chip naming that fixed model instead of a radio group; widening it is a SKILL.md edit, never a UI decision. A light, self-contained beat — it only LOOKS at the kickoff screen, never starts a session (su-create-project-brain above already drives project-brain\'s real session-creation path via its own bespoke launcher).',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[AI-2b] the generic kickoff screen — project-brain\'s fixed-strategy chip');
+              await page.goto(`${watch.uiUrl}/sessions/project-brain/new`, { waitUntil: 'domcontentloaded' });
+              const ready = await page.waitForFunction(
+                () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).then(() => true).catch(() => false);
+              check(ready, 'AI-2b: the generic kickoff screen renders for kind=project-brain ([data-page="session-kickoff"])');
+              await caption(page, 'A fixed-strategy skill (project-brain-builder) — one model, no picker, just a read-only chip.');
+              const pickerKind = await page.evaluate(
+                () => document.querySelector('[data-section="kickoff-model-tier"]')?.getAttribute('data-model-tier-picker') ?? null,
+              );
+              check(pickerKind === 'fixed', `AI-2b: project-brain-builder's model-tier section renders as a FIXED read-only chip, never a radio group (got "${pickerKind}")`);
+              check(await page.locator('[data-field="kickoff-model-fixed-chip"]').count() > 0, 'AI-2b: the read-only fixed-model chip renders');
+              check(await page.locator('[data-field="kickoff-model-tier-option"]').count() === 0, 'AI-2b: NO radio options render for a fixed-strategy skill');
+              await frame(page, 'pbrain-kickoff-fixed-chip', 'The generic kickoff screen — project-brain\'s fixed-model chip, no picker', { key: true });
+        },
+      },
+      {
         id: 'su-create-project-builder',
         title: `Project builder — tune an existing project (/projects/${PROJECT})`,
         narration: `Contrast with the from-scratch project above: ${PROJECT} already has real content, so its project builder shows the same north star, demo timeline, and contract-readiness surfaces already populated and tuneable at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page. Two permanent read-only surfaces sit alongside the editor: the contract panel (R4-12-F1) — a live five-stage view of ${PROJECT}'s real artifacts on disk (contract, instructions, secrets, demo, roadmap), with secrets shown by NAME only and, since ${PROJECT} is creds-free, honestly reporting no secrets rather than inventing a masked value — and the permanent cycle ledger (R4-12-F2), this project's own completed cycles, each a row that digs read-only into its full run detail on the shared flow run-detail surface.`,

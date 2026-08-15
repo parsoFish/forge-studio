@@ -77,16 +77,25 @@ export default function SessionKickoffPage({ params }: { params: { kind: string 
       return;
     }
     let cancelled = false;
+    setError(null);
     Promise.all([
-      fetchStudioProjects().catch(() => []),
-      fetchStudioAgents().catch(() => []),
-      spec.selector === 'kb' ? fetchStudioKbs().catch(() => []) : Promise.resolve([]),
+      fetchStudioProjects(),
+      fetchStudioAgents(),
+      spec.selector === 'kb' ? fetchStudioKbs() : Promise.resolve([]),
     ])
       .then(([projects, agents, kbList]) => {
         if (cancelled) return;
         setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort());
         setAgent(agents.find((a) => a.id === spec.agentSlug) ?? null);
         setKbs(kbList);
+      })
+      .catch((err) => {
+        // W6-B6 post-merge review (LOW): the prior `.catch(() => [])` on
+        // each individual fetch hid a real load failure as an honest-looking
+        // empty list — never surfaced. This top-level catch is the real
+        // failure path; `data-kickoff-error` reuses the SAME error banner
+        // the submit path already renders below.
+        if (!cancelled) setError(`failed to load kickoff data: ${err instanceof Error ? err.message : String(err)}`);
       })
       .finally(() => {
         if (!cancelled) setReady(true);
@@ -97,8 +106,16 @@ export default function SessionKickoffPage({ params }: { params: { kind: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 
-  const isRangeTier = agent?.runtime?.strategy === 'range' && Array.isArray(agent.allowedTiers) && agent.allowedTiers.length > 0;
-  const allowedTiers: ModelTier[] = isRangeTier ? (agent!.allowedTiers as ModelTier[]) : [];
+  // W6-B6 post-merge review (LOW): a single derivation — `allowedTiers` is
+  // computed inside the SAME conditional as the `agent` null-check, so
+  // TypeScript narrows it without a `!` non-null assertion; `isRangeTier`
+  // is just "this list is non-empty", not a second, separately-computed
+  // condition that could drift from it.
+  const allowedTiers: ModelTier[] =
+    agent && agent.runtime?.strategy === 'range' && Array.isArray(agent.allowedTiers) && agent.allowedTiers.length > 0
+      ? agent.allowedTiers
+      : [];
+  const isRangeTier = allowedTiers.length > 0;
 
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : project.trim().length > 0;
   const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;

@@ -35,13 +35,22 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 //     box with per-question fields without touching the POST contract).
 //     Submits `{answers: [{question, answer}]}` — B4's
 //     `handleInstructionsAnswer`'s exact body shape.
-//   - `verdict` — approve/reject buttons. `demo`'s approve additionally
-//     offers a generation picker (B4's `handleDemoVerdict` accepts an
-//     optional `generation`) when the session's own artifact is a real
-//     `generation-gallery` with at least one generation. `kb-cleanup` and
-//     `authoring` render APPROVE ONLY — B4's own table declares no
-//     rejection path for either (a `reject` 422s there), so offering the
-//     button here would be a control known in advance to fail.
+//   - `verdict` — approve/reject buttons, rendered from `affordance.meta.
+//     verdicts` ONLY (W6-B6 post-merge review) — the server-derived, single
+//     source of "which verdict values are legal here"
+//     (`deriveSessionAffordances`, orchestrator/studio/session-kinds.ts:
+//     the row's authored `verdicts:` list, or the ADR default
+//     `['approve','reject']`); the SAME write route validates a posted
+//     verdict against this SAME value, so there is no second, hand-kept
+//     per-kind table on either side that could silently drift from
+//     `studio/session-kinds.yaml` (kb-cleanup/authoring declare
+//     `verdicts: [approve]` there — no rejection path, so the reject button
+//     never renders for them, without this component knowing their names).
+//     Approve additionally offers a generation picker (B4's
+//     `handleDemoVerdict` accepts an optional `generation`) whenever the
+//     session's own artifact IS a real `generation-gallery` with at least
+//     one generation — driven by the wire artifact kind, never a `kind ===
+//     'demo'` compare.
 //   - `staged-review` / `next-turn` — rendered DISABLED, honestly labelled
 //     "not yet wired" — B4 returns 501 `UnhandledAffordanceBody` for both
 //     (they describe what an `agent` step already did / where it advances
@@ -52,14 +61,6 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 // the operator VERBATIM via `data-affordance-error`, never swallowed and
 // never replaced by a generic "failed" string.
 // ---------------------------------------------------------------------------
-
-/** B4's own table (`cli/bridge-studio-affordances.ts`'s
- *  `handleKbCleanupVerdict`/`handleAuthoringVerdict`) declares NO rejection
- *  semantics for either kind — a `verdict: 'reject'` 422s. Named here so the
- *  UI never offers a control known in advance to fail, mirroring
- *  `SessionCleanupPanel`'s own "never a button that's known to error"
- *  discipline. */
-const APPROVE_ONLY_KINDS: ReadonlySet<string> = new Set(['kb-cleanup', 'authoring']);
 
 /** Affordance kinds this route has no write handler for at all (B4's
  *  `unhandledAffordanceBody` fallthrough) — rendered disabled, honestly. */
@@ -105,7 +106,12 @@ export function SessionInteractivePanel({
   const [busyAffordanceId, setBusyAffordanceId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const generations = kind === 'demo' ? generationOptions(artifact) : [];
+  // W6-B6 post-merge review: driven by the WIRE artifact kind, never a
+  // `kind === 'demo'` compare — generationOptions itself already returns
+  // [] for any artifact that isn't a real generation-gallery, so demo is
+  // simply the only kind that will ever have one, without this component
+  // needing to know its name.
+  const generations = generationOptions(artifact);
 
   async function submit(affordance: SessionAffordance, body: Record<string, unknown>): Promise<void> {
     if (!project) {
@@ -176,10 +182,15 @@ export function SessionInteractivePanel({
         }
 
         if (affordance.kind === 'verdict') {
-          const approveOnly = APPROVE_ONLY_KINDS.has(kind);
+          // W6-B6 post-merge review: rendered from the server-derived
+          // `meta.verdicts` ONLY — never a per-kind name compare. Every
+          // `verdict`-kind affordance carries this field (deriveSessionAffordances
+          // always attaches it); the empty-array fallback is defensive only
+          // (a malformed/older payload), never a fabricated "both" default.
+          const verdicts = affordance.meta?.verdicts ?? [];
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="verdict" style={sectionStyle}>
-              {kind === 'demo' && generations.length > 0 && (
+              {generations.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={labelStyle}>Generation to lock (optional — defaults to the latest)</div>
                   <select
@@ -199,22 +210,24 @@ export function SessionInteractivePanel({
               )}
               {error && <ErrorLine message={error} />}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  data-action="verdict-approve"
-                  disabled={busy}
-                  onClick={() =>
-                    void submit(affordance, {
-                      verdict: 'approve',
-                      ...(kind === 'demo' && pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
-                    })
-                  }
-                  style={{ opacity: busy ? 0.5 : 1 }}
-                >
-                  {busy ? 'Working…' : 'Approve'}
-                </button>
-                {!approveOnly && (
+                {verdicts.includes('approve') && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    data-action="verdict-approve"
+                    disabled={busy}
+                    onClick={() =>
+                      void submit(affordance, {
+                        verdict: 'approve',
+                        ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
+                      })
+                    }
+                    style={{ opacity: busy ? 0.5 : 1 }}
+                  >
+                    {busy ? 'Working…' : 'Approve'}
+                  </button>
+                )}
+                {verdicts.includes('reject') && (
                   <button
                     type="button"
                     className="btn"

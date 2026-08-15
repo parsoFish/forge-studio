@@ -231,7 +231,10 @@ function writeSessionKindsYaml(root: string): void {
           style: 'agent',
           phases: [
             { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-            { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
+            // verdicts (W6-B6 post-merge review): mirrors the real, shipped
+            // studio/session-kinds.yaml row verbatim — approve-only, no
+            // rejection semantics exist for a cleanup plan.
+            { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
             { phase: 'applied', step: 'terminal' },
           ],
         },
@@ -1258,7 +1261,7 @@ test('R4-19-F2 WI-4c AT-KBID-1 (RED — the shipped-defect regression lock): GET
   // AT-39 instructions (panel-kind) affordance assertion above.
   assert.deepEqual(
     (body as SessionShellBody).affordances,
-    [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval' }],
+    [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval', meta: { verdicts: ['approve'] } }],
     `expected the turnSpec-derived affordances for phase "awaiting-approval", got: ${JSON.stringify((body as SessionShellBody).affordances)}`,
   );
 });

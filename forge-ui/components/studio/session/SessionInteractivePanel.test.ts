@@ -97,8 +97,12 @@ test('question-form affordance renders an answer field + disabled submit-answers
 });
 
 // ---------------------------------------------------------------------------
-// verdict — demo: approve + reject both render, plus a generation picker
-// when a real generation-gallery artifact carries generations.
+// verdict — W6-B6 post-merge review (HIGH): rendered ONLY from the
+// server-derived `affordance.meta.verdicts` — never a client-side per-kind
+// name table (deleted APPROVE_ONLY_KINDS). `kind` here is just an arbitrary
+// string; these tests prove the panel reads NOTHING from it to decide which
+// verdict buttons render — only `meta.verdicts` and (for the generation
+// picker) the real artifact kind.
 // ---------------------------------------------------------------------------
 
 function generationGallery(numbers: number[]): SessionArtifactPayload {
@@ -110,11 +114,11 @@ function generationGallery(numbers: number[]): SessionArtifactPayload {
   };
 }
 
-test('verdict affordance for "demo" renders BOTH approve and reject, plus a generation picker sourced from the real artifact', () => {
+test('verdict affordance with meta.verdicts:[approve,reject] renders BOTH buttons, plus a generation picker sourced from the real artifact (never a kind==="demo" compare)', () => {
   const html = render({
-    kind: 'demo',
+    kind: 'not-actually-demo', // proves the picker is artifact-driven, not name-driven
     phase: 'awaiting-review',
-    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review' }],
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }],
     artifact: generationGallery([1, 2, 3]),
   });
   expect(html).toContain('data-affordance-kind="verdict"');
@@ -126,32 +130,63 @@ test('verdict affordance for "demo" renders BOTH approve and reject, plus a gene
   expect(html).toContain('generation #2');
 });
 
-test('verdict affordance for "demo" with NO generations yet renders no picker (never a picker with nothing to pick)', () => {
+test('verdict affordance with NO generations yet renders no picker (never a picker with nothing to pick), regardless of kind', () => {
   const html = render({
     kind: 'demo',
     phase: 'awaiting-review',
-    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review' }],
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }],
     artifact: generationGallery([]),
   });
   expect(html).not.toContain('data-field="session-generation-pick"');
 });
 
+test('a generation-gallery artifact under a NON-demo kind still renders the picker — proves the picker is driven by artifact.kind, never a kind==="demo" compare (W6-B6 post-merge review MEDIUM finding)', () => {
+  const html = render({
+    kind: 'kb-cleanup',
+    phase: 'awaiting-review',
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }],
+    artifact: generationGallery([5]),
+  });
+  expect(html).toContain('data-field="session-generation-pick"');
+});
+
 // ---------------------------------------------------------------------------
-// verdict — kb-cleanup / authoring: APPROVE ONLY (B4's table declares no
-// rejection path for either — a reject there 422s).
+// verdict — approve-only (kb-cleanup/authoring's real shape): B4's table
+// declares no rejection path for either, expressed here purely as
+// meta.verdicts:['approve'] — the panel never checks the session kind name.
 // ---------------------------------------------------------------------------
 
 for (const kind of ['kb-cleanup', 'authoring']) {
-  test(`verdict affordance for "${kind}" renders approve ONLY — no reject button (B4's table has no rejection path)`, () => {
+  test(`verdict affordance with meta.verdicts:['approve'] (kind "${kind}"'s real shape) renders approve ONLY — no reject button`, () => {
     const html = render({
       kind,
       phase: 'awaiting-approval',
-      affordances: [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval' }],
+      affordances: [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval', meta: { verdicts: ['approve'] } }],
     });
     expect(html).toContain('data-action="verdict-approve"');
     expect(html).not.toContain('data-action="verdict-reject"');
   });
 }
+
+test('a verdict affordance with meta.verdicts:["reject"] only (a hypothetical future row) renders reject ONLY — proves neither button is hardcoded to a fixed pairing', () => {
+  const html = render({
+    kind: 'anything',
+    phase: 'awaiting-review',
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['reject'] } }],
+  });
+  expect(html).not.toContain('data-action="verdict-approve"');
+  expect(html).toContain('data-action="verdict-reject"');
+});
+
+test('a verdict affordance with meta.verdicts ABSENT entirely renders NEITHER button — the defensive fallback for a malformed/older payload, never a fabricated default', () => {
+  const html = render({
+    kind: 'anything',
+    phase: 'awaiting-review',
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review' }],
+  });
+  expect(html).not.toContain('data-action="verdict-approve"');
+  expect(html).not.toContain('data-action="verdict-reject"');
+});
 
 // ---------------------------------------------------------------------------
 // staged-review / next-turn — disabled, honestly labelled "not yet wired"

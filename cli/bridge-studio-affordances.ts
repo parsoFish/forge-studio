@@ -327,12 +327,12 @@ async function handleKbCleanupVerdict(
   phase: string,
   sessionId: string,
   project: string,
-  verdict: 'approve' | 'reject',
 ): Promise<void> {
-  if (verdict === 'reject') {
-    sendJson(res, 422, { error: 'kb-cleanup supports only verdict "approve" — the awaiting-approval gate declares no rejection path' }, origin);
-    return;
-  }
+  // W6-B6 post-merge review: the reject-422 that used to live here is now
+  // the GENERIC gate in the main handler above, reading the SAME
+  // `affordance.meta.verdicts` `studio/session-kinds.yaml`'s
+  // `awaiting-approval` row declares (`verdicts: [approve]`) — this
+  // function is only ever reached with `verdict === 'approve'` now.
   // Belt-and-suspenders (mirrors the bespoke apply route's own posture):
   // structurally guaranteed by the caller's affordance-membership check
   // (deriveSessionAffordances only ever derives THIS verdict at exactly
@@ -368,13 +368,12 @@ async function handleAuthoringVerdict(
   origin: string,
   project: string,
   sessionId: string,
-  verdict: 'approve' | 'reject',
   body: Record<string, unknown>,
 ): Promise<void> {
-  if (verdict === 'reject') {
-    sendJson(res, 422, { error: 'authoring supports only verdict "approve" — the awaiting-review gate declares no rejection path' }, origin);
-    return;
-  }
+  // W6-B6 post-merge review: same as handleKbCleanupVerdict above — the
+  // reject-422 now happens generically, reading `affordance.meta.verdicts`
+  // (`studio/session-kinds.yaml`'s `awaiting-review` row declares
+  // `verdicts: [approve]`). Only ever reached with `verdict === 'approve'`.
   const kind = body.kind;
   const id = typeof body.id === 'string' ? body.id.trim() : '';
   if (kind !== 'skill' && kind !== 'hook') {
@@ -516,6 +515,28 @@ export async function handleStudioAffordanceRoutes(
         return true;
       }
       const verdict = verdictRaw;
+
+      // W6-B6 post-merge review: "which verdict values are legal for THIS
+      // phase" is ONE business rule with ONE source — `deriveSessionAffordances`
+      // (orchestrator/studio/session-kinds.ts) ALWAYS attaches it as
+      // `affordance.meta.verdicts` (the row's authored `verdicts:` list, or
+      // the ADR default `['approve','reject']`). This gate reads that SAME
+      // derived value — it is no longer a hand-kept per-session-kind 422
+      // table that could silently drift from the yaml (kb-cleanup/authoring
+      // used to hardcode approve-only here; now `studio/session-kinds.yaml`
+      // says so, once, and every consumer — this route AND the client panel
+      // — reads it back).
+      const allowedVerdicts = affordance.meta?.verdicts ?? ['approve', 'reject'];
+      if (!allowedVerdicts.includes(verdict)) {
+        sendJson(
+          res,
+          422,
+          { error: `session kind "${descriptor.id}" does not support verdict "${verdict}" at phase "${phase}" — allowed: ${allowedVerdicts.join(', ')}` },
+          origin,
+        );
+        return true;
+      }
+
       switch (descriptor.id) {
         case 'instructions':
           await handleInstructionsVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict);
@@ -524,10 +545,10 @@ export async function handleStudioAffordanceRoutes(
           await handleDemoVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
           return true;
         case 'kb-cleanup':
-          await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, status, phase, sessionId, project, verdict);
+          await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, status, phase, sessionId, project);
           return true;
         case 'authoring':
-          await handleAuthoringVerdict(ctx, res, origin, project, sessionId, verdict, b);
+          await handleAuthoringVerdict(ctx, res, origin, project, sessionId, b);
           return true;
         default:
           // Structurally unreachable today — the only descriptors whose
