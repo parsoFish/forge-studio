@@ -9,17 +9,22 @@
  * would make the Windows browser hit its own loopback (where nothing is
  * listening). The Next.js API route reads FORGE_BRIDGE_URL server-side
  * and extracts the port.
+ *
+ * W6-P4 (redesigned per review): this route is now the AUTHORITATIVE
+ * CORRECTION path, not the hot path — `app/layout.tsx` inlines the
+ * fixed-port convention's DEFAULT (a build-time literal, `lib/bridge-port.ts`'s
+ * `DEFAULT_BRIDGE_PORT` — never this route's env read) as
+ * `window.__FORGE_BRIDGE_PORT__`, so `resolveBridgeUrl()`
+ * (lib/bridge-client.ts) tries that optimistically first with ZERO network
+ * round-trips. This route is only hit when that first real bridge call
+ * fails outright (e.g. a `--bridge-port` override moved the bridge off the
+ * default) — `resolveBridgeUrl`'s one-shot correction falls back here for
+ * the real, env-derived answer.
  */
+import { resolveBridgePortFromEnv } from '@/lib/bridge-port';
 
 export const dynamic = 'force-dynamic';
 
 export function GET() {
-  const url = process.env.FORGE_BRIDGE_URL ?? '';
-  let bridgePort: number | null = null;
-  if (url) {
-    try {
-      bridgePort = Number(new URL(url).port) || null;
-    } catch { /* fall through */ }
-  }
-  return Response.json({ bridgePort });
+  return Response.json({ bridgePort: resolveBridgePortFromEnv() });
 }
