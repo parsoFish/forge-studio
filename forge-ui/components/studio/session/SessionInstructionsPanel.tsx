@@ -91,17 +91,25 @@ export function SessionInstructionsPanel({
             />
           )}
 
-          {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
-            <ArchitectQuestionForm
-              project={session.project}
-              sessionId={session.sessionId}
-              round={session.round}
-              questions={session.questions}
-              onSubmitAnswers={answerInstructions}
-              sectionName="instructions-interview"
-              heading="Instructions interview"
-            />
-          ) : null}
+          {session.phase === 'awaiting-answers' && (
+            session.questions && session.questions.length > 0 ? (
+              <ArchitectQuestionForm
+                project={session.project}
+                sessionId={session.sessionId}
+                round={session.round}
+                questions={session.questions}
+                onSubmitAnswers={answerInstructions}
+                sectionName="instructions-interview"
+                heading="Instructions interview"
+              />
+            ) : (
+              // W6-SW-3 (sweep C6#4): same pattern as
+              // SessionArchitectPanel.tsx — an empty/undefined questions array
+              // while phase is 'awaiting-answers' used to render a blank pane
+              // instead of the Status() text every other phase gets.
+              <Status label="Waiting on the next question…" />
+            )
+          )}
 
           {(session.phase === 'interviewing' || session.phase === 'drafting' || session.phase === 'finalizing') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

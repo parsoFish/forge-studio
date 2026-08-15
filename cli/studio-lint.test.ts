@@ -111,6 +111,24 @@ guards: []
 `;
 }
 
+/** Seed a minimal, well-formed studio/community/registry.yaml (W6-CR-1). A
+ *  missing registry.yaml is now itself a lint error (seed-present, reviewer
+ *  fix), so any synthetic root a test needs to lint CLEAN of unrelated
+ *  errors — not just "errorCount > 0" — needs this written alongside
+ *  validCatalogYaml(). */
+function seedValidCommunityRegistry(root: string): void {
+  const dir = join(root, 'studio', 'community');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'registry.yaml'),
+    `meta:
+  schemaVersion: 1
+  lastRefresh: null
+items: []
+`,
+  );
+}
+
 /**
  * Seed a discoverable, contract-complete project on disk (B1: projects are
  * auto-discovered from `<root>/projects/*`, not a registry file). The dir
@@ -683,6 +701,7 @@ This agent is broken.
   writeFileSync(join(flowDir, 'flow.yaml'), validFlowYaml('good-flow', goodSlug));
 
   writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  seedValidCommunityRegistry(root);
   seedValidProject(root);
 
   const result = runStudioLint(root);

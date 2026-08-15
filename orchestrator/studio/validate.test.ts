@@ -1854,50 +1854,12 @@ describe('validateCatalog — unique-ids', () => {
 // validateDiscoveredProjects
 // ---------------------------------------------------------------------------
 
-describe('validateCatalog — community-skills', () => {
-  it('duplicate community-skill id → error unique-ids', () => {
-    const findings = validateCatalog(
-      makeCatalog({
-        communitySkills: [
-          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory' },
-          { id: 'handoff', name: 'Handoff 2', provenance: 'b', source: 'u', category: 'memory' },
-        ],
-      }),
-    );
-    assert.ok(findings.some((f) => f.check === 'unique-ids' && f.message.includes('communitySkills')));
-  });
-
-  it('invalid tier → error community-skill/tier', () => {
-    const findings = validateCatalog(
-      makeCatalog({
-        communitySkills: [
-          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory', tier: 'turbo' },
-        ],
-      }),
-    );
-    const f = findings.find((x) => x.check === 'community-skill/tier');
-    assert.ok(f, 'expected community-skill/tier finding');
-    assert.equal(f.level, 'error');
-  });
-
-  it('valid community skills → no community-skill findings', () => {
-    const findings = validateCatalog(
-      makeCatalog({
-        communitySkills: [
-          {
-            id: 'handoff',
-            name: 'Handoff',
-            provenance: 'obra/superpowers',
-            source: 'https://example',
-            category: 'memory',
-            tier: 'haiku',
-          },
-        ],
-      }),
-    );
-    assert.ok(!findings.some((f) => f.check.startsWith('community-skill')));
-  });
-});
+// validateCatalog — community-skills tests REMOVED (W6-CR-1 reviewer fix):
+// catalog.yaml's `community-skills:` section and `Catalog.communitySkills`
+// are both gone (moved to studio/community/registry.yaml — see
+// validateCommunityRegistry's own tests, cli/studio-lint-community-registry.test.ts
+// + this file's registry.ts coverage). These tests exercised a shape
+// `loadCatalog` can no longer produce.
 
 describe('validateDiscoveredProjects — unique-ids', () => {
   it('duplicate project id → error unique-ids', () => {

@@ -70,16 +70,40 @@
  *     `ensureSessionTail` injection `SessionsRouteContext`
  *     (`cli/bridge-studio-sessions.ts`) already uses for the identical
  *     reason.
- *   - kb-cleanup's approve delegates to `enqueueConsolidate` +
- *     `runBrainConsolidateNow` (`cli/bridge-studio-kbs.ts`) — the SAME
- *     per-kbId-serialized drain `POST /api/studio/kbs/:id/cleanup/apply`
- *     already calls, imported directly (no cycle: `bridge-studio-kbs.ts`
- *     does not import this file or `ui-bridge.ts`).
+ *   - kb-cleanup's approve delegates WHOLESALE to `approveKbCleanup`
+ *     (`cli/bridge-studio-kbs.ts`) — the ONE atomic read-check-claim-drain-
+ *     finish choreography `POST /api/studio/kbs/:id/cleanup/apply` ALSO now
+ *     calls (imported directly; no cycle: `bridge-studio-kbs.ts` does not
+ *     import this file or `ui-bridge.ts`). W6-B4 adversarial-review fix:
+ *     this used to be duplicated, non-atomic choreography in BOTH routes —
+ *     a check-then-await-then-write race, live-reproduced as two concurrent
+ *     approves running two independent `runBrainConsolidateNow` drains. See
+ *     `approveKbCleanup`'s own doc comment for the fix (a synchronous
+ *     phase:'applying' claim written BEFORE the one `await`).
  *   - authoring's approve delegates WHOLESALE to `runFinalize`
  *     (`cli/bridge-studio-authoring.ts`, exported for this file) — the
  *     entire `copyStagingToLibrary` + skill/hook-install sequence is far too
  *     security-sensitive to duplicate; this route validates the body shape
- *     and hands off, `runFinalize` sends its OWN response.
+ *     and hands off, `runFinalize` sends its OWN response. `runFinalize`
+ *     independently re-reads status.json and writes its OWN atomic claim
+ *     (`phase:'committing'`) before ITS one await, so it needed no change
+ *     here — it already had the shape `approveKbCleanup` now also has.
+ *
+ * CONCURRENCY (SYNC INVARIANT, W6-B4 adversarial-review fix): the
+ * instructions-answer / instructions-verdict / demo-verdict handlers below
+ * are race-safe TODAY only because none of them contains an `await` between
+ * their `guardedReadSessionStatus`/`status` read (done once, by the caller,
+ * before dispatch) and their own `guardedWriteSessionStatus` write — two
+ * concurrent requests can only interleave at an `await` boundary (Node's
+ * single-threaded event loop never preempts a synchronous span), so a
+ * handler with NO internal await runs its whole read-derived-write
+ * atomically relative to any other request. This is accidental safety, not
+ * a designed invariant: it is broken the moment anyone adds an `await`
+ * between the read and the write (exactly how kb-cleanup's now-fixed race
+ * was introduced). Each such handler below carries its own "SYNC INVARIANT"
+ * comment naming this explicitly — do not add an await inside one without
+ * either preserving the invariant or restructuring it onto
+ * `approveKbCleanup`'s claim-then-await shape.
  *
  * SECURITY (mirrors `cli/bridge-studio-sessions.ts`'s own header — the part
  * reviewers attack hardest):
@@ -114,7 +138,7 @@ import {
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
-import { enqueueConsolidate, runBrainConsolidateNow } from './bridge-studio-kbs.ts';
+import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import { runFinalize } from './bridge-studio-authoring.ts';
 
 // ---------------------------------------------------------------------------
@@ -189,6 +213,33 @@ function safeParseJson<T>(raw: string): T | null {
 // `cli/ui-bridge.ts:3236`).
 // ---------------------------------------------------------------------------
 
+/** Hardening (W6-B4 adversarial-review round): `answers[]` is an
+ *  operator-supplied array with no cap anywhere upstream of this route — an
+ *  unbounded count or unbounded per-field size both reach `answers.json`
+ *  (and the agent's next prompt, which inlines the whole interview
+ *  transcript) unbounded. Caps are generous for any genuine interview round
+ *  (a real round asks a handful of questions with paragraph-length answers)
+ *  and named in the 400 they produce, never silently truncated. */
+const MAX_ANSWERS_COUNT = 64;
+const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
+
+function answersCapReason(answers: readonly { question: string; answer: string }[]): string | null {
+  if (answers.length > MAX_ANSWERS_COUNT) {
+    return `body.answers carries ${answers.length} entries — exceeds the ${MAX_ANSWERS_COUNT}-entry limit`;
+  }
+  for (const [i, a] of answers.entries()) {
+    const qBytes = Buffer.byteLength(a.question, 'utf8');
+    const aBytes = Buffer.byteLength(a.answer, 'utf8');
+    if (qBytes > MAX_ANSWER_FIELD_BYTES) {
+      return `body.answers[${i}].question is ${qBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit`;
+    }
+    if (aBytes > MAX_ANSWER_FIELD_BYTES) {
+      return `body.answers[${i}].answer is ${aBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit`;
+    }
+  }
+  return null;
+}
+
 async function handleInstructionsAnswer(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
@@ -200,12 +251,18 @@ async function handleInstructionsAnswer(
   sessionId: string,
   body: Record<string, unknown>,
 ): Promise<void> {
-  const answers = body.answers;
+  const answersRaw = body.answers;
   if (
-    !Array.isArray(answers) ||
-    !answers.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
+    !Array.isArray(answersRaw) ||
+    !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
   ) {
     sendJson(res, 400, { error: 'body.answers must be an array of {question: string, answer: string}' }, origin);
+    return;
+  }
+  const answers = answersRaw as { question: string; answer: string }[];
+  const capReason = answersCapReason(answers);
+  if (capReason !== null) {
+    sendJson(res, 400, { error: capReason }, origin);
     return;
   }
 
@@ -213,6 +270,10 @@ async function handleInstructionsAnswer(
   const prior = (priorRaw !== null ? safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
   const round = prior.length + 1;
 
+  // SYNC INVARIANT: no await between this function's writes and the caller's
+  // own status read above — an await here reopens the double-spawn race; see
+  // kb-cleanup's now-fixed `approveKbCleanup` (cli/bridge-studio-kbs.ts) for
+  // the shape a genuinely-awaited claim needs.
   if (
     guardedWriteFile(projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers }], null, 2)) === null ||
     guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
@@ -244,6 +305,8 @@ async function handleInstructionsVerdict(
   verdict: 'approve' | 'reject',
 ): Promise<void> {
   const nextPhase = verdict === 'approve' ? 'finalizing' : 'rejected';
+  // SYNC INVARIANT: no await between the caller's status read and this
+  // write — see this file's header note.
   if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: nextPhase }) === null) {
     sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
     return;
@@ -271,6 +334,10 @@ async function handleDemoVerdict(
   verdict: 'approve' | 'reject',
   body: Record<string, unknown>,
 ): Promise<void> {
+  // SYNC INVARIANT: no await between the caller's status read and either
+  // write below — an await here reopens the double-spawn race; see
+  // kb-cleanup's now-fixed `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
+  // this file's header note.
   if (verdict === 'reject') {
     if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
       sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
@@ -323,8 +390,6 @@ async function handleKbCleanupVerdict(
   origin: string,
   projectsRoot: string,
   dirSegs: readonly string[],
-  status: Record<string, unknown>,
-  phase: string,
   sessionId: string,
   project: string,
 ): Promise<void> {
@@ -332,34 +397,36 @@ async function handleKbCleanupVerdict(
   // the GENERIC gate in the main handler above, reading the SAME
   // `affordance.meta.verdicts` `studio/session-kinds.yaml`'s
   // `awaiting-approval` row declares (`verdicts: [approve]`) — this
-  // function is only ever reached with `verdict === 'approve'` now.
-  // Belt-and-suspenders (mirrors the bespoke apply route's own posture):
-  // structurally guaranteed by the caller's affordance-membership check
-  // (deriveSessionAffordances only ever derives THIS verdict at exactly
-  // "awaiting-approval"), re-asserted here so a future registry change
-  // cannot silently widen this to a phase the drain was never designed for.
-  if (phase !== 'awaiting-approval') {
-    sendJson(res, 409, { error: `session "${sessionId}" is not awaiting-approval (current phase: "${phase}")`, sessionId, project }, origin);
+  // function is only ever reached with `verdict === 'approve'` now, so it
+  // no longer needs `verdict` as a parameter at all.
+  //
+  // Delegates WHOLESALE to `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
+  // the phase re-check (belt-and-suspenders on top of the caller's own
+  // affordance-membership check AND the generic verdicts gate above), the
+  // kb_id presence check, the ATOMIC phase:'applying' claim, the drain, and
+  // the phase:'applied' write all live in exactly one place now, shared
+  // with the bespoke `/cleanup/apply` route (W6-B4 adversarial-review fix —
+  // this used to be duplicated, non-atomic choreography here).
+  const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs);
+  if (!outcome.ok) {
+    sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
     return;
   }
-  if (typeof status.kb_id !== 'string') {
-    sendJson(res, 500, { error: `kb-cleanup apply: session "${sessionId}" status.json has no string "kb_id"` }, origin);
-    return;
-  }
-  const kbId = status.kb_id;
-  const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
-  await enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
-
-  const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
-  if (written === null) {
-    sendJson(res, 500, { error: `kb-cleanup apply: status.json write for session "${sessionId}" failed containment` }, origin);
-    return;
-  }
-  sendJson(res, 200, { ok: true, runId }, origin);
+  sendJson(res, 200, { ok: true, runId: outcome.runId }, origin);
 }
 
 // ---------------------------------------------------------------------------
 // verdict — authoring (approve only; delegates WHOLESALE to `runFinalize`).
+//
+// NOT subject to this file's SYNC INVARIANT note (header): `runFinalize`
+// does not reuse this file's caller-supplied `status` at all — it
+// re-reads status.json ITSELF (`bridge-studio-authoring.ts` step 3) and
+// writes its OWN atomic claim (`phase:'committing'`, step 4) synchronously
+// before its one `await runInteractiveTurn(...)`, independent of whatever
+// this dispatcher read earlier. It already had the claim-then-await shape
+// `approveKbCleanup` (cli/bridge-studio-kbs.ts) was built to match — the
+// W6-B4 adversarial-review fix generalised authoring's existing pattern to
+// kb-cleanup, not the other way around.
 // ---------------------------------------------------------------------------
 
 async function handleAuthoringVerdict(
@@ -545,7 +612,7 @@ export async function handleStudioAffordanceRoutes(
           await handleDemoVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
           return true;
         case 'kb-cleanup':
-          await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, status, phase, sessionId, project);
+          await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, project);
           return true;
         case 'authoring':
           await handleAuthoringVerdict(ctx, res, origin, project, sessionId, b);

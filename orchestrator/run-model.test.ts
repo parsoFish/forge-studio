@@ -693,6 +693,92 @@ test('aggregateRun: reflection lost then RECOVERED (later reflector.end) → no 
 });
 
 // ---------------------------------------------------------------------------
+// W6-RV-2: completedAt derivation (roadmap canvas time axis)
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: completedAt — the real cycle.end event wins even when a reflector rerun appends LATER reflection events', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-completed-primary';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-completed-primary';
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId });
+
+    const cycleStart = '2026-01-01T02:00:00.000Z';
+    const cycleEnd = '2026-01-01T03:15:00.000Z';
+    // a standalone reflector rerun (e.g. the 2026-07-10 boot-reconcile flood)
+    // appended WEEKS later, straight onto the same events.jsonl.
+    const rerunAt = '2026-07-10T09:00:00.000Z';
+
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }, { started_at: cycleStart, skill: 'cycle' }),
+      ev('developer-loop', 'start', undefined, undefined, { started_at: cycleStart }),
+      ev('developer-loop', 'end', undefined, undefined, { started_at: cycleEnd }),
+      // the ONE real cycle-end event — phase:orchestrator, skill:cycle (not
+      // the ev() helper's default skill:phase mirroring).
+      ev('orchestrator', 'end', 'cycle.end', { status: 'done' }, { started_at: cycleEnd, skill: 'cycle' }),
+      ev('reflection', 'start', 'reflector.start', undefined, { started_at: rerunAt }),
+      ev('reflection', 'end', 'reflector.end', { status: 'closed' }, { started_at: rerunAt }),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs: Date.now() });
+    assert.equal(run.completedAt, cycleEnd, 'completedAt is the real cycle.end started_at, not the later reflector rerun');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('aggregateRun: completedAt — crash-then-requeue tail (no cycle.end event) falls back to the last NON-reflection event', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-completed-fallback';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-completed-fallback';
+    const manifestPath = writeManifest(root, 'failed', initId, { cycle_id: cycleId });
+
+    const cycleStart = '2026-01-01T02:00:00.000Z';
+    const lastRealEvent = '2026-01-01T02:40:00.000Z'; // process died right after this
+    // a boot-reconcile reflector rerun appended weeks later — must be EXCLUDED
+    // from the fallback, or this crash-tail's date would smear onto 07-10.
+    const rerunAt = '2026-07-10T09:00:00.000Z';
+
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }, { started_at: cycleStart, skill: 'cycle' }),
+      ev('developer-loop', 'start', undefined, undefined, { started_at: lastRealEvent }),
+      // NO orchestrator/cycle/end event — the process crashed here.
+      ev('reflection', 'start', 'reflector.start', undefined, { started_at: rerunAt }),
+      ev('reflection', 'end', 'reflector.end', { status: 'closed' }, { started_at: rerunAt }),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'failed', manifestPath, nowMs: Date.now() });
+    assert.equal(
+      run.completedAt,
+      lastRealEvent,
+      'falls back to the last non-reflection event, excluding the later reflector rerun',
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('aggregateRun: completedAt — absent (not fabricated) when every event is a reflection event', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-completed-absent';
+    const cycleId = '2026-01-01T02-00-00_INIT-2026-01-01-completed-absent';
+    const manifestPath = writeManifest(root, 'failed', initId, { cycle_id: cycleId });
+
+    writeCycleLog(root, cycleId, [
+      ev('reflection', 'start', 'reflector.start'),
+      ev('reflection', 'end', 'reflector.end', { status: 'closed' }),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'failed', manifestPath, nowMs: Date.now() });
+    assert.equal(run.completedAt, undefined, 'no non-reflection event and no cycle.end event ⇒ honestly absent');
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Synthetic: failed (failure_classification event)
 // ---------------------------------------------------------------------------
 

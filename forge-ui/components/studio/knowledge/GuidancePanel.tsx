@@ -86,13 +86,22 @@ export function GuidancePanel({ selectedArticle, kbId, onPinned }: Props) {
             Guidance pinned — will appear in graph and be consumed on the next ingest pass.
           </div>
         )}
+        {/* W6-SW-3 (sweep C4#3): with no kbId (zero-KB roster) the Pin button
+            was clickable and fired pinGuidance('', text, undefined). Disable
+            it with an explanatory hint instead. */}
+        {!kbId && (
+          <div style={{ marginTop: 5, fontSize: 12, color: 'var(--faint)' }}>
+            Select or create a knowledge base first.
+          </div>
+        )}
         <div style={{ marginTop: 8 }}>
           <button
             className="btn btn-primary"
             id="pin-guidance-btn"
             style={{ width: '100%' }}
             onClick={() => { void handlePin(); }}
-            disabled={!text.trim() || pinning}
+            disabled={!kbId || !text.trim() || pinning}
+            title={!kbId ? 'Select or create a knowledge base first.' : undefined}
           >
             {pinning ? 'Pinning…' : 'Pin guidance'}
           </button>

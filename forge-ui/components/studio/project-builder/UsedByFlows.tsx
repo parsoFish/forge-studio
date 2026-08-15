@@ -27,7 +27,19 @@ export function UsedByFlows({ flows, projectId }: { flows: Flow[]; projectId: st
         Run a flow
       </div>
       {ideaFlows.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--faint)', fontStyle: 'italic' }}>No interactive flow yet — build one whose kickoff is an idea.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--faint)', fontStyle: 'italic' }}>No interactive flow yet — build one whose kickoff is an idea.</div>
+          {/* W6-SW-3 (sweep C2#9): the empty state named the fix ("build
+              one…") but gave no way to act on it. */}
+          <Link
+            className="btn btn-ghost"
+            data-action="build-idea-flow"
+            href="/flows/new"
+            style={{ textDecoration: 'none', textAlign: 'center', fontSize: 12 }}
+          >
+            Build a flow →
+          </Link>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <select

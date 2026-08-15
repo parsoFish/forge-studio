@@ -60,14 +60,21 @@ export function SessionArchitectPanel({
       <div style={{ flex: 1, minWidth: 0 }}>
         {stale && <StuckWarning session={session} />}
 
-        {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
-          <ArchitectQuestionForm
-            project={session.project}
-            sessionId={session.sessionId}
-            round={session.round}
-            questions={session.questions}
-          />
-        ) : null}
+        {session.phase === 'awaiting-answers' && (
+          session.questions && session.questions.length > 0 ? (
+            <ArchitectQuestionForm
+              project={session.project}
+              sessionId={session.sessionId}
+              round={session.round}
+              questions={session.questions}
+            />
+          ) : (
+            // W6-SW-3 (sweep C6#3): questions can be empty/undefined while
+            // phase is still 'awaiting-answers' — every other phase branch
+            // renders explicit Status() text; this one used to render nothing.
+            <Status label="Waiting on the next question…" />
+          )
+        )}
 
         {(session.phase === 'interviewing' || session.phase === 'exploring' || session.phase === 'drafting' || session.phase === 'finalizing') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

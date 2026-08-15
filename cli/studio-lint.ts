@@ -7,6 +7,14 @@
  *   1. Agent definitions  — every studio SKILL.md in skills/
  *   2. Flow definitions   — every studio/flows/<id>/flow.yaml
  *   3. Catalog            — studio/catalog.yaml
+ *   3b. Community registry — studio/community/registry.yaml (W6-CR-1; MISSING
+ *                           IS an error — this content was previously
+ *                           mandatory inside catalog.yaml, so forge's own
+ *                           repo must always ship it. Stricter than the
+ *                           runtime reader: community-index.ts's
+ *                           registrySource() still degrades a missing file to
+ *                           [] with a console.warn, since the bridge must not
+ *                           crash a live session mid-seed)
  *   4. Projects           — auto-discovered from `<projectsDir>/*` (B1; no registry file)
  *   5. KB descriptors     — brain/<name>/kb.yaml (tolerate zero; duplicates are
  *                           errors; R1-01 also cross-checks binding.ref against
@@ -14,10 +22,10 @@
  *                           exactly one binding: { kind: unique } KB once ≥1 is
  *                           loaded)
  *
- * Missing seed files (studio/ dir, catalog.yaml) are errors. Zero discovered
- * projects is NOT an error (a fresh box has none); a project dir missing its
- * `.forge/project.json` is a warn. Absent brain kb.yaml files are NOT errors
- * (project KBs live in project repos).
+ * Missing seed files (studio/ dir, catalog.yaml, studio/community/registry.yaml)
+ * are errors. Zero discovered projects is NOT an error (a fresh box has none);
+ * a project dir missing its `.forge/project.json` is a warn. Absent brain
+ * kb.yaml files are NOT errors (project KBs live in project repos).
  *
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
@@ -33,6 +41,8 @@ import {
   listInstructionSeeds,
   loadAgentDefinition,
   loadCatalog,
+  loadCommunityRegistry,
+  communityRegistryPath,
   loadFlowDefinition,
   loadKbDescriptor,
   discoverProjects,
@@ -46,6 +56,7 @@ import {
   validateArtifactRef,
   validateArtifactTemplate,
   validateCatalog,
+  validateCommunityRegistry,
   validateFlow,
   validateInstructionSeed,
   validateKb,
@@ -391,6 +402,50 @@ export function runStudioLint(root: string): StudioLintResult {
         object: 'studio:catalog',
         check: 'load',
         message: `Cannot load catalog.yaml — ${(err as Error).message}`,
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 3b. Community registry (studio/community/registry.yaml, W6-CR-1) — the
+  //     declared-list source of truth for community items, superseding
+  //     catalog.yaml's former `community-skills:` section.
+  //
+  //     Reviewer fix (W6-CR-1 round 2): a MISSING registry.yaml IS a lint
+  //     error here (seed-present, mirrors catalog.yaml's own missing-file
+  //     check immediately above) — this content was PREVIOUSLY mandatory
+  //     inside catalog.yaml, so forge's own repo must always ship the file it
+  //     moved to; a fresh checkout mid-seed that never runs `forge studio
+  //     lint` simply hasn't finished seeding yet. This is deliberately
+  //     STRICTER than the RUNTIME reader — orchestrator/studio/
+  //     community-index.ts's `registrySource()` still degrades a missing file
+  //     to `[]` with a console.warn, because the bridge must not crash a live
+  //     session mid-seed; lint is the gate that catches "forgot to ship it"
+  //     before that degrade ever has to fire in a real forge checkout. A file
+  //     that EXISTS but fails to parse (missing required field, bad kind
+  //     vocab, malformed signals) surfaces as a loud `load` finding, naming
+  //     the real underlying error, never silently treated as an honest empty
+  //     registry.
+  // ------------------------------------------------------------------
+
+  const registryPath = communityRegistryPath(root);
+  if (!existsSync(registryPath)) {
+    findings.push({
+      level: 'error',
+      object: 'studio:community-registry',
+      check: 'seed-present',
+      message: `Required file "${registryPath}" is missing — run the M0 seed step`,
+    });
+  } else {
+    try {
+      const registry = loadCommunityRegistry(registryPath);
+      findings.push(...validateCommunityRegistry(registry));
+    } catch (err) {
+      findings.push({
+        level: 'error',
+        object: 'studio:community-registry',
+        check: 'load',
+        message: `Cannot load studio/community/registry.yaml — ${(err as Error).message}`,
       });
     }
   }

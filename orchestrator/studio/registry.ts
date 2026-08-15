@@ -25,6 +25,9 @@ import type {
   Catalog,
   CatalogGuardEntry,
   CommunitySkill,
+  CommunityRegistry,
+  CommunityRegistryItem,
+  CommunityRegistrySignals,
   CatalogModel,
   CatalogSdk,
   DemoElementDefinition,
@@ -735,29 +738,6 @@ function parseCatalogGuards(raw: unknown, file: string): CatalogGuardEntry[] {
   });
 }
 
-function parseCommunitySkills(raw: unknown, file: string): CommunitySkill[] {
-  if (raw === undefined || raw === null) return [];
-  if (!Array.isArray(raw)) {
-    throw new Error(`${file}: "community-skills" must be an array`);
-  }
-  return raw.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${file}: community-skills[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    return {
-      id: reqString(e, 'id', file),
-      name: reqString(e, 'name', file),
-      provenance: reqString(e, 'provenance', file),
-      source: reqString(e, 'source', file),
-      category: reqString(e, 'category', file),
-      tier: optString(e, 'tier'),
-      stars: optString(e, 'stars'),
-      desc: optString(e, 'desc'),
-    };
-  });
-}
-
 // catalog.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
 export function loadCatalog(catalogYamlPath: string): Catalog {
   const d = loadYaml(catalogYamlPath);
@@ -767,9 +747,140 @@ export function loadCatalog(catalogYamlPath: string): Catalog {
     tools: parseConnectionEntries(d['tools'], catalogYamlPath, 'tools', { readCapabilities: false }),
     mcps: parseConnectionEntries(d['mcps'], catalogYamlPath, 'mcps', { readCapabilities: true }),
     guards: parseCatalogGuards(d['guards'], catalogYamlPath),
-    communitySkills: parseCommunitySkills(d['community-skills'], catalogYamlPath),
     path: catalogYamlPath,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Community registry (W6-CR-1) — studio/community/registry.yaml, the
+// declared-list source of truth for community items, superseding
+// catalog.yaml's former `community-skills:` section (parseCommunitySkills
+// above, removed by this migration).
+// ---------------------------------------------------------------------------
+
+/** Mirrors community-index.ts's COMMUNITY_KINDS / types.ts's
+ *  COMMUNITY_REGISTRY_KINDS exactly — kept as an independent literal here too
+ *  (registry.ts sits BELOW community-index.ts in the import graph) so `oneOf`
+ *  can validate the field without introducing a new cross-module edge for one
+ *  four-string list. */
+const COMMUNITY_REGISTRY_KIND_VALUES = ['skill', 'hook', 'mcp', 'tool'] as const;
+
+function parseCommunityRegistrySignals(raw: unknown, file: string, itemId: string): CommunityRegistrySignals {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${file}: items "${itemId}".signals must be a mapping`);
+  }
+  const s = raw as Record<string, unknown>;
+  const stars = s['stars'];
+  if (stars !== null && typeof stars !== 'number') {
+    throw new Error(`${file}: items "${itemId}".signals.stars must be a number or null`);
+  }
+  const starsDisplay = s['starsDisplay'];
+  if (starsDisplay !== null && typeof starsDisplay !== 'string') {
+    throw new Error(`${file}: items "${itemId}".signals.starsDisplay must be a string or null`);
+  }
+  const attributedTo = s['attributedTo'];
+  if (attributedTo !== null && typeof attributedTo !== 'string') {
+    throw new Error(`${file}: items "${itemId}".signals.attributedTo must be a string or null`);
+  }
+  return { stars, starsDisplay, attributedTo };
+}
+
+function parseNullableString(raw: unknown, file: string, field: string): string | null {
+  if (raw !== null && typeof raw !== 'string') {
+    throw new Error(`${file}: field "${field}" must be a string or null`);
+  }
+  return raw;
+}
+
+function parseCommunityRegistryItem(raw: unknown, i: number, file: string): CommunityRegistryItem {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${file}: items[${i}] must be a mapping`);
+  }
+  const e = raw as Record<string, unknown>;
+  const id = reqString(e, 'id', file);
+  const kind = oneOf(reqString(e, 'kind', file), COMMUNITY_REGISTRY_KIND_VALUES, file, 'kind');
+  return {
+    id,
+    kind,
+    name: reqString(e, 'name', file),
+    desc: optString(e, 'desc'),
+    category: reqString(e, 'category', file),
+    sourceUrl: reqString(e, 'sourceUrl', file),
+    provenance: reqString(e, 'provenance', file),
+    tier: optString(e, 'tier'),
+    signals: parseCommunityRegistrySignals(e['signals'], file, id),
+    upstreamUpdatedAt: parseNullableString(e['upstreamUpdatedAt'], file, `items[${i}] ("${id}").upstreamUpdatedAt`),
+    fetchedAt: parseNullableString(e['fetchedAt'], file, `items[${i}] ("${id}").fetchedAt`),
+    fetchedBy: reqString(e, 'fetchedBy', file),
+  };
+}
+
+export function communityRegistryPath(forgeRoot: string): string {
+  return join(forgeRoot, 'studio', 'community', 'registry.yaml');
+}
+
+/** Throws on ANY structural violation (missing/malformed meta, non-array
+ *  items, a malformed item) — callers that want to TOLERATE a missing file
+ *  check existsSync first (mirrors loadCatalog's own bare-throw contract;
+ *  `communitySkillsFromRegistry` below is the tolerant-to-missing wrapper
+ *  most callers actually want). */
+export function loadCommunityRegistry(registryYamlPath: string): CommunityRegistry {
+  const d = loadYaml(registryYamlPath);
+  const meta = reqObject(d, 'meta', registryYamlPath);
+  const schemaVersion = reqNumber(meta, 'schemaVersion', registryYamlPath);
+  const lastRefresh = parseNullableString(meta['lastRefresh'], registryYamlPath, 'meta.lastRefresh');
+  const rawItems = d['items'];
+  if (!Array.isArray(rawItems)) {
+    throw new Error(`${registryYamlPath}: "items" must be an array`);
+  }
+  return {
+    schemaVersion,
+    lastRefresh,
+    items: rawItems.map((item, i) => parseCommunityRegistryItem(item, i, registryYamlPath)),
+    path: registryYamlPath,
+  };
+}
+
+/** Projects a registry item down onto the LEGACY `CommunitySkill` shape every
+ *  existing consumer already depends on (skill-library.ts, validate.ts,
+ *  community-index.ts, community-install.ts, the bridge routes) — `stars`
+ *  here is always the curated DISPLAY string, never the parsed numeric
+ *  `signals.stars` (types.ts's CommunitySkill doc).
+ *
+ *  DELIBERATE, NOT FORGOTTEN: `item.fetchedAt`/`item.fetchedBy` dead-end
+ *  right here — the legacy `CommunitySkill` shape has no fields for them, so
+ *  they never reach community-index.ts's `CommunityItem`, the bridge wire
+ *  response, or forge-ui. That's CR-2's scope (a real refresh pass +
+ *  staleness sort/display in the community browser), not W6-CR-1's — this
+ *  migration only had to seed the data and make it loadable/validatable.
+ *  When CR-2 lands, it plumbs a NEW projection (or widens this one) rather
+ *  than assuming these fields already flow anywhere. */
+function toCommunitySkill(item: CommunityRegistryItem): CommunitySkill {
+  return {
+    id: item.id,
+    name: item.name,
+    provenance: item.provenance,
+    source: item.sourceUrl,
+    category: item.category,
+    tier: item.tier,
+    stars: item.signals.starsDisplay ?? undefined,
+    desc: item.desc,
+  };
+}
+
+/** Every `kind: skill` row of studio/community/registry.yaml, in the LEGACY
+ *  `CommunitySkill` shape. Tolerant of a MISSING file (returns `[]` — the
+ *  fresh/half-onboarded shape every other studio/community/*.yaml reader
+ *  already tolerates, see community-index.ts's listCommunityHubs); a file
+ *  that EXISTS but fails to parse (missing required field, bad kind vocab,
+ *  malformed signals, ...) throws loud, naming the file + the real error —
+ *  a corrupt registry must never render identically to an honest empty one. */
+export function communitySkillsFromRegistry(forgeRoot: string): CommunitySkill[] {
+  const registryPath = communityRegistryPath(forgeRoot);
+  if (!existsSync(registryPath)) return [];
+  return loadCommunityRegistry(registryPath)
+    .items.filter((item) => item.kind === 'skill')
+    .map(toCommunitySkill);
 }
 
 // ---------------------------------------------------------------------------

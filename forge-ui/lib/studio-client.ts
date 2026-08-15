@@ -157,6 +157,13 @@ export type Run = {
   flowId: string;
   initiativeId: string;
   initiative: string;
+  /**
+   * W6-SW-3 (sweep C8#1): the manifest's project slug, carried through so
+   * GateBar can thread it into `postGate` for plan gates — mirrors
+   * orchestrator/run-model.ts's `Run.project`. Optional: absent for a
+   * degraded (corrupt-manifest) run.
+   */
+  project?: string;
   status: RunStatus;
   origin: 'architect' | 'human-directed';
   costUsd: number;
@@ -914,6 +921,10 @@ export function parseRun(raw: unknown): Run {
     // with no note must not be paired away.
     ...(r.reflectionLost !== undefined ? { reflectionLost: r.reflectionLost } : {}),
     ...(r.reflectionLostNote !== undefined ? { reflectionLostNote: r.reflectionLostNote } : {}),
+    // W6-SW-3 (sweep C8#1): declared-data-fails-open guard, same pattern as
+    // trigger/reflectionLost above — project is parsed and served, must not
+    // be silently dropped here (GateBar depends on it reaching the client).
+    ...(r.project !== undefined ? { project: r.project } : {}),
   };
 }
 

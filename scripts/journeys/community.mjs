@@ -21,6 +21,13 @@ function loadCatalogDoc() {
   return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'catalog.yaml'), 'utf8'));
 }
 
+// W6-CR-1: community skills moved from studio/catalog.yaml's `community-skills:`
+// section to studio/community/registry.yaml — read that file directly rather
+// than re-deriving from the (now community-skills-less) catalog doc.
+function loadRegistryDoc() {
+  return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'registry.yaml'), 'utf8'));
+}
+
 function loadHubsDoc() {
   return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'hubs.yaml'), 'utf8'));
 }
@@ -55,12 +62,13 @@ function realVendoredIds(kind) {
  *  reconstruct the full wire shape. */
 function realCommunityItems() {
   const doc = loadCatalogDoc();
+  const registryDoc = loadRegistryDoc();
   const hubs = realHubs();
-  const communitySkills = doc['community-skills'] ?? [];
+  const communitySkills = (registryDoc.items ?? []).filter((i) => i.kind === 'skill');
   const catalogSkillIds = new Set(communitySkills.map((cs) => cs.id));
   const items = [];
   for (const cs of communitySkills) {
-    items.push({ kind: 'skill', id: cs.id, hub: resolveHubLocal(cs.source, hubs) });
+    items.push({ kind: 'skill', id: cs.id, hub: resolveHubLocal(cs.sourceUrl, hubs) });
   }
   for (const id of realVendoredIds('skill')) {
     if (catalogSkillIds.has(id)) continue; // collision — represented once, above
@@ -87,9 +95,9 @@ function normalizeWs(text) {
 }
 
 function realCommunitySkillEntry(id) {
-  const doc = loadCatalogDoc();
-  const entry = (doc['community-skills'] ?? []).find((cs) => cs.id === id);
-  if (!entry) throw new Error(`community journey: "${id}" is missing from studio/catalog.yaml community-skills: — fixtures assume it exists`);
+  const doc = loadRegistryDoc();
+  const entry = (doc.items ?? []).find((cs) => cs.kind === 'skill' && cs.id === id);
+  if (!entry) throw new Error(`community journey: "${id}" is missing from studio/community/registry.yaml — fixtures assume it exists`);
   return entry;
 }
 
@@ -251,10 +259,10 @@ export const journey = defineJourney({
         const domSource = await card.getAttribute('data-skill-source');
         check(domSource === 'community', `CM-2: ${CM_CATALOG_SKILL_ID} reads data-skill-source="community" (got "${domSource}")`);
         const domHub = await card.getAttribute('data-skill-hub');
-        const realHub = resolveHubLocal(real.source, realHubs());
-        check(domHub === realHub?.id, `CM-2: data-skill-hub matches the catalog source's real resolved hub (dom="${domHub}", real="${realHub?.id}")`);
+        const realHub = resolveHubLocal(real.sourceUrl, realHubs());
+        check(domHub === realHub?.id, `CM-2: data-skill-hub matches the registry sourceUrl's real resolved hub (dom="${domHub}", real="${realHub?.id}")`);
         const domHasSignals = await card.getAttribute('data-skill-has-signals');
-        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries real stars (${real.stars}) (got "${domHasSignals}")`);
+        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries real stars (${real.signals?.starsDisplay ?? 'n/a'}) (got "${domHasSignals}")`);
         await frame(page, 'cm-1-skills-card-signals', 'Part 2 (community) — a community card already carries its derived hub + signals on the /skills shelf', { key: true });
       },
     },
