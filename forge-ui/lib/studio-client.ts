@@ -1269,6 +1269,25 @@ export async function createSkill(
   return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
 }
 
+/** Reattach discovery for a KB's most recent `op:'consolidate'` run (W6-B14):
+ *  `GET /api/studio/kbs/:id/consolidate/active`. A consolidate runId is
+ *  minted server-side (`\`${kbId}-consolidate-<stamp>\``) and its terminal
+ *  state already lives on disk (`_logs/_brainfix-<runId>/events.jsonl`,
+ *  `readBrainFixState` — the SAME reader {@link getAgentFixStatus}'s route
+ *  uses); this is the one piece that was missing: a way to REDISCOVER that
+ *  runId after a client forgot it (nav-away, reload). `runId: null` means
+ *  this kb has never consolidated. The returned `state`/`cleared` are the
+ *  SAME shape `getAgentFixStatus` returns, so the caller feeds this
+ *  straight into {@link pollAgentFix} to resume live polling. */
+export async function fetchActiveOrLatestConsolidate(
+  kbId: string,
+): Promise<{ ok: boolean; runId: string | null; state: AgentFixStatus['state'] | null; cleared: boolean }> {
+  return studioGet(
+    `/api/studio/kbs/${encodeURIComponent(kbId)}/consolidate/active`,
+    { ok: false, runId: null, state: null, cleared: false },
+  );
+}
+
 /** Run a manual brain-maintenance op on a KB (K3): 'lint', 'index', or
  *  'consolidate' (R1-06 WI-3 — drains the FULL agent-tier finding set as one
  *  async session; dispatched the same way as 'index'/'lint', but its `data`
@@ -1486,6 +1505,50 @@ export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> 
   } catch {
     return { ok: false, state: 'unknown', costUsd: 0, events: 0 };
   }
+}
+
+/** One row of `GET /api/agents/:slug/history`'s standalone-dispatch shape —
+ *  narrowed to the fields {@link fetchLatestStandaloneRun} actually needs;
+ *  the route's full `AgentHistoryRow` union (flow-node/standalone/session,
+ *  `cli/ui-bridge.ts`) is server-internal and never re-declared client-side. */
+export type StandaloneHistoryRow = { id: string; status: string; when: string };
+
+/** The most recent standalone-dispatch row for `slug` whose own `status` is
+ *  still `'running'` (W6-B14 RunPanel reattach) — `GET /api/agents/:slug/
+ *  history` already joins flow-node/standalone/session execution paths into
+ *  one ledger (R6-06 WI-1); this reads only the `linkKind:'standalone'` rows
+ *  (a bare dispatch from THIS panel, never a flow-node run) and returns the
+ *  one with the latest `when`, or `null` if none is currently running. The
+ *  row's `id` IS the runId {@link pollAgentRun} needs — no separate lookup. */
+export async function fetchLatestStandaloneRun(slug: string): Promise<StandaloneHistoryRow | null> {
+  const body = await studioGet<{ ok?: boolean; rows?: Array<Record<string, unknown>> }>(
+    `/api/agents/${encodeURIComponent(slug)}/history`,
+    { ok: false, rows: [] },
+  );
+  const running = (body.rows ?? []).filter(
+    (r) => r['linkKind'] === 'standalone' && r['status'] === 'running' && typeof r['id'] === 'string',
+  );
+  if (running.length === 0) return null;
+  running.sort((a, b) => String(b['when'] ?? '').localeCompare(String(a['when'] ?? '')));
+  const top = running[0];
+  return { id: top['id'] as string, status: top['status'] as string, when: String(top['when'] ?? '') };
+}
+
+/** Reattach discovery for a project's most recent onboarding-agent dispatch
+ *  (W6-B14): `GET /api/studio/projects/:id/onboarding/active`. The
+ *  onboarding session's OWN `status.json` (written by `POST /api/studio/
+ *  onboarding/start`, then updated to a terminal phase by
+ *  `writeSessionTerminalPhase`, cli/agent-run.ts) already carries the
+ *  `runId` pollable via {@link getAgentRunStatus} — this finds the most
+ *  recent `_onboarding/<sessionId>` for the project and reads it back.
+ *  `sessionId: null` means this project has never run onboarding. */
+export async function fetchActiveOnboarding(
+  projectId: string,
+): Promise<{ ok: boolean; sessionId: string | null; runId: string | null; phase: string | null }> {
+  return studioGet(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/onboarding/active`,
+    { ok: false, sessionId: null, runId: null, phase: null },
+  );
 }
 
 /**

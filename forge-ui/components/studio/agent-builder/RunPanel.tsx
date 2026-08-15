@@ -53,9 +53,10 @@ import Link from 'next/link';
 import {
   dispatchAgentRun,
   parseRunInputs,
+  fetchLatestStandaloneRun,
   type MaterialUpload,
 } from '@/lib/studio-client';
-import { pollAgentRun, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
+import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 import {
   validateMaterialsClientSide,
   resolveCostCeilingForDispatch,
@@ -153,16 +154,42 @@ export function RunPanel({
   const [status, setStatus] = useState<PolledAgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  const [pollNonce, setPollNonce] = useState(0);
+
+  // W6-B14: reattach on mount — this panel only ever knew its dispatched
+  // runId from its OWN `runId` state, so a nav-away-and-back (or a reload)
+  // forgot it even while the standalone dispatch kept running server-side.
+  // `GET /api/agents/:slug/history` (R6-06 WI-1) already joins every
+  // execution path for this agent into one ledger; this reads back the most
+  // recent STANDALONE row (a bare dispatch from THIS panel, never a
+  // flow-node run) whose own status is still 'running' and resumes polling
+  // it — never a guess: an idle mount with nothing active stays idle.
+  useEffect(() => {
+    if (runId) return;
+    let cancelled = false;
+    fetchLatestStandaloneRun(slug).then((row) => {
+      if (cancelled || !row) return;
+      // Functional update, not a bare setRunId(row.id): a real dispatch
+      // (onRun, below) may have already set a FRESH runId while this fetch
+      // was in flight — never stomp it with a stale reattach result.
+      setRunId((current) => current ?? row.id);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   // Poll the dispatched run's status until it leaves 'running' (done/failed/
   // suppressed) or the bounded ceiling trips — a run that dies without a
   // terminal marker, or a suppressed run that writes no events, must never
   // poll forever, and never silently freeze on a stale 'running' once the
   // ceiling is hit (agent-dispatch.ts's explicit 'timed-out' state).
+  // `pollNonce` lets the "Re-check" button restart a bounded poll for the
+  // SAME runId after a watch timeout, without needing runId itself to change.
   useEffect(() => {
     if (!runId) return;
     return pollAgentRun(runId, { onUpdate: setStatus });
-  }, [runId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, pollNonce]);
 
   // W6-B7: `runId` (minted `_agent-<slug>-<stamp>` — `cli/ui-bridge.ts`'s
   // `POST /api/agents/:slug/run`) IS the run's cycle id — `createLogger`
@@ -203,6 +230,11 @@ export function RunPanel({
   }
 
   const runState = status?.state ?? (runId ? 'running' : 'idle');
+  // W6-B14: the shared three-state contract — `watching` before the poll's
+  // first real response lands too (a dispatched runId with no status yet is
+  // still "being watched", not idle), never fabricated once a real
+  // done/failed/timed-out status is in hand.
+  const pollState = pollDisplayState(status) ?? (runId ? 'watching' : null);
   const effectiveCanRun = canRun && !blockedMessage;
   const controlsDisabled = !effectiveCanRun || dispatching;
 
@@ -264,6 +296,7 @@ export function RunPanel({
       data-run-status={runState}
       data-run-cost={status?.costUsd ?? 0}
       data-run-blocked={blockedMessage ? 'true' : 'false'}
+      {...(pollState ? { 'data-poll-state': pollState } : {})}
       style={RUN_PANEL_STYLE}
     >
       <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
@@ -359,6 +392,17 @@ export function RunPanel({
           <div>
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+            {pollState === 'timed-out' && (
+              <button
+                type="button"
+                data-action="re-check"
+                className="btn btn-sm"
+                style={{ marginLeft: 8 }}
+                onClick={() => setPollNonce((n) => n + 1)}
+              >
+                Re-check
+              </button>
+            )}
           </div>
         </div>
       )}

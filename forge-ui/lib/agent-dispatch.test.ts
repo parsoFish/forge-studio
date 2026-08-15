@@ -26,11 +26,14 @@ import {
   pollAgentRun,
   pollKbDrain,
   pollAgentFix,
+  pollPreflightFix,
+  pollDisplayState,
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_POLL_MAX_ATTEMPTS,
   type PolledAgentRunStatus,
   type PolledKbDrainStatus,
   type PolledAgentFixStatus,
+  type PolledPreflightFixStatus,
 } from './agent-dispatch';
 import type { AgentRunStatus, KbDrainStatus, AgentFixStatus } from './studio-client';
 
@@ -293,4 +296,88 @@ test('pollAgentFix: "unmount mid-poll" — calling the returned stop fn while st
   await vi.advanceTimersByTimeAsync(10000);
   expect(fetchStatus).toHaveBeenCalledTimes(callsAtUnmount);
   expect(onUpdate).toHaveBeenCalledTimes(updatesAtUnmount);
+});
+
+// ---------------------------------------------------------------------------
+// pollPreflightFix (W6-B14) — ContractResolutionPanel.tsx's `submitUser` used
+// to `await` a hand-rolled 45×2s loop DIRECTLY in the click handler, so its
+// result was simply discarded on nav-away, and the ceiling was never
+// surfaced as an explicit state (the same bug class W6-B13 already fixed
+// three times over — pollAgentRun/pollKbDrain/pollAgentFix).
+// ---------------------------------------------------------------------------
+
+function preflightFixStatus(overrides: Partial<PolledPreflightFixStatus> = {}): PolledPreflightFixStatus {
+  return { ok: true, state: 'running', cleared: false, ...overrides };
+}
+
+test('pollPreflightFix: fetches immediately with (projectId, runId) and reports the first status', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(preflightFixStatus({ state: 'cleared', cleared: true }));
+  const onUpdate = vi.fn();
+  const stop = pollPreflightFix('gitpulse', 'pf-run-1', { fetchStatus, onUpdate });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  expect(fetchStatus).toHaveBeenCalledWith('gitpulse', 'pf-run-1');
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ state: 'cleared', cleared: true }));
+  stop();
+});
+
+test('pollPreflightFix: exhausting the poll budget while still "running" emits an explicit "timed-out" state — never a silent freeze', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(preflightFixStatus({ state: 'running' }));
+  const onUpdate = vi.fn();
+  const stop = pollPreflightFix('gitpulse', 'pf-run-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  for (let i = 0; i < 5; i++) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  const finalCall = onUpdate.mock.calls.at(-1)?.[0] as PolledPreflightFixStatus;
+  expect(finalCall.state).toBe('timed-out');
+  stop();
+});
+
+test('pollPreflightFix: stops polling once "not-cleared" or "failed" is reached', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(preflightFixStatus({ state: 'not-cleared' }));
+  const onUpdate = vi.fn();
+  const stop = pollPreflightFix('gitpulse', 'pf-run-1', { fetchStatus, onUpdate, intervalMs: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(fetchStatus).toHaveBeenCalledTimes(1);
+  stop();
+});
+
+test('pollPreflightFix: "unmount mid-poll" — calling the returned stop fn makes NO further fetch calls, matching pollAgentFix\'s own unmount contract', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(preflightFixStatus({ state: 'running' }));
+  const onUpdate = vi.fn();
+  const stop = pollPreflightFix('gitpulse', 'pf-run-1', { fetchStatus, onUpdate, intervalMs: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  stop();
+  const callsAtUnmount = fetchStatus.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(fetchStatus).toHaveBeenCalledTimes(callsAtUnmount);
+});
+
+// ---------------------------------------------------------------------------
+// pollDisplayState (W6-B14) — the ONE shared derivation every fixed poll
+// surface uses to render the three-state operator-intent contract
+// (`data-poll-state="watching|timed-out|terminal"`): watching while
+// 'running', an explicit 'timed-out' (never silence), and every other real
+// outcome collapsed to 'terminal'. `null` (no run yet) is its own, 4th,
+// pre-dispatch case — callers render idle and omit the attribute.
+// ---------------------------------------------------------------------------
+
+test('pollDisplayState: null/undefined (no run dispatched yet) -> null, never a fabricated state', () => {
+  expect(pollDisplayState(null)).toBeNull();
+  expect(pollDisplayState(undefined)).toBeNull();
+});
+
+test('pollDisplayState: state "running" -> "watching"', () => {
+  expect(pollDisplayState({ state: 'running' })).toBe('watching');
+});
+
+test('pollDisplayState: state "timed-out" -> "timed-out"', () => {
+  expect(pollDisplayState({ state: 'timed-out' })).toBe('timed-out');
+});
+
+test('pollDisplayState: every other real state (done/cleared/not-cleared/failed/suppressed/unknown/green/needs-you/...) -> "terminal"', () => {
+  for (const s of ['done', 'cleared', 'not-cleared', 'failed', 'suppressed', 'unknown', 'green', 'needs-you']) {
+    expect(pollDisplayState({ state: s })).toBe('terminal');
+  }
 });

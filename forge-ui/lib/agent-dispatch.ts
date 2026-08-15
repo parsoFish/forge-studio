@@ -28,7 +28,7 @@
  *     already made.
  */
 import {
-  getAgentRunStatus, getAgentFixStatus, fetchKbDrainRun,
+  getAgentRunStatus, getAgentFixStatus, fetchKbDrainRun, preflightFixStatus,
   type AgentRunStatus, type AgentFixStatus, type KbDrainStatus,
 } from './studio-client';
 
@@ -224,4 +224,60 @@ export function pollAgentFix(kbId: string, runId: string, opts: PollAgentFixOpti
     onUpdate: (s) => opts.onUpdate(s),
     onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false }), state: 'timed-out' }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// pollPreflightFix (W6-B14) — ContractResolutionPanel.tsx's `submitUser` used
+// to `await` a hand-rolled 45×2s loop (its own module-local `poll()`) DIRECTLY
+// inside the click handler: the awaited promise, and therefore the run's
+// result, was simply discarded if the operator navigated away before it
+// settled — the THIRD independent instance of the exact bug class
+// `pollAgentRun`/`pollKbDrain`/`pollAgentFix` above already fixed (W6-B13).
+// `preflightFixStatus` (./studio-client.ts) returns the byte-identical shape
+// `AgentFixStatus` does (`{ok, state: 'running'|'cleared'|'not-cleared'|
+// 'failed', cleared}`) — this wrapper is `pollAgentFix`'s twin, over the
+// preflight-fix run shape instead of the brain-fix one.
+// ---------------------------------------------------------------------------
+
+export type PolledPreflightFixState = 'running' | 'cleared' | 'not-cleared' | 'failed' | 'timed-out';
+export type PolledPreflightFixStatus = { ok: boolean; state: PolledPreflightFixState; cleared: boolean };
+
+export type PollPreflightFixOptions = {
+  fetchStatus?: (projectId: string, runId: string) => Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }>;
+  intervalMs?: number;
+  maxAttempts?: number;
+  onUpdate: (status: PolledPreflightFixStatus) => void;
+};
+
+export function pollPreflightFix(projectId: string, runId: string, opts: PollPreflightFixOptions): () => void {
+  const fetchStatus = opts.fetchStatus ?? preflightFixStatus;
+  return pollUntilTerminal<PolledPreflightFixStatus>({
+    fetchStatus: () => fetchStatus(projectId, runId),
+    isRunning: (s) => s.state === 'running',
+    intervalMs: opts.intervalMs,
+    maxAttempts: opts.maxAttempts,
+    onUpdate: (s) => opts.onUpdate(s),
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false, state: 'running' }), state: 'timed-out' }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// pollDisplayState (W6-B14) — the ONE shared mapping from any of the above
+// polled statuses to the three visible states the operator-intent rule
+// requires every multi-step dispatch+poll surface to render: 'watching'
+// (still running), 'timed-out' (the poll ceiling gave up but the run is
+// very likely still going server-side — never rendered as if it silently
+// stopped), or 'terminal' (a real done/cleared/failed/etc outcome). Returns
+// `null` when no run has ever been dispatched/attached — callers render
+// their own idle state and omit the `data-poll-state` attribute entirely
+// rather than emit a stale/fabricated value for "nothing happened yet".
+// ---------------------------------------------------------------------------
+
+export type PollDisplayState = 'watching' | 'timed-out' | 'terminal';
+
+export function pollDisplayState(state: { state: string } | null | undefined): PollDisplayState | null {
+  if (!state) return null;
+  if (state.state === 'running') return 'watching';
+  if (state.state === 'timed-out') return 'timed-out';
+  return 'terminal';
 }

@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight, startOnboardingSession,
+  saveProject, createProject, fetchPreflight,
   fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
-import { pollAgentRun, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
 import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
@@ -34,6 +33,7 @@ import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
 import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
@@ -489,22 +489,11 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   );
 }
 
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// OnboardWithAgent (R4-02-F1, repointed R4-17) — the /projects entry point
-// into the onboarding agent. Now dispatches through the staged onboarding
-// session route, `POST /api/studio/onboarding/start` ({@link
-// startOnboardingSession}), rather than the generic
-// `POST /api/agents/onboarding-agent/run` — D6 keeps the underlying spawn
-// byte-identical (`spawnAgentDispatch(...)`, same argv/prompt), so the
-// returned `runId` remains pollable via the SAME `getAgentRunStatus` this
-// panel always used; the only change is a real, staged session dir
-// (`sessionId`) the operator can now follow to `/sessions/onboarding/<id>`
-// instead of only watching the generic agent page's raw event log.
-// `data-onboard-run-id` / `data-onboard-run-status` /
-// `data-action="run-onboarding-agent"` are UNCHANGED (an existing journey
-// beat asserts them) — `data-onboard-session-id` is additive.
-// ---------------------------------------------------------------------------
+// OnboardWithAgent (R4-02-F1, repointed R4-17) moved to
+// components/studio/project-builder/OnboardWithAgent.tsx (W6-B14) — a
+// page-route file can only export the reserved Next.js route symbols, so a
+// component this task needs a standalone render-pin test for has to live
+// outside this file (mirrors RunPanel.tsx's own D12 extraction).
 
 // ---------------------------------------------------------------------------
 // ContractPanelMount (R4-12-F1) — the client-side seam that mounts the ASYNC
@@ -532,86 +521,6 @@ function ContractPanelMount(props: {
     return () => { cancelled = true; };
   }, [projectId, northStar, instructions, instructionsSource]);
   return el;
-}
-
-function OnboardWithAgent({ projectId }: { projectId: string }) {
-  const [runId, setRunId] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<PolledAgentRunStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  // Poll the dispatched run inline so events/cost are visible from the /projects
-  // entry point too (F1 AC), not only the agent page. Bounded, shared with
-  // RunPanel via lib/agent-dispatch.ts's pollAgentRun (never a silent freeze
-  // once the poll ceiling trips — see that module's header).
-  useEffect(() => {
-    if (!runId) return;
-    return pollAgentRun(runId, { onUpdate: setStatus });
-  }, [runId]);
-
-  const onRun = async () => {
-    setBusy(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const r = await startOnboardingSession(projectId);
-      if (r.ok && r.runId) {
-        setRunId(r.runId);
-        setSessionId(r.sessionId ?? null);
-      } else {
-        setError(r.error ?? 'dispatch failed');
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runState = status?.state ?? (runId ? 'running' : 'idle');
-
-  return (
-    <section
-      data-section="onboard-with-agent"
-      data-onboard-run-id={runId ?? ''}
-      data-onboard-run-status={runState}
-      data-onboard-session-id={sessionId ?? ''}
-      style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px', marginTop: 12 }}
-    >
-      <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Onboarding agent</h3>
-      <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
-        Run the onboarding agent to drive this project to contract-green (declares the gate,
-        converges preflight, disposes advisory clauses).
-      </p>
-      <button
-        className="btn btn-primary"
-        data-action="run-onboarding-agent"
-        onClick={() => void onRun()}
-        disabled={busy}
-      >
-        {busy ? 'Dispatching…' : 'Run onboarding agent'}
-      </button>
-      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
-      {runId && (
-        <div style={{ marginTop: 8, fontSize: 12 }}>
-          <div>run <code>{runId}</code> — <Link href="/agents/onboarding-agent">agent page</Link></div>
-          <div>
-            status: <strong>{runState}</strong>
-            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
-          </div>
-          {sessionId && (
-            <div style={{ marginTop: 4 }}>
-              <Link
-                data-action="view-onboarding-session"
-                href={`/sessions/onboarding/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(projectId)}`}
-              >
-                View onboarding session →
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
-  );
 }
 
 // ---------------------------------------------------------------------------
