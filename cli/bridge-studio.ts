@@ -30,7 +30,8 @@ import { basename, join, resolve, sep } from 'node:path';
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
-import { listRuns, buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { cachedListRuns } from './run-list-cache.ts';
 import { eventToNodeId } from '../orchestrator/run-model-derive.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
@@ -62,6 +63,7 @@ import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
+import type { WorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE, type Provenance } from './studio-provenance.ts';
@@ -276,9 +278,12 @@ function classifyEvent(e: EventLogEntry): LogLine {
 // Runs helpers
 // ---------------------------------------------------------------------------
 
-/** Find a Run by id (cycleId or initiativeId). Returns null if not found. */
+/** Find a Run by id (cycleId or initiativeId). Returns null if not found.
+ *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
+ *  — same derivation, same contract as listRuns, but terminal runs skip
+ *  re-parsing their events.jsonl once cached. */
 function findRun(forgeRoot: string, id: string): Run | null {
-  const runs = listRuns(forgeRoot, Date.now());
+  const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? null;
 }
 
@@ -482,7 +487,8 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const flowFilter = qs.get('flow');
-      let runs = listRuns(ctx.forgeRoot, Date.now());
+      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      let runs = cachedListRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
         // Match by lineage, not just current flowId: a run whose manifest was
         // repointed mid-saga (architect→develop hand-off) stays visible on
@@ -990,6 +996,13 @@ export type RoadmapWorkItem = {
   id: string;
   title: string;
   dependsOn: string[];
+  /**
+   * W6-RV-1: the WI's own status (`WorkItem['status']`, orchestrator/work-item.ts),
+   * threaded through from `parseWorkItem` rather than discarded — feeds the
+   * roadmap card's "done/total" micro-badge. Optional so a read that predates
+   * this field (or a snapshot with no status) never fabricates one.
+   */
+  status?: WorkItem['status'];
 };
 
 export type RoadmapInitiative = {
@@ -1066,6 +1079,10 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
       const fp = join(dir, file);
       let manifest: ReturnType<typeof parseManifest>;
       try {
+        // W6-RV-1 perf fix: parseManifest already runs matter() internally and
+        // now exposes `title` (orchestrator/manifest.ts, additive-optional) —
+        // a second matter() call here would parse the same buffer twice on a
+        // route the operator UI polls repeatedly.
         manifest = parseManifest(readFileSync(fp, 'utf8'));
       } catch {
         continue;
@@ -1090,14 +1107,35 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
  *
  * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
  */
+/**
+ * mock finding I3: betterado manifests all open their body with the SAME
+ * boilerplate heading ("Goal" / "Summary" / "Context" / "Overview"), so a
+ * bare first-`##`-heading scrape put an identical word on every roadmap
+ * card. Skipped case-insensitively, trimmed.
+ */
+const BOILERPLATE_HEADINGS: ReadonlySet<string> = new Set(['goal', 'summary', 'context', 'overview']);
+
+/**
+ * Precedence: `manifest.title` (an explicit author-supplied frontmatter
+ * `title:`, orchestrator/manifest.ts) → first NON-boilerplate `#`/`##`
+ * heading in the body → the initiativeId (never a boilerplate heading, and
+ * never blank).
+ */
+function deriveInitiativeTitle(initId: string, manifestTitle: string | undefined, body: string): string {
+  if (manifestTitle) return manifestTitle;
+  for (const m of body.matchAll(/^##?\s+(.+)$/gm)) {
+    const heading = m[1].trim();
+    if (heading.length > 0 && !BOILERPLATE_HEADINGS.has(heading.toLowerCase())) return heading;
+  }
+  return initId;
+}
+
 function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: string): ProjectRoadmap {
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const entries = scanProjectManifests(projectId, forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
-    // Extract title from manifest body: first non-empty heading line, or fall back to id.
-    const titleMatch = manifest.body.match(/^##?\s+(.+)$/m);
-    const title = titleMatch ? titleMatch[1].trim() : initId;
+    const title = deriveInitiativeTitle(initId, manifest.title, manifest.body);
 
     const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
     const workItems = items.length > 0 ? items : undefined;
@@ -1284,7 +1322,7 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
       // Extract title from WI body: first heading line or fall back to id.
       const titleMatch = raw.match(/^##?\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1].trim() : wi.work_item_id;
-      items.push({ id: wi.work_item_id, title, dependsOn: wi.depends_on });
+      items.push({ id: wi.work_item_id, title, dependsOn: wi.depends_on, status: wi.status });
     } catch {
       // skip unparseable WI
     }

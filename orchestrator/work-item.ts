@@ -92,7 +92,15 @@ export type FixWiOrigin = NonNullable<WorkItem['origin']>;
 // the directory (.forge/unifier-items/) differ.
 const WORK_ITEM_ID_PATTERN = /^U?WI-\d+$/;
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
-const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
+/**
+ * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror
+ * (`forge-ui/lib/bridge-client.ts`'s `WI_STATUSES`, feeding the roadmap
+ * card's WI done/total badge) can be pinned against this SSOT at runtime by
+ * `forge-ui/lib/wi-status-parity.test.ts`, following the same precedent as
+ * `orchestrator/flow-trigger.ts`'s `SHIPPED_TRIGGER_KIND_IDS` /
+ * `forge-ui/lib/trigger-kind-parity.test.ts`.
+ */
+export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
 
 export function parseWorkItem(content: string): WorkItem {
   const parsed = matter(content);

@@ -868,21 +868,25 @@ export const journey = defineJourney({
               // guidance rm) — the one place this journey emulates an ingest pass. Ingest
               // is an LLM fold in the real product; here it's a scripted write against a
               // throwaway scratch KB (never brain/cycles, brain/forge-dev, or brain/projects).
-              await recordClip(browser, watch, 'kb-ingest', '/library', async (p) => {
-                // Entry point: the library's KB card for the scratch KB just created — a
-                // real click into /knowledge?id=<scratch>, not a direct goto.
-                await p.waitForFunction(
-                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
-                  null, { timeout: 8000 },
-                ).catch(() => {});
-                const kbCard = p.locator(`[data-card-type="kb"][data-card-id="${SCRATCH_KB_ID}"]`);
-                await kbCard.scrollIntoViewIfNeeded().catch(() => {});
-                await caption(p, 'Meeting the KB where an operator actually finds it — the library card for the scratch KB just created.');
-                await sleep(THINK);
-                await kbCard.click().catch(() => {});
+              await recordClip(browser, watch, 'kb-ingest', '/knowledge', async (p) => {
+                // Entry point: the Knowledge page's own selector, choosing the scratch KB
+                // just created — a real navigation to /knowledge?id=<scratch>, not a
+                // direct goto to that URL itself. W6-IA-4: was the library's own KB-shelf
+                // card — Library no longer lists knowledge bases; KbSelector.tsx's
+                // native <select> is the real discovery affordance now.
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
-                  null, { timeout: 10000 },
+                  null, { timeout: 8000 },
+                ).catch(() => {});
+                const kbSelect = p.locator('#kb-select');
+                await kbSelect.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(p, 'Meeting the KB where an operator actually finds it — the Knowledge selector, for the scratch KB just created.');
+                await sleep(THINK);
+                await kbSelect.selectOption(SCRATCH_KB_ID).catch(() => {});
+                await p.waitForFunction(
+                  (id) => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true'
+                    && document.querySelector('#kb-select')?.value === id,
+                  SCRATCH_KB_ID, { timeout: 10000 },
                 ).catch(() => {});
                 await p.waitForFunction(() => document.querySelector('[data-layer="guidance"]') !== null, null, { timeout: 10000 }).catch(() => {});
                 await caption(p, 'A raw guidance node — pinned human lesson, not yet folded into a theme.');
@@ -897,8 +901,8 @@ export const journey = defineJourney({
                 }
                 await sleep(THINK);
               }, {
-                readySel: '[data-page="library"]',
-                caption: 'From the library KB card to a folded theme — guidance becomes a real graph node',
+                readySel: '[data-page="knowledge"]',
+                caption: 'From the Knowledge selector to a folded theme — guidance becomes a real graph node',
               });
 
               // Assertions run AFTER the clip, against the main page, re-reading the same
@@ -1036,20 +1040,23 @@ export const journey = defineJourney({
               console.log('\n[S3.3] Author a scratch KB — flow binding + band scope (/knowledge/new)');
               cleanScratchKbBand(); // guard against leftover state from a prior crashed run
 
-              // Entry point: the library's own "+ New KB" CTA — never a direct goto.
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // Entry point: the Knowledge page's own persistent "+ New KB" CTA — never a
+              // direct goto. (W6-IA-4: was the library's own "+ New KB" cross-link/CTA —
+              // Library no longer creates or lists knowledge bases; the Knowledge pillar
+              // itself now carries the persistent CTA, data-action="new-kb" unchanged.)
+              await page.goto(watch.uiUrl + '/knowledge', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
-              await caption(page, 'Same kickoff as any KB — the library\'s own + New KB CTA.');
+              await caption(page, 'Same kickoff as any KB — the Knowledge page\'s own + New KB CTA.');
               await sleep(THINK);
               await page.locator('[data-action="new-kb"]').click().catch(() => {});
               await page.waitForFunction(
                 () => document.querySelector('main[data-page="knowledge-new"]') !== null,
                 null, { timeout: 10000 },
               ).catch(() => {});
-              check(await page.locator('main[data-page="knowledge-new"]').count() > 0, 'kb-band: knowledge-new page renders (via the library + New KB CTA)');
+              check(await page.locator('main[data-page="knowledge-new"]').count() > 0, 'kb-band: knowledge-new page renders (via the Knowledge page\'s + New KB CTA)');
 
               const nameEl = page.locator('[data-field="kb-name"]');
               await nameEl.click().catch(() => {});
@@ -1294,28 +1301,34 @@ export const journey = defineJourney({
               cleanScratchKbMaintain(); // guard against leftover state from a prior crashed run
               seedScratchKbMaintain();
 
-              // Entry point: the library's own card for the freshly-seeded scratch KB — the
-              // real discovery point for maintaining an EXISTING brain (mirrors
-              // knowledge-ingest's own library-card entry; there is nothing to create here).
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // Entry point: the Knowledge page's own KB selector, choosing the
+              // freshly-seeded scratch KB — the real discovery point for maintaining an
+              // EXISTING brain (mirrors knowledge-ingest's own selector entry; there is
+              // nothing to create here). W6-IA-4: was the library's own KB-shelf card —
+              // Library no longer creates or lists knowledge bases (KbCard.tsx is now
+              // unused-in-product), and the Knowledge page itself renders no per-KB
+              // "cards" either — a native <select> (KbSelector.tsx) is the real
+              // discovery affordance.
+              await page.goto(watch.uiUrl + '/knowledge', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
-              const kbCard = page.locator(`[data-card-type="kb"][data-card-id="${SCRATCH_KB_MAINTAIN_ID}"]`);
-              await kbCard.scrollIntoViewIfNeeded().catch(() => {});
-              await caption(page, 'Keeping a brain healthy is part of the loop — open the flagged KB from its own library card.');
+              const kbSelect = page.locator('#kb-select');
+              await kbSelect.scrollIntoViewIfNeeded().catch(() => {});
+              await caption(page, 'Keeping a brain healthy is part of the loop — open the flagged KB from the Knowledge selector.');
               await sleep(THINK);
-              await kbCard.click().catch(() => {});
+              await kbSelect.selectOption(SCRATCH_KB_MAINTAIN_ID).catch(() => {});
               let maintainKbReady = false;
               try {
                 await page.waitForFunction(
-                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
-                  null, { timeout: 15000 },
+                  (id) => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true'
+                    && document.querySelector('#kb-select')?.value === id,
+                  SCRATCH_KB_MAINTAIN_ID, { timeout: 15000 },
                 );
                 maintainKbReady = true;
               } catch { /* checked below */ }
-              check(maintainKbReady, 'kb-maintain: the seeded scratch KB\'s page reaches data-page-ready="true" from its library card');
+              check(maintainKbReady, 'kb-maintain: the seeded scratch KB\'s page reaches data-page-ready="true" from the Knowledge selector');
 
               // KB HEALTH renders structurally (props-driven off kbDetail.health). R6-08
               // WI-1/4on: assert the NAMED check the seeded defect actually trips, not the
@@ -1418,27 +1431,31 @@ export const journey = defineJourney({
               cleanScratchKbCleanup(); // guard against leftover state from a prior crashed run
               seedScratchKbCleanup();
 
-              // Entry point: the library's own card for the freshly-seeded scratch KB —
-              // mirrors knowledge-kb-maintain-session's own entry exactly.
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // Entry point: the Knowledge page's own KB selector, choosing the
+              // freshly-seeded scratch KB — mirrors knowledge-kb-maintain-session's own
+              // entry exactly (W6-IA-4: the library card it used to click is gone —
+              // Library no longer lists knowledge bases; KbSelector.tsx's native
+              // <select> is the real discovery affordance now).
+              await page.goto(watch.uiUrl + '/knowledge', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
-              const kbCard = page.locator(`[data-card-type="kb"][data-card-id="${SCRATCH_KB_CLEANUP_ID}"]`);
-              await kbCard.scrollIntoViewIfNeeded().catch(() => {});
-              await caption(page, 'A brain-maintenance agent can draft a cleanup plan straight from a KB\'s own real lint findings — open the KB from its library card.');
+              const kbSelect = page.locator('#kb-select');
+              await kbSelect.scrollIntoViewIfNeeded().catch(() => {});
+              await caption(page, 'A brain-maintenance agent can draft a cleanup plan straight from a KB\'s own real lint findings — open the KB from the Knowledge selector.');
               await sleep(THINK);
-              await kbCard.click().catch(() => {});
+              await kbSelect.selectOption(SCRATCH_KB_CLEANUP_ID).catch(() => {});
               let kbReady = false;
               try {
                 await page.waitForFunction(
-                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
-                  null, { timeout: 15000 },
+                  (id) => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true'
+                    && document.querySelector('#kb-select')?.value === id,
+                  SCRATCH_KB_CLEANUP_ID, { timeout: 15000 },
                 );
                 kbReady = true;
               } catch { /* checked below */ }
-              check(kbReady, 'kb-cleanup-launch: the seeded scratch KB\'s page reaches data-page-ready="true" from its library card');
+              check(kbReady, 'kb-cleanup-launch: the seeded scratch KB\'s page reaches data-page-ready="true" from the Knowledge selector');
 
               const launcher = page.locator('[data-component="kb-maintenance"] [data-action="start-kb-cleanup"]');
               check(await launcher.count() > 0, 'kb-cleanup-launch: the "Cleanup plan" launcher ([data-action="start-kb-cleanup"]) renders in kb-maintenance, next to Consolidate');
@@ -1589,27 +1606,31 @@ export const journey = defineJourney({
               try {
                 seedIngestActivityFixture();
 
-                // Entry point: the library's own card for the real cycles brain — never
-                // a direct goto (journey-sync entry-point rule).
-                await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+                // Entry point: the Knowledge page's own selector, choosing the real
+                // cycles brain — never a direct goto (journey-sync entry-point rule).
+                // W6-IA-4: was the library's own KB-shelf card — Library no longer lists
+                // knowledge bases; KbSelector.tsx's native <select> is the real
+                // discovery affordance now.
+                await page.goto(watch.uiUrl + '/knowledge', { waitUntil: 'domcontentloaded' });
                 await page.waitForFunction(
-                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                const cyclesCard = page.locator('[data-card-type="kb"][data-card-id="cycles"]');
-                await cyclesCard.scrollIntoViewIfNeeded().catch(() => {});
-                await caption(page, 'Explore / Health / Ingest activity — three tabs on one KB page, entered the same way any KB is: its own library card.');
+                const cyclesSelect = page.locator('#kb-select');
+                await cyclesSelect.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(page, 'Explore / Health / Ingest activity — three tabs on one KB page, entered the same way any KB is: the Knowledge selector.');
                 await sleep(THINK);
-                await cyclesCard.click().catch(() => {});
+                await cyclesSelect.selectOption('cycles').catch(() => {});
                 let exploreReady = false;
                 try {
                   await page.waitForFunction(
-                    () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+                    () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true'
+                      && document.querySelector('#kb-select')?.value === 'cycles',
                     null, { timeout: 15000 },
                   );
                   exploreReady = true;
                 } catch { /* checked below */ }
-                check(exploreReady, 'kb-tabs: the cycles KB page reaches data-page-ready="true" from its library card');
+                check(exploreReady, 'kb-tabs: the cycles KB page reaches data-page-ready="true" from the Knowledge selector');
 
                 // ── Explore is the default tab (no ?tab= yet) ─────────────────────
                 const tabStates = () => page.evaluate(() => ({

@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runBrainFixTurn, type QueryFn } from './brain-fix-runner.ts';
+import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers — minimal brain fixture (same pattern as cli/brain-lint.test.ts)
@@ -283,6 +284,67 @@ test('end event metadata carries cleared, kind, and file', async () => {
     assert.equal(endEv.metadata.kind, 'frontmatter.missing-field');
     assert.equal(endEv.metadata.file, themePath);
     assert.equal(endEv.metadata.runId, runId);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+// W6-B1: brain-fix drove its own raw SDK stream loop with NO text/thinking
+// sink at all before this change — this pins BOTH landing now, plus the
+// unsampled Read tool_use contract every interactive-shaped runner shares.
+test('W6-B1: reasoning + thinking blocks are forwarded to the log (kind: reasoning / thinking), redacted_thinking coalesces, and Read tool_use events are unsampled', async () => {
+  const { forgeRoot, themePath } = buildFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    const runId = 'test-run-thinking';
+    const READ_CALLS = 6;
+    const queryFn: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+          type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+        }));
+        yield {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'text', text: '  inspecting the frontmatter  ' },
+              { type: 'thinking', thinking: '  weighing where to add the field  ' },
+              { type: 'redacted_thinking', data: 'opaque-1' },
+              { type: 'redacted_thinking', data: 'opaque-2' }, // consecutive — must coalesce
+              ...reads,
+            ],
+          },
+        };
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+
+    await runBrainFixTurn({
+      runId,
+      kbId: 'forge',
+      file: themePath,
+      check: 'checkFrontmatter',
+      kind: 'frontmatter.missing-field',
+      message: 'missing required frontmatter field: description',
+      forgeRoot,
+      queryFn,
+    });
+
+    const logPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
+    const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+    const reasoningEvents = events.filter((e) => e.metadata?.kind === 'reasoning');
+    assert.equal(reasoningEvents.length, 1);
+    assert.equal(reasoningEvents[0].message, 'inspecting the frontmatter');
+
+    const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+    assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+    assert.equal(thinkingEvents[0].message, 'weighing where to add the field');
+    assert.equal(thinkingEvents[1].message, REDACTED_THINKING_MARKER);
+
+    const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+    assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
   } finally {
     cleanup(forgeRoot);
   }

@@ -76,7 +76,7 @@
  */
 
 import Link from 'next/link';
-import { formatWhen } from '@/lib/history-ledger';
+import { formatWhen, ledgerRowKind } from '@/lib/history-ledger';
 import type { LedgerRow } from '@/lib/history-ledger';
 
 export type HistoryLedgerProps = {
@@ -84,9 +84,20 @@ export type HistoryLedgerProps = {
   /** Explicit "now", threaded through to `formatWhen` (D7) — never read via
    *  `Date.now()` inside this component. */
   nowMs: number;
+  /**
+   * W6-IA-4 — OPTIONAL, default false/omitted: renders a `data-ledger-kind`
+   * attribute + a small visible "flow"/"agent" badge per row, derived via
+   * `ledgerRowKind(row)`. Only Home's merged everything-ledger opts in
+   * (`showKindChip`) — every OTHER existing caller (the flow monitor's own
+   * ledger, the agents index's recent-runs section, an agent's own ledger)
+   * renders BYTE-IDENTICALLY to before this prop existed, matching this
+   * component's own established byte-identical-when-absent discipline
+   * (R6-06 D8's `linkKind`/`trigger` attributes, same file).
+   */
+  showKindChip?: boolean;
 };
 
-export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
+export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps) {
   return (
     <section
       data-section="history-ledger"
@@ -127,6 +138,7 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
               'data-trigger-source': row.trigger.source,
               'data-trigger-scope': row.trigger.scope ?? '',
             } : {})}
+            {...(showKindChip ? { 'data-ledger-kind': ledgerRowKind(row) } : {})}
             href={row.href}
             title={`${row.what} — ${formatWhen(row.when, nowMs)}`}
             style={{
@@ -141,6 +153,18 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
             }}
           >
             <span style={{ color: 'var(--faint)', flexShrink: 0, width: 64 }}>{formatWhen(row.when, nowMs)}</span>
+            {showKindChip && (
+              <span
+                data-ledger-kind-badge
+                style={{
+                  flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 9.5, textTransform: 'uppercase',
+                  letterSpacing: '0.04em', color: 'var(--faint)', border: '1px solid var(--line-2)',
+                  borderRadius: 999, padding: '1px 6px',
+                }}
+              >
+                {ledgerRowKind(row)}
+              </span>
+            )}
             <span style={{ flexShrink: 0, fontWeight: 600 }}>{row.what}</span>
             <span data-run-status-badge style={{ color: 'var(--dim)', flexShrink: 0, textTransform: 'uppercase', fontSize: 10 }}>
               {row.status}

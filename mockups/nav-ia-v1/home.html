@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Mock</title>
+<style>
+/* Forge Studio house tokens (forge-ui/app/globals.css) + mock annotation layer */
+:root {
+  --bg:#0b0e14; --bg-2:#10151f; --panel:#141a26; --panel-2:#1a2230; --panel-3:#202a3c;
+  --line:#28324a; --line-2:#39455f;
+  --text:#e9eef6; --dim:#93a0b4; --faint:#5b6779;
+  --ember:#ff9e4a; --ember-hot:#ff6b35; --steel:#5cc8ff; --violet:#b78cff;
+  --green:#4ade80; --amber:#fbbf24; --red:#f87171;
+  --c-project:#5cc8ff; --c-agent:#ff9e4a; --c-flow:#b78cff; --c-kb:#4ade80; --c-artifact:#fbbf24;
+  --font-display:'Space Grotesk', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, Menlo, "Cascadia Code", "Fira Code", monospace;
+  --radius:10px; --radius-sm:6px;
+  --shadow:0 8px 30px rgba(0,0,0,.45);
+  --hex-clip:polygon(25% 3%, 75% 3%, 98% 50%, 75% 97%, 25% 97%, 2% 50%);
+  --mk:#ff6b35; --mk-bg:#241108;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; padding:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:14px; line-height:1.55; }
+h1,h2,h3,h4 { font-family:var(--font-display); margin:0; letter-spacing:.01em; }
+h1 { font-size:22px; font-weight:700; }
+h2 { font-size:17px; font-weight:600; }
+h3 { font-size:14px; font-weight:600; }
+a { color:var(--steel); text-decoration:none; }
+a:focus-visible, button:focus-visible { outline:2px solid var(--ember); outline-offset:2px; border-radius:4px; }
+code,.mono { font-family:var(--font-mono); font-size:12.5px; }
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-track { background:var(--bg-2); }
+::-webkit-scrollbar-thumb { background:var(--panel-3); border-radius:6px; }
+
+/* ---- mock band (annotation layer, NOT product chrome) ---- */
+.mockband { position:sticky; top:0; z-index:60; display:flex; gap:14px; align-items:center;
+  background:repeating-linear-gradient(-45deg, #1c0f06 0 14px, #241108 14px 28px);
+  border-bottom:1px dashed var(--mk); color:var(--ember); padding:5px 18px;
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.06em; }
+.mockband strong { color:var(--ember-hot); font-weight:700; }
+.mockband .spacer { flex:1; }
+.mockband a { color:var(--ember); border-bottom:1px dotted var(--ember); }
+.mockband button { background:none; border:1px dashed var(--mk); color:var(--ember);
+  font:inherit; padding:1px 9px; border-radius:999px; cursor:pointer; }
+.mockband button:hover { background:var(--mk); color:#0b0e14; }
+
+/* ---- top nav ---- */
+.topnav { display:flex; align-items:center; gap:26px; padding:0 26px; height:54px;
+  background:linear-gradient(180deg,#10151f 0%,#0c1018 100%); border-bottom:1px solid var(--line);
+  position:sticky; top:31px; z-index:50; }
+.brand { display:flex; align-items:center; gap:10px; font-family:var(--font-display);
+  font-weight:700; font-size:15px; color:var(--text); }
+.hexmark { width:22px; height:22px; clip-path:var(--hex-clip); flex:none;
+  background:linear-gradient(135deg,var(--ember) 0%,var(--ember-hot) 100%); }
+.brand .sub { color:var(--faint); font-weight:400; font-size:11.5px; letter-spacing:.05em; }
+.nav-links { display:flex; gap:4px; align-items:center; }
+.nav-links a { font-family:var(--font-display); font-size:13px; font-weight:500; color:var(--dim);
+  padding:6px 13px; border-radius:999px; border:1px solid transparent; transition:color .12s, background .12s; }
+.nav-links a:hover { color:var(--text); background:var(--panel-2); }
+.nav-links a[aria-current="page"] { color:var(--ember); background:rgba(255,158,74,.09);
+  border-color:rgba(255,158,74,.35); }
+.nav-links a.dim { color:var(--faint); cursor:help; }
+.nav-links a.dim:hover { background:none; color:var(--faint); }
+.nav-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+
+/* ---- layout ---- */
+.wrap { max-width:1240px; margin:0 auto; padding:30px 26px 60px; }
+.pagehead { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:8px; }
+.pagehead .sub { color:var(--dim); margin:6px 0 0; max-width:640px; }
+section { margin-top:34px; }
+.sec-head { display:flex; align-items:baseline; gap:12px; padding:0 0 12px; }
+.sec-head h2 { padding-left:10px; border-left:3px solid var(--line-2); }
+.sec-head[data-tint="project"] h2 { border-color:var(--c-project); }
+.sec-head[data-tint="agent"] h2 { border-color:var(--c-agent); }
+.sec-head[data-tint="flow"] h2 { border-color:var(--c-flow); }
+.sec-head[data-tint="kb"] h2 { border-color:var(--c-kb); }
+.sec-head[data-tint="artifact"] h2 { border-color:var(--c-artifact); }
+.sec-head .count { font-family:var(--font-mono); font-size:12px; color:var(--faint); }
+.sec-head .grow { flex:1; }
+.sec-head .browse { font-size:12.5px; color:var(--dim); }
+.sec-head .browse:hover { color:var(--steel); }
+
+/* ---- buttons / chips / dots ---- */
+.btn { display:inline-flex; align-items:center; gap:7px; font-family:var(--font-display);
+  font-size:13px; font-weight:600; color:var(--text); background:var(--panel-2);
+  border:1px solid var(--line-2); border-radius:8px; padding:8px 15px; cursor:pointer;
+  transition:border-color .12s, background .12s; }
+.btn:hover { border-color:var(--steel); }
+.btn-primary { background:linear-gradient(135deg,#ff9e4a22,#ff6b3522); border-color:var(--ember);
+  color:var(--ember); }
+.btn-primary:hover { background:linear-gradient(135deg,#ff9e4a33,#ff6b3533); border-color:var(--ember-hot); }
+.btn-sm { padding:4px 10px; font-size:12px; border-radius:6px; }
+.chip { display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono);
+  font-size:10.5px; letter-spacing:.04em; padding:1px 8px; border-radius:999px;
+  border:1px solid var(--line-2); color:var(--dim); white-space:nowrap; }
+.chip.project { color:var(--c-project); border-color:#5cc8ff55; }
+.chip.agent { color:var(--c-agent); border-color:#ff9e4a55; }
+.chip.flow { color:var(--c-flow); border-color:#b78cff55; }
+.chip.kb { color:var(--c-kb); border-color:#4ade8055; }
+.chip.artifact { color:var(--c-artifact); border-color:#fbbf2455; }
+.chip.tier { color:var(--violet); border-color:#b78cff44; }
+.dot { width:8px; height:8px; border-radius:50%; flex:none; display:inline-block; }
+.dot[data-status="running"] { background:var(--steel); box-shadow:0 0 6px #5cc8ff88; animation:pulse 1.6s infinite; }
+.dot[data-status="done"] { background:var(--green); }
+.dot[data-status="failed"] { background:var(--red); }
+.dot[data-status="needs-you"], .dot[data-status="gated"] { background:var(--amber); }
+.dot[data-status="suppressed"] { background:var(--faint); }
+.dot[data-status="budget-exceeded"] { background:transparent; border:2px solid var(--red); width:6px; height:6px; }
+@keyframes pulse { 50% { opacity:.45; } }
+@media (prefers-reduced-motion:reduce) { .dot[data-status="running"], .mk { animation:none !important; } }
+
+/* ---- cards / grids ---- */
+.grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); }
+.card { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 16px; transition:border-color .12s, transform .12s; }
+.card:hover { border-color:var(--line-2); transform:translateY(-1px); }
+.card h3 { display:flex; align-items:center; gap:8px; }
+.card .desc { color:var(--dim); font-size:12.5px; margin:7px 0 0; }
+.card .meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.card.ghost { border-style:dashed; background:transparent; display:flex; align-items:center;
+  justify-content:center; color:var(--faint); min-height:86px; font-family:var(--font-display);
+  font-size:13px; cursor:pointer; }
+.card.ghost:hover { color:var(--ember); border-color:var(--ember); }
+
+/* ---- strips (attention / sessions) ---- */
+.strip { display:flex; gap:12px; overflow-x:auto; padding:2px 2px 8px; }
+.strip .card { min-width:250px; max-width:480px; flex:1; }
+
+/* ---- ledger table ---- */
+table.ledger { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); overflow:hidden; }
+.ledger-wrap { border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+.ledger-wrap table { width:100%; border-collapse:collapse; background:var(--panel); }
+.ledger th { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--faint); text-align:left; padding:9px 14px; background:var(--bg-2); border-bottom:1px solid var(--line); }
+.ledger td { padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top; }
+.ledger tr:last-child td { border-bottom:none; }
+.ledger tbody tr { transition:background .1s; }
+.ledger tbody tr:hover { background:var(--panel-2); }
+.ledger .when { font-family:var(--font-mono); font-size:12px; color:var(--dim); white-space:nowrap; }
+.ledger .cost { font-family:var(--font-mono); font-size:12px; text-align:right; color:var(--dim); white-space:nowrap; }
+.ledger .status { white-space:nowrap; display:inline-flex; align-items:center; gap:7px;
+  font-family:var(--font-mono); font-size:11.5px; }
+.narr b { color:var(--text); font-weight:600; }
+.narr { color:var(--dim); }
+.narr a { color:var(--steel); }
+
+/* ---- hex constellation ---- */
+.hexrow { display:flex; gap:10px; flex-wrap:wrap; }
+.hex { width:92px; height:84px; clip-path:var(--hex-clip); background:var(--panel-2);
+  border:none; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; font-family:var(--font-display); font-size:11px; color:var(--dim);
+  outline:1px solid var(--line-2); transition:background .12s; padding:0 10px; text-align:center; }
+.hex:hover { background:var(--panel-3); color:var(--text); }
+.hex .nm { max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ---- comment markers (annotation layer) ---- */
+.mk { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:19px;
+  padding:0 6px; border-radius:999px; background:var(--mk-bg); border:1px dashed var(--mk);
+  color:var(--ember-hot); font-family:var(--font-mono); font-size:10.5px; font-weight:700;
+  letter-spacing:.03em; vertical-align:2px; margin-left:7px; cursor:pointer;
+  transition:transform .1s, background .1s; text-decoration:none; }
+.mk:hover { transform:scale(1.12); background:var(--mk); color:#0b0e14; }
+body.hide-mk .mk { display:none; }
+.legend { max-width:1240px; margin:10px auto 40px; padding:22px 26px;
+  border:1px dashed var(--mk); border-radius:var(--radius); background:#120c07;
+  box-shadow:var(--shadow); }
+.legend h2 { color:var(--ember); display:flex; align-items:center; gap:10px; }
+.legend .lhead-sub { color:var(--dim); font-size:12.5px; margin:6px 0 16px; }
+.lrow { display:flex; gap:14px; padding:10px 8px; border-radius:8px; align-items:flex-start; }
+.lrow + .lrow { border-top:1px dashed #3a2415; }
+.lrow:target { background:#241108; outline:1px dashed var(--ember-hot); }
+.lrow .mk { margin:2px 0 0; flex:none; }
+.lrow .q { margin:0; color:var(--text); font-size:13.5px; }
+.lrow .hint { margin:4px 0 0; color:var(--faint); font-size:12px; }
+footer.mockfoot { max-width:1240px; margin:0 auto; padding:0 26px 50px; color:var(--faint);
+  font-family:var(--font-mono); font-size:11px; }
+
+/* ---- cover page bits ---- */
+.cover-hero { padding:46px 0 10px; }
+.cover-hero .kicker { font-family:var(--font-mono); color:var(--ember); font-size:12px;
+  letter-spacing:.14em; text-transform:uppercase; }
+.cover-hero h1 { font-size:30px; margin-top:10px; }
+.cover-hero p { color:var(--dim); max-width:700px; }
+.twocol { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:860px) { .twocol { grid-template-columns:1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; }
+.panel h3 { margin-bottom:10px; }
+.panel ul { margin:0; padding-left:18px; color:var(--dim); font-size:13px; }
+.panel li { margin:5px 0; }
+.panel li b { color:var(--text); }
+.screens { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+.screen-card { display:block; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); overflow:hidden; color:var(--text); transition:border-color .12s, transform .12s; }
+.screen-card:hover { border-color:var(--ember); transform:translateY(-2px); }
+.thumb { height:130px; background:var(--bg-2); border-bottom:1px solid var(--line); padding:12px; display:flex; flex-direction:column; gap:6px; }
+.tb { border-radius:3px; background:var(--panel-3); }
+.screen-card .body { padding:13px 16px; }
+.screen-card .body p { margin:5px 0 0; color:var(--dim); font-size:12.5px; }
+.qcount { font-family:var(--font-mono); font-size:11px; color:var(--ember); }
+</style>
+</head>
+<body data-page="home" data-mock-round="w6-m1" id="top">
+
+  <div class="mockband">
+    <strong>MOCK ROUND W6-M1</strong> nav-ia-v1 &mdash; static mockup, real data shapes, nothing here is wired
+    <span class="spacer"></span>
+    <span>comment with marker IDs (e.g. &ldquo;H3: add cost&rdquo;)</span>
+    <button type="button" onclick="document.body.classList.toggle('hide-mk')">toggle markers</button>
+  </div>
+
+  <nav class="topnav" aria-label="Studio pillars">
+    <span class="brand"><span class="hexmark"></span>FORGE STUDIO <span class="sub">operator surface</span></span>
+    <div class="nav-links" data-nav-count="6">
+      <a href="home.html" data-nav="home" aria-current="page">Home</a>
+      <a href="#" class="dim" data-nav="projects" title="Not in this mock round — pillar locked, landing page unchanged by W6-M1" onclick="return false">Projects</a>
+      <a href="#" class="dim" data-nav="flows" title="Not in this mock round — pillar locked, landing page unchanged by W6-M1" onclick="return false">Flows</a>
+      <a href="agents-index.html" data-nav="agents">Agents</a>
+      <a href="library-hub.html" data-nav="library">Library</a>
+      <a href="#" class="dim" data-nav="knowledge" title="Not in this mock round — pillar locked, landing page unchanged by W6-M1" onclick="return false">Knowledge</a>
+    </div><a class="mk" id="mk-H1" href="#q-H1" title="Pillar order is Home · Projects · Flows · Agents · Library · Knowledge. Is that the daily-driver left-to-right order — or should Knowledge sit before Library (brain over building blocks)?">H1</a>
+    <div class="nav-right"><a href="index.html" class="chip" style="text-decoration:none" title="Round cover">W6-M1 cover</a></div>
+  </nav>
+<main class="wrap">
+
+  <div class="pagehead">
+    <div>
+      <h1>Forge Studio</h1>
+      <p class="sub">One dashboard. Everything below is live state &mdash; sessions you can rejoin, work that needs you, and what ran.</p>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <a class="btn" href="#" data-action="onboard-project" title="mock: routes to /projects/new" onclick="return false">Onboard a project</a>
+      <a class="btn btn-primary" href="#" data-action="watch-live-run" title="mock: routes to /flows/forge-develop" onclick="return false">Watch live run</a><a class="mk" id="mk-H4" href="#q-H4" title="&quot;Onboard a project&quot; now goes straight to /projects/new (today it bounces via a shim to an arbitrary project). Should &quot;Watch live run&quot; stay pinned to forge-develop, or follow the most recent running flow?">H4</a>
+    </div>
+  </div>
+
+  <section data-section="active-sessions" data-session-count="3" aria-label="Active sessions">
+    <div class="sec-head" data-tint="agent">
+      <h2>Active sessions<a class="mk" id="mk-H2" href="#q-H2" title="Active sessions sit ABOVE needs-attention. Should in-flight interactive sessions outrank attention items, or should blocked/gated work always come first?">H2</a></h2>
+      <span class="count">3 in flight</span>
+      <span class="grow"></span>
+      <a class="browse" href="#" onclick="return false" title="mock: full /sessions index lands in Stream 3">all sessions &rarr;</a>
+    </div>
+    <div class="strip">
+      <div class="card" data-session-kind="architect" data-session-stage="roadmap" data-session-status="running">
+        <h3><span class="dot" data-status="running"></span>Planning session<a class="mk" id="mk-H3" href="#q-H3" title="A session card shows kind · project · stage · elapsed · model tier · Resume. Is anything missing to decide &quot;do I jump back in?&quot; at a glance — cost so far, last activity line?">H3</a></h3>
+        <p class="desc">gitpulse &middot; council 2/3 drafts returned &middot; awaiting your selection next</p>
+        <div class="meta">
+          <span class="chip agent">architect</span>
+          <span class="chip project">gitpulse</span>
+          <span class="chip tier">sonnet</span>
+          <span class="chip">12m elapsed</span>
+        </div>
+        <div class="meta"><button class="btn btn-sm">Resume</button></div>
+      </div>
+      <div class="card" data-session-kind="instructions" data-session-stage="instructions" data-session-status="needs-you">
+        <h3><span class="dot" data-status="needs-you"></span>Instructions session</h3>
+        <p class="desc">terraform-provider-betterado &middot; AGENTS.md draft ready for review</p>
+        <div class="meta">
+          <span class="chip agent">instructions-creator</span>
+          <span class="chip project">terraform-provider-betterado</span>
+          <span class="chip tier">haiku</span>
+          <span class="chip">41m since last turn</span>
+        </div>
+        <div class="meta"><button class="btn btn-sm">Review draft</button></div>
+      </div>
+      <div class="card" data-session-kind="kb-cleanup" data-session-stage="cleanup" data-session-status="running">
+        <h3><span class="dot" data-status="running"></span>KB cleanup</h3>
+        <p class="desc">forge-dev knowledge base &middot; drain round 2/5 &middot; 2 of 3 findings fixed</p>
+        <div class="meta">
+          <span class="chip agent">brain-fix</span>
+          <span class="chip kb">forge-dev</span>
+          <span class="chip tier">haiku</span>
+          <span class="chip">3m elapsed</span>
+        </div>
+        <div class="meta"><button class="btn btn-sm">Watch</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="attention-strip" data-attention-count="3" aria-label="Needs attention">
+    <div class="sec-head" data-tint="artifact">
+      <h2>Needs you</h2>
+      <span class="count">3 items</span>
+    </div>
+    <div class="strip">
+      <div class="card" data-attention-item data-attention-kind="gate" data-attention-project="terraform-provider-betterado" data-attention-status="gated">
+        <h3><span class="dot" data-status="gated"></span>terraform-provider-betterado</h3>
+        <p class="desc">1 run gated on verdict &middot; 2 in flight &middot; 1 merged this week</p>
+        <div class="meta"><span class="chip project">project</span><span class="chip">review verdict waiting</span></div>
+      </div>
+      <div class="card" data-attention-item data-attention-kind="kb" data-attention-kb="cycles" data-attention-status="lint-errors">
+        <h3><span class="dot" data-status="failed"></span>cycles knowledge base</h3>
+        <p class="desc">3 lint errors &middot; 12/12 checks run &middot; drain available</p>
+        <div class="meta"><span class="chip kb">knowledge</span><span class="chip">fix until green</span></div>
+      </div>
+      <div class="card" data-attention-item data-attention-kind="gate" data-attention-project="trafficGame" data-attention-status="planned">
+        <h3><span class="dot" data-status="needs-you"></span>trafficGame</h3>
+        <p class="desc">4 initiatives planned, none started &middot; kick off when ready</p>
+        <div class="meta"><span class="chip project">project</span><span class="chip">idle roadmap</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-section="run-ledger" data-run-count="4" aria-label="Recent flow runs">
+    <div class="sec-head" data-tint="flow">
+      <h2>Runs<a class="mk" id="mk-H5" href="#q-H5" title="The Home ledger stays flow-runs-only; standalone agent runs get their own ledger on the Agents pillar. Or should Home merge both into one &quot;everything that ran&quot; ledger?">H5</a></h2>
+      <span class="count">flow runs &middot; newest first</span>
+      <span class="grow"></span>
+      <a class="browse" href="agents-index.html#ledger">agent runs live on Agents &rarr;</a>
+    </div>
+    <div class="ledger-wrap"><table class="ledger" aria-label="Flow run ledger">
+      <thead><tr><th>When</th><th>Flow</th><th>Ran on</th><th>Outcome</th><th>Status</th><th style="text-align:right">Cost</th></tr></thead>
+      <tbody>
+        <tr data-run-status="running">
+          <td class="when">today 14:02</td>
+          <td><span class="chip flow">forge-develop</span></td>
+          <td><span class="chip project">terraform-provider-betterado</span></td>
+          <td class="narr">dev <b>3/4</b> work items &middot; gate-waiting on WI-2 merge</td>
+          <td><span class="status"><span class="dot" data-status="running"></span>running</span></td>
+          <td class="cost">$5.12</td>
+        </tr>
+        <tr data-run-status="done">
+          <td class="when">today 09:47</td>
+          <td><span class="chip flow">forge-develop</span></td>
+          <td><span class="chip project">gitpulse</span></td>
+          <td class="narr">dev <b>4/4</b> &middot; demo &middot; adversarial-review &middot; merged <a href="#" onclick="return false">PR #67</a></td>
+          <td><span class="status"><span class="dot" data-status="done"></span>done</span></td>
+          <td class="cost">$8.41</td>
+        </tr>
+        <tr data-run-status="gated">
+          <td class="when">yesterday 18:20</td>
+          <td><span class="chip flow">forge-architect</span></td>
+          <td><span class="chip project">trafficGame</span></td>
+          <td class="narr">roadmap draft &middot; council 3/3 &middot; awaiting selection</td>
+          <td><span class="status"><span class="dot" data-status="gated"></span>gated</span></td>
+          <td class="cost">$1.87</td>
+        </tr>
+        <tr data-run-status="done">
+          <td class="when">Tue 11:05</td>
+          <td><span class="chip flow">onboard-project</span></td>
+          <td><span class="chip project">demo-project</span></td>
+          <td class="narr">contract preflight <b>12/12</b> &middot; onboarded</td>
+          <td><span class="status"><span class="dot" data-status="done"></span>done</span></td>
+          <td class="cost">$0.63</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section data-section="constellation" data-hex-count="5" aria-label="Project constellation">
+    <div class="sec-head" data-tint="project">
+      <h2>Projects<a class="mk" id="mk-H6" href="#q-H6" title="The hex constellation survives as a compact project strip. Keep it, shrink it further, or retire it — Projects pillar now owns the real index?">H6</a></h2>
+      <span class="count">5 managed</span>
+      <span class="grow"></span>
+      <a class="browse" href="#" onclick="return false" title="mock: /projects real index (IA-1)">all projects &rarr;</a>
+    </div>
+    <div class="hexrow">
+      <div class="hex" data-hex-status="running"><span class="dot" data-status="running"></span><span class="nm">terraform-provider-betterado</span></div>
+      <div class="hex" data-hex-status="done"><span class="dot" data-status="done"></span><span class="nm">gitpulse</span></div>
+      <div class="hex" data-hex-status="gated"><span class="dot" data-status="gated"></span><span class="nm">trafficGame</span></div>
+      <div class="hex" data-hex-status="idle"><span class="dot" data-status="suppressed"></span><span class="nm">mdtoc</span></div>
+      <div class="hex" data-hex-status="done"><span class="dot" data-status="done"></span><span class="nm">demo-project</span></div>
+    </div>
+  </section>
+</main>
+
+  <section class="legend" aria-label="Open questions">
+    <h2><span class="hexmark" style="background:var(--ember-hot)"></span>Open questions — comment by marker ID</h2>
+    <p class="lhead-sub">Six questions about the rebuilt Home — strip order, card contents, CTA targets, ledger scope, constellation fate. Each badge on the screen anchors here; each row links back to its badge.</p>
+    
+    <div class="lrow" id="q-H1">
+      <a class="mk" href="#mk-H1" title="Jump to marker">H1</a>
+      <div>
+        <p class="q">Pillar order is Home · Projects · Flows · Agents · Library · Knowledge. Is that the daily-driver left-to-right order — or should Knowledge sit before Library (brain over building blocks)?</p>
+        <p class="hint">Comment with the order you want; the set of six is locked, only the order is open.</p>
+      </div>
+    </div>
+    <div class="lrow" id="q-H2">
+      <a class="mk" href="#mk-H2" title="Jump to marker">H2</a>
+      <div>
+        <p class="q">Active sessions sit ABOVE needs-attention. Should in-flight interactive sessions outrank attention items, or should blocked/gated work always come first?</p>
+        <p class="hint">Say "sessions first" or "attention first" — or propose merging them into one strip.</p>
+      </div>
+    </div>
+    <div class="lrow" id="q-H3">
+      <a class="mk" href="#mk-H3" title="Jump to marker">H3</a>
+      <div>
+        <p class="q">A session card shows kind · project · stage · elapsed · model tier · Resume. Is anything missing to decide "do I jump back in?" at a glance — cost so far, last activity line?</p>
+        <p class="hint">Name the one extra field you would actually use, or "as is".</p>
+      </div>
+    </div>
+    <div class="lrow" id="q-H4">
+      <a class="mk" href="#mk-H4" title="Jump to marker">H4</a>
+      <div>
+        <p class="q">"Onboard a project" now goes straight to /projects/new (today it bounces via a shim to an arbitrary project). Should "Watch live run" stay pinned to forge-develop, or follow the most recent running flow?</p>
+        <p class="hint">Pinned vs follow-latest; or drop the second CTA entirely.</p>
+      </div>
+    </div>
+    <div class="lrow" id="q-H5">
+      <a class="mk" href="#mk-H5" title="Jump to marker">H5</a>
+      <div>
+        <p class="q">The Home ledger stays flow-runs-only; standalone agent runs get their own ledger on the Agents pillar. Or should Home merge both into one "everything that ran" ledger?</p>
+        <p class="hint">Split (as mocked) vs merged — this decides where you look each morning.</p>
+      </div>
+    </div>
+    <div class="lrow" id="q-H6">
+      <a class="mk" href="#mk-H6" title="Jump to marker">H6</a>
+      <div>
+        <p class="q">The hex constellation survives as a compact project strip. Keep it, shrink it further, or retire it — Projects pillar now owns the real index?</p>
+        <p class="hint">Keep / shrink / retire.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="mockfoot">mockups/nav-ia-v1/home.html &middot; generated for the W6-M1 comment round &middot; data: studio/catalog.yaml, studio/flows/, studio/session-kinds.yaml, projects/ &mdash; no lorem ipsum</footer>
+
+</body>
+</html>

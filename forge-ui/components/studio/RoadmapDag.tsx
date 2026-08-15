@@ -19,23 +19,34 @@
  *
  * NO-jsdom render contract (see lib/roadmap-dag-render.test.ts): the component
  * renders its full initial DOM synchronously — edges, run links, and the
- * plan/recovery affordances are all present on first paint. The edge SVG
- * geometry is measured in a browser-only effect (ResizeObserver), so under
- * `renderToStaticMarkup` the edge elements exist with placeholder coordinates
- * and get positioned once mounted. The recovery-detail region is rendered
- * UNCONDITIONALLY on a recoverable node (empty until Inspect populates it) — a
- * detail region reachable only through a click would silently vanish from the
- * re-homed subtree, which is exactly what AT5 exists to prevent.
+ * plan/recovery affordances are all present on first paint (the DETAIL region
+ * is always mounted, just `display:none` while collapsed — see W6-RV-1 below).
+ * The edge SVG geometry is measured in a browser-only effect (ResizeObserver),
+ * so under `renderToStaticMarkup` the edge elements exist with placeholder
+ * coordinates and get positioned once mounted. The recovery-detail region is
+ * rendered UNCONDITIONALLY on a recoverable node (empty until Inspect
+ * populates it) — a detail region reachable only through a click would
+ * silently vanish from the re-homed subtree, which is exactly what AT5 exists
+ * to prevent.
+ *
+ * W6-RV-1 (direction-agnostic first step toward the RV-2 time-axis canvas):
+ * the detail body — deps line, blocked-by, WI badges, run links, plan/
+ * start-development triggers, the recovery region — moved out to
+ * `InitiativeDetail.tsx` as a pure re-home (byte-identical DOM/data-*). Nodes
+ * now default COLLAPSED (a uniform, scannable card: title/id/status chip +
+ * two micro-badges) instead of the old expanded-by-default full card, so a
+ * roadmap with many initiatives stays readable; a per-node click, or the new
+ * collapse-all/expand-all toolbar, toggles the full `InitiativeDetail` back
+ * in. See `lib/roadmap-dag-render.test.ts` for the collapsed-card contract
+ * pins (`data-initiative-collapsed`, `data-micro-badge`).
  */
 
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 
 import type {
   ProjectRoadmap,
   RoadmapInitiative,
-  RoadmapWorkItem,
   RecoveryInspect,
 } from '@/lib/bridge-client';
 import { fetchRecovery, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
@@ -43,18 +54,20 @@ import type { InitiativeGroup } from '@/lib/cycle-grouping';
 import { byDepth } from '@/lib/roadmap-dag-layout';
 import { queueStatusToColor } from '@/lib/roadmap-status-color';
 import { STATUS_COLOR } from '@/lib/status-colors';
-import { isRecoverableStatus, attemptInfoFor } from '@/lib/recovery-attrs';
+import { attemptInfoFor } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
+import { InitiativeDetail } from './InitiativeDetail';
 
 // ---------------------------------------------------------------------------
 // Per-initiative trigger state — the same two shapes page.tsx threads into the
-// retiring InitiativeCard. Local (not imported) because page.tsx does not
-// export them; the integration phase passes matching maps.
+// retiring InitiativeCard. Exported (not imported FROM page.tsx — it does not
+// export them) so InitiativeDetail.tsx can share the same two shapes instead
+// of redeclaring them.
 // ---------------------------------------------------------------------------
-type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
+export type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
 const IDLE_DEVELOP: DevelopCardState = { status: 'idle', error: null };
 
-type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
+export type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
 const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
 
 /** planStateAttr, mirrored byte-for-byte from app/projects/[id]/page.tsx so the
@@ -170,6 +183,15 @@ export function RoadmapDag({
     };
   }, [measure]);
 
+  // W6-RV-1: collapse-all/expand-all. Every RoadmapNode keeps its own local
+  // `expanded` useState (default collapsed) — these are one-shot SIGNAL
+  // tokens, not lifted state: bumping the counter tells every node "force
+  // yourself collapsed/expanded now", then each node goes back to owning its
+  // own toggle. Avoids lifting per-node expand state (and its re-render
+  // fan-out) into the DAG just to serve two bulk buttons.
+  const [collapseAllToken, setCollapseAllToken] = useState(0);
+  const [expandAllToken, setExpandAllToken] = useState(0);
+
   return (
     <div
       ref={containerRef}
@@ -178,6 +200,25 @@ export function RoadmapDag({
       data-roadmap-edge-count={edges.length}
       style={{ position: 'relative', overflowX: 'auto', padding: '4px 2px' }}
     >
+      <div data-roadmap-toolbar style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 8, marginBottom: 10 }}>
+        <button
+          type="button"
+          data-action="roadmap-collapse-all"
+          onClick={() => setCollapseAllToken((n) => n + 1)}
+          style={toolbarBtnStyle}
+        >
+          Collapse all
+        </button>
+        <button
+          type="button"
+          data-action="roadmap-expand-all"
+          onClick={() => setExpandAllToken((n) => n + 1)}
+          style={toolbarBtnStyle}
+        >
+          Expand all
+        </button>
+      </div>
+
       {/* Edge overlay — one <path> per (prerequisite → dependent) pair. Drawn
           under the cards; pointer-transparent so the nodes stay clickable. */}
       <svg
@@ -228,6 +269,8 @@ export function RoadmapDag({
                 onPlan={onPlan}
                 onRecoveryDone={onRecoveryDone}
                 onOpenDemo={onOpenDemo}
+                collapseAllToken={collapseAllToken}
+                expandAllToken={expandAllToken}
               />
             ))}
           </div>
@@ -241,11 +284,18 @@ function edgeKey(edge: { from: string; to: string }): string {
   return `${edge.from}->${edge.to}`;
 }
 
+const toolbarBtnStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 600, color: 'var(--text)', background: 'var(--panel)',
+  border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+};
+
 // ---------------------------------------------------------------------------
-// RoadmapNode — one DAG node. Reproduces the retiring InitiativeCard's
-// affordances with byte-identical data-* attributes, adds the per-node run
-// dig-in (active + prior cycle links), and renders the recovery-detail region
-// unconditionally on a recoverable node.
+// RoadmapNode — one DAG node. Collapsed by default (a uniform, scannable
+// card: title/id/status chip + deps-count/WI-progress micro-badges);
+// expanding it renders `InitiativeDetail` — the retiring InitiativeCard's
+// affordances re-homed there with byte-identical data-* attributes, plus the
+// per-node run dig-in (active + prior cycle links) and the recovery-detail
+// region, unconditionally rendered on a recoverable node.
 // ---------------------------------------------------------------------------
 function RoadmapNode({
   initiative,
@@ -258,6 +308,8 @@ function RoadmapNode({
   onPlan,
   onRecoveryDone,
   onOpenDemo,
+  collapseAllToken,
+  expandAllToken,
 }: {
   initiative: RoadmapInitiative;
   group?: InitiativeGroup;
@@ -269,14 +321,36 @@ function RoadmapNode({
   onPlan?: (initiativeId: string) => void | Promise<void>;
   onRecoveryDone?: () => void | Promise<void>;
   onOpenDemo?: () => void;
+  /** W6-RV-1: bump-to-fire signals from the DAG's collapse-all/expand-all toolbar. */
+  collapseAllToken: number;
+  expandAllToken: number;
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
   const colour = STATUS_COLOR[queueStatusToColor(status)];
 
-  // Click-to-pop: the detail region is ALWAYS in the DOM (so the affordances
-  // survive an SSR/no-jsdom render); the click only toggles its visual
-  // expansion. Default expanded so first paint shows the full card.
-  const [expanded, setExpanded] = useState(true);
+  // W6-RV-1: default COLLAPSED — a uniform, scannable card at first paint.
+  // The detail region stays ALWAYS in the DOM (so the affordances survive an
+  // SSR/no-jsdom render); the click only toggles its visual expansion.
+  const [expanded, setExpanded] = useState(false);
+
+  // Bulk collapse-all/expand-all: each token is a one-shot signal (bumped by
+  // the DAG's toolbar buttons), tracked here via a ref of the last-seen value
+  // so a REPEAT click of the same button still fires (the token changes on
+  // every click) without fighting the node's own local toggle in between.
+  const seenCollapseToken = useRef(collapseAllToken);
+  const seenExpandToken = useRef(expandAllToken);
+  useEffect(() => {
+    if (collapseAllToken !== seenCollapseToken.current) {
+      seenCollapseToken.current = collapseAllToken;
+      setExpanded(false);
+    }
+  }, [collapseAllToken]);
+  useEffect(() => {
+    if (expandAllToken !== seenExpandToken.current) {
+      seenExpandToken.current = expandAllToken;
+      setExpanded(true);
+    }
+  }, [expandAllToken]);
 
   // Recovery state — folded off the retired standalone /recovery page, same as
   // InitiativeCard. Effects/handlers do not run under renderToStaticMarkup.
@@ -316,6 +390,18 @@ function RoadmapNode({
   // linked by cycleId — never the bare initiativeId.
   const runCycleIds = group ? [group.activeCycleId, ...group.priorCycleIds] : [];
 
+  // W6-RV-1: the collapsed card's two micro-badges — deps count, WI done/total.
+  // 'complete' counts toward done; 'failed' counts in the total but NOT
+  // toward done (a failed WI is not silently folded into "not done yet" —
+  // its own count surfaces via data-badge-failed + the visual indicator
+  // below, since failed != pending is real signal an operator needs); an
+  // undefined workItems (unplanned) reads as 0/0, never a fabricated total.
+  const depsCount = dependsOnInitiatives.length;
+  const wiTotal = workItems?.length ?? 0;
+  const wiDone = workItems?.filter((w) => w.status === 'complete').length ?? 0;
+  const wiFailed = workItems?.filter((w) => w.status === 'failed').length ?? 0;
+  const wiAllComplete = wiTotal > 0 && wiDone === wiTotal && wiFailed === 0;
+
   return (
     <div
       ref={(el) => registerNode(initiativeId, el)}
@@ -326,14 +412,18 @@ function RoadmapNode({
       data-plan-state={planStateAttr(unplanned, plan)}
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')}
+      data-initiative-collapsed={String(!expanded)}
       style={{
         background: 'var(--panel)',
         border: '1px solid var(--line)',
         borderTop: `3px solid ${colour}`,
         borderRadius: 'var(--radius)',
-        padding: '14px 16px',
-        display: 'flex', flexDirection: 'column', gap: 10,
+        padding: expanded ? '14px 16px' : '10px 12px',
+        display: 'flex', flexDirection: 'column', gap: expanded ? 10 : 6,
         position: 'relative',
+        width: expanded ? undefined : 280,
+        minHeight: expanded ? undefined : 72,
+        boxSizing: 'border-box',
       }}
     >
       <button
@@ -346,9 +436,18 @@ function RoadmapNode({
           background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%',
         }}
       >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35 }}>{title}</div>
-          <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{initiativeId}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            title={title}
+            style={{
+              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35,
+              ...(expanded ? {} : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+            }}
+          >{title}</div>
+          <div style={{
+            fontSize: 11, color: 'var(--faint)', marginTop: 3,
+            ...(expanded ? {} : { fontFamily: 'var(--font-mono, monospace)' }),
+          }}>{initiativeId}</div>
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase',
@@ -356,202 +455,82 @@ function RoadmapNode({
         }}>{status}</span>
       </button>
 
-      {/* click-to-pop detail card — always present in the DOM; expansion is a
-          visual toggle so the re-homed affordances can never silently vanish. */}
-      <div
-        data-node-detail
-        style={{ display: expanded ? 'flex' : 'none', flexDirection: 'column', gap: 10 }}
-      >
-        {dependsOnInitiatives.length > 0 && (
-          <div style={{ fontSize: 11, color: 'var(--dim)' }}>
-            Depends on: {dependsOnInitiatives.join(', ')}
-          </div>
-        )}
-
-        {blocked && (
-          <div data-section="initiative-blocked" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
-            Blocked by: {blockedBy.join(', ')}
-          </div>
-        )}
-
-        {unplanned && (
-          <div data-section="initiative-blocked-until-planned" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
-            Not yet planned — decompose it before starting development.
-          </div>
-        )}
-
-        {wiLevels && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Work Items</div>
-            {Array.from({ length: wiLevels.maxLevel + 1 }, (_, lvl) =>
-              (wiLevels.byLevel.get(lvl) ?? []).map((w) => <WorkItemBadge key={w.id} wi={w} />),
-            )}
-          </div>
-        )}
-
-        {/* R4-13 run dig-in: active + prior (completed) cycles, joined on cycleId. */}
-        {runCycleIds.length > 0 && (
-          <div data-section="initiative-runs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Runs</div>
-            {runCycleIds.map((cycleId, idx) => (
-              <Link
-                key={cycleId}
-                data-run-link
-                data-run-cycle-id={cycleId}
-                data-run-active={idx === 0 ? 'true' : 'false'}
-                href={`/flows/forge-develop/run/${cycleId}`}
-                style={{ fontSize: 11, color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline' }}
+      {/* W6-RV-1: the uniform collapsed card's two micro-badges — deps count,
+          WI done/total. Only rendered while collapsed; the expanded state
+          shows the real deps line + per-WI badges instead (InitiativeDetail).
+          wi-progress styling: muted when unplanned (0/0 — nothing to show
+          yet, distinct from "done"), a complete tone when every WI is done
+          with zero failures, neutral otherwise. A failed WI always surfaces
+          via [data-badge-failed] + a visual marker — never silently folded
+          into "not done yet". */}
+      {!expanded && (
+        <div data-micro-badges style={{ display: 'flex', gap: 6 }}>
+          <span data-micro-badge="deps-count" data-badge-value={depsCount} style={microBadgeStyle}>
+            {depsCount} dep{depsCount === 1 ? '' : 's'}
+          </span>
+          <span
+            data-micro-badge="wi-progress"
+            data-badge-value={`${wiDone}/${wiTotal}`}
+            data-badge-failed={wiFailed}
+            style={wiProgressBadgeStyle(wiTotal, wiAllComplete)}
+          >
+            {wiDone}/{wiTotal} WI
+            {wiFailed > 0 && (
+              <span
+                data-badge-failed-marker
+                title={`${wiFailed} failed work item${wiFailed === 1 ? '' : 's'}`}
+                style={{ marginLeft: 4, color: STATUS_COLOR.failed, fontWeight: 700 }}
               >
-                {idx === 0 ? 'active run' : 'prior run'} · {cycleId} →
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {onOpenDemo && (
-          <button
-            data-link="demo-builder"
-            onClick={onOpenDemo}
-            style={{
-              alignSelf: 'flex-start', fontSize: 11, color: 'var(--c-project, #1f6feb)',
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline',
-            }}
-          >
-            demo builder →
-          </button>
-        )}
-
-        {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. */}
-        {unplanned && plan.status !== 'started' && (
-          <button
-            data-action="plan-initiative"
-            data-initiative-id={initiativeId}
-            disabled={plan.status === 'planning' || !onPlan}
-            onClick={() => void onPlan?.(initiativeId)}
-            style={{
-              marginTop: 4, alignSelf: 'flex-start',
-              color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
-              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-              fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
-              opacity: plan.status === 'planning' ? 0.6 : 1,
-            }}
-          >
-            {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
-          </button>
-        )}
-        {unplanned && plan.status === 'error' && plan.error && (
-          <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
-        )}
-        {unplanned && plan.status === 'started' && (
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Planning started — the initiative will be decomposed into work items.</span>
-            <Link data-action="open-plan-run" href="/flows/forge-architect" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
-              view run →
-            </Link>
-          </div>
-        )}
-
-        {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
-        {canStartDevelopment && develop.status !== 'started' && (
-          <button
-            data-action="start-development"
-            data-initiative-id={initiativeId}
-            disabled={develop.status === 'starting' || !onStart}
-            onClick={() => void onStart?.(initiativeId)}
-            style={{
-              marginTop: 4, alignSelf: 'flex-start',
-              color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
-              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-              fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
-              opacity: develop.status === 'starting' ? 0.6 : 1,
-            }}
-          >
-            {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
-          </button>
-        )}
-        {develop.status === 'error' && develop.error && (
-          <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
-        )}
-        {develop.status === 'started' && (
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
-            <Link data-action="open-develop-run" href="/flows/forge-develop" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
-              view run →
-            </Link>
-          </div>
-        )}
-
-        {/* R4-11-T3: recovery affordances — gated on the recoverable set
-            (in-flight / ready-for-review / failed). The recovery-detail region
-            is rendered UNCONDITIONALLY (populated by Inspect) so the re-home
-            cannot drop a click-gated affordance. */}
-        {isRecoverableStatus(status) && (
-          <div
-            data-recovery-item
-            data-recovery-initiative={initiativeId}
-            data-recovery-status={status}
-            data-recovery-attempt-count={attempt.attemptCount}
-            style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-                Recovery
-                {attempt.attemptCount > 1 && (
-                  <span
-                    data-recovery-prior-attempts={attempt.attemptCount - 1}
-                    title={`${attempt.attemptCount - 1} prior attempt(s): ${attempt.priorCycleIds.join(', ')}`}
-                    style={{ marginLeft: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}
-                  >
-                    ×{attempt.attemptCount}
-                  </span>
-                )}
-              </div>
-              <span style={{ display: 'flex', gap: 6 }}>
-                <button data-action="recovery-inspect" onClick={() => void inspectRecovery()} style={recoveryBtn('var(--line)')}>Inspect</button>
-                <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={() => void doRecoveryAction('requeue')} style={recoveryBtn('#1f6feb')}>Requeue</button>
-                <button data-action="recovery-abandon" disabled={recoveryBusy} onClick={() => void doRecoveryAction('abandon')} style={recoveryBtn('#a33')}>Abandon</button>
+                ⚠{wiFailed}
               </span>
-            </div>
+            )}
+          </span>
+        </div>
+      )}
 
-            <div data-section="recovery-detail" data-recovery-detail-initiative={initiativeId} style={{ fontSize: 11, color: 'var(--dim)' }}>
-              {recoveryDetail ? (
-                <>
-                  <div>branch: <code>{recoveryDetail.branch}</code> · worktree: {recoveryDetail.worktreeExists ? 'preserved' : 'gone'} · PR draft: {recoveryDetail.prDraftChars ?? 0} chars</div>
-                  {recoveryDetail.commits && recoveryDetail.commits.length > 0 && (
-                    <pre data-recovery-commits style={{ background: 'var(--bg)', padding: 6, borderRadius: 4, marginTop: 4, overflowX: 'auto' }}>
-                      {recoveryDetail.commits.join('\n')}
-                    </pre>
-                  )}
-                </>
-              ) : (
-                <span style={{ color: 'var(--faint)', fontStyle: 'italic' }}>Inspect to load branch / worktree / PR-draft detail.</span>
-              )}
-            </div>
-            {recoveryNote && <p data-recovery-note style={{ fontSize: 11, color: 'var(--faint)', margin: 0 }}>{recoveryNote}</p>}
-          </div>
-        )}
-      </div>
+      <InitiativeDetail
+        expanded={expanded}
+        initiativeId={initiativeId}
+        status={status}
+        dependsOnInitiatives={dependsOnInitiatives}
+        blocked={blocked}
+        blockedBy={blockedBy}
+        unplanned={unplanned}
+        wiLevels={wiLevels}
+        runCycleIds={runCycleIds}
+        onOpenDemo={onOpenDemo}
+        plan={plan}
+        onPlan={onPlan}
+        canStartDevelopment={canStartDevelopment}
+        develop={develop}
+        onStart={onStart}
+        attempt={attempt}
+        recoveryDetail={recoveryDetail}
+        recoveryBusy={recoveryBusy}
+        recoveryNote={recoveryNote}
+        onInspectRecovery={inspectRecovery}
+        onRecoveryAction={doRecoveryAction}
+      />
     </div>
   );
 }
 
-function recoveryBtn(bg: string): React.CSSProperties {
-  return { fontSize: 10, padding: '2px 8px', background: bg, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' };
-}
+const microBadgeStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 600, color: 'var(--dim)', background: 'var(--bg)',
+  border: '1px solid var(--line)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap',
+};
 
-function WorkItemBadge({ wi }: { wi: RoadmapWorkItem }) {
-  return (
-    <div
-      data-work-item-id={wi.id}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        fontSize: 12, color: 'var(--text)',
-        background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
-        padding: '5px 9px', border: '1px solid var(--line)',
-      }}
-    >
-      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'var(--c-dev, #4ca3f5)', fontWeight: 700 }}>{wi.id}</span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wi.title}</span>
-    </div>
-  );
+/** wi-progress micro-badge tone: muted when unplanned (0/0 — distinct from
+ *  "done", never conflated with it), the shared complete tone when every WI
+ *  is done with zero failures, neutral (the base badge) otherwise — a failed
+ *  WI's own indicator (data-badge-failed + the ⚠ marker) carries that signal
+ *  instead of a badge-wide tone change. */
+function wiProgressBadgeStyle(wiTotal: number, wiAllComplete: boolean): React.CSSProperties {
+  if (wiTotal === 0) {
+    return { ...microBadgeStyle, color: 'var(--faint)', fontStyle: 'italic', opacity: 0.7 };
+  }
+  if (wiAllComplete) {
+    return { ...microBadgeStyle, color: STATUS_COLOR.complete, borderColor: `${STATUS_COLOR.complete}55` };
+  }
+  return microBadgeStyle;
 }

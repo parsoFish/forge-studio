@@ -453,6 +453,46 @@ test('R6-06: a row with costUsd: null renders NO data-ledger-cost-usd attribute 
   expect(html).not.toContain('$0.00');
 });
 
+// ---------------------------------------------------------------------------
+// W6-IA-4 — showKindChip: OPTIONAL, byte-identical-when-absent, mirroring
+// this file's own established discipline for `linkKind`/`trigger` above.
+// ---------------------------------------------------------------------------
+
+test('W6-IA-4: showKindChip omitted (every EXISTING caller — flow monitor, agents index, agent detail) renders NO data-ledger-kind attribute at all', () => {
+  const html = render({ rows: [row({ id: 'a' })] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).not.toContain('data-ledger-kind');
+  expect(html).not.toContain('data-ledger-kind-badge');
+});
+
+test('W6-IA-4: showKindChip: true renders data-ledger-kind="flow" for a row with linkKind undefined (a flow-ledger.ts row)', () => {
+  const html = render({ rows: [row({ id: 'a', linkKind: undefined } as never)], showKindChip: true });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).toContain('data-ledger-kind="flow"');
+});
+
+test('W6-IA-4: showKindChip: true renders data-ledger-kind="agent" for every agent-sourced linkKind', () => {
+  const html = render({
+    rows: [
+      row({ id: 'a', linkKind: 'standalone' } as never),
+      row({ id: 'b', linkKind: 'flow-node' } as never),
+      row({ id: 'c', linkKind: 'session' } as never),
+    ],
+    showKindChip: true,
+  });
+  expect(rowMarkup(html, 'a')).toContain('data-ledger-kind="agent"');
+  expect(rowMarkup(html, 'b')).toContain('data-ledger-kind="agent"');
+  expect(rowMarkup(html, 'c')).toContain('data-ledger-kind="agent"');
+});
+
+test('W6-IA-4: showKindChip: true renders a visible [data-ledger-kind-badge] per row, and false/omitted renders none', () => {
+  const withChip = render({ rows: [row({ id: 'a' })], showKindChip: true });
+  expect((withChip.match(/data-ledger-kind-badge/g) ?? []).length).toBe(1);
+
+  const withoutChip = render({ rows: [row({ id: 'a' })], showKindChip: false });
+  expect(withoutChip).not.toContain('data-ledger-kind-badge');
+});
+
 test('the SAME row renders DIFFERENT visible relative-time text for a DIFFERENT nowMs — proving nowMs is actually threaded through, not ignored', () => {
   // KILLS: a component that accepts the `nowMs` prop but never uses it
   // (e.g. calling `Date.now()` internally instead, D7's exact violation) —

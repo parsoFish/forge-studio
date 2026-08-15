@@ -95,9 +95,18 @@ export function createToolEventSampler(opts: ToolEventSamplerOptions = {}): Tool
 
       // Read-only tools are sampled 1-in-N to keep noisy Read/Grep bursts off
       // the durable log; the skipped ones are counted (surfaced at flush).
+      // W6-B1: the emit test is `(readOnlySeen - 1) % rate === 0`, NOT the
+      // previous `readOnlySeen % rate === 1` — the two agree for every
+      // rate >= 2 (both emit calls 1, N+1, 2N+1, ...) but the old form was
+      // degenerate at rate === 1: `x % 1` is always 0, which never equals 1,
+      // so a caller passing readOnlySampleRate:1 to mean "unsampled" (every
+      // call emitted) got the opposite — EVERY read-only call silently
+      // dropped. Interactive-session tool events pass rate:1 for exactly
+      // that "unsampled" meaning (interactive-runner.ts + the legacy
+      // interactive runners), so this was a live bug, not a hypothetical one.
       if (READ_ONLY_TOOLS.has(detail.name)) {
         readOnlySeen += 1;
-        if (readOnlySeen % readOnlySampleRate !== 1) {
+        if ((readOnlySeen - 1) % readOnlySampleRate !== 0) {
           sampledOutCount += 1;
           return { emit: false };
         }

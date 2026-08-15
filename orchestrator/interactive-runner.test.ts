@@ -331,6 +331,67 @@ test('turnSpec analyzing (style:agent, step:agent): runs the agent turn, writes 
 });
 
 // ---------------------------------------------------------------------------
+// W6-B1: thinking forwarding + unsampled interactive tool events.
+// ---------------------------------------------------------------------------
+
+// Kills: a runner that never wires onThinking through to runAgentTurn (no
+// 'thinking'-kind log rows at all); one that leaks redacted_thinking's own
+// opaque data instead of the literal marker; one that doesn't coalesce a run
+// of identical marker rows; one that still samples Read calls 1-in-4 (the
+// unattended-phase default) instead of passing the interactive-turn sampler
+// opts {readOnlySampleRate:1, cap:200}.
+test('W6-B1: onThinking forwards thinking + coalesced redacted_thinking to the event log, and tool_use events are effectively unsampled', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const READ_CALLS = 8; // > the unattended-phase default readOnlySampleRate=4 would sample this down
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+        type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+      }));
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  weighing the staging write  ' },
+            { type: 'redacted_thinking', data: 'opaque-bytes-1' },
+            { type: 'redacted_thinking', data: 'opaque-bytes-2' }, // consecutive — must coalesce
+            ...reads,
+          ],
+        },
+      };
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged\n');
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  const testLogger = logger(logsRoot, sessionId);
+  const result = await runInteractiveTurn(descriptor, {
+    sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: testLogger,
+  });
+  assert.equal(result.phase, 'awaiting-review');
+
+  const events = readFileSync(testLogger.logFilePath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+  const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+  assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+  assert.equal(thinkingEvents[0].message, 'weighing the staging write');
+  assert.equal(thinkingEvents[1].message, '[thinking redacted]', 'the exact literal marker, never the block\'s own opaque data');
+
+  const readToolEvents = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+  assert.equal(
+    readToolEvents.length,
+    READ_CALLS,
+    'interactive turns pass sampler opts {readOnlySampleRate:1, cap:200} — every Read is emitted, none sampled out',
+  );
+});
+
+// ---------------------------------------------------------------------------
 // AT-2 (ADR criterion 2): awaiting-review + step:noop leaves the session dir
 // byte-for-byte unchanged and does not advance the phase.
 // ---------------------------------------------------------------------------

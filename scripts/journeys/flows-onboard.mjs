@@ -175,29 +175,29 @@ export const journey = defineJourney({
     {
       id: 'flows-onboard-monitor',
       title: 'The onboard-project flow: a peer of forge-develop, its own two-node topology',
-      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop. Every flow card now carries a live data-flow-status (derived through the SAME shared runsForFlow matcher Home and the flow monitor use — forge-n5r) and a data-provenance read straight off the server, never re-derived from flow.origin client-side (forge-3oq); the same server-sourced data-provenance now reaches non-flow cards too (KBs/agents/projects). It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.',
+      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the flows index (W6-IA-2) beside forge-develop — Library itself dropped its flows/agents/projects/kb shelves down to shelves-only (skills/hooks/connections/templates/community, W6-IA-4); the real per-kind indexes are /flows, /agents, /projects. Every flow card still carries a live data-flow-status (derived through the SAME shared runsForFlow matcher Home and the flow monitor use — forge-n5r) and a data-provenance read straight off the server, never re-derived from flow.origin client-side (forge-3oq); the same server-sourced data-provenance now reaches non-flow cards too (agents/projects). It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.1] The onboard-project flow monitor renders');
-        await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+        await page.goto(watch.uiUrl + '/flows', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
-          () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+          () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
           null, { timeout: 15000 },
         ).catch(() => {});
-        await caption(page, 'onboard-project — a real OOTB flow, a peer of forge-develop on the library shelf.');
+        await caption(page, 'onboard-project — a real OOTB flow, a peer of forge-develop on the flows index.');
         const onboardCard = page.locator('[data-card-type="flow"][data-card-id="onboard-project"]');
         await onboardCard.waitFor({ timeout: 8000 }).catch(() => {});
         check(await onboardCard.count() === 1,
-          'FOB.1: onboard-project renders as a real flow card on the library shelf ([data-card-type="flow"][data-card-id="onboard-project"])');
+          'FOB.1: onboard-project renders as a real flow card on the flows index ([data-card-type="flow"][data-card-id="onboard-project"])');
         const develCount = await page.locator('[data-card-type="flow"][data-card-id="forge-develop"]').count();
         check(develCount === 1,
-          'FOB.1: the OOTB forge-develop card is present in the SAME flows section — onboard-project is a peer, not a separate surface');
+          'FOB.1: the OOTB forge-develop card is present in the SAME index grid — onboard-project is a peer, not a separate surface');
 
         // R6-03-F3: the six-pillar nav (Home added, Library moved off /) + OOTB provenance badges.
         const navCount = await page.locator('[data-component="studio-nav"] [data-nav]').count();
         check(navCount === 6, `FOB.nav: the six-pillar nav renders (Home/Flows/Agents/Projects/Library/Knowledge) — got ${navCount}`);
         check(await page.locator('[data-component="studio-nav"] [data-nav="home"][href="/"]').count() > 0, 'FOB.nav: Home pillar points at /');
-        check(await page.locator('[data-component="studio-nav"] [data-nav="library"][href="/library"]').count() > 0, 'FOB.nav: Library pillar moved onto /library');
+        check(await page.locator('[data-component="studio-nav"] [data-nav="library"][href="/library"]').count() > 0, 'FOB.nav: Library pillar points at /library');
         // The OOTB seed flow forge-develop carries a real provenance badge derived from flow.origin.
         check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"][data-provenance="ootb"]').count() > 0, 'FOB.prov: the OOTB seed flow forge-develop card is marked data-provenance="ootb"');
         check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"] .badge-ootb').count() > 0, 'FOB.prov: forge-develop renders the visible ootb badge');
@@ -205,34 +205,43 @@ export const journey = defineJourney({
         // forge-n5r: FlowCard's status is now derived through the SAME
         // shared runsForFlow() matcher Home/the flow monitor use (never a
         // card-local re-filter that drops flowLineage) — every flow card on
-        // the shelf carries a real data-flow-status, one of active/gated/idle.
+        // the index carries a real data-flow-status, one of active/gated/idle.
         const flowStatuses = await page.evaluate(() =>
           Array.from(document.querySelectorAll('[data-card-type="flow"][data-flow-status]'))
             .map((el) => ({ id: el.getAttribute('data-card-id'), status: el.getAttribute('data-flow-status') })));
         check(flowStatuses.length >= 2,
-          `FOB.status: every flow card on the library shelf carries data-flow-status (got ${JSON.stringify(flowStatuses)})`);
+          `FOB.status: every flow card on the flows index carries data-flow-status (got ${JSON.stringify(flowStatuses)})`);
         const VALID_FLOW_STATUS = new Set(['active', 'gated', 'idle']);
         check(flowStatuses.every((f) => VALID_FLOW_STATUS.has(f.status)),
           `FOB.status: every data-flow-status value is one of active/gated/idle (got ${JSON.stringify(flowStatuses)})`);
 
         // forge-3oq: data-provenance reaches every flow card (already pinned
         // above for forge-develop's specific "ootb" value) — this widens the
-        // check to the WHOLE flow shelf, plus a NON-flow card (a top-level
-        // OOTB KB, always present regardless of what's been onboarded in
-        // this run), proving the server-sourced field reaches every card
-        // type, not just Flow (which alone had a client-inferable signal
-        // before this fix).
+        // check to the WHOLE flows index.
         const flowProvenanceCount = await page.locator('[data-card-type="flow"][data-provenance]').count();
         check(flowProvenanceCount === flowStatuses.length,
           `FOB.prov: every flow card carrying data-flow-status ALSO carries data-provenance (${flowProvenanceCount} of ${flowStatuses.length})`);
 
-        const VALID_PROVENANCE = new Set(['ootb', 'operator', 'unknown']);
-        const kbProvenance = await page.evaluate(() =>
-          document.querySelector('[data-card-type="kb"][data-card-id="forge-dev"]')?.getAttribute('data-provenance') ?? null);
-        check(kbProvenance !== null && VALID_PROVENANCE.has(kbProvenance),
-          `FOB.prov: the forge-dev KB card (a non-flow card type) carries a real server-sourced data-provenance value (got "${kbProvenance}")`);
+        await frame(page, 'fob-0-flows-index', 'FOB — onboard-project on the flows index, beside forge-develop, every card carrying a live status and a server-sourced provenance');
 
-        await frame(page, 'fob-0-library-card', 'FOB — onboard-project on the library shelf, beside forge-develop, every card carrying a live status and a server-sourced provenance');
+        // forge-3oq, widened: data-provenance also reaches a NON-flow card
+        // type (a project card, on its own real index — /projects, W6-IA-1)
+        // — proving the server-sourced field isn't Flow-only (which alone
+        // had a client-inferable signal before this fix). W6-IA-4: the
+        // Library shelf this used to check a KB card on is gone (KBs moved
+        // to the Knowledge pillar, which renders no "cards" of its own — a
+        // native <select>, KbSelector.tsx — so a project card is the real
+        // still-standing non-flow example).
+        await page.goto(watch.uiUrl + '/projects', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 15000 },
+        ).catch(() => {});
+        const VALID_PROVENANCE = new Set(['ootb', 'operator', 'unknown']);
+        const projectProvenance = await page.evaluate(() =>
+          document.querySelector('[data-card-type="project"][data-provenance]')?.getAttribute('data-provenance') ?? null);
+        check(projectProvenance !== null && VALID_PROVENANCE.has(projectProvenance),
+          `FOB.prov: a project card (a non-flow card type, on its own real index) carries a real server-sourced data-provenance value (got "${projectProvenance}")`);
 
         await page.goto(watch.uiUrl + '/flows/onboard-project', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(

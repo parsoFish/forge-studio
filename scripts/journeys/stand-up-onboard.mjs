@@ -34,19 +34,23 @@ export const journey = defineJourney({
       {
         id: 'su-onboard-project',
         title: 'Onboard a project from the UI',
-        narration: 'Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the library; .forge/project.json lands on disk with the hard contract fields — now including a bound KB (R4-02-F3) — the project appears in the library, and `studio lint` stays green. From the project page the operator can hand the rest to the onboarding agent (R4-02): "Run onboarding agent" dispatches it through the same generic run host as the agent page, to drive the project to contract-green. A second, fresh pass re-drives the same form to show the contract-readiness checklist with its failures visible, before anything is resolved.',
+        narration: 'Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the projects index; .forge/project.json lands on disk with the hard contract fields — now including a bound KB (R4-02-F3) — the project appears in the index, and `studio lint` stays green. From the project page the operator can hand the rest to the onboarding agent (R4-02): "Run onboarding agent" dispatches it through the same generic run host as the agent page, to drive the project to contract-green. A second, fresh pass re-drives the same form to show the contract-readiness checklist with its failures visible, before anything is resolved.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── J4: ONBOARD A PROJECT (in the UI) ─────────────────────────────────────
-              // The library "+ New Project" CTA opens a minimal onboarding form (name +
-              // quality gate + north star); submitting registers the project + scaffolds
-              // .forge/project.json. Proves: registry + config on disk, readiness renders,
-              // the project appears in the library, lint stays green.
+              // The projects index's "Onboard a project" CTA opens a minimal onboarding
+              // form (name + quality gate + north star); submitting registers the project
+              // + scaffolds .forge/project.json. Proves: registry + config on disk,
+              // readiness renders, the project appears in the index, lint stays green.
+              // W6-IA-4: was the library "+ New Project" shelf CTA — the projects index
+              // (/projects, W6-IA-1) is now the real entry point (Library dropped its
+              // projects/agents/flows/kb shelves down to shelves-only: skills/hooks/
+              // connections/templates/community).
               console.log('\n[J4] Onboard a project from the UI');
               cleanFirstProject();
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/projects', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
               // Baseline project count BEFORE onboarding — the discoverable-on-disk projects
@@ -54,13 +58,13 @@ export const journey = defineJourney({
               // project + scratch dirs), so the assertion is RELATIVE: onboarding must add
               // exactly one project. Stronger than an absolute floor, and checkout-agnostic.
               const projCountBefore = await page.evaluate(() =>
-                parseInt(document.querySelector('[data-section="projects"]')?.getAttribute('data-count') ?? '0', 10));
+                parseInt(document.querySelector('[data-section="projects-grid"]')?.getAttribute('data-count') ?? '0', 10));
               const newProjCta = await page.evaluate(() => {
-                const el = document.querySelector('[data-action="new-project"]');
+                const el = document.querySelector('[data-action="onboard-project-cta"]');
                 return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
               });
               check(newProjCta !== null && !newProjCta.disabled && (newProjCta.href ?? '').includes('/projects/new'),
-                'J4: library "+ New Project" CTA is enabled and routes to onboarding');
+                'J4: the projects index "Onboard a project" CTA is enabled and routes to onboarding');
 
               await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
@@ -169,13 +173,14 @@ export const journey = defineJourney({
               // slug + cleanup — a first-time operator would see this failing checklist
               // land in place on /projects/new (no redirect, since a hard clause still
               // fails on any brand-new onboard). Distinct slug avoids colliding with the
-              // canonical J4_PROJECT above. Starts at the LIBRARY, the entry point a user
-              // would actually use, not the /projects/new URL directly.
+              // canonical J4_PROJECT above. Starts at the PROJECTS INDEX, the entry point
+              // a user would actually use (W6-IA-4: was the library "+ New Project" shelf
+              // CTA — Library dropped its projects/agents/flows/kb shelves).
               const j4ClipSlug = `${J4_PROJECT}-clip`;
-              await recordClip(browser, watch, 'onboard-form', '/library', async (p) => {
-                await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
-                await sleep(1400); // dwell — the library's "+ New Project" CTA (same onboarding entry as create-new)
-                await p.locator('[data-action="new-project"]').click().catch(() => {});
+              await recordClip(browser, watch, 'onboard-form', '/projects', async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — the projects index's "Onboard a project" CTA (same onboarding entry as create-new)
+                await p.locator('[data-action="onboard-project-cta"]').click().catch(() => {});
                 await p.waitForURL('**/projects/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-field="project-name"]').fill('Journey Demo Project Clip').catch(() => {});
@@ -183,21 +188,21 @@ export const journey = defineJourney({
                 await p.locator('[data-action="onboard-project"]').click().catch(() => {});
                 await p.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: 'main[data-page="library"]', caption: 'From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible' });
+              }, { readySel: 'main[data-page="projects-index"]', caption: 'From the projects index — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible' });
               cleanOnboardedProject(j4ClipSlug);
 
-              // The project now appears in the library.
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // The project now appears in the projects index.
+              await page.goto(watch.uiUrl + '/projects', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
               const projCount = await page.evaluate(() =>
-                parseInt(document.querySelector('[data-section="projects"]')?.getAttribute('data-count') ?? '0', 10));
+                parseInt(document.querySelector('[data-section="projects-grid"]')?.getAttribute('data-count') ?? '0', 10));
               const onboardedListed = await page.evaluate((id) =>
-                document.querySelector(`[data-section="projects"] [data-card-type="project"][data-card-id="${id}"]`) !== null, J4_PROJECT);
+                document.querySelector(`[data-section="projects-grid"] [data-card-type="project"][data-card-id="${id}"]`) !== null, J4_PROJECT);
               check(projCount === projCountBefore + 1 && onboardedListed,
-                `J4: onboarding adds exactly one project to the library (${projCountBefore}→${projCount}, ${J4_PROJECT} listed=${onboardedListed})`);
+                `J4: onboarding adds exactly one project to the index (${projCountBefore}→${projCount}, ${J4_PROJECT} listed=${onboardedListed})`);
 
               // lint stays green with the new project registered.
               let j4LintOk = false;

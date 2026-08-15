@@ -94,6 +94,8 @@ import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   makeHeartbeatWriter,
+  makeReasoningSink,
+  makeThinkingSink,
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger, type Phase } from './logging.ts';
@@ -135,7 +137,16 @@ const INTERACTIVE_LIBRARY_DIRNAME = '_interactive-library';
  *  is the generic, non-committal bucket for cross-cutting spine plumbing. */
 const RUNNER_PHASE: Phase = 'orchestrator';
 const RUNNER_SKILL = 'interactive-runner';
-const MAX_REASONING_TEXT = 400;
+
+// W6-B1: interactive sessions are operator-attended, low-volume turns (one
+// turn per bridge action) — unlike the unattended dev-loop/PM/reflector phases
+// `createToolEventSampler` also backs, there is no wedged-loop risk to guard
+// against here, so `makeToolEventSink`'s sampler opts below pass tool-use
+// events through effectively unsampled (rate 1) with a generous cap. The same
+// literal opts are passed, per-runner (not a shared export — one line each,
+// no new orchestrator surface), by the four legacy interactive runners +
+// brain-fix-runner. The unattended flow phases (pm/dev/reflector bindings)
+// are UNCHANGED and keep the sampler's defaults.
 
 /** Generic over any `{ phase: string, … }` JSON — mirrors how
  *  `guardedReadSessionStatus<S>` is generic in interactive-session.ts. Every
@@ -287,14 +298,20 @@ export async function runInteractiveTurn(
     metadata: { session_id: ctx.sessionId, session_kind: descriptor.id, phase: status.phase, step: phaseRow.step },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId,
-    parentEventId: startEv.event_id,
-    phase: RUNNER_PHASE,
-    skill: RUNNER_SKILL,
-  });
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId,
+      parentEventId: startEv.event_id,
+      phase: RUNNER_PHASE,
+      skill: RUNNER_SKILL,
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const onText = makeReasoningSink(logger, initiativeId, ctx.sessionId);
+  const sinkCtx = { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, idMeta: { session_id: ctx.sessionId } };
+  const onText = makeReasoningSink(logger, sinkCtx);
+  const onThinking = makeThinkingSink(logger, sinkCtx);
 
   let result: RunInteractiveTurnResult;
 
@@ -320,6 +337,7 @@ export async function runInteractiveTurn(
         onToolUse: sink.onToolUse,
         onHeartbeat,
         onText,
+        onThinking,
       });
       break;
 
@@ -373,8 +391,9 @@ async function runAgentStyleStep(args: {
   onToolUse: Parameters<typeof runAgentTurn>[0]['onToolUse'];
   onHeartbeat: () => void;
   onText: (text: string) => void;
+  onThinking: (text: string) => void;
 }): Promise<RunInteractiveTurnResult> {
-  const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, queryFn, onToolUse, onHeartbeat, onText } = args;
+  const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, queryFn, onToolUse, onHeartbeat, onText, onThinking } = args;
 
   // ADR-024: spec/model/prompt derivation from the agent's OWN SKILL.md —
   // resolved against the real forge install (deriveAgentSpec's default root),
@@ -396,6 +415,7 @@ async function runAgentStyleStep(args: {
       onToolUse,
       onHeartbeat,
       onText,
+      onThinking,
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
     });
   } else if (turnSpec.style === 'structured') {
@@ -668,24 +688,10 @@ function buildTurnPrompt(
   ].join('\n');
 }
 
-/** Forward each non-empty reasoning text block to the event log (live panel),
- *  capped to keep the durable log bounded — mirrors
- *  `instructions-runner.ts`'s own `makeReasoningSink`. */
-function makeReasoningSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
-  return (text: string) => {
-    const capped = text.length > MAX_REASONING_TEXT ? `${text.slice(0, MAX_REASONING_TEXT)}…` : text;
-    logger.emit({
-      initiative_id: initiativeId,
-      phase: RUNNER_PHASE,
-      skill: RUNNER_SKILL,
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: capped,
-      metadata: { session_id: sessionId, kind: 'reasoning' },
-    });
-  };
-}
+// W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates
+// were removed — this file now consumes the ONE shared pair exported from
+// interactive-session.ts (imported above), which also owns the per-turn
+// SINK_ROW_CAP backstop and the raw-text (not truncated-text) coalescing fix.
 
 // Re-export so callers don't need a second import for the shared QueryFn type.
 export type { QueryFn } from './interactive-session.ts';
