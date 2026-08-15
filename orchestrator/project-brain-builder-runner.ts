@@ -26,7 +26,7 @@ import {
 import { createLogger, type EventLogger } from './logging.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile, guardedReadDir } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
@@ -65,6 +65,15 @@ export type ProjectBrainStatus = {
    */
   kb_id?: string;
   kb_binding?: KbBinding;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * operator-chosen model tier, validated by the bridge's
+   * `/api/project-brain/start` route against `projectBrainAgentSpec`
+   * (`strategy:fixed`, so the only legal value is the fixed model's own
+   * tier) before it is ever persisted here. Absent ⇒ unchanged default
+   * behavior (`PROJECT_BRAIN_MODEL`).
+   */
+  modelTier?: ModelTier;
 };
 
 export type RunProjectBrainTurnInput = {
@@ -276,7 +285,7 @@ async function runAnalyzeStep(args: {
     queryFn,
     prompt,
     cwd,
-    model: PROJECT_BRAIN_MODEL,
+    model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
     allowedTools: projectBrainAgentSpec.allowedTools,
     disallowedTools: projectBrainAgentSpec.disallowedTools,
     maxTurns: 30,

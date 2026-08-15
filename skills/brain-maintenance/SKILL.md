@@ -16,8 +16,10 @@ composition:
   guards: [event-log]
 runtime:
   sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
+  strategy: range
+  range:
+    - claude-sonnet-4-6
+    - claude-opus-4-8
 brainAccess: advisory
 interactivity: Operator-driven; drafts a cleanup plan from the findings it is given and stops for operator review — never asks free-form questions.
 allowed-tools: [Read, Grep, Glob, Write]

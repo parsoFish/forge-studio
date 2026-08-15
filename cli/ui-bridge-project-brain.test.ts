@@ -82,6 +82,28 @@ test('start without project → 400', async () => {
   assert.equal(r.status, 400);
 });
 
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
+// is strategy:fixed (sonnet), so the only legal modelTier is "sonnet".
+// ---------------------------------------------------------------------------
+
+test('POST /api/project-brain/start with modelTier:"sonnet" (equal to the fixed tier) is persisted into status.json', async () => {
+  const started = await post('/api/project-brain/start', { project: PROJECT, modelTier: 'sonnet' });
+  assert.equal(started.status, 200);
+  const sessionId = started.json.sessionId as string;
+  const sessions = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string; modelTier?: string }>;
+  assert.equal(sessions.find((s) => s.session_id === sessionId)?.modelTier, 'sonnet');
+});
+
+test('POST /api/project-brain/start with an out-of-envelope modelTier ("opus") 400s naming the value and the allowed set — no session dir created', async () => {
+  const before = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string }>;
+  const r = await post('/api/project-brain/start', { project: PROJECT, modelTier: 'opus' });
+  assert.equal(r.status, 400);
+  assert.match(String(r.json.error), /requested model tier "opus".*allowed tier\(s\): sonnet/);
+  const after = (await getJson('/api/project-brain/sessions')).sessions as Array<{ session_id: string }>;
+  assert.equal(after.length, before.length, 'a rejected modelTier must not create a new session');
+});
+
 // ===========================================================================
 // R4-16 PIN 5 — Finding A (BLOCKER): POST /api/project-brain/start was the
 // fourth `/start` sibling — same shape (`{project, projectRepoPath?}` →
