@@ -41,7 +41,16 @@
  * `communityBadgeForSkill` is not yet exported from `./community-view.ts`.
  */
 import { test, expect } from 'vitest';
-import { filterByKind, filterCommunityItems, installStateLabel, signalsLabel, hubLabel, communityBadgeForSkill } from './community-view.ts';
+import {
+  filterByKind,
+  filterCommunityItems,
+  installStateLabel,
+  signalsLabel,
+  hubLabel,
+  communityBadgeForSkill,
+  sortCommunityItems,
+  freshnessBadge,
+} from './community-view.ts';
 import type { CommunityItem, CommunityHub } from './community-client.ts';
 
 function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
@@ -57,6 +66,9 @@ function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
     installState: 'not-installed',
     probeState: null,
     origin: 'test',
+    fetchedAt: null,
+    fetchedBy: 'local',
+    upstreamUpdatedAt: null,
     ...overrides,
   };
 }
@@ -186,11 +198,14 @@ const COLLIDING_COMMUNITY_ITEM: CommunityItem = {
   desc: 'A catalog community-skills entry.',
   upstream: 'https://example.com/collide-id',
   hub: { id: 'example-hub', name: 'Example Hub', url: 'https://example.com', kinds: 'skills' },
-  signals: { stars: '9.9k', attributedTo: 'Catalog Curator' },
+  signals: { stars: '9.9k', attributedTo: 'Catalog Curator', starsNumeric: 9900 },
   vendored: false,
   installState: 'not-installed',
   probeState: null,
   origin: 'studio/catalog.yaml (community-skills)',
+  fetchedAt: null,
+  fetchedBy: 'seed',
+  upstreamUpdatedAt: null,
 };
 
 test('communityBadgeForSkill: a LOCAL entry never gets a badge, even when the community index carries an item with the SAME id — the reviewer-reproduced collision', () => {
@@ -216,4 +231,195 @@ test('communityBadgeForSkill: never matches a non-skill-kind item sharing the id
   const mcpItem: CommunityItem = { ...COLLIDING_COMMUNITY_ITEM, kind: 'mcp' };
   const result = communityBadgeForSkill(communityEntry, [mcpItem]);
   expect(result).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// sortCommunityItems (W6-CR-2) — operator-locked SIMPLE SORTS ONLY: name /
+// stars / updated / source. Pure, new-array, null-last, stable-on-tie.
+// ---------------------------------------------------------------------------
+
+function withStars(id: string, name: string, starsNumeric: number | null): CommunityItem {
+  return item({
+    id,
+    name,
+    signals: starsNumeric === null ? null : { stars: String(starsNumeric), attributedTo: 'someone', starsNumeric },
+  });
+}
+
+function withFetchedAt(id: string, name: string, fetchedAt: string | null): CommunityItem {
+  return item({ id, name, fetchedAt });
+}
+
+test('sortCommunityItems: returns a NEW array, never the same reference, and never mutates the input', () => {
+  const items = [item({ id: 'b', name: 'B' }), item({ id: 'a', name: 'A' })];
+  const original = [...items];
+  const result = sortCommunityItems(items, 'name', 'asc');
+  expect(result).not.toBe(items);
+  expect(items).toEqual(original);
+});
+
+test('sortCommunityItems("name", "asc") sorts alphabetically', () => {
+  const items = [item({ id: 'c', name: 'Charlie' }), item({ id: 'a', name: 'Alpha' }), item({ id: 'b', name: 'Bravo' })];
+  expect(sortCommunityItems(items, 'name', 'asc').map((i) => i.id)).toEqual(['a', 'b', 'c']);
+});
+
+test('sortCommunityItems("name", "desc") reverses the order', () => {
+  const items = [item({ id: 'c', name: 'Charlie' }), item({ id: 'a', name: 'Alpha' }), item({ id: 'b', name: 'Bravo' })];
+  expect(sortCommunityItems(items, 'name', 'desc').map((i) => i.id)).toEqual(['c', 'b', 'a']);
+});
+
+test('sortCommunityItems("stars", "desc") ranks highest numeric stars first', () => {
+  const items = [withStars('a', 'A', 10), withStars('b', 'B', 1000), withStars('c', 'C', 500)];
+  expect(sortCommunityItems(items, 'stars', 'desc').map((i) => i.id)).toEqual(['b', 'c', 'a']);
+});
+
+test('sortCommunityItems("stars", "asc") ranks lowest numeric stars first', () => {
+  const items = [withStars('a', 'A', 10), withStars('b', 'B', 1000), withStars('c', 'C', 500)];
+  expect(sortCommunityItems(items, 'stars', 'asc').map((i) => i.id)).toEqual(['a', 'c', 'b']);
+});
+
+test('sortCommunityItems("stars", ...): a null signals block (no stars at all) sorts LAST in BOTH directions — never a fabricated zero', () => {
+  const items = [withStars('has-stars', 'Has', 10), withStars('no-stars', 'None', null)];
+  expect(sortCommunityItems(items, 'stars', 'asc').map((i) => i.id)).toEqual(['has-stars', 'no-stars']);
+  expect(sortCommunityItems(items, 'stars', 'desc').map((i) => i.id)).toEqual(['has-stars', 'no-stars']);
+});
+
+test('sortCommunityItems("stars", ...): a non-null signals block with a null starsNumeric (display names a different unit) ALSO sorts LAST', () => {
+  const noNumeric = item({ id: 'installs-only', name: 'Installs', signals: { stars: '156k installs', attributedTo: 'x', starsNumeric: null } });
+  const items = [withStars('has-stars', 'Has', 10), noNumeric];
+  expect(sortCommunityItems(items, 'stars', 'desc').map((i) => i.id)).toEqual(['has-stars', 'installs-only']);
+});
+
+test('sortCommunityItems("updated", "desc") ranks the most recently fetchedAt first', () => {
+  const items = [
+    withFetchedAt('old', 'Old', '2026-01-01T00:00:00.000Z'),
+    withFetchedAt('new', 'New', '2026-08-01T00:00:00.000Z'),
+    withFetchedAt('mid', 'Mid', '2026-04-01T00:00:00.000Z'),
+  ];
+  expect(sortCommunityItems(items, 'updated', 'desc').map((i) => i.id)).toEqual(['new', 'mid', 'old']);
+});
+
+test('sortCommunityItems("updated", "asc") ranks the least recently fetchedAt first', () => {
+  const items = [
+    withFetchedAt('old', 'Old', '2026-01-01T00:00:00.000Z'),
+    withFetchedAt('new', 'New', '2026-08-01T00:00:00.000Z'),
+  ];
+  expect(sortCommunityItems(items, 'updated', 'asc').map((i) => i.id)).toEqual(['old', 'new']);
+});
+
+test('sortCommunityItems("updated", ...): a null fetchedAt (seed, never verified) sorts LAST in BOTH directions — never treated as the epoch', () => {
+  const items = [withFetchedAt('verified', 'Verified', '2026-01-01T00:00:00.000Z'), withFetchedAt('seed', 'Seed', null)];
+  expect(sortCommunityItems(items, 'updated', 'asc').map((i) => i.id)).toEqual(['verified', 'seed']);
+  expect(sortCommunityItems(items, 'updated', 'desc').map((i) => i.id)).toEqual(['verified', 'seed']);
+});
+
+test('sortCommunityItems("source", "asc") groups by hub label, then breaks ties by name', () => {
+  const hubA: CommunityHub = { id: 'hub-a', name: 'Alpha Hub', url: 'https://example.com/a', kinds: 'skills' };
+  const hubB: CommunityHub = { id: 'hub-b', name: 'Beta Hub', url: 'https://example.com/b', kinds: 'skills' };
+  const items = [
+    item({ id: 'a2', name: 'Zeta', hub: hubA }),
+    item({ id: 'b1', name: 'Yankee', hub: hubB }),
+    item({ id: 'a1', name: 'Alpha Item', hub: hubA }),
+  ];
+  // Alpha Hub group first (asc), Alpha Item before Zeta within it (name tiebreak).
+  expect(sortCommunityItems(items, 'source', 'asc').map((i) => i.id)).toEqual(['a1', 'a2', 'b1']);
+});
+
+test('sortCommunityItems("source", "desc") reverses the GROUP order, but the within-group name tiebreak stays ascending', () => {
+  const hubA: CommunityHub = { id: 'hub-a', name: 'Alpha Hub', url: 'https://example.com/a', kinds: 'skills' };
+  const hubB: CommunityHub = { id: 'hub-b', name: 'Beta Hub', url: 'https://example.com/b', kinds: 'skills' };
+  const items = [
+    item({ id: 'a2', name: 'Zeta', hub: hubA }),
+    item({ id: 'b1', name: 'Yankee', hub: hubB }),
+    item({ id: 'a1', name: 'Alpha Item', hub: hubA }),
+  ];
+  expect(sortCommunityItems(items, 'source', 'desc').map((i) => i.id)).toEqual(['b1', 'a1', 'a2']);
+});
+
+test('sortCommunityItems("source", ...): a null hub groups under "unaffiliated" — a real bucket, not forced last (unlike stars/updated nulls)', () => {
+  const hubA: CommunityHub = { id: 'hub-a', name: 'Alpha Hub', url: 'https://example.com/a', kinds: 'skills' };
+  const items = [item({ id: 'affiliated', name: 'X', hub: hubA }), item({ id: 'unaffiliated', name: 'Y', hub: null })];
+  // "Alpha Hub" < "unaffiliated" alphabetically — affiliated sorts first here,
+  // but the point is "unaffiliated" is present as a real group, not dropped.
+  const asc = sortCommunityItems(items, 'source', 'asc');
+  expect(asc.map((i) => i.id)).toContain('unaffiliated');
+  expect(asc.map((i) => i.id)).toEqual(['affiliated', 'unaffiliated']);
+});
+
+test('sortCommunityItems: STABILITY — items sharing the IDENTICAL sort key preserve their ORIGINAL relative order (name/stars/updated single-key sorts)', () => {
+  const items = [
+    withStars('first', 'First', 100),
+    withStars('second', 'Second', 100),
+    withStars('third', 'Third', 100),
+  ];
+  expect(sortCommunityItems(items, 'stars', 'desc').map((i) => i.id)).toEqual(['first', 'second', 'third']);
+  expect(sortCommunityItems(items, 'stars', 'asc').map((i) => i.id)).toEqual(['first', 'second', 'third']);
+
+  const sameUpdated = [
+    withFetchedAt('x', 'X', '2026-01-01T00:00:00.000Z'),
+    withFetchedAt('y', 'Y', '2026-01-01T00:00:00.000Z'),
+  ];
+  expect(sortCommunityItems(sameUpdated, 'updated', 'asc').map((i) => i.id)).toEqual(['x', 'y']);
+});
+
+test('sortCommunityItems: an unrecognised sort key throws rather than silently falling back to an arbitrary order', () => {
+  const items = [item({ id: 'a' })];
+  expect(() => sortCommunityItems(items, 'bogus' as never, 'asc')).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// freshnessBadge (W6-CR-2) — NEVER a date for a null fetchedAt.
+// ---------------------------------------------------------------------------
+
+const NOW = Date.parse('2026-08-15T00:00:00.000Z');
+
+test('freshnessBadge(null, now) reads "seed — never verified" — the spec-literal phrase, never a fabricated date', () => {
+  const badge = freshnessBadge(null, NOW);
+  expect(badge.state).toBe('seed');
+  expect(badge.label).toMatch(/seed — never verified/);
+});
+
+test('freshnessBadge: an unparsable fetchedAt degrades to the SAME seed treatment — an honest "don\'t know" beats a fabricated time', () => {
+  const badge = freshnessBadge('not-a-real-date', NOW);
+  expect(badge.state).toBe('seed');
+  expect(badge.label).toMatch(/seed — never verified/);
+});
+
+test('freshnessBadge: a fetchedAt older than 30 days reads "stale"', () => {
+  const thirtyOneDaysAgo = new Date(NOW - 31 * 24 * 60 * 60 * 1000).toISOString();
+  const badge = freshnessBadge(thirtyOneDaysAgo, NOW);
+  expect(badge.state).toBe('stale');
+  expect(badge.label).toBe('stale');
+});
+
+test('freshnessBadge: a fetchedAt exactly at the 30-day boundary is NOT yet stale', () => {
+  const exactlyThirtyDaysAgo = new Date(NOW - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const badge = freshnessBadge(exactlyThirtyDaysAgo, NOW);
+  expect(badge.state).not.toBe('stale');
+});
+
+test('freshnessBadge: a recent fetchedAt (2 days ago) renders a relative time, never a raw date string', () => {
+  const twoDaysAgo = new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const badge = freshnessBadge(twoDaysAgo, NOW);
+  expect(badge.state).toBe('fresh');
+  expect(badge.label).toMatch(/2d ago/);
+  expect(badge.label).not.toMatch(/\d{4}-\d{2}-\d{2}/); // never a raw ISO/date string
+});
+
+test('freshnessBadge: a fetchedAt just a few hours ago renders hours, not days', () => {
+  const threeHoursAgo = new Date(NOW - 3 * 60 * 60 * 1000).toISOString();
+  const badge = freshnessBadge(threeHoursAgo, NOW);
+  expect(badge.state).toBe('fresh');
+  expect(badge.label).toMatch(/3h ago/);
+});
+
+test('freshnessBadge: a fetchedAt in the future (clock skew) never renders a negative age', () => {
+  const future = new Date(NOW + 60_000).toISOString();
+  const badge = freshnessBadge(future, NOW);
+  expect(badge.label).not.toMatch(/-/);
+});
+
+test('freshnessBadge: is wall-clock independent — the SAME fetchedAt + nowMs pair always produces the SAME badge (D7)', () => {
+  const fetchedAt = '2026-08-10T00:00:00.000Z';
+  expect(freshnessBadge(fetchedAt, NOW)).toEqual(freshnessBadge(fetchedAt, NOW));
 });

@@ -124,6 +124,12 @@ type CommunityItemWire = {
   installState: CommunityItem['installState'];
   probeState: ProbeState | null;
   origin: string;
+  /** W6-CR-2 — carried straight through from the item's own real fact (D14 in
+   *  community-index.ts): null/'local' for a vendored package or connection
+   *  with no registry row, never fabricated. */
+  fetchedAt: CommunityItem['fetchedAt'];
+  fetchedBy: CommunityItem['fetchedBy'];
+  upstreamUpdatedAt: CommunityItem['upstreamUpdatedAt'];
   error?: string;
 };
 
@@ -213,6 +219,9 @@ function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
     installState: item.installState,
     probeState: probeStateFor(item),
     origin: originFor(item),
+    fetchedAt: item.fetchedAt,
+    fetchedBy: item.fetchedBy,
+    upstreamUpdatedAt: item.upstreamUpdatedAt,
     ...(item.error !== undefined ? { error: item.error } : {}),
   };
 }
@@ -236,6 +245,9 @@ function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
       installState: item.installState,
       probeState: null,
       origin: originFor(item),
+      fetchedAt: item.fetchedAt,
+      fetchedBy: item.fetchedBy,
+      upstreamUpdatedAt: item.upstreamUpdatedAt,
       error: `cannot fully derive community wire item — ${sanitizeError(err)}`,
     };
   }

@@ -392,6 +392,7 @@ export const RUN_ORDER = [
   ['community', 'community-skills-card-signals'],
   ['community', 'community-browse-entry'],
   ['community', 'community-hub-strip'],
+  ['community', 'community-sort-freshness'],  // W6-CR-2 sort + freshness badge (between hub-strip and filter-skill, per the beat's own placement)
   ['community', 'community-filter-skill'],
   ['community', 'community-skill-detail-open'],
   ['community', 'community-skill-detail-signals'],

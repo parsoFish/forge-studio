@@ -847,14 +847,14 @@ export function loadCommunityRegistry(registryYamlPath: string): CommunityRegist
  *  here is always the curated DISPLAY string, never the parsed numeric
  *  `signals.stars` (types.ts's CommunitySkill doc).
  *
- *  DELIBERATE, NOT FORGOTTEN: `item.fetchedAt`/`item.fetchedBy` dead-end
- *  right here — the legacy `CommunitySkill` shape has no fields for them, so
- *  they never reach community-index.ts's `CommunityItem`, the bridge wire
- *  response, or forge-ui. That's CR-2's scope (a real refresh pass +
- *  staleness sort/display in the community browser), not W6-CR-1's — this
- *  migration only had to seed the data and make it loadable/validatable.
- *  When CR-2 lands, it plumbs a NEW projection (or widens this one) rather
- *  than assuming these fields already flow anywhere. */
+ *  W6-CR-2: `item.fetchedAt`/`item.fetchedBy`/`item.upstreamUpdatedAt`/
+ *  `item.signals.stars` (the numeric figure) now thread straight through —
+ *  every registry-sourced item genuinely HAS these facts (required fields on
+ *  `CommunityRegistryItem`), so there is nothing to fabricate here; a
+ *  vendored-only skill/hook or a connection (no registry row at all) is
+ *  built directly as a `CommunityItem` in community-index.ts, never through
+ *  this function, and gets its own honest fetchedAt:null/fetchedBy:'local'
+ *  treatment there. */
 function toCommunitySkill(item: CommunityRegistryItem): CommunitySkill {
   return {
     id: item.id,
@@ -864,7 +864,11 @@ function toCommunitySkill(item: CommunityRegistryItem): CommunitySkill {
     category: item.category,
     tier: item.tier,
     stars: item.signals.starsDisplay ?? undefined,
+    starsNumeric: item.signals.stars,
     desc: item.desc,
+    upstreamUpdatedAt: item.upstreamUpdatedAt,
+    fetchedAt: item.fetchedAt,
+    fetchedBy: item.fetchedBy,
   };
 }
 

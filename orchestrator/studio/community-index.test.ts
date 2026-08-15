@@ -639,6 +639,68 @@ describe('listCommunityIndex — D5: signals are never invented', () => {
   });
 });
 
+// W6-CR-2, D14: fetchedAt/fetchedBy/upstreamUpdatedAt thread through only
+// from a value the source record already carries — a registry-sourced skill
+// carries its real facts; a vendored-only skill/hook or a connection (no
+// registry row) honestly carries fetchedAt:null/fetchedBy:'local'/
+// upstreamUpdatedAt:null, never a fabricated timestamp.
+describe('listCommunityIndex — D14: fetchedAt/fetchedBy/upstreamUpdatedAt', () => {
+  it('a registry-sourced community-skill carries its real fetchedBy/fetchedAt/upstreamUpdatedAt (the REAL "handoff" entry: fetchedBy "seed", fetchedAt/upstreamUpdatedAt null)', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    const entry = items.find((i) => i.kind === 'skill' && i.id === 'handoff');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedBy, 'seed');
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a vendored-only skill (no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null — never fabricated', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    vendorSkillPackage(root, 'no-fetch-skill');
+    const items = listCommunityIndex(root);
+    const entry = items.find((i) => i.id === 'no-fetch-skill');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.fetchedBy, 'local');
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a vendored hook (no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    vendorHookPackage(root, 'no-fetch-hook');
+    const items = listCommunityIndex(root);
+    const entry = items.find((i) => i.id === 'no-fetch-hook');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.fetchedBy, 'local');
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a connection (tool/mcp, no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, { tools: [{ id: 'no-fetch-tool' }], mcps: [{ id: 'no-fetch-mcp' }] });
+    const items = listCommunityIndex(root);
+    for (const id of ['no-fetch-tool', 'no-fetch-mcp']) {
+      const entry = items.find((i) => i.id === id);
+      assert.ok(entry, `expected item "${id}"`);
+      assert.equal(entry!.fetchedAt, null, `"${id}".fetchedAt`);
+      assert.equal(entry!.fetchedBy, 'local', `"${id}".fetchedBy`);
+      assert.equal(entry!.upstreamUpdatedAt, null, `"${id}".upstreamUpdatedAt`);
+    }
+  });
+
+  it('every item in the REAL committed index carries a real, non-blank fetchedBy — never absent', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    assert.ok(items.length > 0, 'sanity: the real index has entries');
+    for (const item of items) {
+      assert.equal(typeof item.fetchedBy, 'string', `item "${item.kind}:${item.id}" fetchedBy must be a string`);
+      assert.ok(item.fetchedBy.trim().length > 0, `item "${item.kind}:${item.id}" fetchedBy must not be blank`);
+    }
+  });
+});
+
 // T2 round 2, MANDATORY M4: a negative sweep over the REAL repo's full index
 // — no item anywhere may carry a fabricated/degenerate signal.
 describe('listCommunityIndex — M4: full-repo negative sweep for a fabricated zero', () => {
