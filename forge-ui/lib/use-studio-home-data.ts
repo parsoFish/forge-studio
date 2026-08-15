@@ -14,6 +14,7 @@ import {
   type Project,
   type Run,
 } from './studio-client';
+import { debounceLeadingTrailing } from './debounce';
 
 /**
  * useStudioHomeData — the ONE cross-object aggregate fetch (W6-IA-4, sweep
@@ -36,6 +37,17 @@ import {
  * `/api/...` endpoint literal, no `setInterval`, no bespoke `WebSocket`. Live refresh is the
  * ONE bridge WebSocket (`subscribe()`): a `cycle-list-changed` message
  * re-fetches runs only, exactly as both callers did before extraction.
+ *
+ * ADR-044 P1 (`docs/decisions/044-read-path-memoization.md`, merged to main
+ * as `feat/w6-p1-run-list-cache` AFTER this hook's own extraction landed —
+ * re-targeted here on merge): the `cycle-list-changed` refetch is wrapped in
+ * `debounceLeadingTrailing` (`./debounce.ts`, 500ms leading+trailing) so a
+ * burst of WS messages collapses into at most two `fetchRuns()` round-trips
+ * instead of one per message; `.cancel()` runs in the effect cleanup so no
+ * stray trailing call fires after unmount. This is the SAME wiring
+ * `app/page.tsx` carried directly before this hook existed — moved here
+ * unchanged, not re-derived, since this hook is now the one place that
+ * subscription lives.
  */
 export type StudioHomeData = {
   agents: Agent[];
@@ -47,6 +59,19 @@ export type StudioHomeData = {
   /** True once the first `loadAll` Promise.all has settled. */
   ready: boolean;
 };
+
+/**
+ * Extracted so the ADR-044 P1 debounce wiring is a plain, directly-testable
+ * unit — a `Debounced<[]>` (`./debounce.ts`) wrapping `refreshRuns`, with NO
+ * React/effect involvement — rather than only provable by reading the
+ * hook's source text. `use-studio-home-data.test.ts` exercises this with
+ * `vi.useFakeTimers()`, mirroring `debounce.test.ts`'s own style, to pin
+ * that a burst of `cycle-list-changed` messages collapses into at most two
+ * `refreshRuns` calls. The hook itself (below) is the only real caller.
+ */
+export function createDebouncedRefreshRuns(refreshRuns: () => void, waitMs = 500) {
+  return debounceLeadingTrailing(refreshRuns, waitMs);
+}
 
 export function useStudioHomeData(): StudioHomeData {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -92,18 +117,25 @@ export function useStudioHomeData(): StudioHomeData {
 
     // Subscribe to bridge WS to re-fetch runs on cycle-list-changed — the
     // ONE live-refresh transport Studio has.
+    // ADR-044 P1: debounce leading+trailing 500ms (createDebouncedRefreshRuns,
+    // above) so a burst of cycle-list-changed messages collapses into at
+    // most two /api/runs round-trips instead of one per message.
+    const debouncedRefreshRuns = createDebouncedRefreshRuns(() => {
+      void refreshRuns();
+    });
     const sub = subscribe({
       onState: () => { /* this hook does not surface connection state */ },
       onMessage: (msg) => {
         if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
-          void refreshRuns();
+          debouncedRefreshRuns();
         }
       },
     });
 
     return () => {
       signal.cancelled = true;
+      debouncedRefreshRuns.cancel();
       sub.close();
     };
     // intentional mount-only — loadAll/refreshRuns are stable fetch helpers

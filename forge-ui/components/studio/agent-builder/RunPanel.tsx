@@ -46,11 +46,10 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   dispatchAgentRun,
-  getAgentRunStatus,
   parseRunInputs,
-  type AgentRunStatus,
   type MaterialUpload,
 } from '@/lib/studio-client';
+import { pollAgentRun, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 import {
   validateMaterialsClientSide,
   resolveCostCeilingForDispatch,
@@ -143,30 +142,18 @@ export function RunPanel({
   const [materials, setMaterials] = useState<MaterialUpload[]>([]);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
-  const [status, setStatus] = useState<AgentRunStatus | null>(null);
+  const [status, setStatus] = useState<PolledAgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
 
   // Poll the dispatched run's status until it leaves 'running' (done/failed/
-  // suppressed) or a bounded backstop trips — a run that dies without a
+  // suppressed) or the bounded ceiling trips — a run that dies without a
   // terminal marker, or a suppressed run that writes no events, must never
-  // poll forever.
+  // poll forever, and never silently freeze on a stale 'running' once the
+  // ceiling is hit (agent-dispatch.ts's explicit 'timed-out' state).
   useEffect(() => {
     if (!runId) return;
-    let active = true;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 90; // ~3 min at 2s
-    const poll = async (): Promise<string> => {
-      const s = await getAgentRunStatus(runId);
-      if (active) setStatus(s);
-      return s.state;
-    };
-    void poll();
-    const id = setInterval(() => {
-      attempts += 1;
-      void poll().then((st) => { if (st !== 'running' || attempts >= MAX_ATTEMPTS) clearInterval(id); });
-    }, 2000);
-    return () => { active = false; clearInterval(id); };
+    return pollAgentRun(runId, { onUpdate: setStatus });
   }, [runId]);
 
   // R6-01 WI-4: what already starts this agent WITHOUT an operator is a fact

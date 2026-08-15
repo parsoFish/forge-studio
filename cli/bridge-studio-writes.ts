@@ -50,7 +50,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrat
 import { runPreflight } from './preflight.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
-import { listRuns } from '../orchestrator/run-model.ts';
+import { cachedListRuns } from './run-list-cache.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -1318,7 +1318,8 @@ export async function handleStudioWriteRoutes(
       // / forge-reflect), so a run of THIS flow is locked while in flight.
       // Pre-S8 manifests with no flow_id stamp as 'unknown' (never matches a real
       // editable flow id) — correct, an unknowable archival flow is not editable.
-      const activeRun = listRuns(ctx.forgeRoot, Date.now()).find(
+      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      const activeRun = cachedListRuns(ctx.forgeRoot, Date.now()).find(
         (r) => r.flowId === id && r.status === 'active',
       );
       if (activeRun) {
