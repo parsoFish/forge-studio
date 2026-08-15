@@ -245,32 +245,51 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
  * legacy per-kind list routes' existing terminal-phase filter
  * (`cli/ui-bridge.ts`'s four `if (s.phase !== ...) ctx.ensureSessionTail(...)`
  * guards) — this is the SAME gate, applied at this route's own choke point,
- * not a re-invented one.
+ * not a re-invented one. Exported (W6-B11) so the aggregate sessions-index
+ * collector (`cli/ui-bridge.ts`'s `collectStudioSessionIndexRows`) reuses
+ * this SAME derivation for its own `terminal` field — no second, hand-kept
+ * terminal-phase notion.
  *
- * Derives, never hand-writes a new list:
- *   - A descriptor WITH a `turnSpec` (kb-cleanup, authoring) derives its
- *     terminal set from the turnSpec's own phase table — any phase whose row
- *     declares `step: 'terminal'` (the ADR-043 state-machine's own "this is
- *     where it stops" marker, already validated by validateSessionKinds to
- *     have at least one such row — CHECK_TURNSPEC_NO_TERMINAL_PHASE). A
- *     rename/addition of a terminal phase in studio/session-kinds.yaml is
- *     picked up automatically, with no code change here.
- *   - A descriptor with NO `turnSpec` (architect/instructions/demo/
- *     project-brain — the four kinds that predate the turnSpec table) falls
- *     back to `LEGACY_SESSION_TERMINAL_PHASES` (cli/bridge-studio.ts) — the
- *     SAME constant the four legacy list routes now import instead of
- *     hand-writing their own inline literals.
- *   - Any OTHER kind (e.g. 'onboarding': no turnSpec, no
- *     LEGACY_SESSION_TERMINAL_PHASES row) has no terminal-phase source at
- *     all — treated as never-terminal (returns false), so its tail activates
- *     on every GET exactly as before this fix (ensureSessionTail's own
- *     no-op-on-missing-log-dir guard is what actually keeps its cost at
- *     zero, since 'onboarding' never writes to this naming convention's log
- *     dir in the first place — see ensureSessionTail's doc comment).
+ * Derives, never hand-writes a new list — checked in order:
+ *   1. A descriptor WITH a `turnSpec` (kb-cleanup, authoring) derives its
+ *      terminal set from the turnSpec's own phase table — any phase whose
+ *      row declares `step: 'terminal'` (the ADR-043 state-machine's own
+ *      "this is where it stops" marker, already validated by
+ *      validateSessionKinds to have at least one such row —
+ *      CHECK_TURNSPEC_NO_TERMINAL_PHASE). A rename/addition of a terminal
+ *      phase in studio/session-kinds.yaml is picked up automatically, with
+ *      no code change here.
+ *   2. A descriptor with NO `turnSpec` but WITH a `panel` (W6-B11 widening —
+ *      onboarding, and instructions/demo as a redundant-but-harmless second
+ *      path, see below) derives the SAME way from the panel table's own
+ *      `step: 'terminal'` rows — the exact table `deriveSessionAffordances`
+ *      already reads (`descriptor.turnSpec?.phases ?? descriptor.panel?.phases`),
+ *      so this function and that one now agree on which table is the source
+ *      of truth. This closes onboarding's real gap: its panel table DOES
+ *      carry `{phase:'complete',step:'terminal'}` /
+ *      `{phase:'failed',step:'terminal'}` rows (mirroring
+ *      `writeSessionTerminalPhase`'s own two literal terminal values,
+ *      cli/agent-run.ts) — the prior version of this function had no source
+ *      for onboarding at all and always returned `false` for it. Verified
+ *      behavior-preserving for instructions/demo: both kinds' panel tables
+ *      list EXACTLY the same terminal phases as their
+ *      `LEGACY_SESSION_TERMINAL_PHASES` row (instructions:
+ *      committed/rejected; demo: locked/abandoned) — checked here first for
+ *      symmetry with the "derive from the kind's own declared table" rule,
+ *      but never reached in practice for these two since step 2 already
+ *      matches step 3's answer for them.
+ *   3. A descriptor with NEITHER table (architect, project-brain — the two
+ *      kinds with no panel or turnSpec at all) falls back to
+ *      `LEGACY_SESSION_TERMINAL_PHASES` (cli/bridge-studio.ts) — the SAME
+ *      constant the four legacy list routes import instead of hand-writing
+ *      their own inline literals.
+ *   4. Any OTHER kind with none of the three sources has no terminal-phase
+ *      signal at all — treated as never-terminal (`false`), never a guess.
  */
-function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
-  if (descriptor.turnSpec) {
-    return descriptor.turnSpec.phases.some((p) => p.step === 'terminal' && p.phase === phase);
+export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
+  const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;
+  if (phases !== undefined) {
+    return phases.some((p) => p.step === 'terminal' && p.phase === phase);
   }
   return LEGACY_SESSION_TERMINAL_PHASES[descriptor.id]?.has(phase) ?? false;
 }

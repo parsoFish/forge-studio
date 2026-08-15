@@ -56,6 +56,15 @@
  *     buildKbAttention). This is a REAL brain-lint finding driving the KB
  *     attention row — never a hand-poked count.
  *
+ *   - HOME_SESSION_SID (W6-B11) is a REAL instructions session, seeded via
+ *     the harness's EXISTING `writeInstrStatus`/`cleanInstructionsSession`
+ *     helpers (`scripts/lib/journey-fixtures.mjs` — the same ones knowledge/
+ *     agents journeys already use), anchored under mdtoc (never a scratch
+ *     project of its own) at phase `awaiting-verdict` — a REAL
+ *     `deriveSessionAffordances` verdict affordance, so the Home
+ *     active-sessions strip's needs-you dot is honestly derived. Disjoint
+ *     from sessions-index.mjs's own SESSIONS_INDEX_SID fixture.
+ *
  * Both project directories are brand-new, disposable scratch dirs under
  * `projects/` (never mdtoc's) — `discoverProjects()` (orchestrator/studio/
  * registry.ts) only needs the directory to exist to surface a project row;
@@ -78,7 +87,7 @@
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
-import { FORGE_ROOT, caption, ACT, READ } from '../lib/journey-fixtures.mjs';
+import { FORGE_ROOT, caption, ACT, READ, writeInstrStatus, cleanInstructionsSession } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
 // ── HOME fixture identity — local to this journey, disjoint from every other
@@ -107,6 +116,15 @@ const HOME_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', HOME_ACTIVE_CYCLE_ID);
 export const HOME_LINT_KB = 'home-fixture-lint-kb';
 const HOME_LINT_KB_DIR = join(FORGE_ROOT, 'brain', 'projects', HOME_LINT_KB);
 
+// W6-B11 — a REAL, disjoint instructions session (mdtoc-anchored, the same
+// project every instructions-touching journey already seeds into — never
+// HOME_ACTIVE_PROJECT/HOME_GATED_PROJECT, and never sessions-index.mjs's own
+// SESSIONS_INDEX_SID) proving the Home active-sessions strip renders a real
+// in-flight session. Seeded at `awaiting-verdict` — a REAL
+// deriveSessionAffordances verdict affordance, so the strip's needs-you dot
+// is honestly derived, not a hand-poked flag.
+export const HOME_SESSION_SID = 'home-fixture-active-session';
+
 /** Crash-safe sweep of ALL of this journey's own fixtures — never a tracked
  *  path (`projects/`, `_queue/`, `_logs/`, `brain/projects/home-fixture-lint-kb/`
  *  entries created here are all gitignored scratch), called both as a
@@ -120,6 +138,7 @@ function cleanHomeFixture() {
   try { rmSync(HOME_ACTIVE_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_ACTIVE_LOG_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_LINT_KB_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  cleanInstructionsSession(HOME_SESSION_SID); // W6-B11 — the strip's own session fixture
 }
 
 /** Minimal `.forge/project.json` — just enough for the constellation label
@@ -252,6 +271,9 @@ function writeHomeFixture() {
   writeHomeGatedManifest();
   writeHomeActiveManifest();
   writeHomeLintKbFixture();
+  // W6-B11 — the active-sessions strip's own fixture (see HOME_SESSION_SID's
+  // header comment above).
+  writeInstrStatus(HOME_SESSION_SID, { phase: 'awaiting-verdict', round: 2 });
 }
 
 /** goto `/` and wait for the real readiness signal — never a fixed sleep. */
@@ -332,6 +354,31 @@ export const journey = defineJourney({
         const ledgerCount = await page.evaluate(() =>
           parseInt(document.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0', 10));
         check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
+
+        // W6-B11 — the active-sessions strip (IA-4's marked slot): a real
+        // in-flight session (HOME_SESSION_SID, seeded above at
+        // `awaiting-verdict`) renders its own card, needs-you flagged via a
+        // REAL deriveSessionAffordances verdict affordance — never a
+        // fabricated dot.
+        const stripCount = await page.locator('section[data-section="active-sessions"]').count();
+        check(stripCount === 1, `HOME.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+        const stripAttrs = await page.evaluate(() => {
+          const el = document.querySelector('[data-section="active-sessions"]');
+          return el ? {
+            count: el.getAttribute('data-active-session-count'),
+            needsYou: el.getAttribute('data-needs-you-count'),
+          } : null;
+        });
+        check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `HOME.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
+        check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `HOME.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+        const seededCard = await page.evaluate((sid) => {
+          const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
+          return el ? { kind: el.getAttribute('data-session-kind'), needsYou: el.getAttribute('data-needs-you') } : null;
+        }, HOME_SESSION_SID);
+        check(seededCard?.kind === 'instructions', `HOME.1: the seeded session's own card renders with the real kind (got "${seededCard?.kind}")`);
+        check(seededCard?.needsYou === 'true', `HOME.1: the seeded card is flagged needs-you (got "${seededCard?.needsYou}")`);
+        const overflowHref = await page.evaluate(() => document.querySelector('[data-action="view-all-sessions"]')?.getAttribute('href') ?? null);
+        check(overflowHref === '/sessions', `HOME.1: the strip's overflow link targets the real /sessions index (got "${overflowHref}")`);
 
         await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
       },

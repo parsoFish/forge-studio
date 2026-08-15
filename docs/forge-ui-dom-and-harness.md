@@ -150,7 +150,72 @@ inventory rather than one shared page-level contract:
     `undefined` (every flow-ledger.ts row) -> `flow`; any agent-sourced
     `linkKind` (`flow-node`/`standalone`/`session`) -> `agent` — plus a
     visible `[data-ledger-kind-badge]` chip.
-  Journey coverage: `scripts/journeys/home.mjs`.
+  - `section[data-section="active-sessions"][data-active-session-count]
+    [data-needs-you-count]` (W6-B11, the IA-4 marked slot) — the aggregate
+    in-flight-sessions strip, rendered ONLY when at least one session is
+    in flight (the same "never on mere existence" rule the attention strip
+    above follows). Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
+    `fetchStudioSessions()` (`?active=1` default — operator-locked,
+    in-flight sessions ONLY, never terminal history), folded into the same
+    `loadAll` `Promise.all` and refetched on the SAME debounced
+    `cycle-list-changed` WS handler as `runs` (one shared debounce, not a
+    second timer — see the hook's own header). Derivation:
+    `home-view.ts`'s `buildHomeSessionsStrip(sessions)` — a pure `.slice`
+    to `HOME_SESSIONS_STRIP_LIMIT` (4) cards, trusting the bridge's own
+    needs-you-first-then-newest sort (never re-sorted client-side);
+    `needsYouCount`/`totalCount` are counted over the FULL set, not just the
+    4-card slice, so the header stays honest once needs-you sessions exceed
+    the card budget. Header: an "N need you" pill (present only when
+    `needsYouCount>0`) plus `a[data-action="view-all-sessions"]
+    href="/sessions"` reading "all sessions (N) →". Each card:
+    `a[data-session-card][data-session-kind][data-session-phase]
+    [data-needs-you]`, linking to the session's own `href` (the SAME
+    `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
+    carries); a needs-you card additionally renders a `.status-dot
+    [data-status="retrying"]` visual indicator (styling only — the DOM
+    contract attribute is `data-needs-you`, never the dot's own frame value).
+  Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
+  a real instructions session via the harness's existing
+  `writeInstrStatus`/`cleanInstructionsSession` helpers, `HOME_SESSION_SID`)
+  + `scripts/journeys/sessions-index.mjs` (the strip's own overflow-link
+  entry point into `/sessions`, below).
+- **Sessions `/sessions`** (W6-B11) — the aggregate in-flight sessions index.
+  Deliberately NOT a `StudioNav` pillar (operator decision — the six-pillar
+  nav stays closed); reached from Home's active-sessions strip header (above)
+  and from a secondary-nav link on the Agents index
+  (`a[data-nav="sessions-secondary"]`, `components/studio/AgentsIndexView.tsx`,
+  next to the "+ New agent" CTA). Data: `GET /api/studio/sessions?active=1`
+  (`cli/ui-bridge.ts`'s `handleStudioSessionsIndex` — flattens every
+  registered session kind, `studio/session-kinds.yaml`, across every
+  project; the four legacy kinds — architect/instructions/demo/project-brain
+  — reuse their OWN existing `list*Sessions` readers verbatim, no second
+  scanner; every other kind — onboarding/authoring/kb-cleanup — falls
+  through to a generic per-segment-guarded directory scan. Rows carry
+  `{kind, sessionId, project, phase, terminal, needsYou, modelTier,
+  updatedAt, href}`, sorted needs-you-first-then-newest and capped to the
+  newest 200 (`SESSION_INDEX_MAX_ROWS`) by `sortAndCapSessionIndexRows`).
+  Root: `main[data-page="sessions-index"][data-page-ready]
+  [data-session-count]`. Non-empty state: `section[data-section=
+  "sessions-table"][data-session-count]` wrapping a table — one
+  `tr[data-session-kind][data-session-phase][data-needs-you]` per session,
+  columns kind/project/phase(+needs-you dot)/model tier/updated/
+  `a[data-action="resume-session"]` ("Resume →", the row's own `href`).
+  Rows render in the SAME order the bridge returned them — this page never
+  re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
+  false flash before the first fetch resolves):
+  `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
+  kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
+  kickoff kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
+  kb-cleanup/authoring) plus architect's bespoke native entry
+  (`/architect/new` — ADR-043 amendment §4, architect never gets a generic
+  kickoff row). Split: `components/studio/SessionsIndex.tsx`'s
+  `SessionsIndexBody` is the pure, props-driven presentational component
+  (render-tested via `lib/sessions-index-render.test.ts`, the same
+  `renderToStaticMarkup` + `next/navigation` mock pattern as
+  `ProjectsIndexBody`); `app/sessions/page.tsx` is the thin fetch-owning
+  wrapper. Journey coverage: `scripts/journeys/sessions-index.mjs` (entry
+  point: Home's strip overflow link, per the entry-point rule — never opens
+  mid-flow on `/sessions` itself).
 - **Library `/library`** — SHELVES ONLY (W6-IA-4 rebuild, 2026-08-15): the
   reusable building blocks every agent and flow composes from, NOT a
   dashboard. `[data-page="library"][data-page-ready]`. The OLD landing page

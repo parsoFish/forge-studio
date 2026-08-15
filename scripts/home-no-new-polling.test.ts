@@ -49,6 +49,15 @@ const HOME_VIEW = join(ROOT, 'forge-ui', 'lib', 'home-view.ts');
 // The closed set of data-fetch identifiers the extracted hook is allowed to
 // call — no new one — so "new /api endpoint" and "bespoke fetch" are
 // structurally ruled out rather than merely discouraged.
+//
+// W6-B11: `fetchStudioSessions` was deliberately ADDED to this closed set —
+// not a loophole in the guard, the guard's own maintenance contract. It is
+// the EXISTING W6-B11 aggregate-sessions bridge route (`GET /api/studio/
+// sessions`, cli/ui-bridge.ts), composed here exactly like the other six
+// `fetchStudio*`/`fetchRuns`/`fetchProjectAttention` reads — never a raw
+// fetch, never a hardcoded path inside this hook (the path literal lives
+// inside `fetchStudioSessions` itself, in ./studio-client, same as every
+// other read's path lives inside its own wrapper).
 const ALLOWED_FETCH_IDENTIFIERS = [
   'fetchStudioFlows',
   'fetchStudioAgents',
@@ -56,6 +65,7 @@ const ALLOWED_FETCH_IDENTIFIERS = [
   'fetchStudioKbs',
   'fetchRuns',
   'fetchProjectAttention',
+  'fetchStudioSessions',
   'subscribe',
 ] as const;
 

@@ -32,6 +32,10 @@ import {
   // the AT-F1-1 test goes red, on its explicit `typeof … === 'function'`
   // guard.
   fetchContractStages,
+  // W6-B11 — the aggregate sessions-index client read, same
+  // "not-yet-exported resolves to undefined" RED convention as
+  // fetchContractStages/AT-F1-1 above.
+  fetchStudioSessions,
   // zyc review finding 1/2: same "not yet exported" RED convention as
   // AT-F1-1 above — pre-fix, both resolve to `undefined`, so calling either
   // throws a genuine "is not a function" RED rather than silently no-op-ing.
@@ -905,6 +909,48 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
   // verbatim (parseContractStageRow round-trips stage/status/source/detail/
   // bytes). A re-derived or renamed client mirror would diverge here.
   expect(rows).toEqual(CAPTURED_CONTRACT_STAGES.stages);
+});
+
+// ---------------------------------------------------------------------------
+// W6-B11 — fetchStudioSessions: the client read for the aggregate in-flight
+// sessions index (cli/ui-bridge.ts's GET /api/studio/sessions).
+// ---------------------------------------------------------------------------
+
+const SESSION_INDEX_ROWS = [
+  {
+    kind: 'instructions', sessionId: '2026-08-02T11-00-00', project: 'gitpulse', phase: 'awaiting-verdict',
+    terminal: false, needsYou: true, modelTier: 'sonnet', updatedAt: '2026-08-02T11:00:00.000Z',
+    href: '/sessions/instructions/2026-08-02T11-00-00?project=gitpulse',
+  },
+];
+
+test('fetchStudioSessions() defaults to ?active=1 (operator-locked: in-flight sessions only) and parses the wire rows verbatim', async () => {
+  expect(typeof fetchStudioSessions, 'fetchStudioSessions is not exported from ./studio-client yet').toBe('function');
+
+  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: SESSION_INDEX_ROWS }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const rows = await fetchStudioSessions();
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/sessions?active=1`);
+  expect(rows).toEqual(SESSION_INDEX_ROWS);
+});
+
+test('fetchStudioSessions(false) fetches the unfiltered index (no ?active= query)', async () => {
+  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: [] }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  await fetchStudioSessions(false);
+
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/sessions`);
+});
+
+test('fetchStudioSessions() degrades to [] (never throws) when the bridge responds non-2xx', async () => {
+  const fetchSpy = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'boom' }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  await expect(fetchStudioSessions()).resolves.toEqual([]);
 });
 
 // ---------------------------------------------------------------------------

@@ -191,6 +191,7 @@
  * create-and-destroy-its-own-throwaway-fixture precedent.
  */
 import { journey as home } from './home.mjs';
+import { journey as sessionsIndex } from './sessions-index.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
@@ -209,6 +210,7 @@ import { journey as community } from './community.mjs';
 
 export const JOURNEYS = [
   home,
+  sessionsIndex,
   skills,
   hooks,
   templates,
@@ -231,6 +233,15 @@ export const RUN_ORDER = [
   ['home', 'home-projects-index'],
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
+
+  // W6-B11 — self-contained (its own disjoint instructions-session fixture,
+  // seeded/swept entirely within its own two beats); runs right after home
+  // (the "home first" constraint home.mjs's own header documents) and before
+  // every other journey, which is the earliest point that preserves both of
+  // this registry's two hard orderings (stand-up-onboard before flows-author;
+  // flows-run before roadmap) untouched.
+  ['sessions-index', 'sessions-index-home-strip'],
+  ['sessions-index', 'sessions-index-overflow'],
 
   ['skills', 'skills-library'],
   ['skills', 'skills-detail-package'],

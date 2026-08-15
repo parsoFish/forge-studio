@@ -87,6 +87,16 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
               {agents.length}
             </span>
             <span style={{ flex: 1 }} />
+            {/* W6-B11 — Sessions is deliberately NOT its own top-level pillar
+                (operator decision); this is its secondary-nav entry point
+                alongside Home's active-sessions strip. */}
+            <a
+              href="/sessions"
+              data-nav="sessions-secondary"
+              style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', textDecoration: 'none', marginRight: 4 }}
+            >
+              Sessions →
+            </a>
             <a className="btn btn-primary" href="/agents/new" data-action="new-agent" style={{ textDecoration: 'none' }}>
               + New agent
             </a>

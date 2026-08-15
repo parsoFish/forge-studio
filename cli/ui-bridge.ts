@@ -63,6 +63,8 @@ import {
   CSRF_HEADER,
   SAFE_ID_RE,
   LEGACY_SESSION_TERMINAL_PHASES,
+  pathOnly,
+  parseQuery,
 } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import {
@@ -76,7 +78,7 @@ import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason, isTerminalPhase } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -146,7 +148,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds, deriveSessionAffordances, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -1169,6 +1171,239 @@ function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logs
   return rows;
 }
 
+// ---------------------------------------------------------------------------
+// W6-B11 — GET /api/studio/sessions, the aggregate in-flight sessions index
+// backing the /sessions page + Home's active-sessions strip.
+// ---------------------------------------------------------------------------
+
+/** One row of the aggregate `GET /api/studio/sessions` index: every in-flight
+ *  (or, without `?active=1`, every) interactive session across ALL registry
+ *  kinds and every project, flattened to the fields the /sessions index page
+ *  + Home's active-sessions strip both need. */
+export type SessionIndexRow = {
+  kind: string;
+  sessionId: string;
+  project: string;
+  phase: string;
+  /** Derived via `isTerminalPhase` (cli/bridge-studio-sessions.ts) — the
+   *  SAME derivation the single-session route's tail-gating already uses,
+   *  never a second, hand-kept terminal-phase notion. */
+  terminal: boolean;
+  /** True iff `deriveSessionAffordances(descriptor, phase).length > 0` — a
+   *  derivable operator affordance exists at this phase, never re-derived a
+   *  second way. Architect (no turnSpec/panel table at all) is always
+   *  `false` here, matching the single-session route's own `affordances: []`
+   *  for that kind (ADR-043 amendment §4, "permanently bespoke"). */
+  needsYou: boolean;
+  modelTier: string | null;
+  /** ISO timestamp of the session's last known write, or `''` — honest-absent,
+   *  never fabricated — when the kind's status.json carries no timestamp
+   *  field at all (kb-cleanup's shape today). */
+  updatedAt: string;
+  href: string;
+};
+
+/** Bound on `GET /api/studio/sessions`' response — an unbounded number of
+ *  on-disk sessions (every project x every kind, for the lifetime of the
+ *  forge instance) must never balloon the response; 200 comfortably covers
+ *  any realistic in-flight count for the "one operator, many side projects"
+ *  shape this platform is built around. Rows are sorted needs-you-first-
+ *  then-newest (`sortAndCapSessionIndexRows`) BEFORE this cap is applied, so
+ *  a capped response favours keeping needs-you rows over stale passive ones. */
+export const SESSION_INDEX_MAX_ROWS = 200;
+
+/** Generic phase/model/timestamp read for a session-kind with no dedicated
+ *  per-kind list route (onboarding, authoring, kb-cleanup, and any future
+ *  kind registered the same way) — the SAME guarded choke point
+ *  (`resolveGuardedPath`) `readGuardedSessionStatus` (above) uses, just
+ *  widened to the extra fields the aggregate index needs; not a second,
+ *  independently-invented containment mechanism. `updatedAt` prefers
+ *  `updated_at` (the four legacy kinds' own field name, in case a future
+ *  kind reuses it), falls back to `startedAt` (onboarding's/authoring's own
+ *  field — `writeOnboardingSession`/`writeAuthoringSession`, this file), and
+ *  is `''` — honest-absent, never fabricated — when neither exists
+ *  (kb-cleanup's status.json carries no timestamp field at all today). */
+function readGuardedSessionIndexSummary(
+  projectsRoot: string,
+  project: string,
+  kindDirName: string,
+  sessionId: string,
+): { phase: string; modelTier: string | null; updatedAt: string } | null {
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
+  if (!guarded.ok || !guarded.exists) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(guarded.realPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.phase !== 'string') return null;
+  return {
+    phase: obj.phase,
+    modelTier: typeof obj.modelTier === 'string' ? obj.modelTier : null,
+    updatedAt: typeof obj.updated_at === 'string' ? obj.updated_at : typeof obj.startedAt === 'string' ? obj.startedAt : '',
+  };
+}
+
+/**
+ * `GET /api/studio/sessions`' row collector: flattens EVERY registered
+ * session kind (`studio/session-kinds.yaml` via `loadSessionKinds` — never a
+ * hardcoded kind list, so a new registry kind needs no code change here)
+ * across every on-disk project into one row set.
+ *
+ * The four kinds with their OWN per-kind list route/reader
+ * (architect/instructions/demo/project-brain) reuse THAT reader verbatim —
+ * `listArchitectSessions` / `listInstructionsSessions` / `listDemoSessions` /
+ * `listProjectBrainSessions`, the exact functions `GET /api/architect/
+ * sessions` etc. already call — never a second, independently-written scan
+ * of the same on-disk shape. Every OTHER kind (onboarding, authoring,
+ * kb-cleanup today; any future kind added the same way) has no bespoke list
+ * route (bridge-studio-sessions.ts's own header note: the generic
+ * session-detail GET is authoring/kb-cleanup's ONLY read route) — those fall
+ * through to the generic per-segment-guarded directory scan below, which
+ * mirrors `collectSessionRows`'s own directory-enumeration shape immediately
+ * above in this file (readdirSync of REAL, on-disk project names — never
+ * request-derived — with the per-session STATUS READ routed through the SAME
+ * `resolveGuardedPath` choke point every other guarded session read in this
+ * file uses).
+ *
+ * `kind` never comes from a request — every row's `kind` is a registry
+ * descriptor id from `loadSessionKinds`, so this route has no kind-id
+ * traversal surface at all (unlike the single-session GET, whose `kind` path
+ * segment IS request-derived and validated against the registry).
+ */
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string }): SessionIndexRow[] {
+  const descriptors = loadSessionKinds(ctx.forgeRoot);
+  const rows: SessionIndexRow[] = [];
+
+  const pushRow = (
+    descriptor: SessionKindDescriptor,
+    sessionId: string,
+    project: string,
+    phase: string,
+    modelTier: string | null,
+    updatedAt: string,
+  ): void => {
+    rows.push({
+      kind: descriptor.id,
+      sessionId,
+      project,
+      phase,
+      terminal: isTerminalPhase(descriptor, phase),
+      needsYou: deriveSessionAffordances(descriptor, phase).length > 0,
+      modelTier,
+      updatedAt,
+      href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
+    });
+  };
+
+  for (const descriptor of descriptors) {
+    if (descriptor.id === 'architect') {
+      for (const s of listArchitectSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'instructions') {
+      for (const s of listInstructionsSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'demo') {
+      for (const s of listDemoSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'project-brain') {
+      for (const s of listProjectBrainSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else {
+      const kindDirName = `_${descriptor.id}`;
+      let projects: string[];
+      try {
+        projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
+      } catch {
+        projects = [];
+      }
+      for (const project of projects) {
+        const kindDir = join(ctx.projectsRoot, project, kindDirName);
+        if (!existsSync(kindDir)) continue;
+        let sessionIds: string[];
+        try {
+          sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+        } catch {
+          continue;
+        }
+        for (const sessionId of sessionIds) {
+          if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors collectSessionRows
+          const summary = readGuardedSessionIndexSummary(ctx.projectsRoot, project, kindDirName, sessionId);
+          if (summary === null) continue; // unreadable/missing/escaping/hardlinked -> not a real session row
+          pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt);
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/** Deterministic ordering + bound for the aggregate sessions index —
+ *  needs-you rows first, then newest-`updatedAt` first within each group;
+ *  capped to the newest `cap` rows. Pure (no I/O), so it is unit-testable in
+ *  isolation from the filesystem (ADR 042's "a pure function with an
+ *  explicit error contract may be exported for direct tests" boundary).
+ *  ISO-8601 timestamps compare correctly as plain strings; a `''`
+ *  honest-absent `updatedAt` (kb-cleanup's shape today) sorts LAST within its
+ *  needsYou group — an empty string is always lexically smaller than any real
+ *  timestamp — never mistaken for "newest". */
+export function sortAndCapSessionIndexRows(
+  rows: readonly SessionIndexRow[],
+  cap: number = SESSION_INDEX_MAX_ROWS,
+): SessionIndexRow[] {
+  return [...rows]
+    .sort((a, b) => {
+      if (a.needsYou !== b.needsYou) return a.needsYou ? -1 : 1;
+      if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
+      return 0;
+    })
+    .slice(0, cap);
+}
+
+/**
+ * GET /api/studio/sessions[?active=1] — the aggregate sessions index backing
+ * the /sessions page + Home's active-sessions strip. No path segments
+ * (distinguishes it from `GET /api/studio/sessions/:kind/:id`,
+ * bridge-studio-sessions.ts's single-session route — that regex requires
+ * exactly two further path segments, this route requires none). Read-only —
+ * covered by BRIDGE_ROUTE_CLASSIFICATION's blanket `{method:'GET',
+ * route:'*'}` row (cli/dry-bridge.ts); no per-route table entry is needed
+ * for a GET.
+ *
+ * `?active=1` filters to non-terminal rows only — the shape the /sessions
+ * page and Home strip both request (operator-locked: in-flight sessions
+ * ONLY, never terminal history). Omitting the query param returns every row
+ * (terminal included), kept for testability and any future consumer that
+ * genuinely wants the unfiltered set.
+ */
+async function handleStudioSessionsIndex(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'GET' || pathOnly(url) !== '/api/studio/sessions') return false;
+  const origin = allowedOrigin(req);
+  try {
+    const activeOnly = parseQuery(url).get('active') === '1';
+    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
+    const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
+    const sessions = sortAndCapSessionIndexRows(filtered);
+    sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+  }
+  return true;
+}
+
 async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1436,6 +1671,11 @@ async function handleHttp(
   // instructions/demo-builder/project-brain); ensureSessionTail must be
   // threaded through here to close bd forge-2ee's "no consumer reads the
   // authoring spine's events dir" half.
+  // W6-B11 — the aggregate sessions-index GET. Checked before the
+  // single-session route immediately below: distinct URL shapes (no path
+  // segments vs exactly two), so ordering doesn't affect matching, but this
+  // keeps the two GET /api/studio/sessions... routes textually adjacent.
+  if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
