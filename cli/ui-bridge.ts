@@ -78,6 +78,7 @@ import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
+import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -1435,6 +1436,18 @@ async function handleHttp(
   // threaded through here to close bd forge-2ee's "no consumer reads the
   // authoring spine's events dir" half.
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
+  // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
+  // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
+  // module's own function) rather than imported by bridge-studio-affordances.ts
+  // — see that file's own header for why (bridge-studio-*.ts modules never
+  // import FROM ui-bridge.ts).
+  if (await handleStudioAffordanceRoutes(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    spawnAgentTurn,
+    broadcastInstructionsChanged: ctx.broadcastInstructionsChanged,
+    broadcastDemoChanged: ctx.broadcastDemoChanged,
+  }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -2097,7 +2110,14 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
  *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
  *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
  *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
-function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
+// Exported (W6-B4) so cli/bridge-studio-affordances.ts's generic session-
+// affordance write endpoint can DELEGATE to this SAME spawn helper instead of
+// reimplementing it, injected via its AffordanceRouteContext (mirrors
+// SessionsRouteContext's ensureSessionTail injection, cli/bridge-studio-
+// sessions.ts) — bridge-studio-*.ts modules never import FROM ui-bridge.ts
+// (see that file's own header for the reasoning), so this stays exported and
+// passed by reference at the wiring call site, never imported directly.
+export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(sessionId)) {
     console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
