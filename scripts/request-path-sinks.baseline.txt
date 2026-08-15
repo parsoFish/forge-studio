@@ -114,7 +114,7 @@ cli/reflect-reconcile.ts readFileSync 2
 cli/reflect-reconcile.ts statSync 1
 cli/run-list-cache.ts existsSync 2
 cli/run-list-cache.ts readdirSync 2
-cli/run-list-cache.ts readFileSync 1
+cli/run-list-cache.ts readFileSync 2
 cli/run-list-cache.ts statSync 2
 cli/skill-staging.ts mkdirSync 1
 cli/skill-staging.ts writeFileSync 1

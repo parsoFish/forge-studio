@@ -829,7 +829,21 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
   };
 }
 
-function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
+/**
+ * Build the degraded placeholder Run for a manifest that failed to parse
+ * (corrupt YAML frontmatter, unreadable file, …) — pure, total, no I/O of
+ * its own; `state` alone picks the reported status via the same
+ * queue-dir→RunStatus table `aggregateRunWithMapping` uses. `listRuns`
+ * below calls this in its per-file catch so one bad manifest degrades
+ * instead of crashing the whole list.
+ *
+ * ADR-042 disclosure: exported per the ratified boundary "a pure function
+ * with an explicit error contract may be exported for direct tests" — its
+ * second caller is `cli/run-list-cache.ts`'s `deriveFresh` fail path, which
+ * needs the IDENTICAL degraded shape `listRuns` produces rather than a
+ * hand-duplicated twin that can drift from this one.
+ */
+export function makeDegradedRun(initiativeId: string, state: QueueState, _manifestPath: string): Run {
   return {
     id: initiativeId,
     flowId: FALLBACK_FLOW_ID,
