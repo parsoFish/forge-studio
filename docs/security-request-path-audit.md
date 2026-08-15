@@ -361,6 +361,27 @@ caller string. `--write`-accepted below (baseline: `existsSync` 0→3, `mkdirSyn
 0→1, `readdirSync` 0→1, `readFileSync` 0→2, `writeFileSync` 0→1, all in this one
 new file).
 
+**Review-fix addendum (atomicity, `renameSync` 0→1).** A reviewer pass on this
+branch flagged `writeKbDrainStatus`'s plain `writeFileSync` onto the FINAL
+`status.json` path as a torn-read risk: the GET routes above are polled by a
+separate caller turn every ~100-250ms while the in-flight drain writes a new
+snapshot every round, and a `writeFileSync` is not one atomic syscall for a
+multi-field JSON blob — a concurrent reader could observe a partially-written
+file. Fixed to this repo's own established convention
+(`cli/bridge-studio-runs.ts`'s manifest-move: `writeFileSync(tmpPath, …)` then
+`renameSync(tmpPath, toPath)`): `writeKbDrainStatus` now writes to
+`` `${finalPath}.tmp` `` first, then `renameSync`s it onto `finalPath`.
+`renameSync` is not in `RAW_FS_SINKS` (`check-raw-fs-guarded.mjs` only tracks
+the six `readFileSync|writeFileSync|readdirSync|existsSync|statSync|mkdirSync`
+names), so this needs no new ALLOWLIST row there — but it IS a new sink name
+for `check-request-path-sinks.mjs`'s ratchet (a plain call-count tripwire, no
+dataflow). The `tmpPath`/`finalPath` construction carries the IDENTICAL
+TRUSTED-AT-CONSTRUCTION `runId` trust chain as the `writeFileSync` row directly
+above (same function, same call, same `logDir`) — not a new taint source, just
+a new sink NAME the ratchet had not seen from this file before.
+`--write`-accepted (baseline: `renameSync` 0→1, `cli/bridge-studio-kb-drain.ts`
+only).
+
 ### Fixed in R4-16 — the four `/start` routes' `projectRepoPath`
 
 Recorded here because leaving the row below in "unguarded" after R4-16 shipped

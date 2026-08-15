@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -216,6 +216,115 @@ test('runKbDrain: FAILED when the loop itself throws unexpectedly (not a single 
   assert.equal(onDisk.state, 'failed');
 });
 
+test('runKbDrain: a throw in the INITIAL persist (before the round loop even starts) still reaches an on-disk "failed" terminal — not silent-forever "running"', async () => {
+  // Reviewer HIGH finding: the initial persist/emit used to sit OUTSIDE the
+  // try, so a throw there rejected runKbDrain and enqueueConsolidate's queue
+  // continuation swallowed it, leaving status.json at 'running' forever. A
+  // plain filesystem fault can't isolate "first persist call fails, the
+  // catch-block's recovery persist succeeds" — both target the identical
+  // on-disk path — so this uses the persistStatus DI seam to fail ONLY the
+  // first call.
+  const { root } = makeDrainRoot('initcrash-kb');
+  const runId = 'initcrash-kb-drain-t1';
+  let calls = 0;
+  const opts: KbDrainOpts = {
+    persistStatus: (forgeRoot, rid, status) => {
+      calls += 1;
+      if (calls === 1) throw new Error('synthetic initial-persist crash');
+      // Recovery call: a plain direct write (this test's own stub — NOT the
+      // real atomic writer under test; see the dedicated atomicity test for
+      // that).
+      const dir = join(forgeRoot, '_logs', `_kb-drain-${rid}`);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'status.json'), JSON.stringify(status), 'utf8');
+    },
+  };
+  const status = await runKbDrain(root, 'initcrash-kb', runId, opts);
+  assert.equal(calls, 2, 'expected exactly 2 persist attempts: the failed initial one, then the catch-block recovery');
+  assert.equal(status.state, 'failed', JSON.stringify(status));
+  const onDisk = JSON.parse(
+    readFileSync(join(root, '_logs', `_kb-drain-${runId}`, 'status.json'), 'utf8'),
+  ) as KbDrainStatus;
+  assert.equal(onDisk.state, 'failed', 'the on-disk status.json must ALSO reflect failed — what a poller/GET route actually reads');
+});
+
+test("runKbDrain: if EVEN the crash-recovery persist throws, the failure is RETHROWN — never silently swallowed into a fabricated success", async () => {
+  const { root } = makeDrainRoot('doublecrash-kb');
+  const opts: KbDrainOpts = {
+    persistStatus: () => {
+      throw new Error('synthetic persist crash (always fails)');
+    },
+  };
+  await assert.rejects(
+    () => runKbDrain(root, 'doublecrash-kb', 'doublecrash-kb-drain-t1', opts),
+    /synthetic persist crash/,
+    'expected runKbDrain to REJECT (not silently resolve) when even the recovery persist fails — the last line of defense against a silent-forever status',
+  );
+});
+
+test('runKbDrain: NO-PROGRESS via cumulative oscillation — a round\'s after-state repeating a PRIOR round\'s after-state stops the drain even though something changes every round (A→B→A stops at round 3, not the round-cap)', async () => {
+  const { root, brainDir } = makeDrainRoot('oscillate-kb');
+  const seed = fixtureFinding(brainDir, 'seed', 'agent');
+  const a = fixtureFinding(brainDir, 'state-a', 'agent');
+  const b = fixtureFinding(brainDir, 'state-b', 'agent');
+  // round1: before=seed, after=A  (A never seen before -> not oscillating)
+  // round2: before=A,    after=B  (B never seen before -> not oscillating)
+  // round3: before=B,    after=A  (A WAS seen, in round1's after -> oscillating)
+  // Note before(N) != after(N) in every round, so the pre-existing SAME-round
+  // no-progress check never fires either — only the NEW cumulative check can
+  // catch this.
+  const opts: KbDrainOpts = {
+    lint: scriptedLint([[seed], [a], [a], [b], [b], [a]]),
+    applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [] }),
+    runFixTurn: neverFixTurn(),
+  };
+  const status = await runKbDrain(root, 'oscillate-kb', 'oscillate-kb-drain-t1', opts);
+  assert.equal(status.state, 'no-progress', JSON.stringify(status));
+  assert.equal(
+    status.round,
+    3,
+    `expected oscillation to be caught at round 3 (not the ${KB_DRAIN_MAX_ROUNDS}-round cap), got round ${status.round}`,
+  );
+});
+
+test('runKbDrain: under FORGE_DRY_BRIDGE=1, the configured runFixTurn is NEVER called (spy = zero calls) — the auto-fix loop still runs, terminal state stays honest', async () => {
+  const { root, brainDir } = makeDrainRoot('drybridge-kb');
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const stuck = fixtureFinding(brainDir, 'stuck-under-dry-bridge', 'agent');
+    let spyCalls = 0;
+    let autoFixCalls = 0;
+    const opts: KbDrainOpts = {
+      lint: scriptedLint([[stuck], [stuck]]),
+      applyAutoFixes: () => {
+        autoFixCalls += 1;
+        return { ...EMPTY_AUTO_RESULT, remaining: [stuck] };
+      },
+      runFixTurn: async (input) => {
+        spyCalls += 1;
+        // If this were ever actually invoked it would falsely clear the
+        // finding and blow the cost budget — the assertions below prove it
+        // never runs under dry-bridge, defense-in-depth even for an
+        // explicitly-configured (not just the default) turn function.
+        return { runId: input.runId, cleared: true, costUsd: 5 };
+      },
+    };
+    const status = await runKbDrain(root, 'drybridge-kb', 'drybridge-kb-drain-t1', opts);
+    assert.equal(spyCalls, 0, 'expected runFixTurn to be called ZERO times under FORGE_DRY_BRIDGE=1');
+    assert.ok(autoFixCalls >= 1, 'expected the local auto-fix/lint loop to still run under dry-bridge (not a whole-route refusal)');
+    assert.equal(status.costUsd, 0, 'no cost may accrue when the turn is never dispatched');
+    // Honest terminal: the finding never actually cleared (identical before
+    // and after — it was never touched) — no-progress, NOT a fabricated green.
+    assert.equal(status.state, 'no-progress', JSON.stringify(status));
+    const agentEntry = status.perFinding.find((f) => f.tier === 'agent');
+    assert.equal(agentEntry?.outcome, 'not-cleared');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
 test('runKbDrain: a single turn throwing is caught and recorded not-cleared, without aborting the round', async () => {
   const { root, brainDir } = makeDrainRoot('turnthrow-kb');
   const f1 = fixtureFinding(brainDir, 'throws', 'agent');
@@ -258,6 +367,23 @@ test('runKbDrain: status.json is written per round (survives nav-away) with roun
   const events = readFileSync(eventsPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { message?: string });
   assert.ok(events.some((e) => e.message === 'kb-drain.start'));
   assert.ok(events.some((e) => e.message?.startsWith('kb-drain.end')));
+});
+
+test('writeKbDrainStatus is atomic (temp+rename): no leftover .tmp file after a completed run — a mid-write reader can only ever see the fully-written prior or fully-written new file, never a truncated one', async () => {
+  const { root } = makeDrainRoot('atomic-kb');
+  const runId = 'atomic-kb-drain-t1';
+  const status = await runKbDrain(root, 'atomic-kb', runId, {
+    lint: scriptedLint([[], []]),
+    applyAutoFixes: () => EMPTY_AUTO_RESULT,
+    runFixTurn: neverFixTurn(),
+  });
+  assert.equal(status.state, 'green');
+  const dir = join(root, '_logs', `_kb-drain-${runId}`);
+  assert.ok(existsSync(join(dir, 'status.json')), 'expected the final status.json to exist');
+  assert.ok(
+    !existsSync(join(dir, 'status.json.tmp')),
+    'expected NO leftover .tmp file — renameSync must have replaced the final path atomically, in one step, every round',
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -324,21 +450,58 @@ test('POST /api/studio/kbs/:id/drain — dispatches (200 + runId) and reaches GR
   }
 });
 
-test('POST /api/studio/kbs/:id/drain — 409 when a drain is already active for the kb (immediate re-dispatch)', async () => {
+test('POST /api/studio/kbs/:id/drain — genuine concurrent dispatch: exactly one 200 + one 409, both naming the SAME runId, exactly one status dir', async () => {
+  // Reviewer LOW finding: fire both requests via Promise.all (not sequential
+  // await-then-await) so this actually exercises the race, not just ordering.
+  // Reliable-by-construction, not merely "usually passes": the 409-check +
+  // the initial status write are FULLY SYNCHRONOUS (no `await` between them)
+  // inside the route handler, so once ONE request's execution enters that
+  // section it runs to completion before the other's can — Node's
+  // single-threaded event loop cannot interleave mid-synchronous-section.
+  // Exactly one request is therefore guaranteed to see "no active run" and
+  // win; the other always sees the winner's freshly-written status and 409s.
   const iso = await makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   try {
-    seedCleanKb(iso.root, 'clean-beta');
-    const first = await postJson(iso.url, '/api/studio/kbs/clean-beta/drain');
-    assert.equal(first.status, 200, JSON.stringify(first.json));
-    const second = await postJson(iso.url, '/api/studio/kbs/clean-beta/drain');
-    assert.equal(second.status, 409, JSON.stringify(second.json));
-    assert.equal(second.json['runId'], first.json['runId']);
-    // Drain the queue so the process doesn't have a dangling in-flight run.
-    await pollDrainTerminal(iso.url, 'clean-beta', first.json['runId'] as string);
+    seedCleanKb(iso.root, 'clean-concurrent');
+    const [a, b] = await Promise.all([
+      postJson(iso.url, '/api/studio/kbs/clean-concurrent/drain'),
+      postJson(iso.url, '/api/studio/kbs/clean-concurrent/drain'),
+    ]);
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
+    assert.deepEqual(
+      statuses,
+      [200, 409],
+      `expected exactly one 200 and one 409, got ${JSON.stringify(statuses)} — responses: ${JSON.stringify([a.json, b.json])}`,
+    );
+    const winner = a.status === 200 ? a : b;
+    const loser = a.status === 200 ? b : a;
+    assert.equal(loser.json['runId'], winner.json['runId'], 'the 409 must report the SAME runId as the winning dispatch');
+
+    // Exactly one status dir on disk — no split-brain double-dispatch.
+    const dirs = readdirSync(join(iso.root, '_logs')).filter((d) => d.startsWith('_kb-drain-clean-concurrent-drain-'));
+    assert.equal(dirs.length, 1, `expected exactly one drain log dir, got ${JSON.stringify(dirs)}`);
+
+    await pollDrainTerminal(iso.url, 'clean-concurrent', winner.json['runId'] as string);
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+test('GET /api/studio/kbs/:id/drain/:runId — a corrupted status.json is read null-safe (404, not a 500 crash)', async () => {
+  const iso = await makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'corrupt-kb');
+    const runId = 'corrupt-kb-drain-deadbeef';
+    const dir = join(iso.root, '_logs', `_kb-drain-${runId}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'status.json'), '{ this is not valid json,,, ', 'utf8');
+    const res = await getJson(iso.url, `/api/studio/kbs/corrupt-kb/drain/${runId}`);
+    assert.equal(res.status, 404, JSON.stringify(res.json));
+  } finally {
     await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
   }

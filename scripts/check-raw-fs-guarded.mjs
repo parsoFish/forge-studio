@@ -696,13 +696,13 @@ export const ALLOWLIST = [
   // `subRunId` that is NEVER request-derived — always synthesized as
   // `${runId}__r${round}__${i}`) are not flagged at all: `logsRoot` is a
   // TRUSTED_ROOTS name, and `subRunId` is not a curated taint-list name.
-  { file: 'cli/bridge-studio-kb-drain.ts', line: 185, sink: 'mkdirSync',
+  { file: 'cli/bridge-studio-kb-drain.ts', line: 225, sink: 'mkdirSync',
     reason: 'LOGDIR-CREATE (TRUSTED-AT-CONSTRUCTION): writeKbDrainStatus — same construction class as cli/bridge-studio-kbs.ts:180 (writeConsolidateTerminalEvent); runId is server-minted at POST /api/studio/kbs/:id/drain as `${kbId}-drain-${Date.now().toString(36)}` (kbId SLUG_RE-gated there first) or charset+prefix-checked at the two GET routes before this helper is ever reached.' },
-  { file: 'cli/bridge-studio-kb-drain.ts', line: 186, sink: 'writeFileSync',
-    reason: 'LOGDIR-WRITE (TRUSTED-AT-CONSTRUCTION): writeKbDrainStatus\'s status.json write — same runId trust chain as the mkdirSync row immediately above (same function, same call).' },
-  { file: 'cli/bridge-studio-kb-drain.ts', line: 196, sink: 'existsSync',
+  { file: 'cli/bridge-studio-kb-drain.ts', line: 228, sink: 'writeFileSync',
+    reason: 'LOGDIR-WRITE (TRUSTED-AT-CONSTRUCTION): writeKbDrainStatus\'s ATOMIC (temp+rename) status write — `tmpPath` is `` `${finalPath}.tmp` `` where `finalPath = join(logDir, "status.json")` and `logDir` carries the SAME runId trust chain as the mkdirSync row immediately above (same function, same call); the reviewer-requested atomicity fix (temp write + renameSync, mirroring cli/bridge-studio-runs.ts\'s manifest-move convention) only changed WHICH leaf name is written first, not the trust chain.' },
+  { file: 'cli/bridge-studio-kb-drain.ts', line: 239, sink: 'existsSync',
     reason: 'LOG-READ (TRUSTED-AT-CONSTRUCTION): readKbDrainStatus — mirrors cli/bridge-studio-kbs.ts:145 (readBrainFixState)\'s LOG-READ shape; runId is isSafeRunId + `${kbId}-drain-`-prefix gated at the GET routes before this is called (or server-minted at dispatch time); boolean existence probe.' },
-  { file: 'cli/bridge-studio-kb-drain.ts', line: 198, sink: 'readFileSync',
+  { file: 'cli/bridge-studio-kb-drain.ts', line: 241, sink: 'readFileSync',
     reason: 'LOG-READ (TRUSTED-AT-CONSTRUCTION): readKbDrainStatus\'s status.json read — same runId trust chain as the existsSync row immediately above (same function, same call), same class as cli/bridge-studio-kbs.ts:147.' },
 
   // ---- orchestrator/interactive-session.ts ----

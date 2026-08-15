@@ -34,33 +34,53 @@
  *                      `DEFAULT_KB_DRAIN_MAX_COST_USD`) — checked after EACH
  *                      turn, so a ceiling breach mid-round stops dispatching
  *                      immediately rather than finishing the round's queue.
- *   - NO-PROGRESS    — this round's pre-fix and post-fix scoped auto+agent
- *                      finding-KEY sets (kind::file) are identical — nothing
- *                      this round's fixers touched actually cleared, so
- *                      spinning more rounds would not help either.
+ *   - NO-PROGRESS    — either (a) this round's pre-fix and post-fix scoped
+ *                      auto+agent finding-KEY sets (kind::file) are
+ *                      identical (nothing this round's fixers touched
+ *                      actually cleared), or (b) this round's post-fix set
+ *                      is a non-empty subset of the UNION of every PRIOR
+ *                      round's post-fix set — a bounded OSCILLATION
+ *                      (A cleared → B appears → A reappears → …) that keeps
+ *                      changing round to round without ever converging.
+ *                      Either way, spinning more rounds would not help.
  *   - ROUND-CAP      — `KB_DRAIN_MAX_ROUNDS` rounds ran and none of the above
  *                      fired — an honest "still not clean, out of budget".
- *   - FAILED         — an unexpected throw in the loop itself (not a single
- *                      turn's own failure, which is caught per-turn and
- *                      recorded as `outcome:'not-cleared'` — mirrors
+ *   - FAILED         — an unexpected throw ANYWHERE in the run (createLogger
+ *                      itself, the initial status persist, a lint/
+ *                      applyAutoFixes call, …) — never a single turn's own
+ *                      failure, which is caught per-turn and recorded as
+ *                      `outcome:'not-cleared'` (mirrors
  *                      `runBrainConsolidateNow`'s per-group catch, cli/
- *                      bridge-studio-kbs.ts). Mirrors
- *                      `writeConsolidateErrorTerminalEvent`'s
- *                      `brain-fix-consolidate.crashed` shape — an honest
- *                      'error' terminal event, not a silent "running" forever.
+ *                      bridge-studio-kbs.ts). The ENTIRE run — first status
+ *                      write through last emit — sits inside one try, so a
+ *                      throw anywhere in it still reaches an honest 'failed'
+ *                      terminal on disk; if even THAT recovery persist
+ *                      throws, the failure is logged to stderr and rethrown
+ *                      rather than silently leaving status.json stuck at
+ *                      'running' forever.
  *
- * Every round (and the terminal outcome) is persisted to
- * `_logs/_kb-drain-<runId>/status.json` — survives nav-away by construction
- * (it is a file, not in-memory UI state); events land in the SAME dir's
- * `events.jsonl` through the standard `createLogger` (orchestrator/logging.ts)
- * so a future ActivityLog (B7) can tail it. `runBrainFixTurn`'s own thinking/
- * reasoning sinks stream into ITS OWN per-turn sub-dir
- * (`_logs/_brainfix-<runId>__r<round>__<i>/`) — free, unchanged from how
- * consolidate's per-group turns already work.
+ * Under `FORGE_ARCHITECT_NO_SPAWN=1` / dry-bridge, the loop still runs (lint
+ * + auto-fix + re-lint every round) but never actually calls the configured
+ * `runFixTurn` — an agent-tier residual is left honestly uncleared instead of
+ * risking a real SDK call in CI. The gate sits at the per-finding CALL SITE,
+ * not the implementation-selection step, so it holds even for a caller-
+ * supplied `opts.runFixTurn` override.
+ *
+ * Every round (and the terminal outcome) is persisted ATOMICALLY (temp write
+ * + rename, this repo's standard status-write convention — see
+ * `writeKbDrainStatus`) to `_logs/_kb-drain-<runId>/status.json` — survives
+ * nav-away by construction (it is a file, not in-memory UI state), and a
+ * concurrent reader (the GET routes, polled by a caller) can only ever see a
+ * fully-written prior or fully-written new version, never a truncated one.
+ * Events land in the SAME dir's `events.jsonl` through the standard
+ * `createLogger` (orchestrator/logging.ts) so a future ActivityLog (B7) can
+ * tail it. `runBrainFixTurn`'s own thinking/reasoning sinks stream into ITS
+ * OWN per-turn sub-dir (`_logs/_brainfix-<runId>__r<round>__<i>/`) — free,
+ * unchanged from how consolidate's per-group turns already work.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
@@ -152,12 +172,22 @@ export type KbDrainRunFixTurnFn = (
   input: RunBrainFixInput,
 ) => Promise<RunBrainFixResult & { costUsd: number }>;
 
+/** Same signature as the internal `writeKbDrainStatus` (below). Injectable
+ *  ONLY so a test can fail a PRECISE persist call (e.g. the very first one)
+ *  while later calls to the SAME (forgeRoot, runId) succeed — a filesystem-
+ *  level fault (an unwritable dir, a blocked leaf) cannot isolate "first call
+ *  fails, second succeeds" because both the initial persist and the
+ *  catch-block's crash-recovery persist target the identical on-disk path.
+ *  Defaults to the real atomic (temp+rename) writer. */
+export type KbDrainPersistFn = (forgeRoot: string, runId: string, status: KbDrainStatus) => void;
+
 export type KbDrainOpts = {
   maxRounds?: number;
   maxCostUsd?: number;
   lint?: KbDrainLintFn;
   applyAutoFixes?: KbDrainApplyAutoFixesFn;
   runFixTurn?: KbDrainRunFixTurnFn;
+  persistStatus?: KbDrainPersistFn;
 };
 
 // ---------------------------------------------------------------------------
@@ -180,10 +210,23 @@ function kbDrainLogDir(forgeRoot: string, runId: string): string {
   return join(forgeRoot, '_logs', `_kb-drain-${runId}`);
 }
 
+/** Atomic write (temp + rename) — mirrors this repo's own convention
+ *  (cli/bridge-studio-runs.ts's manifest-move: `writeFileSync(tmpPath, …)`
+ *  then `renameSync(tmpPath, toPath)`). `status.json` is read by a SEPARATE
+ *  process turn (the GET routes, polled every ~100-250ms by a caller) while
+ *  this function is called repeatedly (once per round) by the in-flight
+ *  drain — a plain `writeFileSync` on the final path would let a concurrent
+ *  reader observe a PARTIALLY-written file (the write is not one syscall for
+ *  a multi-KB JSON blob); `renameSync` on the same filesystem is atomic, so
+ *  a reader only ever sees the FULLY-written prior version or the
+ *  FULLY-written new one, never a truncated/interleaved one. */
 function writeKbDrainStatus(forgeRoot: string, runId: string, status: KbDrainStatus): void {
   const logDir = kbDrainLogDir(forgeRoot, runId);
   mkdirSync(logDir, { recursive: true });
-  writeFileSync(join(logDir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  const finalPath = join(logDir, 'status.json');
+  const tmpPath = `${finalPath}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(status, null, 2), 'utf8');
+  renameSync(tmpPath, finalPath);
 }
 
 /** Mirrors `readBrainFixState`'s (cli/bridge-studio-kbs.ts) LOG-READ shape:
@@ -290,19 +333,6 @@ async function defaultKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
   return { ...result, costUsd };
 }
 
-/** CI-safety seam (mirrors `runBrainConsolidateNow`'s own `noSpawn` guard,
- *  cli/bridge-studio-kbs.ts): under `FORGE_ARCHITECT_NO_SPAWN=1` or dry-bridge,
- *  a real agent turn is never spawned — the finding is left uncleared (a real
- *  production run would resolve it) so a CI/journey run against a KB that
- *  happens to carry a genuine agent-tier residual still reaches an honest
- *  terminal (round-cap/no-progress/needs-you) instead of making a real SDK
- *  call. Only applies to the DEFAULT fix-turn implementation — an explicit
- *  `opts.runFixTurn` override (test injection) always wins outright, exactly
- *  like `opts.lint`/`opts.applyAutoFixes` above. */
-async function noSpawnFixTurn(input: RunBrainFixInput): Promise<RunBrainFixResult & { costUsd: number }> {
-  return { runId: input.runId, cleared: false, costUsd: 0 };
-}
-
 // ---------------------------------------------------------------------------
 // perFinding builders
 // ---------------------------------------------------------------------------
@@ -360,32 +390,48 @@ export async function runKbDrain(
   const lint = opts.lint ?? runBrainLintFullFresh;
   const applyAutoFixes = opts.applyAutoFixes ?? applyAutoFixesUntilStable;
   const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
-  const runFixTurn = opts.runFixTurn ?? (noSpawn ? noSpawnFixTurn : defaultKbDrainFixTurn);
+  const runFixTurn = opts.runFixTurn ?? defaultKbDrainFixTurn;
+  const persistStatus = opts.persistStatus ?? writeKbDrainStatus;
   const maxRounds = opts.maxRounds ?? KB_DRAIN_MAX_ROUNDS;
   const maxCostUsd = opts.maxCostUsd ?? DEFAULT_KB_DRAIN_MAX_COST_USD;
 
   const cycleId = `_kb-drain-${runId}`;
-  const logger = createLogger(cycleId, join(forgeRoot, '_logs'));
 
-  const persist = (status: KbDrainStatus): KbDrainStatus => {
-    writeKbDrainStatus(forgeRoot, runId, status);
-    return status;
-  };
-
-  logger.emit({
-    initiative_id: cycleId,
-    phase: 'reflection',
-    skill: 'kb-drain',
-    event_type: 'start',
-    input_refs: [],
-    output_refs: [],
-    message: 'kb-drain.start',
-    metadata: { kbId, runId },
-  });
-
-  let status = persist(initialKbDrainStatus(kbId));
+  // TERMINAL-STATE GUARANTEE (reviewer HIGH finding): everything from the
+  // FIRST status write to the LAST emit lives inside the one try below — a
+  // throw ANYWHERE in here (createLogger's own mkdirSync, the initial
+  // persist, a lint/applyAutoFixes call, …) is caught and converted into an
+  // honest 'failed' terminal. Before this fix, the initial persist/emit and
+  // the success-path final emit sat OUTSIDE the try: a throw there rejected
+  // runKbDrain, enqueueConsolidate's queue continuation SWALLOWS that
+  // rejection (cli/bridge-studio-kbs.ts's `.catch(() => {})`), and
+  // status.json was left at 'running' forever — a silent-forever path no
+  // poller could ever resolve out of. `status` is seeded here, BEFORE the
+  // try, so the catch block always has a real value to fall back to even if
+  // the very first persist inside the try never completed.
+  let status: KbDrainStatus = initialKbDrainStatus(kbId);
 
   try {
+    const logger = createLogger(cycleId, join(forgeRoot, '_logs'));
+
+    const persist = (s: KbDrainStatus): KbDrainStatus => {
+      persistStatus(forgeRoot, runId, s);
+      return s;
+    };
+
+    logger.emit({
+      initiative_id: cycleId,
+      phase: 'reflection',
+      skill: 'kb-drain',
+      event_type: 'start',
+      input_refs: [],
+      output_refs: [],
+      message: 'kb-drain.start',
+      metadata: { kbId, runId },
+    });
+
+    status = persist(status);
+
     const brainDir = resolveKbBrainDir(forgeRoot, kbId);
     if (!brainDir) {
       throw new Error(`runKbDrain: kb id "${kbId}" does not resolve to any real brain directory`);
@@ -394,6 +440,13 @@ export async function runKbDrain(
 
     let costUsd = 0;
     let round = 0;
+    // Cumulative union of every PRIOR round's post-fix scoped auto+agent
+    // finding-KEY set (reviewer MEDIUM finding). Catches a bounded
+    // OSCILLATION (A cleared → B appears → A reappears → …) that never
+    // within-round-stagnates — `setsEqual(beforeKeys, afterKeys)` below never
+    // fires because SOMETHING genuinely changes every single round — but
+    // also never converges, without waiting out the full ROUND-CAP budget.
+    const everSeenAfterKeys = new Set<string>();
 
     for (;;) {
       round += 1;
@@ -418,22 +471,38 @@ export async function runKbDrain(
         const subRunId = `${runId}__r${round}__${turnIndex}`;
         turnIndex += 1;
         let outcome: 'cleared' | 'not-cleared' = 'not-cleared';
-        try {
-          const result = await runFixTurn({
-            runId: subRunId,
-            kbId,
-            file: f.file,
-            check: f.check,
-            kind: f.kind,
-            fixHint: f.fixHint,
-            message: f.message,
-            forgeRoot,
-          });
-          costUsd += result.costUsd;
-          outcome = result.cleared ? 'cleared' : 'not-cleared';
-        } catch {
-          // One turn failing must not abort the rest of the round's queue —
-          // mirrors runBrainConsolidateNow's per-group catch.
+        if (noSpawn) {
+          // CI-safety seam (mirrors runBrainConsolidateNow's own noSpawn
+          // guard, cli/bridge-studio-kbs.ts): under FORGE_ARCHITECT_NO_SPAWN=1
+          // or dry-bridge, the CONFIGURED runFixTurn — default OR
+          // test-injected — is never actually called; the finding is left
+          // uncleared so a CI/dry-bridge run against a KB that happens to
+          // carry a genuine agent-tier residual still reaches an honest
+          // terminal instead of making (or even risking) a real SDK call.
+          // Gating the CALL SITE rather than the implementation SELECTION
+          // means this holds even for a caller-supplied opts.runFixTurn —
+          // defense in depth, and what makes the seam directly spy-able in a
+          // unit test (inject a call-counting spy + set FORGE_DRY_BRIDGE=1 →
+          // expect zero calls).
+          outcome = 'not-cleared';
+        } else {
+          try {
+            const result = await runFixTurn({
+              runId: subRunId,
+              kbId,
+              file: f.file,
+              check: f.check,
+              kind: f.kind,
+              fixHint: f.fixHint,
+              message: f.message,
+              forgeRoot,
+            });
+            costUsd += result.costUsd;
+            outcome = result.cleared ? 'cleared' : 'not-cleared';
+          } catch {
+            // One turn failing must not abort the rest of the round's queue —
+            // mirrors runBrainConsolidateNow's per-group catch.
+          }
         }
         perFinding.push({ key: findingKey(f), check: f.check, kind: f.kind, file: f.file, message: f.message, tier: 'agent', outcome });
         if (costUsd >= maxCostUsd) {
@@ -461,10 +530,12 @@ export async function runKbDrain(
       }
 
       const afterKeys = progressKeySet(after);
-      if (setsEqual(beforeKeys, afterKeys)) {
+      const oscillating = afterKeys.size > 0 && [...afterKeys].every((k) => everSeenAfterKeys.has(k));
+      if (setsEqual(beforeKeys, afterKeys) || oscillating) {
         status = persist({ state: 'no-progress', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
         break;
       }
+      for (const k of afterKeys) everSeenAfterKeys.add(k);
 
       if (round >= maxRounds) {
         status = persist({ state: 'round-cap', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
@@ -473,33 +544,58 @@ export async function runKbDrain(
 
       status = persist({ state: 'running', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
     }
-  } catch (err) {
+
     logger.emit({
       initiative_id: cycleId,
       phase: 'reflection',
       skill: 'kb-drain',
-      event_type: 'error',
+      event_type: 'end',
       input_refs: [],
       output_refs: [],
-      message: 'kb-drain.crashed',
-      metadata: { kbId, runId, error: err instanceof Error ? err.message : String(err) },
+      cost_usd: status.costUsd,
+      message: `kb-drain.end (state=${status.state})`,
+      metadata: { kbId, runId, state: status.state, round: status.round, costUsd: status.costUsd },
     });
-    status = persist({ ...status, state: 'failed', updatedAt: new Date().toISOString() });
     return status;
+  } catch (err) {
+    const failedStatus: KbDrainStatus = { ...status, state: 'failed', updatedAt: new Date().toISOString() };
+    // Best-effort crash event — a FRESH createLogger call (the one inside the
+    // try above may never have been reached, or may itself be what threw),
+    // wrapped so a second failure here can never mask the original error or
+    // block the status persist below (the load-bearing terminal signal).
+    try {
+      const crashLogger = createLogger(cycleId, join(forgeRoot, '_logs'));
+      crashLogger.emit({
+        initiative_id: cycleId,
+        phase: 'reflection',
+        skill: 'kb-drain',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'kb-drain.crashed',
+        metadata: { kbId, runId, error: err instanceof Error ? err.message : String(err) },
+      });
+    } catch {
+      // best-effort — the persist below is the real terminal signal.
+    }
+    try {
+      persistStatus(forgeRoot, runId, failedStatus);
+    } catch (persistErr) {
+      // The persist itself failing means NO terminal signal reaches disk at
+      // all — the exact silent-forever failure mode this restructure exists
+      // to close. Never swallow it: log to stderr and rethrow so it is at
+      // least visible (to enqueueConsolidate's caller-side await, and to any
+      // process supervisor watching stderr).
+      // eslint-disable-next-line no-console
+      console.error(
+        `runKbDrain: FAILED to persist terminal 'failed' status for ${runId} (kb ${kbId}) after a crash ` +
+          `(${err instanceof Error ? err.message : String(err)}) — the status.json write itself threw:`,
+        persistErr,
+      );
+      throw persistErr;
+    }
+    return failedStatus;
   }
-
-  logger.emit({
-    initiative_id: cycleId,
-    phase: 'reflection',
-    skill: 'kb-drain',
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [],
-    cost_usd: status.costUsd,
-    message: `kb-drain.end (state=${status.state})`,
-    metadata: { kbId, runId, state: status.state, round: status.round, costUsd: status.costUsd },
-  });
-  return status;
 }
 
 // ---------------------------------------------------------------------------
