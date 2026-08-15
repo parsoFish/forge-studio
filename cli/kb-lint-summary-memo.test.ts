@@ -248,6 +248,29 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
     }
   });
 
+  test('skips agent-harness + campaign scratch at top level (.claude, .next anywhere, _dry-bridge, _wave<N>) — a 27-worktree .claude/ tree cost 290ms/fingerprint on the 2026-08-15 wave-6 bridge', () => {
+    const { forgeRoot } = makeCleanRoot('fp-skipharness-');
+    try {
+      const before = statWalkFingerprint(forgeRoot);
+      mkdirSync(join(forgeRoot, '.claude', 'worktrees', 'agent-x', 'brain', 'themes'), { recursive: true });
+      writeFileSync(join(forgeRoot, '.claude', 'worktrees', 'agent-x', 'brain', 'themes', 'clone.md'), '# a clone of the whole repo\n');
+      mkdirSync(join(forgeRoot, '_wave6', 'sweep'), { recursive: true });
+      writeFileSync(join(forgeRoot, '_wave6', 'sweep', 'report.md'), '# campaign scratch\n');
+      mkdirSync(join(forgeRoot, '_dry-bridge'), { recursive: true });
+      writeFileSync(join(forgeRoot, '_dry-bridge', 'events.jsonl'), '{}\n');
+      mkdirSync(join(forgeRoot, 'forge-ui', '.next', 'server'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'forge-ui', '.next', 'server', 'chunk.js'), '//');
+      const after = statWalkFingerprint(forgeRoot);
+      assert.deepEqual(after, before, 'harness/campaign/build dirs must never be walked — no check reads them and they dwarf the repo');
+      // and the git-tracked demos/ + mockups/ dirs STAY walked (a theme may cite them)
+      mkdirSync(join(forgeRoot, 'mockups', 'x'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'mockups', 'x', 'a.html'), '<p>');
+      assert.notDeepEqual(statWalkFingerprint(forgeRoot), before, 'mockups/ is citeable and must stay in the fingerprint');
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+
   test('throws when forgeRoot itself is not a directory (the fail-open signal runBrainLintFullMemoized/FullFresh rely on)', () => {
     // Under the whole-forgeRoot walk, a single misbehaving CHILD directory
     // (e.g. brain/ replaced by a file) no longer throws — the walker treats

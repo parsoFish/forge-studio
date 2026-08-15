@@ -299,7 +299,7 @@ export function computeKbLintChecks(
  *  own `.git` is a file, not a directory) — vendor/VCS internals no check
  *  reads and that can be arbitrarily large (an npm-workspace `node_modules`
  *  under `forge-ui/`, for one). */
-const FINGERPRINT_SKIP_ANYWHERE = new Set(['node_modules', '.git']);
+const FINGERPRINT_SKIP_ANYWHERE = new Set(['node_modules', '.git', '.next']);
 
 /** Top-level directories (relative to forgeRoot) skipped entirely: gitignored
  *  runtime/managed-project state that grows without bound over a campaign's
@@ -307,7 +307,17 @@ const FINGERPRINT_SKIP_ANYWHERE = new Set(['node_modules', '.git']);
  *  completeness table above). `_queue` is handled separately below — only
  *  `_queue/done/` (`checkReflectorLoss`'s actual input) is walked; its
  *  siblings (`in-flight/pending/failed`) are excluded for the same reason. */
-const FINGERPRINT_SKIP_TOPLEVEL = new Set(['_logs', 'projects', '.forge']);
+const FINGERPRINT_SKIP_TOPLEVEL = new Set([
+  '_logs', 'projects', '.forge',
+  // Agent-harness + campaign scratch (gitignored, no check reads them). The
+  // 2026-08-15 wave-6 bridge measured 64k files / 290ms per fingerprint on a
+  // tree carrying 27 `.claude/worktrees/*` clones (22 GB) — the key cost
+  // exceeded the lint it memoized. Anything matching /^_wave\d+$/ is also
+  // skipped below. Git-tracked dirs (demos/, mockups/) stay WALKED — a theme
+  // may cite them (checkSourceLinks' domain is unbounded).
+  '.claude', '_dry-bridge',
+]);
+const FINGERPRINT_SKIP_TOPLEVEL_RE = /^_wave\d+$/;
 
 /**
  * Cheap stat-walk fingerprint of `runBrainLint({ scope: 'full' })`'s actual
@@ -353,7 +363,7 @@ export function statWalkFingerprint(forgeRoot: string): BrainTreeFingerprint {
       const full = join(dir, entry.name);
       const rel = relFromRoot === '' ? entry.name : `${relFromRoot}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (relFromRoot === '' && FINGERPRINT_SKIP_TOPLEVEL.has(entry.name)) continue;
+        if (relFromRoot === '' && (FINGERPRINT_SKIP_TOPLEVEL.has(entry.name) || FINGERPRINT_SKIP_TOPLEVEL_RE.test(entry.name))) continue;
         if (relFromRoot === '' && entry.name === '_queue') {
           // Only checkReflectorLoss's actual input matters — done/ — not its
           // siblings, which can be large and change constantly mid-campaign.
