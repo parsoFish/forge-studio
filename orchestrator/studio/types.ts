@@ -490,8 +490,25 @@ export type CommunitySkill = {
   source: string; // upstream URL
   category: string; // coding | review | testing | research | planning | memory | docs | git
   tier?: string; // recommended model tier (haiku | sonnet | opus)
-  stars?: string; // adoption signal, free-form (e.g. "228k")
+  stars?: string; // adoption signal, free-form (e.g. "228k") — the curated DISPLAY string
+  /** Parsed NUMERIC star count (registry `signals.stars`), alongside the
+   *  display `stars` string above — null when the curated display string
+   *  names a different unit (e.g. "156k installs") or carries no figure at
+   *  all; never fabricated from the display string (W6-CR-2). */
+  starsNumeric: number | null;
   desc?: string;
+  /** ISO date the upstream project last published a change, per the
+   *  registry's own curated fact — null when unknown, never fabricated
+   *  (W6-CR-2, mirrors CommunityRegistryItem.upstreamUpdatedAt below). */
+  upstreamUpdatedAt: string | null;
+  /** ISO date this item was last verified against upstream — null until a
+   *  real refresh pass has actually run (still just the seed); NEVER
+   *  rendered as a date when null — the honest "seed — never verified"
+   *  state instead (W6-CR-2). */
+  fetchedAt: string | null;
+  /** Provenance of the currently-recorded data, e.g. "seed" (hand-curated,
+   *  never fetched) — always a real, non-fabricated string (W6-CR-2). */
+  fetchedBy: string;
 };
 
 // ---------------------------------------------------------------------------

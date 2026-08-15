@@ -1,6 +1,6 @@
 /**
  * Pure view-state derivation for the /community browse page +
- * /community/[kind]/[id] detail page (R3-07-F1).
+ * /community/[kind]/[id] detail page (R3-07-F1; sort + freshness W6-CR-2).
  *
  * Mirrors connection-library-view.ts's testability convention exactly: no
  * DOM, no React, no network, no re-derivation of any server-computed fact
@@ -12,6 +12,11 @@
  * D2 — this file owns ZERO trust decisions: it never references
  * approve/override/re-pin machinery, not even in a comment
  * (cli/community-no-trust-decisions.test.ts scans this file's source text).
+ *
+ * W6-CR-2 adds `sortCommunityItems` (operator-locked: SIMPLE SORTS ONLY —
+ * name / stars / updated / source, no search/facets/tags sort) and
+ * `freshnessBadge` (never renders a date for a null `fetchedAt` — see each
+ * function's own doc comment below for the full contract).
  */
 
 import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunitySignals } from './community-client.ts';
@@ -92,4 +97,140 @@ export function communityBadgeForSkill(entry: { id: string; source: string }, it
   if (entry.source !== 'community') return null;
   const match = items.find((item) => item.kind === 'skill' && item.id === entry.id);
   return match ? match : null;
+}
+
+// ---------------------------------------------------------------------------
+// sortCommunityItems — W6-CR-2: SIMPLE SORTS ONLY (operator-locked: name /
+// stars / updated / source — no search/facets/tags sort exists or is
+// planned). Mirrors this file's own filter conventions above: pure, returns
+// a NEW array, never mutates `items`.
+//
+// null-last (never fabricated): a null `stars`/`updated` value is an HONEST
+// absence of data, not a zero or an epoch date — it sorts LAST regardless of
+// `dir` (asc AND desc), so a genuinely starred/verified item is never pushed
+// below an unknown one just because the direction flipped.
+//
+// 'updated' sorts on `fetchedAt` — the SAME fact the freshness badge below
+// renders (deliberately never `upstreamUpdatedAt`, a different claim: "when
+// did the UPSTREAM project last change" vs "when did FORGE last verify this
+// row"). The sort and the badge must always agree on what "freshness" means
+// for an item.
+//
+// 'source' groups by the item's hub label (`hubLabel` — the SAME
+// "unaffiliated" fallback the card already renders, never a second,
+// divergent grouping fact), then breaks ties by name; the name tiebreak
+// stays ascending regardless of `dir` — only the group ordering flips. This
+// is the ONE key with an explicit two-level rule; `name`/`stars`/`updated`
+// are single-key comparisons, so a tie between two items with the identical
+// key value keeps their ORIGINAL relative order (`Array.prototype.sort` is
+// guaranteed stable, ES2019+) rather than an arbitrary re-shuffle.
+// ---------------------------------------------------------------------------
+
+export const COMMUNITY_SORT_KEYS = ['name', 'stars', 'updated', 'source'] as const;
+export type CommunitySortKey = (typeof COMMUNITY_SORT_KEYS)[number];
+
+export const COMMUNITY_SORT_DIRECTIONS = ['asc', 'desc'] as const;
+export type CommunitySortDirection = (typeof COMMUNITY_SORT_DIRECTIONS)[number];
+
+/** The default sort — deterministic, applied whenever the operator has not
+ *  chosen otherwise (W6-CR-2 design note: name/asc, never an unsorted /
+ *  server-order default). */
+export const DEFAULT_COMMUNITY_SORT_KEY: CommunitySortKey = 'name';
+export const DEFAULT_COMMUNITY_SORT_DIRECTION: CommunitySortDirection = 'asc';
+
+/** null sorts LAST regardless of `dir` — a null is an honest absence, not a
+ *  zero, and must never be pushed to the front just because `dir` flipped. */
+function compareNullableNumber(a: number | null, b: number | null, dir: CommunitySortDirection): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return dir === 'asc' ? a - b : b - a;
+}
+
+function fetchedAtMs(item: CommunityItem): number | null {
+  if (item.fetchedAt === null) return null;
+  const ms = Date.parse(item.fetchedAt);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function compareName(a: CommunityItem, b: CommunityItem): number {
+  return a.name.localeCompare(b.name);
+}
+
+export function sortCommunityItems(
+  items: readonly CommunityItem[],
+  key: CommunitySortKey,
+  dir: CommunitySortDirection,
+): CommunityItem[] {
+  const sorted = [...items];
+  switch (key) {
+    case 'name':
+      sorted.sort((a, b) => (dir === 'asc' ? compareName(a, b) : -compareName(a, b)));
+      return sorted;
+    case 'stars':
+      sorted.sort((a, b) =>
+        compareNullableNumber(a.signals?.starsNumeric ?? null, b.signals?.starsNumeric ?? null, dir),
+      );
+      return sorted;
+    case 'updated':
+      sorted.sort((a, b) => compareNullableNumber(fetchedAtMs(a), fetchedAtMs(b), dir));
+      return sorted;
+    case 'source':
+      sorted.sort((a, b) => {
+        const groupCmp = hubLabel(a.hub).localeCompare(hubLabel(b.hub));
+        const directed = dir === 'asc' ? groupCmp : -groupCmp;
+        return directed !== 0 ? directed : compareName(a, b);
+      });
+      return sorted;
+    default: {
+      const exhaustive: never = key;
+      throw new Error(`sortCommunityItems: unrecognised sort key "${String(exhaustive)}"`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// freshnessBadge — W6-CR-2: never render a date for a null fetchedAt. `nowMs`
+// is threaded through explicitly (D7 — mirrors history-ledger.ts's own
+// formatWhen) so this stays wall-clock-independent and unit-testable.
+// ---------------------------------------------------------------------------
+
+export const FRESHNESS_STATES = ['seed', 'stale', 'fresh'] as const;
+export type FreshnessState = (typeof FRESHNESS_STATES)[number];
+
+export type FreshnessBadge = { state: FreshnessState; label: string };
+
+const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const MINUTE_MS = 60_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+const SEED_LABEL = 'seed — never verified';
+
+function relativeAge(ageMs: number): string {
+  const minutes = Math.floor(ageMs / MINUTE_MS);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(ageMs / HOUR_MS);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(ageMs / DAY_MS);
+  return `${days}d ago`;
+}
+
+/**
+ * The freshness badge for an item's `fetchedAt`. NEVER renders a date for a
+ * null `fetchedAt` — the spec-literal "seed — never verified" label (a seed
+ * row this repo hand-curated but has never verified against upstream). A
+ * present-but-unparsable `fetchedAt` degrades to the SAME seed treatment (an
+ * honest "we don't actually know" beats a fabricated relative time). A
+ * `fetchedAt` older than 30 days reads "stale"; anything fresher renders a
+ * relative time, never the raw date.
+ */
+export function freshnessBadge(fetchedAt: string | null, nowMs: number): FreshnessBadge {
+  if (fetchedAt === null) return { state: 'seed', label: SEED_LABEL };
+  const thenMs = Date.parse(fetchedAt);
+  if (!Number.isFinite(thenMs)) return { state: 'seed', label: SEED_LABEL };
+  const ageMs = Math.max(0, nowMs - thenMs);
+  if (ageMs > STALE_AFTER_MS) return { state: 'stale', label: 'stale' };
+  return { state: 'fresh', label: relativeAge(ageMs) };
 }

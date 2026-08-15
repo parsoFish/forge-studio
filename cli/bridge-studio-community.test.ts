@@ -306,6 +306,38 @@ test('GET /api/studio/community: returns hubs (with itemCount) and the cross-kin
   assert.ok(body.items.some((i) => i['kind'] === 'hook' && i['id'] === 'listed-hook'));
 });
 
+// W6-CR-2: fetchedAt/fetchedBy/upstreamUpdatedAt carried through the wire —
+// a registry-sourced item carries its real seed facts, a vendored/connection
+// item (no registry row) honestly carries fetchedAt:null/fetchedBy:'local'.
+test('GET /api/studio/community: every item carries fetchedAt/fetchedBy/upstreamUpdatedAt on the wire (W6-CR-2)', async () => {
+  writeCatalog({
+    communitySkills: [{ id: 'freshness-catalog-skill' }],
+    tools: [{ id: 'freshness-tool' }],
+  });
+  vendorHookPackage('freshness-hook');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+
+  const catalogSkill = body.items.find((i) => i['kind'] === 'skill' && i['id'] === 'freshness-catalog-skill');
+  assert.ok(catalogSkill);
+  assert.equal(catalogSkill!['fetchedBy'], 'seed', 'a registry-sourced item carries its real fetchedBy');
+  assert.equal(catalogSkill!['fetchedAt'], null);
+  assert.equal(catalogSkill!['upstreamUpdatedAt'], null);
+
+  const tool = body.items.find((i) => i['kind'] === 'tool' && i['id'] === 'freshness-tool');
+  assert.ok(tool);
+  assert.equal(tool!['fetchedBy'], 'local', 'a connection has no registry row — honest "local", never a fabricated "seed"');
+  assert.equal(tool!['fetchedAt'], null);
+  assert.equal(tool!['upstreamUpdatedAt'], null);
+
+  const hook = body.items.find((i) => i['kind'] === 'hook' && i['id'] === 'freshness-hook');
+  assert.ok(hook);
+  assert.equal(hook!['fetchedBy'], 'local', 'a vendored hook has no registry row — honest "local"');
+  assert.equal(hook!['fetchedAt'], null);
+});
+
 // ---------------------------------------------------------------------------
 // GET /api/studio/community/:kind/:id — detail (F2)
 // ---------------------------------------------------------------------------

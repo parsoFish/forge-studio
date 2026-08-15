@@ -15,7 +15,7 @@ import { NodeArticle } from '@/components/studio/knowledge/NodeArticle';
 import { ThemeList } from '@/components/studio/knowledge/ThemeList';
 import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
-import { LintResolutionPanel } from '@/components/studio/knowledge/LintResolutionPanel';
+import { KbDrainPanel } from '@/components/studio/knowledge/KbDrainPanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
 import Link from 'next/link';
@@ -455,12 +455,14 @@ function KnowledgePageInner() {
         </div>
       )}
 
-      {/* Health tab: lint resolution + guidance + KB health, moved under this
-          branch (F1 — not rendered unconditionally). */}
+      {/* Health tab: drain-to-green + guidance + KB health, moved under this
+          branch (F1 — not rendered unconditionally). W6-B13: KbDrainPanel
+          replaces LintResolutionPanel — ONE button drives the KB to green
+          server-side; the panel is a pure observer of that server state. */}
       {tab === 'health' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {currentId && (
-            <LintResolutionPanel kbId={currentId} onChanged={handlePinned} />
+            <KbDrainPanel kbId={currentId} onChanged={handlePinned} />
           )}
           <GuidancePanel
             selectedArticle={article}
@@ -538,14 +540,14 @@ function IngestActivityPanel({ kbId }: { kbId: string }) {
 // ---------------------------------------------------------------------------
 function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMaintained?: () => void; onDeleted?: () => void }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'lint' | 'index' | 'consolidate' | 'delete' | 'start-cleanup' | null>(null);
+  const [busy, setBusy] = useState<'index' | 'consolidate' | 'delete' | 'start-cleanup' | null>(null);
   const [result, setResult] = useState<string | null>(null);
   // R1-06 WI-3 MINOR 2: the observed terminal state of the LAST consolidate run
   // ('' until one completes) — the kb-maintain journey drives off this rather
   // than scraping the result text. Reset when a fresh consolidate starts.
   const [consolidateState, setConsolidateState] = useState<string>('');
 
-  async function run(op: 'lint' | 'index' | 'consolidate') {
+  async function run(op: 'index' | 'consolidate') {
     setBusy(op);
     setResult(null);
     if (op === 'consolidate') {
@@ -561,15 +563,14 @@ function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMain
       setTimeout(() => setResult(null), 6000);
       return;
     }
+    // W6-B13: 'lint' was removed as its own action here — the Health tab's
+    // KbDrainPanel now IS the scan result (every drain round re-lints the KB
+    // and surfaces the counts/findings live), so a separate manual lint-only
+    // button duplicated it with no distinct value (sweep finding C4#7).
     const r = await runKbMaintenance(kbId, op);
     setBusy(null);
     if (!r.ok) { setResult(r.error ?? 'failed'); return; }
-    if (op === 'lint') {
-      const findings = (r.data?.findings as unknown[] | undefined) ?? [];
-      setResult(findings.length === 0 ? 'lint: clean ✓' : `lint: ${findings.length} finding(s)`);
-    } else {
-      setResult('index refreshed ✓');
-    }
+    setResult('index refreshed ✓');
     setTimeout(() => setResult(null), 6000);
   }
 
@@ -611,9 +612,6 @@ function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMain
       {...(consolidateState ? { 'data-consolidate-state': consolidateState } : {})}
       style={{ display: 'flex', alignItems: 'center', gap: 6 }}
     >
-      <button data-action="kb-lint" style={btn} disabled={busy !== null} onClick={() => void run('lint')}>
-        {busy === 'lint' ? 'Linting…' : 'Lint'}
-      </button>
       <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
         {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
       </button>

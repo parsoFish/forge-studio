@@ -36,6 +36,16 @@
  *
  * D13 — item identity is the (kind, id) pair; a skill and an mcp sharing an
  * id are two distinct CommunityItem rows.
+ *
+ * D14 (W6-CR-2) — fetchedAt/fetchedBy/upstreamUpdatedAt are populated only
+ * from a value the source record already carries, mirroring D5's discipline
+ * for signals: a registry-sourced skill (`CommunitySkill`, itself sourced
+ * from `CommunityRegistryItem`) carries its own real fetchedAt/fetchedBy/
+ * upstreamUpdatedAt straight through. A vendored-only skill/hook or a
+ * connection has NO registry row at all — there is nothing to have been
+ * "fetched" from, so it honestly carries `fetchedAt: null`,
+ * `fetchedBy: 'local'` (curated/authored in this repo, never fetched from
+ * anywhere), `upstreamUpdatedAt: null` — never a fabricated timestamp.
  */
 
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -73,6 +83,11 @@ export type CommunityInstallState = (typeof COMMUNITY_INSTALL_STATES)[number];
  *  invented one. Matches hubs.yaml's `forge-seed` entry exactly. */
 const VENDORED_UPSTREAM_SOURCE = 'https://github.com/parsoFish/forge-studio';
 
+/** D14 (W6-CR-2) — the one honest `fetchedBy` value for an item with NO
+ *  registry row (a vendored skill/hook package, or a tool/mcp connection):
+ *  never fetched from anywhere, curated/authored directly in this repo. */
+const FETCHED_BY_LOCAL = 'local';
+
 export interface CommunityHub {
   id: string;
   name: string;
@@ -85,6 +100,10 @@ export type CommunityHubCount = CommunityHub & { itemCount: number };
 export interface CommunitySignals {
   stars: string;
   attributedTo: string;
+  /** Parsed NUMERIC star count, alongside the display `stars` string above —
+   *  null when the curated display string names a different unit (e.g. "156k
+   *  installs") or carries no figure at all; never fabricated (W6-CR-2). */
+  starsNumeric: number | null;
 }
 
 export interface CommunityItem {
@@ -103,6 +122,18 @@ export interface CommunityItem {
   probeState?: ProbeState;
   signals: CommunitySignals | null;
   hub: CommunityHub | null;
+  /** ISO date this item was last verified against upstream — null until a
+   *  real refresh pass has run for it (still just the seed) OR for an item
+   *  with no registry row at all (D14). NEVER rendered as a date when null. */
+  fetchedAt: string | null;
+  /** Provenance of the currently-recorded data — e.g. "seed" for a
+   *  registry-sourced item, or "local" (D14) for a vendored package/
+   *  connection with no registry row. Always a real, non-blank string. */
+  fetchedBy: string;
+  /** ISO date the upstream project last published a change, per the
+   *  registry's own curated fact — null when unknown or for an item with no
+   *  registry row at all; never fabricated. */
+  upstreamUpdatedAt: string | null;
   /** A malformed vendored package surfaces here — never silently dropped. */
   error?: string;
 }
@@ -334,7 +365,7 @@ function communitySkillSignals(cs: CommunitySkill): CommunitySignals | null {
   if (cs.stars === undefined) return null;
   const attributedTo = cs.provenance.trim();
   if (attributedTo.length === 0) return null;
-  return { stars: cs.stars, attributedTo };
+  return { stars: cs.stars, attributedTo, starsNumeric: cs.starsNumeric };
 }
 
 /** The fixed-filename leaf (`SKILL.md`/`hook.yaml`) inside a vendored package
@@ -393,6 +424,9 @@ function buildCatalogSkillItem(forgeRoot: string, hubs: readonly CommunityHub[],
     installState: communityInstallState(forgeRoot, 'skill', cs.id),
     signals: communitySkillSignals(cs),
     hub: resolveHub(cs.source, hubs),
+    fetchedAt: cs.fetchedAt,
+    fetchedBy: cs.fetchedBy,
+    upstreamUpdatedAt: cs.upstreamUpdatedAt,
   };
 }
 
@@ -408,6 +442,9 @@ function buildVendoredOnlySkillItem(forgeRoot: string, hubs: readonly CommunityH
       installState: communityInstallState(forgeRoot, 'skill', id),
       signals: null,
       hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
+      fetchedAt: null,
+      fetchedBy: FETCHED_BY_LOCAL,
+      upstreamUpdatedAt: null,
     };
   } catch (e) {
     return {
@@ -418,6 +455,9 @@ function buildVendoredOnlySkillItem(forgeRoot: string, hubs: readonly CommunityH
       installState: 'not-installed',
       signals: null,
       hub: null,
+      fetchedAt: null,
+      fetchedBy: FETCHED_BY_LOCAL,
+      upstreamUpdatedAt: null,
       error: `cannot build community index entry for vendored skill "${id}" — ${(e as Error).message}`,
     };
   }
@@ -435,6 +475,9 @@ function buildHookItem(forgeRoot: string, hubs: readonly CommunityHub[], id: str
       installState: communityInstallState(forgeRoot, 'hook', id),
       signals: null,
       hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
+      fetchedAt: null,
+      fetchedBy: FETCHED_BY_LOCAL,
+      upstreamUpdatedAt: null,
     };
   } catch (e) {
     return {
@@ -445,6 +488,9 @@ function buildHookItem(forgeRoot: string, hubs: readonly CommunityHub[], id: str
       installState: 'not-installed',
       signals: null,
       hub: null,
+      fetchedAt: null,
+      fetchedBy: FETCHED_BY_LOCAL,
+      upstreamUpdatedAt: null,
       error: `cannot build community index entry for vendored hook "${id}" — ${(e as Error).message}`,
     };
   }
@@ -466,6 +512,9 @@ export function buildConnectionItem(hubs: readonly CommunityHub[], conn: Connect
     probeState: probe.state,
     signals: null,
     hub: resolveHub(conn.provenance, hubs),
+    fetchedAt: null,
+    fetchedBy: FETCHED_BY_LOCAL,
+    upstreamUpdatedAt: null,
   };
 }
 

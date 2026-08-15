@@ -1516,8 +1516,13 @@ describe('communitySkillsFromRegistry', () => {
       assert.ok(handoff);
       assert.equal(handoff!.source, 'https://github.com/obra/superpowers', 'sourceUrl projects onto the legacy `source` field');
       assert.equal(handoff!.stars, '228k', 'stars is the curated DISPLAY string, never the parsed numeric signals.stars');
+      assert.equal(handoff!.starsNumeric, 228000, 'W6-CR-2: starsNumeric carries the parsed numeric figure alongside the display string');
+      assert.equal(handoff!.upstreamUpdatedAt, null, 'W6-CR-2: upstreamUpdatedAt threads through (null in this fixture, never fabricated)');
+      assert.equal(handoff!.fetchedAt, null, 'W6-CR-2: fetchedAt threads through (null — still just the seed)');
+      assert.equal(handoff!.fetchedBy, 'seed', 'W6-CR-2: fetchedBy threads through');
       const noStars = skills.find((s) => s.id === 'security-review');
       assert.equal(noStars!.stars, undefined, 'no starsDisplay ⇒ CommunitySkill.stars is undefined, never a fabricated value');
+      assert.equal(noStars!.starsNumeric, null, 'no numeric signals.stars ⇒ CommunitySkill.starsNumeric is null, never a fabricated value');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -1690,6 +1695,27 @@ community-skills:
     const skills = communitySkillsFromRegistry(REPO_ROOT_FOR_MIGRATION);
     const catalog = loadCatalog(join(REPO_ROOT_FOR_MIGRATION, 'studio', 'catalog.yaml'));
     assert.equal(skills.length + catalog.tools.length + catalog.mcps.length, 18, 'sanity: 9 registry skills + 3 tools + 6 mcps = 18 (the vendored skill + hook are on-disk, not catalog/registry-declared, counted separately by listCommunityIndex)');
+  });
+
+  // W6-CR-2: the freshness fields thread through the real, committed
+  // registry.yaml — not just a synthetic fixture. Every real entry today is
+  // `fetchedBy: seed` / `fetchedAt: null` / `upstreamUpdatedAt: null` (no
+  // refresh pass has ever run — see the registry.yaml file header), and
+  // "handoff"'s "228k" display string is the one entry that parses to a real
+  // numeric starsNumeric.
+  it('W6-CR-2: every real registry-sourced CommunitySkill carries fetchedAt/fetchedBy/upstreamUpdatedAt/starsNumeric, never dropped', () => {
+    const skills = communitySkillsFromRegistry(REPO_ROOT_FOR_MIGRATION);
+    assert.ok(skills.length > 0, 'sanity: the real registry has entries');
+    for (const s of skills) {
+      assert.equal(typeof s.fetchedBy, 'string', `"${s.id}".fetchedBy must be a real string`);
+      assert.ok(s.fetchedBy.length > 0, `"${s.id}".fetchedBy must not be blank`);
+      assert.equal(s.fetchedAt, null, `"${s.id}".fetchedAt: no refresh pass has ever run in this checkout — still null`);
+      assert.equal(s.upstreamUpdatedAt, null, `"${s.id}".upstreamUpdatedAt: not curated yet in this checkout — still null`);
+    }
+    const handoff = skills.find((s) => s.id === 'handoff');
+    assert.equal(handoff!.starsNumeric, 228000, '"handoff"\'s "228k" display string carries a real parsed numeric figure');
+    const noNumeric = skills.find((s) => s.starsNumeric === null);
+    assert.ok(noNumeric, 'sanity: at least one real entry has no numeric stars figure (e.g. a different unit or no stars at all) — never fabricated to 0');
   });
 });
 

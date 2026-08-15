@@ -225,6 +225,61 @@ test('staged-review and next-turn affordances render disabled with an honest "no
 });
 
 // ---------------------------------------------------------------------------
+// ActivityLog (W6-B10) — shown exactly when every derived affordance is a
+// disabled "not yet wired" one (a working phase with nothing actionable),
+// generic over `kind` — mirrors the retired DemoBuilderPanel's own
+// generating/locking coverage without a kind==='demo' compare.
+// ---------------------------------------------------------------------------
+
+test('ActivityLog renders when every affordance is not-yet-wired (a working phase, e.g. demo generating: writes+next)', () => {
+  const html = render({
+    kind: 'demo',
+    phase: 'generating',
+    affordances: [
+      { id: 'generating-staged-review', kind: 'staged-review', phase: 'generating', meta: { writes: ['demo'] } },
+      { id: 'generating-next-turn', kind: 'next-turn', phase: 'generating', meta: { next: 'awaiting-review' } },
+    ],
+    events: [],
+  });
+  expect(html).toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render when a verdict affordance is present (something actionable)', () => {
+  const html = render({
+    kind: 'demo',
+    phase: 'awaiting-review',
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }],
+  });
+  expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render on zero affordances at a genuinely TERMINAL phase (demo "locked")', () => {
+  // Merge-reconciled (W6-B8 x W6-B10): the zero-affordances branch renders
+  // `!terminal && <ActivityLog/>` (B8) — 'locked' is demo's real terminal
+  // phase, so this must pass `terminal: true` explicitly (the wire's own
+  // honest value for this phase) to keep asserting what it always meant to:
+  // a SETTLED session shows no drawer. The companion case this test used to
+  // conflate — a NON-terminal, zero-affordance phase (onboarding's
+  // 'running') — is covered separately below ("terminal:false renders the
+  // ActivityLog drawer"), which is the real gap B8 closed: W6-B10's own
+  // `affordances.length > 0` guard would have hidden the drawer there too.
+  const html = render({ kind: 'demo', phase: 'locked', affordances: [], terminal: true });
+  expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render when affordances mix an actionable kind with a not-yet-wired one', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-answers',
+    affordances: [
+      { id: 'awaiting-answers-question-form', kind: 'question-form', phase: 'awaiting-answers' },
+      { id: 'awaiting-answers-next-turn', kind: 'next-turn', phase: 'awaiting-answers', meta: { next: 'interviewing' } },
+    ],
+  });
+  expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+// ---------------------------------------------------------------------------
 // Multiple affordances on one phase row (e.g. a noop row that ALSO carries
 // `next`) all render together, in order.
 // ---------------------------------------------------------------------------

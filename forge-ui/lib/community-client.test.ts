@@ -34,11 +34,14 @@ const WELL_FORMED_SKILL_ITEM = {
   desc: 'Compress the current session into a markdown transfer doc.',
   upstream: 'https://github.com/obra/superpowers',
   hub: { id: 'superpowers', name: 'obra/superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' },
-  signals: { stars: '228k', attributedTo: 'obra/superpowers + Matt Pocock' },
+  signals: { stars: '228k', attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 228000 },
   vendored: false,
   installState: 'not-installed',
   probeState: null,
   origin: 'studio/catalog.yaml (community-skills)',
+  fetchedAt: null,
+  fetchedBy: 'seed',
+  upstreamUpdatedAt: null,
 };
 
 const WELL_FORMED_TOOL_ITEM = {
@@ -53,6 +56,9 @@ const WELL_FORMED_TOOL_ITEM = {
   installState: 'installed',
   probeState: 'available',
   origin: 'listConnections (studio/catalog.yaml tools:)',
+  fetchedAt: null,
+  fetchedBy: 'local',
+  upstreamUpdatedAt: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -135,8 +141,51 @@ test('parseCommunityItem: "signals.stars" is never the empty string or "0" — a
 });
 
 test('parseCommunityItem: signals present with a non-empty stars string and a non-empty attributedTo round-trips', () => {
+  const item = { ...WELL_FORMED_SKILL_ITEM, signals: { stars: '5', attributedTo: 'someone', starsNumeric: 5 } };
+  expect(parseCommunityItem(item).signals).toEqual({ stars: '5', attributedTo: 'someone', starsNumeric: 5 });
+});
+
+// ---------------------------------------------------------------------------
+// W6-CR-2 — fetchedAt / fetchedBy / upstreamUpdatedAt / signals.starsNumeric
+// ---------------------------------------------------------------------------
+
+test('parseCommunityItem: throws when "fetchedAt" key is ABSENT — an explicit null is required, never fabricated from a missing key', () => {
+  const { fetchedAt: _fetchedAt, ...rest } = WELL_FORMED_SKILL_ITEM;
+  expect(() => parseCommunityItem(rest)).toThrow();
+});
+
+test('parseCommunityItem: throws when "upstreamUpdatedAt" key is ABSENT', () => {
+  const { upstreamUpdatedAt: _upstreamUpdatedAt, ...rest } = WELL_FORMED_SKILL_ITEM;
+  expect(() => parseCommunityItem(rest)).toThrow();
+});
+
+test('parseCommunityItem: throws when "fetchedBy" is missing — never defaulted to an empty string', () => {
+  const { fetchedBy: _fetchedBy, ...rest } = WELL_FORMED_SKILL_ITEM;
+  expect(() => parseCommunityItem(rest)).toThrow();
+});
+
+test('parseCommunityItem: throws when "fetchedAt" is present but not a string or null (e.g. a number)', () => {
+  expect(() => parseCommunityItem({ ...WELL_FORMED_SKILL_ITEM, fetchedAt: 12345 })).toThrow();
+});
+
+test('parseCommunityItem: a real ISO fetchedAt round-trips', () => {
+  const item = { ...WELL_FORMED_SKILL_ITEM, fetchedAt: '2026-08-01T00:00:00.000Z' };
+  expect(parseCommunityItem(item).fetchedAt).toBe('2026-08-01T00:00:00.000Z');
+});
+
+test('parseCommunityItem: throws when "signals.starsNumeric" key is ABSENT', () => {
   const item = { ...WELL_FORMED_SKILL_ITEM, signals: { stars: '5', attributedTo: 'someone' } };
-  expect(parseCommunityItem(item).signals).toEqual({ stars: '5', attributedTo: 'someone' });
+  expect(() => parseCommunityItem(item)).toThrow();
+});
+
+test('parseCommunityItem: throws when "signals.starsNumeric" is a string, not a number or null', () => {
+  const item = { ...WELL_FORMED_SKILL_ITEM, signals: { stars: '5', attributedTo: 'someone', starsNumeric: '5' } };
+  expect(() => parseCommunityItem(item)).toThrow();
+});
+
+test('parseCommunityItem: "signals.starsNumeric" of null round-trips (a display string naming a different unit)', () => {
+  const item = { ...WELL_FORMED_SKILL_ITEM, signals: { stars: '156k installs', attributedTo: 'someone', starsNumeric: null } };
+  expect(parseCommunityItem(item).signals?.starsNumeric).toBeNull();
 });
 
 test('parseCommunityItem: throws when "vendored" is not a boolean', () => {

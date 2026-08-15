@@ -94,13 +94,19 @@ describe('knowledge page — KbMaintenance action bar (R1-06 WI-3 group B, 1)', 
   const block = extractFunctionBody(source, 'KbMaintenance');
 
   it('precondition: the extracted block really is the kb-maintenance component (regression-anchors the extraction itself)', () => {
-    // These three MUST be true today, independent of this WI — if they are
-    // not, extractFunctionBody found the wrong block (or none), and the RED
-    // below would be meaningless.
+    // These MUST be true today, independent of this WI — if they are not,
+    // extractFunctionBody found the wrong block (or none), and the RED below
+    // would be meaningless. W6-B13: kb-lint was REMOVED from this bar (sweep
+    // finding C4#7 — it duplicated the Health tab's KbDrainPanel, whose
+    // status IS the scan result now); see knowledge-page-kb-maintenance's
+    // companion removal test below.
     expect(block).toContain('data-component="kb-maintenance"');
-    expect(block).toContain('data-action="kb-lint"');
     expect(block).toContain('data-action="kb-index"');
     expect(block).toContain('data-action="kb-delete"');
+  });
+
+  it('W6-B13: data-action="kb-lint" is REMOVED from the maintenance bar — sweep finding C4#7 (it duplicated the Health tab\'s KbDrainPanel, whose live status IS the scan result)', () => {
+    expect(block).not.toContain('data-action="kb-lint"');
   });
 
   it('RED: renders a [data-action="kb-maintain-session"] entry inside [data-component="kb-maintenance"] (R1-06-F3 maintenance-session entry point — missing today)', () => {

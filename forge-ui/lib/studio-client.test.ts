@@ -75,6 +75,12 @@ import {
   // resource-id + action path shape.
   startKbCleanup,
   applyKbCleanup,
+  // W6-B13: the KB drain-to-green client (cli/bridge-studio-kb-drain.ts's
+  // routes) — dispatch + the two read routes (specific-run poll and
+  // active-or-latest reattach).
+  dispatchKbDrain,
+  fetchKbDrainRun,
+  fetchActiveOrLatestKbDrain,
 } from './studio-client';
 import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
@@ -1064,6 +1070,117 @@ test('R4-19-F2 AT-F2-6: applyKbCleanup: a real 409 "not awaiting-approval" body 
 
   const result = await applyKbCleanup('forge-dev', { project: '.kb-forge-dev', sessionId: 'abc123' });
   expect(result).toEqual({ ok: false, error: 'session "abc123" is not awaiting-approval (current phase: "applied")' });
+});
+
+// ---------------------------------------------------------------------------
+// W6-B13: KB drain-to-green client (dispatchKbDrain / fetchKbDrainRun /
+// fetchActiveOrLatestKbDrain) — the ONE-button, server-owned counterpart to
+// the retired LintResolutionPanel scan/apply-all loop. Mirrors the
+// startKbCleanup/applyKbCleanup fetch-assertion style directly above.
+// ---------------------------------------------------------------------------
+
+test('W6-B13: dispatchKbDrain(id) issues EXACTLY ONE POST to /api/studio/kbs/:id/drain with the x-forge-csrf header, and returns {ok:true, runId} from a real 200 body', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, runId: 'forge-dev-drain-abc123' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await dispatchKbDrain('forge-dev');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string; headers?: Record<string, string> } | undefined;
+  expect(init?.method).toBe('POST');
+  expect(init?.headers?.['x-forge-csrf']).toBe('1');
+  expect(result).toEqual({ ok: true, runId: 'forge-dev-drain-abc123' });
+});
+
+test('W6-B13: dispatchKbDrain: a real 409 "already active" body round-trips the server\'s error message VERBATIM as {ok:false, error} — never a generic "failed" string', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({ error: 'a drain run is already active for this kb', runId: 'forge-dev-drain-existing' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await dispatchKbDrain('forge-dev');
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe('a drain run is already active for this kb');
+  // studioPost drops the response body on any non-2xx (shared contract with
+  // every other route in this module) — a caller recovers the active run's
+  // real id via fetchActiveOrLatestKbDrain, never by trusting this field.
+  expect(result.runId).toBeUndefined();
+});
+
+test('W6-B13: fetchKbDrainRun(id, runId) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain/:runId and returns the full status verbatim', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true, runId: 'forge-dev-drain-abc123', kbId: 'forge-dev', state: 'running', round: 2,
+      counts: { auto: 0, agent: 1, user: 0 }, perFinding: [], costUsd: 0.12, updatedAt: '2026-08-15T00:00:00.000Z',
+    }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchKbDrainRun('forge-dev', 'forge-dev-drain-abc123');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain/forge-dev-drain-abc123`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string } | undefined;
+  expect(init?.method ?? 'GET').toBe('GET');
+  expect(result.state).toBe('running');
+  expect(result.round).toBe(2);
+  expect(result.counts).toEqual({ auto: 0, agent: 1, user: 0 });
+});
+
+test('W6-B13: fetchKbDrainRun: a 404 "unknown drain run" degrades to an honest ok:false fallback — never throws, never fabricates a terminal state', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: 'unknown drain run' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchKbDrainRun('forge-dev', 'bogus-run');
+  expect(result.ok).toBe(false);
+  expect(result.runId).toBe('bogus-run');
+});
+
+test('W6-B13: fetchActiveOrLatestKbDrain(id) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain (no trailing runId segment) and passes runId:null through when no run has ever been dispatched', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, runId: null }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchActiveOrLatestKbDrain('forge-dev');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain`);
+  expect(result.runId).toBeNull();
+});
+
+test('W6-B13: fetchActiveOrLatestKbDrain: reattaches to a real active-or-latest run\'s full status when one exists', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true, runId: 'forge-dev-drain-xyz789', kbId: 'forge-dev', state: 'needs-you', round: 3,
+      counts: { auto: 0, agent: 0, user: 1 },
+      perFinding: [{ key: 'contradiction::theme.md', check: 'contradiction', kind: 'contradiction', file: 'theme.md', message: 'conflicting guidance', tier: 'user', outcome: 'needs-you' }],
+      costUsd: 0.34, updatedAt: '2026-08-15T00:05:00.000Z',
+    }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchActiveOrLatestKbDrain('forge-dev');
+  expect(result.runId).toBe('forge-dev-drain-xyz789');
+  expect(result.state).toBe('needs-you');
+  expect(result.perFinding).toHaveLength(1);
 });
 
 // ---------------------------------------------------------------------------

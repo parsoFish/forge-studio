@@ -284,6 +284,78 @@ function cleanScratchKb() {
   try { rmSync(SCRATCH_KB_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
+// ── scratch project-brain (knowledge-lint-index — W6-B13 drain-to-green) ──────
+// A FIFTH scratch KB, disjoint from every one above — the drain button's own
+// fixture. Deliberately the SAME shape as SCRATCH_KB_MAINTAIN (a
+// brain/projects/* KB with one theme missing from its own category index —
+// the checkProjectBrainIndexes "not listed" finding, resolution:'agent'):
+// that shape is PROVEN by knowledge-kb-maintain-session's own beat to trip
+// EXACTLY one finding and nothing spurious. It is deliberately NOT reused —
+// a separate directory keeps each beat's state ownership independent
+// (rule 3) even though, unlike Consolidate, drain under no-spawn never
+// writes to this KB's files at all (its one agent-tier finding can never
+// clear without a real SDK turn — see the beat's own honesty-rule comment).
+const SCRATCH_KB_DRAIN_ID = 'journey-scratch-kb-drain';
+const SCRATCH_KB_DRAIN_NAME = 'journey-scratch-kb-drain (project)';
+const SCRATCH_KB_DRAIN_DESC = 'Ephemeral per-project-shaped brain created by the e2e journey itself, seeded with one agent-tier lint finding to demo the drain-to-green button reaching an honest, CI-safe terminal.';
+const SCRATCH_KB_DRAIN_DIR = join(FORGE_ROOT, 'brain', 'projects', SCRATCH_KB_DRAIN_ID);
+const SCRATCH_KB_DRAIN_THEME_SLUG = 'scratch-drain-lesson';
+const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, present on disk, deliberately left out of its own category index so checkProjectBrainIndexes flags it (agent-tier) and the drain button has something genuine to work on.';
+
+function cleanScratchKbDrain() {
+  try { rmSync(SCRATCH_KB_DRAIN_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
+/** Mirrors seedScratchKbMaintain's own shape exactly — see that function's
+ *  header for why this trips exactly the checkProjectBrainIndexes "not
+ *  listed" finding and nothing else. */
+function seedScratchKbDrain() {
+  const themesDir = join(SCRATCH_KB_DRAIN_DIR, 'themes');
+  mkdirSync(themesDir, { recursive: true });
+  writeFileSync(join(SCRATCH_KB_DRAIN_DIR, 'kb.yaml'), [
+    `id: ${SCRATCH_KB_DRAIN_ID}`,
+    `name: ${SCRATCH_KB_DRAIN_NAME}`,
+    'binding:',
+    '  kind: project',
+    `  ref: ${SCRATCH_KB_DRAIN_ID}`,
+    `desc: ${SCRATCH_KB_DRAIN_DESC}`,
+    'backend: filesystem',
+    '',
+  ].join('\n'), 'utf8');
+  const now = new Date().toISOString();
+  writeFileSync(join(themesDir, `${SCRATCH_KB_DRAIN_THEME_SLUG}.md`), [
+    '---',
+    'title: Scratch drain lesson — deliberately unindexed',
+    `description: ${SCRATCH_KB_DRAIN_THEME_DESC}`,
+    'category: pattern',
+    'keywords: [e2e-journey, scratch-kb, kb-drain, drain-to-green]',
+    `created_at: ${now}`,
+    `updated_at: ${now}`,
+    'related_themes: []',
+    '---',
+    '',
+    '# Theme: scratch drain lesson',
+    '',
+    '## Pattern',
+    '',
+    SCRATCH_KB_DRAIN_THEME_DESC,
+    '',
+  ].join('\n'), 'utf8');
+  // patterns.md EXISTS (so checkProjectBrainIndexes doesn't instead flag
+  // "no category index files") but omits the theme's own link line — the
+  // finding the drain button is being asked to work on.
+  writeFileSync(join(SCRATCH_KB_DRAIN_DIR, 'patterns.md'), [
+    `# ${SCRATCH_KB_DRAIN_ID} — Patterns`,
+    '',
+    '> Category index. Lists theme pages describing proven approaches that work in this project.',
+    '',
+    '## Theme pages',
+    '',
+    '(deliberately empty — the e2e journey seeds this to demo the drain button reaching an honest terminal)',
+    '',
+  ].join('\n'), 'utf8');
+}
+
 /** Emulates one ingest pass on the scratch KB: folds the pinned guidance note into a
  * real theme file (house-style frontmatter, matching brain/cycles/themes/*.md) and
  * removes the guidance note. In the real product this fold is an LLM pass
@@ -945,40 +1017,99 @@ export const journey = defineJourney({
       },
       {
         id: 'knowledge-lint-index',
-        title: 'KB maintenance — lint / index / OOTB brains',
-        narration: 'The operator runs the real kb-lint and kb-index actions from the maintenance panel — structural checks and a regenerated index, not cosmetic buttons — and the KB selector confirms both cycles and forge-dev ship as OOTB brains: the knowledge pillar is edited through lint/index tooling, on top of the human-guidance loop from the beat before.',
+        title: 'KB health — drain to green (W6-B13) + index / OOTB brains',
+        narration: 'The operator opens a KB with a real lint finding and clicks the ONE "Drain to green" button on Health — forge iteratively fixes every auto- and agent-tier finding server-side, round by round, until the KB is clean or honestly stops and says why (`cli/bridge-studio-kb-drain.ts`). This replaces the old kb-lint scan + LintResolutionPanel\'s own "fix all with agent" client loop (W6-B13, retiring sweep finding C4#7\'s header/panel scan duplication and C9#2/C9#3\'s silent-timeout/dead-skip-button defects). Under this harness\'s FORGE_ARCHITECT_NO_SPAWN=1 the drain loop still runs for real (a real local fresh-lint, a real local auto-fix pass, a real status.json on disk) but never actually spawns the agent-tier turn — so the seeded fixture\'s one agent-tier finding can never clear here, and the panel\'s own [data-drain-state] honestly reaches "no-progress," never a fabricated "green." Navigating away (the Explore tab) and back to Health proves the run is server-owned, not component state: the SAME run id and state are still there, exactly the "nav-away never loses the work" invariant the operator brief names. The KB selector also confirms both cycles and forge-dev ship as OOTB brains, and kb-index still runs a real deterministic refresh.',
         drive: async (ctx) => {
               const { page, watch, browser, recordClip, check, frame } = ctx;
-              // ── S3.2: KB maintenance — LINT + INDEX + OOTB brains (real, read-only) ───
-              console.log('\n[S3.2] KB maintenance — lint / index / OOTB brains');
-              await page.goto(`${watch.uiUrl}/knowledge?id=cycles`, { waitUntil: 'domcontentloaded' });
+              // ── S3.2: KB health — drain to green + index / OOTB brains ────────────────
+              console.log('\n[S3.2] KB health — drain to green + index / OOTB brains');
+              cleanScratchKbDrain(); // guard against leftover state from a prior crashed run
+              seedScratchKbDrain();
+
+              const TERMINAL_DRAIN_STATES = ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed', 'timed-out'];
+              const waitForTerminalDrainState = (p, timeout) => p.waitForFunction(
+                (terminals) => {
+                  const v = document.querySelector('[data-component="kb-drain-panel"]')?.getAttribute('data-drain-state');
+                  return v !== null && terminals.includes(v);
+                },
+                TERMINAL_DRAIN_STATES, { timeout },
+              );
+              const readDrainAttrs = (p) => p.evaluate(() => {
+                const el = document.querySelector('[data-component="kb-drain-panel"]');
+                return { state: el?.getAttribute('data-drain-state') ?? '', runId: el?.getAttribute('data-drain-run-id') ?? '' };
+              });
+
+              await page.goto(`${watch.uiUrl}/knowledge?id=${encodeURIComponent(SCRATCH_KB_DRAIN_ID)}`, { waitUntil: 'domcontentloaded' });
               const kbMaintReady = await page.waitForFunction(
                 () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 30000 }).then(() => true).catch(() => false);
-              await caption(page, 'Knowledge is editable — deterministic LINT + INDEX maintenance, plus the human-guidance + ingest loop.');
+              await caption(page, 'Knowledge is editable — ONE button drains every fixable lint finding to green, server-side.');
+              check(kbMaintReady, 'kb-drain: the seeded scratch KB\'s page reaches data-page-ready="true"');
+
               if (kbMaintReady) {
-                await page.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
+                await page.locator('[data-tab="health"]').click().catch(() => {});
                 await page.waitForFunction(
-                  () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
-                  null, { timeout: 15000 }).catch(() => {});
-                const lintText = await page.evaluate(() => document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '');
-                check(/^lint:/.test(lintText), `S3.2: kb-lint result badge (got "${lintText}")`);
-                await frame(page, 'kb-0-lint', `Part 2 (knowledge) — kb-lint: ${lintText || 'result'}`);
+                  () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
+                  null, { timeout: 8000 }).catch(() => {});
+
+                const drainPanelPresent = await page.locator('[data-component="kb-drain-panel"]').count().catch(() => 0);
+                check(drainPanelPresent > 0, 'kb-drain: KbDrainPanel renders on the Health tab ([data-component="kb-drain-panel"])');
+                await frame(page, 'kb-0-drain-idle', 'Part 2 (knowledge) — KB health: the drain-to-green panel, not yet run');
+
+                await page.locator('[data-action="drain-to-green"]').click().catch(() => {});
+                await caption(page, 'ONE button — forge iteratively fixes every auto/agent lint finding, round by round, on the server.');
+
+                let drainState = '';
+                let runIdBefore = '';
+                try {
+                  await waitForTerminalDrainState(page, 30000);
+                  ({ state: drainState, runId: runIdBefore } = await readDrainAttrs(page));
+                } catch { /* checked below */ }
+                // Honesty rule: under FORGE_ARCHITECT_NO_SPAWN=1 the agent-tier turn never
+                // runs, so the seeded fixture's one agent-tier (checkProjectBrainIndexes)
+                // finding can never actually clear here — the only honest terminal this run
+                // can reach is 'no-progress' (nothing changed round-over-round). Asserting
+                // this exact state (not just "some terminal") kills a false 'green' that
+                // would mean an agent turn secretly ran under a harness meant to suppress it.
+                check(drainState === 'no-progress',
+                  `kb-drain: [data-drain-state] reaches the real, honest terminal for a CI-suppressed agent-tier finding (got "${drainState || '(none)'}") — never a fabricated "green"`);
+                check(runIdBefore.length > 0, 'kb-drain: a real server-minted runId is recorded on the panel (data-drain-run-id)');
+                await frame(page, 'kb-drain-1-terminal', `Knowledge — drain-to-green reached a real terminal (data-drain-state="${drainState}")`);
+
+                // Reattach-on-return (the operator-brief invariant: "nav-away never loses
+                // the work; the UI is a pure OBSERVER of server state"). KbDrainPanel's
+                // reattach effect runs on MOUNT, keyed off kbId — switching to Explore
+                // unmounts it (Health-tab-gated in page.tsx) and switching back remounts it,
+                // so a tab round-trip genuinely exercises the same GET .../drain reattach a
+                // full page reload would.
+                await page.locator('[data-tab="explore"]').click().catch(() => {});
+                await page.waitForFunction(
+                  () => document.querySelector('[data-tab="explore"]')?.getAttribute('data-tab-active') === 'true',
+                  null, { timeout: 8000 }).catch(() => {});
+                await sleep(THINK);
+                await page.locator('[data-tab="health"]').click().catch(() => {});
+                await page.waitForFunction(
+                  () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
+                  null, { timeout: 8000 }).catch(() => {});
+
+                let reattachedState = '';
+                let reattachedRunId = '';
+                try {
+                  await waitForTerminalDrainState(page, 15000);
+                  ({ state: reattachedState, runId: reattachedRunId } = await readDrainAttrs(page));
+                } catch { /* checked below */ }
+                check(reattachedRunId.length > 0 && reattachedRunId === runIdBefore,
+                  `kb-drain: navigating away (Explore) and back REATTACHES to the SAME server-owned run (data-drain-run-id before="${runIdBefore}" after="${reattachedRunId}")`);
+                check(reattachedState === drainState,
+                  `kb-drain: the reattached state matches the terminal reached before navigating away (before="${drainState}" after="${reattachedState}")`);
+                await frame(page, 'kb-drain-2-reattached', `Knowledge — nav-away and back reattaches to the SAME run (data-drain-run-id="${reattachedRunId}")`, { key: true });
+
                 await page.locator('[data-component="kb-maintenance"] [data-action="kb-index"]').click().catch(() => {});
                 await page.waitForFunction(
                   () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '') === 'index refreshed ✓',
                   null, { timeout: 15000 }).catch(() => {});
                 check(true, 'S3.2: kb-index maintenance triggered');
-                const scanBtn = page.locator('[data-section="lint-resolution"] [data-action="lint-scan"]');
-                if (await scanBtn.count() > 0) {
-                  await scanBtn.click().catch(() => {});
-                  await page.waitForFunction(
-                    () => document.querySelector('[data-section="lint-resolution"]')?.getAttribute('data-lint-scanned') === 'true',
-                    null, { timeout: 15000 }).catch(() => {});
-                  check(await page.locator('[data-section="lint-resolution"][data-lint-scanned="true"]').count() > 0,
-                    'S3.2: lint-resolution scan ran (data-lint-scanned="true")');
-                }
-                await frame(page, 'kb-1-maintenance', 'Part 2 (knowledge) — lint/index maintenance + the resolution surface');
+
                 const ootb = await page.evaluate(() => ({
                   cycles: document.querySelector('#kb-select option[value="cycles"]')?.textContent ?? '',
                   forgeDev: document.querySelector('#kb-select option[value="forge-dev"]')?.textContent ?? '',
@@ -986,47 +1117,33 @@ export const journey = defineJourney({
                 check(ootb.cycles.length > 0 && ootb.forgeDev.length > 0,
                   `S3.2: cycles + forge-dev brains ship OOTB (${ootb.cycles} / ${ootb.forgeDev})`);
               }
-              // Clip: kb-lint + the lint-resolution scan — read-only/idempotent maintenance,
-              // safe to re-drive on a fresh context. Fresh context, own navigation.
-              await recordClip(browser, watch, 'kb-lint', '/knowledge?id=cycles', async (p) => {
+
+              // Clip: drain-to-green on the seeded fixture — real/idempotent (re-seeded
+              // every run), safe to re-drive on a fresh context. Fresh context, own
+              // navigation.
+              await recordClip(browser, watch, 'kb-lint', `/knowledge?id=${encodeURIComponent(SCRATCH_KB_DRAIN_ID)}&tab=health`, async (p) => {
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 12000 },
                 ).catch(() => {});
-                await caption(p, 'The cycles KB — but the story here is maintenance, not the graph.');
+                await caption(p, 'A KB with a real lint finding — the story here is the ONE drain-to-green button.');
                 await sleep(THINK);
-                // The force-graph animates continuously — hide it for this clip so every
-                // recorded frame is near-static (the clip's story is the lint panel, not
-                // the graph — kept even at the taller default viewport).
-                await p.addStyleTag({ content: '#kb-svg { visibility: hidden; }' }).catch(() => {});
-                await p.waitForSelector('[data-component="kb-maintenance"] [data-action="kb-lint"]', { timeout: 12000 }).catch(() => {});
-                // Scroll the maintenance panel into view — belt-and-braces even at the taller
-                // default viewport, since the (invisible) graph still occupies its layout space.
-                await p.locator('[data-component="kb-maintenance"]').scrollIntoViewIfNeeded().catch(() => {});
+                await p.waitForSelector('[data-action="drain-to-green"]', { timeout: 12000 }).catch(() => {});
+                await p.locator('[data-component="kb-drain-panel"]').scrollIntoViewIfNeeded().catch(() => {});
                 await sleep(400);
-                await p.locator('[data-component="kb-maintenance"] [data-action="kb-lint"]').click().catch(() => {});
-                await p.waitForFunction(
-                  () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '').startsWith('lint:'),
-                  null, { timeout: 15000 },
-                ).catch(() => {});
-                const lintResultText = await p.evaluate(() => document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '');
-                await caption(p, `Lint findings, live: ${lintResultText || 'the maintenance panel\'s own read of the brain'}`);
+                await p.locator('[data-action="drain-to-green"]').click().catch(() => {});
+                await caption(p, 'Server-side, round by round — this browser is just watching.');
+                await waitForTerminalDrainState(p, 15000).catch(() => {});
+                const { state: clipState } = await readDrainAttrs(p);
+                await caption(p, `Reached a real terminal, live: ${clipState || 'the panel\'s own read of the run'}`);
                 await sleep(THINK);
-                const scanBtn = p.locator('[data-section="lint-resolution"] [data-action="lint-scan"]');
-                if (await scanBtn.count() > 0) {
-                  await scanBtn.click().catch(() => {});
-                  await p.waitForFunction(
-                    () => document.querySelector('[data-section="lint-resolution"]')?.getAttribute('data-lint-scanned') === 'true',
-                    null, { timeout: 15000 },
-                  ).catch(() => {});
-                  await caption(p, 'The resolution surface — from a finding to a concrete fix, without leaving the panel.');
-                  await sleep(THINK);
-                }
               }, {
                 readySel: '[data-page="knowledge"]',
-                caption: 'KB lint findings triaged from the maintenance surface',
+                caption: 'Drain to green — the ONE button, server-owned, honest about what it did',
                 holdTailMs: 1500,
               });
+
+              cleanScratchKbDrain();
 
         },
       },

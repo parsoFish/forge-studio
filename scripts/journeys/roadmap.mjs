@@ -282,21 +282,36 @@ export const journey = defineJourney({
                     document.querySelectorAll(`${sel} [data-work-item-id]`).length, drawerSel);
                   check(wiCount >= 1, `roadmap: the ${INIT} drawer lists its real work items (≥1 [data-work-item-id], got ${wiCount})`);
                   await frame(page, 'r6-0b-popover', 'W6-RV-2 — a card\'s detail drawer: its real work items, run links, and demo tie-in — canvas geometry unchanged behind it');
-                  // R4-07-F3: the drawer links straight to the project's demo
-                  // surface — click it and land on the editor tab's Demo Timeline.
+                  // R4-07-F3 (entrypoint fixed W6-B10): the drawer links to the
+                  // project's demo surface — click it and land HONESTLY on the
+                  // dedicated demo-builder session screen or its kickoff
+                  // (resolveDemoEntryHref, lib/demo-entry-view.ts), never the
+                  // old fake tab-switch. This fixture project has no demo
+                  // session yet, so it lands on the generic kickoff screen,
+                  // prefilled with the project and this initiative for context.
                   const demoLink = page.locator(`${drawerSel} [data-link="demo-builder"]`);
                   const demoLinkPresent = (await demoLink.count()) >= 1;
                   check(demoLinkPresent, 'roadmap: the drawer carries [data-link="demo-builder"] (R4-07-F3 demo tie-in)');
                   if (demoLinkPresent) {
                     await demoLink.first().click().catch(() => {});
-                    await sleep(500);
-                    const demoSurface = await page.evaluate(() =>
-                      document.querySelector('[data-tab="editor"][data-tab-active="true"]') !== null &&
-                      document.querySelector('[data-section="demo-source"]') !== null);
-                    check(demoSurface, 'roadmap: demo-builder link lands on the editor tab\'s Demo Timeline ([data-section="demo-source"])');
-                    await frame(page, 'r6-0c-demo-link', 'R4-07-F3 — the drawer links straight to the demo surface');
-                    // Return to the roadmap tab so the following assertions/beats
-                    // keep driving the canvas.
+                    const kickoffReady = await page.waitForFunction(
+                      () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true',
+                      null, { timeout: 15000 },
+                    ).then(() => true).catch(() => false);
+                    check(kickoffReady, 'roadmap: demo-builder link lands on the generic kickoff screen ([data-page="session-kickoff"])');
+                    const prefilledProject = await page.locator('[data-field="kickoff-project"]').inputValue().catch(() => '');
+                    check(prefilledProject === PROJECT, `roadmap: the kickoff screen prefills ?project= from the link (got "${prefilledProject}")`);
+                    const initiativeContext = await page.locator('[data-section="kickoff-initiative-context"]').count() > 0;
+                    check(initiativeContext, 'roadmap: the kickoff screen shows the originating initiative as context ([data-section="kickoff-initiative-context"])');
+                    await frame(page, 'r6-0c-demo-link', 'W6-B10 — the drawer links honestly to the demo kickoff screen, prefilled with the project + initiative');
+                    // Return to the project page's roadmap tab — a real
+                    // navigation happened (the old fake tab-switch didn't),
+                    // so the following assertions/beats need a fresh page.goto.
+                    await page.goto(watch.uiUrl + `/projects/${PROJECT}`, { waitUntil: 'domcontentloaded' });
+                    await page.waitForFunction(
+                      () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                      null, { timeout: 15000 },
+                    ).catch(() => {});
                     await page.locator('[data-tab="roadmap"]').click().catch(() => {});
                     await sleep(500);
                   }

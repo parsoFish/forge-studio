@@ -79,13 +79,20 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // the operator VERBATIM via `data-affordance-error`, never swallowed and
 // never replaced by a generic "failed" string.
 //
-// W6-B8 — the shared `ActivityLog` bottom drawer (W6-B7) now renders here
-// too, gated on `!terminal`: `terminal` (session-client.ts, mirroring the
-// server's own `isTerminalPhase`) is a session-level fact, not derived from
-// `affordances.length` (a working, non-terminal phase can legitimately have
-// zero affordances — onboarding's `running` phase is exactly that case, the
-// one this gate most needs to cover). Every GENERIC_PANEL_KINDS kind gets
-// this identically — never a per-kind branch.
+// The shared `ActivityLog` bottom drawer (W6-B7) renders here via TWO
+// complementary gates, one per affordance-count branch — every
+// GENERIC_PANEL_KINDS kind gets both identically, never a per-kind branch:
+//   - ZERO affordances (W6-B8): gated on `!terminal` — `terminal`
+//     (session-client.ts, mirroring the server's own `isTerminalPhase`) is a
+//     session-level fact, not derived from `affordances.length` (a working,
+//     non-terminal phase can legitimately have zero affordances —
+//     onboarding's `running` phase is exactly that case, the one this gate
+//     most needs to cover).
+//   - NON-zero affordances (W6-B10): gated on `showActivityLog` — true when
+//     every derived affordance is one of the disabled "not yet wired" kinds
+//     (a working phase with nothing actionable yet, e.g. demo's
+//     `generating`), false the instant a real `verdict`/`question-form`
+//     affordance exists.
 // ---------------------------------------------------------------------------
 
 /** Affordance kinds this route has no write handler for at all (B4's
@@ -137,13 +144,24 @@ export function SessionInteractivePanel({
    *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
-  /** W6-B8 — this session's live event stream (the same `useCycleEvents(cycleId)`
-   *  feed the page already computes for the StageHex burst chips), handed
-   *  straight to the shared `ActivityLog` drawer. */
+  /** W6-B10: this session's live event stream (the SAME
+   *  `useCycleEvents(cycleId)` feed the page already computes for the
+   *  StageHex burst chips / the retired `DemoBuilderPanel` used), handed
+   *  straight to the shared `ActivityLog` drawer — REQUIRED (W6-B8; the
+   *  real page always has one, even if empty before the first event lands;
+   *  test call sites default it via their own local helper, not a prop
+   *  default, mirroring how `phase` is required). */
   events: EventLogEntry[];
   /** W6-B8 — session-client.ts's `terminal` (mirrors the server's own
-   *  `isTerminalPhase`), gating the ActivityLog drawer: it renders only
-   *  while `!terminal` — a settled session has nothing left to watch work. */
+   *  `isTerminalPhase`), gating the ActivityLog drawer for the
+   *  ZERO-affordance case (`drawer` below): it renders only while
+   *  `!terminal` — a settled session has nothing left to watch work,
+   *  onboarding's `running` phase legitimately has zero affordances while
+   *  genuinely working. The NON-zero-affordance case is gated separately by
+   *  `showActivityLog` (W6-B10, below) — the two conditions are
+   *  complementary, not competing: `terminal` answers "is this session
+   *  done at all", `showActivityLog` answers "of the affordances THIS
+   *  phase has, is any of them actually actionable yet". */
   terminal: boolean;
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
@@ -174,6 +192,20 @@ export function SessionInteractivePanel({
   // `artifact.kind`, never `kind === 'authoring'`.
   const packageArtifact = artifact !== null && artifact.kind === 'file-package' ? artifact : null;
   const packageShape = packageArtifact ? draftShapeOf(packageArtifact.files) : null;
+
+  // W6-B10: show the shared ActivityLog drawer exactly when every derived
+  // affordance is one of the disabled "not yet wired" kinds — i.e. the
+  // phase table put the operator in an `agent`/`finalize` step (writes
+  // and/or next declared, no `noop`) with nothing ACTIONABLE to click.
+  // Generic over `kind` (no `kind === 'demo'` compare): demo's `generating`
+  // row (`writes: [demo], next: awaiting-review`) derives exactly
+  // `[staged-review, next-turn]`, both not-yet-wired, so this is true for
+  // it — the same phases the retired `DemoBuilderPanel` showed its own
+  // ActivityLog for. A `verdict`/`question-form` affordance (something to
+  // act on) leaves it false; ZERO affordances also leaves it false here —
+  // that case is `drawer`'s job (below), gated on `!terminal` (W6-B8), not
+  // this computation's `affordances.length > 0` guard.
+  const showActivityLog = affordances.length > 0 && affordances.every((a) => NOT_YET_WIRED_KINDS.has(a.kind));
 
   async function submit(affordance: SessionAffordance, body: Record<string, unknown>): Promise<void> {
     if (!project) {
@@ -226,6 +258,8 @@ export function SessionInteractivePanel({
   return (
     <div data-component="session-interactive-panel" data-affordance-count={affordances.length}>
       <ProvenanceStrip phase={phase} modelTier={modelTier} />
+
+      {showActivityLog && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />}
 
       {affordances.map((affordance) => {
         const error = errors[affordance.id];
