@@ -21,14 +21,15 @@ const PROJECT_ID = 'test-project';
 
 function makeManifest(
   id: string,
-  opts: { flowId?: string; deps?: string[]; cycleId?: string } = {},
+  opts: { flowId?: string; deps?: string[]; cycleId?: string; title?: string; body?: string } = {},
 ): string {
-  const { flowId = 'forge-develop', deps = [], cycleId } = opts;
+  const { flowId = 'forge-develop', deps = [], cycleId, title, body } = opts;
   const depsBlock =
     deps.length > 0
       ? `depends_on_initiatives:\n${deps.map((d) => `  - ${d}`).join('\n')}\n`
       : '';
   const cycleBlock = cycleId ? `cycle_id: ${cycleId}\n` : '';
+  const titleBlock = title ? `title: ${JSON.stringify(title)}\n` : '';
   return `---
 initiative_id: ${id}
 project: ${PROJECT_ID}
@@ -38,9 +39,9 @@ iteration_budget: 5
 cost_budget_usd: 2.0
 phase: pending
 flow_id: ${flowId}
-${depsBlock}${cycleBlock}---
+${depsBlock}${cycleBlock}${titleBlock}---
 
-# ${id}
+${body ?? `# ${id}`}
 `;
 }
 
@@ -104,6 +105,7 @@ type RoadmapBody = {
     projectId: string;
     initiatives: Array<{
       initiativeId: string;
+      title: string;
       status: string;
       ready: boolean;
       blockedBy: string[];
@@ -177,6 +179,68 @@ test('roadmap: pending initiative with cycle_id + WI snapshot → workItems defi
     d!.workItems!.map((w) => w.id),
     ['WI-1'],
   );
+});
+
+// ---------------------------------------------------------------------------
+// mock finding I3 — title-source fix. betterado manifests all open their body
+// with the SAME boilerplate heading ("Goal" / "Summary" / "Context" /
+// "Overview"), so every roadmap card showed the identical word. Precedence:
+// frontmatter `title:` > first NON-boilerplate heading > initiativeId.
+// ---------------------------------------------------------------------------
+
+test('roadmap: betterado-shaped body (first heading is boilerplate "Goal") — the card title skips it for the next real heading', async () => {
+  const path = join(forgeRoot, '_queue', 'pending', 'INIT-TITLE1.md');
+  writeFileSync(
+    path,
+    makeManifest('INIT-TITLE1', {
+      body: '## Goal\n\nShip a dark-mode toggle.\n\n## Add dark mode toggle\n\nImplement the settings switch.',
+    }),
+  );
+  try {
+    const roadmap = await fetchRoadmap();
+    const t = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-TITLE1');
+    assert.ok(t, 'INIT-TITLE1 present in roadmap');
+    assert.equal(t!.title, 'Add dark mode toggle');
+  } finally {
+    rmSync(path, { force: true });
+  }
+});
+
+test('roadmap: every heading is boilerplate → the card title falls back to the initiativeId, never a boilerplate word', async () => {
+  const path = join(forgeRoot, '_queue', 'pending', 'INIT-TITLE2.md');
+  writeFileSync(
+    path,
+    makeManifest('INIT-TITLE2', {
+      body: '## Goal\n\nShip it.\n\n## Summary\n\nDetails.\n\n## Context\n\nBackground.',
+    }),
+  );
+  try {
+    const roadmap = await fetchRoadmap();
+    const t = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-TITLE2');
+    assert.ok(t, 'INIT-TITLE2 present in roadmap');
+    assert.equal(t!.title, 'INIT-TITLE2');
+  } finally {
+    rmSync(path, { force: true });
+  }
+});
+
+test('roadmap: a frontmatter title: field wins over heading scrape entirely', async () => {
+  const path = join(forgeRoot, '_queue', 'pending', 'INIT-TITLE3.md');
+  writeFileSync(
+    path,
+    makeManifest('INIT-TITLE3', {
+      title: 'Dark mode toggle for the settings page',
+      body: '## Goal\n\nShip a dark-mode toggle.\n',
+    }),
+  );
+  try {
+    const roadmap = await fetchRoadmap();
+    const t = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-TITLE3');
+    assert.ok(t, 'INIT-TITLE3 present in roadmap');
+    assert.equal(t!.title, 'Dark mode toggle for the settings page');
+  } finally {
+    rmSync(path, { force: true });
+  }
 });
 
 test('roadmap: dep moves to done/ → dependent initiative flips to ready', async () => {

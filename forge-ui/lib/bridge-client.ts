@@ -194,6 +194,14 @@ export type RoadmapWorkItem = {
   id: string;
   title: string;
   dependsOn: string[];
+  /**
+   * W6-RV-1: the WI's own status (mirrors `orchestrator/work-item.ts`'s
+   * `WorkItemStatus`), read straight off its frontmatter. Feeds the
+   * collapsed roadmap card's "done/total" micro-badge. Optional — legacy WI
+   * snapshots or a read that predates this field leave it undefined; callers
+   * treat undefined as "not complete" rather than fabricating a status.
+   */
+  status?: 'pending' | 'in-progress' | 'complete' | 'failed';
 };
 
 export type RoadmapInitiative = {

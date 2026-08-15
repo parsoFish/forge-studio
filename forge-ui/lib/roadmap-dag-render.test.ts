@@ -290,3 +290,67 @@ test('[R4-13] AT5: a RECOVERABLE initiative keeps [data-recovery-item] + inspect
   const recoveryItem = tagContaining(html, 'data-recovery-item');
   expect(recoveryItem).toContain('data-recovery-initiative="INIT-B"');
 });
+
+// ---------------------------------------------------------------------------
+// W6-RV-1 — default-collapsed uniform cards + collapse-all/expand-all.
+// The detail body (deps line, WI badges, run links, plan/start-development
+// triggers, the recovery region) moved to InitiativeDetail.tsx as a pure
+// re-home (AT4/AT5 above still pass byte-identical — display:none does not
+// remove markup from `renderToStaticMarkup`'s output). What's NEW here is
+// the collapsed-card contract: every node starts collapsed, carries
+// [data-initiative-collapsed="true"], and renders a uniform title/id/status
+// + two micro-badges (deps count, WI done/total) instead of the old
+// expanded-by-default full card.
+// ---------------------------------------------------------------------------
+
+test('[R4-13/W6-RV-1] every node renders [data-initiative-collapsed="true"] and aria-expanded="false" by default', () => {
+  const roadmap = buildRoadmap();
+  const html = render(roadmap);
+  expect(countAttr(html, 'data-initiative-collapsed')).toBe(roadmap.initiatives.length);
+  for (const init of roadmap.initiatives) {
+    const node = tagContaining(html, `data-initiative-id="${init.initiativeId}"`);
+    expect(node).toContain('data-initiative-collapsed="true"');
+  }
+  // toggle-node-detail is inside the node's markup, not the outer node tag
+  // itself — check its own aria-expanded on the FIRST such button.
+  const toggleBtn = html.match(/<button[^>]*data-action="toggle-node-detail"[^>]*>/)?.[0] ?? '';
+  expect(toggleBtn).toContain('aria-expanded="false"');
+});
+
+test('[R4-13/W6-RV-1] the collapsed card carries deps-count and wi-progress micro-badges with the real counts', () => {
+  const html = render();
+  // INIT-C: two parents (INIT-A, INIT-B) and one planned WI (WI-C1), none
+  // marked complete in the fixture → "0/1".
+  const cNode = nodeBlock(html, 'INIT-C');
+  expect(cNode).toContain('data-micro-badge="deps-count"');
+  expect(cNode).toContain('data-badge-value="2"');
+  expect(cNode).toContain('data-micro-badge="wi-progress"');
+  expect(cNode).toContain('data-badge-value="0/1"');
+
+  // INIT-D: unplanned (workItems undefined) → 0 deps, "0/0" WI progress —
+  // the badge never fabricates a total from an absent snapshot.
+  const dNode = nodeBlock(html, 'INIT-D');
+  expect(dNode).toContain('data-badge-value="0"');
+  expect(dNode).toContain('data-badge-value="0/0"');
+});
+
+test('[R4-13/W6-RV-1] the RoadmapDag header carries collapse-all / expand-all toolbar actions', () => {
+  const html = render();
+  expect(html).toContain('data-action="roadmap-collapse-all"');
+  expect(html).toContain('data-action="roadmap-expand-all"');
+});
+
+/** The full outer `<div data-roadmap-node ...>...</div>` block for one
+ *  initiative — wider than `tagContaining` (which stops at the first `>`),
+ *  needed to search INSIDE a node for its micro-badges. Relies on there
+ *  being no nested `data-roadmap-node` (never true in this fixture) between
+ *  one node's open tag and the next. */
+function nodeBlock(html: string, initiativeId: string): string {
+  const marker = `data-initiative-id="${initiativeId}"`;
+  const idx = html.indexOf(marker);
+  if (idx === -1) return '';
+  const start = html.lastIndexOf('<div data-roadmap-node', idx);
+  const nextNode = html.indexOf('<div data-roadmap-node', idx + marker.length);
+  const end = nextNode === -1 ? html.length : nextNode;
+  return html.slice(start, end);
+}
