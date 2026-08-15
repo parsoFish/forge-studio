@@ -362,8 +362,17 @@ export const RUN_ORDER = [
 
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],
+  // W6-B6 — read-only detour: the SAME awaiting-review session, opened on
+  // the shared /sessions/demo/<sid> shell, proving the generic interaction
+  // panel now renders there too (R1-03-F2's inline panel is unchanged).
+  ['demo-builder', 'demo-builder-session-shell'],
   ['demo-builder', 'demo-builder-generations'],
   ['demo-builder', 'demo-builder-lock'],
+  // W6-B6 — a SEPARATE, self-contained session: the generic
+  // /sessions/demo/new kickoff screen, registered LAST (self-contained
+  // create+cleanup, touches neither demoSid nor the shared .forge/demo/
+  // lock the beats above already exercised).
+  ['demo-builder', 'demo-builder-kickoff'],
 
   // community (R3-07) runs LAST, deliberately: it installs a real skill and a
   // real hook into the repo, which changes /skills, /hooks and the

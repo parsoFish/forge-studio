@@ -127,6 +127,10 @@ const KB_CLEANUP_UNRESOLVABLE_SESSION = '2026-08-14T10-00-00';
 // applyKbCleanup call-site defect — see AT-KBID-1 below).
 const KB_CLEANUP_RESOLVABLE_SESSION = '2026-08-14T10-02-00';
 const KB_CLEANUP_RESOLVABLE_KB_ID = 'kb-cleanup-wire-kb';
+// W6-B6 — a session whose status.json genuinely carries a kickoff-selected
+// `modelTier` (W6-B5's write side), proving the read route threads it
+// through rather than the stale `null` placeholder.
+const MODEL_TIER_SESSION = '2026-08-15T11-00-00';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -370,6 +374,17 @@ function writeInstructionsSession(projectsRoot: string, project: string, session
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'drafting' }), 'utf8');
 }
 
+// W6-B6 — same shape as writeInstructionsSession, plus a real `modelTier`
+// key (the W6-B5 write side's own field name), so the read route's
+// `typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null`
+// branch has a genuine non-null case to prove against.
+function writeInstructionsSessionWithModelTier(projectsRoot: string, project: string, sessionId: string, modelTier: string): void {
+  const dir = join(projectsRoot, project, '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n', 'utf8');
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'drafting', modelTier }), 'utf8');
+}
+
 function writeProjectBrainSession(projectsRoot: string, project: string, sessionId: string): void {
   const dir = join(projectsRoot, project, '_project-brain', sessionId);
   mkdirSync(dir, { recursive: true });
@@ -477,6 +492,7 @@ before(async () => {
   writeInstructionsSession(projectsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
   writeProjectBrainSession(projectsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
   writeArchitectSessionWithDeps(projectsRoot, 'depsproj', DEPS_SESSION);
+  writeInstructionsSessionWithModelTier(projectsRoot, 'demoproj', MODEL_TIER_SESSION, 'opus');
 
   // R4-19 WI-2 — the ".kb-" seeding-anchor reachability fixture, plus a
   // normal (non-dot) project-brain session as the companion baseline.
@@ -606,10 +622,11 @@ type SessionShellBody = {
   ok: boolean; kind: string; sessionId: string; project: string; phase: string;
   stages: string[]; defaultStage: string; turns: SessionShellTurn[]; artifact: unknown;
   // W6-B3 — always present (never omitted): affordances is [] when the
-  // descriptor carries neither turnSpec nor panel (architect); modelTier is
-  // always null until B5 lands its write side.
+  // descriptor carries neither turnSpec nor panel (architect). W6-B6 —
+  // modelTier is read live off status.json ('opus'|'sonnet'|'haiku'|null);
+  // still typed loosely here since most fixtures below carry no modelTier.
   affordances: { id: string; kind: string; phase: string; meta?: { writes?: string[]; next?: string } }[];
-  modelTier: null;
+  modelTier: string | null;
 };
 
 test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the full shell payload', async () => {
@@ -682,6 +699,14 @@ test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the 
     `expected the panel-derived affordances for phase "drafting", got: ${JSON.stringify(body.affordances)}`,
   );
   assert.equal(body.modelTier, null);
+});
+
+test('W6-B6: GET /api/studio/sessions/instructions/<id>?project=<p> threads a real status.json modelTier through, never the stale null placeholder', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${MODEL_TIER_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.modelTier, 'opus', 'a real status.json.modelTier must reach the wire verbatim, not the B3-era null placeholder');
 });
 
 test('AT-40: GET /api/studio/sessions/project-brain/<id>?project=<p> returns the full shell payload, honestly one turn', async () => {

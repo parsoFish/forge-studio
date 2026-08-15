@@ -14,9 +14,11 @@ import {
   listInstructionsSessions,
   fetchProjectBrainSessions,
   fetchStagedThemes,
+  listDemoSessions,
   type ArchitectSessionSummary,
   type InstructionsSessionSummary,
   type ProjectBrainSession,
+  type DemoSessionSummary,
 } from '@/lib/bridge-client';
 
 import { SessionTranscript } from '@/components/studio/session/SessionTranscript';
@@ -26,6 +28,12 @@ import { SessionInstructionsPanel } from '@/components/studio/session/SessionIns
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionAuthoringPanel } from '@/components/studio/session/SessionAuthoringPanel';
 import { SessionCleanupPanel } from '@/components/studio/session/SessionCleanupPanel';
+import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
+
+/** W6-B6 — kinds that render the GENERIC interaction panel this batch.
+ *  architect/instructions/kb-cleanup/authoring keep their bespoke panels
+ *  (B8/B9 migrate them); architect never migrates (ADR-043 amendment §4). */
+const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding']);
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -102,6 +110,23 @@ export default function SessionShellPage({
     } else if (kind === 'project-brain') {
       fetchProjectBrainSessions()
         .then((list) => settle(toProjectBrainSummary(list.find((s) => s.session_id === sessionId) ?? null)))
+        .catch(() => setSummaryAttempted(true));
+    } else if (kind === 'demo') {
+      // W6-B6 fix (the demo "Session not found" bug) — `demo` had NO branch
+      // here at all, unlike architect/instructions/project-brain: it fell
+      // into the generic `else` below, which only ever calls
+      // `setSummaryAttempted(true)` and NEVER resolves `summary`, so `project`
+      // (derived below as `summary?.data.project ?? queryProject ?? null`)
+      // permanently depended on a `?project=` query param being present in
+      // the URL with no fallback — any deep link or navigation that omitted
+      // it (this batch's own kickoff `Start` button included) left `project`
+      // stuck at `null` forever, tripping `noProjectKnown` and showing
+      // "Session not found" even though `listDemoSessions()` — the SAME
+      // per-kind list endpoint `DemoBuilderPanel`/the legacy `/demo/[sid]`
+      // redirect already use — can resolve it, exactly like the three kinds
+      // above.
+      listDemoSessions()
+        .then((list) => settle(toDemoSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
         .catch(() => setSummaryAttempted(true));
     } else {
       setSummaryAttempted(true); // an unrecognised kind — nothing to fetch here; the shell route's own 404 carries the page
@@ -216,6 +241,17 @@ export default function SessionShellPage({
                 kbId={kbId}
                 artifact={viewState.artifact}
               />
+            ) : GENERIC_PANEL_KINDS.has(kind) ? (
+              <SessionInteractivePanel
+                kind={kind}
+                sessionId={sessionId}
+                project={project}
+                phase={viewState.phase}
+                affordances={viewState.affordances}
+                artifact={viewState.artifact}
+                modelTier={viewState.modelTier}
+                onChanged={refreshShell}
+              />
             ) : null}
           </SessionTranscript>
           <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />
@@ -253,12 +289,14 @@ const SUMMARY_POLL_MS = 3000;
 const LIST_CHANGED_MESSAGE_TYPE: Record<string, string> = {
   architect: 'architect-list-changed',
   instructions: 'instructions-list-changed',
+  demo: 'demo-list-changed',
 };
 
 type KindSummary =
   | { kind: 'architect'; data: ArchitectSessionSummary }
   | { kind: 'instructions'; data: InstructionsSessionSummary }
-  | { kind: 'project-brain'; data: ProjectBrainSession };
+  | { kind: 'project-brain'; data: ProjectBrainSession }
+  | { kind: 'demo'; data: DemoSessionSummary };
 
 function toArchitectSummary(data: ArchitectSessionSummary | null): KindSummary | null {
   return data ? { kind: 'architect', data } : null;
@@ -268,6 +306,9 @@ function toInstructionsSummary(data: InstructionsSessionSummary | null): KindSum
 }
 function toProjectBrainSummary(data: ProjectBrainSession | null): KindSummary | null {
   return data ? { kind: 'project-brain', data } : null;
+}
+function toDemoSummary(data: DemoSessionSummary | null): KindSummary | null {
+  return data ? { kind: 'demo', data } : null;
 }
 
 /** `StudioArchitectShell.mainData` is `Record<string,string>` — `dataAttrs`

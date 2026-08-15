@@ -712,8 +712,16 @@ export async function listInstructionsSessions(): Promise<InstructionsSessionSum
 export async function startInstructions(input: {
   project: string;
   mode: 'init' | 'edit';
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — an operator-chosen kickoff
+   *  model tier, validated server-side against instructions-creator's own
+   *  SKILL.md-declared envelope (`resolveKickoffModelTier`). Omit for the
+   *  spec's spawn-default tier. */
+  modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'init' | 'edit'; error?: string }> {
-  const r = await bridgePost('/api/instructions/start', { project: input.project, mode: input.mode });
+  const r = await bridgePost('/api/instructions/start', {
+    project: input.project, mode: input.mode,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return {
     ok: true,
@@ -835,10 +843,14 @@ export async function startDemoBuilder(input: {
   mode: 'create' | 'update';
   /** Iterate ONE demo-element kind (per-element iteration); omit to compose the full demo. */
   targetElement?: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against demo-builder's own SKILL.md envelope. */
+  modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'create' | 'update'; error?: string }> {
   const r = await bridgePost('/api/demo-builder/start', {
     project: input.project, mode: input.mode,
     ...(input.targetElement ? { targetElement: input.targetElement } : {}),
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
   });
   if (!r.ok) return { ok: false, error: r.error };
   return {
@@ -869,8 +881,16 @@ export type ProjectBrainSession = {
 };
 
 /** Start a project-brain builder session (phase=briefing). */
-export async function startProjectBrain(input: { project: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/project-brain/start', { project: input.project });
+export async function startProjectBrain(input: {
+  project: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against project-brain-builder's own SKILL.md envelope. */
+  modelTier?: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/project-brain/start', {
+    project: input.project,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
@@ -917,8 +937,17 @@ export async function fetchStagedThemes(project: string, sessionId: string): Pro
  * convention every kind uses), not what the drafted skill/hook belongs to;
  * skills and hooks are forge-wide, project-agnostic library artifacts.
  */
-export async function startAuthoring(input: { project: string; prompt: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/studio/authoring/start', { project: input.project, prompt: input.prompt });
+export async function startAuthoring(input: {
+  project: string;
+  prompt: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against creation-agent's own SKILL.md envelope. */
+  modelTier?: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/start', {
+    project: input.project, prompt: input.prompt,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }

@@ -614,6 +614,67 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
 }
 
 // ---------------------------------------------------------------------------
+// SessionAffordancePayload — mirrors orchestrator/studio/session-kinds.ts's
+// `SessionAffordance` (W6-B6, ADR-043 2026-08-15 amendment §1 "affordances
+// are derived, not authored"). Re-declared client-side per this file's own
+// convention (header) — never imported from the orchestrator.
+// ---------------------------------------------------------------------------
+
+const SESSION_AFFORDANCE_KINDS = ['question-form', 'verdict', 'staged-review', 'next-turn'] as const;
+export type SessionAffordanceKind = (typeof SESSION_AFFORDANCE_KINDS)[number];
+
+export type SessionAffordance = {
+  id: string;
+  kind: SessionAffordanceKind;
+  phase: string;
+  /** Present only when the source phase-table row carried the corresponding
+   *  field (`writes` for `staged-review`, `next` for `next-turn`) — omitted,
+   *  never defaulted, mirroring the server's own omit-don't-default
+   *  discipline (session-kinds.ts's `deriveSessionAffordances`). */
+  meta?: { writes?: string[]; next?: string };
+};
+
+function parseSessionAffordanceKind(raw: unknown): SessionAffordanceKind {
+  if (typeof raw === 'string' && (SESSION_AFFORDANCE_KINDS as readonly string[]).includes(raw)) {
+    return raw as SessionAffordanceKind;
+  }
+  throw new Error(`unrecognised affordance kind ${JSON.stringify(raw)} — must be one of: ${SESSION_AFFORDANCE_KINDS.join(', ')}`);
+}
+
+/** A malformed affordance (wrong-typed/missing field, an unrecognised kind,
+ *  or not a plain object) throws — mirrors `parseSessionTurn`'s discipline;
+ *  never rendered with an invented field. `meta` is carried through
+ *  verbatim when present (both sub-fields optional-tolerant — a malformed
+ *  `writes`/`next` degrades that ONE sub-field to absent rather than
+ *  throwing the whole affordance away, since `meta` is advisory display
+ *  data, not a gate). */
+function parseSessionAffordance(raw: unknown): SessionAffordance {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed session affordance: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  const id = requireString(raw, 'id');
+  const kind = parseSessionAffordanceKind(raw['kind']);
+  const phase = requireString(raw, 'phase');
+  const metaRaw = raw['meta'];
+  let meta: SessionAffordance['meta'];
+  if (isPlainObject(metaRaw)) {
+    const writes = Array.isArray(metaRaw['writes']) && metaRaw['writes'].every((w) => typeof w === 'string') ? (metaRaw['writes'] as string[]) : undefined;
+    const next = typeof metaRaw['next'] === 'string' ? metaRaw['next'] : undefined;
+    if (writes !== undefined || next !== undefined) {
+      meta = { ...(writes !== undefined ? { writes } : {}), ...(next !== undefined ? { next } : {}) };
+    }
+  }
+  return { id, kind, phase, ...(meta !== undefined ? { meta } : {}) };
+}
+
+function parseSessionAffordances(raw: unknown): SessionAffordance[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`missing or invalid "affordances": expected an array, got ${JSON.stringify(raw)}`);
+  }
+  return raw.map((a) => parseSessionAffordance(a));
+}
+
+// ---------------------------------------------------------------------------
 // SessionShellPayload — the whole route envelope
 // ---------------------------------------------------------------------------
 
@@ -648,6 +709,25 @@ export type SessionShellPayload = {
    * a payload omitting the key is not malformed.
    */
   kbId?: string;
+  /**
+   * W6-B6 (ADR-043 2026-08-15 amendment §1) — the derived, phase-scoped
+   * operator affordances (`orchestrator/studio/session-kinds.ts`'s
+   * `deriveSessionAffordances`, server-computed). REQUIRED and hard-parsed
+   * like every sibling field above `kbId` — a kind with no derivable
+   * affordances (architect) still carries a genuine `[]`, never an omitted
+   * key. `SessionInteractivePanel` renders EXACTLY this array and never
+   * re-derives from `phase` itself (the "derived, not authored" discipline).
+   */
+  affordances: SessionAffordance[];
+  /**
+   * W6-B6 (ADR-043 2026-08-15 amendment §3) — the session's own
+   * kickoff-selected model tier, read live off `status.json.modelTier`.
+   * `null` for a session with no recorded tier (predates the seam, or a
+   * `strategy:fixed` skill's kickoff never writes one). REQUIRED (the key
+   * is always present on the wire, never omitted) — unlike `kbId`, `null`
+   * IS the honest value here, not an absence to model as `undefined`.
+   */
+  modelTier: string | null;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -705,7 +785,27 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   const kbIdRaw = raw['kbId'];
   const kbId = typeof kbIdRaw === 'string' ? kbIdRaw : undefined;
 
-  return { ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact, ...(kbId !== undefined ? { kbId } : {}) };
+  // W6-B6 — hard-required like every field above `kbId` (never coerced to a
+  // permissive default): a non-array "affordances" throws, mirroring the
+  // "turns" refusal above this same function.
+  const affordances = parseSessionAffordances(raw['affordances']);
+
+  // modelTier's honest value space is `string | null` — unlike kbId, `null`
+  // IS the real answer for "no recorded tier", so this is REQUIRED (throws
+  // if the key is missing or neither a string nor null), never
+  // absence-tolerant like kbId's own undefined-when-malformed handling.
+  const modelTierRaw = raw['modelTier'];
+  if (modelTierRaw !== null && typeof modelTierRaw !== 'string') {
+    throw new Error(`missing or invalid "modelTier": expected a string or null, got ${JSON.stringify(modelTierRaw)}`);
+  }
+  const modelTier = modelTierRaw;
+
+  return {
+    ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
+    ...(kbId !== undefined ? { kbId } : {}),
+    affordances,
+    modelTier,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -823,4 +923,85 @@ export async function fetchSessionShell(kind: string, sessionId: string, project
   }
 
   return interpretSessionShellOutcome({ kind: 'json', status: res.status, body });
+}
+
+// ---------------------------------------------------------------------------
+// postSessionAffordance — the W6-B6 write half, `POST /api/studio/sessions/
+// :kind/:sessionId/:affordance` (`cli/bridge-studio-affordances.ts`, W6-B4).
+// Sibling of `fetchSessionShell` above — same module, same bridge-URL
+// resolution, but its own small POST helper (this file owns no import of
+// `bridgePost`/`studioPost`, per this file's "each client owns its own small
+// helpers" convention, header).
+// ---------------------------------------------------------------------------
+
+export type PostSessionAffordanceResult =
+  | { ok: true; data: Record<string, unknown> }
+  | {
+      ok: false;
+      error: string;
+      /** Present only for a 501 `UnhandledAffordanceBody` (a structurally
+       *  valid, currently-available affordance this route has no write
+       *  handler for) — lets a caller distinguish "not yet wired" from any
+       *  other failure without string-matching `error`. Absent for every
+       *  other failure shape (network error, 400/404/409/422/500). */
+      unhandledKind?: SessionAffordanceKind;
+    };
+
+function sessionAffordancePath(kind: string, sessionId: string, affordanceId: string): string {
+  return `/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(affordanceId)}`;
+}
+
+/**
+ * POST an operator act against one currently-available affordance. `body`
+ * is the per-affordance-kind wire shape (`{answers: [...]}` for a
+ * question-form submit, `{verdict: 'approve'|'reject', ...}` for a verdict) —
+ * this function does not shape it, only carries it through verbatim (the
+ * SAME "delegate, never reimplement" discipline the route itself documents).
+ *
+ * Every failure surfaces the server's own `error` string VERBATIM — a 409
+ * wrong-phase refusal (naming the offending affordance id + the currently
+ * available set), a 422 (e.g. kb-cleanup/authoring's reject-unsupported
+ * refusal), and a 501 `UnhandledAffordanceBody` alike. Never swallowed,
+ * never replaced by a generic "failed" string.
+ */
+export async function postSessionAffordance(
+  kind: string,
+  sessionId: string,
+  affordanceId: string,
+  body: Record<string, unknown>,
+): Promise<PostSessionAffordanceResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${sessionAffordancePath(kind, sessionId, affordanceId)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch (err) {
+    return { ok: false, error: `non-JSON affordance response (HTTP ${res.status}): ${String(err)}` };
+  }
+  if (!isPlainObject(data)) {
+    return { ok: false, error: `malformed affordance response (HTTP ${res.status}): expected an object, got ${JSON.stringify(data)}` };
+  }
+
+  if (!res.ok || data['ok'] === false) {
+    const error = typeof data['error'] === 'string' ? data['error'] : `HTTP ${res.status}`;
+    let unhandledKind: SessionAffordanceKind | undefined;
+    if (typeof data['kind'] === 'string' && (SESSION_AFFORDANCE_KINDS as readonly string[]).includes(data['kind'])) {
+      unhandledKind = data['kind'] as SessionAffordanceKind;
+    }
+    return { ok: false, error, ...(unhandledKind !== undefined ? { unhandledKind } : {}) };
+  }
+
+  return { ok: true, data };
 }
