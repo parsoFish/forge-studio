@@ -76,9 +76,15 @@ export function KbHealth({ health }: Props) {
           </div>
         </div>
 
-        {/* Lint */}
+        {/* Lint — W6-B13: these counts are ACTIONABLE (the drain-to-green
+            panel is what actually clears them), so they link straight to it
+            rather than sitting as orphan numbers with no path to a fix. */}
         {(lintFlags > 0 || lintErrors > 0) && (
-          <div style={{ marginBottom: 12 }}>
+          <a
+            href="#kb-drain-panel"
+            data-action="goto-drain-panel"
+            style={{ display: 'block', marginBottom: 12, textDecoration: 'none', color: 'inherit' }}
+          >
             <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
               Lint
@@ -95,7 +101,7 @@ export function KbHealth({ health }: Props) {
                 {lintFlags} lint flag{lintFlags !== 1 ? 's' : ''}
               </div>
             )}
-          </div>
+          </a>
         )}
 
         {/* R6-08 WI-1: per-check itemization. Always renders when `checks` is
@@ -103,7 +109,11 @@ export function KbHealth({ health }: Props) {
             clean/'pass' check, so an operator can see what was actually run,
             not just what failed. */}
         {checks && checks.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
+          <a
+            href="#kb-drain-panel"
+            data-action="goto-drain-panel"
+            style={{ display: 'block', marginBottom: 12, textDecoration: 'none', color: 'inherit' }}
+          >
             <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
               Checks
@@ -137,7 +147,7 @@ export function KbHealth({ health }: Props) {
                 </span>
               </div>
             ))}
-          </div>
+          </a>
         )}
 
         {/* Staleness */}

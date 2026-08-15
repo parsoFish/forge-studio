@@ -27,7 +27,10 @@
  *     relabelled `'timed-out'` — no wasted 91st fetch chasing a decision
  *     already made.
  */
-import { getAgentRunStatus, type AgentRunStatus } from './studio-client';
+import {
+  getAgentRunStatus, getAgentFixStatus, fetchKbDrainRun,
+  type AgentRunStatus, type AgentFixStatus, type KbDrainStatus,
+} from './studio-client';
 
 /** `AgentRunStatus['state']` plus the one state this module adds: the poll
  *  gave up after `maxAttempts` while the run was still genuinely running. */
@@ -41,6 +44,79 @@ export type PolledAgentRunStatus = Omit<AgentRunStatus, 'state'> & { state: Poll
 export const DEFAULT_POLL_INTERVAL_MS = 2000;
 /** Both original call sites capped at 90 interval polls (~3 min @ 2s). */
 export const DEFAULT_POLL_MAX_ATTEMPTS = 90;
+
+// ---------------------------------------------------------------------------
+// pollUntilTerminal — the generic bounded-poll core, extracted (W6-B13) so a
+// SECOND fragile hand-rolled poll loop never gets a chance to exist. Every
+// consumer below (`pollAgentRun`, and the two W6-B13 additions
+// `pollKbDrain`/`pollAgentFix`) is a thin, status-shape-specific wrapper
+// around this one mechanism: fetch immediately, then every `intervalMs`
+// while `isRunning(status)` holds, until either a real terminal status
+// arrives or `maxAttempts` is exhausted — in which case `onTimeout` fires
+// EXACTLY ONCE with the last real status this loop actually observed (never
+// a silent stop, never a fabricated status for one it never saw). A
+// throwing `fetchStatus` counts as one failed attempt and keeps polling,
+// same as a still-running status — never an unhandled rejection.
+// ---------------------------------------------------------------------------
+
+export type PollUntilTerminalOptions<S> = {
+  fetchStatus: () => Promise<S>;
+  /** True while `status` should keep being polled. */
+  isRunning: (status: S) => boolean;
+  intervalMs?: number;
+  maxAttempts?: number;
+  /** Called with every polled status, including the immediate first poll. */
+  onUpdate: (status: S) => void;
+  /** Called EXACTLY ONCE, instead of `onUpdate`, once `maxAttempts` is
+   *  reached while still running — `lastStatus` is the last real status this
+   *  loop observed (`null` if every attempt threw). The caller derives its
+   *  own `'timed-out'`-shaped status from it. */
+  onTimeout: (lastStatus: S | null) => void;
+};
+
+export function pollUntilTerminal<S>(opts: PollUntilTerminalOptions<S>): () => void {
+  const intervalMs = opts.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const maxAttempts = opts.maxAttempts ?? DEFAULT_POLL_MAX_ATTEMPTS;
+
+  let cancelled = false;
+  let attempts = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastStatus: S | null = null;
+
+  const tick = async (): Promise<void> => {
+    let s: S;
+    try {
+      s = await opts.fetchStatus();
+    } catch {
+      if (cancelled) return;
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        opts.onTimeout(lastStatus);
+        return;
+      }
+      timer = setTimeout(() => { void tick(); }, intervalMs);
+      return;
+    }
+    if (cancelled) return;
+    lastStatus = s;
+    opts.onUpdate(s);
+    if (!opts.isRunning(s)) return; // terminal (or honestly unknown) — stop
+
+    attempts += 1;
+    if (attempts >= maxAttempts) {
+      opts.onTimeout(s);
+      return;
+    }
+    timer = setTimeout(() => { void tick(); }, intervalMs);
+  };
+
+  void tick();
+
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+  };
+}
 
 export type PollAgentRunOptions = {
   /** Injectable for tests; defaults to the real `getAgentRunStatus`
@@ -67,53 +143,85 @@ export type PollAgentRunOptions = {
  */
 export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => void {
   const fetchStatus = opts.fetchStatus ?? getAgentRunStatus;
-  const intervalMs = opts.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const maxAttempts = opts.maxAttempts ?? DEFAULT_POLL_MAX_ATTEMPTS;
-  const onUpdate = opts.onUpdate;
+  return pollUntilTerminal<AgentRunStatus>({
+    fetchStatus: () => fetchStatus(runId),
+    isRunning: (s) => s.state === 'running',
+    intervalMs: opts.intervalMs,
+    maxAttempts: opts.maxAttempts,
+    onUpdate: (s) => opts.onUpdate(s as PolledAgentRunStatus),
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, costUsd: 0, events: 0 }), state: 'timed-out' }),
+  });
+}
 
-  let cancelled = false;
-  let attempts = 0;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  // Preserved across ticks so a timeout reached via a THROWING poll (below)
-  // can still report the last real cost/events, rather than fabricating
-  // zeros for a status this loop never actually saw.
-  let lastStatus: AgentRunStatus | null = null;
+// ---------------------------------------------------------------------------
+// pollKbDrain (W6-B13) — the drain-to-green panel's live poll. Same bounded/
+// explicit-timeout mechanics as `pollAgentRun`, over the drain status shape
+// (`cli/bridge-studio-kb-drain.ts`'s `KbDrainStatus`, mirrored client-side in
+// `./studio-client.ts`). A drain run keeps running server-side regardless of
+// whether anything is watching it (it is driven by `enqueueConsolidate`, not
+// this poll) — `'timed-out'` here means only "this browser stopped
+// watching," never "the run stopped."
+// ---------------------------------------------------------------------------
 
-  const tick = async (): Promise<void> => {
-    let s: AgentRunStatus;
-    try {
-      s = await fetchStatus(runId);
-    } catch {
-      // A throwing fetch counts as one failed attempt and keeps polling —
-      // never an unhandled rejection, and never a status this loop didn't
-      // actually observe. Bounded by the same maxAttempts ceiling as a
-      // still-'running' poll.
-      if (cancelled) return;
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        onUpdate({ ...(lastStatus ?? { ok: false, costUsd: 0, events: 0 }), state: 'timed-out' });
-        return;
-      }
-      timer = setTimeout(() => { void tick(); }, intervalMs);
-      return;
-    }
-    if (cancelled) return;
-    lastStatus = s;
-    onUpdate(s);
-    if (s.state !== 'running') return; // terminal (or honestly unknown) — stop
+export type PolledKbDrainState = KbDrainStatus['state'] | 'timed-out';
+export type PolledKbDrainStatus = Omit<KbDrainStatus, 'state'> & { state: PolledKbDrainState };
 
-    attempts += 1;
-    if (attempts >= maxAttempts) {
-      onUpdate({ ...s, state: 'timed-out' });
-      return;
-    }
-    timer = setTimeout(() => { void tick(); }, intervalMs);
+export type PollKbDrainOptions = {
+  fetchStatus?: (kbId: string, runId: string) => Promise<KbDrainStatus>;
+  intervalMs?: number;
+  maxAttempts?: number;
+  onUpdate: (status: PolledKbDrainStatus) => void;
+};
+
+function timedOutKbDrainStatus(kbId: string, runId: string): KbDrainStatus {
+  return {
+    ok: false, runId, kbId, state: 'running', round: 0,
+    counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0,
+    updatedAt: new Date(0).toISOString(),
   };
+}
 
-  void tick();
+export function pollKbDrain(kbId: string, runId: string, opts: PollKbDrainOptions): () => void {
+  const fetchStatus = opts.fetchStatus ?? fetchKbDrainRun;
+  return pollUntilTerminal<KbDrainStatus>({
+    fetchStatus: () => fetchStatus(kbId, runId),
+    isRunning: (s) => s.state === 'running',
+    intervalMs: opts.intervalMs,
+    maxAttempts: opts.maxAttempts,
+    onUpdate: (s) => opts.onUpdate(s as PolledKbDrainStatus),
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? timedOutKbDrainStatus(kbId, runId)), state: 'timed-out' }),
+  });
+}
 
-  return () => {
-    cancelled = true;
-    if (timer) clearTimeout(timer);
-  };
+// ---------------------------------------------------------------------------
+// pollAgentFix (W6-B13) — the ONE surviving per-finding poll from the old
+// LintResolutionPanel (its `pollFix`, deleted with the rest of that
+// component): dispatching a single agent turn for a USER-tier finding the
+// drain-to-green loop itself never resolves. The old `pollFix` silently
+// returned a still-'running' status forever once its 45×2s budget was
+// exhausted (W6 sweep finding C9#2 — the operator saw the "Apply answer"
+// button just re-enable with no feedback); this fixes that the same way
+// `pollAgentRun` already does, with an explicit `'timed-out'` state.
+// ---------------------------------------------------------------------------
+
+export type PolledAgentFixState = AgentFixStatus['state'] | 'timed-out';
+export type PolledAgentFixStatus = Omit<AgentFixStatus, 'state'> & { state: PolledAgentFixState };
+
+export type PollAgentFixOptions = {
+  fetchStatus?: (kbId: string, runId: string) => Promise<AgentFixStatus>;
+  intervalMs?: number;
+  maxAttempts?: number;
+  onUpdate: (status: PolledAgentFixStatus) => void;
+};
+
+export function pollAgentFix(kbId: string, runId: string, opts: PollAgentFixOptions): () => void {
+  const fetchStatus = opts.fetchStatus ?? getAgentFixStatus;
+  return pollUntilTerminal<AgentFixStatus>({
+    fetchStatus: () => fetchStatus(kbId, runId),
+    isRunning: (s) => s.state === 'running',
+    intervalMs: opts.intervalMs,
+    maxAttempts: opts.maxAttempts,
+    onUpdate: (s) => opts.onUpdate(s as PolledAgentFixStatus),
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false }), state: 'timed-out' }),
+  });
 }

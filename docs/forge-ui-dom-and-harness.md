@@ -1724,10 +1724,12 @@ inventory rather than one shared page-level contract:
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
     like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
     the pre-existing graph + reader body, re-anchored under this branch
-    unchanged; **Health** hosts `LintResolutionPanel` + `GuidancePanel` +
+    unchanged; **Health** hosts `KbDrainPanel` + `GuidancePanel` +
     `KbHealth` (moved under this branch, F1 — no longer rendered
-    unconditionally); **Ingest Activity** is the new read-only
-    `IngestActivityPanel` (see below). Journey: `knowledge-explore-tabs`.
+    unconditionally; W6-B13 replaced `LintResolutionPanel` with
+    `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
+    **Ingest Activity** is the new read-only `IngestActivityPanel` (see
+    below). Journey: `knowledge-explore-tabs`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]`, force-graph
     root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
     per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
@@ -1833,8 +1835,10 @@ inventory rather than one shared page-level contract:
     that same root once a consolidate run reaches a terminal (`'cleared'` |
     `'not-cleared'` | `'failed'` | `'running'` — absent before the first
     run, reset to `''` the moment a new one starts). Actions:
-    `[data-action="kb-lint"]` (deterministic `forge brain lint`, scoped to
-    the KB's own dir), `[data-action="kb-index"]` (index refresh),
+    `[data-action="kb-index"]` (index refresh — **`kb-lint` was REMOVED here
+    W6-B13**: it duplicated the Health tab's `KbDrainPanel`, whose live
+    status IS the scan result now, since every drain round re-lints the KB —
+    sweep finding C4#7),
     **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
     `op=consolidate`)**, **`[data-action="start-kb-cleanup"]` (R4-19-F2 — the
     kb-cleanup LAUNCHER, closing the reachability gap
@@ -1867,6 +1871,93 @@ inventory rather than one shared page-level contract:
     NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
     (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
     computes the real `cleared`/`total` count the terminal event carries.
+  - **KB drain-to-green panel (Health tab, W6-B13).** `KbDrainPanel.tsx`
+    replaces `LintResolutionPanel.tsx` (deleted) — ONE button drives every
+    auto- and agent-tier lint finding to a fixed point, entirely server-side
+    (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`, W6-B12): the component
+    is a pure OBSERVER of `_logs/_kb-drain-<runId>/status.json`, never the
+    owner of the run. Root: `#kb-drain-panel[data-component="kb-drain-panel"]
+    [data-drain-state][data-drain-round][data-drain-run-id]`.
+    `data-drain-state` is one of the server's own `KbDrainState` values
+    (`'running'|'green'|'needs-you'|'no-progress'|'round-cap'|'cost-ceiling'
+    |'failed'`) plus three UI-only values: `'idle'` (no run has ever been
+    dispatched for this kb), `'attaching'` (the mount-time reattach GET is
+    still in flight), and `'timed-out'` (this browser's bounded poll gave up
+    watching — the run itself keeps going server-side; see below). Actions:
+    `[data-action="drain-to-green"]` (`POST .../drain`, 409-safe — see
+    below) and `[data-action="recheck-drain"]` (only rendered in
+    `'timed-out'`; restarts the poll for the SAME `runId` without a fresh
+    dispatch).
+    - **Reattach-on-mount, not assume-fresh.** On every mount (including a
+      tab round-trip away from and back to Health — `KbDrainPanel` is
+      rendered only under `tab === 'health'`, so switching tabs unmounts/
+      remounts it), the panel calls `GET /api/studio/kbs/:id/drain`
+      (active-or-latest) BEFORE assuming there is no run — this is what
+      makes nav-away genuinely lose nothing: the SAME `data-drain-run-id`
+      and `data-drain-state` reappear. Journey:
+      `knowledge-lint-index` drives exactly this (drain → nav to Explore →
+      back to Health → assert the SAME run id/state).
+    - **The poll.** `lib/agent-dispatch.ts`'s `pollKbDrain` (built on the
+      SAME generic `pollUntilTerminal` core `pollAgentRun` now also uses) —
+      bounded, immediate-then-interval, with an EXPLICIT `'timed-out'`
+      status once the poll ceiling is hit while still `'running'` — never a
+      silent freeze. A drain run is driven by `enqueueConsolidate`
+      server-side, not by this poll, so `'timed-out'` here means only "this
+      browser stopped watching," never "the run stopped" — the re-check
+      button restarts watching the SAME run, no new dispatch.
+    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`)
+      posts `{}`; a 409 ("already active") is recovered by immediately
+      calling `fetchActiveOrLatestKbDrain` rather than trusting anything off
+      the 409 response body (the shared `studioPost` helper drops the body
+      on any non-2xx across this whole module) — so a double-click race
+      attaches to the REAL active run instead of surfacing a dead-end error.
+    - **Progress + terminal rendering.** `[data-drain-section="progress"]`
+      lists this round's auto+agent-tier `perFinding` rows —
+      `[data-drain-finding][data-drain-finding-tier="auto"|"agent"|"user"]
+      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]`.
+      Every terminal state gets honest, state-specific copy
+      (`lib/kb-drain-view.ts`'s `drainStateCopy` — pure, unit-tested):
+      `'green'` shows `[data-component="drain-green"]`; `'no-progress'` /
+      `'round-cap'` / `'cost-ceiling'` name what to do next (re-run, or
+      address manually); `'failed'` points at the `ActivityLog` drawer below
+      it (mounted whenever a `runId` is known, subscribed to the run's own
+      `_kb-drain-<runId>` cycle id) rather than inventing an error string
+      the persisted status doesn't carry.
+    - **`'needs-you'` — the ONE surviving piece of the old
+      `LintResolutionPanel`.** When (and only when) the server reports
+      `'needs-you'`, `[data-drain-section="needs-you"]
+      [data-user-index][data-user-total]` walks the operator through each
+      remaining USER-tier finding — the one decision the drain loop never
+      makes on its own. `[data-component="user-resolution-input"]`
+      (textarea) + `[data-action="submit-user-resolution"]` dispatch a
+      single agent-fix turn (`dispatchAgentFix`, unchanged route) polled by
+      the NEW `pollAgentFix` (same `pollUntilTerminal` core — fixes sweep
+      finding C9#2: the old panel's own `pollFix` silently stayed
+      `'running'` forever past its 45×2s budget with zero feedback;
+      `pollAgentFix` reaches an explicit `'timed-out'` instead). Clearing a
+      finding re-dispatches a fresh drain run rather than guessing
+      client-side what's left. `[data-action="skip-user-resolution"]`
+      advances the walkthrough; stepping past the last finding renders
+      `[data-component="user-tier-exhausted"]` — an explicit "reviewed all
+      N, none resolved yet" completion (fixes sweep finding C9#3: the old
+      panel clamped its index to the last item forever, so Skip past the
+      end produced no visible change on every subsequent click).
+    - **`KbHealth.tsx`'s lint counts link here (sweep C9, "no orphan health
+      numbers").** The Lint sub-section and the per-check itemization block
+      are both wrapped in `<a href="#kb-drain-panel"
+      data-action="goto-drain-panel">` — these counts are the ones
+      `KbDrainPanel` actually acts on, so they route straight to it rather
+      than sitting as dead numbers. (Layer balance / connectivity /
+      staleness stay plain — drain does not act on those.)
+    - Render-tested (`.tsx` wiring only — no jsdom in this repo, see
+      `RunPanel.tsx`'s own header) via `tsc`/`next build` plus pure-logic
+      unit coverage: `lib/kb-drain-view.test.ts` (state copy, tier
+      splitting, the C9#3 walkthrough-completion fix),
+      `lib/agent-dispatch.test.ts` (`pollKbDrain`/`pollAgentFix`), and
+      `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
+      `fetchActiveOrLatestKbDrain` wire contracts). Journey:
+      `knowledge-lint-index` (renamed in spirit from the old lint/index
+      beat — the file's own `id` is unchanged for RUN_ORDER stability).
   - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
     (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
     KB's own dir by the same identity-matched `resolveKbBrainDir` walk
