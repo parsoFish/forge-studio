@@ -863,69 +863,121 @@ inventory rather than one shared page-level contract:
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
-  Roadmap renders `RoadmapDag.tsx` (R4-13, replacing the retired
-  `SerpentineTimeline` time-ordered spine): a real dependency **DAG** —
-  `[data-roadmap-dag][data-initiative-count][data-roadmap-edge-count]` — with
-  initiatives bucketed left→right into dependency-depth columns
-  (`[data-dag-column]`; layout `lib/roadmap-dag-layout.ts`'s `byDepth`, node
-  tone `lib/roadmap-status-color.ts`). An `[data-dag-edges]` SVG overlay draws
-  **one edge per (prerequisite → dependent) pair whose both ends are in the
-  roadmap**:
-  `[data-dep-edge][data-dep-from="<prerequisite>"][data-dep-to="<dependent>"]`
-  — the edge-correctness the serpentine arcs carried ZERO `data-*` for. (Note:
-  NO attribute begins with `data-dep-edge-`; the edge count lives on
-  `[data-roadmap-edge-count]` — a `\bdata-dep-edge\b` matcher must remember a
-  hyphen is a word boundary.) Per initiative,
+  Roadmap renders `RoadmapCanvas.tsx` (**W6-RV-2**, replacing `RoadmapDag.tsx`
+  — R4-13's dependency-depth **column** layout, itself the replacement for
+  the retired `SerpentineTimeline` time-ordered spine): a **completion-time
+  canvas** —
+  `[data-roadmap-canvas][data-initiative-count][data-roadmap-edge-count]
+  [data-canvas-scale]` — the operator-locked "B-prime" design
+  (`mockups/roadmap-uplift/b-prime.html`). Layout math is pure and unit-tested
+  (`lib/roadmap-time-layout.ts`'s `computeRoadmapTimeLayout` +
+  `bucketByCompletionDay`/`layoutBlock`/`computeGapWidth`/`assignPendingBand`),
+  producing REAL `{x,y,w,h}` positions for every card up front — unlike the
+  retired DAG, the canvas needs no post-mount `ResizeObserver` measurement
+  pass, so its edges render correctly even in a no-jsdom `renderToStaticMarkup`
+  test. **The X axis is real completion time**: an initiative with a derivable
+  `completedAt` (`RoadmapInitiative.completedAt`, ISO — see the server-side
+  contract below) sits in a `[data-day-column][data-day="<YYYY-MM-DD">]
+  [data-day-count]` bucket, day-columns left→right in completion order; a
+  dense day wraps column-major into sub-columns of ≤6 rows (`MAX_ROWS`);
+  inter-day gaps are capped-proportional
+  (`GAP_BASE`+`GAP_PER_DAY`×(days-1), capped at `GAP_MAX`), with a
+  `[data-gap-chip][data-gap-days]` "··· n days" marker once a gap reaches
+  `GAP_CHIP_THRESHOLD_DAYS` (3). Pending work (no `completedAt` — including a
+  card whose completion is honestly undiscoverable, never a fabricated date)
+  sits inside the hatched `[data-projected-zone]` right of an amber
+  `[data-now-line]`, banded by dependency-feasibility, NOT dates:
+  `[data-band="in-flight"|"ready"|"after-prerequisites"|"unplanned"]
+  [data-band-count]`, in that fixed left→right order
+  (`assignPendingBand`/`PENDING_BAND_ORDER`). An `[data-dag-edges]` SVG
+  overlay draws **one edge per (prerequisite → dependent) pair whose both
+  ends are in the roadmap**:
+  `[data-dep-edge][data-dep-from="<prerequisite>"][data-dep-to="<dependent>"]
+  [data-hot="true"|"false"]` — faint at rest, bolded (`data-hot="true"`) when
+  either end is the selected card — the edge-correctness the serpentine arcs
+  carried ZERO `data-*` for. (Note: NO attribute begins with
+  `data-dep-edge-`; the edge count lives on `[data-roadmap-edge-count]` — a
+  `\bdata-dep-edge\b` matcher must remember a hyphen is a word boundary.) Per
+  initiative,
   `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
-  [data-initiative-collapsed="true"|"false"]`). **W6-RV-1** (the
-  direction-agnostic first step toward the RV-2 time-axis canvas): every node
-  renders **collapsed by default** — a uniform, scannable ~280×72 card
-  (title, 1-line ellipsis; `initiativeId`, monospace; the status chip) plus
-  two micro-badges, `[data-micro-badge="deps-count"][data-badge-value]` and
+  [data-initiative-collapsed="true"][data-completed-at]` — the last only when
+  derivable). **Every card is now PERMANENTLY collapsed** — canvas geometry
+  never reflows on selection (operator ruling, mock decision point P5), so
+  `data-initiative-collapsed` never flips to `"false"` and there is no more
+  per-node inline-expand toggle (`[data-action="toggle-node-detail"]` is
+  gone). The uniform ~280×72 card (title, 1-line ellipsis; `initiativeId`,
+  monospace; the status chip; a `✓ HH:MM` real-merge-time chip when
+  `completedAt` is present) carries the SAME two RV-1 micro-badges, now
+  rendered UNCONDITIONALLY (nothing left to collapse them behind):
+  `[data-micro-badge="deps-count"][data-badge-value]` and
   `[data-micro-badge="wi-progress"][data-badge-value="<done>/<total>"]
-  [data-badge-failed="<n>"]` — the arithmetic contract: `'complete'` counts
-  toward done, `'failed'` counts in the total but **never** toward done (a
-  failed WI is real signal, not silently folded into "not done yet"), and
-  `workItems === undefined` (unplanned) reads `"0/0"`/`data-badge-failed="0"`,
-  never a fabricated total. A failed count > 0 additionally renders a small
-  `[data-badge-failed-marker]` (⚠ + count) inline in the badge so it's never
-  hidden. Styling: the badge is muted (dim, italic) when unplanned (`0/0` —
-  distinct from "done"), the shared `STATUS_COLOR.complete` tone when every WI
-  is done with zero failures, neutral otherwise — the two never render
-  identically. The header
-  `[data-action="toggle-node-detail"]` toggles the full detail card open —
-  extracted to its own component, `InitiativeDetail.tsx` (a pure re-home,
-  byte-identical data-*/DOM to the pre-W6-RV-1 inline markup) — rendered into
-  the SAME always-mounted `[data-node-detail]` region as before (`display:none`
-  while collapsed, never removed from the DOM), so every affordance below
-  survives an SSR/no-jsdom render regardless of collapse state (no click-to-pop
-  gap; a blind node-center click is unnecessary AND must be avoided, since it
-  can land on a trigger). The DAG header also carries bulk
-  `[data-action="roadmap-collapse-all"]` / `[data-action="roadmap-expand-all"]`
-  toolbar buttons. The card
-  lists the initiative's real work items (`[data-work-item-id]`) and a per-node
-  run dig-in `[data-section="initiative-runs"]` with one
+  [data-badge-failed="<n>"]` — same arithmetic contract as RV-1 (`'complete'`
+  counts toward done, `'failed'` counts in the total but never toward done,
+  `workItems === undefined` reads `"0/0"`, never fabricated; a failed count
+  > 0 additionally renders `[data-badge-failed-marker]`). Clicking a card
+  selects it (border highlight + its dependency edges bolded, neighbors
+  outlined, everything else dimmed) and opens the **right push drawer** —
+  `[data-roadmap-drawer][data-drawer-open="true"|"false"]`, and while open
+  `[data-drawer-initiative="<id>"]` wraps `InitiativeDetail.tsx` rendered
+  `expanded={true}` (byte-identical data-*/DOM to RV-1's inline detail card —
+  nothing lost on the re-home) — `[data-action="drawer-close"]` closes it. The
+  drawer's "Depends on" line renders each id as a clickable
+  `[data-dep-jump="<id>"]` chip (an additive, backward-compatible
+  `InitiativeDetail` change — an `onDepJump` prop, omitted elsewhere) that
+  selects + pans the canvas to the target card. Because there is no more
+  per-card inline expand, RV-1's bulk `[data-action="roadmap-collapse-all"]`
+  / `[data-action="roadmap-expand-all"]` toolbar is RETIRED (nothing left to
+  toggle); its bulk-view-reset SPIRIT carries onto the canvas toolbar instead:
+  `[data-action="roadmap-zoom-in"|"roadmap-zoom-out"|"roadmap-zoom-fit"
+  |"roadmap-jump-now"]`, with `[data-roadmap-canvas]`'s own
+  `data-canvas-scale` (2-decimal string, e.g. `"1.00"`) as the "did this
+  button actually change real view state" pin (mirroring
+  `data-initiative-collapsed`'s old role). Pan (drag) / zoom (wheel,
+  zoom-to-cursor) is a hand-rolled CSS `translate()+scale()` transform, NOT
+  reactflow (already a forge-ui dep for `FlowBuilderCanvas`) — every
+  coordinate here comes from the pure layout module, not a DOM measurement,
+  so reactflow's actual value-add doesn't apply, and this repo's no-jsdom
+  render-test convention has no precedent of a reactflow tree surviving it
+  (see `RoadmapCanvas.tsx`'s header comment for the full reasoning). A small
+  `[data-minimap]` renders a proportional overview (click-to-jump); a
+  screen-anchored `[data-roadmap-axis]` strip shows month/day labels + the
+  now-line's chip, horizontally synced to pan/zoom, vertically fixed. Inside
+  the open drawer, the card's real work items (`[data-work-item-id]`) and a
+  per-node run dig-in `[data-section="initiative-runs"]` with one
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
   prior attempt. Each pending initiative also carries `[data-plan-state="unplanned"
   |"planning"|"planned"|"error"]` (`unplanned` = the R4-05
   `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
-  has run yet): unplanned renders the `[data-action="plan-initiative"]`
-  button plus a blocked-until-planned lock badge
-  (`[data-section="initiative-blocked-until-planned"]`) that hides
+  has run yet; this attribute lives on the CARD itself, so it's queryable
+  without opening the drawer): the drawer renders the
+  `[data-action="plan-initiative"]` button plus a blocked-until-planned lock
+  badge (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. The roadmap header carries an optional
+  the `forge-architect` flow monitor. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
   accepts `costCeilingUsd` **only** for a single-initiative Start and stamps it onto
   that initiative's manifest `cost_ceiling_usd`; the field is **opt-in gated**
   (untouched → no `costCeilingUsd` is sent → the manifest's own budget-derived
   ceiling stands, never silently overwritten by the run-level default), and a stamp
   that fails to land is surfaced in the per-item result rather than reported as a
-  clean enqueue. Every node's card carries
+  clean enqueue. Every drawer carries
   `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
   Timeline (+ inline builder panel), tying demo upkeep to initiative state.
+  Server-side, `RoadmapInitiative.completedAt` (`cli/bridge-studio.ts`'s
+  `buildProjectRoadmap`) is threaded from `Run.completedAt`
+  (`orchestrator/run-model.ts`) — the `started_at` of a cycle's
+  `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event (falling
+  back to the cycle log's last non-`'reflection'` event for a
+  crash-then-requeue tail with no such event — the exclusion keeps a
+  standalone reflector rerun, e.g. the 2026-07-10 boot-reconcile flood, from
+  smearing a stale cycle's date onto its rerun date) — via the SAME memoized
+  per-manifest derivation `GET /api/runs` already uses
+  (`cli/run-list-cache.ts`'s `cachedListRuns`), so the roadmap's completedAt
+  column costs nothing beyond what that route already pays: no second
+  events.jsonl parser.
   A brand-new project renders
   `ProjectOnboardForm` instead:
   `[data-section="project-onboard"]`, collapsible
@@ -957,16 +1009,17 @@ inventory rather than one shared page-level contract:
   `onboarding`, for both onboarding AND creation).
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
-  `pending`/`done`) gets recovery affordances right on its RoadmapDag node's
-  (default-expanded) detail card (R4-11-T3, folded off the retired standalone
-  `/recovery` page — see below): `[data-recovery-item][data-recovery-initiative]
+  `pending`/`done`) gets recovery affordances inside its **drawer**
+  (**W6-RV-2**: moved off the card's own detail region along with the rest of
+  `InitiativeDetail`; R4-11-T3 originally folded these off the retired
+  standalone `/recovery` page): `[data-recovery-item][data-recovery-initiative]
   [data-recovery-status][data-recovery-attempt-count]` (+
   `[data-recovery-prior-attempts]` when a prior attempt exists) with
   `[data-action="recovery-inspect"|"recovery-requeue"|"recovery-abandon"]`
   buttons. The `[data-section="recovery-detail"][data-recovery-detail-initiative]`
-  region renders **structurally** (R4-13: it is in the DOM on first paint,
-  empty until Inspect populates it with branch / worktree / PR-draft detail, so
-  the re-home can't drop a click-gated affordance)
+  region renders **structurally** inside the drawer once opened (empty until
+  Inspect populates it with branch / worktree / PR-draft detail, so the
+  re-home can't drop a click-gated affordance)
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
   API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
@@ -1629,7 +1682,8 @@ inventory rather than one shared page-level contract:
     (`button`/`[data-action]` inside the panel) is zero.
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
-  per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
+  per-project roadmap's card drawer (**W6-RV-2**; see `/projects/[id]`
+  above). The
   route is now a permanent client-side redirect stub into `/` (bookmarks
   keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
 - **`/skills` + `/skills/new` + `/skills/[id]` — the skills library (R3-01-F3/F4).**
@@ -1843,7 +1897,7 @@ The shared status vocabularies:
   independently.
 - **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
-- **Roadmap initiative status** (`RoadmapDag.tsx`) — `pending |
+- **Roadmap initiative status** (`RoadmapCanvas.tsx`) — `pending |
   in-flight | ready-for-review | merged | done | failed` (R4-11-F1: `merged`
   = PR confirmed merged, reflect pending — a transient `_queue/merged/`
   pass-through promoted to `done` in the same finalize sweep).
