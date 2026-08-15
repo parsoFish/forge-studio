@@ -239,9 +239,10 @@ inventory rather than one shared page-level contract:
   id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
-  root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
-  (that `data-page="flows"` value is the page's own literal, not a typo —
-  every gate/artifact moment folded into this one route). `type=verdict&mode=gate`
+  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
+  mismatch, not a deliberate shared-surface value; every gate/artifact moment
+  is still folded into this one route). `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
   `[data-section="review-findings"][data-findings-count]` with per-row

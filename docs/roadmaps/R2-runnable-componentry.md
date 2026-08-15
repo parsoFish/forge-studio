@@ -34,7 +34,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 
 ### R2-B7 Artifact templates + advisory ref validation
 
-`studio/artifact-templates/` (plan, work-items, pr, verdict, wi-branches) with `validateArtifactRef` (ADR-027 amendment, `orchestrator/studio/validate.ts:331-355`) — currently **advisory**, promotion to error pending. `studio/demo-elements/` (6 element types) is the existing precedent for agent-composed rich output. The unified viewer is `/artifact` (`[data-page="flows"]`, ADR-031).
+`studio/artifact-templates/` (plan, work-items, pr, verdict, wi-branches) with `validateArtifactRef` (ADR-027 amendment, `orchestrator/studio/validate.ts:331-355`) — currently **advisory**, promotion to error pending. `studio/demo-elements/` (6 element types) is the existing precedent for agent-composed rich output. The unified viewer is `/artifact` (`[data-page="artifact"]`, ADR-031).
 
 ### R2-B8 Agent-as-runnable primitive shipped (R2-01, 2026-07-18)
 

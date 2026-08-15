@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 /**
  * Reflection artifact renderer.
  * 3-col went-well / friction / lessons + KB links + inconsistencies section.
@@ -125,7 +127,7 @@ export function ReflectionRenderer({ doc }: { doc: ReflectionDoc }) {
                   {lesson.text}
                 </div>
                 {lesson.target && (
-                  <a
+                  <Link
                     href={`/knowledge?node=${encodeURIComponent(lesson.target)}`}
                     style={{
                       display: 'inline-flex',
@@ -145,7 +147,7 @@ export function ReflectionRenderer({ doc }: { doc: ReflectionDoc }) {
                     }}
                   >
                     ⬡ {lesson.target}
-                  </a>
+                  </Link>
                 )}
               </div>
             ))

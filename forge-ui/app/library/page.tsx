@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from '@/lib/bridge-client';
 import {
   fetchRuns,
@@ -206,7 +207,7 @@ export default function LibraryPage() {
                 a.flagged > 0 ? `${a.flagged} flagged` : null,
               ].filter((s): s is string => s !== null);
               return (
-                <a
+                <Link
                   key={a.projectId}
                   href={a.link}
                   data-attention-item
@@ -238,7 +239,7 @@ export default function LibraryPage() {
                   <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
                     {a.planned} planned · {a.inFlight} in-flight · {a.merged} merged
                   </span>
-                </a>
+                </Link>
               );
             })}
           </section>
@@ -279,7 +280,7 @@ export default function LibraryPage() {
               <li>Give the flow work to complete</li>
             </ol>
             <div>
-              <a
+              <Link
                 href="/agents/new"
                 className="btn btn-primary"
                 data-action="start-here"
@@ -287,7 +288,7 @@ export default function LibraryPage() {
                 style={{ textDecoration: 'none', display: 'inline-block' }}
               >
                 Create your first agent →
-              </a>
+              </Link>
             </div>
           </section>
         )}
@@ -306,14 +307,14 @@ export default function LibraryPage() {
               {projects.length}
             </span>
             <span style={{ flex: 1 }} />
-            <a
+            <Link
               className="btn"
               href="/projects/new"
               data-action="new-project"
               style={{ textDecoration: 'none' }}
             >
               + New Project
-            </a>
+            </Link>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {projects.map((p, i) => (
@@ -338,14 +339,14 @@ export default function LibraryPage() {
               {agents.length}
             </span>
             <span style={{ flex: 1 }} />
-            <a
+            <Link
               className="btn"
               href="/agents/new"
               data-action="new-agent"
               style={{ textDecoration: 'none' }}
             >
               + New Agent
-            </a>
+            </Link>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {agents.map((a, i) => (
@@ -370,14 +371,14 @@ export default function LibraryPage() {
               {flows.length}
             </span>
             <span style={{ flex: 1 }} />
-            <a
+            <Link
               className="btn"
               href="/flows/new"
               data-action="new-flow"
               style={{ textDecoration: 'none' }}
             >
               + New Flow
-            </a>
+            </Link>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {flows.map((f, i) => (
@@ -402,14 +403,14 @@ export default function LibraryPage() {
               {kbs.length}
             </span>
             <span style={{ flex: 1 }} />
-            <a
+            <Link
               className="btn"
               href="/knowledge/new"
               data-action="new-kb"
               style={{ textDecoration: 'none' }}
             >
               + New KB
-            </a>
+            </Link>
           </div>
           <div className="card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}>
             {kbs.map((k, i) => (
