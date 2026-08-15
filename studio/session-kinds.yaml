@@ -12,23 +12,39 @@
 # for any new artifact.kind those descriptors need — the session shell is
 # generic over whatever is declared in this file.
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — the two prior entries
+# (/architect/[sessionId], /architect/[sessionId]/interview) named
+# forge-ui/app/ page directories that implemented the redirect themselves;
+# both were PURE path-shape moves (the destination is knowable from the URL
+# alone), so policy converted them to next.config.mjs `redirects()` entries
+# and deleted the page directories outright. `legacyRoutes`/`legacyRouteResolves`
+# (this file's own header comment, orchestrator/studio/session-kinds.ts) model
+# ONLY a forge-ui/app/ route directory — a next.config.mjs wire redirect is a
+# structurally different mechanism, so the honest value here is now `[]`,
+# same as every other kind below with no live forge-ui/app/ predecessor. The
+# old paths still work (see next.config.mjs); collectSessionRows
+# (cli/ui-bridge.ts) falls back to the modern `/sessions/architect/<sid>` href
+# for freshly-generated session rows, which is a strict improvement — no
+# redirect hop on internally-generated links.
 - id: architect
   agent: architect
   title: Planning session
-  legacyRoutes:
-    - /architect/[sessionId]
-    - /architect/[sessionId]/interview
+  legacyRoutes: []
   stages: [roadmap]
   defaultStage: roadmap
   artifact:
     kind: roadmap-draft
     label: Roadmap draft
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — /instructions/[sessionId]
+# was a pure path-shape move (destination knowable from the URL alone),
+# converted to a next.config.mjs `redirects()` entry with its page directory
+# deleted outright (see the "architect" descriptor above for the full
+# rationale — same policy, same mechanism).
 - id: instructions
   agent: instructions-creator
   title: Instructions session
-  legacyRoutes:
-    - /instructions/[sessionId]
+  legacyRoutes: []
   stages: [instructions]
   defaultStage: instructions
   artifact:
@@ -72,11 +88,16 @@
       # orchestrator/instructions-runner.ts:23 — terminal.
       - { phase: rejected, step: terminal }
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — /project-brain/[sessionId]
+# was a pure path-shape move (destination knowable from the URL alone, its
+# `?project=` query forwarded automatically by Next's redirect passthrough),
+# converted to a next.config.mjs `redirects()` entry with its page directory
+# deleted outright (see the "architect" descriptor above for the full
+# rationale — same policy, same mechanism).
 - id: project-brain
   agent: project-brain-builder
   title: Brain creation session
-  legacyRoutes:
-    - /project-brain/[sessionId]
+  legacyRoutes: []
   stages: [brain]
   defaultStage: brain
   artifact:
