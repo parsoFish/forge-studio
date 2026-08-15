@@ -86,7 +86,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { startBridge } from './ui-bridge.ts';
-import { handleStudioSessionsRoutes, type SessionsRouteContext } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, isPseudoProjectAnchor, type SessionsRouteContext } from './bridge-studio-sessions.ts';
 import { serializeManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
 import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
@@ -1408,4 +1408,28 @@ test('W6-B8: GET /api/studio/sessions/instructions/<id> — terminal:false at "d
   const body = JSON.parse(text) as SessionShellBody;
   assert.equal(body.phase, 'drafting');
   assert.equal(body.terminal, false);
+});
+
+// ===========================================================================
+// W6-B9 reviewer fix — isPseudoProjectAnchor: the general leading-"." check
+// backing the generic session-shell page's "back to project" link decision
+// (forge-ui/lib/session-shell-view.ts mirrors this exact predicate — kept
+// honest by that file's own parity test).
+// ===========================================================================
+
+test('isPseudoProjectAnchor: a real project slug is NOT a pseudo-anchor', () => {
+  assert.equal(isPseudoProjectAnchor('mdtoc'), false);
+  assert.equal(isPseudoProjectAnchor('my-real-project'), false);
+});
+
+test('isPseudoProjectAnchor: the KB-seeding anchor shape (".kb-<id>") IS a pseudo-anchor', () => {
+  assert.equal(isPseudoProjectAnchor('.kb-forge-dev'), true);
+});
+
+test('isPseudoProjectAnchor: the community-refresh anchor (".community-registry") IS a pseudo-anchor, even though its constant is not yet merged onto this branch — the check is general (leading "."), not an enumerated allow-list', () => {
+  assert.equal(isPseudoProjectAnchor('.community-registry'), true);
+});
+
+test('isPseudoProjectAnchor: ANY leading-"." value is a pseudo-anchor, including one this file has never heard of — matches discoverProjects\' own categorical dot-dir filter', () => {
+  assert.equal(isPseudoProjectAnchor('.some-future-anchor'), true);
 });

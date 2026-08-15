@@ -147,6 +147,7 @@ import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import { runFinalize } from './bridge-studio-authoring.ts';
+import { dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // UnhandledAffordanceBody — mirrors forge-ui's `UnhandledArtifactBody`
@@ -215,9 +216,12 @@ function safeParseJson<T>(raw: string): T | null {
 
 // ---------------------------------------------------------------------------
 // question-form — instructions' interview-answer round
-// (`awaiting-answers-question-form`, the ONLY `awaits:questions` row in the
-// whole registry — mirrors `POST /api/instructions/answer`,
-// `cli/ui-bridge.ts:3236`).
+// (`awaiting-answers-question-form` — mirrors `POST /api/instructions/answer`,
+// `cli/ui-bridge.ts:3236`). W6-B9 — instructions' `briefing` phase ALSO
+// derives a `question-form` row (`briefing-question-form`, same reused
+// `awaits: 'questions'` shape) — dispatched to `handleInstructionsBrief`
+// below instead, by `affordance.phase`, since the two share a `kind` but
+// write to different files with different semantics.
 // ---------------------------------------------------------------------------
 
 /** Hardening (W6-B4 adversarial-review round): `answers[]` is an
@@ -228,7 +232,14 @@ function safeParseJson<T>(raw: string): T | null {
  *  (a real round asks a handful of questions with paragraph-length answers)
  *  and named in the 400 they produce, never silently truncated. */
 const MAX_ANSWERS_COUNT = 64;
-const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
+/** Exported (W6-B9 reviewer fix) so `cli/ui-bridge.ts`'s bespoke
+ *  `POST /api/instructions/brief` route can cap its own `body.brief` field
+ *  against this SAME limit — `handleInstructionsBrief` above already caps
+ *  the generic `briefing-question-form` path's equivalent field to it; two
+ *  routes writing the identical `prompt.md`/`status.prompt` target with two
+ *  different, hand-kept limits (one bounded, one not) is exactly the kind
+ *  of quiet drift a single shared constant closes, one number, not two. */
+export const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
 
 function answersCapReason(answers: readonly { question: string; answer: string }[]): string | null {
   if (answers.length > MAX_ANSWERS_COUNT) {
@@ -245,6 +256,30 @@ function answersCapReason(answers: readonly { question: string; answer: string }
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// W6-B9 reviewer fix — the generic route's spawn-triggering handlers
+// (answer/brief/verdict-instructions/verdict-demo) previously called
+// `ctx.spawnAgentTurn` with no dry-bridge marker at all: `spawnAgentTurn`
+// itself already no-ops under `FORGE_DRY_BRIDGE=1`
+// (`cli/ui-bridge.ts:2124`), so no REAL spawn ever happened — but the 200
+// body silently omitted the `dryBridge:{skipped:['agent-turn']}` disclosure
+// every bespoke per-kind spawn route already gives the same caller (e.g.
+// `POST /api/instructions/brief`, `cli/ui-bridge.ts:3310`), a parity gap
+// this batch has otherwise been careful to close. ONE shared helper (not
+// four repeated `...dryBridgeAgentTurnMarker(...)` call sites) — `route` is
+// a fixed, literal identifier for this generic dispatch point (mirrors
+// `BRIDGE_ROUTE_CLASSIFICATION`'s own `:id`-style placeholder convention,
+// `cli/dry-bridge.ts` — documentation, not a router pattern), never the
+// bespoke route name a given call happens to mirror, so the emitted
+// `dry-bridge.skip` event names what ACTUALLY handled the request.
+// ---------------------------------------------------------------------------
+
+const GENERIC_AFFORDANCE_ROUTE = '/api/studio/sessions/:kind/:sessionId/:affordance';
+
+function affordanceDryBridgeMarker(ctx: AffordanceRouteContext, sessionId: string): ReturnType<typeof dryBridgeAgentTurnMarker> {
+  return dryBridgeAgentTurnMarker(ctx.logsRoot, GENERIC_AFFORDANCE_ROUTE, sessionId);
 }
 
 async function handleInstructionsAnswer(
@@ -291,7 +326,63 @@ async function handleInstructionsAnswer(
 
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
-  sendJson(res, 200, { ok: true, round }, origin);
+  sendJson(res, 200, { ok: true, round, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
+}
+
+// ---------------------------------------------------------------------------
+// question-form — instructions' PRE-interview briefing checkpoint
+// (`briefing-question-form`, the phase `POST /api/instructions/start` lands
+// EVERY new session in — cli/ui-bridge.ts:3193-3197 — without spawning the
+// agent). Mirrors `POST /api/instructions/brief` (cli/ui-bridge.ts:3275):
+// writes `prompt.md` (NOT `answers.json` — a different on-disk target from
+// `handleInstructionsAnswer` above) and sets `status.prompt`/`round: 1`/
+// `phase: 'interviewing'`, then spawns the same turn.
+// ---------------------------------------------------------------------------
+
+async function handleInstructionsBrief(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const answersRaw = body.answers;
+  if (!Array.isArray(answersRaw) || !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).answer === 'string')) {
+    sendJson(res, 400, { error: 'body.answers must be an array of {question: string, answer: string}' }, origin);
+    return;
+  }
+  // W6-B9 — the generic single-box question-form UI submits at most one
+  // entry (SessionInteractivePanel's hardcoded `[{question:'Operator
+  // response', answer: answerText}]`); only the free text itself is the
+  // brief — this phase is not a real interview round, so there is no
+  // question to echo back. An empty submission (no entries, or a lone
+  // empty-string answer) is a legal "no notes" brief — mirrors the bespoke
+  // route's own `body.brief ?? ''` default, and is WHY the generic panel's
+  // Send button no longer requires non-empty text (see that file's own note).
+  const brief = (answersRaw[0] as { answer?: string } | undefined)?.answer ?? '';
+  const briefBytes = Buffer.byteLength(brief, 'utf8');
+  if (briefBytes > MAX_ANSWER_FIELD_BYTES) {
+    sendJson(res, 400, { error: `body.answers[0].answer is ${briefBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+    return;
+  }
+
+  // SYNC INVARIANT: no await between this function's writes and the
+  // caller's own status read above — see this file's header note.
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+
+  ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
+  ctx.broadcastInstructionsChanged();
+  sendJson(res, 200, { ok: true, phase: 'interviewing', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +411,7 @@ async function handleInstructionsVerdict(
   }
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
-  sendJson(res, 200, { ok: true, phase: nextPhase }, origin);
+  sendJson(res, 200, { ok: true, phase: nextPhase, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +467,7 @@ async function handleDemoBrief(
   }
   ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastDemoChanged();
-  sendJson(res, 200, { ok: true, phase: 'generating' }, origin);
+  sendJson(res, 200, { ok: true, phase: 'generating', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +499,7 @@ async function handleDemoVerdict(
     }
     ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
     ctx.broadcastDemoChanged();
-    sendJson(res, 200, { ok: true, phase: 'abandoned' }, origin);
+    sendJson(res, 200, { ok: true, phase: 'abandoned', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
     return;
   }
 
@@ -431,7 +522,7 @@ async function handleDemoVerdict(
   }
   ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastDemoChanged();
-  sendJson(res, 200, { ok: true, phase: 'locking' }, origin);
+  sendJson(res, 200, { ok: true, phase: 'locking', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -772,7 +863,16 @@ export async function handleStudioAffordanceRoutes(
     // --- 4. body -> per-affordance-kind schema, then per session kind. ---
     if (affordance.kind === 'question-form') {
       if (descriptor.id === 'instructions') {
-        await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        // W6-B9 — 'briefing' and 'awaiting-answers' both derive a
+        // `question-form` affordance (same `kind`, different `phase`,
+        // different on-disk target) — dispatch on `affordance.phase`, the
+        // SAME server-derived field the client already reads, never a
+        // second phase read.
+        if (affordance.phase === 'briefing') {
+          await handleInstructionsBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        } else {
+          await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        }
         return true;
       }
       // W6-B10: demo's own `briefing` row (studio/session-kinds.yaml).

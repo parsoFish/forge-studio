@@ -268,3 +268,55 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
     dataAttrs: { 'data-session-status': 'error' },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Pseudo-project anchors (W6-B9 reviewer fix) — a project id starting with
+// "." is NEVER a real registered project: `discoverProjects`
+// (orchestrator/studio/registry.ts) categorically filters every dot-prefixed
+// directory out of the real project list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX,
+// cli/bridge-studio-kbs.ts) and ".community-registry" (W6-CR-3's
+// COMMUNITY_REFRESH_PROJECT_ANCHOR, cli/bridge-studio-sessions.ts) are the
+// two known anchor shapes today; a THIRD, unrecognised dot-prefixed anchor
+// still trips `isPseudoProjectAnchor` (the general leading-"." check), it
+// just has no known destination — `pseudoProjectAnchorDestination` returns
+// `null` for it rather than guessing, and the caller renders NOTHING rather
+// than a dead-ended link.
+//
+// forge-ui never imports cli/ at runtime (see this repo's SSOT-parity-test
+// convention, e.g. forge-ui/lib/trigger-kind-parity.test.ts) — this is a
+// small, independently-declared mirror of `isPseudoProjectAnchor` and the
+// two anchor literals (cli/bridge-studio-sessions.ts), kept honest by a
+// parity test in this file's own .test.ts sibling.
+// ---------------------------------------------------------------------------
+
+export function isPseudoProjectAnchor(project: string): boolean {
+  return project.startsWith('.');
+}
+
+export type PseudoProjectDestination = { readonly label: string; readonly href: string };
+
+const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
+const COMMUNITY_REGISTRY_ANCHOR = '.community-registry';
+
+/** `null` for a project that either isn't a pseudo-anchor at all, or IS one
+ *  but of an unrecognised shape (a future anchor this file hasn't been
+ *  taught yet) — both cases the caller treats identically: render no link
+ *  rather than one to a dead end or a guessed destination. */
+export function pseudoProjectAnchorDestination(project: string): PseudoProjectDestination | null {
+  if (project.startsWith(KB_SEEDING_ANCHOR_PREFIX)) return { label: 'Knowledge', href: '/knowledge' };
+  if (project === COMMUNITY_REGISTRY_ANCHOR) return { label: 'Community', href: '/community' };
+  return null;
+}
+
+/** The one thing `app/sessions/[kind]/[sessionId]/page.tsx`'s generic
+ *  terminal "back to project" link actually needs: `null` when nothing
+ *  should render (no project known, not yet terminal, or a pseudo-anchor
+ *  with no known destination), otherwise the real `{label, href}` to render
+ *  — a real project's own `/projects/<id>` for an honest project id, or the
+ *  pseudo-anchor's own destination otherwise. Pure and total: never throws,
+ *  never fabricates a destination this file hasn't been told about. */
+export function backToProjectLink(project: string | null, terminal: boolean): PseudoProjectDestination | null {
+  if (!terminal || project === null) return null;
+  if (isPseudoProjectAnchor(project)) return pseudoProjectAnchorDestination(project);
+  return { label: 'project', href: `/projects/${encodeURIComponent(project)}` };
+}

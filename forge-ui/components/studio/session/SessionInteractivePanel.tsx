@@ -20,22 +20,35 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // 409s exactly as a forged one would; this panel is a thin, honest renderer
 // over that already-derived contract, not a second source of truth.
 //
-// W6-B6 wired `demo`/`onboarding` onto this surface; W6-B8 adds `kb-cleanup`
+// W6-B6 wired `demo`/`onboarding` onto this surface; W6-B8 added `kb-cleanup`
 // and `authoring` (deleting their bespoke `SessionCleanupPanel`/
-// `SessionAuthoringPanel`) — architect/instructions keep their own panels
-// (instructions is a future migration; architect never migrates, ADR-043
-// amendment §4 — its branching council/interview control flow has no linear
-// phase-table seam).
+// `SessionAuthoringPanel`); W6-B9 adds `instructions` (deleting its bespoke
+// `SessionInstructionsPanel`) — architect is now the ONLY kind that keeps its
+// own panel, permanently (ADR-043 amendment §4 — its branching
+// council/interview control flow has no linear phase-table seam).
 //
 // Per-affordance-kind rendering:
-//   - `question-form` — a free-text answer box (this batch's B4/B6 pass has
-//     no per-question granularity on the wire yet — the operator reads the
-//     actual question text in the transcript pane to the LEFT of this panel
-//     and replies here; a future batch that threads structured
-//     `questions.json` rows onto the shell payload can replace this single
-//     box with per-question fields without touching the POST contract).
-//     Submits `{answers: [{question, answer}]}` — B4's
-//     `handleInstructionsAnswer`'s exact body shape.
+//   - `question-form` — a free-text answer box (no per-question granularity
+//     on the wire — the operator reads the actual question text in the
+//     transcript pane to the LEFT of this panel and replies here; the
+//     transcript already surfaces the FULL pending question text at
+//     `awaiting-answers` — `deriveSessionTranscript`,
+//     orchestrator/studio/session-transcript.ts — so this box does not
+//     duplicate it). Submits `{answers: [{question, answer}]}` — B4's
+//     `handleInstructionsAnswer`'s exact body shape. instructions (W6-B9)
+//     and demo (W6-B10, landed concurrently) are this affordance kind's
+//     first two real consumers, and instructions derives it from TWO
+//     phases: `awaiting-answers` (a real interview round) and `briefing` (the
+//     pre-interview checkpoint every new session starts at,
+//     `handleInstructionsBrief`, cli/bridge-studio-affordances.ts) — demo's
+//     own `briefing` row works the same way via `handleDemoBrief`. The Send
+//     button therefore does NOT require non-empty text (unlike an earlier
+//     revision of this file): a briefing note is genuinely optional (the
+//     bespoke routes they replace, `POST /api/instructions/brief` and
+//     `POST /api/demo-builder/brief`, both always accepted an empty brief),
+//     and an empty interview answer is harmless — the agent can simply
+//     re-ask. No per-phase or per-kind special-casing here; the button
+//     reads the SAME rule for all of them.
 //   - `verdict` — approve/reject buttons, rendered from `affordance.meta.
 //     verdicts` ONLY (W6-B6 post-merge review) — the server-derived, single
 //     source of "which verdict values are legal here"
@@ -77,35 +90,61 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 //     throws "invariant expected app router to be mounted" under
 //     `renderToStaticMarkup`, the
 //     harness this file's own DOM regression suite renders with.
-//   - `staged-review` / `next-turn` — rendered DISABLED, honestly labelled
-//     "not yet wired" — B4 returns 501 `UnhandledAffordanceBody` for both
-//     (they describe what an `agent` step already did / where it advances
-//     to, not an operator write action).
+//   - `staged-review` / `next-turn` — HIDDEN entirely (W6-B9 reviewer fix;
+//     previously rendered disabled with a "not yet wired" label). B4 returns
+//     501 `UnhandledAffordanceBody` for both — they describe what an `agent`
+//     step already did / where it advances to, not an operator write
+//     action, and a placeholder block for a control that can never work is
+//     clutter, not an honest affordance, especially on the FIRST screen an
+//     operator sees (instructions' `briefing` row derives exactly this
+//     shape). `deriveSessionAffordances` still derives them onto the wire
+//     honestly — `isRenderableAffordance` filters them out of the DOM here,
+//     a presentation decision, not a data one.
 //
 // Every endpoint error — 409 wrong-phase (naming the offending affordance id
 // + the currently-available set), 422, 501 UnhandledAffordanceBody — reaches
 // the operator VERBATIM via `data-affordance-error`, never swallowed and
 // never replaced by a generic "failed" string.
 //
-// The shared `ActivityLog` bottom drawer (W6-B7) renders here via TWO
-// complementary gates, one per affordance-count branch — every
-// GENERIC_PANEL_KINDS kind gets both identically, never a per-kind branch:
-//   - ZERO affordances (W6-B8): gated on `!terminal` — `terminal`
-//     (session-client.ts, mirroring the server's own `isTerminalPhase`) is a
-//     session-level fact, not derived from `affordances.length` (a working,
-//     non-terminal phase can legitimately have zero affordances —
-//     onboarding's `running` phase is exactly that case, the one this gate
-//     most needs to cover).
-//   - NON-zero affordances (W6-B10): gated on `showActivityLog` — true when
-//     every derived affordance is one of the disabled "not yet wired" kinds
-//     (a working phase with nothing actionable yet, e.g. demo's
-//     `generating`), false the instant a real `verdict`/`question-form`
-//     affordance exists.
+// The shared `ActivityLog` bottom drawer (W6-B7) renders in exactly ONE
+// place: the ZERO-RENDERABLE-affordances early return, gated on `!terminal`
+// (W6-B8) — `terminal` (session-client.ts, mirroring the server's own
+// `isTerminalPhase`) is a session-level fact, not derived from
+// `affordances.length` (a working, non-terminal phase can legitimately have
+// zero affordances — onboarding's `running` phase is exactly that case, the
+// one this gate most needs to cover). Every GENERIC_PANEL_KINDS kind gets
+// this identically, never a per-kind branch. W6-B10 originally added a
+// SECOND gate (`showActivityLog`) for the "affordances exist but none are
+// actionable" case (demo's `generating`, deriving only `staged-review`/
+// `next-turn`) — W6-B9's `isRenderableAffordance` filter (below) made that
+// second gate redundant: a phase whose ENTIRE derived set is non-renderable
+// now has `renderableAffordances.length === 0` too, so it already takes the
+// SAME early-return branch `{drawer}` lives in. One mechanism now covers
+// both cases W6-B8 and W6-B10 each built their own gate for.
 // ---------------------------------------------------------------------------
 
-/** Affordance kinds this route has no write handler for at all (B4's
- *  `unhandledAffordanceBody` fallthrough) — rendered disabled, honestly. */
-const NOT_YET_WIRED_KINDS: ReadonlySet<SessionAffordance['kind']> = new Set(['staged-review', 'next-turn']);
+/** W6-B9 reviewer fix — a GENERIC "does this panel have an actual renderer
+ *  for this affordance kind" predicate, keyed on `kind` alone (never on
+ *  `phase`/session `kind` — the SAME discipline every other branch in this
+ *  file already holds). `staged-review`/`next-turn` are real, honestly
+ *  DERIVED wire data (`deriveSessionAffordances` legitimately emits
+ *  `next-turn` for any `noop` row that also declares `next` — instructions'
+ *  OWN `briefing`/`awaiting-answers` rows both do) describing what an agent
+ *  step already wrote / where it advances to, not an operator WRITE action
+ *  (B4's write route 501s both, `UnhandledAffordanceBody`) — but a
+ *  placeholder "not yet wired" block for them is CLUTTER, not an honest
+ *  affordance, especially on `briefing`, the FIRST screen every new
+ *  instructions session lands the operator on. Filtering renders here (a
+ *  presentation decision) rather than at `deriveSessionAffordances` (the
+ *  wire contract, a data decision) keeps `affordances[]` itself the full,
+ *  honest derived set — `[data-affordance-count]` reflects what's actually
+ *  IN THE DOM (the CWC discipline this whole file's header note leans on),
+ *  never a count the operator can't see. */
+const RENDERABLE_AFFORDANCE_KINDS: ReadonlySet<SessionAffordance['kind']> = new Set(['question-form', 'verdict']);
+
+function isRenderableAffordance(affordance: SessionAffordance): boolean {
+  return RENDERABLE_AFFORDANCE_KINDS.has(affordance.kind);
+}
 
 /** Detects a drafted authoring package's shape purely by file PRESENCE
  *  (skills/creation-agent/SKILL.md's own two package shapes) — mirrors the
@@ -152,24 +191,22 @@ export function SessionInteractivePanel({
    *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
-  /** W6-B10: this session's live event stream (the SAME
-   *  `useCycleEvents(cycleId)` feed the page already computes for the
-   *  StageHex burst chips / the retired `DemoBuilderPanel` used), handed
+  /** This session's live event stream (the SAME `useCycleEvents(cycleId)`
+   *  feed the page already computes for the StageHex burst chips / the
+   *  retired `DemoBuilderPanel`/`SessionInstructionsPanel` used), handed
    *  straight to the shared `ActivityLog` drawer — REQUIRED (W6-B8; the
    *  real page always has one, even if empty before the first event lands;
    *  test call sites default it via their own local helper, not a prop
    *  default, mirroring how `phase` is required). */
   events: EventLogEntry[];
   /** W6-B8 — session-client.ts's `terminal` (mirrors the server's own
-   *  `isTerminalPhase`), gating the ActivityLog drawer for the
-   *  ZERO-affordance case (`drawer` below): it renders only while
-   *  `!terminal` — a settled session has nothing left to watch work,
-   *  onboarding's `running` phase legitimately has zero affordances while
-   *  genuinely working. The NON-zero-affordance case is gated separately by
-   *  `showActivityLog` (W6-B10, below) — the two conditions are
-   *  complementary, not competing: `terminal` answers "is this session
-   *  done at all", `showActivityLog` answers "of the affordances THIS
-   *  phase has, is any of them actually actionable yet". */
+   *  `isTerminalPhase`), the ONE gate for the ActivityLog drawer (`drawer`
+   *  below, rendered only in the zero-renderable-affordances early return):
+   *  it renders only while `!terminal` — a settled session has nothing left
+   *  to watch work, onboarding's `running` phase legitimately has zero
+   *  affordances while genuinely working. A working phase whose affordances
+   *  are all non-renderable (demo's `generating`) reaches this SAME branch
+   *  too (see `isRenderableAffordance`'s doc comment) — one gate, not two. */
   terminal: boolean;
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
@@ -200,20 +237,6 @@ export function SessionInteractivePanel({
   // `artifact.kind`, never `kind === 'authoring'`.
   const packageArtifact = artifact !== null && artifact.kind === 'file-package' ? artifact : null;
   const packageShape = packageArtifact ? draftShapeOf(packageArtifact.files) : null;
-
-  // W6-B10: show the shared ActivityLog drawer exactly when every derived
-  // affordance is one of the disabled "not yet wired" kinds — i.e. the
-  // phase table put the operator in an `agent`/`finalize` step (writes
-  // and/or next declared, no `noop`) with nothing ACTIONABLE to click.
-  // Generic over `kind` (no `kind === 'demo'` compare): demo's `generating`
-  // row (`writes: [demo], next: awaiting-review`) derives exactly
-  // `[staged-review, next-turn]`, both not-yet-wired, so this is true for
-  // it — the same phases the retired `DemoBuilderPanel` showed its own
-  // ActivityLog for. A `verdict`/`question-form` affordance (something to
-  // act on) leaves it false; ZERO affordances also leaves it false here —
-  // that case is `drawer`'s job (below), gated on `!terminal` (W6-B8), not
-  // this computation's `affordances.length > 0` guard.
-  const showActivityLog = affordances.length > 0 && affordances.every((a) => NOT_YET_WIRED_KINDS.has(a.kind));
 
   async function submit(affordance: SessionAffordance, body: Record<string, unknown>): Promise<void> {
     if (!project) {
@@ -251,7 +274,13 @@ export function SessionInteractivePanel({
 
   const drawer = !terminal && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />;
 
-  if (affordances.length === 0) {
+  // W6-B9 reviewer fix — filtered to what this panel can actually RENDER
+  // (see isRenderableAffordance's own doc comment); `data-affordance-count`
+  // and the empty-state gate both read this, not the raw wire `affordances`,
+  // so the DOM metric never over-counts placeholder sections nothing draws.
+  const renderableAffordances = affordances.filter(isRenderableAffordance);
+
+  if (renderableAffordances.length === 0) {
     return (
       <div data-component="session-interactive-panel" data-affordance-count={0}>
         <ProvenanceStrip phase={phase} modelTier={modelTier} />
@@ -264,12 +293,10 @@ export function SessionInteractivePanel({
   }
 
   return (
-    <div data-component="session-interactive-panel" data-affordance-count={affordances.length}>
+    <div data-component="session-interactive-panel" data-affordance-count={renderableAffordances.length}>
       <ProvenanceStrip phase={phase} modelTier={modelTier} />
 
-      {showActivityLog && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />}
-
-      {affordances.map((affordance) => {
+      {renderableAffordances.map((affordance) => {
         const error = errors[affordance.id];
         const busy = busyAffordanceId === affordance.id;
 
@@ -290,9 +317,9 @@ export function SessionInteractivePanel({
                 type="button"
                 className="btn btn-primary"
                 data-action="submit-answers"
-                disabled={busy || answerText.trim().length === 0}
+                disabled={busy}
                 onClick={() => void submit(affordance, { answers: [{ question: 'Operator response', answer: answerText.trim() }] })}
-                style={{ opacity: busy || answerText.trim().length === 0 ? 0.5 : 1 }}
+                style={{ opacity: busy ? 0.5 : 1 }}
               >
                 {busy ? 'Sending…' : 'Send answer'}
               </button>
@@ -410,37 +437,35 @@ export function SessionInteractivePanel({
           );
         }
 
-        if (NOT_YET_WIRED_KINDS.has(affordance.kind)) {
-          return (
-            <div key={affordance.id} data-section="session-affordance" data-affordance-kind={affordance.kind} style={sectionStyle}>
-              <button type="button" className="btn" disabled style={{ opacity: 0.4 }}>
-                {affordance.kind === 'staged-review' ? 'Review staged files' : 'Advance turn'}
-              </button>
-              <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 6 }}>not yet wired</div>
-            </div>
-          );
-        }
-
-        // Structurally unreachable (SessionAffordanceKind's closed vocabulary
-        // is exactly the four cases above) — fails honestly rather than
-        // silently rendering nothing for a future kind this panel hasn't
-        // been taught yet.
+        // Structurally unreachable TODAY — `renderableAffordances` is
+        // already filtered to `RENDERABLE_AFFORDANCE_KINDS` (question-form/
+        // verdict only; `staged-review`/`next-turn` never reach this map at
+        // all any more, W6-B9 reviewer fix — see `isRenderableAffordance`'s
+        // own doc comment for why hiding them entirely, not rendering a
+        // disabled "not yet wired" placeholder, is the honest behaviour).
+        // Kept as defense-in-depth against `RENDERABLE_AFFORDANCE_KINDS`
+        // drifting ahead of the render branches above (a THIRD kind added
+        // there with no matching `if` here) — fails honestly rather than
+        // silently rendering nothing.
         return (
           <div key={affordance.id} data-section="session-affordance" data-affordance-kind={affordance.kind} style={sectionStyle}>
             <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>unrecognised affordance kind &quot;{affordance.kind}&quot;</div>
           </div>
         );
       })}
-      {/* Merge-fix: no `{drawer}` here — this branch (affordances.length > 0)
-          is gated by `showActivityLog` alone (rendered above, before the
-          `.map()`). A trailing unconditional `{drawer}` here (as shipped in
-          W6-B8's own commit) double-rendered the ActivityLog for every
-          NON-terminal session with a real actionable affordance (e.g. a
-          `verdict` at `awaiting-review`) — `!terminal` is true whenever a
-          session isn't finished, regardless of whether anything is actually
-          "not yet wired". `terminal:false renders the ActivityLog drawer`'s
-          own test (zero-affordances branch, below) is the ONLY place
-          `drawer` belongs. */}
+      {/* No `{drawer}` here (this branch: renderableAffordances.length > 0) —
+          W6-B9's isRenderableAffordance filter (above) makes W6-B10's
+          separate `showActivityLog` flag redundant, not just stale: a phase
+          whose ENTIRE derived affordances[] is non-renderable (demo's
+          `generating`, e.g. `[staged-review, next-turn]`) never reaches
+          this branch at all — renderableAffordances is empty, so execution
+          takes the EARLY RETURN above instead, where `{drawer}` (gated on
+          `!terminal`, W6-B8) already renders it. This branch is only ever
+          reached when at least one REAL actionable control exists, so a
+          trailing unconditional `{drawer}` here would double-render the
+          ActivityLog alongside a live verdict/question-form control — the
+          exact double-render W6-B10 introduced `showActivityLog` to avoid,
+          now achieved for free by the filter instead of a second flag. */}
     </div>
   );
 }

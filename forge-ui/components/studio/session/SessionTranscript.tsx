@@ -17,6 +17,17 @@ import type { SessionTurn } from '@/lib/session-client';
 // affordance (question form / briefing / verdict / theme review) below the
 // historical turns — the chat pane's equivalent of a composer, except the
 // composer is a real, wired form rather than the mockup's disabled input.
+//
+// W6-B9 reviewer fix — a pending `questions.json` turn (`deriveSessionTranscript`,
+// orchestrator/studio/session-transcript.ts) concatenates every real question's
+// text into ONE turn, joined on a blank line — the wire carries no per-question
+// boundary. Now that the generic `SessionInteractivePanel`'s single-box
+// `question-form` affordance has retired the bespoke per-question
+// `ArchitectQuestionForm` fieldset list for instructions, this pane is the
+// ONLY place multiple pending questions are structurally observable — so a
+// `source === 'questions.json'` turn splits its text on that SAME separator
+// and renders each question in its own `[data-question-index]` element
+// (display-only; the wire `SessionTurn.text` shape is unchanged).
 // ---------------------------------------------------------------------------
 
 export function SessionTranscript({
@@ -56,8 +67,22 @@ export function SessionTranscript({
   );
 }
 
+/** The SAME separator `deriveSessionTranscript` joins pending questions on
+ *  (orchestrator/studio/session-transcript.ts) — a shared literal, not
+ *  independently guessed, so a change to one side is a visible diff on the
+ *  other. */
+const QUESTIONS_TURN_SEPARATOR = '\n\n';
+
 function TurnBubble({ turn }: { turn: SessionTurn }): JSX.Element {
   const isAgent = turn.role === 'agent';
+  // Gated on `source === 'questions.json'` (never a text-shape guess) — the
+  // ONLY turn kind whose text is a joined multi-question blob; every other
+  // source's text is a single genuine block (idea.md/prompt.md/feedback.md)
+  // that must never be chopped into fake "questions" by a coincidental blank
+  // line.
+  const questionLines = turn.source === 'questions.json'
+    ? turn.text.split(QUESTIONS_TURN_SEPARATOR).filter((line) => line.trim().length > 0)
+    : null;
   return (
     <div
       data-turn-index={turn.index}
@@ -76,9 +101,23 @@ function TurnBubble({ turn }: { turn: SessionTurn }): JSX.Element {
       <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 4 }}>
         {isAgent ? 'agent' : 'operator'}
       </div>
-      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {turn.text}
-      </div>
+      {questionLines ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {questionLines.map((line, i) => (
+            <div
+              key={i}
+              data-question-index={i}
+              style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {turn.text}
+        </div>
+      )}
     </div>
   );
 }

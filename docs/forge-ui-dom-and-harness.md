@@ -1303,7 +1303,16 @@ inventory rather than one shared page-level contract:
   — `data-turn-source` names the checkpoint file the turn was DERIVED from
   (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`,
   `feedback.md`), because no chat transcript exists on disk and none is
-  invented. Artifact pane:
+  invented. **W6-B9 reviewer fix** — a `source="questions.json"` turn's
+  `text` is a joined multi-question blob (`deriveSessionTranscript` joins
+  every real question on a blank line, no per-question boundary on the
+  wire); `SessionTranscript.tsx` splits that SAME turn's rendering (display-
+  only, gated on `source === 'questions.json'`, never any other turn's
+  legitimately multi-paragraph text) into one
+  `[data-question-index="0"|"1"|…]` child per question — a structural
+  ≥N-questions proof now that the bespoke per-question
+  `ArchitectQuestionForm` fieldset list no longer renders for instructions
+  (below). Artifact pane:
   `[data-section="session-artifact"][data-artifact-kind][data-artifact-label]`
   (the label comes from `studio/session-kinds.yaml` over the wire, never a
   client-side table). Fail-closed state:
@@ -1333,11 +1342,7 @@ inventory rather than one shared page-level contract:
   `[data-action="open-plan"]` into
   `/artifact?run=_architect-<sid>&type=plan&mode=gate` (the PLAN gate is still
   just another gate — M7-4, ADR-031) and `[data-action="watch-it-build"]`;
-  the instructions side's `[data-section="instructions-interview"|"instructions-status"]`,
-  `[data-instructions-stale][data-instructions-stale-ms]`,
-  `[data-component="instructions-verdict"][data-form-state][data-form-kind]`
-  with `[data-action="approve-instructions"|"revise-instructions"|"reject-instructions"]`
-  and `[data-action="back-to-project"]`; the project-brain side's
+  the project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
   `[data-component="brain-brief-input"]`, and
@@ -1356,8 +1361,6 @@ inventory rather than one shared page-level contract:
   which spawns `forge agent run authoring <sid> --project <p>` (the generic
   dispatch fork, `cli/agent-run.ts`'s `cmdAgentRun`) rather than the generic
   one-shot dispatch host.
-  The two question forms are now ONE component parameterised on its submit fn
-  and section name — both `data-section` values are unchanged.
   **`/architect/new` stays** as the native "start a run" entry that replaced
   the retired `/dashboard` launcher —
   `[data-page="architect-new"][data-page-ready]` wrapping
@@ -1375,9 +1378,40 @@ inventory rather than one shared page-level contract:
   (see the KB maintenance panel entry, below) —
   `[data-action="start-kb-cleanup"]`, POSTing
   `POST /api/studio/kbs/:id/cleanup/start`.
-  **`demo`, `onboarding`, `kb-cleanup`, and `authoring`** render the generic
-  `SessionInteractivePanel` in this same ladder slot — see its own entry
-  below for the full contract.
+  **W6-B9 — the instructions kind.** Its bespoke `SessionInstructionsPanel`
+  (interview form via the shared `ArchitectQuestionForm`, `InstructionsVerdict`'s
+  draft-preview + approve/revise/reject gate, `SessionBriefing`'s pre-interview
+  notes screen) is DELETED, along with `InstructionsVerdict.tsx` (its sole
+  caller) — `instructions` now renders the generic `SessionInteractivePanel`
+  too. instructions' `awaiting-answers` interview round is this affordance
+  system's FIRST real `question-form` consumer (see that component's own entry
+  below for the single-box shape this trades the per-question radio UI for).
+  Its `briefing` phase — every new session's actual starting phase (`POST
+  /api/instructions/start` never spawns the agent) — gains a NEW panel row of
+  the SAME reused `awaits: questions` shape (`studio/session-kinds.yaml`),
+  dispatched server-side to `handleInstructionsBrief`
+  (`cli/bridge-studio-affordances.ts`) instead of `handleInstructionsAnswer`
+  by `affordance.phase`; both write different files (`prompt.md` vs
+  `answers.json`) but render through the identical `question-form` UI. The
+  drafted AGENTS.md's own preview is unaffected — it already lived on
+  `SessionArtifactPane`'s `markdown-draft` renderer (below), not on the
+  retired verdict component. `ArchitectQuestionForm` (`components/
+  ArchitectQuestionForm.tsx`) keeps its `onSubmitAnswers`/`sectionName`/
+  `heading` parameterisation for any future bespoke kind, but architect is its
+  only consumer today. **architect is now the ONLY kind left on its own
+  panel**, permanently (ADR-043 amendment §4).
+  **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
+  (W6-B9)** render the generic `SessionInteractivePanel` in this same ladder
+  slot — see its own entry below for the full contract.
+  **A GENERIC terminal "back to project" link (W6-B9)** — rendered by the
+  session-shell PAGE itself (`app/sessions/[kind]/[sessionId]/page.tsx`),
+  never a per-panel one-off — whenever `viewState.terminal` (the SAME
+  server-derived fact `SessionInteractivePanel` already gates its
+  ActivityLog drawer on) is true AND `project` is known:
+  `[data-action="back-to-project"]` → `/projects/<project>`. Applies to
+  every kind uniformly (closing the gap where only instructions' own retired
+  panel used to offer this for itself); architect and project-brain keep
+  their own additional bespoke nav unaffected.
 - **`ActivityLog` — the shared live thinking/working drawer (W6-B7,
   2026-08-15).** `components/studio/ActivityLog.tsx`, generalized off the
   retired `ArchitectActivityLog.tsx` inline panel (deleted once every
@@ -1417,12 +1451,13 @@ inventory rather than one shared page-level contract:
   ONLY from caller-supplied `costUsd`/`tokensTotal`/`elapsedMs` props —
   never fabricated when absent (today only `RunPanel` has a real `costUsd`
   source; the architect/instructions session-summary types carry no cost
-  field yet, a disclosed gap, not papered over). Adopted by
-  `SessionArchitectPanel`, `SessionInstructionsPanel` (during their working
-  phases, subscribed via the SAME `useCycleEvents(cycleId)` seam they already
-  held), `SessionInteractivePanel` (W6-B10 — generic over `kind`, shown
-  whenever every derived affordance is a not-yet-wired one; see the demo
-  builder entry above), and `RunPanel`
+  field yet, a disclosed gap, not papered over). Adopted at launch by
+  `SessionArchitectPanel`, `SessionInstructionsPanel` (retired W6-B9) and
+  `DemoBuilderPanel` (retired W6-B10) during their working phases,
+  subscribed via the SAME `useCycleEvents(cycleId)` seam they already held;
+  both retired panels' instructions/demo kinds get the drawer via the
+  generic `SessionInteractivePanel` now (below, `!terminal`-gated), and
+  `RunPanel`
   (`components/studio/agent-builder/RunPanel.tsx`) — for a standalone
   dispatched agent run, whose `runId` (minted `_agent-<slug>-<stamp>`,
   `cli/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
@@ -1484,26 +1519,30 @@ inventory rather than one shared page-level contract:
   every session kind, never a hand-kept per-kind field list (this replaced
   authoring's OWN hardcoded `{kind,id}` check — `kind` itself is no longer
   read from the body at all; `handleAuthoringVerdict` derives it server-side
-  from the real staged files). Every affordance kind this route has no write
-  handler for at all — `staged-review` / `next-turn`, which describe what an
-  `agent` step already did rather than something to trigger — 501s with
-  `UnhandledAffordanceBody` (`{ok:false, kind, error}`, mirroring
-  `SessionArtifactPane`'s `UnhandledArtifactBody`), never a silent 200.
-  Delegates to the SAME underlying write+spawn helpers every bespoke
-  per-kind route already uses (`spawnAgentTurn`,
-  `enqueueConsolidate`/`runBrainConsolidateNow`, `runFinalize`) — this route
-  validates the body shape and hands off, it never reimplements a
-  finalizer.
+  from the real staged files). `instructions` is the only kind whose
+  `question-form` dispatch itself branches — by `affordance.phase`, not a
+  second body field — between `handleInstructionsAnswer` (`awaiting-answers`)
+  and `handleInstructionsBrief` (`briefing`, W6-B9: writes `prompt.md`, not
+  `answers.json`); both accept the identical `{answers: [...]}` body shape.
+  Every affordance kind this route has no write handler for at all —
+  `staged-review` / `next-turn`, which describe what an `agent` step already
+  did rather than something to trigger — 501s with `UnhandledAffordanceBody`
+  (`{ok:false, kind, error}`, mirroring `SessionArtifactPane`'s
+  `UnhandledArtifactBody`), never a silent 200. Delegates to the SAME
+  underlying write+spawn helpers every bespoke per-kind route already uses
+  (`spawnAgentTurn`, `enqueueConsolidate`/`runBrainConsolidateNow`,
+  `runFinalize`) — this route validates the body shape and hands off, it
+  never reimplements a finalizer.
 - **`SessionInteractivePanel` — the generic interaction panel (W6-B6,
-  2026-08-15; W6-B8 extends it).** `components/studio/session/SessionInteractivePanel.tsx`.
+  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`.
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
-  **`demo`, `onboarding`, `kb-cleanup`, and `authoring`** — architect/
-  instructions keep their own bespoke panels (`SessionArchitectPanel` /
-  `SessionInstructionsPanel`, documented above; instructions is a future
-  migration); architect never migrates (ADR-043 amendment §4 — permanently
-  bespoke). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8) are DELETED
-  — no dual paths.
+  **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
+  (W6-B9)** — architect is the ONLY kind left on its own bespoke panel
+  (`SessionArchitectPanel`, documented above), permanently (ADR-043
+  amendment §4 — its branching council/interview control flow has no linear
+  phase-table seam). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8)
+  and `SessionInstructionsPanel` (W6-B9) are DELETED — no dual paths.
   Root: `[data-component="session-interactive-panel"][data-affordance-count=<N>]`.
   An empty `affordances[]` (onboarding, at every one of its three phases)
   renders `[data-section="session-no-affordances"]` — an honest "no operator
@@ -1519,9 +1558,24 @@ inventory rather than one shared page-level contract:
   `question-form` → a free-text answer field (`[data-field="session-answer"]`)
   and `[data-action="submit-answers"]` (no per-question granularity on the
   wire — the operator reads the real question text in the transcript pane to
-  the left and replies here; unreachable in practice today, since none of
-  the four wired kinds ever derives a `question-form` row — kept generically
-  correct for when `instructions` migrates its panel later); `verdict` →
+  the left and replies here — `deriveSessionTranscript`,
+  `orchestrator/studio/session-transcript.ts`, already surfaces the FULL
+  pending question text as a turn while `awaiting-answers`). **W6-B9 —
+  instructions and (W6-B10, landed concurrently) demo are this affordance
+  kind's first two real consumers.** instructions derives it from TWO
+  phases: `awaiting-answers` (a real interview round,
+  `handleInstructionsAnswer`) and `briefing` (every new session's actual
+  starting phase — `POST /api/instructions/start` never spawns the agent —
+  dispatched instead to `handleInstructionsBrief`, which writes `prompt.md`,
+  not `answers.json`; both `cli/bridge-studio-affordances.ts`, selected by
+  `affordance.phase`); demo derives it from its own `briefing` row the same
+  way, via `handleDemoBrief`. The Send button no longer requires non-empty
+  text (an earlier revision of this panel disabled it until text was
+  entered) — a briefing note is genuinely optional (the bespoke `POST
+  /api/instructions/brief` / `POST /api/demo-builder/brief` routes it
+  replaces always accepted an empty brief), and an empty interview answer
+  is harmless (the agent can re-ask); the same rule applies to every phase
+  and kind, with no per-phase or per-kind branch in this component. `verdict` →
   `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`
   (approve-only for `kb-cleanup`/`authoring` — B4's own table declares no
   rejection path for either, so the reject button is never offered where it
@@ -1558,8 +1612,18 @@ inventory rather than one shared page-level contract:
   own `{kind, id}` echo, and the PAGE (not the panel — `useRouter()` throws
   under the `renderToStaticMarkup` harness this file's DOM regression suite
   uses) navigates to `/skills/<id>` or `/hooks/<id>`, mirroring the retired
-  `SessionAuthoringPanel`'s own `onFinalized` behaviour. `staged-review`/`next-turn` render DISABLED,
-  labelled "not yet wired" (B4 returns 501 for both). Every endpoint error —
+  `SessionAuthoringPanel`'s own `onFinalized` behaviour. `staged-review`/
+  `next-turn` are HIDDEN entirely (W6-B9 reviewer fix; previously rendered
+  disabled, labelled "not yet wired" — B4 returns 501 for both).
+  `isRenderableAffordance` filters `affordances[]` down to
+  `question-form`/`verdict` before this component ever maps over it —
+  `[data-affordance-count]` and the `[data-section="session-no-affordances"]`
+  empty-state gate both read the FILTERED count, so a phase deriving only a
+  `next-turn` row (instructions' own `briefing`/`awaiting-answers` rows both
+  legitimately do, via their `next:` field) renders the honest
+  no-affordances state, not a disabled placeholder — clutter on the FIRST
+  screen an operator sees is a real cost, a control that can never work
+  either way. Every endpoint error —
   409 wrong-phase (naming the offending affordance id + the
   currently-available set), 422, 501 `UnhandledAffordanceBody` — surfaces
   verbatim via `[data-affordance-error]`, never swallowed.
@@ -1578,6 +1642,11 @@ inventory rather than one shared page-level contract:
   into "Session not found" (the demo "Session not found" bug); `kb-cleanup`/
   `authoring` have no per-kind summary branch either, so their `project`
   resolves from `?project=` alone, same as before their W6-B8 migration.
+  `instructions` (W6-B9) keeps ITS pre-existing per-kind summary branch
+  (`listInstructionsSessions()`) too, but now ONLY to resolve `project` for a
+  deep link that omits `?project=` (the "Standing Instructions" project-page
+  launcher and the contract-resolution agent route both still do) — no
+  per-kind PANEL is rendered from it any more.
   **The shared `ActivityLog` bottom drawer (W6-B7) now renders here too
   (W6-B8),** gated on `!terminal` (the read contract's own `terminal` field,
   above) — a session-level fact, never derived from `affordances.length`
@@ -1600,8 +1669,10 @@ inventory rather than one shared page-level contract:
   not a per-project/per-KB artifact) — plus a
   free-text prompt field for the ONE kind whose `/start` body requires one
   (`authoring` — `[data-field="kickoff-prompt"]`; every other kickoff kind
-  takes its brief on a LATER turn, via its own bespoke panel's briefing
-  step, not at kickoff) + a model-tier picker,
+  takes its brief on a LATER turn instead, not at kickoff — instructions'
+  own `briefing` phase, W6-B9, now takes it via the generic
+  `SessionInteractivePanel`'s `question-form` affordance, above, rather than
+  a bespoke panel step) + a model-tier picker,
   `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"]`,
   rendered from `agentCapabilityDescriptor.allowedTiers`
   (`Agent.allowedTiers`, `forge-ui/lib/studio-client.ts` — parsed
@@ -1711,11 +1782,17 @@ inventory rather than one shared page-level contract:
   questions}`, rendering as the generic question-form box, and
   `cli/bridge-studio-affordances.ts` gained `handleDemoBrief`, mirroring
   `POST /api/demo-builder/brief`. `ActivityLog` (the shared bottom drawer,
-  `[data-component="activity-drawer"]`) is now wired generically into
-  `SessionInteractivePanel` — shown whenever every derived affordance is a
-  disabled not-yet-wired one (a working phase with nothing actionable),
-  covering demo's `generating`/`locking` phases the same way the retired
-  panel did, without a `kind === 'demo'` compare. **Disclosed regression, not
+  `[data-component="activity-drawer"]`) is wired generically into
+  `SessionInteractivePanel`, gated on `!terminal` (W6-B8) — W6-B10 originally
+  added a SECOND, separate gate (`showActivityLog`, true whenever every
+  derived affordance was a disabled not-yet-wired one) to cover demo's
+  `generating`/`locking` phases without a `kind === 'demo'` compare; W6-B9's
+  `isRenderableAffordance` filter (staged-review/next-turn hidden entirely,
+  see that entry above) made the second gate REDUNDANT rather than merely
+  stale — a phase whose entire derived set is non-renderable now has ZERO
+  renderable affordances too, so it already takes the SAME early-return
+  branch the `!terminal` gate covers. One mechanism now covers what W6-B8
+  and W6-B10 each built their own gate for. **Disclosed regression, not
   fixed here** (needs a real affordance-model extension — `VERDICT_VALUES` is
   a closed `['approve','reject']` set with no "revise in place" semantics):
   the old panel's free-text "apply feedback & regenerate" loop, per-element
