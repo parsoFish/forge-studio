@@ -999,7 +999,12 @@ function wellFormedTurnSpec(): Record<string, unknown> {
     style: 'agent',
     phases: [
       { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
-      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
+      // verdicts (W6-B6 post-merge review): the real, live authoring row
+      // declares `verdicts: [approve]` — there is no rejection path for a
+      // drafted package — kept in lockstep here so this literal stays a
+      // truthful mirror of the checked-in yaml, not just the ADR's original
+      // 4-phase shape.
+      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
       { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
       { phase: 'committed', step: 'terminal' },
     ],
@@ -1209,11 +1214,20 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
         style: 'agent',
         phases: [
           { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-          { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
+          // verdicts (W6-B6 post-merge review): approve-only, same reasoning
+          // as the "no next" comment above — no rejection semantics exist
+          // anywhere in this repo for a cleanup plan.
+          { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
+          // W6-B4 adversarial-review fix: `applying` is the atomic-claim
+          // marker `approveKbCleanup` (cli/bridge-studio-kbs.ts) writes
+          // SYNCHRONOUSLY before its one await, closing a live-reproduced
+          // double-drain race. Unreachable via `next` (same as `applied`
+          // always has been) — `approveKbCleanup` is its only writer.
+          { phase: 'applying', step: 'terminal' },
           { phase: 'applied', step: 'terminal' },
         ],
       },
-      `kb-cleanup's real turnSpec must deep-equal its ratified 3-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
+      `kb-cleanup's real turnSpec must deep-equal its ratified 4-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applying→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
     );
 
     const kbCleanupFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:kb-cleanup');
@@ -1560,7 +1574,14 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
     style: 'agent',
     phases: [
       { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-      { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
+      // verdicts (W6-B6 post-merge review): approve-only, mirroring the
+      // "no next" comment above — no rejection semantics exist anywhere in
+      // this repo for a cleanup plan.
+      { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
+      // W6-B4 adversarial-review fix: the atomic-claim marker
+      // `approveKbCleanup` writes synchronously before its one await —
+      // see session-kinds.yaml's own comment on this row.
+      { phase: 'applying', step: 'terminal' },
       { phase: 'applied', step: 'terminal' },
     ],
   };
@@ -1820,6 +1841,63 @@ describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-r
     assert.ok(f.message.includes('questions') && f.message.includes('verdict'), 'message must name the allowed set');
   });
 
+  it('W6-B6-1 (the reviewer\'s HIGH finding, unknown-verdict rejection): a panel verdict row declaring a "verdicts" entry outside VERDICT_VALUES -> session-kinds/panel-unknown-verdict naming the offending value AND the allowed set', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-verdict-value';
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { ...phases[idx], verdicts: [bogus] };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-unknown-verdict');
+    assert.ok(f, `expected a session-kinds/panel-unknown-verdict finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    assert.ok(f.message.includes('approve') && f.message.includes('reject'), 'message must name the allowed set');
+  });
+
+  it('W6-B6-2: "verdicts" declared on a row that is NOT a noop+awaits:verdict row -> session-kinds/panel-verdicts-misplaced (the field is meaningless anywhere else — dead, confusing authored data, never silently ignored)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'drafting');
+    phases[idx] = { ...phases[idx], verdicts: ['approve'] }; // "drafting" is step:agent, not noop+awaits:verdict
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-verdicts-misplaced');
+    assert.ok(f, `expected a session-kinds/panel-verdicts-misplaced finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('drafting'), 'message must name the offending phase');
+  });
+
+  it('W6-B6-3 (positive control): a panel verdict row declaring "verdicts: [approve]" (kb-cleanup/authoring\'s real shape) validates CLEAN — zero panel-* findings, and derives ONLY an approve button, never a fabricated reject', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { ...phases[idx], verdicts: ['approve'] };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    assert.deepEqual(findings, [], `expected zero panel-* findings for a well-formed approve-only verdict row, got: ${JSON.stringify(findings)}`);
+
+    const [descriptor] = loadSessionKinds(root);
+    const affordances = deriveSessionAffordances(descriptor, 'awaiting-review');
+    const verdictAffordance = affordances.find((a) => a.kind === 'verdict');
+    assert.ok(verdictAffordance, 'expected a verdict affordance to derive for "awaiting-review"');
+    assert.deepEqual(
+      verdictAffordance!.meta,
+      { verdicts: ['approve'] },
+      `expected the authored approve-only list to derive verbatim (never the ['approve','reject'] default), got: ${JSON.stringify(verdictAffordance!.meta)}`,
+    );
+  });
+
   it('W6-B3-5 (positive control): the well-formed panel fixture validates CLEAN — zero panel-* findings (without this, W6-B3-1..4 could all pass for the wrong reason — an implementation that rejects every panel unconditionally)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
@@ -2042,13 +2120,17 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
       panel: { phases: [{ phase: 'awaiting-answers', step: 'noop', awaits: 'verdict' }] },
     } as SessionKindDescriptor;
     assert.deepEqual(deriveSessionAffordances(namedLikeAQuestionButIsAVerdict, 'awaiting-answers'), [
-      { id: 'awaiting-answers-verdict', kind: 'verdict', phase: 'awaiting-answers' },
+      // verdicts defaults to ['approve','reject'] (the ADR default) — this
+      // fixture row declares no `verdicts:` of its own.
+      { id: 'awaiting-answers-verdict', kind: 'verdict', phase: 'awaiting-answers', meta: { verdicts: ['approve', 'reject'] } },
     ]);
   });
 
   it('any OTHER `noop` phase (e.g. "awaiting-verdict") → [verdict], never question-form', () => {
     const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'awaiting-verdict');
-    assert.deepEqual(result, [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict' }]);
+    // verdicts defaults to ['approve','reject'] — PANEL_DESCRIPTOR's
+    // "awaiting-verdict" row declares no `verdicts:` of its own.
+    assert.deepEqual(result, [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict', meta: { verdicts: ['approve', 'reject'] } }]);
   });
 
   it('an `agent` step with `writes` AND `next` (e.g. "drafting") → [staged-review, next-turn], in that order', () => {
@@ -2087,7 +2169,11 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
       { id: 'analyzing-staged-review', kind: 'staged-review', phase: 'analyzing', meta: { writes: ['staging'] } },
       { id: 'analyzing-next-turn', kind: 'next-turn', phase: 'analyzing', meta: { next: 'awaiting-review' } },
     ]);
-    assert.deepEqual(deriveSessionAffordances(authoring, 'awaiting-review'), [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review' }]);
+    // verdicts defaults to ['approve','reject'] — this LOCAL fixture's own
+    // "awaiting-review" row declares no `verdicts:` (unlike the real,
+    // checked-in authoring row, which declares `verdicts: [approve]` — see
+    // wellFormedTurnSpec() above).
+    assert.deepEqual(deriveSessionAffordances(authoring, 'awaiting-review'), [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }]);
     assert.deepEqual(deriveSessionAffordances(authoring, 'committed'), []);
   });
 

@@ -2,9 +2,10 @@
  * Skill library — trust pipeline + registry model (R3-01-F3/F4).
  *
  * Single source for the skill-library object model: the union of local plain
- * skills (`skills/<id>/SKILL.md`, no `runtime:` block) and `studio/catalog.yaml`
- * community entries, the trust vocabulary that gates palette visibility, and the
- * install → quarantine → approve → re-review pipeline for vendored packages.
+ * skills (`skills/<id>/SKILL.md`, no `runtime:` block) and
+ * `studio/community/registry.yaml` community entries (W6-CR-1), the trust
+ * vocabulary that gates palette visibility, and the install → quarantine →
+ * approve → re-review pipeline for vendored packages.
  * See `_wave5/specs/R3-01-F3F4.md` for the full design (D1-D8, trust vocabulary).
  *
  * Trust vocabulary (single source of truth — do not re-derive elsewhere):
@@ -62,7 +63,7 @@ import matter from 'gray-matter';
 // empty-data success. Passing {} opts out of the cache entirely.
 
 import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs, assertSkillSlug } from '../skill-path.ts';
-import { isStudioAgent, loadAgentDefinition, loadCatalog } from './registry.ts';
+import { communitySkillsFromRegistry, isStudioAgent, loadAgentDefinition } from './registry.ts';
 import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
 import { guardedFile } from '../../cli/studio-path-guard.ts';
 import type { AgentDefinition, CommunitySkill } from './types.ts';
@@ -147,21 +148,22 @@ const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 // Shared internals
 // ---------------------------------------------------------------------------
 
-/** Tolerant catalog load — an absent studio/catalog.yaml means "no community
- *  skills yet", not an error (mirrors registry.ts's other list* tolerances).
- *  A catalog that FAILS to load (malformed YAML, or — R3-04 — a structurally
- *  invalid connection entry under tools:/mcps:) is likewise tolerated here:
- *  `runStudioLint`'s own catalog section (cli/studio-lint.ts) already loads
- *  the same file and surfaces the real error as a `studio:catalog`/`load`
+/** Tolerant community-skill load — an absent studio/community/registry.yaml
+ *  means "no community skills yet", not an error (mirrors registry.ts's other
+ *  list* tolerances; `communitySkillsFromRegistry` already returns [] for a
+ *  missing file). A registry that FAILS to load (malformed YAML, bad kind
+ *  vocab, ...) is likewise tolerated here: `runStudioLint`'s own
+ *  community-registry section (cli/studio-lint.ts) already loads the same
+ *  file and surfaces the real error as a `studio:community-registry`/`load`
  *  finding; this function's job is only to extract communitySkills for the
  *  skill-trust pipeline, so re-throwing the SAME load error a second time
- *  here would crash the whole lint run instead of reporting it once. */
-function loadCatalogSafely(forgeRoot: string): { communitySkills: CommunitySkill[] } {
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  if (!existsSync(catalogPath)) return { communitySkills: [] };
+ *  here would crash the whole lint run instead of reporting it once.
+ *  W6-CR-1: source moved from studio/catalog.yaml's `community-skills:`
+ *  section to studio/community/registry.yaml — the declared-list source of
+ *  truth for community items. */
+function loadCommunitySkillsSafely(forgeRoot: string): { communitySkills: CommunitySkill[] } {
   try {
-    const catalog = loadCatalog(catalogPath);
-    return { communitySkills: catalog.communitySkills ?? [] };
+    return { communitySkills: communitySkillsFromRegistry(forgeRoot) };
   } catch {
     return { communitySkills: [] };
   }
@@ -174,7 +176,7 @@ function loadCatalogSafely(forgeRoot: string): { communitySkills: CommunitySkill
  *  the union is computed once, not re-derived divergently. */
 function allKnownSkillIds(forgeRoot: string): Set<string> {
   const localIds = listSkillDirs(forgeRoot).map((dir) => basename(dir));
-  const catalog = loadCatalogSafely(forgeRoot);
+  const catalog = loadCommunitySkillsSafely(forgeRoot);
   return new Set([...localIds, ...catalog.communitySkills.map((c) => c.id)]);
 }
 
@@ -306,7 +308,7 @@ export function skillTrustState(forgeRoot: string, id: string): SkillTrust {
 // ---------------------------------------------------------------------------
 
 export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
-  const catalog = loadCatalogSafely(forgeRoot);
+  const catalog = loadCommunitySkillsSafely(forgeRoot);
   const agents = listAgentDefinitionsResilient(skillsDir(forgeRoot));
   const usage = deriveSkillUsage(agents);
 

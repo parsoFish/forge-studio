@@ -48,6 +48,10 @@ export type CommunityHubWithCount = CommunityHub & { itemCount: number };
 export type CommunitySignals = {
   stars: string;
   attributedTo: string;
+  /** Parsed NUMERIC star count alongside the display `stars` string above —
+   *  null when the curated display string names a different unit or carries
+   *  no figure at all; never fabricated (W6-CR-2). */
+  starsNumeric: number | null;
 };
 
 export type CommunityItem = {
@@ -62,6 +66,20 @@ export type CommunityItem = {
   installState: CommunityInstallState;
   probeState: CommunityProbeState | null;
   origin: string;
+  /** ISO date this item was last verified against upstream — null until a
+   *  real refresh pass has run for it, or for an item with no registry row
+   *  at all (a vendored package / connection). NEVER render a date for a
+   *  null fetchedAt — the honest "seed — never verified" state instead
+   *  (W6-CR-2). */
+  fetchedAt: string | null;
+  /** Provenance of the currently-recorded data — "seed" for a
+   *  registry-sourced item, "local" for a vendored package/connection with
+   *  no registry row. Always a real, non-blank string. */
+  fetchedBy: string;
+  /** ISO date the upstream project last published a change, per the
+   *  registry's own curated fact — null when unknown or for an item with no
+   *  registry row; never fabricated. */
+  upstreamUpdatedAt: string | null;
 };
 
 export type CommunityFile = { path: string; body: string };
@@ -142,6 +160,17 @@ function requireNumber(r: Record<string, unknown>, key: string): number {
   return v;
 }
 
+/** A field that is legitimately a number OR null (never absent — the KEY
+ *  must still be present, mirroring `parseNullableField`'s own discipline
+ *  below for object-shaped nullable fields). */
+function requireNullableNumber(r: Record<string, unknown>, key: string): number | null {
+  if (!(key in r)) throw new Error(`expected "${key}" key to be present (explicit null is allowed, an absent key is not)`);
+  const v = r[key];
+  if (v === null) return null;
+  if (typeof v !== 'number') throw new Error(`expected "${key}" to be a number or null, got ${JSON.stringify(v)}`);
+  return v;
+}
+
 /** A field that is legitimately nullable MUST still be a PRESENT key
  *  (explicit `null` is honest; an absent key is a malformed response — this
  *  campaign's recurring "declared data fails open" shape, applied to parse
@@ -188,7 +217,11 @@ function parseCommunityProbeState(raw: unknown): CommunityProbeState {
 
 function parseCommunitySignals(raw: unknown): CommunitySignals {
   const r = asRecord(raw);
-  return { stars: requireString(r, 'stars'), attributedTo: requireString(r, 'attributedTo') };
+  return {
+    stars: requireString(r, 'stars'),
+    attributedTo: requireString(r, 'attributedTo'),
+    starsNumeric: requireNullableNumber(r, 'starsNumeric'),
+  };
 }
 
 /**
@@ -210,6 +243,15 @@ export function parseCommunityItem(raw: unknown): CommunityItem {
     installState: parseCommunityInstallState(r['installState']),
     probeState: parseNullableField(r, 'probeState', parseCommunityProbeState),
     origin: requireString(r, 'origin'),
+    fetchedAt: parseNullableField(r, 'fetchedAt', (v) => {
+      if (typeof v !== 'string') throw new Error(`expected "fetchedAt" to be a string when present, got ${JSON.stringify(v)}`);
+      return v;
+    }),
+    fetchedBy: requireString(r, 'fetchedBy'),
+    upstreamUpdatedAt: parseNullableField(r, 'upstreamUpdatedAt', (v) => {
+      if (typeof v !== 'string') throw new Error(`expected "upstreamUpdatedAt" to be a string when present, got ${JSON.stringify(v)}`);
+      return v;
+    }),
   };
 }
 

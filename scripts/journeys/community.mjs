@@ -21,6 +21,13 @@ function loadCatalogDoc() {
   return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'catalog.yaml'), 'utf8'));
 }
 
+// W6-CR-1: community skills moved from studio/catalog.yaml's `community-skills:`
+// section to studio/community/registry.yaml — read that file directly rather
+// than re-deriving from the (now community-skills-less) catalog doc.
+function loadRegistryDoc() {
+  return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'registry.yaml'), 'utf8'));
+}
+
 function loadHubsDoc() {
   return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'hubs.yaml'), 'utf8'));
 }
@@ -55,12 +62,13 @@ function realVendoredIds(kind) {
  *  reconstruct the full wire shape. */
 function realCommunityItems() {
   const doc = loadCatalogDoc();
+  const registryDoc = loadRegistryDoc();
   const hubs = realHubs();
-  const communitySkills = doc['community-skills'] ?? [];
+  const communitySkills = (registryDoc.items ?? []).filter((i) => i.kind === 'skill');
   const catalogSkillIds = new Set(communitySkills.map((cs) => cs.id));
   const items = [];
   for (const cs of communitySkills) {
-    items.push({ kind: 'skill', id: cs.id, hub: resolveHubLocal(cs.source, hubs) });
+    items.push({ kind: 'skill', id: cs.id, hub: resolveHubLocal(cs.sourceUrl, hubs) });
   }
   for (const id of realVendoredIds('skill')) {
     if (catalogSkillIds.has(id)) continue; // collision — represented once, above
@@ -87,10 +95,33 @@ function normalizeWs(text) {
 }
 
 function realCommunitySkillEntry(id) {
-  const doc = loadCatalogDoc();
-  const entry = (doc['community-skills'] ?? []).find((cs) => cs.id === id);
-  if (!entry) throw new Error(`community journey: "${id}" is missing from studio/catalog.yaml community-skills: — fixtures assume it exists`);
+  const doc = loadRegistryDoc();
+  const entry = (doc.items ?? []).find((cs) => cs.kind === 'skill' && cs.id === id);
+  if (!entry) throw new Error(`community journey: "${id}" is missing from studio/community/registry.yaml — fixtures assume it exists`);
   return entry;
+}
+
+// ── W6-CR-2 helpers: sort + freshness, re-derived from the real registry ────
+
+/** The registry-sourced item with the HIGHEST numeric signals.stars —
+ *  independently recomputed off studio/community/registry.yaml, never a
+ *  re-read of the page's own claimed sort order. Used to assert that
+ *  switching the sort to stars/desc genuinely reorders the DOM against real
+ *  data, not just against whatever the page happened to render first. */
+function realTopStarsRegistryEntry() {
+  const doc = loadRegistryDoc();
+  const withStars = (doc.items ?? []).filter((i) => typeof i.signals?.stars === 'number');
+  if (withStars.length === 0) throw new Error('community journey: expected at least one registry item with a numeric signals.stars value');
+  return withStars.reduce((best, cur) => (cur.signals.stars > best.signals.stars ? cur : best));
+}
+
+/** Sorts a bridge-fetched item list the SAME way sortCommunityItems('name',
+ *  'asc') does (plain `localeCompare` ascending) — a local recomputation
+ *  over the bridge's own real, already-derived facts, never a re-read of
+ *  the DOM's own claimed order (mirrors CM-7's own precedent of fetching
+ *  `/api/studio/community` directly and computing the expected value here). */
+function sortItemsByNameAscLocal(items) {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function realMcpEntry(id) {
@@ -251,10 +282,10 @@ export const journey = defineJourney({
         const domSource = await card.getAttribute('data-skill-source');
         check(domSource === 'community', `CM-2: ${CM_CATALOG_SKILL_ID} reads data-skill-source="community" (got "${domSource}")`);
         const domHub = await card.getAttribute('data-skill-hub');
-        const realHub = resolveHubLocal(real.source, realHubs());
-        check(domHub === realHub?.id, `CM-2: data-skill-hub matches the catalog source's real resolved hub (dom="${domHub}", real="${realHub?.id}")`);
+        const realHub = resolveHubLocal(real.sourceUrl, realHubs());
+        check(domHub === realHub?.id, `CM-2: data-skill-hub matches the registry sourceUrl's real resolved hub (dom="${domHub}", real="${realHub?.id}")`);
         const domHasSignals = await card.getAttribute('data-skill-has-signals');
-        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries real stars (${real.stars}) (got "${domHasSignals}")`);
+        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries real stars (${real.signals?.starsDisplay ?? 'n/a'}) (got "${domHasSignals}")`);
         await frame(page, 'cm-1-skills-card-signals', 'Part 2 (community) — a community card already carries its derived hub + signals on the /skills shelf', { key: true });
       },
     },
@@ -318,6 +349,79 @@ export const journey = defineJourney({
         check(zeroDom === '0', `CM-4: skills.sh reads a genuine "0", not a fabricated or missing count (got "${zeroDom}")`);
         await caption(page, 'Every hub renders — including skills.sh, which forge indexes nothing from yet: an honest zero, never dropped.');
         await frame(page, 'cm-2-hub-strip', 'Part 2 (community) — the hub strip: real per-hub counts, an honest zero for skills.sh', { key: true });
+      },
+    },
+    {
+      id: 'community-sort-freshness',
+      title: 'Sorting the index — deterministic against the registry data, plus the seed-never-verified badge',
+      narration:
+        'Ordering is SIMPLE SORTS ONLY (name / stars / updated / source), ' +
+        'operator-locked — no search/facets/tags sort exists. The default ' +
+        'is name/asc, independently recomputed off the bridge\'s own real ' +
+        'items, not a re-read of the page\'s own claim; switching to ' +
+        'stars/desc reorders the first card to the REAL highest-starred ' +
+        'registry entry. A seed item (never actually re-fetched from ' +
+        'upstream) honestly reads "seed — never verified", never a ' +
+        'fabricated date.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[CM-4b] Sorting the community index + the seed-never-verified badge');
+
+        // Default sort: name/asc — independently recomputed off the bridge's
+        // own real item list (never a re-read of the DOM's own claim).
+        const domSortKey = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-key'));
+        const domSortDir = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-dir'));
+        check(domSortKey === 'name', `CM-4b: the default sort key is "name" (got "${domSortKey}")`);
+        check(domSortDir === 'asc', `CM-4b: the default sort direction is "asc" (got "${domSortDir}")`);
+
+        const preRes = await fetch(watch.bridgeUrl + '/api/studio/community');
+        const preBody = await preRes.json().catch(() => ({ items: [] }));
+        const expectedFirstByName = sortItemsByNameAscLocal(preBody.items ?? [])[0];
+        check(!!expectedFirstByName, 'CM-4b: (sanity) the bridge index has at least one item to sort');
+        const firstCardId = await page.locator('[data-card-type="community-item"]').first().getAttribute('data-item-id');
+        check(firstCardId === expectedFirstByName.id, `CM-4b: the default (name/asc) first card matches the independently-recomputed name order (dom="${firstCardId}", real="${expectedFirstByName.id}")`);
+
+        // Switch to stars, then flip to descending — the first card must
+        // change to the REAL highest-signals.stars registry entry.
+        await page.locator('select[data-community-sort]').selectOption('stars').catch(() => {});
+        await page.locator('[data-action="toggle-sort-direction"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-dir') === 'desc',
+          null, { timeout: 5000 }).catch(() => {});
+        const realTopStars = realTopStarsRegistryEntry();
+        const starsFirstCard = page.locator('[data-card-type="community-item"]').first();
+        await page.waitForFunction(
+          (expectedId) => document.querySelector('[data-card-type="community-item"]')?.getAttribute('data-item-id') === expectedId,
+          realTopStars.id, { timeout: 5000 }).catch(() => {});
+        const starsFirstId = await starsFirstCard.getAttribute('data-item-id');
+        check(starsFirstId === realTopStars.id, `CM-4b: changing sort to stars/desc reorders the first card to the REAL highest-starred registry entry "${realTopStars.id}" (${realTopStars.signals.stars} stars) (got "${starsFirstId}")`);
+        await frame(page, 'cm-2b-sort-stars', 'Part 2 (community) — sorted by stars/desc: the first card reorders to the real highest-starred entry', { key: true });
+
+        // A seed item (this checkout's registry has never had a real refresh
+        // pass run — see registry.yaml's own file header) honestly reads
+        // "seed — never verified", never a fabricated date. Switch back to
+        // name/asc first so the fixed CM_CATALOG_SKILL_ID card is reachable
+        // regardless of where stars/desc happened to place it.
+        await page.locator('select[data-community-sort]').selectOption('name').catch(() => {});
+        await page.locator('[data-action="toggle-sort-direction"]').click().catch(() => {}); // back to asc
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-dir') === 'asc',
+          null, { timeout: 5000 }).catch(() => {});
+        const seedEntry = realCommunitySkillEntry(CM_CATALOG_SKILL_ID);
+        check(seedEntry.fetchedAt === null, `CM-4b: (sanity) the real registry entry for "${CM_CATALOG_SKILL_ID}" genuinely has fetchedAt: null`);
+        const seedCard = page.locator(`[data-card-type="community-item"][data-item-id="${CM_CATALOG_SKILL_ID}"][data-item-kind="skill"]`);
+        check(await seedCard.count() > 0, `CM-4b: the seed item "${CM_CATALOG_SKILL_ID}" card is present`);
+        const hasFetchedAtAttr = await seedCard.evaluate((el) => el.hasAttribute('data-fetched-at'));
+        check(hasFetchedAtAttr === false, 'CM-4b: data-fetched-at is ABSENT for a null fetchedAt — never a fabricated attribute value');
+        const badge = seedCard.locator('[data-component="freshness-badge"]');
+        check(await badge.count() > 0, 'CM-4b: the freshness badge renders on the card');
+        const badgeState = await badge.getAttribute('data-freshness');
+        check(badgeState === 'seed', `CM-4b: data-freshness="seed" for a never-verified item (got "${badgeState}")`);
+        const badgeText = await badge.textContent();
+        check(/seed — never verified/.test(badgeText ?? ''), `CM-4b: the badge reads the spec-literal "seed — never verified" (got "${(badgeText ?? '').trim()}")`);
+        check(!/\d{4}-\d{2}-\d{2}/.test(badgeText ?? ''), 'CM-4b: the badge never renders a raw date for a null fetchedAt');
+        await caption(page, 'Simple sorts only — name/stars/updated/source. A seed item honestly reads "seed — never verified", never a fabricated date.');
+        await frame(page, 'cm-2c-freshness-badge', 'Part 2 (community) — the seed-never-verified freshness badge, never a fabricated date', { key: true });
       },
     },
     {

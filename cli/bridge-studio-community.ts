@@ -39,11 +39,11 @@
  *     literal constant community-index.ts/community-install.ts already use
  *     for hub resolution), or the catalog `source`/connection `provenance`
  *     field for a non-vendored item. Read from the SAME primary records WI-1
- *     itself reads (studio/catalog.yaml, listConnections) — never a second
- *     declared list, never hub.url substituted in (a hub can be a coarser
- *     prefix of an item's own upstream link — see studio/catalog.yaml's real
- *     MCP entries, which point at a `tree/main/src/<name>` subpath of their
- *     hub's repo root).
+ *     itself reads (studio/community/registry.yaml, listConnections) — never
+ *     a second declared list, never hub.url substituted in (a hub can be a
+ *     coarser prefix of an item's own upstream link — see studio/catalog.yaml's
+ *     real MCP entries, which point at a `tree/main/src/<name>` subpath of
+ *     their hub's repo root).
  *   - `probeState` is the REAL live probe state for a tool/mcp item (not just
  *     the narrower "misconfigured only" fact WI-1's own type surfaces), and
  *     null for a skill/hook (no probe concept exists for either).
@@ -84,7 +84,7 @@ import type { HookPermissionManifest } from '../orchestrator/studio/hook-library
 import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
-import { loadCatalog } from '../orchestrator/studio/registry.ts';
+import { communitySkillsFromRegistry } from '../orchestrator/studio/registry.ts';
 import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
 import type { CommunitySkill } from '../orchestrator/studio/types.ts';
 
@@ -124,6 +124,12 @@ type CommunityItemWire = {
   installState: CommunityItem['installState'];
   probeState: ProbeState | null;
   origin: string;
+  /** W6-CR-2 — carried straight through from the item's own real fact (D14 in
+   *  community-index.ts): null/'local' for a vendored package or connection
+   *  with no registry row, never fabricated. */
+  fetchedAt: CommunityItem['fetchedAt'];
+  fetchedBy: CommunityItem['fetchedBy'];
+  upstreamUpdatedAt: CommunityItem['upstreamUpdatedAt'];
   error?: string;
 };
 
@@ -134,24 +140,28 @@ type WireCtx = {
 
 /** T2 round 6, AT GROUP 5: mirrors listCommunityIndex's own deliberate
  *  missing-vs-malformed split (orchestrator/studio/community-index.ts, MAJOR
- *  2) at the ROUTE level. `listConnections` calls `loadCatalog` unguarded —
- *  correct for ITS callers, which never expect a catalog-less root — so this
- *  function must not call it at all when studio/catalog.yaml is genuinely
- *  absent (the fresh/half-onboarded shape: degrade to no connections, never
- *  a 500). A catalog.yaml that EXISTS but fails to parse must still throw
- *  loud (via the same unguarded `loadCatalog` call below, for communitySkills)
- *  — a corrupt registry must never render identically to an honest empty one. */
+ *  2) at the ROUTE level, now over TWO independent files (W6-CR-1 decoupled
+ *  community-skill sourcing from catalog.yaml):
+ *   - connections: `listConnections` calls `loadCatalog` unguarded — correct
+ *     for ITS callers, which never expect a catalog-less root — so this
+ *     function must not call it at all when studio/catalog.yaml is genuinely
+ *     absent (the fresh/half-onboarded shape: degrade to no connections,
+ *     never a 500).
+ *   - communitySkills: `communitySkillsFromRegistry` is tolerant of a MISSING
+ *     studio/community/registry.yaml (degrades to `[]`) but throws loud on a
+ *     MALFORMED one (via its own unguarded `loadCommunityRegistry` call) — a
+ *     corrupt registry must never render identically to an honest empty one. */
 function buildWireCtx(forgeRoot: string): WireCtx {
   const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
   const catalogExists = existsSync(catalogPath);
-  const communitySkills = catalogExists ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
+  const communitySkills = communitySkillsFromRegistry(forgeRoot);
   const connections = catalogExists ? listConnections(forgeRoot) : [];
   return { communitySkills, connections };
 }
 
 function originFor(item: CommunityItem): string {
   if (item.kind === 'skill') {
-    return item.vendored ? `studio/community/skills/${item.id}/SKILL.md` : 'studio/catalog.yaml (community-skills)';
+    return item.vendored ? `studio/community/skills/${item.id}/SKILL.md` : 'studio/community/registry.yaml';
   }
   if (item.kind === 'hook') return `studio/community/hooks/${item.id}/hook.yaml`;
   return `listConnections (studio/catalog.yaml ${item.kind}s:)`;
@@ -169,7 +179,7 @@ function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
   if (item.kind === 'skill') {
     const cs = ctx.communitySkills.find((c) => c.id === item.id);
     if (!cs) {
-      throw new Error(`community item "${item.id}" (skill) is not vendored and has no studio/catalog.yaml community-skills entry`);
+      throw new Error(`community item "${item.id}" (skill) is not vendored and has no studio/community/registry.yaml community-skills entry`);
     }
     return cs.source;
   }
@@ -209,6 +219,9 @@ function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
     installState: item.installState,
     probeState: probeStateFor(item),
     origin: originFor(item),
+    fetchedAt: item.fetchedAt,
+    fetchedBy: item.fetchedBy,
+    upstreamUpdatedAt: item.upstreamUpdatedAt,
     ...(item.error !== undefined ? { error: item.error } : {}),
   };
 }
@@ -232,6 +245,9 @@ function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
       installState: item.installState,
       probeState: null,
       origin: originFor(item),
+      fetchedAt: item.fetchedAt,
+      fetchedBy: item.fetchedBy,
+      upstreamUpdatedAt: item.upstreamUpdatedAt,
       error: `cannot fully derive community wire item — ${sanitizeError(err)}`,
     };
   }

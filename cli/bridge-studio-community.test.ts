@@ -128,6 +128,23 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
+/** W6-CR-1: community skills live in studio/community/registry.yaml, written
+ *  UNCONDITIONALLY (even empty) alongside catalog.yaml every time
+ *  writeCatalog is called, mirroring writeCatalog's own "every section, even
+ *  when empty" discipline. */
+function writeRegistry(communitySkills: Array<Record<string, unknown>>): void {
+  const dir = join(forgeRoot, 'studio', 'community');
+  mkdirSync(dir, { recursive: true });
+  const items = (communitySkills ?? []).map((s) => ({
+    id: s['id'], kind: 'skill', name: s['id'], provenance: s['provenance'] ?? 'Test Author',
+    sourceUrl: s['source'] ?? `https://example.com/${s['id']}`, category: 'testing',
+    desc: `${s['id']} description`,
+    signals: { stars: null, starsDisplay: s['stars'] ?? null, attributedTo: s['provenance'] ?? 'Test Author' },
+    upstreamUpdatedAt: null, fetchedAt: null, fetchedBy: 'seed',
+  }));
+  writeFileSync(join(dir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }), 'utf8');
+}
+
 function writeCatalog(opts: {
   tools?: Array<Record<string, unknown>>;
   mcps?: Array<Record<string, unknown>>;
@@ -151,13 +168,9 @@ function writeCatalog(opts: {
       capabilities: m['capabilities'] ?? [{ name: 'do_thing', summary: 'Do the thing.' }],
     })),
     guards: [],
-    'community-skills': (opts.communitySkills ?? []).map((s) => ({
-      id: s['id'], name: s['id'], provenance: s['provenance'] ?? 'Test Author',
-      source: s['source'] ?? `https://example.com/${s['id']}`, category: 'testing',
-      desc: `${s['id']} description`, ...(s['stars'] !== undefined ? { stars: s['stars'] } : {}),
-    })),
   };
   writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), yaml.dump(doc), 'utf8');
+  writeRegistry(opts.communitySkills ?? []);
 }
 
 function writeHubs(hubs: Array<{ id: string; name: string; url: string; kinds: string }>): void {
@@ -291,6 +304,38 @@ test('GET /api/studio/community: returns hubs (with itemCount) and the cross-kin
   assert.ok(body.items.some((i) => i['kind'] === 'tool' && i['id'] === 'listed-tool'));
   assert.ok(body.items.some((i) => i['kind'] === 'mcp' && i['id'] === 'listed-mcp'));
   assert.ok(body.items.some((i) => i['kind'] === 'hook' && i['id'] === 'listed-hook'));
+});
+
+// W6-CR-2: fetchedAt/fetchedBy/upstreamUpdatedAt carried through the wire —
+// a registry-sourced item carries its real seed facts, a vendored/connection
+// item (no registry row) honestly carries fetchedAt:null/fetchedBy:'local'.
+test('GET /api/studio/community: every item carries fetchedAt/fetchedBy/upstreamUpdatedAt on the wire (W6-CR-2)', async () => {
+  writeCatalog({
+    communitySkills: [{ id: 'freshness-catalog-skill' }],
+    tools: [{ id: 'freshness-tool' }],
+  });
+  vendorHookPackage('freshness-hook');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+
+  const catalogSkill = body.items.find((i) => i['kind'] === 'skill' && i['id'] === 'freshness-catalog-skill');
+  assert.ok(catalogSkill);
+  assert.equal(catalogSkill!['fetchedBy'], 'seed', 'a registry-sourced item carries its real fetchedBy');
+  assert.equal(catalogSkill!['fetchedAt'], null);
+  assert.equal(catalogSkill!['upstreamUpdatedAt'], null);
+
+  const tool = body.items.find((i) => i['kind'] === 'tool' && i['id'] === 'freshness-tool');
+  assert.ok(tool);
+  assert.equal(tool!['fetchedBy'], 'local', 'a connection has no registry row — honest "local", never a fabricated "seed"');
+  assert.equal(tool!['fetchedAt'], null);
+  assert.equal(tool!['upstreamUpdatedAt'], null);
+
+  const hook = body.items.find((i) => i['kind'] === 'hook' && i['id'] === 'freshness-hook');
+  assert.ok(hook);
+  assert.equal(hook!['fetchedBy'], 'local', 'a vendored hook has no registry row — honest "local"');
+  assert.equal(hook!['fetchedAt'], null);
 });
 
 // ---------------------------------------------------------------------------

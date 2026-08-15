@@ -148,23 +148,48 @@ type RawCommunitySkill = {
   desc?: string;
 };
 
-function communitySkillDoc(s: RawCommunitySkill): Record<string, unknown> {
-  const doc: Record<string, unknown> = {
+/** W6-CR-1: community skills live in studio/community/registry.yaml, not
+ *  catalog.yaml — this builds one registry item's YAML doc, migrated field
+ *  names (source → sourceUrl, stars → signals.starsDisplay). */
+function communityRegistryItemDoc(s: RawCommunitySkill): Record<string, unknown> {
+  return {
     id: s.id,
+    kind: 'skill',
     name: s.name ?? s.id,
     provenance: s.provenance ?? 'Test Author',
-    source: s.source ?? `https://example.com/${s.id}`,
+    sourceUrl: s.source ?? `https://example.com/${s.id}`,
     category: s.category ?? 'testing',
     desc: s.desc ?? `${s.id} description`,
+    ...(s.tier !== undefined ? { tier: s.tier } : {}),
+    signals: { stars: null, starsDisplay: s.stars ?? null, attributedTo: s.provenance ?? 'Test Author' },
+    upstreamUpdatedAt: null,
+    fetchedAt: null,
+    fetchedBy: 'seed',
   };
-  if (s.tier !== undefined) doc['tier'] = s.tier;
-  if (s.stars !== undefined) doc['stars'] = s.stars;
-  return doc;
+}
+
+/** Writes studio/community/registry.yaml from the same `communitySkills`
+ *  option `writeCatalog` used to embed into catalog.yaml's `community-skills:`
+ *  section pre-W6-CR-1 — written UNCONDITIONALLY (even empty) alongside
+ *  catalog.yaml, mirroring writeCatalog's own "every section, even when
+ *  empty" discipline, so registry.yaml exists in every fixture that calls
+ *  writeCatalog and a genuinely MISSING registry.yaml stays confined to the
+ *  tests that deliberately never call writeCatalog at all. */
+function writeRegistry(root: string, communitySkills: RawCommunitySkill[]): void {
+  const dir = join(root, 'studio', 'community');
+  mkdirSync(dir, { recursive: true });
+  const doc = {
+    meta: { schemaVersion: 1, lastRefresh: null },
+    items: communitySkills.map(communityRegistryItemDoc),
+  };
+  writeFileSync(join(dir, 'registry.yaml'), yaml.dump(doc), 'utf8');
 }
 
 /** Writes a full studio/catalog.yaml — every section loadCatalog requires,
  *  even when empty (mirrors skill-library.test.ts's writeCatalogYaml, but
- *  generalized to also carry tools:/mcps: connection metadata). */
+ *  generalized to also carry tools:/mcps: connection metadata). ALSO writes
+ *  studio/community/registry.yaml from `opts.communitySkills` (W6-CR-1 moved
+ *  community skills off catalog.yaml — see writeRegistry above). */
 function writeCatalog(
   root: string,
   opts: { tools?: RawTool[]; mcps?: RawTool[]; communitySkills?: RawCommunitySkill[] } = {},
@@ -175,10 +200,10 @@ function writeCatalog(
     tools: (opts.tools ?? []).map(toolDoc),
     mcps: (opts.mcps ?? []).map(mcpDoc),
     guards: [],
-    'community-skills': (opts.communitySkills ?? []).map(communitySkillDoc),
   };
   mkdirSync(join(root, 'studio'), { recursive: true });
   writeFileSync(join(root, 'studio', 'catalog.yaml'), yaml.dump(doc), 'utf8');
+  writeRegistry(root, opts.communitySkills ?? []);
 }
 
 function writeHubs(root: string, hubs: Array<{ id: string; name: string; url: string; kinds: string }>): void {
@@ -450,13 +475,13 @@ describe('communityInstallState — connection (mcp/tool) (D3)', () => {
 // ===========================================================================
 
 describe('listCommunityIndex — D1: derived from real registries, no fourth declared file', () => {
-  it('a NEW community-skills catalog entry appears in the index by editing ONLY catalog.yaml — no community-specific file touched', () => {
+  it('a NEW registry.yaml community-skills entry appears in the index by editing ONLY registry.yaml — no vendored package needed (W6-CR-1)', () => {
     const root = makeForgeRoot();
     writeCatalog(root, { communitySkills: [{ id: 'brand-new-skill', stars: '42' }] });
     // Deliberately: no hubs.yaml write, no studio/community/skills/ write.
     const items = listCommunityIndex(root);
     const found = items.find((i) => i.kind === 'skill' && i.id === 'brand-new-skill');
-    assert.ok(found, 'a catalog-only community-skills entry must appear in the index without any community-specific data file');
+    assert.ok(found, 'a registry-only community-skills entry must appear in the index without any vendored package on disk');
     assert.equal(found!.vendored, false, 'no vendored package exists on disk for this id — vendored must be false');
   });
 
@@ -519,6 +544,30 @@ describe('listCommunityIndex — MAJOR 2: missing vs malformed studio/catalog.ya
     assert.ok(items.some((i) => i.kind === 'skill' && i.id === 'vendored-skill-no-catalog'));
     assert.ok(items.some((i) => i.kind === 'hook' && i.id === 'vendored-hook-no-catalog'));
     assert.ok(!items.some((i) => i.kind === 'tool' || i.kind === 'mcp'), 'with no catalog there is nothing to source a tool/mcp item from — none may be fabricated');
+  });
+
+  // Reviewer fix (LOW): registrySource's degrade-on-missing path was
+  // previously untested — nothing asserted the console.warn actually fires,
+  // or what it says. console.warn (not createLogger's structured JSONL
+  // event log) is the right choke point here and matches this repo's own
+  // house precedent for a warn with no cycle/run context to log through
+  // (see cli/bridge-hooks.ts's own "no cycle context exists" console.warn
+  // family) — this is a synchronous read helper, not a phase or agent run.
+  it('a MISSING studio/community/registry.yaml warns loud via console.warn, naming the file (registrySource, community-index.ts)', (t) => {
+    const root = makeForgeRoot();
+    // Deliberately: no writeRegistry call — registry.yaml absent, the
+    // fresh/half-onboarded-root shape registrySource degrades on.
+    const warnCalls: unknown[][] = [];
+    t.mock.method(console, 'warn', (...args: unknown[]) => {
+      warnCalls.push(args);
+    });
+
+    listCommunityIndex(root);
+
+    assert.ok(
+      warnCalls.some((args) => typeof args[0] === 'string' && /studio[/\\]community[/\\]registry\.yaml/.test(args[0])),
+      `expected a console.warn call naming studio/community/registry.yaml — got: ${JSON.stringify(warnCalls)}`,
+    );
   });
 
   it('a MALFORMED studio/catalog.yaml THROWS LOUDLY, carrying the real underlying parse detail, never a generic string', () => {
@@ -587,6 +636,68 @@ describe('listCommunityIndex — D5: signals are never invented', () => {
     const entry = items.find((i) => i.id === 'blank-provenance-skill');
     assert.ok(entry);
     assert.equal(entry!.signals, null, 'a signals block whose attributedTo would be blank/whitespace must not be emitted at all — fall back to null');
+  });
+});
+
+// W6-CR-2, D14: fetchedAt/fetchedBy/upstreamUpdatedAt thread through only
+// from a value the source record already carries — a registry-sourced skill
+// carries its real facts; a vendored-only skill/hook or a connection (no
+// registry row) honestly carries fetchedAt:null/fetchedBy:'local'/
+// upstreamUpdatedAt:null, never a fabricated timestamp.
+describe('listCommunityIndex — D14: fetchedAt/fetchedBy/upstreamUpdatedAt', () => {
+  it('a registry-sourced community-skill carries its real fetchedBy/fetchedAt/upstreamUpdatedAt (the REAL "handoff" entry: fetchedBy "seed", fetchedAt/upstreamUpdatedAt null)', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    const entry = items.find((i) => i.kind === 'skill' && i.id === 'handoff');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedBy, 'seed');
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a vendored-only skill (no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null — never fabricated', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    vendorSkillPackage(root, 'no-fetch-skill');
+    const items = listCommunityIndex(root);
+    const entry = items.find((i) => i.id === 'no-fetch-skill');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.fetchedBy, 'local');
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a vendored hook (no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    vendorHookPackage(root, 'no-fetch-hook');
+    const items = listCommunityIndex(root);
+    const entry = items.find((i) => i.id === 'no-fetch-hook');
+    assert.ok(entry);
+    assert.equal(entry!.fetchedAt, null);
+    assert.equal(entry!.fetchedBy, 'local');
+    assert.equal(entry!.upstreamUpdatedAt, null);
+  });
+
+  it('a connection (tool/mcp, no registry row) carries fetchedAt:null, fetchedBy:"local", upstreamUpdatedAt:null', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, { tools: [{ id: 'no-fetch-tool' }], mcps: [{ id: 'no-fetch-mcp' }] });
+    const items = listCommunityIndex(root);
+    for (const id of ['no-fetch-tool', 'no-fetch-mcp']) {
+      const entry = items.find((i) => i.id === id);
+      assert.ok(entry, `expected item "${id}"`);
+      assert.equal(entry!.fetchedAt, null, `"${id}".fetchedAt`);
+      assert.equal(entry!.fetchedBy, 'local', `"${id}".fetchedBy`);
+      assert.equal(entry!.upstreamUpdatedAt, null, `"${id}".upstreamUpdatedAt`);
+    }
+  });
+
+  it('every item in the REAL committed index carries a real, non-blank fetchedBy — never absent', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    assert.ok(items.length > 0, 'sanity: the real index has entries');
+    for (const item of items) {
+      assert.equal(typeof item.fetchedBy, 'string', `item "${item.kind}:${item.id}" fetchedBy must be a string`);
+      assert.ok(item.fetchedBy.trim().length > 0, `item "${item.kind}:${item.id}" fetchedBy must not be blank`);
+    }
   });
 });
 

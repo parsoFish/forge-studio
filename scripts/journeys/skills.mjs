@@ -207,13 +207,20 @@ export const journey = defineJourney({
               // ════════════════════════════════════════════════════════════════════════
 
               // ── SK-1: the OOTB skill library (community-sourced) ──────────────────────
+              // W6-CR-1: community skills moved from studio/catalog.yaml's
+              // `community-skills:` section to studio/community/registry.yaml —
+              // read that file directly (mirrors community.mjs's own
+              // loadRegistryDoc), never the now community-skills-less catalog.
               console.log('\n[SK-1] OOTB skill library (community-sourced)');
               let community = [];
-              try { community = (yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'catalog.yaml'), 'utf8'))?.['community-skills']) ?? []; } catch { /* */ }
-              check(community.length >= 5, `SK-1: catalog ships an OOTB skill library (${community.length} community-skills)`);
+              try {
+                const registryDoc = yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'registry.yaml'), 'utf8'));
+                community = (registryDoc?.items ?? []).filter((i) => i.kind === 'skill');
+              } catch { /* */ }
+              check(community.length >= 5, `SK-1: registry.yaml ships an OOTB skill library (${community.length} community skills)`);
               const handoffSkill = community.find((s) => s.id === 'handoff');
-              check(/github\.com|firecrawl|http/.test(handoffSkill?.source ?? ''), `SK-1: an OOTB skill cites an online source (${handoffSkill?.source ?? 'none'})`);
-              check(!!handoffSkill?.provenance && !!handoffSkill?.stars, `SK-1: OOTB skill carries provenance + stars (${handoffSkill?.provenance ?? '?'}, ${handoffSkill?.stars ?? '?'})`);
+              check(/github\.com|firecrawl|http/.test(handoffSkill?.sourceUrl ?? ''), `SK-1: an OOTB skill cites an online source (${handoffSkill?.sourceUrl ?? 'none'})`);
+              check(!!handoffSkill?.provenance && !!handoffSkill?.signals?.starsDisplay, `SK-1: OOTB skill carries provenance + stars (${handoffSkill?.provenance ?? '?'}, ${handoffSkill?.signals?.starsDisplay ?? '?'})`);
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
               await caption(page, 'Every OOTB skill is a curated community skill (superpowers, TDD, security-review) — drag it into an agent.');

@@ -1,16 +1,22 @@
 /**
  * Client-side glue to the forge-ui-bridge.
  *
- * Bridge URL discovery is RUNTIME: the client fetches /api/forge-config
- * (a Next.js route that reads process.env.FORGE_BRIDGE_URL at request
- * time). This avoids the build-time embedding fragility of next.config
- * `env` blocks across `forge watch` restarts.
+ * Bridge URL discovery (W6-P4, redesigned per review): the client tries the
+ * FIXED-PORT DEFAULT optimistically first (zero-RTT — see
+ * `resolveBridgeUrl`'s own doc below), and falls back to `/api/forge-config`
+ * (a Next.js route that reads process.env.FORGE_BRIDGE_URL at request time —
+ * the authoritative source, correct under a `--bridge-port` override) only
+ * if that first real bridge call fails outright. This still avoids the
+ * build-time embedding fragility of `next.config` `env` blocks across
+ * `forge watch` restarts — the DEFAULT inlined by the root layout is a
+ * plain literal, never an observed env value that could go stale.
  *
  * One subscribe() opens a single WebSocket; the page is expected to
  * call this once for the lifetime of the mount. Cycle-selection filtering
  * lives in the handler the page provides — the bridge broadcasts events
  * for every live cycle.
  */
+import { DEFAULT_BRIDGE_PORT } from './bridge-port.ts';
 
 export type Cycle = {
   cycleId: string;
@@ -66,40 +72,90 @@ export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'no-bridg
 
 // ---- runtime bridge URL --------------------------------------------------
 
+// W6-P4 (redesigned per review): `app/layout.tsx` inlines the FIXED-PORT
+// DEFAULT (a build-time literal — see lib/bridge-port.ts, never an env
+// read, so the layout stays statically prerendered) as this global. Never a
+// host — see the function doc below.
+declare global {
+  interface Window {
+    __FORGE_BRIDGE_PORT__?: number | null;
+  }
+}
+
 // Cache the PROMISE rather than the value so concurrent callers
 // (Strict Mode double-mount, two effects running on the same tick)
 // share a single network request.
 let cachedBridgeUrl: Promise<string> | null = null;
 
+// True once resolveBridgeUrl has produced at least one value. The FIRST
+// resolution is always the OPTIMISTIC fixed-port-default guess (zero-RTT —
+// no fetch at all). Every resolution AFTER an invalidation
+// (clearBridgeCache, below) goes straight to the authoritative,
+// env-derived `/api/forge-config` route instead of re-guessing the same
+// default a second time — the guess already proved wrong once.
+let hasResolvedBefore = false;
+
+/** Build the bridge base URL from `window.location` + a port. The host
+ *  segment ALWAYS comes from `window.location.hostname` — essential for
+ *  WSL2 + Windows browser: the Windows browser sees `localhost` (forwarded
+ *  into WSL by WSL2), while a Linux/WSL browser sees the actual WSL
+ *  hostname — NEVER from a server-supplied value (global or fetched), on
+ *  either resolution path below. */
+function buildBridgeUrl(loc: Pick<Location, 'protocol' | 'hostname'>, port: number): string {
+  return `${loc.protocol}//${loc.hostname}:${port}`;
+}
+
+async function fetchAuthoritativeBridgeUrl(loc: Pick<Location, 'protocol' | 'hostname'>): Promise<string> {
+  try {
+    const res = await fetch('/api/forge-config', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`forge-config → ${res.status}`);
+    const body = (await res.json()) as { bridgePort: number | null };
+    if (!body.bridgePort) return '';
+    return buildBridgeUrl(loc, body.bridgePort);
+  } catch {
+    return '';
+  }
+}
+
 /**
- * Build the bridge base URL from `window.location` + the port the
- * server-side API route resolved. Same-hostname-as-the-browser is
- * essential for WSL2 + Windows browser: the Windows browser sees
- * `localhost` (forwarded into WSL by WSL2), while a Linux/WSL browser
- * sees the actual WSL hostname. Either way, the bridge port piggybacks
- * on the same hostname-forwarding the UI port already uses.
+ * Resolve the bridge base URL. Resolution order (W6-P4, redesigned per
+ * review — never trade the app's static shells for a per-request fact that
+ * has a stable default):
+ *   1. FIRST call ever: `window.__FORGE_BRIDGE_PORT__` (the fixed-port
+ *      convention's default, inlined by the static root layout) —
+ *      OPTIMISTIC, zero network round-trips. Used immediately for the
+ *      first real bridge call; `bridgeFetch` (below) corrects it if that
+ *      call fails outright.
+ *   2. Any resolution AFTER `clearBridgeCache()`: the authoritative,
+ *      env-derived `/api/forge-config` route — correct even under a
+ *      `--bridge-port` override, at the cost of one round trip.
  */
 export function resolveBridgeUrl(): Promise<string> {
   if (cachedBridgeUrl) return cachedBridgeUrl;
+  const useOptimisticDefault = !hasResolvedBefore;
+  hasResolvedBefore = true;
   cachedBridgeUrl = (async () => {
-    try {
-      const res = await fetch('/api/forge-config', { cache: 'no-store' });
-      if (!res.ok) throw new Error(`forge-config → ${res.status}`);
-      const body = (await res.json()) as { bridgePort: number | null };
-      if (!body.bridgePort) return '';
-      // Same hostname as the page so WSL2 (or any other localhost-
-      // forwarding scheme) routes the request the same way it routed
-      // the UI's HTTP fetch.
-      const loc = typeof window !== 'undefined' ? window.location : null;
-      if (!loc) return ''; // SSR — client-only code path
-      return `${loc.protocol}//${loc.hostname}:${body.bridgePort}`;
-    } catch {
-      return '';
+    const loc = typeof window !== 'undefined' ? window.location : null;
+    if (!loc) return ''; // SSR — client-only code path
+    if (useOptimisticDefault) {
+      const port = window.__FORGE_BRIDGE_PORT__ ?? DEFAULT_BRIDGE_PORT;
+      return buildBridgeUrl(loc, port);
     }
+    return fetchAuthoritativeBridgeUrl(loc);
   })();
   return cachedBridgeUrl;
 }
 
+/**
+ * Invalidate the current resolution so the NEXT `resolveBridgeUrl()` call
+ * re-derives — always via the authoritative `/api/forge-config` route past
+ * the first resolution (see `hasResolvedBefore` above). Two callers:
+ *   - `bridgeFetch`'s one-shot correction, when the FIRST real bridge call
+ *     against the optimistic guess fails outright.
+ *   - `subscribe()`'s WS reconnect loop, after N consecutive close
+ *     failures — a bridge that restarted on a different port must be
+ *     re-discovered, not retried on the dead one forever.
+ */
 function clearBridgeCache(): void {
   cachedBridgeUrl = null;
 }
@@ -109,12 +165,40 @@ function clearBridgeCache(): void {
 // envelope in one place means the "no bridge → fallback", "non-ok → fallback",
 // and "throw → fallback" semantics can't drift between endpoints.
 
+// W6-P4: one-shot correction gate for `bridgeFetch`. Set the first time ANY
+// bridge call's raw `fetch()` throws (a network-level failure — nothing is
+// listening at the guessed URL, e.g. a `--bridge-port` override moved the
+// bridge off the fixed-port default) — never re-armed, so a since-broken
+// bridge doesn't retry-storm `/api/forge-config` on every later failure.
+let correctionAttempted = false;
+
+/**
+ * `fetch(base + path, init)` against the CURRENTLY resolved bridge URL, with
+ * the W6-P4 one-shot correction: if the very first real bridge fetch this
+ * tab makes THROWS (connection refused / DNS failure — not a normal
+ * non-ok status, which is left entirely to the caller), invalidate the
+ * cached URL, re-resolve via the authoritative route, and retry exactly
+ * once against the corrected URL.
+ */
+async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
+  const base = await resolveBridgeUrl();
+  if (!base) throw new Error('no bridge configured');
+  try {
+    return await fetch(`${base}${path}`, init);
+  } catch (err) {
+    if (correctionAttempted) throw err;
+    correctionAttempted = true;
+    clearBridgeCache();
+    const corrected = await resolveBridgeUrl();
+    if (!corrected || corrected === base) throw err; // nothing to gain from retrying
+    return fetch(`${corrected}${path}`, init);
+  }
+}
+
 /** GET a bridge JSON endpoint; returns `fallback` on no-bridge / non-ok / throw. */
 async function bridgeGet<T>(path: string, fallback: T): Promise<T> {
-  const base = await resolveBridgeUrl();
-  if (!base) return fallback;
   try {
-    const res = await fetch(`${base}${path}`);
+    const res = await bridgeFetch(path);
     if (!res.ok) return fallback;
     return (await res.json()) as T;
   } catch {
@@ -131,10 +215,8 @@ async function bridgePost(
   path: string,
   body?: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}${path}`, body === undefined
+    const res = await bridgeFetch(path, body === undefined
       ? { method: 'POST', headers: { 'x-forge-csrf': '1' } }
       : { method: 'POST', headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body) });
     const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
@@ -148,9 +230,7 @@ async function bridgePost(
 // ---- HTTP API ------------------------------------------------------------
 
 export async function fetchCycles(): Promise<CycleListSnapshot> {
-  const base = await resolveBridgeUrl();
-  if (!base) throw new Error('no bridge configured');
-  const res = await fetch(`${base}/api/cycles`);
+  const res = await bridgeFetch('/api/cycles');
   if (!res.ok) throw new Error(`bridge /api/cycles → ${res.status}`);
   return res.json();
 }
@@ -721,8 +801,16 @@ export async function listInstructionsSessions(): Promise<InstructionsSessionSum
 export async function startInstructions(input: {
   project: string;
   mode: 'init' | 'edit';
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — an operator-chosen kickoff
+   *  model tier, validated server-side against instructions-creator's own
+   *  SKILL.md-declared envelope (`resolveKickoffModelTier`). Omit for the
+   *  spec's spawn-default tier. */
+  modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'init' | 'edit'; error?: string }> {
-  const r = await bridgePost('/api/instructions/start', { project: input.project, mode: input.mode });
+  const r = await bridgePost('/api/instructions/start', {
+    project: input.project, mode: input.mode,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return {
     ok: true,
@@ -844,10 +932,14 @@ export async function startDemoBuilder(input: {
   mode: 'create' | 'update';
   /** Iterate ONE demo-element kind (per-element iteration); omit to compose the full demo. */
   targetElement?: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against demo-builder's own SKILL.md envelope. */
+  modelTier?: string;
 }): Promise<{ ok: boolean; sessionId?: string; mode?: 'create' | 'update'; error?: string }> {
   const r = await bridgePost('/api/demo-builder/start', {
     project: input.project, mode: input.mode,
     ...(input.targetElement ? { targetElement: input.targetElement } : {}),
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
   });
   if (!r.ok) return { ok: false, error: r.error };
   return {
@@ -878,8 +970,16 @@ export type ProjectBrainSession = {
 };
 
 /** Start a project-brain builder session (phase=briefing). */
-export async function startProjectBrain(input: { project: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/project-brain/start', { project: input.project });
+export async function startProjectBrain(input: {
+  project: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against project-brain-builder's own SKILL.md envelope. */
+  modelTier?: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/project-brain/start', {
+    project: input.project,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
@@ -926,8 +1026,17 @@ export async function fetchStagedThemes(project: string, sessionId: string): Pro
  * convention every kind uses), not what the drafted skill/hook belongs to;
  * skills and hooks are forge-wide, project-agnostic library artifacts.
  */
-export async function startAuthoring(input: { project: string; prompt: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
-  const r = await bridgePost('/api/studio/authoring/start', { project: input.project, prompt: input.prompt });
+export async function startAuthoring(input: {
+  project: string;
+  prompt: string;
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
+   *  own doc; validated against creation-agent's own SKILL.md envelope. */
+  modelTier?: string;
+}): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/start', {
+    project: input.project, prompt: input.prompt,
+    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
@@ -1098,6 +1207,14 @@ export function subscribe(handlers: SubscribeHandlers): Subscription {
   let closed = false;
   let backoff = 500;
   let connecting = false; // serialises connect() against itself
+  // Review fix #2: consecutive `onclose` events with no intervening `onopen`
+  // — a WS that keeps failing to (re)connect. After N of these, the bridge
+  // may have restarted on a DIFFERENT port (e.g. a `--bridge-port` override
+  // across a `forge watch` restart); without this, `cachedBridgeUrl` stayed
+  // pinned to the dead port forever and every reconnect attempt kept
+  // retrying it. Reset to 0 on any successful `onopen`.
+  let consecutiveCloseFailures = 0;
+  const RECONNECT_REPROBE_THRESHOLD = 3;
   const setState = (s: ConnectionState): void => handlers.onState?.(s);
 
   const connect = async (): Promise<void> => {
@@ -1129,6 +1246,7 @@ export function subscribe(handlers: SubscribeHandlers): Subscription {
       ws.onopen = () => {
         if (closed) { try { ws.close(); } catch { /* */ } return; }
         backoff = 500;
+        consecutiveCloseFailures = 0;
         setState('open');
       };
       ws.onmessage = (ev) => {
@@ -1138,6 +1256,13 @@ export function subscribe(handlers: SubscribeHandlers): Subscription {
       ws.onclose = () => {
         if (socket === ws) socket = null;
         if (closed) return;
+        consecutiveCloseFailures += 1;
+        if (consecutiveCloseFailures >= RECONNECT_REPROBE_THRESHOLD) {
+          // Review fix #2: re-derive via the authoritative /api/forge-config
+          // route instead of retrying a dead port forever.
+          clearBridgeCache();
+          consecutiveCloseFailures = 0;
+        }
         setState('reconnecting');
         setTimeout(() => { void connect(); }, backoff);
         backoff = Math.min(backoff * 2, 5000);

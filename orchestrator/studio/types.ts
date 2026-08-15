@@ -490,8 +490,70 @@ export type CommunitySkill = {
   source: string; // upstream URL
   category: string; // coding | review | testing | research | planning | memory | docs | git
   tier?: string; // recommended model tier (haiku | sonnet | opus)
-  stars?: string; // adoption signal, free-form (e.g. "228k")
+  stars?: string; // adoption signal, free-form (e.g. "228k") — the curated DISPLAY string
+  /** Parsed NUMERIC star count (registry `signals.stars`), alongside the
+   *  display `stars` string above — null when the curated display string
+   *  names a different unit (e.g. "156k installs") or carries no figure at
+   *  all; never fabricated from the display string (W6-CR-2). */
+  starsNumeric: number | null;
   desc?: string;
+  /** ISO date the upstream project last published a change, per the
+   *  registry's own curated fact — null when unknown, never fabricated
+   *  (W6-CR-2, mirrors CommunityRegistryItem.upstreamUpdatedAt below). */
+  upstreamUpdatedAt: string | null;
+  /** ISO date this item was last verified against upstream — null until a
+   *  real refresh pass has actually run (still just the seed); NEVER
+   *  rendered as a date when null — the honest "seed — never verified"
+   *  state instead (W6-CR-2). */
+  fetchedAt: string | null;
+  /** Provenance of the currently-recorded data, e.g. "seed" (hand-curated,
+   *  never fetched) — always a real, non-fabricated string (W6-CR-2). */
+  fetchedBy: string;
+};
+
+// ---------------------------------------------------------------------------
+// Community registry (W6-CR-1) — studio/community/registry.yaml, the
+// declared-list source of truth for community items (skill/hook/mcp/tool),
+// superseding catalog.yaml's former `community-skills:` section (which only
+// ever covered kind:skill). Loaded by orchestrator/studio/registry.ts
+// (`loadCommunityRegistry`); validated by orchestrator/studio/validate.ts
+// (`validateCommunityRegistry`), wired into `forge studio lint` via
+// cli/studio-lint.ts.
+// ---------------------------------------------------------------------------
+
+export const COMMUNITY_REGISTRY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
+export type CommunityRegistryKind = (typeof COMMUNITY_REGISTRY_KINDS)[number];
+
+/** Adoption signals for a registry item. `stars` is the parsed NUMERIC value
+ *  (null when the curated display string names a different unit, e.g. "156k
+ *  installs" — never fabricated); `starsDisplay` is the curated free-form
+ *  string shown to operators; `attributedTo` is the curated attribution. */
+export type CommunityRegistrySignals = {
+  stars: number | null;
+  starsDisplay: string | null;
+  attributedTo: string | null;
+};
+
+export type CommunityRegistryItem = {
+  id: string;
+  kind: CommunityRegistryKind;
+  name: string;
+  desc?: string;
+  category: string;
+  sourceUrl: string;
+  provenance: string;
+  tier?: string; // recommended model tier (haiku | sonnet | opus) — skill items only
+  signals: CommunityRegistrySignals;
+  upstreamUpdatedAt: string | null;
+  fetchedAt: string | null; // null until a refresh pass has actually run
+  fetchedBy: string; // e.g. "seed"
+};
+
+export type CommunityRegistry = {
+  schemaVersion: number;
+  lastRefresh: string | null;
+  items: CommunityRegistryItem[];
+  path: string;
 };
 
 export const DEMO_STEP_KINDS = ['capture', 'verify', 'present'] as const;
@@ -593,7 +655,10 @@ export type Catalog = {
   tools: CatalogConnectionEntry[];
   mcps: CatalogConnectionEntry[];
   guards: CatalogGuardEntry[];
-  communitySkills?: CommunitySkill[];
+  // communitySkills REMOVED (W6-CR-1 reviewer fix): catalog.yaml's
+  // `community-skills:` section moved to studio/community/registry.yaml —
+  // see CommunityRegistry/CommunityRegistryItem above and
+  // registry.ts's communitySkillsFromRegistry, the field's replacement.
   path: string;
 };
 

@@ -401,7 +401,7 @@ orchestrator/studio/community-index.ts existsSync 10
 orchestrator/studio/community-index.ts readdirSync 2
 orchestrator/studio/community-index.ts readFileSync 1
 orchestrator/studio/community-index.ts realpathSync 1
-orchestrator/studio/community-install.ts existsSync 5
+orchestrator/studio/community-install.ts existsSync 4
 orchestrator/studio/community-install.ts mkdirSync 2
 orchestrator/studio/community-install.ts writeFileSync 1
 orchestrator/studio/connection-probe.ts existsSync 3
@@ -415,7 +415,7 @@ orchestrator/studio/hook-scan.ts existsSync 1
 orchestrator/studio/hook-scan.ts mkdirSync 1
 orchestrator/studio/hook-scan.ts readFileSync 2
 orchestrator/studio/hook-scan.ts writeFileSync 1
-orchestrator/studio/registry.ts existsSync 1
+orchestrator/studio/registry.ts existsSync 2
 orchestrator/studio/registry.ts readdirSync 5
 orchestrator/studio/registry.ts readFileSync 6
 orchestrator/studio/session-kinds.ts existsSync 1
@@ -427,7 +427,7 @@ orchestrator/studio/skill-install-ledger.ts existsSync 1
 orchestrator/studio/skill-install-ledger.ts mkdirSync 1
 orchestrator/studio/skill-install-ledger.ts readFileSync 1
 orchestrator/studio/skill-install-ledger.ts writeFileSync 1
-orchestrator/studio/skill-library.ts existsSync 2
+orchestrator/studio/skill-library.ts existsSync 1
 orchestrator/studio/skill-library.ts mkdirSync 2
 orchestrator/studio/skill-library.ts readdirSync 2
 orchestrator/studio/skill-library.ts readFileSync 7

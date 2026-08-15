@@ -230,6 +230,10 @@ export type AgentCapabilityDescriptor = {
   fanoutCapable: boolean;
 };
 
+/** W6-B6 — client mirror of `orchestrator/phase-agent.ts`'s `ModelTier`
+ *  (re-declared per this file's own convention, header). */
+export type ModelTier = 'haiku' | 'sonnet' | 'opus';
+
 /** R2-03-F2 — client mirror of the server AgentDefinition.fanout block. */
 export type AgentFanout = {
   drivingArtifact: string;
@@ -281,6 +285,22 @@ export type Agent = {
    * payload degrades to `false` — never fabricated as enforceable.
    */
   costCeilingEnforceable?: boolean;
+  /**
+   * W6-B6 (ADR-043 2026-08-15 amendment §3) — server-computed FACT
+   * (`orchestrator/studio/derive.ts`'s `agentCapabilityDescriptor().
+   * allowedTiers`), read directly off the wire's `capability` object —
+   * SAME "own top-level field, parsed independently of `capability`"
+   * precedent `costCeilingEnforceable` establishes immediately above (its
+   * doc explains why: `capability`'s 3-key return shape is pinned
+   * byte-for-byte by `studio-client.test.ts`'s existing `toEqual` pins).
+   * Present ONLY for a `strategy:range` skill (the full SKILL-declared tier
+   * envelope, cheapest-first); absent for `strategy:fixed` — the kickoff
+   * page's model-tier picker renders a radio group when present, a
+   * read-only chip naming `runtime.model` when absent. Absent/malformed
+   * wire payload degrades to `undefined` (no picker), never a fabricated
+   * single-tier array.
+   */
+  allowedTiers?: ModelTier[];
   /**
    * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
    * Optional on the client TYPE (not the wire payload) so pre-existing empty/
@@ -936,6 +956,21 @@ export function parseFanout(raw: unknown): AgentFanout | undefined {
   };
 }
 
+const MODEL_TIER_VALUES: readonly ModelTier[] = ['haiku', 'sonnet', 'opus'];
+
+/** W6-B6 — carry `capability.allowedTiers` through verbatim; `undefined` for
+ *  an absent/malformed value (an older bridge payload, or a `strategy:fixed`
+ *  skill that never carries the key at all) — never a fabricated single-tier
+ *  array. Every element must be a real `ModelTier`; ANY unrecognised element
+ *  degrades the WHOLE array to `undefined` rather than silently dropping
+ *  just that one entry (a partial tier list would let the kickoff picker
+ *  offer a narrower-than-real range without any signal something's wrong). */
+function parseAllowedTiers(raw: unknown): ModelTier[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  if (!raw.every((t): t is ModelTier => typeof t === 'string' && (MODEL_TIER_VALUES as readonly string[]).includes(t))) return undefined;
+  return raw;
+}
+
 /**
  * Map a raw AgentDefinition (server shape) to the client Agent type.
  * Server: slug, composition.{skills,tools,mcps,guards}, body, name, purpose,
@@ -967,6 +1002,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     fanout:         parseFanout(r['fanout']),
     materials:      parseMaterials(r['materials']),
     costCeilingEnforceable: cap['costCeilingEnforceable'] === true,
+    allowedTiers:   parseAllowedTiers(cap['allowedTiers']),
     provenance:     parseProvenance(r['provenance']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
@@ -1670,8 +1706,15 @@ export async function createKb(body: {
  *  session straight to a 404. */
 export async function startKbCleanup(
   id: string,
+  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — an operator-chosen kickoff
+   *  model tier, validated server-side against brain-maintenance's own
+   *  SKILL.md-declared envelope (`resolveKickoffModelTier`). Omit for the
+   *  spec's spawn-default tier. */
+  modelTier?: string,
 ): Promise<{ ok: true; sessionId: string; project: string } | { ok: false; error: string }> {
-  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/cleanup/start`, {});
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/cleanup/start`, {
+    ...(modelTier ? { modelTier } : {}),
+  });
   if (!r.ok) return { ok: false, error: r.error ?? 'failed to start kb-cleanup session' };
   const sessionId = r.data?.sessionId;
   const project = r.data?.project;

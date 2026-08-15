@@ -69,8 +69,7 @@ import {
   handleStudioKbRoutes,
   loadKbDescriptors,
   computeAgentCleanupFindings,
-  runBrainConsolidateNow,
-  enqueueConsolidate,
+  approveKbCleanup,
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
@@ -79,6 +78,7 @@ import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
+import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -1439,6 +1439,18 @@ async function handleHttp(
   // threaded through here to close bd forge-2ee's "no consumer reads the
   // authoring spine's events dir" half.
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
+  // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
+  // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
+  // module's own function) rather than imported by bridge-studio-affordances.ts
+  // — see that file's own header for why (bridge-studio-*.ts modules never
+  // import FROM ui-bridge.ts).
+  if (await handleStudioAffordanceRoutes(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    spawnAgentTurn,
+    broadcastInstructionsChanged: ctx.broadcastInstructionsChanged,
+    broadcastDemoChanged: ctx.broadcastDemoChanged,
+  }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -2101,7 +2113,14 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
  *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
  *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
  *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
-function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
+// Exported (W6-B4) so cli/bridge-studio-affordances.ts's generic session-
+// affordance write endpoint can DELEGATE to this SAME spawn helper instead of
+// reimplementing it, injected via its AffordanceRouteContext (mirrors
+// SessionsRouteContext's ensureSessionTail injection, cli/bridge-studio-
+// sessions.ts) — bridge-studio-*.ts modules never import FROM ui-bridge.ts
+// (see that file's own header for the reasoning), so this stays exported and
+// passed by reference at the wiring call site, never imported directly.
+export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(sessionId)) {
     console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
@@ -4482,69 +4501,27 @@ async function handleDemoBuilder(
       }
       const { project, sessionId } = body;
 
+      // W6-B4 adversarial-review fix: the ENTIRE choreography below (read
+      // status -> check phase/kb_id -> claim phase:'applying' -> drain ->
+      // write phase:'applied') used to live inline here, duplicated
+      // byte-for-byte in cli/bridge-studio-affordances.ts's generic sibling
+      // — a check-then-await-then-write race, live-reproduced (two
+      // concurrent approves ran two independent runBrainConsolidateNow
+      // drains). Both routes now delegate to the ONE shared, atomically-
+      // correct `approveKbCleanup` (cli/bridge-studio-kbs.ts) — the
+      // duplicated choreography is deleted, not merely mirrored. `urlKbId`
+      // rides as `expectedKbId`, preserving DEFECT B's URL/status.kb_id
+      // identity check; the SECURITY INVARIANT it protects (the drain's
+      // sole source of truth is `status.kb_id`, never the URL) is enforced
+      // inside `approveKbCleanup` itself now.
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const dirSegs = [project, '_kb-cleanup', sessionId];
-      const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
-      if (!status || typeof status.phase !== 'string') {
-        sendJson(res, 404, { error: 'session not found', sessionId, project }, origin);
+      const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, { expectedKbId: urlKbId });
+      if (!outcome.ok) {
+        sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
         return true;
       }
-      if (typeof status.kb_id !== 'string') {
-        sendJson(res, 500, { error: `kb-cleanup apply: session "${sessionId}" status.json has no string "kb_id"` }, origin);
-        return true;
-      }
-      // DEFECT B: the URL's ":id" must name the SAME kb this session
-      // actually belongs to. A well-formed but MISMATCHED id is a 404 — no
-      // (kbId, project, sessionId) triple names this pairing — never a
-      // silent drain of whichever kb the session happens to carry. Checked
-      // BEFORE the phase gate below: 409 is reserved for a
-      // CORRECTLY-identified resource in the wrong state, which this
-      // request is not yet proven to be.
-      if (urlKbId !== status.kb_id) {
-        sendJson(res, 404, { error: `session "${sessionId}" does not belong to kb "${urlKbId}"`, sessionId, project }, origin);
-        return true;
-      }
-      if (status.phase !== 'awaiting-approval') {
-        sendJson(res, 409, { error: `session "${sessionId}" is not awaiting-approval (current phase: "${status.phase}")` }, origin);
-        return true;
-      }
-      // The drain's SOLE source of truth is `status.kb_id`, never `urlKbId`
-      // — see the SECURITY INVARIANT comment at this route's own header.
-      // The equality check just above makes the two values identical by
-      // construction from here on, which is exactly why a reviewer cannot
-      // observe a swap to `urlKbId` from outside (AT-13) — do not make one.
-      const kbId = status.kb_id;
-
-      // Runs the KB's existing local consolidate drain — the SAME
-      // deterministic in-process repair path `POST /api/studio/kbs/:id/
-      // maintenance (op=consolidate)` already dispatches
-      // (cli/bridge-studio-kbs.ts's `runBrainConsolidateNow`). That helper
-      // ALREADY self-suppresses its own agent-tier spawn under dry-bridge
-      // (`const noSpawn = FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
-      // cli/bridge-studio-kbs.ts:502) — running deterministic fixes only —
-      // so this route needs no dry-bridge guard of its own (see
-      // cli/dry-bridge.ts's `exempt-local` row for this route).
-      //
-      // DEFECT A fix: routed through `enqueueConsolidate` — the SAME
-      // per-kbId serialization queue the sibling maintenance op=consolidate
-      // route uses — instead of calling `runBrainConsolidateNow` directly.
-      // That function's own doc comment requires this: "Always invoked via
-      // enqueueConsolidate (never directly)". Without it, two applies (or
-      // an apply racing the Consolidate button) against the same kbId could
-      // race-edit the same on-disk category-index file. Awaited (unlike the
-      // maintenance route's fire-and-forget dispatch) so this route can
-      // still write `phase: 'applied'` and respond only once the QUEUED run
-      // has actually finished, not merely been enqueued.
-      const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
-      await enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
-
-      const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
-      if (written === null) {
-        sendJson(res, 500, { error: `kb-cleanup apply: status.json write for session "${sessionId}" failed containment` }, origin);
-        return true;
-      }
-
-      sendJson(res, 200, { ok: true, runId }, origin);
+      sendJson(res, 200, { ok: true, runId: outcome.runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

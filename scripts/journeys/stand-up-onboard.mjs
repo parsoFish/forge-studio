@@ -260,6 +260,22 @@ export const journey = defineJourney({
                 `J4b (R4-17-F1): the rows read REAL artifacts — this project has a declared gate and a scaffolded roadmap.md (contract=${byStage.contract}, roadmap=${byStage.roadmap})`);
               await frame(page, 'j4-3-onboard-session', 'J4b — the staged onboarding session: the contract build-out, five stages against real artifacts');
 
+              // W6-B6 — onboarding is now one of the two kinds wired onto the
+              // GENERIC interaction panel (the other is demo, see demo-
+              // builder.mjs's own new beat). onboarding.panel.phases derives
+              // NO affordances at ANY of its three phases (running/complete/
+              // failed each yield []) — this dispatch is still 'running', so
+              // the panel must render the HONEST "no operator action" state,
+              // never nothing at all (the prior "render null" gap this batch
+              // closes) and never a fabricated control.
+              await page.waitForSelector('[data-component="session-interactive-panel"]', { timeout: 15000 }).catch(() => {});
+              check(await page.locator('[data-component="session-interactive-panel"]').count() > 0,
+                'J4b (W6-B6): the generic SessionInteractivePanel renders for kind=onboarding');
+              check(await page.locator('[data-section="session-no-affordances"]').count() > 0,
+                'J4b (W6-B6): onboarding honestly reports no operator action available — never a silent null render');
+              check(await page.locator('[data-section="session-provenance"]').count() > 0,
+                'J4b (W6-B6): the provenance strip is visible even on the empty-affordances path');
+
               // The project-page data contract (R4-17 D9) R4-12-F1 renders in batch D:
               // the SAME rows, off the same derivation, on their own route.
               // Node-side fetch (the shipped idiom in hooks.mjs/community.mjs) — a

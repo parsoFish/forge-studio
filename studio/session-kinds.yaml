@@ -235,7 +235,12 @@
     style: agent
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
-      - { phase: awaiting-review, step: noop, awaits: verdict }
+      # verdicts (W6-B6 post-merge review): approve-only — there is no
+      # rejection path for a drafted package (the operator either commits it
+      # or leaves the session sitting here); the write route
+      # (cli/bridge-studio-affordances.ts) 422s a reject against this SAME
+      # authored list, never a hardcoded per-kind table.
+      - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve] }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
 
@@ -266,10 +271,30 @@
 # dir) byte-for-byte unchanged, so a duplicate/retried turn dispatch can
 # never auto-advance an unapproved plan into `applied`. `applied` is written
 # by exactly one caller — the dedicated apply route
-# (POST /api/studio/kbs/:id/cleanup/apply) — after it independently checks
+# (POST /api/studio/kbs/:id/cleanup/apply, and its generic W6-B4 sibling
+# POST /api/studio/sessions/kb-cleanup/:sid/awaiting-approval-verdict, both
+# funneling through the ONE shared `approveKbCleanup`,
+# cli/bridge-studio-kbs.ts) — after it independently checks
 # `phase === 'awaiting-approval'` itself; the ordinary turn-dispatch path
 # (`forge agent run kb-cleanup ...`) never writes it. Adding a `next` here
 # would silently defeat the whole approval-gate feature.
+#
+# `applying` (W6-B4 adversarial-review fix, closing a live-reproduced
+# double-drain race): the ATOMIC CLAIM `approveKbCleanup` writes
+# SYNCHRONOUSLY — no `await` — the instant it observes `awaiting-approval`,
+# strictly BEFORE the awaited `enqueueConsolidate` drain runs. A second
+# concurrent approve then reads `applying`, not `awaiting-approval`, and
+# 409s instead of ALSO running the drain (the pre-fix repro: two concurrent
+# approves produced two independent `runBrainConsolidateNow` runs, two
+# `_brainfix-<runId>` log dirs). Like `applied`, this row is UNREACHABLE via
+# any `next` in this table (nothing points `next: applying` at it) —
+# `approveKbCleanup` is its only writer, exactly mirroring how `applied`
+# itself has always been written outside the `next` graph. `step: terminal`
+# here is not a claim that the session has finished (it has not — the very
+# next write is `applied`); it is the one TURN_STEPS value that makes
+# `deriveSessionAffordances` correctly derive ZERO affordances while a claim
+# is in flight, matching the row's real semantics ("nothing is currently
+# writable here") without inventing a fifth step kind.
 - id: kb-cleanup
   agent: brain-maintenance
   title: KB cleanup session
@@ -284,5 +309,10 @@
     style: agent
     phases:
       - { phase: drafting, step: agent, writes: [plan], next: awaiting-approval }
-      - { phase: awaiting-approval, step: noop, awaits: verdict }
+      # verdicts (W6-B6 post-merge review): approve-only — same reasoning as
+      # `awaiting-approval` deliberately declaring no `next` above: there is
+      # no rejection semantics anywhere in this repo for a cleanup plan. The
+      # write route 422s a reject against this SAME authored list.
+      - { phase: awaiting-approval, step: noop, awaits: verdict, verdicts: [approve] }
+      - { phase: applying, step: terminal }
       - { phase: applied, step: terminal }
