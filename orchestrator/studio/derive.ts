@@ -43,6 +43,10 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
   if (!def.phase) throw new Error(`${def.path}: cannot derive spec — no phase field`);
 
   let tier: ModelTier;
+  // ADR-043 §3 amendment (wave-6): the full SKILL-declared tier envelope, set
+  // ONLY for strategy:range (see PhaseAgentSpec.allowedTiers's own doc for
+  // why strategy:fixed leaves this undefined rather than restating [tier]).
+  let allowedTiers: ModelTier[] | undefined;
 
   if (def.runtime.strategy === 'fixed') {
     if (!def.runtime.model) {
@@ -68,6 +72,7 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
     const catalog = loadCatalog(catalogPath);
     const tiers = rangeTiers(def.runtime.range, catalog);
     tier = tiers[0]; // cheapest-first; escalation is applied at spawn time
+    allowedTiers = tiers;
   }
 
   return {
@@ -80,6 +85,12 @@ export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): P
     // orchestrator can spawn the phase on a non-claude runtime. Previously
     // dropped here; resolveSdkId gates it at the dev-loop call site.
     sdk: def.runtime.sdk,
+    // ADR-043 §3 amendment: omit the key entirely for strategy:fixed (never
+    // set to `undefined`) so the M0 frontmatter-regression literal-equality
+    // lock (derive.test.ts) stays byte-identical for every fixed-strategy
+    // skill — an explicit `allowedTiers: undefined` key would still show up
+    // in `Object.keys()` and break that deep-equal.
+    ...(allowedTiers ? { allowedTiers } : {}),
   };
 }
 

@@ -206,7 +206,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
 // nothing depends on process.cwd() or ambient state.
 // ---------------------------------------------------------------------------
 
-type TestStatus = { session_id: string; phase: string; updated_at: string; package_id?: string };
+type TestStatus = { session_id: string; phase: string; updated_at: string; package_id?: string; modelTier?: string };
 
 type Fixture = {
   root: string;
@@ -902,6 +902,78 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
     options.allowedTools,
     expectedSpec.allowedTools,
     'allowedTools handed to queryFn must equal the derived spec\'s own grant exactly — the "assert the call record, not just the outcome" discipline',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — status.modelTier is
+// read back and resolved through resolveSessionModel on EVERY turn.
+// descriptor.agent === 'project-brain-builder' here (strategy:fixed, sonnet).
+// ---------------------------------------------------------------------------
+
+test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches queryFn as options.model', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString(), modelTier: 'sonnet' });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  let capturedModel: string | undefined;
+  const queryFn: QueryFn = ({ options }) => {
+    capturedModel = (options as { model?: string } | undefined)?.model;
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(capturedModel, 'claude-sonnet-4-6');
+});
+
+test('status.modelTier absent resolves to the unchanged default — byte-identical prior behavior (pins Finding 4\'s own expectation)', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const expectedSpec = deriveAgentSpec(skillPathRelative(descriptor.agent));
+  const expectedModel = modelForSpec(expectedSpec);
+
+  let capturedModel: string | undefined;
+  const queryFn: QueryFn = ({ options }) => {
+    capturedModel = (options as { model?: string } | undefined)?.model;
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(capturedModel, expectedModel);
+});
+
+test('status.modelTier mismatching the fixed tier throws naming the value and the allowed set', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString(), modelTier: 'opus' });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  await assert.rejects(
+    () => runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    /requested model tier "opus".*allowed tier\(s\): sonnet/,
   );
 });
 

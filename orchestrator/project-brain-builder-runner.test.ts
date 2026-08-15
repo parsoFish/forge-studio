@@ -7,12 +7,17 @@ import { join } from 'node:path';
 import {
   runProjectBrainTurn,
   projectBrainSessionDir,
+  projectBrainAgentSpec,
+  PROJECT_BRAIN_MODEL,
   type ProjectBrainStatus,
 } from './project-brain-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { loadKbDescriptor } from './studio/registry.ts';
 
-function setup(phase: ProjectBrainStatus['phase']): { forgeRoot: string; projectRoot: string; sessionDir: string; sessionId: string } {
+function setup(
+  phase: ProjectBrainStatus['phase'],
+  overrides?: Partial<ProjectBrainStatus>,
+): { forgeRoot: string; projectRoot: string; sessionDir: string; sessionId: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'pbrain-'));
   const projectRoot = join(forgeRoot, 'projects', 'demoproj');
   const sessionId = '2026-06-27T10-00-00';
@@ -27,6 +32,7 @@ function setup(phase: ProjectBrainStatus['phase']): { forgeRoot: string; project
     phase,
     prompt: 'focus on the build + test conventions',
     updated_at: new Date().toISOString(),
+    ...overrides,
   });
   return { forgeRoot, projectRoot, sessionDir, sessionId };
 }
@@ -59,6 +65,84 @@ test('analyzing → awaiting-review when the agent stages themes', async () => {
     });
     assert.equal(r.phase, 'awaiting-review');
     assert.deepEqual(r.themes, ['conventions.md', 'profile.md', 'structure.md']);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — projectBrainAgentSpec
+// stays strategy:fixed, so the only legal requested tier is the fixed one.
+// ---------------------------------------------------------------------------
+
+test('ADR-024: projectBrainAgentSpec derives tier (sonnet)', () => {
+  assert.equal(projectBrainAgentSpec.tier, 'sonnet');
+  assert.equal(PROJECT_BRAIN_MODEL, 'claude-sonnet-4-6');
+});
+
+test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches queryFn as options.model', async () => {
+  const { forgeRoot, sessionId, projectRoot } = setup('analyzing', { modelTier: 'sonnet' });
+  let capturedModel: string | undefined;
+  try {
+    const staging = projectBrainSessionDir(projectRoot, sessionId);
+    await runProjectBrainTurn({
+      sessionId,
+      projectRoot,
+      forgeRoot,
+      logsRoot: join(forgeRoot, '_logs'),
+      queryFn: ({ options }) => {
+        capturedModel = (options as { model?: string }).model;
+        async function* gen(): AsyncGenerator<unknown> {
+          const themesDir = join(staging, 'themes');
+          mkdirSync(themesDir, { recursive: true });
+          writeFileSync(join(themesDir, 'structure.md'), '---\nname: structure\n---\n# Structure\n');
+          yield { type: 'result', total_cost_usd: 0 };
+        }
+        return gen();
+      },
+    });
+    assert.equal(capturedModel, 'claude-sonnet-4-6');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('status.modelTier absent resolves to the unchanged default (sonnet) — byte-identical prior behavior', async () => {
+  const { forgeRoot, sessionId, projectRoot } = setup('analyzing');
+  let capturedModel: string | undefined;
+  try {
+    const staging = projectBrainSessionDir(projectRoot, sessionId);
+    await runProjectBrainTurn({
+      sessionId,
+      projectRoot,
+      forgeRoot,
+      logsRoot: join(forgeRoot, '_logs'),
+      queryFn: ({ options }) => {
+        capturedModel = (options as { model?: string }).model;
+        async function* gen(): AsyncGenerator<unknown> {
+          const themesDir = join(staging, 'themes');
+          mkdirSync(themesDir, { recursive: true });
+          writeFileSync(join(themesDir, 'structure.md'), '---\nname: structure\n---\n# Structure\n');
+          yield { type: 'result', total_cost_usd: 0 };
+        }
+        return gen();
+      },
+    });
+    assert.equal(capturedModel, PROJECT_BRAIN_MODEL);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('status.modelTier mismatching the fixed tier throws naming the value and the allowed set', async () => {
+  const { forgeRoot, sessionId, projectRoot } = setup('analyzing', { modelTier: 'opus' });
+  try {
+    await assert.rejects(
+      () => runProjectBrainTurn({
+        sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn: makeQueryFn(),
+      }),
+      /requested model tier "opus".*allowed tier\(s\): sonnet/,
+    );
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

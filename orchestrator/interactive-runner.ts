@@ -11,8 +11,11 @@
  *   - the SEC-04 containment preamble: `resolveGuardedPath(projectRoot,
  *     [turnSpec.kindDir, sessionId])` -> `guardedReadSessionStatus`;
  *   - the ADR-024 spec/model/prompt derivation:
- *     `deriveAgentSpec(skillPathRelative(agent))` -> `modelForSpec` -> the
- *     tool grant, `SKILL.md` as the runtime prompt;
+ *     `deriveAgentSpec(skillPathRelative(agent))` -> `resolveSessionModel`
+ *     (ADR-043 §3 amendment, wave-6: honors an optional operator-chosen
+ *     `status.modelTier` within the SKILL-declared envelope; absent ⇒ the
+ *     same `modelForSpec` default as before) -> the tool grant, `SKILL.md`
+ *     as the runtime prompt;
  *   - the shared telemetry: `createLogger` / `makeToolEventSink` /
  *     `flushIteration(1)` / a heartbeat writer / a reasoning sink;
  *   - the phase-table dispatch loop: read `status.phase` -> find its row in
@@ -96,7 +99,7 @@ import {
 import { createLogger, type EventLogger, type Phase } from './logging.ts';
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from './skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
@@ -137,8 +140,26 @@ const MAX_REASONING_TEXT = 400;
 /** Generic over any `{ phase: string, … }` JSON — mirrors how
  *  `guardedReadSessionStatus<S>` is generic in interactive-session.ts. Every
  *  real session-kind status shape (InstructionsStatus, ProjectBrainStatus,
- *  a future turnSpec-driven status) satisfies this structurally. */
+ *  a future turnSpec-driven status) satisfies this structurally. An optional
+ *  `modelTier` (ADR-043 §3 amendment, wave-6) rides here structurally too —
+ *  the bridge's kickoff route already validated it before it ever reached
+ *  disk (see `resolveKickoffModelTier`, cli/ui-bridge.ts), so this module
+ *  only needs to READ it back, never re-validate its shape. */
 export type InteractiveTurnStatus = { phase: string } & Record<string, unknown>;
+
+/** Pull `status.modelTier` back out as a (loosely-typed) requested tier for
+ *  `resolveSessionModel`. Deliberately does NOT pre-filter an unrecognised
+ *  string here — `resolveSessionModel` is the one place that validates it
+ *  against the SKILL-declared envelope and throws naming the allowed set;
+ *  duplicating that check here would just be a second, weaker copy of it.
+ *  Only a non-string (or absent) value degrades to `undefined` — that is
+ *  "no request was made," not "an invalid request," and `status.json` is
+ *  never hand-authored, so a non-string `modelTier` can only mean corrupt
+ *  session state, not a request this turn should refuse over. */
+function readRequestedModelTier(status: InteractiveTurnStatus): ModelTier | undefined {
+  const raw = status.modelTier;
+  return typeof raw === 'string' ? (raw as ModelTier) : undefined;
+}
 
 export type RunInteractiveTurnCtx = {
   sessionId: string;
@@ -360,7 +381,7 @@ async function runAgentStyleStep(args: {
   // never `ctx.forgeRoot` — the agent/skill roster is part of the forge
   // install, not per-project/per-test data (see header note).
   const agentSpec = deriveAgentSpec(skillPathRelative(descriptor.agent));
-  const model = modelForSpec(agentSpec);
+  const model = resolveSessionModel(agentSpec, readRequestedModelTier(status));
   const skill = readSkillPrompt(descriptor.agent);
   const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill);
 

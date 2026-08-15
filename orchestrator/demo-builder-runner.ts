@@ -55,7 +55,7 @@ import { createLogger, type EventLogger } from './logging.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { listDemoElements } from './studio/registry.ts';
@@ -146,6 +146,14 @@ export type DemoBuilderStatus = {
    * behaviour, unchanged) and `demo.lock.json.generation` records `null`.
    */
   selectedGeneration?: number;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * operator-chosen model tier, validated by the bridge's `/api/demo-builder/
+   * start` route against `demoBuilderAgentSpec` (now `strategy:range` — see
+   * the SKILL.md runtime block) before it is ever persisted here. Absent ⇒
+   * unchanged default behavior (`DEMO_BUILDER_MODEL`).
+   */
+  modelTier?: ModelTier;
 };
 
 export type RunDemoBuilderTurnInput = {
@@ -337,7 +345,7 @@ async function runGenerateStep(args: {
     queryFn,
     prompt,
     cwd: status.project_repo_path,
-    model: DEMO_BUILDER_MODEL,
+    model: resolveSessionModel(demoBuilderAgentSpec, status.modelTier),
     allowedTools: demoBuilderAgentSpec.allowedTools,
     disallowedTools: demoBuilderAgentSpec.disallowedTools,
     maxTurns: 24,

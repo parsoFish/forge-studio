@@ -129,6 +129,35 @@ test('deriveAgentSpec: strategy:range with opus+haiku derives at haiku (cheapest
   }
 });
 
+// ---------------------------------------------------------------------------
+// allowedTiers — ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// ---------------------------------------------------------------------------
+
+test('deriveAgentSpec: strategy:range populates allowedTiers cheapest-first', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
+  try {
+    const fm = VALID_BASE
+      .replace('strategy: fixed', 'strategy: range')
+      .replace('model: claude-sonnet-4-6', 'range:\n  - claude-opus-4-8\n  - claude-sonnet-4-6');
+    const skillPath = writeTmpSkill(dir, fm);
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.deepEqual(spec.allowedTiers, ['sonnet', 'opus']);
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('deriveAgentSpec: strategy:fixed omits allowedTiers entirely (not just undefined)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'derive-fixed-'));
+  try {
+    const skillPath = writeTmpSkill(dir, VALID_BASE);
+    const spec = deriveAgentSpec(skillPath, process.cwd());
+    assert.ok(!('allowedTiers' in spec), 'allowedTiers key must be entirely absent for strategy:fixed');
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
 test('deriveAgentSpec throws when strategy:range has no range field', () => {
   const dir = mkdtempSync(join(tmpdir(), 'derive-range-'));
   try {

@@ -53,9 +53,49 @@ export type PhaseAgentSpec = {
    * sdk falls back to `claude` rather than crashing the phase.
    */
   sdk?: string;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): the
+   * full tier envelope this agent may spawn at, cheapest-first. Populated by
+   * `deriveAgentSpec` ONLY for a `strategy:range` skill — a `strategy:fixed`
+   * skill has exactly one legal tier (`tier` itself), so this field stays
+   * absent rather than redundantly restating `[tier]`; `resolveSessionModel`
+   * treats an absent value as `[tier]`. Additive-optional (ADR 042).
+   */
+  allowedTiers?: readonly ModelTier[];
 };
 
 /** Resolve the concrete model id the orchestrator spawns this agent at. */
 export function modelForSpec(spec: PhaseAgentSpec): string {
   return MODEL_BY_TIER[spec.tier];
+}
+
+/**
+ * ADR-043 §3 amendment (2026-08-15, wave-6): resolve the concrete model id
+ * for an interactive session's kickoff, honoring an operator-chosen model
+ * TIER within the SKILL-declared envelope. `SKILL.md` remains the sole
+ * source of both the agent's intent (ADR 024) AND its capability envelope —
+ * this function never grants a tier the skill did not declare.
+ *
+ * - `requestedTier` absent -> unchanged `modelForSpec(spec)` behavior (the
+ *   spawn-default tier `deriveAgentSpec` already resolved). Every existing
+ *   caller of `modelForSpec` is byte-identical when it migrates to this
+ *   function without passing a second argument.
+ * - `requestedTier` present -> validated against `spec.allowedTiers ??
+ *   [spec.tier]` (a `strategy:fixed` spec has no `allowedTiers`, so its only
+ *   legal request is `spec.tier` itself; a `strategy:range` spec's
+ *   `allowedTiers` is the full SKILL-declared range). A tier outside that
+ *   set THROWS, naming the requested value AND the allowed set — never a
+ *   silent fallback (the declared-data-fails-open antipattern this campaign
+ *   guards against).
+ */
+export function resolveSessionModel(spec: PhaseAgentSpec, requestedTier?: ModelTier): string {
+  if (requestedTier === undefined) return modelForSpec(spec);
+  const allowed = spec.allowedTiers ?? [spec.tier];
+  if (!allowed.includes(requestedTier)) {
+    throw new Error(
+      `resolveSessionModel: requested model tier "${requestedTier}" is not permitted for skill "${spec.skill}" — ` +
+        `allowed tier(s): ${allowed.join(', ')}.`,
+    );
+  }
+  return MODEL_BY_TIER[requestedTier];
 }

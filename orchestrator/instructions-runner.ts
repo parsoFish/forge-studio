@@ -43,7 +43,7 @@ import { createLogger, type EventLogger } from './logging.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { readAgentInstructionsFile } from './project-config.ts';
 import { skillPathRelative, loadSkillTurnPrompt } from './skill-path.ts';
@@ -97,6 +97,14 @@ export type InstructionsStatus = {
   /** The operator's raw brief / change-notes (also persisted to `prompt.md`). */
   prompt: string;
   updated_at: string;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * operator-chosen model tier, validated by the bridge's `/api/instructions/
+   * start` route against `instructionsAgentSpec` (now `strategy:range` —
+   * see the SKILL.md runtime block) before it is ever persisted here. Absent
+   * ⇒ unchanged default behavior (`INSTRUCTIONS_MODEL`).
+   */
+  modelTier?: ModelTier;
 };
 
 /** The draft AGENTS.md the runner writes between turns, pending operator verdict. */
@@ -347,7 +355,7 @@ async function runInterviewStep(args: {
 
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
     queryFn, prompt, schema: INTERVIEW_SCHEMA,
-    model: INSTRUCTIONS_MODEL, allowedTools: instructionsAgentSpec.allowedTools,
+    model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     onToolUse, onHeartbeat, onText, label: 'instructions-structured',
   });
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
@@ -412,7 +420,7 @@ async function runDraftStep(args: {
 
   const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
     queryFn, prompt, schema: DRAFT_SCHEMA,
-    model: INSTRUCTIONS_MODEL, allowedTools: instructionsAgentSpec.allowedTools,
+    model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     onToolUse, onHeartbeat, onText, label: 'instructions-structured',
   });
 
