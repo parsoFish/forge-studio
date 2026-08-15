@@ -375,6 +375,43 @@ export async function runInteractiveTurn(
   return result;
 }
 
+/**
+ * bead forge-eip (W6-CR-3) — derives `runAgentTurn`'s `writeRoots` from the
+ * phase row's OWN declared `writes:` entries, never a hardcoded `staging`
+ * literal (so kb-cleanup's `plan/` gets the identical fence authoring's/
+ * community-refresh's `staging/` does — this is a spine fix, not a
+ * per-kind one). Each declared dir name is resolved through the SAME
+ * `resolveGuardedPath` containment guard every other write in this file
+ * uses, GUARD-TERMINAL `mkdirSync`'d into existence if absent — mirrors
+ * `runFinalizeStep`'s own `libraryRootGuard` pattern exactly — so
+ * `runAgentTurn`'s fence always has a REAL, already-existing root to
+ * realpath at turn start, never a not-yet-created path a symlink could
+ * race into being ahead of the agent's very first write.
+ *
+ * A guard-rejected dir name throws rather than silently degrading to an
+ * empty (fence-disabling) `writeRoots` list — `writes:` entries are
+ * forge-authored data (studio/session-kinds.yaml), never request data, so
+ * a rejection here can only mean a malformed session-kinds row, which
+ * should fail loud at the first turn that reaches it, not silently ship a
+ * kind with no fence.
+ */
+function resolveWriteRoots(sessionDir: string, writesDirs: readonly string[]): string[] {
+  const roots: string[] = [];
+  for (const dirName of writesDirs) {
+    const guarded = resolveGuardedPath(sessionDir, [dirName]);
+    if (!guarded.ok) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: declared writes entry "${dirName}" failed containment (${guarded.reason}) while provisioning the write-root fence.`,
+      );
+    }
+    if (!guarded.exists) {
+      mkdirSync(guarded.realPath, { recursive: true });
+    }
+    roots.push(guarded.realPath);
+  }
+  return roots;
+}
+
 // ---------------------------------------------------------------------------
 // step: agent — dispatches on turnSpec.style (runAgentTurn | runStructuredTurn)
 // ---------------------------------------------------------------------------
@@ -405,6 +442,14 @@ async function runAgentStyleStep(args: {
   const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill);
 
   if (turnSpec.style === 'agent') {
+    // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
+    // phase row's own declared `writes:` (never hardcoded to `staging`, so
+    // kb-cleanup's `plan/` gets the identical protection authoring's/
+    // community-refresh's `staging/` does). Absent/empty `writes:` yields an
+    // empty writeRoots, which `runAgentTurn` correctly reads as "no fence" —
+    // matching this phase's pre-existing behaviour (an `agent` step with no
+    // declared writes, e.g. a Q&A-only turn, never needed one).
+    const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
     await runAgentTurn({
       queryFn,
       prompt,
@@ -412,6 +457,7 @@ async function runAgentStyleStep(args: {
       model,
       allowedTools: agentSpec.allowedTools,
       disallowedTools: agentSpec.disallowedTools,
+      writeRoots,
       onToolUse,
       onHeartbeat,
       onText,

@@ -1,6 +1,7 @@
 /**
  * Acceptance test — redirect preservation for every moved route (R6-03-F3,
- * batch-F ruling 47), AMENDED for R6-07, AMENDED AGAIN for W6-IA-8.
+ * batch-F ruling 47), AMENDED for R6-07, AMENDED AGAIN for W6-IA-8, AMENDED
+ * AGAIN for W6-B10.
  *
  * Immutable-gate, RED-first. `{from:'/', to:'/library'}` was the interim wire
  * redirect covering the window between Library vacating `/` (R6-03-F3) and
@@ -18,9 +19,16 @@
  * rule, which is why `permanent` is now itself part of the fixture instead of
  * a hardcoded `false` in the assertion.
  *
- * `/demo/[sessionId]` stays a page, not a row here — it resolves its owning
- * project via a live `listDemoSessions()` lookup, so the destination is NOT
- * knowable from the URL alone (data-dependent shims are excluded by policy).
+ * `/demo/[sessionId]` stayed a page at W6-IA-8 — it resolved its owning
+ * project via a live `listDemoSessions()` lookup, so the destination was NOT
+ * knowable from the URL alone. W6-B10 (the demo-builder entrypoint repair,
+ * R1-03-F2 reversed) changed the premise: the DESTINATION,
+ * `/sessions/demo/<sid>`, learned to make that same `listDemoSessions()`
+ * lookup itself (`refreshSummary`'s `demo` branch,
+ * `app/sessions/[kind]/[sessionId]/page.tsx`) — `?project=` on the redirect
+ * is now an optional optimization, not a hard requirement — so the move
+ * graduates to a pure path-shape one, exactly like its six siblings, and the
+ * shim page is deleted.
  *
  * This still asserts the ACTUAL served redirect DECLARATION Next.js uses (the
  * `redirects()` config the framework turns into a wire 3xx) rather than a
@@ -50,6 +58,9 @@ const MOVED_ROUTES: ReadonlyArray<{ from: string; to: string; permanent: boolean
   { from: '/architect/:sessionId', to: '/sessions/architect/:sessionId', permanent: true },
   { from: '/instructions/:sessionId', to: '/sessions/instructions/:sessionId', permanent: true },
   { from: '/project-brain/:sessionId', to: '/sessions/project-brain/:sessionId', permanent: true },
+  // W6-B10: /demo/[sessionId] graduates from a data-dependent client shim to
+  // a pure wire redirect — see this file's header comment.
+  { from: '/demo/:sessionId', to: '/sessions/demo/:sessionId', permanent: true },
   { from: '/review/:cycleId', to: '/artifact?run=:cycleId&type=verdict&mode=gate', permanent: true },
   { from: '/reflect/:cycleId', to: '/artifact?run=:cycleId&type=reflection&mode=view', permanent: true },
   { from: '/recovery', to: '/library', permanent: true },
@@ -95,6 +106,9 @@ test('every MOVED_ROUTES shim page is actually deleted (no orphaned client-shim 
     'architect/[sessionId]/page.tsx',
     'instructions/[sessionId]/page.tsx',
     'project-brain/[sessionId]/page.tsx',
+    // W6-B10: graduated from the data-dependent shim W6-IA-8 deliberately
+    // left behind (see this file's header comment) to a pure wire redirect.
+    'demo/[sessionId]/page.tsx',
     'review/[cycleId]/page.tsx',
     'reflect/[cycleId]/page.tsx',
     'recovery/page.tsx',
@@ -107,15 +121,6 @@ test('every MOVED_ROUTES shim page is actually deleted (no orphaned client-shim 
       `${rel} should be deleted — its route is now a wire redirect in next.config.mjs, not a client-side shim page`,
     );
   }
-
-  // The one data-dependent legacy shim MUST survive — it resolves its
-  // destination via a live lookup (listDemoSessions()), so it cannot become a
-  // static wire redirect.
-  assert.equal(
-    existsSync(`${uiRoot}/demo/[sessionId]/page.tsx`),
-    true,
-    'demo/[sessionId]/page.tsx is data-dependent (resolves its owning project via listDemoSessions()) and must stay a page, not a redirect',
-  );
 });
 
 test('no stale `/` -> `/library` redirect remains (R6-07: `/` is now the Home surface, not a redirect)', async () => {

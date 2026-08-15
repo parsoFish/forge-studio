@@ -191,6 +191,7 @@
  * create-and-destroy-its-own-throwaway-fixture precedent.
  */
 import { journey as home } from './home.mjs';
+import { journey as sessionsIndex } from './sessions-index.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
@@ -209,6 +210,7 @@ import { journey as community } from './community.mjs';
 
 export const JOURNEYS = [
   home,
+  sessionsIndex,
   skills,
   hooks,
   templates,
@@ -231,6 +233,15 @@ export const RUN_ORDER = [
   ['home', 'home-projects-index'],
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
+
+  // W6-B11 — self-contained (its own disjoint instructions-session fixture,
+  // seeded/swept entirely within its own two beats); runs right after home
+  // (the "home first" constraint home.mjs's own header documents) and before
+  // every other journey, which is the earliest point that preserves both of
+  // this registry's two hard orderings (stand-up-onboard before flows-author;
+  // flows-run before roadmap) untouched.
+  ['sessions-index', 'sessions-index-home-strip'],
+  ['sessions-index', 'sessions-index-overflow'],
 
   ['skills', 'skills-library'],
   ['skills', 'skills-detail-package'],
@@ -364,13 +375,13 @@ export const RUN_ORDER = [
   ['demo-showcase', 'demo-showcase-empty'],
   ['demo-showcase', 'demo-showcase-refresh'],
 
+  // W6-B10 (R1-03-F2 reversed): the demo builder is now the dedicated
+  // /sessions/demo/<sid> screen — the same session shell every interactive
+  // kind renders through — not an inline project-page panel, so there is no
+  // more separate "the same session, on the shared shell" detour beat to
+  // register (that WAS the entrypoint, now it's the only one).
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],
-  // W6-B6 — read-only detour: the SAME awaiting-review session, opened on
-  // the shared /sessions/demo/<sid> shell, proving the generic interaction
-  // panel now renders there too (R1-03-F2's inline panel is unchanged).
-  ['demo-builder', 'demo-builder-session-shell'],
-  ['demo-builder', 'demo-builder-generations'],
   ['demo-builder', 'demo-builder-lock'],
   // W6-B6 — a SEPARATE, self-contained session: the generic
   // /sessions/demo/new kickoff screen, registered LAST (self-contained
@@ -392,6 +403,7 @@ export const RUN_ORDER = [
   ['community', 'community-skills-card-signals'],
   ['community', 'community-browse-entry'],
   ['community', 'community-hub-strip'],
+  ['community', 'community-sort-freshness'],  // W6-CR-2 sort + freshness badge (between hub-strip and filter-skill, per the beat's own placement)
   ['community', 'community-filter-skill'],
   ['community', 'community-skill-detail-open'],
   ['community', 'community-skill-detail-signals'],
@@ -410,4 +422,9 @@ export const RUN_ORDER = [
   ['community', 'community-return-to-browser'],
   ['community', 'community-connections-local-shelf'],
   ['community', 'community-connections-used-by'],
+  // W6-CR-3: the refresh-entry -> session-kickoff beat runs LAST of all —
+  // community already runs last of every journey (see the header comment
+  // above), and this beat only reads/renders (no live agent spawn belongs
+  // in a gate), so it carries no ordering risk to anything before it.
+  ['community', 'community-refresh-kickoff'],
 ];

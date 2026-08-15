@@ -36,6 +36,7 @@
  * fetch-outcome convention already establishes on `/agents/[id]`).
  */
 
+import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import type { Agent } from '@/lib/studio-client';
@@ -87,9 +88,23 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
               {agents.length}
             </span>
             <span style={{ flex: 1 }} />
-            <a className="btn btn-primary" href="/agents/new" data-action="new-agent" style={{ textDecoration: 'none' }}>
+            {/* W6-B11 — Sessions is deliberately NOT its own top-level pillar
+                (operator decision); this is its secondary-nav entry point
+                alongside Home's active-sessions strip. `Link` (not a plain
+                `<a>`), per IA-6's single-tab policy — every internal anchor
+                navigates client-side, never a full-page reload. */}
+            <Link
+              href="/sessions"
+              data-nav="sessions-secondary"
+              style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', textDecoration: 'none', marginRight: 4 }}
+            >
+              Sessions →
+            </Link>
+            {/* Review fix (same IA-6 class as the row above): was a plain
+                `<a>` — converted to `Link` while in this file. */}
+            <Link className="btn btn-primary" href="/agents/new" data-action="new-agent" style={{ textDecoration: 'none' }}>
               + New agent
-            </a>
+            </Link>
           </div>
 
           {!ready ? (

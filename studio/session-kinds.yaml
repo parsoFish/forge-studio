@@ -125,9 +125,16 @@
 # real demo-builder sessions live under _demo/<sid> (demoSessionDir,
 # orchestrator/demo-builder-runner.ts). "demo-builder" would resolve
 # _demo-builder/ and 404 for every real session.
-# legacyRoutes is deliberately [] — /demo/[sessionId] exists but is a
-# redirect stub to the PROJECT PAGE (R1-03-F2), not a route the session
-# shell replaces; declaring it here would misstate R1-03-F2.
+# legacyRoutes is deliberately [] as of W6-B10 — /demo/[sessionId] is now a
+# next.config.mjs wire redirect (like architect/instructions/project-brain
+# above), not a forge-ui/app/ page directory, so it cannot be declared here
+# (legacyRouteResolves — this file's own header comment,
+# orchestrator/studio/session-kinds.ts — checks a REAL page directory).
+# Before W6-B10 it was a data-dependent client shim redirecting to the
+# PROJECT PAGE (R1-03-F2's inline DemoBuilderPanel); R1-03-F2 is now
+# REVERSED (docs/roadmaps/R1-contract-componentry.md) — the demo builder is
+# this dedicated session screen, the same one every other interactive kind
+# shares, not an inline panel.
 - id: demo
   agent: demo-builder
   title: Demo capability session
@@ -144,6 +151,20 @@
   # primitive), so this is its ONLY source of derivable affordances.
   panel:
     phases:
+      # W6-B10 — every demo session is MINTED at this phase (POST
+      # /api/demo-builder/start, cli/ui-bridge.ts, always writes
+      # `phase: 'briefing'`) — without this row, a session opened at
+      # `/sessions/demo/<sid>` before this batch derived ZERO affordances
+      # (the phase table had no matching row at all) and the operator could
+      # never get the agent started from the dedicated screen. `awaits:
+      # questions` renders the generic free-text box (SessionInteractivePanel)
+      # exactly the way `demoBuilderBrief`/`SessionBriefing` did inline;
+      # `handleDemoBrief` (cli/bridge-studio-affordances.ts) mirrors
+      # `POST /api/demo-builder/brief` (cli/ui-bridge.ts) — same prompt.md
+      # write, same phase -> generating transition. No `next:` here — the
+      # write itself advances the phase, exactly like every other
+      # `awaits:questions`/`awaits:verdict` row in this registry.
+      - { phase: briefing, step: noop, awaits: questions }
       # orchestrator/demo-builder-runner.ts:16, runGenerateStep (agent turn,
       # orchestrator/demo-builder-runner.ts:279) — writes DEMO.html + the
       # generator skill (orchestrator/demo-builder-runner.ts:402), advances to
@@ -342,3 +363,52 @@
       - { phase: awaiting-approval, step: noop, awaits: verdict, verdicts: [approve] }
       - { phase: applying, step: terminal }
       - { phase: applied, step: terminal }
+
+# W6-CR-3 — the community-refresh session (community-refresh agent). The
+# operator-triggered agent that EXTENDS studio/community/registry.yaml (the
+# W6-CR-1 source of truth the Studio community browser reads) from live
+# sources on demand — the registry never fetches itself; this session is how
+# an operator asks for a verified pass. `id`/`kindDir` follow the SAME rule
+# stated on `kb-cleanup` above: `id` MUST equal the `_<kindDir>` directory
+# prefix without its leading underscore (`community-refresh` <->
+# `_community-refresh`).
+#
+# `stages: [community]` — the vocabulary's SECOND extension (session-kinds.ts,
+# mirroring 'authoring's own R4-21 precedent): a single-stage session with no
+# natural fit among the ordered onboarding sequence the other six tokens
+# encode.
+#
+# artifact.kind is 'file-package' — REUSED from `authoring` (ADR-043's own
+# "prefer reuse" discipline), not a new reserved row: the session's
+# `staging/` directory holds exactly a small, reviewable file package
+# (`registry.yaml` + `evidence.md`), the same shape `deriveFilePackage`
+# already renders generically for any turnSpec kind's staging/ dir.
+#
+# turnSpec: `gathering` runs the agent (writes the draft package to
+# `staging/`) -> `awaiting-review` (operator verdict; UNLIKE kb-cleanup/
+# authoring, this row allows BOTH `approve` and `reject` — there is a real,
+# meaningful "discard this draft" action here, since a refresh pass may
+# propose changes the operator does not want committed) -> `committing` runs
+# the `commitRegistryDraft` finalizer (orchestrator/interactive-finalizers.ts)
+# -> `committed` (terminal). `rejected` is its OWN terminal row, reached
+# directly from `awaiting-review` by the generic affordance write route
+# (cli/bridge-studio-affordances.ts) on a `reject` verdict — never through
+# `committing`, so a rejected draft never touches the real registry at all.
+- id: community-refresh
+  agent: community-refresh
+  title: Community refresh session
+  legacyRoutes: []
+  stages: [community]
+  defaultStage: community
+  artifact:
+    kind: file-package
+    label: Registry draft
+  turnSpec:
+    kindDir: _community-refresh
+    style: agent
+    phases:
+      - { phase: gathering, step: agent, writes: [staging], next: awaiting-review }
+      - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve, reject] }
+      - { phase: committing, step: finalize, finalizer: commitRegistryDraft, next: committed }
+      - { phase: committed, step: terminal }
+      - { phase: rejected, step: terminal }

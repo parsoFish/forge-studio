@@ -105,7 +105,10 @@ import type { SessionShellPayload, SessionShellFetchResult } from './session-cli
 // `isPseudoProjectAnchor` mirrors (imported directly, not re-typed/
 // re-declared, mirroring trigger-kind-parity.test.ts's precedent — inert at
 // module-load time, no I/O until a function is actually called).
-import { isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor } from '../../cli/bridge-studio-sessions.ts';
+import {
+  isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor,
+  COMMUNITY_REFRESH_PROJECT_ANCHOR as SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR,
+} from '../../cli/bridge-studio-sessions.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -547,6 +550,10 @@ test('AT-104: PARITY — forge-ui\'s isPseudoProjectAnchor mirror agrees with th
   for (const s of samples) {
     expect(isPseudoProjectAnchor(s), `sample ${JSON.stringify(s)}`).toBe(SSOT_isPseudoProjectAnchor(s));
   }
+});
+
+test('AT-104b: PARITY — forge-ui\'s hardcoded ".community-registry" literal (COMMUNITY_REGISTRY_ANCHOR) matches the real, exported COMMUNITY_REFRESH_PROJECT_ANCHOR SSOT (cli/bridge-studio-sessions.ts, W6-CR-3) byte-for-byte', () => {
+  expect(pseudoProjectAnchorDestination(SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR)).toEqual({ label: 'Community', href: '/community' });
 });
 
 test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the community-refresh anchor resolves to Community; an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {

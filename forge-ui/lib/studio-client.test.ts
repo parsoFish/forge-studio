@@ -32,6 +32,10 @@ import {
   // the AT-F1-1 test goes red, on its explicit `typeof … === 'function'`
   // guard.
   fetchContractStages,
+  // W6-B11 — the aggregate sessions-index client read, same
+  // "not-yet-exported resolves to undefined" RED convention as
+  // fetchContractStages/AT-F1-1 above.
+  fetchStudioSessions,
   // zyc review finding 1/2: same "not yet exported" RED convention as
   // AT-F1-1 above — pre-fix, both resolve to `undefined`, so calling either
   // throws a genuine "is not a function" RED rather than silently no-op-ing.
@@ -74,6 +78,12 @@ import {
   // its one caller (SessionCleanupPanel.tsx) was deleted, this client
   // function had no production caller left.
   startKbCleanup,
+  // W6-B13: the KB drain-to-green client (cli/bridge-studio-kb-drain.ts's
+  // routes) — dispatch + the two read routes (specific-run poll and
+  // active-or-latest reattach).
+  dispatchKbDrain,
+  fetchKbDrainRun,
+  fetchActiveOrLatestKbDrain,
 } from './studio-client';
 import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
@@ -911,6 +921,48 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
 });
 
 // ---------------------------------------------------------------------------
+// W6-B11 — fetchStudioSessions: the client read for the aggregate in-flight
+// sessions index (cli/ui-bridge.ts's GET /api/studio/sessions).
+// ---------------------------------------------------------------------------
+
+const SESSION_INDEX_ROWS = [
+  {
+    kind: 'instructions', sessionId: '2026-08-02T11-00-00', project: 'gitpulse', phase: 'awaiting-verdict',
+    terminal: false, needsYou: true, modelTier: 'sonnet', updatedAt: '2026-08-02T11:00:00.000Z',
+    href: '/sessions/instructions/2026-08-02T11-00-00?project=gitpulse',
+  },
+];
+
+test('fetchStudioSessions() defaults to ?active=1 (operator-locked: in-flight sessions only) and parses the wire rows verbatim', async () => {
+  expect(typeof fetchStudioSessions, 'fetchStudioSessions is not exported from ./studio-client yet').toBe('function');
+
+  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: SESSION_INDEX_ROWS }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const rows = await fetchStudioSessions();
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/sessions?active=1`);
+  expect(rows).toEqual(SESSION_INDEX_ROWS);
+});
+
+test('fetchStudioSessions(false) fetches the unfiltered index (no ?active= query)', async () => {
+  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: [] }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  await fetchStudioSessions(false);
+
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/sessions`);
+});
+
+test('fetchStudioSessions() degrades to [] (never throws) when the bridge responds non-2xx', async () => {
+  const fetchSpy = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'boom' }) }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  await expect(fetchStudioSessions()).resolves.toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
 // R4-19-F2 T3 — startKbCleanup: the typed client caller for the kb-cleanup
 // session's kickoff route (cli/ui-bridge.ts):
 //   POST /api/studio/kbs/:id/cleanup/start  -> {ok:true, sessionId, project}
@@ -986,6 +1038,117 @@ test('R4-19-F2 AT-F2-3: startKbCleanup(id): a real 404 "unknown kb" body round-t
   expect(result.error).toBe('unknown kb: bogus');
   expect((result as { sessionId?: string }).sessionId).toBeUndefined();
   expect((result as { project?: string }).project).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// W6-B13: KB drain-to-green client (dispatchKbDrain / fetchKbDrainRun /
+// fetchActiveOrLatestKbDrain) — the ONE-button, server-owned counterpart to
+// the retired LintResolutionPanel scan/apply-all loop. Mirrors the
+// startKbCleanup/applyKbCleanup fetch-assertion style directly above.
+// ---------------------------------------------------------------------------
+
+test('W6-B13: dispatchKbDrain(id) issues EXACTLY ONE POST to /api/studio/kbs/:id/drain with the x-forge-csrf header, and returns {ok:true, runId} from a real 200 body', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, runId: 'forge-dev-drain-abc123' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await dispatchKbDrain('forge-dev');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string; headers?: Record<string, string> } | undefined;
+  expect(init?.method).toBe('POST');
+  expect(init?.headers?.['x-forge-csrf']).toBe('1');
+  expect(result).toEqual({ ok: true, runId: 'forge-dev-drain-abc123' });
+});
+
+test('W6-B13: dispatchKbDrain: a real 409 "already active" body round-trips the server\'s error message VERBATIM as {ok:false, error} — never a generic "failed" string', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({ error: 'a drain run is already active for this kb', runId: 'forge-dev-drain-existing' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await dispatchKbDrain('forge-dev');
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe('a drain run is already active for this kb');
+  // studioPost drops the response body on any non-2xx (shared contract with
+  // every other route in this module) — a caller recovers the active run's
+  // real id via fetchActiveOrLatestKbDrain, never by trusting this field.
+  expect(result.runId).toBeUndefined();
+});
+
+test('W6-B13: fetchKbDrainRun(id, runId) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain/:runId and returns the full status verbatim', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true, runId: 'forge-dev-drain-abc123', kbId: 'forge-dev', state: 'running', round: 2,
+      counts: { auto: 0, agent: 1, user: 0 }, perFinding: [], costUsd: 0.12, updatedAt: '2026-08-15T00:00:00.000Z',
+    }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchKbDrainRun('forge-dev', 'forge-dev-drain-abc123');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain/forge-dev-drain-abc123`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string } | undefined;
+  expect(init?.method ?? 'GET').toBe('GET');
+  expect(result.state).toBe('running');
+  expect(result.round).toBe(2);
+  expect(result.counts).toEqual({ auto: 0, agent: 1, user: 0 });
+});
+
+test('W6-B13: fetchKbDrainRun: a 404 "unknown drain run" degrades to an honest ok:false fallback — never throws, never fabricates a terminal state', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: 'unknown drain run' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchKbDrainRun('forge-dev', 'bogus-run');
+  expect(result.ok).toBe(false);
+  expect(result.runId).toBe('bogus-run');
+});
+
+test('W6-B13: fetchActiveOrLatestKbDrain(id) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain (no trailing runId segment) and passes runId:null through when no run has ever been dispatched', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, runId: null }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchActiveOrLatestKbDrain('forge-dev');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/drain`);
+  expect(result.runId).toBeNull();
+});
+
+test('W6-B13: fetchActiveOrLatestKbDrain: reattaches to a real active-or-latest run\'s full status when one exists', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true, runId: 'forge-dev-drain-xyz789', kbId: 'forge-dev', state: 'needs-you', round: 3,
+      counts: { auto: 0, agent: 0, user: 1 },
+      perFinding: [{ key: 'contradiction::theme.md', check: 'contradiction', kind: 'contradiction', file: 'theme.md', message: 'conflicting guidance', tier: 'user', outcome: 'needs-you' }],
+      costUsd: 0.34, updatedAt: '2026-08-15T00:05:00.000Z',
+    }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await fetchActiveOrLatestKbDrain('forge-dev');
+  expect(result.runId).toBe('forge-dev-drain-xyz789');
+  expect(result.state).toBe('needs-you');
+  expect(result.perFinding).toHaveLength(1);
 });
 
 // ---------------------------------------------------------------------------

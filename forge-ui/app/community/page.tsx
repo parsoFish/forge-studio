@@ -106,6 +106,16 @@ export default function CommunityBrowserPage() {
           it) happens on its own owning page, never here.
         </>
       }
+      actions={
+        <Link
+          href="/sessions/community-refresh/new"
+          data-action="refresh-community-registry"
+          className="btn btn-sm"
+          title="Kick off the community-refresh agent — fetches real upstream signals and drafts a reviewable diff of the registry (W6-CR-3)"
+        >
+          Refresh registry (agent)
+        </Link>
+      }
     >
 
         {status === 'ready' && (

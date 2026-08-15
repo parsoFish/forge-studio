@@ -35,17 +35,20 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 //     `awaiting-answers` — `deriveSessionTranscript`,
 //     orchestrator/studio/session-transcript.ts — so this box does not
 //     duplicate it). Submits `{answers: [{question, answer}]}` — B4's
-//     `handleInstructionsAnswer`'s exact body shape. instructions (W6-B9) is
-//     this affordance kind's first real consumer, and derives it from TWO
+//     `handleInstructionsAnswer`'s exact body shape. instructions (W6-B9)
+//     and demo (W6-B10, landed concurrently) are this affordance kind's
+//     first two real consumers, and instructions derives it from TWO
 //     phases: `awaiting-answers` (a real interview round) and `briefing` (the
 //     pre-interview checkpoint every new session starts at,
-//     `handleInstructionsBrief`, cli/bridge-studio-affordances.ts) — the Send
+//     `handleInstructionsBrief`, cli/bridge-studio-affordances.ts) — demo's
+//     own `briefing` row works the same way via `handleDemoBrief`. The Send
 //     button therefore does NOT require non-empty text (unlike an earlier
 //     revision of this file): a briefing note is genuinely optional (the
-//     bespoke route it replaces, `POST /api/instructions/brief`, always
-//     accepted an empty brief), and an empty interview answer is harmless —
-//     the agent can simply re-ask. No per-phase special-casing here; the
-//     button reads the SAME rule for both.
+//     bespoke routes they replace, `POST /api/instructions/brief` and
+//     `POST /api/demo-builder/brief`, both always accepted an empty brief),
+//     and an empty interview answer is harmless — the agent can simply
+//     re-ask. No per-phase or per-kind special-casing here; the button
+//     reads the SAME rule for all of them.
 //   - `verdict` — approve/reject buttons, rendered from `affordance.meta.
 //     verdicts` ONLY (W6-B6 post-merge review) — the server-derived, single
 //     source of "which verdict values are legal here"
@@ -103,13 +106,21 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // the operator VERBATIM via `data-affordance-error`, never swallowed and
 // never replaced by a generic "failed" string.
 //
-// W6-B8 — the shared `ActivityLog` bottom drawer (W6-B7) now renders here
-// too, gated on `!terminal`: `terminal` (session-client.ts, mirroring the
-// server's own `isTerminalPhase`) is a session-level fact, not derived from
+// The shared `ActivityLog` bottom drawer (W6-B7) renders in exactly ONE
+// place: the ZERO-RENDERABLE-affordances early return, gated on `!terminal`
+// (W6-B8) — `terminal` (session-client.ts, mirroring the server's own
+// `isTerminalPhase`) is a session-level fact, not derived from
 // `affordances.length` (a working, non-terminal phase can legitimately have
 // zero affordances — onboarding's `running` phase is exactly that case, the
 // one this gate most needs to cover). Every GENERIC_PANEL_KINDS kind gets
-// this identically — never a per-kind branch.
+// this identically, never a per-kind branch. W6-B10 originally added a
+// SECOND gate (`showActivityLog`) for the "affordances exist but none are
+// actionable" case (demo's `generating`, deriving only `staged-review`/
+// `next-turn`) — W6-B9's `isRenderableAffordance` filter (below) made that
+// second gate redundant: a phase whose ENTIRE derived set is non-renderable
+// now has `renderableAffordances.length === 0` too, so it already takes the
+// SAME early-return branch `{drawer}` lives in. One mechanism now covers
+// both cases W6-B8 and W6-B10 each built their own gate for.
 // ---------------------------------------------------------------------------
 
 /** W6-B9 reviewer fix — a GENERIC "does this panel have an actual renderer
@@ -180,13 +191,22 @@ export function SessionInteractivePanel({
    *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
-  /** W6-B8 — this session's live event stream (the same `useCycleEvents(cycleId)`
-   *  feed the page already computes for the StageHex burst chips), handed
-   *  straight to the shared `ActivityLog` drawer. */
+  /** This session's live event stream (the SAME `useCycleEvents(cycleId)`
+   *  feed the page already computes for the StageHex burst chips / the
+   *  retired `DemoBuilderPanel`/`SessionInstructionsPanel` used), handed
+   *  straight to the shared `ActivityLog` drawer — REQUIRED (W6-B8; the
+   *  real page always has one, even if empty before the first event lands;
+   *  test call sites default it via their own local helper, not a prop
+   *  default, mirroring how `phase` is required). */
   events: EventLogEntry[];
   /** W6-B8 — session-client.ts's `terminal` (mirrors the server's own
-   *  `isTerminalPhase`), gating the ActivityLog drawer: it renders only
-   *  while `!terminal` — a settled session has nothing left to watch work. */
+   *  `isTerminalPhase`), the ONE gate for the ActivityLog drawer (`drawer`
+   *  below, rendered only in the zero-renderable-affordances early return):
+   *  it renders only while `!terminal` — a settled session has nothing left
+   *  to watch work, onboarding's `running` phase legitimately has zero
+   *  affordances while genuinely working. A working phase whose affordances
+   *  are all non-renderable (demo's `generating`) reaches this SAME branch
+   *  too (see `isRenderableAffordance`'s doc comment) — one gate, not two. */
   terminal: boolean;
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
@@ -433,7 +453,19 @@ export function SessionInteractivePanel({
           </div>
         );
       })}
-      {drawer}
+      {/* No `{drawer}` here (this branch: renderableAffordances.length > 0) —
+          W6-B9's isRenderableAffordance filter (above) makes W6-B10's
+          separate `showActivityLog` flag redundant, not just stale: a phase
+          whose ENTIRE derived affordances[] is non-renderable (demo's
+          `generating`, e.g. `[staged-review, next-turn]`) never reaches
+          this branch at all — renderableAffordances is empty, so execution
+          takes the EARLY RETURN above instead, where `{drawer}` (gated on
+          `!terminal`, W6-B8) already renders it. This branch is only ever
+          reached when at least one REAL actionable control exists, so a
+          trailing unconditional `{drawer}` here would double-render the
+          ActivityLog alongside a live verdict/question-form control — the
+          exact double-render W6-B10 introduced `showActivityLog` to avoid,
+          now achieved for free by the filter instead of a second flag. */}
     </div>
   );
 }

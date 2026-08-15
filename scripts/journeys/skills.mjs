@@ -80,12 +80,12 @@ async function waitForEditMarker(ms = 8000) {
   return false;
 }
 
-/** Parse the demo-builder session id out of a project-page ?demo=<sid> URL
- * (R1-03-F2 — the builder is an inline panel; the old /demo/<sid> path form
- * is also still parsed for the redirect-stub hop). */
+/** Parse the demo-builder session id out of the dedicated session screen's
+ * own URL, `/sessions/demo/<sid>` (W6-B10 — the builder is that screen, not
+ * an inline panel; matches on the `/demo/<sid>` path segment shared by both
+ * `/sessions/demo/<sid>` and the legacy `/demo/<sid>` wire-redirect source,
+ * so either form resolves). */
 function demoSidFromUrl(url) {
-  const q = /[?&]demo=([^&#]+)/.exec(url);
-  if (q) return decodeURIComponent(q[1]);
   const m = /\/demo\/([^/?#]+)/.exec(url);
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -573,21 +573,26 @@ export const journey = defineJourney({
 
               // The REAL click: fix-agent dispatch → demo-builder session → navigation.
               await page.locator(resolveBtn).click().catch(() => {});
-              // R1-03-F2: the resolution opens the INLINE panel on the project page
-              // (?demo=<sid>), not a detached route.
-              await page.waitForURL('**demo=**', { timeout: 15000 }).catch(() => {});
+              // W6-B10 (R1-03-F2 reversed): the resolution opens the DEDICATED
+              // session screen (/sessions/demo/<sid>), not an inline panel.
+              const kickoffReady = await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).then(() => true).catch(() => false);
+              check(kickoffReady, `SK-4: the agent route opens the dedicated demo-builder session screen (${page.url()})`);
               const sid = demoSidFromUrl(page.url());
-              check(!!sid, `SK-4: the agent route opens an inline demo-builder session on the project page (${page.url()})`);
+              check(!!sid, `SK-4: a real session id is in the URL (${page.url()})`);
               ctx.seeded.demoSid = sid; // crash-safe sweep via the runner's finally
 
-              // Brief the agent for real (the bridge flips briefing → generating; the
-              // spawn is suppressed), then emulate the turn's activity — the pending
+              // Brief the agent for real, through the GENERIC question-form
+              // affordance (the bridge flips briefing → generating; the spawn is
+              // suppressed), then emulate the turn's activity — the pending
               // state the viewer dwells on before the flip.
-              await page.waitForSelector('[data-section="session-briefing"]', { timeout: 15000 }).catch(() => {});
-              await page.locator('[data-field="briefing-notes"]').fill(AGENTIC_BRIEF).catch(() => {});
-              await page.locator('[data-action="submit-brief"]').click().catch(() => {});
-              await page.waitForFunction(() => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating', null, { timeout: 15000 }).catch(() => {});
-              check(await page.evaluate(() => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating'), 'SK-4: the briefed session enters generating (the pending state the real agent runs in)');
+              await page.waitForSelector('[data-field="session-answer"]', { timeout: 15000 }).catch(() => {});
+              await page.locator('[data-field="session-answer"]').fill(AGENTIC_BRIEF).catch(() => {});
+              await page.locator('[data-action="submit-answers"]').click().catch(() => {});
+              await page.waitForFunction(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'generating', null, { timeout: 15000 }).catch(() => {});
+              check(await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'generating'), 'SK-4: the briefed session enters generating (the pending state the real agent runs in)');
               if (sid) demoEvent(sid, 'start', 'demo-builder turn (staged) — authoring .forge/skills/demo-design/SKILL.md');
               await caption(page, 'The demo-builder agent authors the skill — staged for this walkthrough; a real run writes the same file.');
               await frame(page, 'sk-5-generating', 'Part 2 (skills) — the agent turn pending (generation staged for the demo)');
@@ -617,11 +622,14 @@ export const journey = defineJourney({
                 await p.waitForFunction(() => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') === 'ok', null, { timeout: 15000 }).catch(() => {});
                 await sleep(1600); // dwell on the failing clause + its agent-tier offer
                 await p.locator(resolveBtn).click().catch(() => {});
-                await p.waitForURL('**demo=**', { timeout: 15000 }).catch(() => {});
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                ).catch(() => {});
                 clipSid = demoSidFromUrl(p.url());
-                await p.waitForSelector('[data-section="session-briefing"]', { timeout: 10000 }).catch(() => {});
-                await p.locator('[data-field="briefing-notes"]').fill(AGENTIC_BRIEF).catch(() => {});
-                await p.locator('[data-action="submit-brief"]').click().catch(() => {});
+                await p.waitForSelector('[data-field="session-answer"]', { timeout: 10000 }).catch(() => {});
+                await p.locator('[data-field="session-answer"]').fill(AGENTIC_BRIEF).catch(() => {});
+                await p.locator('[data-action="submit-answers"]').click().catch(() => {});
                 if (clipSid) demoEvent(clipSid, 'start', 'demo-builder turn (staged) — authoring the demo-design skill');
                 await sleep(2400); // pending hold — the generation dwell before the flip
                 writeDemoDesignSkill();

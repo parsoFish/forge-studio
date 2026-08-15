@@ -80,6 +80,11 @@ const ROUTES = [
   { path: '/templates', name: 'templates library' },
   { path: '/templates/plan', name: 'template detail (real planning template)' },
   { path: '/architect/new', name: 'architect launcher' },
+  // W6-B10: the demo-builder's own entrypoint repair — a static, no-id
+  // kickoff surface (mirrors `/architect/new` above), the same generic
+  // `/sessions/[kind]/new` screen instructions/kb-cleanup/authoring/
+  // project-brain also share.
+  { path: '/sessions/demo/new', name: 'demo-builder kickoff (dedicated session screen, W6-B10)' },
   // W6-IA-8: `/recovery` is now a wire redirect (next.config.mjs) to
   // `/library`, not a client-shim page — `page.goto` follows the 308 at the
   // network level before this crawler ever inspects the DOM, so this row's

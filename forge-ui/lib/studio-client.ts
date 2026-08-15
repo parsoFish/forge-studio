@@ -1141,6 +1141,45 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
 }
 
 /**
+ * W6-B11 — one row of the aggregate `GET /api/studio/sessions` index. Mirrors
+ * `cli/ui-bridge.ts`'s `SessionIndexRow` wire shape verbatim (server-sourced,
+ * never re-derived client-side): `terminal`/`needsYou` are the bridge's own
+ * `isTerminalPhase`/`deriveSessionAffordances` derivations, threaded through
+ * as-is so the client never re-implements either vocabulary.
+ */
+export type SessionIndexRow = {
+  kind: string;
+  sessionId: string;
+  project: string;
+  phase: string;
+  terminal: boolean;
+  needsYou: boolean;
+  modelTier: string | null;
+  updatedAt: string;
+  href: string;
+};
+
+/**
+ * Fetch the aggregate in-flight sessions index (W6-B11) — every registered
+ * session kind, across every project, flattened by the bridge's
+ * `collectStudioSessionIndexRows` + `sortAndCapSessionIndexRows`
+ * (needs-you-first, then newest). `activeOnly` (default `true`, the shape
+ * every current caller — the /sessions page, Home's active-sessions strip —
+ * wants: operator-locked, in-flight sessions ONLY, never terminal history)
+ * maps onto the bridge's `?active=1` query param; pass `false` for the rare
+ * caller that genuinely wants terminal rows included too. Same fallback
+ * discipline as every other `fetchStudio*` read here: no bridge configured,
+ * a non-2xx, or a thrown fetch all degrade to `[]` rather than rejecting, so
+ * one unavailable endpoint can never blank a sibling surface fed by the same
+ * `Promise.all`.
+ */
+export async function fetchStudioSessions(activeOnly: boolean = true): Promise<SessionIndexRow[]> {
+  const path = activeOnly ? '/api/studio/sessions?active=1' : '/api/studio/sessions';
+  const body = await studioGet<{ sessions: SessionIndexRow[] }>(path, { sessions: [] });
+  return body.sessions ?? [];
+}
+
+/**
  * Fetch a single KB with its graph and health. Returns null if not found.
  *
  * `body.kb` arrives via `studioGet`'s unchecked `as T` cast (same as every
@@ -1243,48 +1282,11 @@ export async function runKbMaintenance(
   return { ok: r.ok, error: r.error, data: r.data };
 }
 
-// --- Guided lint-resolution (the Knowledge page resolver) ---
+// --- Per-finding agent fix turn (W6-B13: the ONE surviving piece of the old
+// LintResolutionPanel — dispatching one agent turn for a USER-tier finding,
+// the operator decision the drain-to-green loop itself never makes). ---
 
-export type LintFinding = {
-  category: 'error' | 'flag' | 'auto-fix';
-  file: string;
-  message: string;
-  check?: string;
-  kind?: string;
-  resolution?: 'auto' | 'agent' | 'user';
-  fixHint?: string;
-};
 export type ResolutionCounts = { auto: number; agent: number; user: number };
-const ZERO_COUNTS: ResolutionCounts = { auto: 0, agent: 0, user: 0 };
-
-/** Run lint for a kb → classified findings + per-tier counts. */
-export async function lintKb(
-  id: string,
-): Promise<{ ok: boolean; error?: string; findings: LintFinding[]; counts: ResolutionCounts }> {
-  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op: 'lint' });
-  return {
-    ok: r.ok,
-    error: r.error,
-    findings: (r.data?.findings as LintFinding[]) ?? [],
-    counts: (r.data?.counts as ResolutionCounts) ?? ZERO_COUNTS,
-  };
-}
-
-/** Apply every deterministic AUTO-tier fix, then re-lint. */
-export async function fixAutoKb(
-  id: string,
-): Promise<{ ok: boolean; error?: string; applied: Array<{ kind: string; file: string; detail: string }>; skipped: Array<{ kind: string; file: string; reason: string }>; rounds: number; remaining: LintFinding[]; counts: ResolutionCounts }> {
-  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op: 'fix-auto' });
-  return {
-    ok: r.ok,
-    error: r.error,
-    applied: (r.data?.applied as Array<{ kind: string; file: string; detail: string }>) ?? [],
-    skipped: (r.data?.skipped as Array<{ kind: string; file: string; reason: string }>) ?? [],
-    rounds: typeof r.data?.rounds === 'number' ? r.data.rounds : 1,
-    remaining: (r.data?.remaining as LintFinding[]) ?? [],
-    counts: (r.data?.counts as ResolutionCounts) ?? ZERO_COUNTS,
-  };
-}
 
 /** Dispatch ONE agent-tier fix turn. `fixHint` carries the operator's decision
  *  for a user-tier finding (else the finding's own default hint). */
@@ -1303,11 +1305,10 @@ export async function dispatchAgentFix(
   return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
+export type AgentFixStatus = { ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean };
+
 /** Poll a dispatched agent-fix run's state. */
-export async function getAgentFixStatus(
-  id: string,
-  runId: string,
-): Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }> {
+export async function getAgentFixStatus(id: string, runId: string): Promise<AgentFixStatus> {
   const base = await resolveBridgeUrl();
   if (!base) return { ok: false, state: 'running', cleared: false };
   try {
@@ -1315,12 +1316,98 @@ export async function getAgentFixStatus(
     const data = (await res.json()) as { state?: string; cleared?: boolean };
     return {
       ok: res.ok,
-      state: (data.state as 'running' | 'cleared' | 'not-cleared' | 'failed') ?? 'running',
+      state: (data.state as AgentFixStatus['state']) ?? 'running',
       cleared: data.cleared === true,
     };
   } catch {
     return { ok: false, state: 'running', cleared: false };
   }
+}
+
+// --- KB drain-to-green (W6-B13) ---------------------------------------------
+//
+// Client for the W6-B12 bridge job (`cli/bridge-studio-kb-drain.ts`): ONE
+// button drives every auto+agent lint finding on a KB to a fixed point,
+// server-side, surviving nav-away by construction (the run's own progress
+// lives in `_logs/_kb-drain-<runId>/status.json`, not client state — this
+// module is a pure OBSERVER: dispatch, then read back what the server
+// already decided). Mirrors `KbDrainStatus`/`KbDrainState`/`KbDrainPerFinding`
+// from `cli/bridge-studio-kb-drain.ts` verbatim (re-declared client-side per
+// this file's own header convention — no Node import across the forge-ui
+// boundary).
+
+export type KbDrainState =
+  | 'running'
+  | 'green'
+  | 'needs-you'
+  | 'no-progress'
+  | 'round-cap'
+  | 'cost-ceiling'
+  | 'failed';
+
+export type KbDrainPerFinding = {
+  key: string;
+  check: string;
+  kind: string;
+  file: string;
+  message: string;
+  tier: 'auto' | 'agent' | 'user';
+  outcome: 'cleared' | 'not-cleared' | 'needs-you';
+};
+
+export type KbDrainStatus = {
+  ok: boolean;
+  runId: string | null;
+  state: KbDrainState;
+  round: number;
+  counts: ResolutionCounts;
+  perFinding: KbDrainPerFinding[];
+  costUsd: number;
+  updatedAt: string;
+  kbId?: string;
+  error?: string;
+};
+
+/** `studioGet`'s fallback can't distinguish "no bridge configured" from a
+ *  real non-2xx (a 404 unknown run, say) — it never parses the body on
+ *  either path — so this stays a neutral, honest-for-both-cases message
+ *  rather than asserting a specific cause it can't actually know. */
+function emptyKbDrainStatus(runId: string | null): KbDrainStatus {
+  return {
+    ok: false, runId, state: 'running', round: 0,
+    counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0,
+    updatedAt: new Date(0).toISOString(), error: 'no drain status available',
+  };
+}
+
+/** Dispatch a drain-to-green run: `POST /api/studio/kbs/:id/drain`. A 409
+ *  (a run is already active for this kb) surfaces as `{ok:false, error}` —
+ *  `studioPost` drops the response body's `runId` on any non-2xx, so a
+ *  caller that hits this must recover the ACTUAL active run via
+ *  {@link fetchActiveOrLatestKbDrain} rather than trust anything parsed off
+ *  this call's own error path. */
+export async function dispatchKbDrain(id: string): Promise<{ ok: boolean; error?: string; runId?: string }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/drain`, {});
+  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+}
+
+/** Poll one specific drain run's status: `GET /api/studio/kbs/:id/drain/:runId`. */
+export async function fetchKbDrainRun(id: string, runId: string): Promise<KbDrainStatus> {
+  return studioGet<KbDrainStatus>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/drain/${encodeURIComponent(runId)}`,
+    emptyKbDrainStatus(runId),
+  );
+}
+
+/** Reattach to the active-or-latest drain run for a kb:
+ *  `GET /api/studio/kbs/:id/drain` — `runId: null` when none has ever run.
+ *  This is what makes nav-away-and-back a true reattach: the panel calls
+ *  this on mount instead of assuming a fresh, run-less state. */
+export async function fetchActiveOrLatestKbDrain(id: string): Promise<KbDrainStatus> {
+  return studioGet<KbDrainStatus>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/drain`,
+    emptyKbDrainStatus(null),
+  );
 }
 
 /** Parse the RunPanel inputs textarea — one `key: value` per line — into the

@@ -150,7 +150,72 @@ inventory rather than one shared page-level contract:
     `undefined` (every flow-ledger.ts row) -> `flow`; any agent-sourced
     `linkKind` (`flow-node`/`standalone`/`session`) -> `agent` — plus a
     visible `[data-ledger-kind-badge]` chip.
-  Journey coverage: `scripts/journeys/home.mjs`.
+  - `section[data-section="active-sessions"][data-active-session-count]
+    [data-needs-you-count]` (W6-B11, the IA-4 marked slot) — the aggregate
+    in-flight-sessions strip, rendered ONLY when at least one session is
+    in flight (the same "never on mere existence" rule the attention strip
+    above follows). Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
+    `fetchStudioSessions()` (`?active=1` default — operator-locked,
+    in-flight sessions ONLY, never terminal history), folded into the same
+    `loadAll` `Promise.all` and refetched on the SAME debounced
+    `cycle-list-changed` WS handler as `runs` (one shared debounce, not a
+    second timer — see the hook's own header). Derivation:
+    `home-view.ts`'s `buildHomeSessionsStrip(sessions)` — a pure `.slice`
+    to `HOME_SESSIONS_STRIP_LIMIT` (4) cards, trusting the bridge's own
+    needs-you-first-then-newest sort (never re-sorted client-side);
+    `needsYouCount`/`totalCount` are counted over the FULL set, not just the
+    4-card slice, so the header stays honest once needs-you sessions exceed
+    the card budget. Header: an "N need you" pill (present only when
+    `needsYouCount>0`) plus `a[data-action="view-all-sessions"]
+    href="/sessions"` reading "all sessions (N) →". Each card:
+    `a[data-session-card][data-session-kind][data-session-phase]
+    [data-needs-you]`, linking to the session's own `href` (the SAME
+    `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
+    carries); a needs-you card additionally renders a `.status-dot
+    [data-status="retrying"]` visual indicator (styling only — the DOM
+    contract attribute is `data-needs-you`, never the dot's own frame value).
+  Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
+  a real instructions session via the harness's existing
+  `writeInstrStatus`/`cleanInstructionsSession` helpers, `HOME_SESSION_SID`)
+  + `scripts/journeys/sessions-index.mjs` (the strip's own overflow-link
+  entry point into `/sessions`, below).
+- **Sessions `/sessions`** (W6-B11) — the aggregate in-flight sessions index.
+  Deliberately NOT a `StudioNav` pillar (operator decision — the six-pillar
+  nav stays closed); reached from Home's active-sessions strip header (above)
+  and from a secondary-nav link on the Agents index
+  (`a[data-nav="sessions-secondary"]`, `components/studio/AgentsIndexView.tsx`,
+  next to the "+ New agent" CTA). Data: `GET /api/studio/sessions?active=1`
+  (`cli/ui-bridge.ts`'s `handleStudioSessionsIndex` — flattens every
+  registered session kind, `studio/session-kinds.yaml`, across every
+  project; the four legacy kinds — architect/instructions/demo/project-brain
+  — reuse their OWN existing `list*Sessions` readers verbatim, no second
+  scanner; every other kind — onboarding/authoring/kb-cleanup — falls
+  through to a generic per-segment-guarded directory scan. Rows carry
+  `{kind, sessionId, project, phase, terminal, needsYou, modelTier,
+  updatedAt, href}`, sorted needs-you-first-then-newest and capped to the
+  newest 200 (`SESSION_INDEX_MAX_ROWS`) by `sortAndCapSessionIndexRows`).
+  Root: `main[data-page="sessions-index"][data-page-ready]
+  [data-session-count]`. Non-empty state: `section[data-section=
+  "sessions-table"][data-session-count]` wrapping a table — one
+  `tr[data-session-kind][data-session-phase][data-needs-you]` per session,
+  columns kind/project/phase(+needs-you dot)/model tier/updated/
+  `a[data-action="resume-session"]` ("Resume →", the row's own `href`).
+  Rows render in the SAME order the bridge returned them — this page never
+  re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
+  false flash before the first fetch resolves):
+  `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
+  kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
+  kickoff kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
+  kb-cleanup/authoring) plus architect's bespoke native entry
+  (`/architect/new` — ADR-043 amendment §4, architect never gets a generic
+  kickoff row). Split: `components/studio/SessionsIndex.tsx`'s
+  `SessionsIndexBody` is the pure, props-driven presentational component
+  (render-tested via `lib/sessions-index-render.test.ts`, the same
+  `renderToStaticMarkup` + `next/navigation` mock pattern as
+  `ProjectsIndexBody`); `app/sessions/page.tsx` is the thin fetch-owning
+  wrapper. Journey coverage: `scripts/journeys/sessions-index.mjs` (entry
+  point: Home's strip overflow link, per the entry-point rule — never opens
+  mid-flow on `/sessions` itself).
 - **Library `/library`** — SHELVES ONLY (W6-IA-4 rebuild, 2026-08-15): the
   reusable building blocks every agent and flow composes from, NOT a
   dashboard. `[data-page="library"][data-page-ready]`. The OLD landing page
@@ -504,6 +569,23 @@ inventory rather than one shared page-level contract:
   never invented as an attribute value), and `data-has-signals="false"`
   renders "no signals published" rather than a fabricated zero.
 
+  **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
+  (a real `<a href="/sessions/community-refresh/new">`, rendered via
+  `StudioPage`'s `actions` header slot — never a bespoke button) is the
+  ONLY thing on this browser that can ever change what it shows: the
+  registry is a declared list forge does not crawl on its own (D10 —
+  `studio/community/hubs.yaml`'s own header), so an operator explicitly asks
+  the community-refresh agent for a verified pass. The link lands on the
+  SAME generic `/sessions/[kind]/new` kickoff surface B6 built for every
+  other interactive kind (see below), just with `selector:"none"` — no
+  project/KB to pick, since the registry is forge's own single file. The
+  agent's draft (a `staging/registry.yaml` diff + `staging/evidence.md`)
+  stops for an explicit operator `approve`/`reject` verdict before anything
+  here ever changes; a `reject`ed draft never touches this browser's data at
+  all. Registry rows this browser has never been refreshed for keep
+  rendering the honest "seed — never verified" freshness state below —
+  refreshing is additive, never retroactive.
+
   **Sorting (W6-CR-2), operator-locked — SIMPLE SORTS ONLY**: `name`,
   `stars`, `updated`, `source`; there is deliberately no search/facets/tags
   sort. A native `select[data-community-sort]` picks the key, and
@@ -524,8 +606,11 @@ inventory rather than one shared page-level contract:
   `[data-component="freshness-badge"][data-freshness="seed"|"stale"|"fresh"]`
   span (`forge-ui/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
   null` renders the spec-literal "seed — never verified" (every item sourced
-  from `studio/community/registry.yaml` today, since no refresh pass has
-  ever run — see that file's own header); a `fetchedAt` older than 30 days
+  from `studio/community/registry.yaml` today reads this way — the
+  community-refresh agent's `commitRegistryDraft` finalizer stamps a real
+  `fetchedAt` only on a row it actually verified this pass, W6-CR-3; an item
+  no operator has ever run a refresh against keeps this honest seed state
+  indefinitely, never a fabricated verification date); a `fetchedAt` older than 30 days
   reads "stale"; anything fresher renders a relative time ("3h ago", "2d
   ago"). **A raw date is NEVER rendered for a null `fetchedAt`** — this is
   the freshness-honesty contract the badge exists to enforce.
@@ -1038,8 +1123,10 @@ inventory rather than one shared page-level contract:
   ceiling stands, never silently overwritten by the run-level default), and a stamp
   that fails to land is surfaced in the per-item result rather than reported as a
   clean enqueue. Every drawer carries
-  `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
-  Timeline (+ inline builder panel), tying demo upkeep to initiative state.
+  `[data-link="demo-builder"]` (R4-07-F3; entrypoint fixed W6-B10) — routes
+  honestly (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`) to the
+  project's in-flight demo session (`/sessions/demo/<sid>`) or the kickoff
+  screen, tying demo upkeep to initiative state without a fake tab switch.
   Server-side, `RoadmapInitiative.completedAt` (`cli/bridge-studio.ts`'s
   `buildProjectRoadmap`) is threaded from `Run.completedAt`
   (`orchestrator/run-model.ts`) — the `started_at` of a cycle's
@@ -1365,11 +1452,12 @@ inventory rather than one shared page-level contract:
   never fabricated when absent (today only `RunPanel` has a real `costUsd`
   source; the architect/instructions session-summary types carry no cost
   field yet, a disclosed gap, not papered over). Adopted at launch by
-  `SessionArchitectPanel`, `SessionInstructionsPanel` (retired W6-B9 — the
-  instructions kind gets the drawer via the generic `SessionInteractivePanel`
-  now, below), and `DemoBuilderPanel` (all three during their working
-  phases, subscribed via the SAME `useCycleEvents(cycleId)` seam they
-  already held), and `RunPanel`
+  `SessionArchitectPanel`, `SessionInstructionsPanel` (retired W6-B9) and
+  `DemoBuilderPanel` (retired W6-B10) during their working phases,
+  subscribed via the SAME `useCycleEvents(cycleId)` seam they already held;
+  both retired panels' instructions/demo kinds get the drawer via the
+  generic `SessionInteractivePanel` now (below, `!terminal`-gated), and
+  `RunPanel`
   (`components/studio/agent-builder/RunPanel.tsx`) — for a standalone
   dispatched agent run, whose `runId` (minted `_agent-<slug>-<stamp>`,
   `cli/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
@@ -1473,19 +1561,21 @@ inventory rather than one shared page-level contract:
   the left and replies here — `deriveSessionTranscript`,
   `orchestrator/studio/session-transcript.ts`, already surfaces the FULL
   pending question text as a turn while `awaiting-answers`). **W6-B9 —
-  instructions is this affordance kind's first real consumer**, and derives
-  it from TWO phases: `awaiting-answers` (a real interview round,
+  instructions and (W6-B10, landed concurrently) demo are this affordance
+  kind's first two real consumers.** instructions derives it from TWO
+  phases: `awaiting-answers` (a real interview round,
   `handleInstructionsAnswer`) and `briefing` (every new session's actual
   starting phase — `POST /api/instructions/start` never spawns the agent —
   dispatched instead to `handleInstructionsBrief`, which writes `prompt.md`,
   not `answers.json`; both `cli/bridge-studio-affordances.ts`, selected by
-  `affordance.phase`). The Send button no longer requires non-empty text
-  (an earlier revision of this panel disabled it until text was entered) —
-  a briefing note is genuinely optional (the bespoke `POST
-  /api/instructions/brief` route it replaces always accepted an empty
-  brief), and an empty interview answer is harmless (the agent can re-ask);
-  the same rule applies to both phases, with no per-phase branch in this
-  component. `verdict` →
+  `affordance.phase`); demo derives it from its own `briefing` row the same
+  way, via `handleDemoBrief`. The Send button no longer requires non-empty
+  text (an earlier revision of this panel disabled it until text was
+  entered) — a briefing note is genuinely optional (the bespoke `POST
+  /api/instructions/brief` / `POST /api/demo-builder/brief` routes it
+  replaces always accepted an empty brief), and an empty interview answer
+  is harmless (the agent can re-ask); the same rule applies to every phase
+  and kind, with no per-phase or per-kind branch in this component. `verdict` →
   `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`
   (approve-only for `kb-cleanup`/`authoring` — B4's own table declares no
   rejection path for either, so the reject button is never offered where it
@@ -1539,8 +1629,11 @@ inventory rather than one shared page-level contract:
   verbatim via `[data-affordance-error]`, never swallowed.
   `postSessionAffordance` (`forge-ui/lib/session-client.ts`) is the client
   POST helper; `[data-page="session"]`'s `refreshSummary` gained a real
-  `demo` branch (`listDemoSessions()`, the SAME per-kind list endpoint
-  `DemoBuilderPanel`/the legacy `/demo/[sid]` redirect already use) —
+  `demo` branch (`listDemoSessions()` — the SAME per-kind list endpoint the
+  now-retired `DemoBuilderPanel` used, and the reason W6-B10 could later
+  graduate `/demo/[sid]` from a data-dependent client shim to a plain wire
+  redirect: this page now makes the SAME lookup the shim used to make
+  first) —
   previously `demo` fell into the generic "unrecognised kind" else-branch
   alongside every kind with no per-kind summary fetch at all, so a
   session-shell deep link carrying no `?project=` query param (this batch's
@@ -1563,12 +1656,17 @@ inventory rather than one shared page-level contract:
   computes for the StageHex burst chips on the bespoke panels, now also
   handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
-  (W6-B6, 2026-08-15).** `app/sessions/[kind]/new/page.tsx`. Kind context
+  (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 adds the `selector:"none"` case).**
+  `app/sessions/[kind]/new/page.tsx`. Kind context
   card (agent slug + `SKILL.md` path, produced artifact label, session
   directory shape) + a project select (`[data-field="kickoff-project"]`,
   datalist-backed, mirroring `NewIdeaBox`/`AuthoringLauncher`'s own
-  convention) or, for `kb-cleanup` only, a KB select
-  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`) + a
+  convention), or, for `kb-cleanup` only, a KB select
+  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
+  `community-refresh` only, **no selector section renders at all**
+  (`[data-section="kickoff-selector"]` is absent from the DOM, not merely
+  empty — the community registry is forge's own single, forge-wide file,
+  not a per-project/per-KB artifact) — plus a
   free-text prompt field for the ONE kind whose `/start` body requires one
   (`authoring` — `[data-field="kickoff-prompt"]`; every other kickoff kind
   takes its brief on a LATER turn instead, not at kickoff — instructions'
@@ -1584,13 +1682,17 @@ inventory rather than one shared page-level contract:
   a read-only chip (`[data-field="kickoff-model-fixed-chip"]`) naming
   `runtime.model` for `strategy:fixed`; widening a skill's range is a
   `SKILL.md` edit, never a UI decision. `[data-action="start-session"]`
-  POSTs the kind's existing `/start` route (now every one of the five client
+  POSTs the kind's existing `/start` route (now every one of the six client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
-  `startAuthoring`/`startKbCleanup` — threads an optional `modelTier` onto
-  the wire, validated server-side against the SKILL-declared envelope,
-  W6-B5's seam) and `router.push`es onto `/sessions/<kind>/<sid>?project=<p>`
-  on success. Kickoff kinds: `instructions`, `demo`, `kb-cleanup`,
-  `authoring`, `project-brain`. `architect` is explicitly OUT —
+  `startAuthoring`/`startKbCleanup`/`startCommunityRefresh` — threads an
+  optional `modelTier` onto the wire, validated server-side against the
+  SKILL-declared envelope, W6-B5's seam) and `router.push`es onto
+  `/sessions/<kind>/<sid>?project=<p>` on success (`project` for
+  `community-refresh` is the server-resolved fixed anchor
+  `.community-registry`, echoed back on the `/start` response — the
+  kickoff page never invents or requires one). Kickoff kinds:
+  `instructions`, `demo`, `kb-cleanup`, `authoring`, `project-brain`,
+  `community-refresh`. `architect` is explicitly OUT —
   `kind === 'architect'` renders a small link-out card to `/architect/new`
   rather than duplicating `NewIdeaBox` (ADR-043 amendment §4: architect
   stays bespoke, kickoff included).
@@ -1639,37 +1741,84 @@ inventory rather than one shared page-level contract:
   genuinely cannot distinguish a broken bridge from an empty result. Claiming
   a `failed` state it can never enter would be a DOM contract the code does
   not honour; the swallow is filed instead.
-- **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
-  per-project demo-page builder (brief → generate → lock, element-by-element)
-  is an inline panel on the project page, opened by
-  `[data-action="launch-demo-builder"]` / a `?demo=<sid>` deep link:
-  `[data-section="demo-builder-panel"][data-demo-session][data-demo-phase]`
-  containing the preserved inner contract —
-  `[data-section="session-briefing"|"demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`,
-  `[data-component="demo-review"]`, `[data-demo-iframe]`,
-  `[data-field="demo-feedback"]` (the review textarea — named so the harness
-  can drive a real feedback round trip, R4-16),
-  `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
-  plus a compact `[data-section="demo-status-strip"]`. The old detached
-  `/demo/[sid]` route is a redirect stub
-  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`) —
-  deliberately kept as a CLIENT-side page, not converted to a
-  `next.config.mjs` wire redirect at W6-IA-8 alongside the other six legacy
-  shims: its destination isn't knowable from the URL alone, it needs a live
-  `listDemoSessions()` lookup to resolve which project owns the session id.
+- **Demo builder — the dedicated session screen (W6-B10, 2026-08-15, R1-03-F2
+  REVERSED):** the per-project demo-page builder is now `/sessions/demo/<sid>`
+  — the ONE session screen every interactive kind shares (W6-B6) — not an
+  inline panel. `DemoBuilderPanel.tsx` and `DemoReview.tsx` are DELETED, along
+  with the project page's `?demo=` deep-link handling and `activeDemoSid`
+  state; the retired inline contract
+  (`[data-section="demo-builder-panel"]`, `[data-component="demo-review"]`,
+  `[data-field="demo-feedback"]`, `[data-action="submit-brief"|"apply-feedback"|
+  "abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`,
+  `[data-section="demo-history"|"demo-viewer"|"demo-process"]`) is GONE, not
+  relocated — the dedicated screen renders through the SAME generic surfaces
+  every other `GENERIC_PANEL_KINDS` member does:
+  `SessionInteractivePanel` (`[data-component="session-interactive-panel"]`,
+  `[data-affordance-kind="question-form"|"verdict"]`,
+  `[data-action="submit-answers"|"verdict-approve"|"verdict-reject"]`,
+  `[data-field="session-generation-pick"]`) LEFT, `SessionArtifactPane`'s
+  generation-gallery RIGHT — see below. Three entrypoints route here, all via
+  `router.push`: `DemoTimeline`'s `[data-action="launch-demo-builder"]`
+  (project page), `ContractResolutionPanel`'s DEMO-clause
+  `[data-action="resolve-clause-agent"]` (mirrors its own `instructions`
+  branch exactly), and the roadmap's `[data-link="demo-builder"]`
+  (`InitiativeDetail`, via `RoadmapCanvas`'s `onOpenDemo`) — which now routes
+  HONESTLY (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`: resume the
+  project's in-flight session, else `/sessions/demo/new?project=<p>&
+  initiative=<id>`) rather than the old fake `setTab('editor')`. Kickoff
+  (`/sessions/demo/new`) gained an optional `?project=`/`?initiative=` prefill
+  (`[data-section="kickoff-initiative-context"]` shows the latter as context
+  only — sessions are project-scoped, never initiative-scoped). `/demo/
+  [sessionId]` graduates from the data-dependent client shim W6-IA-8
+  deliberately left behind to a pure `next.config.mjs` wire redirect →
+  `/sessions/demo/:sessionId` — the destination now resolves its own project
+  via the SAME `listDemoSessions()` lookup the shim used to make first (see
+  `refreshSummary`'s `demo` branch below), so `?project=` is an optimization,
+  not a requirement, and the move is knowable from the URL alone like its six
+  siblings. The gap this surfaced: `studio/session-kinds.yaml`'s `demo` panel
+  table had NO row for `briefing` — every session is minted straight into it
+  (`POST /api/demo-builder/start`) — so a session opened here could never get
+  the agent started; it gained `{phase: briefing, step: noop, awaits:
+  questions}`, rendering as the generic question-form box, and
+  `cli/bridge-studio-affordances.ts` gained `handleDemoBrief`, mirroring
+  `POST /api/demo-builder/brief`. `ActivityLog` (the shared bottom drawer,
+  `[data-component="activity-drawer"]`) is wired generically into
+  `SessionInteractivePanel`, gated on `!terminal` (W6-B8) — W6-B10 originally
+  added a SECOND, separate gate (`showActivityLog`, true whenever every
+  derived affordance was a disabled not-yet-wired one) to cover demo's
+  `generating`/`locking` phases without a `kind === 'demo'` compare; W6-B9's
+  `isRenderableAffordance` filter (staged-review/next-turn hidden entirely,
+  see that entry above) made the second gate REDUNDANT rather than merely
+  stale — a phase whose entire derived set is non-renderable now has ZERO
+  renderable affordances too, so it already takes the SAME early-return
+  branch the `!terminal` gate covers. One mechanism now covers what W6-B8
+  and W6-B10 each built their own gate for. **Disclosed regression, not
+  fixed here** (needs a real affordance-model extension — `VERDICT_VALUES` is
+  a closed `['approve','reject']` set with no "revise in place" semantics):
+  the old panel's free-text "apply feedback & regenerate" loop, per-element
+  iterate-with-its-own-prompt, and "view a previous locked demo" history have
+  no equivalent on the generic panel today.
 - **Generation gallery — the demo-builder's session artifact (R4-16-F1,
-  2026-08-06).** Each completed generate turn is SNAPSHOTTED into the session
-  dir (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
+  2026-08-06; entry point updated W6-B10).** Each completed generate turn is
+  SNAPSHOTTED into the session dir
+  (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
   `meta.json`), so the generations accumulate instead of overwriting each
   other, and a new **live** artifact kind `generation-gallery`
   (`studio/session-kinds.yaml`'s fourth descriptor, `id: demo` — the id IS the
   `_<kind>` session-dir segment the read route derives) renders them through
-  the R2-10 shell's own renderer stack. **Entry stays the project page**
-  (R1-03-F2 is not reversed): the inline `DemoBuilderPanel` mounts the REAL
-  `SessionArtifactPane`, fed by the same
-  `GET /api/studio/sessions/demo/<sid>?project=<p>` route the
-  `/sessions/[kind]/[sessionId]` deep link uses — one derivation, one renderer,
-  two mounts. Contract:
+  the R2-10 shell's own renderer stack. **Entry is the dedicated session
+  screen** (W6-B10 — R1-03-F2's original "entry stays the project page" is
+  itself reversed): `/sessions/demo/<sid>` renders the REAL
+  `SessionArtifactPane`, fed by
+  `GET /api/studio/sessions/demo/<sid>?project=<p>` — the same read route,
+  one mount now instead of two. `finalize-generation` (the gallery's own
+  per-item button) renders honestly DISABLED here (`onFinalizeGeneration` is
+  not wired on this page — `title="Not available from this view"`); the
+  session-shell's own way to finalize a chosen generation is the generic
+  verdict-approve's `[data-field="session-generation-pick"]` picker (posts
+  `{verdict:'approve', generation:<n>}` through the SAME affordance route
+  `handleDemoVerdict` already answers), not a second, redundant call path.
+  Contract:
   `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
   per selector button
   `[data-action="select-generation"][data-generation-number][data-generation-selected="true"|"false"]`,
@@ -1679,7 +1828,8 @@ inventory rather than one shared page-level contract:
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
-  chooser `[data-action="finalize-generation"][data-generation-number]`, and an
+  (on this page, honestly disabled) chooser
+  `[data-action="finalize-generation"][data-generation-number]`, and an
   honest `[data-generation-empty="true"]` naming what was scanned rather than a
   bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
   never an array position, so a corrupt snapshot leaves a visible gap instead
@@ -1688,11 +1838,11 @@ inventory rather than one shared page-level contract:
   polls is the race this campaign already diagnosed once), and the view is
   re-derived with the operator's chosen generation NUMBER preserved across the
   new payload, because a selection that dies every 3 seconds cannot be acted
-  on. `[data-action="lock-demo"]` keeps its meaning (lock the sample currently
-  in the repo); `finalize-generation` restores the CHOSEN snapshot's sample AND
-  its generator skill into the project repo before the same lock runs, so
-  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
-  generation.
+  on. The real way to lock a CHOSEN generation on this page is
+  `verdict-approve`'s generation picker — server-side (`handleDemoVerdict`)
+  it restores that snapshot's sample AND its generator skill into the project
+  repo before the same lock runs, so `demo.lock.json`'s
+  `demo_html`/`demo_skill` pair always comes from one generation.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/
   session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
@@ -1805,10 +1955,12 @@ inventory rather than one shared page-level contract:
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
     like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
     the pre-existing graph + reader body, re-anchored under this branch
-    unchanged; **Health** hosts `LintResolutionPanel` + `GuidancePanel` +
+    unchanged; **Health** hosts `KbDrainPanel` + `GuidancePanel` +
     `KbHealth` (moved under this branch, F1 — no longer rendered
-    unconditionally); **Ingest Activity** is the new read-only
-    `IngestActivityPanel` (see below). Journey: `knowledge-explore-tabs`.
+    unconditionally; W6-B13 replaced `LintResolutionPanel` with
+    `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
+    **Ingest Activity** is the new read-only `IngestActivityPanel` (see
+    below). Journey: `knowledge-explore-tabs`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]`, force-graph
     root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
     per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
@@ -1914,8 +2066,10 @@ inventory rather than one shared page-level contract:
     that same root once a consolidate run reaches a terminal (`'cleared'` |
     `'not-cleared'` | `'failed'` | `'running'` — absent before the first
     run, reset to `''` the moment a new one starts). Actions:
-    `[data-action="kb-lint"]` (deterministic `forge brain lint`, scoped to
-    the KB's own dir), `[data-action="kb-index"]` (index refresh),
+    `[data-action="kb-index"]` (index refresh — **`kb-lint` was REMOVED here
+    W6-B13**: it duplicated the Health tab's `KbDrainPanel`, whose live
+    status IS the scan result now, since every drain round re-lints the KB —
+    sweep finding C4#7),
     **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
     `op=consolidate`)**, **`[data-action="start-kb-cleanup"]` (R4-19-F2 — the
     kb-cleanup LAUNCHER, closing the reachability gap
@@ -1948,6 +2102,118 @@ inventory rather than one shared page-level contract:
     NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
     (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
     computes the real `cleared`/`total` count the terminal event carries.
+  - **KB drain-to-green panel (Health tab, W6-B13).** `KbDrainPanel.tsx`
+    replaces `LintResolutionPanel.tsx` (deleted) — ONE button drives every
+    auto- and agent-tier lint finding to a fixed point, entirely server-side
+    (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`, W6-B12): the component
+    is a pure OBSERVER of `_logs/_kb-drain-<runId>/status.json`, never the
+    owner of the run. Root: `#kb-drain-panel[data-component="kb-drain-panel"]
+    [data-drain-state][data-drain-round][data-drain-run-id]`.
+    `data-drain-state` is one of the server's own `KbDrainState` values
+    (`'running'|'green'|'needs-you'|'no-progress'|'round-cap'|'cost-ceiling'
+    |'failed'`) plus three UI-only values: `'idle'` (no run has ever been
+    dispatched for this kb), `'attaching'` (the mount-time reattach GET is
+    still in flight), and `'timed-out'` (this browser's bounded poll gave up
+    watching — the run itself keeps going server-side; see below). Actions:
+    `[data-action="drain-to-green"]` (`POST .../drain`, 409-safe — see
+    below) and `[data-action="recheck-drain"]` (only rendered in
+    `'timed-out'`; restarts the poll for the SAME `runId` without a fresh
+    dispatch).
+    - **Reattach-on-mount, not assume-fresh.** On every mount (including a
+      tab round-trip away from and back to Health — `KbDrainPanel` is
+      rendered only under `tab === 'health'`, so switching tabs unmounts/
+      remounts it), the panel calls `GET /api/studio/kbs/:id/drain`
+      (active-or-latest) BEFORE assuming there is no run — this is what
+      makes nav-away genuinely lose nothing: the SAME `data-drain-run-id`
+      and `data-drain-state` reappear. Journey:
+      `knowledge-lint-index` drives exactly this (drain → nav to Explore →
+      back to Health → assert the SAME run id/state).
+    - **The poll.** `lib/agent-dispatch.ts`'s `pollKbDrain` (built on the
+      SAME generic `pollUntilTerminal` core `pollAgentRun` now also uses) —
+      bounded, immediate-then-interval, with an EXPLICIT `'timed-out'`
+      status once the poll ceiling is hit while still `'running'` — never a
+      silent freeze. A drain run is driven by `enqueueConsolidate`
+      server-side, not by this poll, so `'timed-out'` here means only "this
+      browser stopped watching," never "the run stopped" — the re-check
+      button restarts watching the SAME run, no new dispatch.
+    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`)
+      posts `{}`; a 409 ("already active") is recovered by immediately
+      calling `fetchActiveOrLatestKbDrain` rather than trusting anything off
+      the 409 response body (the shared `studioPost` helper drops the body
+      on any non-2xx across this whole module) — so a double-click race
+      attaches to the REAL active run instead of surfacing a dead-end error.
+    - **Progress + terminal rendering.** `[data-drain-section="progress"]`
+      lists this round's auto+agent-tier `perFinding` rows —
+      `[data-drain-finding][data-drain-finding-tier="auto"|"agent"|"user"]
+      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]`.
+      Every terminal state gets honest, state-specific copy
+      (`lib/kb-drain-view.ts`'s `drainStateCopy` — pure, unit-tested):
+      `'green'` shows `[data-component="drain-green"]`; `'no-progress'` /
+      `'round-cap'` / `'cost-ceiling'` name what to do next (re-run, or
+      address manually); `'failed'` points at the `ActivityLog` drawer below
+      it (mounted whenever a `runId` is known, subscribed to the run's own
+      `_kb-drain-<runId>` cycle id) rather than inventing an error string
+      the persisted status doesn't carry.
+    - **`'needs-you'` — the ONE surviving piece of the old
+      `LintResolutionPanel`.** When (and only when) the server reports
+      `'needs-you'`, `[data-drain-section="needs-you"]
+      [data-user-index][data-user-total]` walks the operator through each
+      remaining USER-tier finding — the one decision the drain loop never
+      makes on its own. `[data-component="user-resolution-input"]`
+      (textarea) + `[data-action="submit-user-resolution"]` dispatch a
+      single agent-fix turn (`dispatchAgentFix`, unchanged route) polled by
+      the NEW `pollAgentFix` (same `pollUntilTerminal` core — fixes sweep
+      finding C9#2: the old panel's own `pollFix` silently stayed
+      `'running'` forever past its 45×2s budget with zero feedback;
+      `pollAgentFix` reaches an explicit `'timed-out'` instead). Clearing a
+      finding re-dispatches a fresh drain run rather than guessing
+      client-side what's left. `[data-action="skip-user-resolution"]`
+      advances the walkthrough; stepping past the last finding renders
+      `[data-component="user-tier-exhausted"]` — an explicit "reviewed all
+      N, none resolved yet" completion (fixes sweep finding C9#3: the old
+      panel clamped its index to the last item forever, so Skip past the
+      end produced no visible change on every subsequent click).
+    - **`KbHealth.tsx`'s lint counts link here (sweep C9, "no orphan health
+      numbers").** The Lint sub-section and the per-check itemization block
+      are both wrapped in `<a href="#kb-drain-panel"
+      data-action="goto-drain-panel">` — these counts are the ones
+      `KbDrainPanel` actually acts on, so they route straight to it rather
+      than sitting as dead numbers. (Layer balance / connectivity /
+      staleness stay plain — drain does not act on those.)
+    - **Container/view split (review round).** `KbDrainPanel.tsx`'s
+      "interesting" states (running/green/needs-you/no-progress/round-cap/
+      cost-ceiling/failed/timed-out) only ever exist via an async fetch/poll
+      result, which `renderToStaticMarkup` never runs — a render test
+      against the hooks-owning component could only ever observe its
+      permanently-stuck initial `'attaching'` state. `KbDrainPanel` (the
+      exported default, hooks/effects/fetch/poll wiring) renders the
+      exported, hooks-free `KbDrainPanelView` — every prop
+      (`displayState`/`round`/`runId`/`counts`/`perFinding`/`dispatching`/
+      `attaching`/the user-tier walkthrough fields) is driven straight from
+      container state, so `KbDrainPanelView` alone is fully render-testable
+      via `react-dom/server`'s `renderToStaticMarkup`, the same way
+      `KbHealth.tsx` (already a plain props-in component) is tested.
+      Render-tested: `lib/kb-drain-panel-render.test.ts` (mirrors
+      `run-panel-render.test.ts`'s technique) — pins every
+      `data-drain-state` vocabulary value, `data-drain-round`,
+      `data-drain-run-id`, the per-finding `data-drain-finding-tier`/
+      `-outcome` rows, the needs-you `data-user-index`/`-total` block +
+      the C9#3 exhausted-completion state, the `timed-out` re-check
+      affordance, and the full drain-to-green button disabled matrix
+      (dispatching/running/attaching → disabled; every terminal state →
+      enabled). The container's own wiring (`.tsx` only — no jsdom in this
+      repo, see `RunPanel.tsx`'s own header) is verified by `tsc`/
+      `next build` plus pure-logic unit coverage: `lib/kb-drain-view.test.ts`
+      (state copy, tier splitting, the C9#3 walkthrough-completion logic),
+      `lib/agent-dispatch.test.ts` (`pollKbDrain`/`pollAgentFix`, including
+      the "unmount mid-poll" cleanup-fn pin the user-tier poll's own ref
+      relies on — review round MEDIUM fix: `submitUserAnswer` now stores
+      `pollAgentFix`'s returned stop fn in a ref and cancels it from the
+      SAME unmount-cleanup effect the runId poll already uses), and
+      `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
+      `fetchActiveOrLatestKbDrain` wire contracts). Journey:
+      `knowledge-lint-index` (renamed in spirit from the old lint/index
+      beat — the file's own `id` is unchanged for RUN_ORDER stability).
   - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
     (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
     KB's own dir by the same identity-matched `resolveKbBrainDir` walk
