@@ -240,7 +240,17 @@
       # or leaves the session sitting here); the write route
       # (cli/bridge-studio-affordances.ts) 422s a reject against this SAME
       # authored list, never a hardcoded per-kind table.
-      - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve] }
+      #
+      # requires (W6-B9, reviewer finding on W6-B8): approve needs an
+      # operator-supplied library `id` (the directory name — D4, the drafted
+      # package cannot name itself) beyond `verdict` itself. This is the ONE
+      # wire signal for that requirement — the write route's generic
+      # body-shape check (cli/bridge-studio-affordances.ts) 400s naming any
+      # field this list requires that the POST body omits, and the panel
+      # (SessionInteractivePanel.tsx) gates its Approve button on the SAME
+      # list, never a hardcoded "file-package needs an id" assumption on
+      # either side.
+      - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve], requires: [id] }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
 

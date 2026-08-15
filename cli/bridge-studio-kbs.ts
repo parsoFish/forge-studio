@@ -545,12 +545,17 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
 // never sufficient, because it never stopped a second unapproved caller
 // from being enqueued in the first place.
 //
-// Both callers (the bespoke `/cleanup/apply` route, which additionally
-// checks `expectedKbId` against the URL's own `:id` segment — DEFECT B,
-// see that route's own header — and the generic affordance route, which
-// carries no URL-supplied kb id at all and so omits `expectedKbId`) now
-// funnel through this ONE function — the duplicated choreography that used
-// to independently exist in each is deleted, not merely mirrored.
+// BOTH callers used to funnel through this ONE function — the duplicated
+// choreography that independently existed in each is deleted, not merely
+// mirrored. W6-B9 (reviewer finding on W6-B8): the bespoke `/cleanup/apply`
+// route (which additionally checked `expectedKbId` against the URL's own
+// `:id` segment — DEFECT B) is now DELETED — kb-cleanup migrated onto the
+// generic session shell, and the bespoke route had no production caller
+// left. The generic affordance route (`cli/bridge-studio-affordances.ts`)
+// is the ONLY caller now; it carries no URL-supplied kb id at all, so it
+// omits `expectedKbId`. The parameter itself is left in place (optional,
+// unused today) rather than stripped along with its one caller — a narrower
+// removal than this fix's own scope.
 // ---------------------------------------------------------------------------
 
 export type ApproveKbCleanupOutcome = { ok: true; runId: string } | { ok: false; status: number; error: string };
