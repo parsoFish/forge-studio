@@ -177,12 +177,51 @@ export type AgentCapabilityDescriptor = {
    * destined for a 400.
    */
   costCeilingEnforceable: boolean;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam;
+   * reviewer fix, B5): the full SKILL-declared tier envelope, cheapest-first
+   * — the SAME `rangeTiers` computation `deriveAgentSpec` uses for
+   * `PhaseAgentSpec.allowedTiers` (see that field's own doc). Present ONLY
+   * for a `strategy:range` skill; a `strategy:fixed` skill has exactly one
+   * legal tier and leaves this key entirely absent (never `undefined`) so a
+   * literal deep-equal against a fixed-strategy descriptor stays
+   * byte-identical. This is the wire-facing FACT the kickoff model-tier
+   * picker (B6) renders directly — it must never re-derive the envelope
+   * from raw `runtime.range` client-side, which is exactly the
+   * re-derivation this type's own doc comment forbids.
+   */
+  allowedTiers?: ModelTier[];
   // Extension point (documented; added where its authoring source lands):
   //   artifactOutputs — R2-05-F2.
 };
 
-/** Compute the wave-1 capability descriptor for an agent definition. Pure — no I/O. */
-export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapabilityDescriptor {
+/**
+ * Compute the wave-1 capability descriptor for an agent definition.
+ *
+ * Pure over its OWN inputs (`def`, `root`) — no network/DB I/O, no mutation
+ * — but NOT literally zero filesystem reads: a `strategy:range` def reads
+ * `<root>/studio/catalog.yaml` to cost-sort `allowedTiers`, the SAME small
+ * read `deriveAgentSpec`'s own range branch performs for `PhaseAgentSpec`.
+ * `root` defaults to `FORGE_ROOT` (this module's real forge-install root,
+ * matching `deriveAgentSpec`'s own default-param convention) so every
+ * existing call site (none of which pass a `root` today) is unaffected.
+ */
+export function agentCapabilityDescriptor(def: AgentDefinition, root: string = FORGE_ROOT): AgentCapabilityDescriptor {
+  // Mirrors the materials guard immediately below: a hand-built/malformed
+  // def (or a root with no readable catalog.yaml) must degrade to an ABSENT
+  // allowedTiers, never crash the whole capability-descriptor response over
+  // one agent — the same "guard the shape first" discipline this function
+  // already applies to `def.materials`.
+  let allowedTiers: ModelTier[] | undefined;
+  if (def.runtime.strategy === 'range' && Array.isArray(def.runtime.range) && def.runtime.range.length > 0) {
+    try {
+      const catalog = loadCatalog(join(root, 'studio', 'catalog.yaml'));
+      allowedTiers = rangeTiers(def.runtime.range, catalog);
+    } catch {
+      allowedTiers = undefined;
+    }
+  }
+
   return {
     interactive: executionPathForSurface(def.surface) === 'interactive',
     runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
@@ -200,5 +239,9 @@ export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapability
     // Exact match only — see the field's own doc comment above for why a
     // truthy/substring check is the wrong shape here.
     costCeilingEnforceable: def.runtime.loopStrategy === 'one-shot',
+    // Omit the key entirely when absent (never `allowedTiers: undefined`) —
+    // same discipline as PhaseAgentSpec.allowedTiers, so a fixed-strategy
+    // descriptor's literal deep-equal stays byte-identical.
+    ...(allowedTiers ? { allowedTiers } : {}),
   };
 }

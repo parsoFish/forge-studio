@@ -149,10 +149,13 @@ test('POST /api/demo-builder/start with a valid modelTier ("opus", within the wi
   assert.equal(readDemoStatus(json.sessionId as string).modelTier, 'opus');
 });
 
-test('POST /api/demo-builder/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set', async () => {
+test('POST /api/demo-builder/start with an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set — no session dir created', async () => {
+  const before = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
   const { status, json } = await post('/api/demo-builder/start', { project: 'demo', modelTier: 'haiku' });
   assert.equal(status, 400);
   assert.match(String(json.error), /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
+  const after = existsSync(join(repoDir(), '_demo')) ? readdirSync(join(repoDir(), '_demo')).length : 0;
+  assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
 test('demo sessions surface per-element fragments + the fragment endpoint serves them', async () => {
