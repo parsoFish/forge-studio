@@ -662,7 +662,9 @@ export const journey = defineJourney({
               await page.waitForSelector('main[data-page="session"][data-session-phase="committing"]', { timeout: 8000 }).catch(() => {});
               writePbStatus(pbSid, 'committed', '');
               await page.waitForSelector('[data-section="brain-committed"]', { timeout: 8000 }).catch(() => {});
-              check(await page.locator('[data-action="bind-and-return"]').count() > 0, 'AI-2: seed brain committed — bind-and-return offered');
+              // W6-SW-3 (sweep C6#1): data-action renamed bind-and-return -> return-to-project —
+              // the click only ever navigated (the per-project brain is bound at onboarding, not here).
+              check(await page.locator('[data-action="return-to-project"]').count() > 0, 'AI-2: seed brain committed — return-to-project offered');
               await frame(page, 'pbrain-2-committed', 'Part 1 — project brain seeded (grows with the project)');
 
         },

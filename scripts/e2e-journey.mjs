@@ -332,6 +332,25 @@ async function main() {
     return;
   }
 
+  // T2 fix lane (2026-08-15) — `--journey <id>[,<id>...]` (or
+  // E2E_JOURNEY=<id>[,<id>...]) narrows the RUN_ORDER loop below to only the
+  // named journeys' beats (comma-separated for a multi-journey repro, e.g. a
+  // suspected cross-journey state leak), for fast local repro without paying
+  // the full 10-journey wall-clock cost. RUN_ORDER's drift-check above still
+  // validates against the FULL set (so a scoped run can never mask a
+  // structural RUN_ORDER/JOURNEYS mismatch) — only the drive loop is
+  // filtered. The finally block's cleanup stays global and best-effort
+  // regardless, so a scoped run never leaves foreign-journey state behind
+  // uncleaned.
+  const journeyFilterIdx = process.argv.indexOf('--journey');
+  const journeyFilterRaw = journeyFilterIdx !== -1 ? process.argv[journeyFilterIdx + 1] : (process.env.E2E_JOURNEY || null);
+  const journeyFilterSet = journeyFilterRaw ? new Set(journeyFilterRaw.split(',').map((s) => s.trim()).filter(Boolean)) : null;
+  if (journeyFilterSet) {
+    for (const jid of journeyFilterSet) {
+      if (!journeyById[jid]) throw new Error(`[e2e] --journey '${jid}' is not a known journey id. Known ids: ${journeyIds.join(', ')}`);
+    }
+  }
+
   // Pre-seed isolation guard (known-gaps #10) — refuse before touching anything
   // if a live daemon or a stray manifest could turn the emulated seed into a
   // REAL cycle.
@@ -396,6 +415,7 @@ async function main() {
 
   try {
     for (const [journeyId, beatId] of RUN_ORDER) {
+      if (journeyFilterSet && !journeyFilterSet.has(journeyId)) continue;
       const beat = journeyById[journeyId].beats.find((b) => b.id === beatId);
       console.log(`\n[journey/beat] ${journeyId}/${beatId} — ${beat.title}`);
       tracker.begin(journeyId, beatId);
@@ -545,9 +565,9 @@ async function main() {
     try { rmSync(join(CLIPS, '_tmp'), { recursive: true, force: true }); } catch { /* */ }
   const results = tracker.toResults({
     project: PROJECT,
-    mode: 'full',
-    requestedJourneys: journeyIds,
-    executedJourneys: journeyIds,
+    mode: journeyFilterSet ? 'single' : 'full',
+    requestedJourneys: journeyFilterSet ? [...journeyFilterSet] : journeyIds,
+    executedJourneys: journeyFilterSet ? [...journeyFilterSet] : journeyIds,
   });
   writeResultsFile(join(OUT, 'results.json'), results);
   writeGalleryFile(join(OUT, 'index.html'), renderGallery(results, {

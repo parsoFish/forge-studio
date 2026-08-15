@@ -7,7 +7,7 @@
  *
  * Mirror: forge-ui/lib/bridge-client.ts's `WI_STATUSES`, a hand-kept runtime
  * array (feeding `RoadmapWorkItem['status']`'s type and, downstream, the
- * roadmap card's WI done/total micro-badge arithmetic in RoadmapDag.tsx —
+ * roadmap card's WI done/total micro-badge arithmetic in RoadmapCanvas.tsx —
  * 'complete' counts toward done, 'failed' counts in the total but not done).
  * forge-ui cannot import orchestrator/ TypeScript directly in PRODUCTION
  * code (the same constraint SHIPPED_TRIGGER_KINDS documents for itself in

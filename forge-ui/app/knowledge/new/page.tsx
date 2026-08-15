@@ -36,7 +36,11 @@ export default function NewKbPage() {
   // [] renders it empty for an unbound-ref or bandless flow.
   const bandOptions = deriveKbBandOptions(kind, flows, ref);
   const slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const canSubmit = name.trim().length > 0 && ref.length > 0;
+  // W6-SW-3 (sweep C4#4): a name made only of characters outside [a-z0-9- ]
+  // (emoji, CJK, punctuation-only) strips to an empty slug — that must block
+  // submit too, not just an empty/unbound name+ref, since `slug` is the
+  // create payload's id.
+  const canSubmit = name.trim().length > 0 && ref.length > 0 && slug.length > 0;
 
   async function onSubmit() {
     if (!canSubmit || saving) return;
