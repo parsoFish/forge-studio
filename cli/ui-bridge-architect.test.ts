@@ -306,7 +306,7 @@ test('GET /api/architect/sessions live-tails the session log → WS event stream
     });
   });
   await new Promise<void>((r) => ws.on('open', () => r()));
-  // GET sessions triggers ensureArchitectTail; the 200ms tail then replays the log.
+  // GET sessions triggers ensureSessionTail; the 200ms tail then replays the log.
   await fetch(`${url}/api/architect/sessions`);
   const received = await got;
   ws.close();

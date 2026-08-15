@@ -457,13 +457,44 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     tails.set(cycleId, state);
   };
 
+  // W6-B2 — the ONE generalized session-tail activator, replacing the four
+  // hand-enumerated `ensure<Kind>Tail` closures that used to live here
+  // (ensureArchitectTail/ensureInstructionsTail/ensureDemoTail/
+  // ensureProjectBrainTail — each an identical one-line wrapper around
+  // `ensureTailFor(`_${prefix}-${sessionId}`)`, differing only in `prefix`).
+  // `kind` is the session-kind id — session-kinds.yaml's own `descriptor.id`
+  // for the generic `/api/studio/sessions/:kind/:id` route, or, for the four
+  // legacy per-kind list routes below, `SPAWN_AGENT_SPECS[agentId].logPrefix`
+  // (the SAME string: SPAWN_AGENT_SPECS's `logPrefix` values and the
+  // session-kinds.yaml `id` values coincide for every spawnable kind —
+  // 'demo-builder''s SPAWN_AGENT_SPECS KEY differs from its `logPrefix`
+  // ('demo'), but that `logPrefix` is exactly the 'demo' session-kind id).
+  // This is also the literal convention forge-ui's session-shell page
+  // derives independently (`forge-ui/app/sessions/[kind]/[sessionId]/
+  // page.tsx`: `` const cycleId = `_${kind}-${sessionId}` ``) — one naming
+  // rule, three call sites, no second hand-kept mapping anywhere.
+  //
+  // No terminal-phase filter here (unlike the legacy per-kind list routes,
+  // which skip already-terminal sessions before calling this): terminal
+  // phases are a DIFFERENT closed vocabulary per kind (committed/rejected
+  // for architect, locked/abandoned for demo, applied for kb-cleanup, ...) —
+  // hardcoding that set here would be exactly the "second hand-kept mapping"
+  // this generalization exists to remove. `ensureTailFor` is idempotent and
+  // no-ops for a log dir that doesn't exist (never started) or is already
+  // tailed; the only cost of tailing a terminal session is a bounded, cheap
+  // poll that stops the moment every WS client disconnects (`stopAllTails`).
+  const ensureSessionTail = (kind: string, sessionId: string): void => {
+    ensureTailFor(`_${kind}-${sessionId}`);
+  };
+
   // Tail only LIVE cycles (in-flight / ready-for-review), and only while at
   // least one browser is connected: a terminal cycle's log is immutable and
   // served on demand via /api/events, and with no client there is nobody to
   // stream to. This drops the idle cost from ~RECENT_CYCLES_MAX statSync polls
   // every TAIL_POLL_MS to zero when no UI is open, and to just the live set
-  // otherwise. (Architect-session tails are driven separately by
-  // ensureArchitectTail when the architect screen is open.)
+  // otherwise. (Session tails — architect/instructions/demo-builder/
+  // project-brain/authoring/kb-cleanup — are driven separately by
+  // ensureSessionTail when the corresponding session-detail screen is open.)
   const startTailsForLive = (): void => {
     if (clients.size === 0) return;
     for (const c of scanCycles().live) ensureTailFor(c.cycleId);
@@ -583,20 +614,19 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       queueRoot: queuePaths.root,
       projectsRoot,
       broadcastArchitectChanged: () => broadcast({ type: 'architect-list-changed' }),
-      // ADR 020 — live-tail an architect session's event log so its tool_use
-      // bursts stream to the dedicated screen's hex. The runner writes to
-      // `_logs/_architect-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
-      ensureArchitectTail: (sessionId: string) => ensureTailFor(`_architect-${sessionId}`),
       broadcastInstructionsChanged: () => broadcast({ type: 'instructions-list-changed' }),
-      // Stage A — live-tail an instructions session's event log. The runner
-      // writes to `_logs/_instructions-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
-      ensureInstructionsTail: (sessionId: string) => ensureTailFor(`_instructions-${sessionId}`),
       broadcastDemoChanged: () => broadcast({ type: 'demo-list-changed' }),
-      // Stage B — live-tail a demo-builder session's event log. The runner
-      // writes to `_logs/_demo-<sid>/events.jsonl`; ensureTailFor no-ops if absent.
-      ensureDemoTail: (sessionId: string) => ensureTailFor(`_demo-${sessionId}`),
       broadcastProjectBrainChanged: () => broadcast({ type: 'project-brain-list-changed' }),
-      ensureProjectBrainTail: (sessionId: string) => ensureTailFor(`_project-brain-${sessionId}`),
+      // W6-B2 — the ONE generalized session tail, replacing
+      // ensureArchitectTail/ensureInstructionsTail/ensureDemoTail/
+      // ensureProjectBrainTail (see ensureSessionTail's own doc comment
+      // above for the shared cycle-id derivation). Every kind's
+      // session-detail GET activates it: the four legacy per-kind list
+      // routes below (architect/instructions/demo-builder/project-brain),
+      // plus the generic `/api/studio/sessions/:kind/:id` route
+      // (bridge-studio-sessions.ts) for authoring and kb-cleanup, which have
+      // no per-kind list route of their own.
+      ensureSessionTail,
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -693,23 +723,20 @@ type HttpContext = {
   /** Broadcast an `architect-list-changed` WS message (fsWatch may miss
    *  same-tick writes; the routes call this after they mutate session state). */
   broadcastArchitectChanged: () => void;
-  /** Start (idempotently) live-tailing an architect session's event log so its
-   *  tool_use bursts stream to the dedicated screen. */
-  ensureArchitectTail: (sessionId: string) => void;
   /** Broadcast an `instructions-list-changed` WS message (fsWatch may miss
    *  same-tick writes; the routes call this after they mutate session state). */
   broadcastInstructionsChanged: () => void;
-  /** Start (idempotently) live-tailing an instructions session's event log. */
-  ensureInstructionsTail: (sessionId: string) => void;
   /** Broadcast a `demo-list-changed` WS message (fsWatch may miss same-tick
    *  writes; the routes call this after they mutate session state). */
   broadcastDemoChanged: () => void;
-  /** Start (idempotently) live-tailing a demo-builder session's event log. */
-  ensureDemoTail: (sessionId: string) => void;
   /** R1-3b — broadcast a `project-brain-list-changed` WS message. */
   broadcastProjectBrainChanged: () => void;
-  /** R1-3b — live-tail a project-brain session's event log. */
-  ensureProjectBrainTail: (sessionId: string) => void;
+  /** W6-B2 — start (idempotently) live-tailing ANY session kind's event log
+   *  (architect/instructions/demo/project-brain/authoring/kb-cleanup — every
+   *  kind whose runner writes to `_logs/_<kind>-<sid>/events.jsonl`), keyed
+   *  on the session-kind id (== `SPAWN_AGENT_SPECS[agentId].logPrefix`).
+   *  Replaces the four former per-kind `ensure<Kind>Tail` fields. */
+  ensureSessionTail: (kind: string, sessionId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -1399,7 +1426,12 @@ async function handleHttp(
   if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioAuthoringRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioTemplatesRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
-  if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // W6-B2 — the generic session-detail GET is the ONLY read route authoring
+  // and kb-cleanup sessions have (no per-kind list route like architect/
+  // instructions/demo-builder/project-brain); ensureSessionTail must be
+  // threaded through here to close bd forge-2ee's "no consumer reads the
+  // authoring spine's events dir" half.
+  if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -2639,7 +2671,7 @@ async function handleArchitect(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureArchitectTail(s.session_id);
+      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureSessionTail(SPAWN_AGENT_SPECS.architect.logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — this used a RAW `architectSessionDir` join and
@@ -2980,7 +3012,7 @@ async function handleInstructions(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureInstructionsTail(s.session_id);
+      if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureSessionTail(SPAWN_AGENT_SPECS.instructions.logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 — resolve through the shared guard (the enumeration is already
@@ -3527,7 +3559,7 @@ async function handleDemoBuilder(
     // Live-tail each non-terminal session's log so the dedicated screen's hex
     // streams tool bursts (idempotent; no-ops if the log doesn't exist yet).
     for (const s of statuses) {
-      if (s.phase !== 'locked' && s.phase !== 'abandoned') ctx.ensureDemoTail(s.session_id);
+      if (s.phase !== 'locked' && s.phase !== 'abandoned') ctx.ensureSessionTail(SPAWN_AGENT_SPECS['demo-builder'].logPrefix, s.session_id);
     }
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
@@ -3865,7 +3897,7 @@ async function handleDemoBuilder(
   if (method === 'GET' && url === '/api/project-brain/sessions') {
     const statuses = listProjectBrainSessions(ctx.projectsRoot);
     for (const s of statuses) {
-      if (s.phase !== 'committed' && s.phase !== 'abandoned') ctx.ensureProjectBrainTail(s.session_id);
+      if (s.phase !== 'committed' && s.phase !== 'abandoned') ctx.ensureSessionTail(SPAWN_AGENT_SPECS['project-brain'].logPrefix, s.session_id);
     }
     sendJson(res, 200, { sessions: statuses }, origin);
     return true;

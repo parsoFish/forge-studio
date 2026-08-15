@@ -109,6 +109,19 @@ const MAX_PROJECT_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
 const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
 
+/** W6-B2 — this route is the generic "session-detail GET" EVERY session kind
+ *  goes through (`forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` calls
+ *  `fetchSessionShell` for architect/instructions/project-brain/demo/
+ *  onboarding/authoring/kb-cleanup alike), and for authoring + kb-cleanup it
+ *  is the ONLY read route they have — neither has a per-kind list route like
+ *  `/api/architect/sessions`. `ensureSessionTail` is threaded in here (rather
+ *  than only from the four legacy per-kind list routes in cli/ui-bridge.ts)
+ *  so every kind's live event log gets tailed to the WS stream, closing bd
+ *  forge-2ee's "no consumer reads the authoring spine's events dir" half. */
+export type SessionsRouteContext = StudioContext & {
+  ensureSessionTail: (kind: string, sessionId: string) => void;
+};
+
 // ---------------------------------------------------------------------------
 // Input validation — length cap THEN charset, both before any fs call.
 // ---------------------------------------------------------------------------
@@ -207,7 +220,7 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
 export async function handleStudioSessionsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: SessionsRouteContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -301,6 +314,17 @@ export async function handleStudioSessionsRoutes(
       return true;
     }
     const phase = statusParsed.phase;
+
+    // W6-B2 — live-tail this session's event log (idempotent; no-ops for a
+    // kind whose runner never writes `_logs/_<kind>-<sid>/events.jsonl`, e.g.
+    // 'onboarding', which dispatches through a different, already-streaming
+    // mechanism — see cli/ui-bridge.ts's ensureSessionTail doc comment). No
+    // terminal-phase filter: terminal phases are a per-kind closed
+    // vocabulary (committed/rejected/locked/abandoned/applied/...) and
+    // hardcoding that set here would reintroduce the exact second mapping
+    // this generalization removes; the tail's own cost is bounded and stops
+    // once every WS client disconnects.
+    ctx.ensureSessionTail(descriptor.id, sessionId);
 
     const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir, phase });
     if (!transcriptResult.ok) {
