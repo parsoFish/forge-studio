@@ -19,6 +19,8 @@
 
 import type { Run, Flow, Agent, Project, Kb, KbLintSummary } from './studio-client';
 import type { ProjectAttentionItem } from './bridge-client';
+import type { LedgerRow } from './history-ledger';
+import { mergeRecentAgentRuns } from './agents-index';
 
 export type HomeStatus = 'active' | 'gated' | 'idle';
 export type HomeHexKind = 'flow' | 'agent' | 'project' | 'kb';
@@ -273,4 +275,95 @@ export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
   }
 
   return items;
+}
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 sweep finding C1#3 — GATE_ATTENTION_STATUS_FRAME
+// ---------------------------------------------------------------------------
+
+/**
+ * forge-w6ia4: styling-only mapping for a 'gate' HomeAttentionItem's own
+ * real status vocabulary ('gated' | 'flagged', built by buildHomeAttention
+ * above) onto the shared 5-state status-dot CSS vocabulary
+ * (pending/active/complete/retrying/failed) — mirrors KB_ATTENTION_STATUS_
+ * FRAME's own established pattern (app/page.tsx) exactly, for the SAME
+ * reason: `data-attention-status` must always carry the real
+ * HomeAttentionItem value untouched (never this frame's output), so this
+ * map is consulted ONLY for the visual `.status-dot`'s `data-status`.
+ * 'gated' -> 'retrying' (awaiting review is the normal, recoverable-in-
+ * progress case — the same mapping the page previously hardcoded for every
+ * gate row); 'flagged' -> 'failed' (a review actually flagged something —
+ * a real defect, not a routine wait), matching KB_ATTENTION_STATUS_FRAME's
+ * own errors->failed / warn->retrying precedent. An unrecognised status
+ * (the type is deliberately open-ended, `string`, on the 'gate' variant)
+ * fails closed to 'pending' rather than guessing.
+ */
+export const GATE_ATTENTION_STATUS_FRAME: Record<string, string> = {
+  gated: 'retrying',
+  flagged: 'failed',
+};
+
+/** Never a fabricated guess for an attention status this frame doesn't
+ *  recognise — 'pending' is the honest "no stronger visual claim" default,
+ *  the same fail-closed shape `deriveProjectStatus`/`deriveAgentStatus`
+ *  above already establish for their own absent-data cases. */
+export function gateAttentionStatusDot(status: string): string {
+  return GATE_ATTENTION_STATUS_FRAME[status] ?? 'pending';
+}
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 sweep finding C1#2 — deriveWatchLiveRunHref
+// ---------------------------------------------------------------------------
+
+/**
+ * The Home header's "Watch live run" CTA used to hardcode `/flows/forge-
+ * develop`, rendered unconditionally regardless of whether anything was
+ * actually running there. This derives the REAL target: the flow behind an
+ * ACTUAL live run, never a fabricated default. 'active' beats 'gated' (an
+ * actively-executing run is a more useful "live" destination than one
+ * merely parked on a gate); ties within a status keep `runs`' own order
+ * (the caller's already-sorted/fetched order, never re-sorted here). No
+ * active/gated run at all falls back to the flows index — never a
+ * specific-but-fabricated flow id.
+ */
+export function deriveWatchLiveRunHref(runs: Run[]): string {
+  const active = runs.find((r) => r.status === 'active');
+  if (active) return `/flows/${encodeURIComponent(active.flowId)}`;
+  const gated = runs.find((r) => r.status === 'gated');
+  if (gated) return `/flows/${encodeURIComponent(gated.flowId)}`;
+  return '/flows';
+}
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 — the Home merged everything-ledger (flow runs + agent runs)
+// ---------------------------------------------------------------------------
+
+/** A single named constant (never a literal repeated at call sites) bounding
+ *  Home's merged ledger — mirrors `agents-index.ts`'s own
+ *  `RECENT_AGENT_RUNS_LIMIT` convention. */
+export const HOME_LEDGER_LIMIT = 30;
+
+/**
+ * Home's own "everything ledger": interleaves the flow-run rows Home already
+ * derives (`deriveFlowLedgerRows(runs)`, unchanged) with the recent
+ * standalone/flow-node agent rows `lib/agents-index.ts`'s
+ * `fetchRecentAgentRuns` resolves, into ONE newest-first, deduped, bounded
+ * list — reusing `mergeRecentAgentRuns` UNCHANGED (D2, the reuse seam that
+ * module's own header documents: a generic "flatten + sort + dedupe-by-id +
+ * bound" merge, not agent-specific despite its name).
+ *
+ * Passing `flowRows` FIRST is deliberate: `mergeRecentAgentRuns`'s dedupe
+ * keeps the FIRST-seen row for a given id after a stable newest-first sort,
+ * so a run that is BOTH a flow run (Home's own `runs`) AND a participant in
+ * some agent's own history (a flow-node row sharing the SAME run id) always
+ * surfaces as its flow-level row — one row per run, attributed to the flow,
+ * never double-listed. Only genuinely standalone/session agent rows (no
+ * colliding flow-run id) survive as their own rows.
+ */
+export function buildHomeLedgerRows(
+  flowRows: LedgerRow[],
+  agentRows: LedgerRow[],
+  limit: number = HOME_LEDGER_LIMIT,
+): LedgerRow[] {
+  return mergeRecentAgentRuns([flowRows, agentRows], limit);
 }

@@ -1,6 +1,7 @@
 /**
  * Acceptance test — Home dashboard sources live data ONLY from existing
- * reads, and its derivation module is pure (R6-07).
+ * reads, and its derivation module is pure (R6-07; relocated onto the
+ * extracted data hook by W6-IA-4).
  *
  * `/` becomes the Home surface (forge-ui/app/page.tsx), aggregating flows /
  * agents / projects / kbs with live status derived from the run-model. The
@@ -10,20 +11,30 @@
  * derivation module — none of which the rest of Studio's live-refresh
  * plumbing (subscribe()-driven SSE) accounts for.
  *
+ * W6-IA-4 EXTRACTED the byte-duplicated loadAll/refreshRuns/subscribe()
+ * shape Home and the old Library landing page both hand-carried (sweep
+ * finding C1#5) into ONE shared hook, `forge-ui/lib/use-studio-home-data.ts`
+ * — Home is now its only caller, and the rebuilt Library page's five
+ * shelves read entirely different sources. This file's checks move onto
+ * that hook (the new home of the fetch/subscribe wiring) instead of
+ * comparing app/page.tsx's source against app/library/page.tsx's — Library's
+ * fetch set is no longer even related to Home's.
+ *
  * Kills:
- *  - a Home that runs `setInterval(...)` to re-poll instead of using the
- *    existing `subscribe()` SSE hookup (a second, uncoordinated polling loop);
- *  - a Home that opens its own `new WebSocket(...)` transport;
- *  - a Home that calls a brand-new `/api/...` aggregate endpoint instead of
- *    composing the existing fetchStudioFlows / fetchRuns / fetchProjectAttention reads;
- *  - a Home that does a raw `fetch(...)` bypassing the bridge-client/studio-client
- *    wrappers entirely;
+ *  - a Home (or its hook) that runs `setInterval(...)` to re-poll instead of
+ *    using the existing `subscribe()` SSE hookup (a second, uncoordinated
+ *    polling loop);
+ *  - a Home (or its hook) that opens its own `new WebSocket(...)` transport;
+ *  - a Home (or its hook) that calls a brand-new `/api/...` aggregate
+ *    endpoint instead of composing the existing fetchStudioFlows /
+ *    fetchRuns / fetchProjectAttention reads;
+ *  - a Home (or its hook) that does a raw `fetch(...)` bypassing the
+ *    bridge-client/studio-client wrappers entirely;
  *  - a `home-view.ts` derivation that isn't pure — i.e. that itself fetches,
  *    awaits, or subscribes rather than taking already-fetched data as input.
  *
  * RUN: node --test --experimental-strip-types scripts/home-no-new-polling.test.ts
  */
-
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -32,13 +43,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOME_PAGE = join(ROOT, 'forge-ui', 'app', 'page.tsx');
-const LIBRARY_PAGE = join(ROOT, 'forge-ui', 'app', 'library', 'page.tsx');
+const HOME_DATA_HOOK = join(ROOT, 'forge-ui', 'lib', 'use-studio-home-data.ts');
 const HOME_VIEW = join(ROOT, 'forge-ui', 'lib', 'home-view.ts');
 
-// The closed set of data-fetch identifiers Library already uses for this same
-// kind of cross-object aggregate. Home is allowed to use a SUBSET of these —
-// never a new one — so "new /api endpoint" and "bespoke fetch" are structurally
-// ruled out rather than merely discouraged.
+// The closed set of data-fetch identifiers the extracted hook is allowed to
+// call — no new one — so "new /api endpoint" and "bespoke fetch" are
+// structurally ruled out rather than merely discouraged.
 const ALLOWED_FETCH_IDENTIFIERS = [
   'fetchStudioFlows',
   'fetchStudioAgents',
@@ -58,37 +68,56 @@ test('forge-ui/app/page.tsx exists (Home fills `/`)', () => {
   readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
 });
 
+test('forge-ui/lib/use-studio-home-data.ts exists (the extracted, shared data-loading hook — W6-IA-4)', () => {
+  readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+});
+
 test('forge-ui/lib/home-view.ts exists (the pure derivation module)', () => {
   readOrFail(HOME_VIEW, 'forge-ui/lib/home-view.ts');
 });
 
-test('app/page.tsx imports data reads only from @/lib/studio-client and @/lib/bridge-client', () => {
+test('app/page.tsx sources its data via useStudioHomeData(), not a bespoke client import of its own', () => {
   const src = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
-  const importsStudioClient = /from ['"]@\/lib\/studio-client['"]/.test(src);
-  const importsBridgeClient = /from ['"]@\/lib\/bridge-client['"]/.test(src);
+  assert.ok(src.includes('useStudioHomeData'), 'Home must source its six cross-object reads through the extracted hook');
+});
+
+test('lib/use-studio-home-data.ts imports data reads only from ./studio-client and ./bridge-client', () => {
+  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const importsStudioClient = /from ['"]\.\/studio-client['"]/.test(src);
+  const importsBridgeClient = /from ['"]\.\/bridge-client['"]/.test(src);
   assert.ok(
     importsStudioClient || importsBridgeClient,
-    'Home must source data via the existing @/lib/studio-client / @/lib/bridge-client wrappers, not a bespoke client',
+    'the hook must source data via the existing ./studio-client / ./bridge-client wrappers, not a bespoke client',
   );
 });
 
-test("app/page.tsx's fetch identifiers are a SUBSET of app/library/page.tsx's (no new endpoint invented for Home)", () => {
-  const homeSrc = readOrFail(HOME_PAGE, 'forge-ui/app/page.tsx');
-  const librarySrc = readOrFail(LIBRARY_PAGE, 'forge-ui/app/library/page.tsx');
+test("the hook's fetch identifiers are exactly the pre-existing closed set (no new endpoint invented for Home)", () => {
+  const hookSrc = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  const usedIds = ALLOWED_FETCH_IDENTIFIERS.filter((id) => new RegExp(`\\b${id}\\b`).test(hookSrc));
+  assert.ok(usedIds.length > 0, 'the hook must call at least one of the existing fetch* reads to show live status');
+  // No per-item fetch helper name (fetchKb, etc.) — the N-fan-out shape this
+  // guard exists to rule out.
+  assert.ok(!/\bfetchKb\b/.test(hookSrc), 'the hook must not fan out a per-KB (or per-item) fetch — only the six existing bulk reads');
+});
 
-  const usedIn = (src: string) => ALLOWED_FETCH_IDENTIFIERS.filter((id) => new RegExp(`\\b${id}\\b`).test(src));
+test('the hook does not run its own setInterval poll loop', () => {
+  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  assert.ok(!src.includes('setInterval('), 'the hook must not spin its own polling loop — live refresh comes from subscribe() (SSE)');
+});
 
-  const homeIds = usedIn(homeSrc);
-  const libraryIds = usedIn(librarySrc);
+test('the hook does not open its own WebSocket transport', () => {
+  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  assert.ok(!src.includes('new WebSocket('), 'the hook must not open a bespoke WebSocket — subscribe() is the one live-refresh transport');
+});
 
-  assert.ok(homeIds.length > 0, 'Home must call at least one of the existing fetch* reads to show live status');
+test('the hook does not make a raw fetch() call (must go through bridge-client/studio-client wrappers)', () => {
+  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  assert.ok(!/\bfetch\(/.test(src), 'the hook must not call raw fetch() — all reads must be through the existing typed wrappers');
+});
 
-  const notInLibrary = homeIds.filter((id) => !libraryIds.includes(id));
-  assert.deepEqual(
-    notInLibrary,
-    [],
-    `Home uses fetch identifiers outside Library's existing set (would imply a new endpoint/read): ${JSON.stringify(notInLibrary)}`,
-  );
+test('the hook does not reference a new /api/ literal (no bespoke aggregate endpoint)', () => {
+  const src = readOrFail(HOME_DATA_HOOK, 'forge-ui/lib/use-studio-home-data.ts');
+  assert.ok(!src.includes("'/api/"), "the hook must not hardcode a new '/api/...' endpoint — compose the existing fetch* reads instead");
 });
 
 test('app/page.tsx does not run its own setInterval poll loop', () => {

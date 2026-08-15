@@ -35,11 +35,17 @@ import {
   // "is not a function" reason.
   buildKbAttention,
   runsForFlow,
+  // W6-IA-4 additions
+  GATE_ATTENTION_STATUS_FRAME,
+  gateAttentionStatusDot,
+  deriveWatchLiveRunHref,
+  buildHomeLedgerRows,
   type HomeHex,
   type HomeAttentionItem,
 } from './home-view.ts';
 import type { Flow, Agent, Project, Kb, Run, FlowNode, KbLintSummary } from './studio-client.ts';
 import type { ProjectAttentionItem } from './bridge-client.ts';
+import type { LedgerRow } from './history-ledger.ts';
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -518,17 +524,151 @@ test('SOURCE: lib/home-view.ts stays pure after buildKbAttention — no fetch(, 
   expect(/\bsubscribe\(/.test(src)).toBe(false);
 });
 
-test("SOURCE: app/page.tsx's fetch identifiers stay a SUBSET of app/library/page.tsx's — buildKbAttention must consume the ALREADY-FETCHED fetchStudioKbs() result, never a per-KB fan-out fetch", () => {
+// W6-IA-4: this SOURCE test used to compare app/page.tsx's fetch
+// identifiers against app/library/page.tsx's own set — Home and the OLD
+// Library landing page byte-duplicated the exact same loadAll/refreshRuns/
+// subscribe() shape (sweep finding C1#5), so "Home's fetch identifiers are
+// a subset of Library's" was a real, meaningful guard against a bespoke
+// Home-only endpoint. W6-IA-4 EXTRACTS that shape into ONE shared hook
+// (lib/use-studio-home-data.ts) — app/page.tsx no longer contains any of
+// these identifiers directly, and the rebuilt Library page's five shelves
+// (skills/hooks/connections/templates/community) read entirely different
+// sources, so "subset of Library's set" is no longer a meaningful
+// invariant to state. The guard this test existed to enforce — no bespoke
+// Home-only fetch/endpoint invented — now lives on the EXTRACTED hook
+// itself, checked directly rather than by comparison to a sibling page.
+test('SOURCE: lib/use-studio-home-data.ts only calls the pre-existing fetchStudioFlows/Agents/Projects/Kbs/fetchRuns/fetchProjectAttention/subscribe — no bespoke endpoint, no per-KB fan-out fetch', () => {
+  const forgeUiRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const hookSrc = readFileSync(join(forgeUiRoot, 'lib', 'use-studio-home-data.ts'), 'utf8');
+  const ALLOWED = ['fetchStudioFlows', 'fetchStudioAgents', 'fetchStudioProjects', 'fetchStudioKbs', 'fetchRuns', 'fetchProjectAttention', 'subscribe'];
+  const usedIds = ALLOWED.filter((id) => new RegExp(`\\b${id}\\b`).test(hookSrc));
+  expect(usedIds.length, 'the hook must call at least one of the existing fetch* reads').toBeGreaterThan(0);
+  // Kills the N-fan-out shape specifically: no per-item fetch helper name
+  // (fetchKb, etc.) appears in the hook's source at all.
+  expect(/\bfetchKb\b/.test(hookSrc)).toBe(false);
+  expect(hookSrc.includes("'/api/")).toBe(false);
+  expect(/\bnew WebSocket\(/.test(hookSrc)).toBe(false);
+  expect(hookSrc.includes('setInterval(')).toBe(false);
+});
+
+test('SOURCE: app/page.tsx sources its six cross-object reads through useStudioHomeData(), not a re-duplicated fetch shape of its own', () => {
   const forgeUiRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
   const homeSrc = readFileSync(join(forgeUiRoot, 'app', 'page.tsx'), 'utf8');
-  const librarySrc = readFileSync(join(forgeUiRoot, 'app', 'library', 'page.tsx'), 'utf8');
-  const ALLOWED = ['fetchStudioFlows', 'fetchStudioAgents', 'fetchStudioProjects', 'fetchStudioKbs', 'fetchRuns', 'fetchProjectAttention', 'subscribe'];
-  const usedIn = (src: string) => ALLOWED.filter((id) => new RegExp(`\\b${id}\\b`).test(src));
-  const homeIds = usedIn(homeSrc);
-  const libraryIds = usedIn(librarySrc);
-  const notInLibrary = homeIds.filter((id) => !libraryIds.includes(id));
-  expect(notInLibrary, `Home uses fetch identifiers outside Library's set: ${JSON.stringify(notInLibrary)}`).toEqual([]);
-  // Kills the N-fan-out shape specifically: no per-item fetch helper name
-  // (fetchKb, etc.) appears in Home's source at all.
-  expect(/\bfetchKb\b/.test(homeSrc)).toBe(false);
+  expect(homeSrc.includes('useStudioHomeData')).toBe(true);
+  const ALLOWED = ['fetchStudioFlows', 'fetchStudioAgents', 'fetchStudioProjects', 'fetchStudioKbs', 'fetchProjectAttention'];
+  for (const id of ALLOWED) {
+    expect(new RegExp(`\\b${id}\\b`).test(homeSrc), `app/page.tsx must not re-declare ${id} — it belongs to the extracted hook`).toBe(false);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 sweep finding C1#3 — GATE_ATTENTION_STATUS_FRAME
+// ---------------------------------------------------------------------------
+
+test('GATE_ATTENTION_STATUS_FRAME: gated -> retrying, flagged -> failed', () => {
+  expect(GATE_ATTENTION_STATUS_FRAME.gated).toBe('retrying');
+  expect(GATE_ATTENTION_STATUS_FRAME.flagged).toBe('failed');
+});
+
+test('gateAttentionStatusDot: maps the real buildHomeAttention() gate statuses, and fails closed to "pending" for anything unrecognised — never a fabricated guess', () => {
+  expect(gateAttentionStatusDot('gated')).toBe('retrying');
+  expect(gateAttentionStatusDot('flagged')).toBe('failed');
+  expect(gateAttentionStatusDot('something-unexpected')).toBe('pending');
+});
+
+test('gateAttentionStatusDot: a real buildHomeAttention() row status round-trips through the frame correctly', () => {
+  const gatedItem = asGateItem(buildHomeAttention([makeAttention({ projectId: 'p1', gated: 2 })])[0]);
+  expect(gatedItem.status).toBe('gated');
+  expect(gateAttentionStatusDot(gatedItem.status)).toBe('retrying');
+
+  const flaggedItem = asGateItem(buildHomeAttention([makeAttention({ projectId: 'p2', gated: 0, flagged: 1 })])[0]);
+  expect(flaggedItem.status).toBe('flagged');
+  expect(gateAttentionStatusDot(flaggedItem.status)).toBe('failed');
+});
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 sweep finding C1#2 — deriveWatchLiveRunHref
+// ---------------------------------------------------------------------------
+
+test('deriveWatchLiveRunHref: an active run -> that run\'s OWN flow, never a hardcoded flow id', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'onboard-project', status: 'active' })];
+  expect(deriveWatchLiveRunHref(runs)).toBe('/flows/onboard-project');
+});
+
+test('deriveWatchLiveRunHref: active beats gated when both exist', () => {
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'forge-architect', status: 'gated' }),
+    makeRun({ id: 'r2', flowId: 'forge-develop', status: 'active' }),
+  ];
+  expect(deriveWatchLiveRunHref(runs)).toBe('/flows/forge-develop');
+});
+
+test('deriveWatchLiveRunHref: no active run -> falls back to a gated run\'s flow', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-architect', status: 'gated' })];
+  expect(deriveWatchLiveRunHref(runs)).toBe('/flows/forge-architect');
+});
+
+test('deriveWatchLiveRunHref: no active or gated run -> falls back to the flows index, never a fabricated specific flow', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-develop', status: 'complete' })];
+  expect(deriveWatchLiveRunHref(runs)).toBe('/flows');
+});
+
+test('deriveWatchLiveRunHref: an empty runs list falls back to the flows index', () => {
+  expect(deriveWatchLiveRunHref([])).toBe('/flows');
+});
+
+// ---------------------------------------------------------------------------
+// W6-IA-4 — buildHomeLedgerRows: the merged everything-ledger
+// ---------------------------------------------------------------------------
+
+function makeLedgerRow(overrides: Partial<LedgerRow> & { id: string }): LedgerRow {
+  return {
+    when: '2026-01-01T00:00:00Z',
+    what: overrides.id,
+    narrative: null,
+    narrativeKinds: [],
+    status: 'complete',
+    costUsd: null,
+    href: `/flows/forge-develop/run/${overrides.id}`,
+    ...overrides,
+  };
+}
+
+test('buildHomeLedgerRows: interleaves flow rows and agent rows into ONE newest-first list', () => {
+  const flowRows = [
+    makeLedgerRow({ id: 'flow-old', when: '2026-01-01T00:00:00Z' }),
+  ];
+  const agentRows = [
+    makeLedgerRow({ id: 'agent-new', when: '2026-01-03T00:00:00Z', linkKind: 'standalone', href: '/agents/dev/run/agent-new' }),
+    makeLedgerRow({ id: 'agent-mid', when: '2026-01-02T00:00:00Z', linkKind: 'standalone', href: '/agents/dev/run/agent-mid' }),
+  ];
+  const merged = buildHomeLedgerRows(flowRows, agentRows);
+  expect(merged.map((r) => r.id)).toEqual(['agent-new', 'agent-mid', 'flow-old']);
+});
+
+test('buildHomeLedgerRows: a run id shared by BOTH a flow row and an agent row dedupes to the FLOW row — one row per run, attributed to the flow', () => {
+  const flowRows = [makeLedgerRow({ id: 'shared-run', when: '2026-01-01T00:00:00Z', href: '/flows/forge-develop/run/shared-run' })];
+  const agentRows = [makeLedgerRow({ id: 'shared-run', when: '2026-01-01T00:00:00Z', linkKind: 'flow-node', href: '/agents/dev/run/shared-run' })];
+  const merged = buildHomeLedgerRows(flowRows, agentRows);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].href).toBe('/flows/forge-develop/run/shared-run');
+  expect(merged[0].linkKind).toBeUndefined();
+});
+
+test('buildHomeLedgerRows: respects the limit, keeping the newest rows across BOTH sources', () => {
+  const flowRows = [makeLedgerRow({ id: 'f1', when: '2026-01-01T00:00:00Z' })];
+  const agentRows = [
+    makeLedgerRow({ id: 'a1', when: '2026-01-05T00:00:00Z', linkKind: 'standalone' }),
+    makeLedgerRow({ id: 'a2', when: '2026-01-04T00:00:00Z', linkKind: 'standalone' }),
+  ];
+  const merged = buildHomeLedgerRows(flowRows, agentRows, 2);
+  expect(merged.map((r) => r.id)).toEqual(['a1', 'a2']);
+});
+
+test('buildHomeLedgerRows: an empty agentRows list still returns the flow rows, newest-first', () => {
+  const flowRows = [
+    makeLedgerRow({ id: 'f-new', when: '2026-01-02T00:00:00Z' }),
+    makeLedgerRow({ id: 'f-old', when: '2026-01-01T00:00:00Z' }),
+  ];
+  expect(buildHomeLedgerRows(flowRows, []).map((r) => r.id)).toEqual(['f-new', 'f-old']);
 });
