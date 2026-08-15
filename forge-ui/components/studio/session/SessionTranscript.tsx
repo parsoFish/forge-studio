@@ -26,7 +26,7 @@ import type { SessionTurn } from '@/lib/session-client';
 // `ArchitectQuestionForm` fieldset list for instructions, this pane is the
 // ONLY place multiple pending questions are structurally observable — so a
 // `source === 'questions.json'` turn splits its text on that SAME separator
-// and renders each question in its own `[data-question-index]` element
+// and renders each question in its own `[data-transcript-question-index]` element
 // (display-only; the wire `SessionTurn.text` shape is unchanged).
 // ---------------------------------------------------------------------------
 
@@ -106,7 +106,7 @@ function TurnBubble({ turn }: { turn: SessionTurn }): JSX.Element {
           {questionLines.map((line, i) => (
             <div
               key={i}
-              data-question-index={i}
+              data-transcript-question-index={i}
               style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
             >
               {line}

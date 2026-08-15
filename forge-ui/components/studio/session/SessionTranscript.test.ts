@@ -1,7 +1,7 @@
 /**
  * DOM regression tests for `SessionTranscript.tsx` — W6-B9 reviewer fix: a
  * pending `questions.json` turn splits its joined multi-question text into
- * one `[data-question-index]` element per real question (a structural proof
+ * one `[data-transcript-question-index]` element per real question (a structural proof
  * that ≥2 questions actually reached the operator, restoring the journey
  * assertion the retired per-question `ArchitectQuestionForm` fieldset list
  * used to provide for instructions before it migrated onto the generic
@@ -25,7 +25,7 @@ function render(turns: readonly SessionTurn[], emptyMessage: string | null = nul
   return renderToStaticMarkup(React.createElement(SessionTranscript, { turns, emptyMessage }));
 }
 
-test('a questions.json turn with 2 real questions renders TWO [data-question-index] elements (0 and 1)', () => {
+test('a questions.json turn with 2 real questions renders TWO [data-transcript-question-index] elements (0 and 1)', () => {
   const turns: SessionTurn[] = [
     {
       index: 0,
@@ -36,39 +36,39 @@ test('a questions.json turn with 2 real questions renders TWO [data-question-ind
     },
   ];
   const html = render(turns);
-  expect(html).toContain('data-question-index="0"');
-  expect(html).toContain('data-question-index="1"');
-  expect(html).not.toContain('data-question-index="2"');
+  expect(html).toContain('data-transcript-question-index="0"');
+  expect(html).toContain('data-transcript-question-index="1"');
+  expect(html).not.toContain('data-transcript-question-index="2"');
   expect(html).toContain('Who is the primary audience for AGENTS.md?');
   expect(html).toContain('Which command is the quality gate?');
 });
 
-test('a questions.json turn with 3 real questions renders exactly THREE [data-question-index] elements', () => {
+test('a questions.json turn with 3 real questions renders exactly THREE [data-transcript-question-index] elements', () => {
   const turns: SessionTurn[] = [
     { index: 0, role: 'agent', stage: 'instructions', source: 'questions.json', text: 'Q1?\n\nQ2?\n\nQ3?' },
   ];
   const html = render(turns);
-  const count = (html.match(/data-question-index="\d+"/g) ?? []).length;
+  const count = (html.match(/data-transcript-question-index="\d+"/g) ?? []).length;
   expect(count).toBe(3);
 });
 
-test('a NON-questions.json turn with a coincidental blank line is NOT split into fake questions — no [data-question-index] at all', () => {
+test('a NON-questions.json turn with a coincidental blank line is NOT split into fake questions — no [data-transcript-question-index] at all', () => {
   const turns: SessionTurn[] = [
     { index: 0, role: 'operator', stage: 'instructions', source: 'prompt.md', text: 'Paragraph one.\n\nParagraph two.' },
   ];
   const html = render(turns);
-  expect(html).not.toContain('data-question-index');
+  expect(html).not.toContain('data-transcript-question-index');
   expect(html).toContain('Paragraph one.');
   expect(html).toContain('Paragraph two.');
 });
 
-test('a single-question questions.json turn still renders one [data-question-index="0"]', () => {
+test('a single-question questions.json turn still renders one [data-transcript-question-index="0"]', () => {
   const turns: SessionTurn[] = [
     { index: 0, role: 'agent', stage: 'instructions', source: 'questions.json', text: 'Only one question?' },
   ];
   const html = render(turns);
-  expect(html).toContain('data-question-index="0"');
-  expect(html).not.toContain('data-question-index="1"');
+  expect(html).toContain('data-transcript-question-index="0"');
+  expect(html).not.toContain('data-transcript-question-index="1"');
 });
 
 test('the turn-level data-* contract (data-turn-index/role/stage/source) is unaffected by the question split', () => {
@@ -82,8 +82,8 @@ test('the turn-level data-* contract (data-turn-index/role/stage/source) is unaf
   expect(html).toContain('data-turn-source="questions.json"');
 });
 
-test('an empty turns[] renders the honest emptyMessage, never a stray [data-question-index]', () => {
+test('an empty turns[] renders the honest emptyMessage, never a stray [data-transcript-question-index]', () => {
   const html = render([], 'No turns recorded yet.');
   expect(html).toContain('No turns recorded yet.');
-  expect(html).not.toContain('data-question-index');
+  expect(html).not.toContain('data-transcript-question-index');
 });

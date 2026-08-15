@@ -1309,7 +1309,7 @@ inventory rather than one shared page-level contract:
   wire); `SessionTranscript.tsx` splits that SAME turn's rendering (display-
   only, gated on `source === 'questions.json'`, never any other turn's
   legitimately multi-paragraph text) into one
-  `[data-question-index="0"|"1"|…]` child per question — a structural
+  `[data-transcript-question-index="0"|"1"|…]` child per question — a structural
   ≥N-questions proof now that the bespoke per-question
   `ArchitectQuestionForm` fieldset list no longer renders for instructions
   (below). Artifact pane:
