@@ -163,6 +163,8 @@ export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemo
           {/* Open in Agent Builder */}
           <Link
             href={agent ? `/agents/${encodeURIComponent(agent.id)}` : '#'}
+            aria-disabled={!agent}
+            onClick={(e) => { if (!agent) e.preventDefault(); }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
