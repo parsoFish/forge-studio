@@ -965,3 +965,41 @@ is the same residual the pre-R4-23 per-runner `readFileSync` calls carried. The
 one behavioural change is in the opposite direction from a weakening: those
 helpers **failed open** on an unreadable file (returning a one-line default
 prompt); the shared loader throws.
+
+---
+
+### W6-P2 — `statWalkFingerprint`'s `readdirSync`/`statSync` (`cli/kb-lint-summary.ts`, `[read]`)
+
+W6-P2 (ADR 044, read-path memoization) added `statWalkFingerprint(forgeRoot)` to
+`cli/kb-lint-summary.ts`, memoizing `runBrainLint({ scope: 'full' })` behind a
+cheap stat-walk key. `check-request-path-sinks` reports `cli/kb-lint-summary.ts
+readdirSync: baseline 0 -> now 1` and `statSync: baseline 0 -> now 1`,
+`--write`-accepted below.
+
+Classification: **no request-derived path reaches either sink.**
+`statWalkFingerprint` takes exactly one argument, `forgeRoot` — the same
+trusted, server-configured root every other function in this file already
+receives; no caller (`attachKbLintSummaries`, `runBrainConsolidateNow`,
+`buildKbHealth`, `computeAgentCleanupFindings`, or the `POST
+/api/studio/kbs/:id/maintenance` `op:'lint'` branch) ever threads a request-
+derived id, kbId, or file path into it. The two roots it walks —
+`join(forgeRoot, 'brain')` and `join(forgeRoot, '_queue', 'done')` — are fixed
+literals; every path below them is built by recursing into names
+`readdirSync` itself enumerates from the filesystem, never from caller input.
+This is the identical shape already audited for `collectAllThemeSlugs` in the
+R4-19-F2 section above (fixed root + `readdirSync`-enumerated names + no
+caller-supplied segment), one level more contained even: unlike
+`buildKbHealth`/`computeAgentCleanupFindings`, which resolve a request-derived
+`kbId` through `resolveKbBrainDir`'s realpath choke point before reading
+anything, `statWalkFingerprint` never receives a `kbId` at all.
+
+Residual, disclosed rather than claimed away: symlink-blind, same as every
+other whole-tree walk in this family (`readThemeFiles`,
+`collectAllThemeSlugs`) — a symlinked directory under `brain/` or
+`_queue/done/` would be walked if `entry.isDirectory()` reported it as one
+(it does not: `Dirent.isDirectory()` reflects the link itself under
+`withFileTypes`, not its target, so a symlinked directory is simply skipped,
+narrower than the residual it mirrors rather than wider). `_queue/done` sits
+outside `brain/` but is read-only here (never written) and gitignored,
+operator-owned content — the same trust class `checkReflectorLoss`
+(`cli/brain-lint.ts`) already reads it under, unguarded, today.

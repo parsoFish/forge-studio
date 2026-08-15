@@ -40,7 +40,7 @@ import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.t
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
+import { resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -51,6 +51,7 @@ import {
   unionFindings,
   computeKbLintChecks,
   attachKbLintSummaries,
+  runBrainLintFullMemoized,
   type CheckHealthEntry,
 } from './kb-lint-summary.ts';
 import {
@@ -428,7 +429,7 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
   // ensureLinkedAt read/write). The happy path writes its own terminal at the
   // end and returns without throwing, so the catch never double-fires.
   try {
-    const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+    const { findings } = runBrainLintFullMemoized(forgeRoot);
     const scoped = scopeFindingsToKb(forgeRoot, kbId, findings);
     const agentTier = scoped.filter(
       (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
@@ -471,7 +472,7 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
     // "cleared" that never actually re-checked anything.
     let clearedCount = 0;
     try {
-      const { findings: after } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+      const { findings: after } = runBrainLintFullMemoized(forgeRoot);
       const stillPresent = new Set(
         scopeFindingsToKb(forgeRoot, kbId, after)
           .filter((f) => f.resolution === 'agent')
@@ -604,7 +605,7 @@ function buildKbHealth(
     // aggregate roll-up) lives in `computeKbLintChecks` (cli/kb-lint-summary.ts)
     // now — the ONE derivation both this per-KB detail route and the list
     // route's `attachKbLintSummaries` share, so the two can never drift.
-    const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+    const { findings } = runBrainLintFullMemoized(forgeRoot);
     const result = computeKbLintChecks(forgeRoot, kbId, findings);
     checks = result.checks;
     lintErrors = result.lintErrors;
@@ -666,7 +667,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
   if (!brainDir) {
     throw new Error(`computeAgentCleanupFindings: kb id "${kbId}" does not resolve to any real brain directory`);
   }
-  const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+  const { findings } = runBrainLintFullMemoized(forgeRoot);
   const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
   const ownThemeFiles = listOwnThemeFiles(brainDir);
   const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
@@ -1402,7 +1403,7 @@ export async function handleStudioKbRoutes(
       const op = (body as Record<string, unknown>)?.['op'];
 
       if (op === 'lint') {
-        const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
+        const { findings } = runBrainLintFullMemoized(ctx.forgeRoot);
         const scoped = scopeFindingsToKb(ctx.forgeRoot, kbId, findings);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.

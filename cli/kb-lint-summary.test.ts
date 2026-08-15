@@ -365,7 +365,7 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
   const KB_LINT_SUMMARY_FILE = join(ROOT, 'cli', 'kb-lint-summary.ts');
   const BRIDGE_KBS_FILE = join(ROOT, 'cli', 'bridge-studio-kbs.ts');
 
-  test('AT-4a: cli/kb-lint-summary.ts contains exactly ONE runBrainLint( call site, and it lives inside attachKbLintSummaries — not computeKbLintChecks', () => {
+  test('AT-4a: cli/kb-lint-summary.ts contains exactly ONE literal runBrainLint( call site, and it lives inside runBrainLintFullMemoized (W6-P2 memo) — not computeKbLintChecks or attachKbLintSummaries directly', () => {
     assert.ok(
       existsSync(KB_LINT_SUMMARY_FILE),
       `cli/kb-lint-summary.ts must exist (RED at base — forge-2am not yet implemented) at ${KB_LINT_SUMMARY_FILE}`,
@@ -373,12 +373,16 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
     const src = stripComments(readFileSync(KB_LINT_SUMMARY_FILE, 'utf8'));
 
     // Kills: an N-fan-out that re-runs the full brain lint once per KB — the
-    // exact cost _wave5/parks/R6-07-kb-skew-report-dont-patch.md option (a) refused.
+    // exact cost _wave5/parks/R6-07-kb-skew-report-dont-patch.md option (a)
+    // refused. W6-P2 (ADR 044) moved the ONE call site behind
+    // runBrainLintFullMemoized's cache; attachKbLintSummaries now calls THAT
+    // wrapper instead of runBrainLint directly, but the invariant this test
+    // guards — one real lint per list call at most — still holds.
     const callSites = src.match(/\brunBrainLint\s*\(/g) ?? [];
     assert.equal(
       callSites.length,
       1,
-      `expected exactly ONE runBrainLint( call site in cli/kb-lint-summary.ts (one full-corpus lint per list call, not one per KB), found ${callSites.length}`,
+      `expected exactly ONE literal runBrainLint( call site in cli/kb-lint-summary.ts (the memo wraps it — one real full-corpus lint per cache miss, not one per KB), found ${callSites.length}`,
     );
 
     const computeBody = extractFunctionBody(src, 'computeKbLintChecks', 'cli/kb-lint-summary.ts');
@@ -389,8 +393,18 @@ describe('kb-lint-summary — one lint per list call, structural (AT-4)', () => 
 
     const attachBody = extractFunctionBody(src, 'attachKbLintSummaries', 'cli/kb-lint-summary.ts');
     assert.ok(
-      /\brunBrainLint\s*\(/.test(attachBody),
-      'attachKbLintSummaries must be the ONE call site that runs runBrainLint, exactly once for the whole kbs list',
+      !/\brunBrainLint\s*\(/.test(attachBody),
+      'attachKbLintSummaries must NOT call runBrainLint directly — it must go through runBrainLintFullMemoized so GET /api/studio/kbs benefits from the W6-P2 memo',
+    );
+    assert.ok(
+      /\brunBrainLintFullMemoized\s*\(/.test(attachBody),
+      'attachKbLintSummaries must call runBrainLintFullMemoized exactly once for the whole kbs list',
+    );
+
+    const memoBody = extractFunctionBody(src, 'runBrainLintFullMemoized', 'cli/kb-lint-summary.ts');
+    assert.ok(
+      /\brunBrainLint\s*\(/.test(memoBody),
+      'runBrainLintFullMemoized must be the ONE place that calls the real runBrainLint, on a cache miss',
     );
   });
 
