@@ -120,12 +120,14 @@ export const journey = defineJourney({
                   parseInt(document.querySelector('[data-component="activity-drawer"]')?.getAttribute('data-activity-count') ?? '0', 10));
                 check(count >= 1, `W6-B7: activity drawer data-activity-count ≥1 (got ${count})`);
               } catch { check(false, 'W6-B7: activity drawer data-activity-count ≥1 (timeout)'); }
-              const hasReasoningRow = await page.evaluate(() => {
-                const drawer = document.querySelector('[data-component="activity-drawer"]');
-                if (!drawer) return false;
-                return drawer.textContent?.includes('reason') || drawer.querySelectorAll('[data-activity-kind]').length > 0;
-              });
-              check(hasReasoningRow, 'W6-B7: at least one reasoning row rendered in the activity drawer');
+              // W6-B7 review round 2 (LOW): assert the SPECIFIC reasoning-row
+              // kind, not "reasoning text OR any row at all" — that OR made
+              // the check pass even if `[data-activity-kind="reasoning"]`
+              // silently stopped rendering, as long as SOME unrelated row
+              // (e.g. a tool_use row) was present.
+              const hasReasoningRow = await page.evaluate(() =>
+                document.querySelector('[data-component="activity-drawer"] [data-activity-kind="reasoning"]') !== null);
+              check(hasReasoningRow, 'W6-B7: at least one [data-activity-kind="reasoning"] row rendered in the activity drawer');
               await frame(page, 'r1-1-activity-settled', 'R1 (settled) — activity drawer: tool calls + reasoning rows persisted');
 
         },
