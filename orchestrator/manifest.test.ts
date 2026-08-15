@@ -95,6 +95,23 @@ test('cost_ceiling_usd: absent stays undefined (not serialized)', () => {
   assert.equal(parseManifest(md).cost_ceiling_usd, undefined);
 });
 
+test('W6-RV-1: title round-trips through serialize/parse when present, trimmed', () => {
+  const m: InitiativeManifest = { ...fixture(), title: '  Add dark mode toggle  ' };
+  const parsed = parseManifest(serializeManifest(m));
+  assert.equal(parsed.title, 'Add dark mode toggle');
+});
+
+test('W6-RV-1: title absent stays undefined (not serialized) — a legacy manifest round-trips byte-clean', () => {
+  const md = serializeManifest(fixture());
+  assert.ok(!/^title:/m.test(md), 'absent title must not be serialized');
+  assert.equal(parseManifest(md).title, undefined);
+});
+
+test('W6-RV-1: a blank title in frontmatter parses as absent, not an empty string', () => {
+  const md = serializeManifest(fixture()).replace(/^---\n/, '---\ntitle: "   "\n');
+  assert.equal(parseManifest(md).title, undefined);
+});
+
 test('validateManifest: rejects cost_ceiling_usd ≤ 0 when present, allows absent', () => {
   assert.ok(validateManifest({ ...fixture(), cost_ceiling_usd: 0 }).some((e) => e.includes('cost_ceiling_usd')));
   assert.equal(validateManifest(fixture()).filter((e) => e.includes('cost_ceiling_usd')).length, 0);

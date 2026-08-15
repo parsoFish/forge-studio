@@ -877,11 +877,33 @@ inventory rather than one shared page-level contract:
   `[data-roadmap-edge-count]` — a `\bdata-dep-edge\b` matcher must remember a
   hyphen is a word boundary.) Per initiative,
   `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
-  `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]`),
-  whose header `[data-action="toggle-node-detail"]` toggles a
-  **default-EXPANDED** `[data-node-detail]` — so every affordance below is
-  present on first paint (no click-to-pop; a blind node-center click is
-  unnecessary AND must be avoided, since it can land on a trigger). The card
+  `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
+  [data-initiative-collapsed="true"|"false"]`). **W6-RV-1** (the
+  direction-agnostic first step toward the RV-2 time-axis canvas): every node
+  renders **collapsed by default** — a uniform, scannable ~280×72 card
+  (title, 1-line ellipsis; `initiativeId`, monospace; the status chip) plus
+  two micro-badges, `[data-micro-badge="deps-count"][data-badge-value]` and
+  `[data-micro-badge="wi-progress"][data-badge-value="<done>/<total>"]
+  [data-badge-failed="<n>"]` — the arithmetic contract: `'complete'` counts
+  toward done, `'failed'` counts in the total but **never** toward done (a
+  failed WI is real signal, not silently folded into "not done yet"), and
+  `workItems === undefined` (unplanned) reads `"0/0"`/`data-badge-failed="0"`,
+  never a fabricated total. A failed count > 0 additionally renders a small
+  `[data-badge-failed-marker]` (⚠ + count) inline in the badge so it's never
+  hidden. Styling: the badge is muted (dim, italic) when unplanned (`0/0` —
+  distinct from "done"), the shared `STATUS_COLOR.complete` tone when every WI
+  is done with zero failures, neutral otherwise — the two never render
+  identically. The header
+  `[data-action="toggle-node-detail"]` toggles the full detail card open —
+  extracted to its own component, `InitiativeDetail.tsx` (a pure re-home,
+  byte-identical data-*/DOM to the pre-W6-RV-1 inline markup) — rendered into
+  the SAME always-mounted `[data-node-detail]` region as before (`display:none`
+  while collapsed, never removed from the DOM), so every affordance below
+  survives an SSR/no-jsdom render regardless of collapse state (no click-to-pop
+  gap; a blind node-center click is unnecessary AND must be avoided, since it
+  can land on a trigger). The DAG header also carries bulk
+  `[data-action="roadmap-collapse-all"]` / `[data-action="roadmap-expand-all"]`
+  toolbar buttons. The card
   lists the initiative's real work items (`[data-work-item-id]`) and a per-node
   run dig-in `[data-section="initiative-runs"]` with one
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
