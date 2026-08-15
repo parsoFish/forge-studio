@@ -99,6 +99,15 @@ function buildRoadmap(): ProjectRoadmap {
         dependsOnInitiatives: [],
         workItems: undefined, // unplanned
       }),
+      initiative({
+        // Reviewer finding (MEDIUM): genuinely done, but completedAt is
+        // honestly undiscoverable — must band as done-no-date, never ready.
+        initiativeId: 'INIT-E',
+        status: 'done',
+        dependsOnInitiatives: [],
+        ready: true,
+        workItems: [wi('WI-E1')],
+      }),
     ],
   };
 }
@@ -258,6 +267,13 @@ test('[W6-RV-2] AT4: the drawer\'s "Depends on" line renders clickable [data-dep
   expect(html).toContain('data-dep-jump="INIT-B"');
 });
 
+test('[W6-RV-2] AT4: a [data-dep-jump] chip is keyboard-reachable (role=button, tabindex=0) — reviewer finding', () => {
+  const html = render({ initialSelectedId: 'INIT-C' });
+  const chip = tagContaining(html, 'data-dep-jump="INIT-A"');
+  expect(chip).toContain('role="button"');
+  expect(chip).toContain('tabindex="0"');
+});
+
 test('[W6-RV-2] AT4: the drawer carries the run dig-in (active + prior cycles) for a node with runs', () => {
   const html = render({ initialSelectedId: 'INIT-A' });
   expect(html).toContain('data-run-cycle-id="c-active"');
@@ -306,6 +322,19 @@ test('[W6-RV-2] AT6: pending work (no completedAt) renders inside the hatched [d
   expect(html).toContain('data-band="in-flight"'); // INIT-B: failed, no date yet
   expect(html).toContain('data-band="after-prerequisites"'); // INIT-C: planned + blocked
   expect(html).toContain('data-band="unplanned"'); // INIT-D: no WI snapshot
+});
+
+test('[W6-RV-2] AT6: a done initiative with no completedAt bands as done-no-date ("done — date unknown"), never ready', () => {
+  const html = render();
+  expect(html).toContain('data-band="done-no-date"');
+  const doneNoDateTag = tagContaining(html, 'data-band="done-no-date"');
+  expect(doneNoDateTag).toContain('data-band-count="1"'); // exactly INIT-E
+  expect(html).toContain('done — date unknown');
+  // INIT-E is done+ready, but the fixture has no genuinely-pending ready
+  // work — the 'ready' band ("ready — projected next") must NOT appear at
+  // all, proving INIT-E was never folded into it.
+  expect(html).not.toContain('data-band="ready"');
+  expect(html).not.toContain('ready — projected next');
 });
 
 test('[W6-RV-2] AT6: a done card carries data-completed-at, honestly matching Run.completedAt', () => {

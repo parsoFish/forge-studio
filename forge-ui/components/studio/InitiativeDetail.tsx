@@ -97,6 +97,20 @@ export function InitiativeDetail({
   const handleInspect = useCallback(() => void onInspectRecovery(), [onInspectRecovery]);
   const handleRequeue = useCallback(() => void onRecoveryAction('requeue'), [onRecoveryAction]);
   const handleAbandon = useCallback(() => void onRecoveryAction('abandon'), [onRecoveryAction]);
+  // Reviewer finding (MEDIUM): a dep-jump chip is a real interactive
+  // control (it selects + pans the canvas), not decorative text, so it
+  // needs the same activation contract a native <button> gets for free —
+  // a bare <span onClick> is mouse/pointer-only and invisible to keyboard
+  // navigation and screen readers.
+  const handleDepJumpKeyDown = useCallback(
+    (depId: string) => (e: React.KeyboardEvent<HTMLSpanElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onDepJump?.(depId);
+      }
+    },
+    [onDepJump],
+  );
 
   return (
     <div
@@ -112,7 +126,10 @@ export function InitiativeDetail({
                   {idx > 0 && ', '}
                   <span
                     data-dep-jump={depId}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onDepJump(depId)}
+                    onKeyDown={handleDepJumpKeyDown(depId)}
                     style={{ color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline', cursor: 'pointer' }}
                   >
                     {depId}

@@ -69,9 +69,21 @@ export type DayGroup = { day: string; items: RoadmapInitiative[] };
 
 export type DayCaption = { x: number; day: string; count: number };
 
-export type PendingBand = 'in-flight' | 'ready' | 'after-prerequisites' | 'unplanned';
+/**
+ * `'done-no-date'` is NOT a dependency-feasibility band like the other
+ * four — it holds initiatives that genuinely FINISHED (`status` done/
+ * merged) but whose completion instant is honestly undiscoverable
+ * (`completedAt` absent — see `Run.completedAt`'s fail-open contract).
+ * Reviewer finding (MEDIUM): such a card must never be placed in `'ready'`
+ * ("ready — projected next") — that reads completed work as UPCOMING,
+ * which is backwards. It sits leftmost (immediately right of the now-line,
+ * before any genuinely-pending band) precisely because it already
+ * happened; the canvas just can't say when.
+ */
+export type PendingBand = 'done-no-date' | 'in-flight' | 'ready' | 'after-prerequisites' | 'unplanned';
 
 export const PENDING_BAND_ORDER: readonly PendingBand[] = [
+  'done-no-date',
   'in-flight',
   'ready',
   'after-prerequisites',
@@ -203,14 +215,21 @@ const ACTIVE_STATUSES: ReadonlySet<RoadmapInitiative['status']> = new Set([
   'failed',
 ]);
 
+/** `done`/`merged` — genuinely finished, just missing a derivable
+ *  `completedAt` (see the `PendingBand` doc comment above). */
+const DONE_STATUSES: ReadonlySet<RoadmapInitiative['status']> = new Set(['done', 'merged']);
+
 /**
- * Which of the four dependency-order bands a still-open (no `completedAt`)
- * initiative belongs in. Order matters (mirrors the mock's `laneOf`):
- * actively-working statuses win FIRST (an in-flight/gated/failed initiative
- * is by definition already planned, so this never actually races the
- * unplanned check) — then unplanned, then ready-vs-blocked.
+ * Which band a still-open (no `completedAt`) initiative belongs in. Order
+ * matters: a completed-but-undated initiative is classified FIRST (it is
+ * not "still pending" in any dependency-feasibility sense — see
+ * `'done-no-date'`'s doc comment), then actively-working statuses (an
+ * in-flight/gated/failed initiative is by definition already planned, so
+ * this never actually races the unplanned check), then unplanned, then
+ * ready-vs-blocked — mirroring the mock's `laneOf`.
  */
 export function assignPendingBand(initiative: RoadmapInitiative): PendingBand {
+  if (DONE_STATUSES.has(initiative.status)) return 'done-no-date';
   if (ACTIVE_STATUSES.has(initiative.status)) return 'in-flight';
   if (initiative.workItems === undefined) return 'unplanned';
   return initiative.ready ? 'ready' : 'after-prerequisites';

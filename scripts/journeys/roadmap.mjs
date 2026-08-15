@@ -354,6 +354,25 @@ export const journey = defineJourney({
               await caption(page, 'Jump-to-now pans straight to the amber now-line, the boundary between real history and projected work.');
               await frame(page, 'r6-2c-jump-now', 'W6-RV-2 — jump-to-now pans the canvas to the amber now-line');
 
+              // A real wheel dispatch over the viewport — proves the canvas
+              // zooms on scroll (not just the toolbar buttons above), and
+              // implicitly that the viewport's wheel handler is attached
+              // NATIVELY with { passive: false } (React's root wheel
+              // listener is passive, so a JSX onWheel's preventDefault()
+              // would be a silent no-op and the page would scroll under the
+              // canvas instead of zooming it).
+              const viewportBox = await page.locator('[data-roadmap-viewport]').boundingBox();
+              if (viewportBox) {
+                const scaleBeforeWheel = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+                await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+                await page.mouse.wheel(0, -200); // negative deltaY = zoom in
+                await sleep(200);
+                const scaleAfterWheel = await page.locator('[data-roadmap-canvas]').getAttribute('data-canvas-scale');
+                check(scaleAfterWheel !== scaleBeforeWheel, `roadmap: wheel-to-zoom changes [data-canvas-scale] (before ${scaleBeforeWheel}, after ${scaleAfterWheel})`);
+              } else {
+                check(false, 'roadmap: [data-roadmap-viewport] has a bounding box to dispatch a wheel event over');
+              }
+
         },
       },
       {

@@ -104,6 +104,7 @@ export type RoadmapCanvasProps = {
 };
 
 const BAND_LABEL: Record<PendingBand, string> = {
+  'done-no-date': 'done — date unknown',
   'in-flight': 'in flight',
   ready: 'ready — projected next',
   'after-prerequisites': 'after prerequisites',
@@ -111,6 +112,10 @@ const BAND_LABEL: Record<PendingBand, string> = {
 };
 
 const BAND_TONE: Record<PendingBand, string> = {
+  // Still the "complete" tone (it genuinely finished) — the LABEL, not the
+  // colour, carries the "we don't know when" distinction from the real
+  // time-axis 'done' cards and from the 'ready' (upcoming) band.
+  'done-no-date': STATUS_COLOR.complete,
   'in-flight': STATUS_COLOR.active,
   ready: STATUS_COLOR.complete,
   'after-prerequisites': STATUS_COLOR.attention,
@@ -205,18 +210,30 @@ export function RoadmapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout.worldWidth, layout.worldHeight]);
 
-  const onWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+  // Reviewer finding (HIGH): React's root event listener is PASSIVE for
+  // wheel, so a JSX `onWheel={...}` handler's `preventDefault()` is a
+  // silent no-op — the browser scrolls the PAGE underneath the canvas at
+  // the same time the handler zooms it. Wheel semantics here are
+  // browser-level, not React's synthetic layer: attach natively via
+  // `addEventListener('wheel', handler, { passive: false })` on the real
+  // viewport element (the same pattern reactflow itself uses for its own
+  // pannable/zoomable surface), so `preventDefault()` actually takes.
+  useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
-    e.preventDefault();
-    const r = vp.getBoundingClientRect();
-    const mx = e.clientX - r.left;
-    const my = e.clientY - r.top;
-    setView((v) => {
-      const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const ns = Math.min(2, Math.max(0.1, v.scale * f));
-      return { tx: mx - (mx - v.tx) * (ns / v.scale), ty: my - (my - v.ty) * (ns / v.scale), scale: ns };
-    });
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      const mx = e.clientX - r.left;
+      const my = e.clientY - r.top;
+      setView((v) => {
+        const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const ns = Math.min(2, Math.max(0.1, v.scale * f));
+        return { tx: mx - (mx - v.tx) * (ns / v.scale), ty: my - (my - v.ty) * (ns / v.scale), scale: ns };
+      });
+    };
+    vp.addEventListener('wheel', handleWheel, { passive: false });
+    return () => vp.removeEventListener('wheel', handleWheel);
   }, []);
 
   const onMouseDown = useCallback(
@@ -296,7 +313,6 @@ export function RoadmapCanvas({
           ref={viewportRef}
           data-roadmap-viewport
           onMouseDown={onMouseDown}
-          onWheel={onWheel}
           style={{
             position: 'relative',
             height: VIEWPORT_HEIGHT,

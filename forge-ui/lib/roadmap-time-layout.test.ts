@@ -22,6 +22,7 @@ import {
   CARD_W,
   CARD_H,
   GAP_X,
+  GAP_Y,
   MAX_ROWS,
   GAP_BASE,
   GAP_MAX,
@@ -195,6 +196,42 @@ test('assignPendingBand: planned + blocked pending initiative bands as after-pre
 });
 
 // ---------------------------------------------------------------------------
+// Reviewer finding (MEDIUM): a genuinely completed initiative with an
+// honestly-absent completedAt must NEVER read as upcoming work ('ready').
+// It gets its own 'done-no-date' band instead.
+// ---------------------------------------------------------------------------
+
+test('assignPendingBand: a done initiative with no completedAt bands as done-no-date, never ready', () => {
+  const result = assignPendingBand(init('A', { status: 'done', ready: true, workItems: [{ id: 'WI-1', title: 'x', dependsOn: [], status: 'complete' }] }));
+  expect(result).toBe('done-no-date');
+  expect(result).not.toBe('ready');
+});
+
+test('assignPendingBand: a merged initiative with no completedAt bands as done-no-date, never ready', () => {
+  const result = assignPendingBand(init('A', { status: 'merged', ready: true, workItems: [] }));
+  expect(result).toBe('done-no-date');
+  expect(result).not.toBe('ready');
+});
+
+test('computeRoadmapTimeLayout: a done initiative with no completedAt lands in the done-no-date band, not ready', () => {
+  const items = [
+    init('DONE-NO-DATE', { status: 'done', ready: true, workItems: [] }),
+    init('READY-1', { status: 'pending', ready: true, workItems: [] }),
+  ];
+  const layout = computeRoadmapTimeLayout(items, Date.parse('2026-06-10T00:00:00.000Z'));
+  const doneCaption = layout.bandCaptions.find((b) => b.band === 'done-no-date');
+  expect(doneCaption).toBeDefined();
+  expect(doneCaption!.count).toBe(1);
+  const readyCaption = layout.bandCaptions.find((b) => b.band === 'ready');
+  expect(readyCaption).toBeDefined();
+  expect(readyCaption!.count).toBe(1); // only the genuinely-pending READY-1, not DONE-NO-DATE
+  // done-no-date sits LEFTMOST among the pending bands (right after the
+  // now-line) — it already happened; it is not "projected next".
+  expect(layout.bandCaptions[0].band).toBe('done-no-date');
+  expect(layout.positions.get('DONE-NO-DATE')!.x).toBeLessThan(layout.positions.get('READY-1')!.x);
+});
+
+// ---------------------------------------------------------------------------
 // computeRoadmapTimeLayout — end to end
 // ---------------------------------------------------------------------------
 
@@ -267,4 +304,48 @@ test('computeRoadmapTimeLayout: pending band secondary sort follows dependency d
   const deepPos = layout.positions.get('DEEP')!;
   expect(midPos.x).toBe(deepPos.x);
   expect(midPos.y).toBeLessThan(deepPos.y);
+});
+
+// ---------------------------------------------------------------------------
+// Reviewer finding (LOW): a real betterado-scale burst (51 initiatives, all
+// merged the SAME day) through the FULL pipeline, not just layoutBlock in
+// isolation — proves day-bucketing + column-major wrap + world sizing all
+// agree with each other end to end at realistic scale.
+// ---------------------------------------------------------------------------
+
+test('computeRoadmapTimeLayout: a 51-initiative all-same-day burst wraps to a single 9-col × ≤6-row day block, every card placed, no now-line fabricated past it incorrectly', () => {
+  const SAME_DAY = '2026-07-01T';
+  const items = Array.from({ length: 51 }, (_, i) =>
+    done(`INIT-${i}`, `${SAME_DAY}${String(8 + Math.floor(i / 10)).padStart(2, '0')}:${String((i % 10) * 6).padStart(2, '0')}:00.000Z`),
+  );
+  const layout = computeRoadmapTimeLayout(items, Date.parse('2026-07-02T00:00:00.000Z'));
+
+  // Exactly one day bucket, carrying all 51.
+  expect(layout.dayCaptions).toHaveLength(1);
+  expect(layout.dayCaptions[0].day).toBe('2026-07-01');
+  expect(layout.dayCaptions[0].count).toBe(51);
+
+  // Every initiative is placed (none silently dropped at scale).
+  expect(layout.positions.size).toBe(51);
+  for (const item of items) expect(layout.positions.has(item.initiativeId)).toBe(true);
+
+  // Column-major wrap: 9 columns (ceil(51/6)) × ≤6 rows each; the world
+  // width/height agree with that same shape (no drift between layoutBlock's
+  // own internal math and the top-level world sizing).
+  const xs = new Set([...layout.positions.values()].map((p) => p.x));
+  expect(xs.size).toBe(9);
+  // 6 rows max — the exact CAP_HEIGHT offset is covered by the layoutBlock
+  // unit tests above; here a generous upper bound over 6 rows is enough to
+  // catch a wrap regression at real scale (e.g. a row cap silently dropped).
+  const maxRowY = 26 + (MAX_ROWS - 1) * (CARD_H + GAP_Y);
+  for (const p of layout.positions.values()) {
+    expect(p.y).toBeLessThanOrEqual(maxRowY);
+  }
+
+  // No day-to-day gap chip (there is only one day — nothing to compress),
+  // but a real now-line still anchors right after the burst since there is
+  // no pending work in this fixture.
+  expect(layout.gaps).toHaveLength(0);
+  expect(layout.nowX).not.toBeNull();
+  expect(layout.bandCaptions).toHaveLength(0);
 });
