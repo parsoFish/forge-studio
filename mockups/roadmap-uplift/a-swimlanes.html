@@ -1,0 +1,515 @@
+<meta charset="utf-8">
+<title>Status Swimlanes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#0b0e14; --panel:#141a26; --panel2:#0f1420; --line:#28324a;
+  --text:#e9eef6; --dim:#93a0b4; --faint:#5b6779;
+  --idle:#6e7681; --active:#1f6feb; --complete:#2ea043; --attention:#d29922; --failed:#f85149;
+  --run-link:#4ca3f5; --marker:#a371f7;
+  --font-display:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-body:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-mono:ui-monospace,'JetBrains Mono','Cascadia Code',Consolas,monospace;
+  --radius:8px; --radius-sm:5px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.5}
+h1,h2,h3,h4{font-family:var(--font-display);margin:0;letter-spacing:.01em;text-wrap:balance}
+a{color:var(--run-link)}
+button{font-family:var(--font-body)}
+code,.mono{font-family:var(--font-mono)}
+:focus-visible{outline:2px solid var(--marker);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.topbar{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid var(--line);
+  background:var(--panel2);position:sticky;top:0;z-index:40;flex-wrap:wrap}
+.topbar .brand{font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:.02em}
+.topbar .brand .accent{color:var(--run-link)}
+.topbar nav{display:flex;gap:4px;flex-wrap:wrap}
+.topbar nav a{font-size:12px;color:var(--dim);text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.topbar nav a:hover{color:var(--text);border-color:var(--line)}
+.topbar nav a[aria-current="page"]{color:var(--text);background:var(--panel);border-color:var(--line)}
+.topbar .spacer{flex:1}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+
+.mode-toggle{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.mode-toggle button{background:none;border:none;color:var(--dim);font-size:11px;font-weight:600;
+  padding:5px 12px;cursor:pointer}
+.mode-toggle button[aria-pressed="true"]{background:var(--panel);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;border-radius:4px;padding:2px 7px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* uniform collapsed card — the 280x72 contract */
+.icard{width:280px;height:72px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--idle);
+  border-radius:var(--radius-sm);padding:8px 10px 7px;display:flex;flex-direction:column;justify-content:space-between;
+  cursor:pointer;text-align:left;color:var(--text);position:relative;transition:border-color .12s, opacity .12s}
+.icard:hover{border-color:var(--faint)}
+.icard.selected{border-color:var(--marker);box-shadow:0 0 0 1px var(--marker)}
+.icard.neighbor{border-color:var(--run-link)}
+.icard.dimmed{opacity:.28}
+.icard .t{font-family:var(--font-display);font-size:12px;font-weight:600;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.icard .meta{display:flex;align-items:center;gap:8px;font-size:9.5px;color:var(--faint);font-family:var(--font-mono)}
+.icard .meta .st{display:inline-flex;align-items:center;gap:4px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.icard .meta .req{color:var(--attention)}
+
+/* detail panel (drawer / inline expansion / accordion) */
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);font-size:12px}
+.detail .dhead{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.detail .dhead .t{font-family:var(--font-display);font-size:15px;font-weight:700;line-height:1.3}
+.detail .dhead .id{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);margin-top:4px;word-break:break-all}
+.detail .dbody{padding:6px 16px 14px;display:flex;flex-direction:column}
+.dsec{padding:9px 0;border-bottom:1px solid var(--line)}
+.dsec:last-child{border-bottom:none}
+.dsec .slabel{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.gate{font-size:9px;font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--faint);
+  border:1px dashed var(--line);border-radius:4px;padding:1px 6px}
+.gate.off{color:var(--faint)}
+.gate.on{color:var(--complete);border-color:var(--complete)}
+.dsec.inactive{opacity:.55}
+.dep-chip{display:inline-block;font-family:var(--font-mono);font-size:10px;color:var(--dim);
+  background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;margin:0 4px 4px 0;cursor:pointer}
+.dep-chip:hover{color:var(--text);border-color:var(--faint)}
+.wi-badge{display:flex;align-items:center;gap:8px;font-size:11.5px;background:var(--bg);
+  border:1px solid var(--line);border-radius:var(--radius-sm);padding:5px 9px;margin-bottom:5px}
+.wi-badge .wid{font-family:var(--font-mono);font-size:10px;color:var(--run-link);font-weight:700;flex-shrink:0}
+.wi-badge .wt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wi-badge .wdep{font-family:var(--font-mono);font-size:9px;color:var(--faint);flex-shrink:0}
+.run-link{display:block;font-size:11px;color:var(--run-link);text-decoration:underline;margin-bottom:3px;
+  font-family:var(--font-mono);word-break:break-all}
+.btn{display:inline-block;color:#fff;border:1px solid var(--line);border-radius:6px;padding:6px 14px;
+  font-size:12px;font-weight:600;cursor:pointer;background:var(--active)}
+.btn.green{background:#238636}
+.btn.small{font-size:10px;padding:2px 8px;border:none;border-radius:4px}
+.btn.grey{background:var(--line)}
+.btn.red{background:#a33}
+.notice{font-size:11px;color:var(--attention)}
+.recovery-empty{color:var(--faint);font-style:italic;font-size:11px}
+.inventory{margin-top:10px;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.inventory .row{display:flex;gap:8px;font-size:10.5px;color:var(--dim);padding:2px 0}
+.inventory .row .ok{color:var(--complete);font-weight:700}
+.inventory .row code{color:var(--faint);font-size:9.5px}
+
+/* comment markers */
+.cm{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;
+  background:var(--marker);color:#0b0e14;font-size:11px;font-weight:800;cursor:pointer;border:none;
+  vertical-align:middle;margin:0 3px;flex-shrink:0;font-family:var(--font-mono)}
+.cm:hover{box-shadow:0 0 0 3px rgba(163,113,247,.3)}
+#cm-pop{position:fixed;z-index:100;max-width:360px;background:var(--panel);border:1px solid var(--marker);
+  border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--dim);box-shadow:0 8px 30px rgba(0,0,0,.5);display:none}
+#cm-pop .pid{font-family:var(--font-mono);font-size:10px;font-weight:800;color:var(--marker);letter-spacing:.05em}
+#cm-pop .pq{color:var(--text);font-weight:600;margin:4px 0 6px;font-size:12.5px}
+.legend{max-width:900px;margin:40px auto 60px;padding:0 20px}
+.legend table{width:100%;border-collapse:collapse;font-size:12px}
+.legend th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);
+  padding:6px 10px;border-bottom:1px solid var(--line)}
+.legend td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--dim)}
+.legend td.q{color:var(--text);font-weight:600}
+.legend td.mid{font-family:var(--font-mono);font-weight:800;color:var(--marker);white-space:nowrap}
+.provenance{font-size:11px;color:var(--faint);line-height:1.6}
+.provenance code{font-size:10px;color:var(--dim)}
+.scrollx{overflow-x:auto}
+
+
+.board-wrap{display:flex;align-items:stretch;min-height:calc(100vh - 46px)}
+.board{flex:1;min-width:0;padding:16px 20px}
+.controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.lane{margin-bottom:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel2);overflow:hidden}
+.lane-head{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;background:none;border:none;
+  width:100%;text-align:left;color:var(--text)}
+.lane-head .lname{font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.02em}
+.lane-head .lcount{font-family:var(--font-mono);font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+.lane-head .ldesc{font-size:11px;color:var(--faint)}
+.lane-head .chev{margin-left:auto;color:var(--faint);font-size:11px;transition:transform .15s}
+.lane.collapsed .chev{transform:rotate(-90deg)}
+.lane-bar{height:3px}
+.lane-body{padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px}
+.lane.collapsed .lane-body{display:none}
+.lane-empty{font-size:12px;color:var(--faint);padding:2px 0}
+.lane-summary{display:none;font-size:11.5px;color:var(--faint);padding:0 14px 10px}
+.lane.collapsed .lane-summary{display:block}
+.depth-tick{width:100%;font-size:9px;color:var(--faint);font-family:var(--font-mono);letter-spacing:.06em;
+  padding-top:2px;border-top:1px dashed var(--line);margin-top:2px}
+.depth-tick:first-child{border-top:none;margin-top:0;padding-top:0}
+.drawer{width:0;overflow:hidden;border-left:1px solid var(--line);background:var(--panel2);
+  transition:width .18s ease;flex-shrink:0}
+.drawer.open{width:420px}
+.drawer-inner-pad{padding:14px}
+.drawer-top{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0;min-width:380px}
+#drawer-body{padding:10px 14px 20px;min-width:380px;max-height:calc(100vh - 100px);overflow-y:auto}
+@media (max-width:900px){
+  .board-wrap{flex-direction:column}
+  .drawer.open{width:100%;border-left:none;border-top:1px solid var(--line)}
+  .drawer-top,#drawer-body{min-width:0}
+}
+</style>
+<header class="topbar">
+  <span class="brand">forge <span class="accent">studio</span></span>
+  <span class="eyebrow">roadmap uplift &middot; RV-0 mockups</span>
+  <nav><a href="index.html">Cover</a><a href="a-swimlanes.html" aria-current=page>A &middot; Swimlanes</a><a href="b-canvas.html">B &middot; Canvas</a><a href="c-milestones.html">C &middot; Milestone bands</a></nav>
+  <span class="spacer"></span>
+  <span class="eyebrow" title="terraform-provider-betterado — the real 51-manifest corpus">betterado &middot; 51 initiatives &middot; 66 edges</span>
+</header>
+
+<div class="board-wrap" id="board-wrap">
+  <main class="board" id="board">
+    <div class="controls">
+      <div class="mode-toggle" role="group" aria-label="Status mode">
+        <button id="mode-replay" aria-pressed="true">Replay &middot; 2026-07-01</button>
+        <button id="mode-today" aria-pressed="false">Today &middot; real</button>
+      </div>
+      <span class="cm" data-cm="A7"></span>
+      <span class="eyebrow" id="mode-note">replayed mid-migration state &mdash; derivation on the cover page</span>
+    </div>
+    <div id="lanes"></div>
+  </main>
+  <aside class="drawer" id="drawer" aria-label="Initiative detail">
+    <div class="drawer-top">
+      <span class="eyebrow">initiative detail <span class="cm" data-cm="A4"></span></span>
+      <button id="drawer-close" class="btn small grey" aria-label="Close detail">close &times;</button>
+    </div>
+    <div id="drawer-body"></div>
+  </aside>
+</div>
+<div id="legend-slot"></div>
+
+<script>
+
+const DATA = [{"id":"INIT-2026-05-31-release-definition-unit-tests","title":"Release definition unit tests","queueDir":"done","created":"2026-05-31","cycle":null,"deps":[],"requeued":true,"heading":"## Overview","depth":0,"fanOut":0,"ord":0},{"id":"INIT-2026-06-01-ci-green","title":"CI green","queueDir":"done","created":"2026-06-01","cycle":null,"deps":[],"requeued":true,"heading":"## Summary","depth":0,"fanOut":0,"ord":1},{"id":"INIT-2026-06-05-complete-release-definition","title":"Complete release definition","queueDir":"done","created":"2026-06-05","cycle":null,"deps":[],"requeued":true,"heading":"## Goal","depth":0,"fanOut":1,"ord":2},{"id":"INIT-2026-06-05-environment-templates-spike","title":"Environment templates spike","queueDir":"done","created":"2026-06-05","cycle":null,"deps":["INIT-2026-06-05-release-definition-permissions"],"requeued":false,"heading":"## Goal","depth":4,"fanOut":0,"ord":3},{"id":"INIT-2026-06-05-release-data-sources","title":"Release data sources","queueDir":"done","created":"2026-06-05","cycle":null,"deps":["INIT-2026-06-05-release-folder"],"requeued":false,"heading":"## Goal","depth":2,"fanOut":1,"ord":4},{"id":"INIT-2026-06-05-release-definition-permissions","title":"Release definition permissions","queueDir":"done","created":"2026-06-05","cycle":null,"deps":["INIT-2026-06-05-release-data-sources"],"requeued":false,"heading":"## Goal","depth":3,"fanOut":1,"ord":5},{"id":"INIT-2026-06-05-release-folder","title":"Release folder","queueDir":"done","created":"2026-06-05","cycle":null,"deps":["INIT-2026-06-05-complete-release-definition"],"requeued":true,"heading":"## Goal","depth":1,"fanOut":1,"ord":6},{"id":"INIT-2026-06-06-shared-acceptance-fixture","title":"Shared acceptance fixture","queueDir":"done","created":"2026-06-06","cycle":null,"deps":[],"requeued":true,"heading":"## Context","depth":0,"fanOut":0,"ord":7},{"id":"INIT-2026-06-07-release-folder-data-source","title":"Release folder data source","queueDir":"done","created":"2026-06-07","cycle":null,"deps":[],"requeued":true,"heading":"## Goal","depth":0,"fanOut":0,"ord":8},{"id":"INIT-2026-06-08-release-acceptance-test-fixes","title":"Release acceptance test fixes","queueDir":"done","created":"2026-06-08","cycle":"2026-06-12T12-19-27_INIT-2026-06-08-release-acceptance-test-fixes","deps":["INIT-2026-06-08-release-definition-environment-config-surface","INIT-2026-06-08-release-definition-artifact-trigger-enhancements","INIT-2026-06-08-release-definition-approval-options-gates-comple"],"requeued":true,"heading":"## Summary","depth":2,"fanOut":0,"ord":9},{"id":"INIT-2026-06-08-release-data-sources-completion","title":"Release data sources completion","queueDir":"done","created":"2026-06-08","cycle":"2026-06-08T11-43-56_INIT-2026-06-08-release-data-sources-completion","deps":["INIT-2026-06-08-release-definition-schema-audit"],"requeued":true,"heading":"## Summary","depth":1,"fanOut":0,"ord":10},{"id":"INIT-2026-06-08-release-definition-approval-options-gates-comple","title":"Release definition approval options + gates completion","queueDir":"done","created":"2026-06-08","cycle":"2026-06-08T11-43-56_INIT-2026-06-08-release-definition-approval-options-gates-comple","deps":["INIT-2026-06-08-release-definition-schema-audit"],"requeued":false,"heading":"## Summary","depth":1,"fanOut":1,"ord":11},{"id":"INIT-2026-06-08-release-definition-artifact-trigger-enhancements","title":"Release definition artifact trigger enhancements","queueDir":"done","created":"2026-06-08","cycle":"2026-06-08T11-54-58_INIT-2026-06-08-release-definition-artifact-trigger-enhancements","deps":["INIT-2026-06-08-release-definition-schema-audit"],"requeued":true,"heading":"## Summary","depth":1,"fanOut":1,"ord":12},{"id":"INIT-2026-06-08-release-definition-environment-config-surface","title":"Release definition environment config surface","queueDir":"done","created":"2026-06-08","cycle":"2026-06-08T12-01-16_INIT-2026-06-08-release-definition-environment-config-surface","deps":["INIT-2026-06-08-release-definition-schema-audit"],"requeued":true,"heading":"## Summary","depth":1,"fanOut":1,"ord":13},{"id":"INIT-2026-06-08-release-definition-schema-audit","title":"Release definition schema audit","queueDir":"done","created":"2026-06-08","cycle":"2026-06-08T11-00-43_INIT-2026-06-08-release-definition-schema-audit","deps":[],"requeued":false,"heading":"## Summary","depth":0,"fanOut":4,"ord":14},{"id":"INIT-2026-06-16-task-group-acceptance-and-data-source","title":"Task group acceptance and data source","queueDir":"done","created":"2026-06-16","cycle":"2026-06-16T10-06-57_INIT-2026-06-16-task-group-acceptance-and-data-source","deps":[],"requeued":false,"heading":"## Summary","depth":0,"fanOut":0,"ord":15},{"id":"INIT-2026-06-17-release-definition-coverage-gaps","title":"Release definition coverage gaps","queueDir":"done","created":"2026-06-17","cycle":"2026-06-18T07-53-10_INIT-2026-06-17-release-definition-coverage-gaps","deps":["INIT-2026-06-17-release-stages-array-refactor"],"requeued":false,"heading":"## Summary","depth":1,"fanOut":1,"ord":16},{"id":"INIT-2026-06-17-release-definition-permissions-coverage","title":"Release definition permissions coverage","queueDir":"done","created":"2026-06-17","cycle":"2026-06-18T10-27-18_INIT-2026-06-17-release-definition-permissions-coverage","deps":["INIT-2026-06-17-release-folder-coverage"],"requeued":false,"heading":"## Summary","depth":4,"fanOut":0,"ord":17},{"id":"INIT-2026-06-17-release-folder-coverage","title":"Release folder coverage","queueDir":"done","created":"2026-06-17","cycle":"2026-06-18T09-50-09_INIT-2026-06-17-release-folder-coverage","deps":["INIT-2026-06-17-task-group-coverage"],"requeued":false,"heading":"## Summary","depth":3,"fanOut":1,"ord":18},{"id":"INIT-2026-06-17-release-stages-array-refactor","title":"Release stages array refactor","queueDir":"done","created":"2026-06-17","cycle":"2026-06-17T21-21-21_INIT-2026-06-17-release-stages-array-refactor","deps":[],"requeued":true,"heading":"## Summary","depth":0,"fanOut":1,"ord":19},{"id":"INIT-2026-06-17-task-group-coverage","title":"Task group coverage","queueDir":"done","created":"2026-06-17","cycle":"2026-06-18T09-23-23_INIT-2026-06-17-task-group-coverage","deps":["INIT-2026-06-17-release-definition-coverage-gaps"],"requeued":false,"heading":"## Summary","depth":2,"fanOut":1,"ord":20},{"id":"INIT-2026-06-19-framework-docs-examples","title":"Framework docs examples","queueDir":"done","created":"2026-06-19","cycle":"2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples","deps":["INIT-2026-06-19-framework-state-upgraders"],"requeued":true,"heading":"## Context","depth":3,"fanOut":0,"ord":21},{"id":"INIT-2026-06-19-framework-mux-entrypoint","title":"Framework mux entrypoint","queueDir":"done","created":"2026-06-19","cycle":"2026-06-19T06-29-05_INIT-2026-06-19-framework-mux-entrypoint","deps":[],"requeued":true,"heading":"## Context","depth":0,"fanOut":2,"ord":22},{"id":"INIT-2026-06-19-framework-release-definition","title":"Framework release definition","queueDir":"done","created":"2026-06-19","cycle":"2026-06-19T23-10-22_INIT-2026-06-19-framework-release-definition","deps":["INIT-2026-06-19-framework-mux-entrypoint"],"requeued":true,"heading":"## Context","depth":1,"fanOut":1,"ord":23},{"id":"INIT-2026-06-19-framework-state-upgraders","title":"Framework state upgraders","queueDir":"done","created":"2026-06-19","cycle":"2026-06-20T04-10-33_INIT-2026-06-19-framework-state-upgraders","deps":["INIT-2026-06-19-framework-task-group","INIT-2026-06-19-framework-release-definition"],"requeued":true,"heading":"## Context","depth":2,"fanOut":1,"ord":24},{"id":"INIT-2026-06-19-framework-task-group","title":"Framework task group","queueDir":"done","created":"2026-06-19","cycle":"2026-06-19T23-10-22_INIT-2026-06-19-framework-task-group","deps":["INIT-2026-06-19-framework-mux-entrypoint"],"requeued":true,"heading":"## Context","depth":1,"fanOut":1,"ord":25},{"id":"INIT-2026-07-01-migrate-framework-build","title":"Migrate framework: build","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-build","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":26},{"id":"INIT-2026-07-01-migrate-framework-core","title":"Migrate framework: core","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-core","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":27},{"id":"INIT-2026-07-01-migrate-framework-dashboard-extension","title":"Migrate framework: dashboard extension","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-dashboard-extension","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":28},{"id":"INIT-2026-07-01-migrate-framework-feed","title":"Migrate framework: feed","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-feed","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":29},{"id":"INIT-2026-07-01-migrate-framework-git","title":"Migrate framework: git","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-git","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":true,"heading":"## Goal","depth":1,"fanOut":1,"ord":30},{"id":"INIT-2026-07-01-migrate-framework-graph-identity","title":"Migrate framework: graph identity","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-graph-identity","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":31},{"id":"INIT-2026-07-01-migrate-framework-member-entitlement","title":"Migrate framework: member entitlement","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-member-entitlement","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":32},{"id":"INIT-2026-07-01-migrate-framework-policy-branch","title":"Migrate framework: policy branch","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-policy-branch","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":33},{"id":"INIT-2026-07-01-migrate-framework-release-folder-permissions","title":"Migrate framework: release folder permissions","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-release-folder-permissions","deps":[],"requeued":false,"heading":"## Goal","depth":0,"fanOut":23,"ord":34},{"id":"INIT-2026-07-01-migrate-framework-security-permissions","title":"Migrate framework: security permissions","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-security-permissions","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":35},{"id":"INIT-2026-07-01-migrate-framework-serviceendpoint","title":"Migrate framework: serviceendpoint","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-serviceendpoint","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":36},{"id":"INIT-2026-07-01-migrate-framework-servicehook","title":"Migrate framework: servicehook","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-servicehook","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":true,"heading":"## Goal","depth":1,"fanOut":1,"ord":37},{"id":"INIT-2026-07-01-migrate-framework-taskagent","title":"Migrate framework: taskagent","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-taskagent","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":38},{"id":"INIT-2026-07-01-migrate-framework-wiki","title":"Migrate framework: wiki","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-wiki","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":39},{"id":"INIT-2026-07-01-migrate-framework-workitemtracking","title":"Migrate framework: workitemtracking","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-workitemtracking","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":40},{"id":"INIT-2026-07-01-migrate-framework-workitemtrackingprocess","title":"Migrate framework: workitemtrackingprocess","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-migrate-framework-workitemtrackingprocess","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":41},{"id":"INIT-2026-07-01-mux-free-cutover","title":"Mux-free cutover","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-mux-free-cutover","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions","INIT-2026-07-01-migrate-framework-core","INIT-2026-07-01-migrate-framework-git","INIT-2026-07-01-migrate-framework-build","INIT-2026-07-01-migrate-framework-policy-branch","INIT-2026-07-01-migrate-framework-feed","INIT-2026-07-01-migrate-framework-wiki","INIT-2026-07-01-migrate-framework-graph-identity","INIT-2026-07-01-migrate-framework-member-entitlement","INIT-2026-07-01-migrate-framework-dashboard-extension","INIT-2026-07-01-migrate-framework-security-permissions","INIT-2026-07-01-migrate-framework-servicehook","INIT-2026-07-01-migrate-framework-workitemtracking","INIT-2026-07-01-migrate-framework-workitemtrackingprocess","INIT-2026-07-01-migrate-framework-taskagent","INIT-2026-07-01-migrate-framework-serviceendpoint","INIT-2026-07-01-new-api-notification","INIT-2026-07-01-new-api-pipelines-v2","INIT-2026-07-01-new-api-pipelinesapproval","INIT-2026-07-01-new-api-featuremanagement","INIT-2026-07-01-new-api-gallery-extensionmanagement","INIT-2026-07-01-new-api-accounts-profile","INIT-2026-07-01-new-api-test"],"requeued":false,"heading":"## Goal","depth":3,"fanOut":0,"ord":42},{"id":"INIT-2026-07-01-new-api-accounts-profile","title":"New API: accounts profile","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-accounts-profile","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":43},{"id":"INIT-2026-07-01-new-api-featuremanagement","title":"New API: featuremanagement","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-featuremanagement","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":44},{"id":"INIT-2026-07-01-new-api-gallery-extensionmanagement","title":"New API: gallery extensionmanagement","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-gallery-extensionmanagement","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":45},{"id":"INIT-2026-07-01-new-api-notification","title":"New API: notification","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-notification","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":46},{"id":"INIT-2026-07-01-new-api-pipelines-v2","title":"New API: pipelines v2","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-pipelines-v2","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":2,"ord":47},{"id":"INIT-2026-07-01-new-api-pipelinesapproval","title":"New API: pipelinesapproval","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-pipelinesapproval","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions","INIT-2026-07-01-new-api-pipelines-v2"],"requeued":false,"heading":"## Goal","depth":2,"fanOut":1,"ord":48},{"id":"INIT-2026-07-01-new-api-test","title":"New API: test","queueDir":"done","created":"2026-07-01","cycle":"2026-07-01T08-39-27_INIT-2026-07-01-new-api-test","deps":["INIT-2026-07-01-migrate-framework-release-folder-permissions"],"requeued":false,"heading":"## Goal","depth":1,"fanOut":1,"ord":49},{"id":"INIT-2026-07-10-framework-auth-parity","title":"Framework auth parity","queueDir":"done","created":"2026-07-10","cycle":"2026-07-10T23-53-00_INIT-2026-07-10-framework-auth-parity","deps":[],"requeued":true,"heading":"## Context","depth":0,"fanOut":0,"ord":50}];
+const BY_ID = Object.fromEntries(DATA.map(d=>[d.id,d]));
+const TONE = {pending:'var(--idle)','in-flight':'var(--active)','ready-for-review':'var(--attention)',
+  merged:'var(--complete)',done:'var(--complete)',failed:'var(--failed)'};
+const HUB = 'INIT-2026-07-01-migrate-framework-release-folder-permissions';
+const ACC_ID = 'INIT-2026-06-08-release-acceptance-test-fixes';
+const MUX_ID = 'INIT-2026-07-01-mux-free-cutover';
+// Replay 2026-07-01T09:30Z — statuses reconstructed mid-migration-wave.
+// Rules: created before 07-01 -> done (all June cycles had completed; real cycle_ids).
+// The 07-01 wave hub (release-folder-permissions) -> done (its dependents were already
+// running under cycle 2026-07-01T08-39-27). Wave-internal in-flight/review/failed picks
+// are illustrative, but `failed` is only assigned to an initiative that REALLY failed
+// (it carries previous_failure_modes: requeued-from-failed). blockedBy is COMPUTED from
+// the real dependency edges, mirroring the scheduler's checkInitiativeDeps gate.
+const REPLAY_OVERRIDES = {
+  'INIT-2026-07-01-migrate-framework-core':'in-flight',
+  'INIT-2026-07-01-migrate-framework-build':'in-flight',
+  'INIT-2026-07-01-migrate-framework-workitemtracking':'in-flight',
+  'INIT-2026-07-01-migrate-framework-feed':'ready-for-review',
+  'INIT-2026-07-01-migrate-framework-git':'failed',
+};
+function replayQueue(d){
+  if (REPLAY_OVERRIDES[d.id]) return REPLAY_OVERRIDES[d.id];
+  if (d.created < '2026-07-01') return 'done';
+  if (d.id === HUB) return 'done';
+  return 'pending';                      // rest of the wave + later-authored items
+}
+function statusOf(d, mode){
+  const queue = mode === 'today' ? d.queueDir : replayQueue(d);
+  const planned = mode === 'today' ? true : !(queue === 'pending' && d.created > '2026-07-01');
+  const doneSet = s => s === 'done' || s === 'merged';
+  const blockedBy = queue === 'pending'
+    ? d.deps.filter(p => !doneSet(mode === 'today' ? BY_ID[p].queueDir : replayQueue(BY_ID[p])))
+    : [];
+  return { queue, planned, ready: blockedBy.length === 0, blockedBy };
+}
+function laneOf(st){
+  if (st.queue === 'in-flight' || st.queue === 'ready-for-review' || st.queue === 'failed') return 'progress';
+  if (st.queue === 'done' || st.queue === 'merged') return 'done';
+  if (!st.planned) return 'unplanned';
+  return st.ready ? 'ready' : 'blocked';
+}
+function slugOf(id){ return id.replace(/^INIT-\d{4}-(\d{2}-\d{2})-/, ''); }
+function dateOf(id){ const m = id.match(/^INIT-\d{4}-(\d{2}-\d{2})/); return m ? m[1] : ''; }
+function neighborsOf(id){
+  const up = new Set(BY_ID[id].deps);
+  const down = new Set(DATA.filter(d => d.deps.includes(id)).map(d => d.id));
+  return { up, down };
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Cross-page nav: relative hrefs serve the local file set; when hosted as
+// claude.ai Artifacts the four pages live at separate URLs, so rewrite.
+const ARTIFACT_URLS = {
+  'index.html': 'https://claude.ai/code/artifact/618cb613-5834-4ba1-9202-387d2857aa38',
+  'a-swimlanes.html': 'https://claude.ai/code/artifact/58d751d2-3f66-4650-ac02-17c3f5c6be13',
+  'b-canvas.html': 'https://claude.ai/code/artifact/a76ff26b-3997-401c-89e3-aeb14123ce80',
+  'c-milestones.html': 'https://claude.ai/code/artifact/dcba281e-c8f6-4b3b-b707-6fc6dec92482',
+};
+if (location.protocol !== 'file:'){
+  document.querySelectorAll('a[href$=".html"]').forEach(a => {
+    const u = ARTIFACT_URLS[a.getAttribute('href')];
+    if (u) a.href = u;
+  });
+}
+
+// Real WI snapshot for the pre-expanded card — read from
+// _logs/2026-06-12T12-19-27_INIT-2026-06-08-release-acceptance-test-fixes/work-items-snapshot/
+const WI_SNAPSHOT = {
+  'INIT-2026-06-08-release-acceptance-test-fixes': [
+    {id:'WI-1', deps:[], title:'Extend update acceptance test — add environment + description + revision-increment assertions (AC-3 gaps)'},
+    {id:'WI-2', deps:['WI-1'], title:'Add TestAccReleaseDefinition_import acceptance test (AC-4)'},
+    {id:'WI-3', deps:['WI-2'], title:'Add TestAccReleaseDefinition_completeWithNewFields — combined AC-2 coverage (PR #18 + PR #19 fields)'},
+  ],
+  // real snapshot: _logs/2026-07-01T08-39-27_INIT-2026-07-01-mux-free-cutover/work-items-snapshot/
+  'INIT-2026-07-01-mux-free-cutover': [
+    {id:'WI-1', deps:[], title:'Port JFrog service endpoint resources to terraform-plugin-framework'},
+    {id:'WI-2', deps:['WI-1'], title:'Port remaining 12 SDKv2 service endpoint resources to terraform-plugin-framework'},
+    {id:'WI-3', deps:['WI-2'], title:'Empty SDKv2 ResourcesMap / DataSourcesMap in provider.go; remove/unexport Provider()'},
+    {id:'WI-4', deps:['WI-3'], title:'Rewrite main.go to pure framework; delete framework.go shim; update test utilities'},
+    {id:'WI-5', deps:['WI-4'], title:'Live acceptance test for betterado_project + CHANGELOG + version bump'},
+  ],
+};
+
+function cardHTML(d, mode){
+  const st = statusOf(d, mode);
+  return `<button class="icard" data-roadmap-node data-initiative-id="${d.id}"
+    data-initiative-status="${st.queue}" data-plan-state="${st.planned ? 'planned' : 'unplanned'}"
+    data-initiative-ready="${st.ready}" data-blocked-by="${esc(st.blockedBy.join(','))}"
+    style="border-left-color:${TONE[st.queue]}">
+    <span class="t">${esc(d.title)}</span>
+    <span class="meta">
+      <span class="st" style="color:${TONE[st.queue]}"><span class="dot" style="background:${TONE[st.queue]}"></span>${st.planned ? st.queue : 'unplanned'}</span>
+      <span title="dependency depth">d${d.depth}</span>
+      ${d.deps.length ? `<span title="${d.deps.length} prerequisite(s)">&larr;${d.deps.length}</span>` : ''}
+      ${d.fanOut ? `<span title="${d.fanOut} dependent(s)">&rarr;${d.fanOut}</span>` : ''}
+      ${d.requeued ? '<span class="req" title="requeued after a failed attempt (previous_failure_modes)">&times;2</span>' : ''}
+    </span>
+  </button>`;
+}
+
+function detailHTML(d, mode){
+  const st = statusOf(d, mode);
+  const recoverable = ['in-flight','ready-for-review','failed'].includes(st.queue);
+  const unplanned = !st.planned;
+  const canStart = st.queue === 'pending' && st.ready && st.planned;
+  const blocked = st.queue === 'pending' && !st.ready;
+  const wis = WI_SNAPSHOT[d.id];
+  const gate = (active, label) =>
+    `<span class="gate ${active ? 'on' : 'off'}">${active ? 'active now' : 'gate: ' + label}</span>`;
+  const sec = (active, label, gateLabel, inner) =>
+    `<div class="dsec ${active ? '' : 'inactive'}"><div class="slabel">${label} ${gate(active, gateLabel)}</div>${inner}</div>`;
+
+  let h = `<div class="dhead">
+    <span class="chip" style="color:${TONE[st.queue]};background:color-mix(in srgb, ${TONE[st.queue]} 12%, transparent)">
+      <span class="dot" style="background:${TONE[st.queue]}"></span>${st.queue}</span>
+    <div class="t" style="margin-top:8px">${esc(d.title)}</div>
+    <div class="id">${d.id}</div>
+  </div><div class="dbody">`;
+
+  h += `<div class="dsec"><div class="slabel">Mock convention</div>
+    <div style="font-size:11px;color:var(--faint)">Every relocated section is rendered below. In the live UI a
+    dashed chip's section only appears when its state gate is met — nothing is click-gated out of the DOM.</div></div>`;
+
+  h += sec(d.deps.length > 0, 'Depends on', 'has prerequisites',
+    d.deps.length
+      ? d.deps.map(p => `<span class="dep-chip" data-dep-jump="${p}">${slugOf(p)}</span>`).join('')
+      : '<span style="color:var(--faint);font-size:11px">none — rank-0 initiative</span>');
+
+  h += sec(blocked, 'Blocked by', 'pending &amp; deps unmet',
+    `<div class="notice" data-section="initiative-blocked">${
+      st.blockedBy.length ? st.blockedBy.map(slugOf).join(', ') : '(empty when unblocked)'}</div>`);
+
+  h += sec(unplanned, 'Blocked until planned', 'pending &amp; no WI snapshot',
+    `<div class="notice" data-section="initiative-blocked-until-planned">Not yet planned — decompose it before starting development.</div>`);
+
+  h += sec(!!wis, 'Work items', 'WI snapshot exists',
+    wis
+      ? wis.map(w => `<div class="wi-badge" data-work-item-id="${w.id}"><span class="wid">${w.id}</span><span class="wt" title="${esc(w.title)}">${esc(w.title)}</span>${w.deps.length ? `<span class="wdep">&larr; ${w.deps.join(',')}</span>` : ''}</div>`).join('')
+      : `<div style="font-size:11px;color:var(--faint)">Real snapshot lives in <code>_logs/&lt;cycle&gt;/work-items-snapshot/</code> — only the expanded example card bakes its WIs into this mock.</div>`);
+
+  h += sec(!!d.cycle, 'Runs', 'cycle exists',
+    (d.cycle ? `<a class="run-link" data-run-link data-run-cycle-id="${esc(d.cycle)}" data-run-active="true" href="#" onclick="return false" title="mock link — live UI routes to /flows/forge-develop/run/&lt;cycleId&gt;">active run &middot; ${esc(d.cycle)} &rarr;</a>` : '')
+    + (d.requeued ? `<div style="font-size:10.5px;color:var(--faint)" data-recovery-prior-attempts="1">prior attempt &times;2 — manifest carries <code>previous_failure_modes: requeued-from-failed</code>; prior cycle logs rotated</div>` : '')
+    + (!d.cycle && !d.requeued ? '<span style="color:var(--faint);font-size:11px">no cycle recorded</span>' : ''));
+
+  h += sec(true, 'Demo', 'always',
+    `<button class="btn small grey" data-link="demo-builder" style="background:none;color:var(--run-link);text-decoration:underline;padding:0">demo builder &rarr;</button>`);
+
+  h += sec(unplanned, 'Plan trigger', 'pending &amp; unplanned',
+    `<button class="btn" data-action="plan-initiative" data-initiative-id="${d.id}">Plan &rarr;</button>`);
+
+  h += sec(canStart, 'Start development', 'pending &amp; ready &amp; planned',
+    `<button class="btn green" data-action="start-development" data-initiative-id="${d.id}">Start development &rarr;</button>`);
+
+  h += sec(recoverable, 'Recovery', 'in-flight / ready-for-review / failed',
+    `<div data-recovery-item data-recovery-initiative="${d.id}" data-recovery-status="${st.queue}" data-recovery-attempt-count="${d.requeued ? 2 : 1}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:10px;color:var(--faint)">${d.requeued ? '&times;2 attempts' : '&times;1 attempt'}</span>
+        <span style="display:flex;gap:6px">
+          <button class="btn small grey" data-action="recovery-inspect">Inspect</button>
+          <button class="btn small" data-action="recovery-requeue">Requeue</button>
+          <button class="btn small red" data-action="recovery-abandon">Abandon</button>
+        </span>
+      </div>
+      <div class="recovery-empty" data-section="recovery-detail" data-recovery-detail-initiative="${d.id}">Inspect to load branch / worktree / PR-draft detail.</div>
+    </div>`);
+
+  h += `<div class="inventory"><div class="slabel" style="margin-bottom:4px">Relocation inventory — nothing lost from RoadmapDag.tsx</div>` +
+    [['deps line','data-initiative-id + Depends on'],
+     ['blocked-by','data-blocked-by + data-section=initiative-blocked'],
+     ['WI badges','data-work-item-id (topo order)'],
+     ['run links','data-run-link / data-run-cycle-id / data-run-active'],
+     ['plan trigger','data-action=plan-initiative + data-plan-state'],
+     ['start development','data-action=start-development'],
+     ['recovery','data-recovery-* + inspect/requeue/abandon + detail region'],
+     ['demo builder','data-link=demo-builder']]
+    .map(([a,b]) => `<div class="row"><span class="ok">&#10003;</span><span style="min-width:120px">${a}</span><code>${b}</code></div>`).join('')
+    + `</div>`;
+
+  h += `</div>`;
+  return h;
+}
+
+// ---- comment markers ----
+function initMarkers(prefix, markers){
+  let pop = document.getElementById('cm-pop');
+  if (!pop){
+    pop = document.createElement('div');
+    pop.id = 'cm-pop';
+    document.body.appendChild(pop);
+    pop.addEventListener('click', ev => ev.stopPropagation());   // allow copying the text
+    document.addEventListener('click', () => { pop.style.display = 'none'; });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') pop.style.display = 'none'; });
+  }
+  document.querySelectorAll('.cm').forEach(el => {
+    const key = el.dataset.cm;
+    const m = markers[key];
+    if (!m || el.dataset.cmWired) return;
+    el.dataset.cmWired = '1';
+    el.textContent = key.replace(prefix, '');
+    el.title = m[0];
+    el.setAttribute('aria-label', 'Decision point ' + key + ': ' + m[0]);
+    el.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (pop.style.display === 'block' && pop.dataset.for === key){ pop.style.display = 'none'; return; }
+      pop.innerHTML = `<div class="pid">${key}</div><div class="pq">${m[0]}</div><div>${m[1]}</div>`;
+      pop.dataset.for = key;
+      const r = el.getBoundingClientRect();
+      pop.style.display = 'block';
+      pop.style.left = Math.min(r.left, innerWidth - 390) + 'px';
+      pop.style.top = Math.min(r.bottom + 8, innerHeight - 200) + 'px';
+    });
+  });
+}
+function legendHTML(prefix, markers){
+  return `<div class="legend"><h3 style="font-size:15px;margin-bottom:4px">Decision points — comment with the marker id</h3>
+  <p style="font-size:12px;color:var(--faint);margin:0 0 12px">Reference a marker id (e.g. <code>${prefix}2</code>) in your artifact comment. Violet circles on the page mark where each decision lives.</p>
+  <div class="scrollx"><table><tr><th>id</th><th>Decision</th><th>Context</th></tr>` +
+  Object.entries(markers).map(([k, m]) =>
+    `<tr><td class="mid">${k}</td><td class="q">${m[0]}</td><td>${m[1]}</td></tr>`).join('') +
+  `</table></div></div>`;
+}
+
+
+const MARKERS = {
+  A1: ['Lane taxonomy: does “In progress” absorb review + failed?', 'The plan names five lanes: in-progress / ready / blocked / unplanned / done. This mock folds ready-for-review and failed into “In progress — needs attention” with status chips telling them apart. Alternative: a sixth “Attention” lane so amber/red never hides inside a blue lane. Which?'],
+  A2: ['Uniform 280&times;72 card: which facts earn the meta row?', 'The collapsed card holds a 2-line title plus one meta row. Shown: status, depth tick (d0&ndash;d4), prerequisite count, dependent count, and a &times;2 requeue mark. Anything missing you would triage by (cost? age? WI count)? Anything to cut?'],
+  A3: ['Done lane collapsed by default?', 'Today the real corpus is 51/51 done — uncollapsed, Done IS the page. The mock collapses Done to a one-line summary strip (count + latest merge) with expand-on-demand. Right default?'],
+  A4: ['Drawer: push vs overlay, and does selection persist?', 'The mock pushes the board left by 420px and keeps the drawer open until you close it or select elsewhere. Alternative: overlay that dismisses on outside-click. Push keeps lanes scannable while reading detail; overlay keeps full board width.'],
+  A5: ['No edges at rest — is a lit neighborhood enough geometry?', 'A&rsquo;s stated weakness. Selecting a card lights direct prerequisites (blue ring) and dims everything unrelated, across lanes. Try “Mux-free cutover” in the Blocked lane — its 23 prerequisites light up across four lanes. If you need full-path tracing, that is direction B&rsquo;s argument.'],
+  A6: ['In-lane order: depth then authored order?', 'Cards sort by dependency depth, then manifest order; the depth tick (d0&ndash;d4) makes the grouping legible. Alternative sorts: most-recently-active first, or alphabetical. Depth keeps “what unblocks what” roughly left-to-right even without edges.'],
+  A7: ['Keep the time toggle in the real surface?', 'The replay/today toggle exists so this mock can exercise every lane against real data. But a roadmap that can show “as of any past date” is a real feature candidate (cycle history already exists in _logs). Build it, or mock-only?'],
+};
+
+
+const LANES = [
+  ['progress', 'In progress — needs attention', 'in-flight, at review, or failed', 'var(--active)'],
+  ['ready',    'Ready',     'planned, all prerequisites merged', 'var(--complete)'],
+  ['blocked',  'Blocked',   'waiting on prerequisites', 'var(--attention)'],
+  ['unplanned','Unplanned', 'no work-item snapshot yet', 'var(--idle)'],
+  ['done',     'Done',      'merged', 'var(--complete)'],
+];
+let MODE = 'replay';
+let SELECTED = MUX_ID;
+const collapsedLanes = new Set(['done']);
+
+function render(){
+  const lanesEl = document.getElementById('lanes');
+  const groups = Object.fromEntries(LANES.map(l => [l[0], []]));
+  DATA.forEach(d => groups[laneOf(statusOf(d, MODE))].push(d));
+  Object.values(groups).forEach(g => g.sort((a, b) => a.depth - b.depth || a.ord - b.ord));
+  const nb = SELECTED ? neighborsOf(SELECTED) : null;
+
+  lanesEl.innerHTML = LANES.map(([key, name, desc, tone], li) => {
+    const g = groups[key];
+    const collapsed = collapsedLanes.has(key);
+    let cards = '';
+    let lastDepth = -1;
+    g.forEach(d => {
+      if (d.depth !== lastDepth){
+        cards += `<div class="depth-tick">depth ${d.depth}</div>`;
+        lastDepth = d.depth;
+      }
+      cards += cardHTML(d, MODE);
+    });
+    const markers = {progress:'A1', ready:'A6', blocked:'A5', unplanned:'A2', done:'A3'};
+    const latest = g.length ? g.reduce((a, b) => (a.created > b.created ? a : b)) : null;
+    return `<section class="lane ${collapsed ? 'collapsed' : ''}" data-lane="${key}" data-lane-count="${g.length}">
+      <div class="lane-bar" style="background:${tone}"></div>
+      <button class="lane-head" data-lane-toggle="${key}" aria-expanded="${!collapsed}">
+        <span class="lname">${name}</span>
+        <span class="lcount">${g.length}</span>
+        <span class="ldesc">${desc}</span>
+        <span class="cm" data-cm="${markers[key]}"></span>
+        <span class="chev">&#9660;</span>
+      </button>
+      <div class="lane-summary">${g.length ? `${g.length} initiative${g.length === 1 ? '' : 's'}${latest ? ` &middot; latest: ${esc(latest.title)} (${latest.created})` : ''} &mdash; expand to browse` : 'empty'}</div>
+      <div class="lane-body">${g.length ? cards : '<div class="lane-empty">No initiatives here right now — this lane empties as the roadmap moves.</div>'}</div>
+    </section>`;
+  }).join('');
+
+  // selection highlight — neighborhood across lanes
+  if (SELECTED){
+    document.querySelectorAll('.icard').forEach(el => {
+      const id = el.dataset.initiativeId;
+      if (id === SELECTED) el.classList.add('selected');
+      else if (nb.up.has(id) || nb.down.has(id)) el.classList.add('neighbor');
+      else el.classList.add('dimmed');
+    });
+  }
+  document.querySelectorAll('.icard').forEach(el =>
+    el.addEventListener('click', () => select(el.dataset.initiativeId)));
+  document.querySelectorAll('[data-lane-toggle]').forEach(el =>
+    el.addEventListener('click', () => {
+      const k = el.dataset.laneToggle;
+      collapsedLanes.has(k) ? collapsedLanes.delete(k) : collapsedLanes.add(k);
+      render();
+    }));
+  initMarkers('A', MARKERS);
+  wireDrawerDeps();
+}
+function select(id){
+  SELECTED = id;
+  collapsedLanes.delete(laneOf(statusOf(BY_ID[id], MODE)));   // never select into a hidden lane
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-body').innerHTML =
+    `<div class="detail">${detailHTML(BY_ID[id], MODE)}</div>`;
+  render();
+}
+function wireDrawerDeps(){
+  document.querySelectorAll('#drawer-body [data-dep-jump]').forEach(el =>
+    el.addEventListener('click', () => select(el.dataset.depJump)));
+}
+document.getElementById('drawer-close').addEventListener('click', () => {
+  document.getElementById('drawer').classList.remove('open');
+  SELECTED = null; render();
+});
+function setMode(m){
+  MODE = m;
+  document.getElementById('mode-replay').setAttribute('aria-pressed', String(m === 'replay'));
+  document.getElementById('mode-today').setAttribute('aria-pressed', String(m === 'today'));
+  document.getElementById('mode-note').innerHTML = m === 'replay'
+    ? 'replayed mid-migration state &mdash; derivation on the cover page'
+    : 'live queue state &mdash; the campaign shipped: 51/51 done';
+  if (m === 'today') collapsedLanes.delete('done');   // A3: today, Done IS the roadmap
+  if (SELECTED) select(SELECTED); else render();
+}
+document.getElementById('mode-replay').addEventListener('click', () => setMode('replay'));
+document.getElementById('mode-today').addEventListener('click', () => setMode('today'));
+document.getElementById('legend-slot').innerHTML = legendHTML('A', MARKERS);
+select(MUX_ID);
+
+</script>
