@@ -25,6 +25,7 @@ There is **one operating model**: the daemon (`forge serve`). Operator-directed 
 
 `forge studio` is the operator surface (ADR-031: the UI/bridge is the sole interaction point). It runs on **fixed ports** — bridge `4123`, UI `4124` — so one browser tab stays pinned and auto-reconnects across re-runs.
 
+- **`forge studio` serves a production Next build by default** (build once, then start; ~20s first run, since wave-6 P3); `--dev` keeps the next-dev workflow for forge-ui iteration.
 - **The agent runs `forge studio` once at session start and keeps it up all session.** Restart it **only** to apply changes to Studio's own code (bridge/UI). It is the live window onto every cycle — don't tear it down between tasks.
 - **A second `forge studio` attaches read-only by default** (F1). It probes `GET /api/health` for the bridge identity `{service:'forge-bridge',pid,startedAt}`: a healthy forge bridge is **reused** (the running session — and any in-flight cycle — is left untouched); only a free, stale, or foreign port is taken over. Human viewers should open a second window with `forge studio --attach` (errors if nothing healthy is there) and **never `--force-takeover` a running agent session** — that SIGKILLs the bridge and hard-resets in-flight cycles. `--force-takeover` is the deliberate escape hatch to replace a healthy bridge on purpose.
 

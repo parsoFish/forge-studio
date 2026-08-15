@@ -334,6 +334,166 @@ R1-05 · R7-01..04 (journeys serve as the gate; the bench rebuild remains
 post-closure) · R8. Deferred items stay deferred (R1-D1 · R2-D1/D2 · R4-D1 ·
 R6-D1 · R8-D1). R5-03/05/06 stay continuous as before.
 
+### Wave 6 — Daily-Driver UI/UX overhaul (opened 2026-08-15; closed 2026-08-15)
+
+**North star:** get forge to the point where it is the operator's MAIN
+agentic interaction point, minimising Claude CLI use over time. Every
+prioritisation call in this wave was judged against daily-driver readiness —
+the surfaces the operator touches every day (kick off work, watch it run,
+steer mid-flight, review results) had to be complete, intuitive and
+trustworthy before nice-to-haves. Sequencing: **IA-first** — nav/routing
+consolidation lands clean before everything else builds on it.
+
+Execution: an explicit Workflow-script DAG (deterministic fan-out/joins)
+driving tiered agents (`tiered-orchestration` skill), **34 PRs (#136–#170)**
+across four streams plus a mockup gate and a contradiction sweep, each batch
+gated by build+test+journey+reviewer before merge, plus a same-day hotfix
+(#171 — see standing lessons, below).
+
+#### Streams and batches
+
+**Stream 1 — IA / navigation** (foundation): IA-1 projects index (#138) ·
+IA-2 flows index (#139) · IA-3 agents index + runs ledger (#137) · IA-4
+Library rebuilt as the object-type hub, Home the one dashboard (#148) · IA-5
+nav repointed to the six-pillar IA (#151) · IA-6 single-tab navigation
+policy + artifact page identity (#141) · IA-7 honest agent-action labels +
+shared dispatch poll (#143) · IA-8 wired redirects, deleted the seven
+legacy shims (#153).
+
+**Stream 2 — Performance**: P0 perf-snapshot harness (#140) · P1
+mtime/hash-keyed run-list memo (#145) · P2 full-tree brain-lint memoized
+behind a repo fingerprint (#147; regression fix P2b, fingerprint walk
+excluding `.claude/worktrees`/campaign dirs, #161) · P3 `forge studio`
+serves a production build by default, `--dev` opt-out (#142) · P4 zero-RTT
+bridge URL + Knowledge fetch fan-in (#160) · P5 events tail-reads —
+**deferred** (run-detail-only path, not daily-driver-critical).
+
+**Stream 3 — Generic session surface**: B1 thinking/reasoning forwarding +
+unsampled interactive tool events (#146) · B2 one derived session tail for
+every kind (#144) · B3 derived session affordances + `panel.phases` (#150)
+· B4 generic session affordance write endpoint (#158) · B5 kickoff
+model-tier selection within the SKILL-declared range (#152) · B6 generic
+session panel + kickoff w/ tier picker (#162) · B7 shared ActivityLog — live
+thinking/working drawer on every agent surface (#154) · B8 kb-cleanup +
+authoring migrated onto the generic panel (#168, combined with B11) · B9
+instructions migrated onto the generic panel — architect is now the only
+bespoke panel left (#170) · B10 demo builder on the dedicated session
+screen, R1-03-F2 reversed (#165) · B11 `/sessions` index + Home
+active-sessions strip (#168) · B12 KB drain-to-green bridge job (#164; hotfix #171 — see standing lessons) ·
+B13 one button — Drain to green — on KB health (#166) · B14 every operator
+poll made server-owned + client-observed (#169).
+
+**Stream 4 — Roadmap viz + community + contradiction sweep**: RV-1
+InitiativeDetail extraction + collapsed roadmap cards (#149) · RV-2 the B′
+roadmap — completion-time canvas + push drawer (#155) · CR-1 community
+`registry.yaml`, declared-list source of truth (#159) · CR-2 community
+sorts + freshness honesty (#163) · CR-3 community-refresh agent, a new
+session kind authored as data, folds CR-4's entry button (#167) · SW-1/SW-2
+contradiction-sweep fan-out (10 read-only clusters, 42 findings) → SW-3
+bundle fix, 17 findings (#157).
+
+Plus the opening ADR PR — ADR-043 third amendment + ADR-044 read-path
+memoization (#136) — and a harness addition, the `--journey` filter for
+scoped runs (#156).
+
+#### Operator-locked decisions (2026-08-15 interview, 3 rounds)
+
+- Six-pillar nav, Option A: Home · Projects · Flows · Agents · Library ·
+  Knowledge (Home carries the active-sessions strip).
+- `forge studio` serves a production build by default; `--dev` keeps the
+  next-dev workflow.
+- Model selection = tier **within** the SKILL-declared range, chosen at
+  kickoff — never a free override outside it.
+- Demo inline panel **deleted outright** — R1-03-F2 (fold the demo builder
+  into the project page) is deliberately **reversed**; the demo builder is a
+  dedicated session screen again.
+- Roadmap viz = the **B′ canvas**: a completion-time layout with a push
+  drawer (direction B's reactflow canvas, refined with a time axis and
+  direction A's static drawer, after a 3-mock operator comment round).
+- Community = a `registry.yaml` declared-list source of truth, extended by a
+  draft-gated refresh agent (operator approves before a write lands); simple
+  sorts only.
+- Session activity = a full-width collapsible **bottom drawer**, not the
+  mock's inline placement.
+- Home ledger = one **merged** ledger (flow + agent runs, kind chip per
+  row).
+
+#### Measured perf delta (baseline → post-wave-6, prod serve)
+
+`/api/runs` 848 → 15ms · `/api/studio/kbs` 102 → 53ms (a same-day P2
+regression to 348ms, PR #161 — the fingerprint walk crossing 27
+`.claude/worktrees` clones on the operator's real tree, caught and fixed
+before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
+`/` 2552 → 882ms, `/library` 2866 → 878ms).
+
+#### Standing lessons
+
+- **Review-per-batch keeps earning its cost.** Every reviewed batch
+  surfaced a live defect (P1 an incomplete rollout, P2 an
+  ADR-044-rule-2 violation, B1 a sampler bug dropping all read-only events,
+  B2 idle terminal-session pollers, B4 a real double-approve race) —
+  consistent with the wave-5 measurement.
+- **Declared-data-fails-open recurred three times, independently, and was
+  fixed the same way each time** — moving a hardcoded set to a wire-derived
+  one: `brainFixHref` (must thread the REAL bound KB; null → disabled-honest,
+  #143), the approve-only kind set (`meta.verdicts` now derived from an
+  authored phase-row field validated by the frozen vocab, not a hardcoded
+  list, #162), and `isTerminalPhase` (checked panel tables generically
+  instead of a name-matched special case that left `onboarding` silently
+  always-non-terminal, #168).
+- **Missing render/structural pins kept slipping past first-draft review** —
+  an `ActivityLog` double-render in B8's first commit, caught by B11's
+  gates; `KbDrainPanelView` needed 24 `renderToStaticMarkup` pins added at
+  review (#166). A recurring reviewer finding, not a one-off.
+- **The `check-raw-fs-guarded` allowlist's line-numbered format taxes every
+  batch that touches `cli/ui-bridge.ts`** — P1, B1 and B3/B5 all had to
+  serialize and remap around the same file. Bead `forge-mlk` tracks the
+  structural fix (content-anchored keys, not line numbers).
+- **Measure perf on the operator's REAL tree, not a clean checkout.** P2's
+  regression (102 → 348ms) only existed because the live tree carries 27
+  `.claude/worktrees` clones (22GB) a CI checkout never sees — the harness
+  dirs are the operator's daily reality, and the fix (skip them in the
+  fingerprint walk) shipped the same session it was found.
+- **A waiver's own gate must be `e2e-journey.mjs --list` green, not just
+  `node --check`.** B13's CR-2 beat had never been registered in
+  `RUN_ORDER` — the harness's own drift check blocked `--list` and caught
+  it before the waiver could paper over it.
+- **Main went red for six PRs (#164–#169) and nobody noticed until #170's
+  own gate caught it — root cause AND process, both fixed same-day (hotfix
+  PR #171).** B12's review round moved its no-spawn gate to the fix-turn
+  CALL SITE so it would "hold even for injected turns" — but CI's global
+  `FORGE_ARCHITECT_NO_SPAWN=1` then suppressed every test's injected fake
+  fix-turn too, failing the round-cap/cost-ceiling tests. The fix gates the
+  DEFAULT selection instead (consolidate's own precedent): an injected
+  `runFixTurn` is by definition not a spawn. The process half is the
+  durable lesson: **a merge gate must assert PRESENCE of a green terminal
+  conclusion for the exact head SHA, never absence of red** — the
+  merge-train's flake-retry tooling (`gh pr checks --watch`-shaped) returns
+  exit 0 on "no checks reported" exactly as readily as on "all green," so
+  six red runs rode through undetected until a later PR's own gate
+  happened to reproduce the failure locally.
+
+#### Follow-up beads (not wave-6 blocking)
+
+- `forge-4ei` — demo/instructions "revise verdict" / feedback-loop
+  capability lost in the panel migration (P1).
+- `forge-lzv` — instructions' rich per-question radio form, not yet
+  reproduced on the generic panel.
+- `forge-9bd` — `SLUG_RE` false-rejects camelCase/underscore project names
+  (verified TRUE during B4's fix round).
+- `forge-yuq` — the knowledge `kb-tabs` journey flake (a seeded
+  `reflect.kb-ingest` event intermittently renders 0 in the ingest-activity
+  panel).
+- `forge-1im` — the AT-2 journey-flake class (per-PR auto flake-retry
+  shipped as a stopgap, #150/#151).
+- `forge-mlk` — the `check-raw-fs-guarded` allowlist line-drift tax (see
+  lessons, above).
+- `forge-87f` — the full-suite test count includes a LOCAL-only scanner
+  that walks `.claude/worktrees` (5055/5056 under CI env vs the operator's
+  real tree; surfaced by hotfix PR #171's verification run).
+
+**WAVE 6 COMPLETE — 2026-08-15.**
+
 ---
 
 ## 5. Maintenance contract (living-roadmap mechanics)

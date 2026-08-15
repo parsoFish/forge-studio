@@ -993,7 +993,17 @@ third connection kind above); `npm run parity:stories` exits 0.
 ### R3-07 Community browser
 
 - **Status:** implemented (2026-08-05, branch feat/r3-07-community-browser;
-  baseline R3-B11)  ·  **Wave:** 5 (module: community-browser)
+  baseline R3-B11). **Wave-6 evolution (2026-08-15):** the source of truth
+  moved from a catalog-adjacent read to a declared `studio/community/
+  registry.yaml` (CR-1, PR #159 — migrates the 20 catalog `community-skills`
+  entries; vendored skills/hooks + connections stay derived, `hubs.yaml`
+  unchanged), gained pure sorts + freshness/staleness honesty (CR-2, PR
+  #163), and gained a **community-refresh session kind** — gather → draft →
+  operator-approve → finalize, on the generic interactive spine, stamping
+  real `fetchedAt`/`fetchedBy` provenance rather than fabricating it (CR-3,
+  PR #167, folds CR-4's entry button). The F1-F3 browse/detail/install
+  behaviour this initiative specified is unchanged by the migration.  ·
+  **Wave:** 5 (module: community-browser)
 - **Depends on:** R3-01-F4 (skill install pipeline — the browser is an entry
   point, never a second pipeline), R3-03-F2 (hook scan + approval), R3-04
   (connections registry + probe), R3-06 (soft — templates browsable later).
@@ -1307,3 +1317,7 @@ rather than deferred within it:
   `install-connections` flip `pending` → `ported` — 13/13 and 10/12 (+2
   explicit `{excluded, decision}` on the fabricated `cli` kind) respectively;
   `npm run parity:stories` exits 0.
+- 2026-08-15 — **Wave-6 docs-sync note.** R3-07 stays `implemented`; its
+  status line gains a note on the CR-1..3 evolution (registry.yaml as the
+  new source of truth, sorts + freshness honesty, the community-refresh
+  agent) — the initiative's own F1-F3 acceptance criteria are unaffected.

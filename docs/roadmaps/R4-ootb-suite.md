@@ -1520,7 +1520,13 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 
 ### R4-13 Project roadmap tab (dependency DAG)
 
-- **Status:** planned  ·  **Wave:** 5 (module: project-roadmap-tab)
+- **Status:** **implemented** (2026-08-09, PR #104 — dependency-DAG column
+  layout replaces `SerpentineTimeline`). **Superseded 2026-08-15 (wave-6
+  RV-1/RV-2):** `RoadmapDag.tsx` itself is retired in favour of the B′
+  completion-time canvas (`RoadmapCanvas.tsx`) with a push drawer —
+  `InitiativeDetail` extracted first (RV-1, PR #149), the canvas landed next
+  (RV-2, PR #155). See `docs/forge-ui-dom-and-harness.md`'s Roadmap entry
+  for the as-built contract.  ·  **Wave:** 5 (module: project-roadmap-tab)
 - **Depends on:** R4-12 (the Overview | Roadmap tab split lives on its page).
 - **Context:** Wave-5 cut, **operator decision 4 (2026-08-03): the dependency
   DAG replaces the serpentine.** Mockup round-7: the roadmap moves to its own
@@ -1560,7 +1566,10 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 
 ### R4-14 Demo showcase page
 
-- **Status:** planned  ·  **Wave:** 5 (module: demo-showcase)
+- **Status:** **implemented** (2026-08-09/10, PR #108 — showcase surface
+  derived from the real demo manifest; this file's status line was stale,
+  corrected in the wave-6 docs-sync pass)  ·  **Wave:** 5 (module:
+  demo-showcase)
 - **Depends on:** R4-12 (entry from the project page), R1-03 (demo-process
   clause — the artifacts it renders).
 - **Context:** Wave-5 cut. Mockup `#/projects/showcase/<id>`
@@ -2233,3 +2242,9 @@ gitignored campaign dir):
   acceptance) rather than a slot in a batch. Separately filed, deliberately NOT fixed here: the bridge never
   starts a tail for `authoring` at all (there is no `ensureAuthoringTail`), so the live panel stays empty
   even with the directories now agreed — one concern per PR.
+- 2026-08-15 — **Wave-6 docs-sync correction.** R4-13 and R4-14 were stale
+  `planned` in this file despite shipping before wave 6 opened — R4-13 (PR
+  #104, 2026-08-09) and R4-14 (PR #108, 2026-08-09/10). Both flipped to
+  `implemented`; R4-13's status line additionally records wave-6's RV-1/RV-2
+  (PRs #149/#155), which retired `RoadmapDag.tsx` in favour of
+  `RoadmapCanvas.tsx`.
