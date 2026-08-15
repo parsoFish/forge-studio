@@ -4508,6 +4508,76 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // GET /api/studio/projects/:id/onboarding/active — W6-B14 reattach
+  // discovery. `OnboardWithAgent` (forge-ui) only ever knew its dispatched
+  // runId from its OWN component state — a nav-away (or reload) forgot it,
+  // with no way back to a still-running server-side onboarding dispatch even
+  // though the run's own `status.json` (written by `writeOnboardingSession`
+  // above with `phase: 'running'`, then updated to a terminal phase by
+  // `writeSessionTerminalPhase`, cli/agent-run.ts) already carries everything
+  // needed to reattach. This is that tiny GET: find this project's most
+  // recent `_onboarding/<sessionId>` (sessionId embeds a sortable
+  // `newArchitectSessionId()` timestamp, above — a plain string sort picks
+  // the latest) and report its own `runId`/`phase` — `sessionId: null` if
+  // this project has never run onboarding. Read-only; no dispatch branch on
+  // this URL, so nothing here can trigger a run (mirrors the ingest-activity
+  // route's own GET-only contract, cli/bridge-studio-kbs.ts).
+  if (method === 'GET' && url.startsWith('/api/studio/projects/') && url.endsWith('/onboarding/active')) {
+    try {
+      const project = decodeURIComponent(url.slice('/api/studio/projects/'.length, url.length - '/onboarding/active'.length));
+      const projectReason = invalidGenerationProjectReason(project);
+      if (projectReason) { sendJson(res, 400, { error: projectReason }, origin); return true; }
+      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
+      if (realProjectDir === null) { sendJson(res, 404, { error: `project not found: ${project}` }, origin); return true; }
+
+      // SEC-04 — route the `_onboarding` LISTING itself through the shared
+      // guard (`guardedReadDir`, same primitive `listInstructionsSessions`'s
+      // per-session reads already use below): `realProjectDir` proves the
+      // PROJECT dir is contained, but says nothing about a `_onboarding`
+      // entry BENEATH it — a checked-out project repo is attacker-supplied
+      // content, and a commit carrying a symlink named `_onboarding` would
+      // otherwise redirect this enumeration outside `projectsRoot` (the
+      // exact escape `writeOnboardingSession`'s own header above documents
+      // for the WRITE side of this same directory).
+      const sessionIds = (guardedReadDir(ctx.projectsRoot, [project, '_onboarding']) ?? [])
+        .filter((name) => !name.startsWith('_'));
+      if (sessionIds.length === 0) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
+
+      // "Most recent" is picked by each session's OWN `status.json.startedAt`
+      // (millisecond-precision ISO, sorts correctly as a plain string), never
+      // by sorting the sessionId strings themselves — `newArchitectSessionId()`
+      // has only ONE-SECOND timestamp granularity plus a RANDOM (non-monotonic)
+      // hex entropy suffix, so two sessions started within the same wall-clock
+      // second (a real shape: an operator double-clicking, or two fast test
+      // dispatches) sort in an ARBITRARY order by id alone.
+      let latest: string | null = null;
+      let latestStatus: { phase?: unknown; runId?: unknown; startedAt?: unknown } | null = null;
+      let latestStartedAt = '';
+      for (const sessionId of sessionIds) {
+        const status = guardedReadSessionStatus<{ phase?: unknown; runId?: unknown; startedAt?: unknown }>(
+          ctx.projectsRoot, [project, '_onboarding', sessionId],
+        );
+        const startedAt = typeof status?.startedAt === 'string' ? status.startedAt : '';
+        if (latest === null || startedAt > latestStartedAt) {
+          latest = sessionId;
+          latestStatus = status;
+          latestStartedAt = startedAt;
+        }
+      }
+      if (!latest) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
+
+      sendJson(res, 200, {
+        ok: true,
+        sessionId: latest,
+        runId: typeof latestStatus?.runId === 'string' ? latestStatus.runId : null,
+        phase: typeof latestStatus?.phase === 'string' ? latestStatus.phase : null,
+      }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // POST /api/studio/authoring/start {project, prompt} — R4-21, the
   // authoring session's kickoff route. Mirrors `POST /api/studio/onboarding/
   // start` EXACTLY: SLUG_RE + length-cap project validation via

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { preflightFixAuto, preflightFixAgent, preflightFixStatus, type PreflightClause } from '@/lib/studio-client';
+import { preflightFixAuto, preflightFixAgent, type PreflightClause } from '@/lib/studio-client';
 import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
 import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND_HINT } from '@/lib/contract-resolution-view';
+import { pollPreflightFix, pollDisplayState, type PolledPreflightFixStatus } from '@/lib/agent-dispatch';
 
 /**
  * Stage D — guided contract-resolution panel. Mirrors LintResolutionPanel for
@@ -29,20 +30,28 @@ import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND
  *   - USER  → the operator's decision drives the preflight-fix agent, which
  *             applies it and re-runs preflight to confirm the clause cleared
  *             (this tier — and only this tier — genuinely dispatches + polls
- *             an agent turn, ~90s bounded; see `poll` below).
+ *             an agent turn).
  * Load-bearing state is mirrored to data-* for the harness.
+ *
+ * W6-B14: `submitUser` used to `await` a hand-rolled 45×2s poll loop DIRECTLY
+ * inside the click handler — the THIRD independent instance of the fragile-
+ * poll-loop class W6-B13 already fixed twice (pollAgentRun/pollKbDrain/
+ * pollAgentFix). It now routes through the shared `pollPreflightFix`
+ * (`./lib/agent-dispatch.ts`), rendering the same three-visible-state
+ * contract every other fixed poll surface in this app does —
+ * `data-poll-state="watching|timed-out|terminal"` per clause, plus a
+ * `data-action="re-check"` affordance once timed out. Dispatched
+ * imperatively from the click handler (not a `useEffect`, mirroring
+ * `KbDrainPanel.tsx`'s own user-tier fix poll — see that file's header for
+ * why), with each clause's in-flight poll's stop fn tracked in a ref map and
+ * cancelled on unmount, so a nav-away never leaves a poll trying to
+ * `setState` on a dead component. No server-side reattach exists for this
+ * tier (a preflight-fix runId is not independently discoverable without
+ * already knowing it — unlike consolidate/onboarding, there is no per-clause
+ * "active run" index) — a reload genuinely starts fresh, same as before.
  */
 
-type AgentState = 'running' | 'cleared' | 'not-cleared' | 'failed';
-
-async function poll(projectId: string, runId: string): Promise<AgentState> {
-  for (let i = 0; i < 45; i++) {
-    const s = await preflightFixStatus(projectId, runId);
-    if (s.state !== 'running') return s.state;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  return 'running';
-}
+type AgentState = 'running' | 'cleared' | 'not-cleared' | 'failed' | 'timed-out';
 
 const btn: React.CSSProperties = {
   fontSize: 11.5, padding: '5px 11px', background: 'var(--panel-2)', color: 'var(--text)',
@@ -68,8 +77,32 @@ export function ContractResolutionPanel({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [runState, setRunState] = useState<Record<string, AgentState>>({});
+  const [runStatus, setRunStatus] = useState<Record<string, PolledPreflightFixStatus>>({});
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Per-clause in-flight poll stop fns + last dispatched runId (for
+  // "Re-check") — a plain ref, since these are driven imperatively from
+  // click handlers, not a useEffect reacting to state (mirrors
+  // KbDrainPanel.tsx's own submitUserAnswer / userPollStopRef).
+  const pollStopRef = useRef<Record<string, () => void>>({});
+  const runIdRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    return () => { Object.values(pollStopRef.current).forEach((stop) => stop()); };
+  }, []);
+
+  const startPoll = useCallback((clauseId: string, runId: string) => {
+    pollStopRef.current[clauseId]?.();
+    runIdRef.current[clauseId] = runId;
+    pollStopRef.current[clauseId] = pollPreflightFix(projectId, runId, {
+      onUpdate: (s) => {
+        setRunStatus((m) => ({ ...m, [clauseId]: s }));
+        if (s.state === 'cleared') onChanged?.();
+        else if (s.state !== 'running' && s.state !== 'timed-out') {
+          setMsg(`agent could not clear ${clauseId} (${s.state}) — refine your decision and retry`);
+        }
+      },
+    });
+  }, [projectId, onChanged]);
 
   const failing = clauses.filter((c) => !c.pass);
   const auto = failing.filter((c) => c.resolution === 'auto');
@@ -88,10 +121,14 @@ export function ContractResolutionPanel({
 
   const resolveAgent = useCallback(async (c: PreflightClause) => {
     setBusy(`agent:${c.id}`); setMsg(null);
-    setRunState((m) => ({ ...m, [c.id]: 'running' }));
+    setRunStatus((m) => ({ ...m, [c.id]: { ok: true, state: 'running', cleared: false } }));
     const r = await preflightFixAgent(projectId, { clauseId: c.id });
     setBusy(null);
-    if (!r.ok) { setRunState((m) => ({ ...m, [c.id]: 'failed' })); setMsg(r.error ?? 'dispatch failed'); return; }
+    if (!r.ok) {
+      setRunStatus((m) => ({ ...m, [c.id]: { ok: false, state: 'failed', cleared: false } }));
+      setMsg(r.error ?? 'dispatch failed');
+      return;
+    }
     // Agent-tier clauses route to an existing builder — navigate there.
     if (r.route === 'instructions') {
       const s = await startInstructions({ project: projectId, mode: 'init' });
@@ -115,15 +152,21 @@ export function ContractResolutionPanel({
   const submitUser = useCallback(async (c: PreflightClause) => {
     const instruction = (notes[c.id] ?? '').trim();
     setBusy(`user:${c.id}`); setMsg(null);
-    setRunState((m) => ({ ...m, [c.id]: 'running' }));
+    setRunStatus((m) => ({ ...m, [c.id]: { ok: true, state: 'running', cleared: false } }));
     const r = await preflightFixAgent(projectId, { clauseId: c.id, instruction });
-    if (!r.ok || !r.runId) { setBusy(null); setRunState((m) => ({ ...m, [c.id]: 'failed' })); setMsg(r.error ?? 'dispatch failed'); return; }
-    const state = await poll(projectId, r.runId);
     setBusy(null);
-    setRunState((m) => ({ ...m, [c.id]: state }));
-    if (state === 'cleared') onChanged?.();
-    else setMsg(`agent could not clear ${c.id} (${state}) — refine your decision and retry`);
-  }, [projectId, notes, onChanged]);
+    if (!r.ok || !r.runId) {
+      setRunStatus((m) => ({ ...m, [c.id]: { ok: false, state: 'failed', cleared: false } }));
+      setMsg(r.error ?? 'dispatch failed');
+      return;
+    }
+    startPoll(c.id, r.runId);
+  }, [projectId, notes, startPoll]);
+
+  const recheckUser = useCallback((clauseId: string) => {
+    const runId = runIdRef.current[clauseId];
+    if (runId) startPoll(clauseId, runId);
+  }, [startPoll]);
 
   if (failing.length === 0) return null;
 
@@ -145,7 +188,7 @@ export function ContractResolutionPanel({
       {auto.length > 0 && (
         <div data-resolution-stage="auto" style={{ marginBottom: 12 }}>
           <Stage title={`Auto-fixable (${auto.length})`} sub="Deterministic — .gitignore entries, scaffolded context stubs." />
-          {auto.map((c) => <ClauseRow key={c.id} c={c} state={undefined} />)}
+          {auto.map((c) => <ClauseRow key={c.id} c={c} status={undefined} />)}
           <button data-action="apply-preflight-auto" style={{ ...btn, marginTop: 6 }} disabled={busy !== null} onClick={() => void applyAuto()}>
             {busy === 'auto' ? 'Applying…' : `Apply ${auto.length} auto-fix${auto.length > 1 ? 'es' : ''}`}
           </button>
@@ -161,7 +204,7 @@ export function ContractResolutionPanel({
             return (
               <div key={c.id} style={{ marginBottom: blocked ? 6 : 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ClauseRow c={c} state={runState[c.id]} />
+                  <ClauseRow c={c} status={runStatus[c.id]} />
                   <button
                     data-action="resolve-clause-agent"
                     data-resolve-clause-id={c.id}
@@ -189,29 +232,45 @@ export function ContractResolutionPanel({
       {user.length > 0 && (
         <div data-resolution-stage="user" data-user-total={user.length} style={{ marginBottom: 8 }}>
           <Stage title={`Needs your decision (${user.length})`} sub="State the decision (or your reasoning to accept it as-is); the agent applies it and re-runs preflight." />
-          {user.map((c) => (
-            <div key={c.id} data-user-clause data-user-clause-id={c.id} style={{ marginBottom: 10 }}>
-              <ClauseRow c={c} state={runState[c.id]} />
-              <textarea
-                data-component="clause-decision-input"
-                data-decision-clause-id={c.id}
-                value={notes[c.id] ?? ''}
-                onChange={(e) => setNotes((m) => ({ ...m, [c.id]: e.target.value }))}
-                placeholder={c.fixHint ?? 'How should this be resolved?'}
-                rows={2}
-                style={{ width: '100%', marginTop: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 7, resize: 'vertical' }}
-              />
-              <button
-                data-action="apply-clause-decision"
-                data-apply-clause-id={c.id}
-                style={{ ...btn, marginTop: 4 }}
-                disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
-                onClick={() => void submitUser(c)}
-              >
-                {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
-              </button>
-            </div>
-          ))}
+          {user.map((c) => {
+            const status = runStatus[c.id];
+            const clausePollState = pollDisplayState(status ?? null);
+            return (
+              <div key={c.id} data-user-clause data-user-clause-id={c.id} {...(clausePollState ? { 'data-poll-state': clausePollState } : {})} style={{ marginBottom: 10 }}>
+                <ClauseRow c={c} status={status} />
+                <textarea
+                  data-component="clause-decision-input"
+                  data-decision-clause-id={c.id}
+                  value={notes[c.id] ?? ''}
+                  onChange={(e) => setNotes((m) => ({ ...m, [c.id]: e.target.value }))}
+                  placeholder={c.fixHint ?? 'How should this be resolved?'}
+                  rows={2}
+                  style={{ width: '100%', marginTop: 6, fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 7, resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <button
+                    data-action="apply-clause-decision"
+                    data-apply-clause-id={c.id}
+                    style={btn}
+                    disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
+                    onClick={() => void submitUser(c)}
+                  >
+                    {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
+                  </button>
+                  {clausePollState === 'timed-out' && (
+                    <button
+                      data-action="re-check"
+                      data-recheck-clause-id={c.id}
+                      style={btn}
+                      onClick={() => recheckUser(c.id)}
+                    >
+                      Re-check
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -227,9 +286,10 @@ function Stage({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-const STATE_GLYPH: Record<AgentState, string> = { running: '⏳', cleared: '✓', 'not-cleared': '⚠', failed: '✗' };
+const STATE_GLYPH: Record<AgentState, string> = { running: '⏳', cleared: '✓', 'not-cleared': '⚠', failed: '✗', 'timed-out': '⏸' };
 
-function ClauseRow({ c, state }: { c: PreflightClause; state?: AgentState }) {
+function ClauseRow({ c, status }: { c: PreflightClause; status?: PolledPreflightFixStatus }) {
+  const state = status?.state as AgentState | undefined;
   return (
     <div
       data-resolution-clause

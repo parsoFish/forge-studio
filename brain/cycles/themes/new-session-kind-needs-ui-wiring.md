@@ -12,11 +12,12 @@ keywords:
   - reachability
   - additive-is-not-enough
 created_at: 2026-08-10
-updated_at: 2026-08-10
+updated_at: 2026-08-15
 related_themes:
   - adr042-park-recurrence-and-the-generic-primitive
   - declared-data-fails-open
   - forge-ui-data-attribute-contract-discipline
+  - background-work-server-owned-client-observes
 ---
 
 # A new interactive session kind needs its UI wiring and a runner
@@ -43,6 +44,10 @@ R4-21 shipped the additive layer complete and **green across 4339 tests**, yet t
 - [ ] A journey that **drives the kind from launcher to finalize** — reachability, not just route resolution. Assert on the settled terminal state ([[forge-ui-data-attribute-contract-discipline]]).
 
 When the runner is a new `orchestrator/` executor, it is ADR-042 ask-first — see [[adr042-park-recurrence-and-the-generic-primitive]] for why the per-kind runner keeps recurring and the generic primitive that dissolves it.
+
+## Amendment — 2026-08-15 (W6-B14): the generic panel dissolves layer 2 for `turnSpec`/`panel` kinds
+
+Wave-6 batches B3/B4/B6 built the generic interaction panel plus its `POST …/sessions/:kind/:sessionId/:affordance` write endpoint (ADR-043's 2026-08-15 amendment). The **KindSummary-panel** line of the checklist above is now *derived*, not hand-authored, for any kind declaring a `turnSpec` (the migrated legacy kinds) or the read-only `panel.phases` twin (the un-migrated ones — demo, onboarding, kb-cleanup, authoring, instructions each gain a `panel` row instead of a bespoke component). A new kind that fits this shared, deep-frozen phase-row vocabulary gets its panel affordances for free; the failure shape this theme documents (backend-complete, product-unreachable) no longer recurs at the panel layer for it. The **launcher** and **finalize-action** lines are unchanged — still hand-wired per kind, the endpoint only derives read-side affordances — and the **runtime runner** line is untouched entirely. Architect keeps a permanently bespoke panel (ADR-043 §4: branching council/interview control flow a linear phase table cannot express) — it, and any kind whose runtime shape genuinely does not fit `turnSpec`/`panel`, still owes the full checklist.
 
 ## Sources
 

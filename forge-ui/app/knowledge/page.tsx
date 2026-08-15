@@ -3,11 +3,10 @@
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb,
-  fetchKbIngestActivity, startKbCleanup,
+  fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode,
+  fetchKbIngestActivity,
 } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
-import { runConsolidateToTerminal, consolidateResultLabel } from '@/lib/kb-consolidate';
 import { resolveActiveKbId } from '@/lib/knowledge-id-resolution';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
@@ -16,6 +15,7 @@ import { ThemeList } from '@/components/studio/knowledge/ThemeList';
 import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
 import { KbDrainPanel } from '@/components/studio/knowledge/KbDrainPanel';
+import { KbMaintenance } from '@/components/studio/knowledge/KbMaintenancePanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
 import Link from 'next/link';
@@ -533,116 +533,8 @@ function IngestActivityPanel({ kbId }: { kbId: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// KbMaintenance (K3) — manual brain lint / index-refresh from the knowledge tab.
-// (Ingest + agentic review run during cycle reflection; these are the
-// deterministic, operator-triggerable ops.)
-// ---------------------------------------------------------------------------
-function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMaintained?: () => void; onDeleted?: () => void }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState<'index' | 'consolidate' | 'delete' | 'start-cleanup' | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  // R1-06 WI-3 MINOR 2: the observed terminal state of the LAST consolidate run
-  // ('' until one completes) — the kb-maintain journey drives off this rather
-  // than scraping the result text. Reset when a fresh consolidate starts.
-  const [consolidateState, setConsolidateState] = useState<string>('');
-
-  async function run(op: 'index' | 'consolidate') {
-    setBusy(op);
-    setResult(null);
-    if (op === 'consolidate') {
-      // Consolidate is async: dispatch, poll its runId to terminal, then refresh
-      // the KB health so the operator sees a real completion + updated warnings
-      // (not a static "session started"). onMaintained refetches KB detail.
-      setConsolidateState('');
-      const outcome = await runConsolidateToTerminal(kbId);
-      setBusy(null);
-      setResult(consolidateResultLabel(outcome));
-      setConsolidateState(outcome.ok ? outcome.state : 'error');
-      if (outcome.ok) onMaintained?.();
-      setTimeout(() => setResult(null), 6000);
-      return;
-    }
-    // W6-B13: 'lint' was removed as its own action here — the Health tab's
-    // KbDrainPanel now IS the scan result (every drain round re-lints the KB
-    // and surfaces the counts/findings live), so a separate manual lint-only
-    // button duplicated it with no distinct value (sweep finding C4#7).
-    const r = await runKbMaintenance(kbId, op);
-    setBusy(null);
-    if (!r.ok) { setResult(r.error ?? 'failed'); return; }
-    setResult('index refreshed ✓');
-    setTimeout(() => setResult(null), 6000);
-  }
-
-  // R4-19-F2: the kb-cleanup LAUNCHER — closes the reachability gap the
-  // brain theme new-session-kind-needs-ui-wiring.md documents (R4-21's prior
-  // instance). Navigates using the `project` this route itself returns,
-  // NEVER `kbId` — a non-project-bound KB anchors its session under a
-  // server-minted `.kb-<id>` scratch project (`startKbCleanup`'s own header
-  // in lib/studio-client.ts), so re-deriving the anchor from `kbId` here
-  // would 404 for every such KB. No shared href-builder exists in this
-  // codebase (AuthoringLauncher.tsx/KbBind.tsx/skills/new all hand-build
-  // their own template string at the call site) — this follows suit.
-  async function handleStartCleanup() {
-    setBusy('start-cleanup');
-    setResult(null);
-    const r = await startKbCleanup(kbId);
-    setBusy(null);
-    if (!r.ok) { setResult(r.error); return; }
-    router.push(`/sessions/kb-cleanup/${encodeURIComponent(r.sessionId)}?project=${encodeURIComponent(r.project)}`);
-  }
-
-  async function handleDelete() {
-    if (!window.confirm(`Delete brain "${kbId}" and all its content? This cannot be undone.`)) return;
-    setBusy('delete');
-    setResult(null);
-    const r = await deleteKb(kbId);
-    setBusy(null);
-    if (!r.ok) { setResult(r.error ?? 'delete failed'); return; }
-    onDeleted?.();
-  }
-
-  const btn: React.CSSProperties = {
-    fontSize: 11.5, padding: '4px 10px', background: 'var(--panel-2)', color: 'var(--text)',
-    border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
-  };
-  return (
-    <div
-      data-component="kb-maintenance"
-      {...(consolidateState ? { 'data-consolidate-state': consolidateState } : {})}
-      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-    >
-      <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
-        {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
-      </button>
-      <button
-        data-action="kb-maintain-session"
-        style={btn}
-        disabled={busy !== null}
-        onClick={() => void run('consolidate')}
-        title="Start a consolidate maintenance session"
-      >
-        {busy === 'consolidate' ? 'Consolidating…' : 'Consolidate'}
-      </button>
-      <button
-        data-action="start-kb-cleanup"
-        style={btn}
-        disabled={busy !== null}
-        onClick={() => void handleStartCleanup()}
-        title="Start a kb-cleanup session (draft plan + operator-approved apply)"
-      >
-        {busy === 'start-cleanup' ? 'Starting…' : 'Cleanup plan'}
-      </button>
-      <button
-        data-action="kb-delete"
-        style={{ ...btn, color: 'var(--error, #f87171)', borderColor: 'var(--error, #f87171)' }}
-        disabled={busy !== null}
-        onClick={() => void handleDelete()}
-        title="Delete this knowledge base"
-      >
-        {busy === 'delete' ? 'Deleting…' : 'Delete'}
-      </button>
-      {result && <span data-component="kb-maintenance-result" style={{ fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>{result}</span>}
-    </div>
-  );
-}
+// KbMaintenance (K3, manual brain lint/index-refresh/consolidate/cleanup/
+// delete) moved to components/studio/knowledge/KbMaintenancePanel.tsx
+// (W6-B14) — a page-route file can only export the reserved Next.js route
+// symbols, so a component this task needs a standalone render-pin test for
+// has to live outside this file (mirrors RunPanel.tsx's own D12 extraction).
