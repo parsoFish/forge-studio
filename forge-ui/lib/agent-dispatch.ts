@@ -148,7 +148,7 @@ export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => vo
     isRunning: (s) => s.state === 'running',
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
-    onUpdate: (s) => opts.onUpdate(s as PolledAgentRunStatus),
+    onUpdate: (s) => opts.onUpdate(s),
     onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, costUsd: 0, events: 0 }), state: 'timed-out' }),
   });
 }
@@ -188,7 +188,7 @@ export function pollKbDrain(kbId: string, runId: string, opts: PollKbDrainOption
     isRunning: (s) => s.state === 'running',
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
-    onUpdate: (s) => opts.onUpdate(s as PolledKbDrainStatus),
+    onUpdate: (s) => opts.onUpdate(s),
     onTimeout: (last) => opts.onUpdate({ ...(last ?? timedOutKbDrainStatus(kbId, runId)), state: 'timed-out' }),
   });
 }
@@ -221,7 +221,7 @@ export function pollAgentFix(kbId: string, runId: string, opts: PollAgentFixOpti
     isRunning: (s) => s.state === 'running',
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
-    onUpdate: (s) => opts.onUpdate(s as PolledAgentFixStatus),
+    onUpdate: (s) => opts.onUpdate(s),
     onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false }), state: 'timed-out' }),
   });
 }

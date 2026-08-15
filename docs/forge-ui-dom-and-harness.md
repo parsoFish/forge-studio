@@ -1949,11 +1949,36 @@ inventory rather than one shared page-level contract:
       `KbDrainPanel` actually acts on, so they route straight to it rather
       than sitting as dead numbers. (Layer balance / connectivity /
       staleness stay plain — drain does not act on those.)
-    - Render-tested (`.tsx` wiring only — no jsdom in this repo, see
-      `RunPanel.tsx`'s own header) via `tsc`/`next build` plus pure-logic
-      unit coverage: `lib/kb-drain-view.test.ts` (state copy, tier
-      splitting, the C9#3 walkthrough-completion fix),
-      `lib/agent-dispatch.test.ts` (`pollKbDrain`/`pollAgentFix`), and
+    - **Container/view split (review round).** `KbDrainPanel.tsx`'s
+      "interesting" states (running/green/needs-you/no-progress/round-cap/
+      cost-ceiling/failed/timed-out) only ever exist via an async fetch/poll
+      result, which `renderToStaticMarkup` never runs — a render test
+      against the hooks-owning component could only ever observe its
+      permanently-stuck initial `'attaching'` state. `KbDrainPanel` (the
+      exported default, hooks/effects/fetch/poll wiring) renders the
+      exported, hooks-free `KbDrainPanelView` — every prop
+      (`displayState`/`round`/`runId`/`counts`/`perFinding`/`dispatching`/
+      `attaching`/the user-tier walkthrough fields) is driven straight from
+      container state, so `KbDrainPanelView` alone is fully render-testable
+      via `react-dom/server`'s `renderToStaticMarkup`, the same way
+      `KbHealth.tsx` (already a plain props-in component) is tested.
+      Render-tested: `lib/kb-drain-panel-render.test.ts` (mirrors
+      `run-panel-render.test.ts`'s technique) — pins every
+      `data-drain-state` vocabulary value, `data-drain-round`,
+      `data-drain-run-id`, the per-finding `data-drain-finding-tier`/
+      `-outcome` rows, the needs-you `data-user-index`/`-total` block +
+      the C9#3 exhausted-completion state, the `timed-out` re-check
+      affordance, and the full drain-to-green button disabled matrix
+      (dispatching/running/attaching → disabled; every terminal state →
+      enabled). The container's own wiring (`.tsx` only — no jsdom in this
+      repo, see `RunPanel.tsx`'s own header) is verified by `tsc`/
+      `next build` plus pure-logic unit coverage: `lib/kb-drain-view.test.ts`
+      (state copy, tier splitting, the C9#3 walkthrough-completion logic),
+      `lib/agent-dispatch.test.ts` (`pollKbDrain`/`pollAgentFix`, including
+      the "unmount mid-poll" cleanup-fn pin the user-tier poll's own ref
+      relies on — review round MEDIUM fix: `submitUserAnswer` now stores
+      `pollAgentFix`'s returned stop fn in a ref and cancels it from the
+      SAME unmount-cleanup effect the runId poll already uses), and
       `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
       `fetchActiveOrLatestKbDrain` wire contracts). Journey:
       `knowledge-lint-index` (renamed in spirit from the old lint/index

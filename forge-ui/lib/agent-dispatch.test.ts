@@ -278,3 +278,19 @@ test('pollAgentFix: stops polling once "not-cleared" or "failed" is reached', as
   expect(fetchStatus).toHaveBeenCalledTimes(1);
   stop();
 });
+
+test('pollAgentFix: "unmount mid-poll" — calling the returned stop fn while still "running" makes NO further fetch calls (review round MEDIUM: KbDrainPanel.tsx now stores this exact stop fn in a ref and calls it from the SAME unmount-cleanup effect the runId poll already uses — this pins the underlying mechanism that fix relies on: a still-running poll, once stopped, genuinely produces zero further fetchStatus calls, not just zero further onUpdate calls)', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(fixStatus({ state: 'running' }));
+  const onUpdate = vi.fn();
+  const stop = pollAgentFix('forge-dev', 'fix-run-1', { fetchStatus, onUpdate, intervalMs: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  // Simulate the component unmounting WHILE the poll is still 'running' (the
+  // exact scenario the discarded-stop-fn defect covered: an operator submits
+  // a user-tier answer, then navigates away before it clears).
+  stop();
+  const callsAtUnmount = fetchStatus.mock.calls.length;
+  const updatesAtUnmount = onUpdate.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(fetchStatus).toHaveBeenCalledTimes(callsAtUnmount);
+  expect(onUpdate).toHaveBeenCalledTimes(updatesAtUnmount);
+});
