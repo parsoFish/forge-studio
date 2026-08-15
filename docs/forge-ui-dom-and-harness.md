@@ -370,9 +370,12 @@ inventory rather than one shared page-level contract:
   fieldset `[data-question-inferred="true"]` (the interactive form stamps
   `"false"`) with a `[data-question-inferred-badge]` and the inferred
   `[data-question-answer]`, and NO submit button. The old `/review/[cycleId]` and `/reflect/[cycleId]`
-  routes are now permanent client-side redirects into `/artifact` (M7-3,
-  ADR-031) — `[data-page="review-redirect"|"reflect-redirect"][data-page-ready="true"]`
-  — kept only so stale bookmarks keep working.
+  routes are now permanent WIRE redirects into `/artifact` (M7-3, ADR-031;
+  converted from client-side shim pages to `next.config.mjs` `redirects()`
+  entries at W6-IA-8 — `?run=<id>&type=verdict&mode=gate` /
+  `?run=<id>&type=reflection&mode=view` respectively) — no page renders at the
+  old path at all now, the 308 lands directly on this route; kept only so
+  stale bookmarks keep working.
 - **`/hooks`, `/hooks/[id]`, `/hooks/new`** (R3-03-F4) — the hooks pillar. A
   library "hook" is an **agent-lifecycle customisation** and a FILE PACKAGE
   (`studio/hooks/<id>/hook.yaml` + its scripts), generic and host-agnostic;
@@ -1108,12 +1111,17 @@ inventory rather than one shared page-level contract:
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it
-  replaced (`/architect/[sid]/interview`, `/instructions/[sid]`,
-  `/project-brain/[sid]`) are **deleted as implementations and survive as
-  permanent server-side redirects** into this route — `/project-brain`'s
-  redirect forwards its `?project=` query, and `/architect/[sid]` now
-  redirects straight here rather than chaining through `/interview`.
-  Page shell:
+  replaced (`/architect/[sid]`, `/architect/[sid]/interview`,
+  `/instructions/[sid]`, `/project-brain/[sid]`) are **deleted as
+  implementations, with no page file at all left at the old paths** — they
+  survive only as permanent WIRE redirects declared in `forge-ui/next.config.mjs`
+  `redirects()` (converted from client/server-component shim pages to
+  config-level redirects at W6-IA-8, since each destination is knowable from
+  the URL alone) into this route — `/project-brain`'s redirect entry forwards
+  its `?project=` query automatically (Next passes through any query param the
+  destination doesn't consume), and both `/architect/[sid]` and
+  `/architect/[sid]/interview` redirect straight here directly, never chaining
+  through each other. Page shell:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
@@ -1313,7 +1321,11 @@ inventory rather than one shared page-level contract:
   `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
   plus a compact `[data-section="demo-status-strip"]`. The old detached
   `/demo/[sid]` route is a redirect stub
-  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`).
+  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`) —
+  deliberately kept as a CLIENT-side page, not converted to a
+  `next.config.mjs` wire redirect at W6-IA-8 alongside the other six legacy
+  shims: its destination isn't knowable from the URL alone, it needs a live
+  `listDemoSessions()` lookup to resolve which project owns the session id.
 - **Generation gallery — the demo-builder's session artifact (R4-16-F1,
   2026-08-06).** Each completed generate turn is SNAPSHOTTED into the session
   dir (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
@@ -1668,8 +1680,11 @@ inventory rather than one shared page-level contract:
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
-  route is now a permanent client-side redirect stub into `/` (bookmarks
-  keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
+  route is now a permanent WIRE redirect (`forge-ui/next.config.mjs`
+  `redirects()`, converted from a client-side shim page at W6-IA-8) straight
+  into `/library` — the future home of the cross-project stuck-initiative
+  attention strip (R4-11-F4) — so bookmarks keep working with no page ever
+  rendering at the old path.
 - **`/skills` + `/skills/new` + `/skills/[id]` — the skills library (R3-01-F3/F4).**
   The OOTB community-sourced skills (`studio/catalog.yaml`, with provenance +
   stars) still surface as draggable chips inside the agent builder's palette
