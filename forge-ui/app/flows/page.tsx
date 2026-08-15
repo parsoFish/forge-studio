@@ -21,10 +21,8 @@ import {
 // a card grid (reusing the REAL FlowCard from the library shelf's flows
 // section), with a first-run banner / true-empty state carrying the same
 // "+ New flow" CTA (see `FlowsIndexBody`'s header for the three-state split).
-// `StudioNav.tsx`'s Flows nav item still deep-links straight to
-// `/flows/forge-develop` — repointing it to this index is a LATER lane
-// (IA-5) and is deliberately NOT done here; this route is reached today via
-// direct navigation and its own card on `/library`.
+// `StudioNav.tsx`'s Flows nav item points at this index (repointed in
+// W6-IA-5).
 //
 // This is a thin connected shell: all render CONTRACT (grid rows,
 // first-run/zero-state, card reuse) lives on `FlowsIndexBody`

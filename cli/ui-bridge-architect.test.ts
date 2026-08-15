@@ -328,6 +328,36 @@ test('POST /api/architect/start creates a session dir + status', async () => {
   assert.equal(status.phase, 'interviewing');
 });
 
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
+// is strategy:fixed (sonnet), so the only legal modelTier is "sonnet".
+// ---------------------------------------------------------------------------
+
+test('POST /api/architect/start with modelTier:"sonnet" (equal to the fixed tier) is persisted into status.json', async () => {
+  const res = await fetch(`${url}/api/architect/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', idea: 'A brand new idea.', modelTier: 'sonnet' }),
+  });
+  assert.equal(res.status, 200);
+  const { sessionId } = (await res.json()) as { sessionId: string };
+  const status = JSON.parse(readFileSync(join(sessionDir(sessionId), 'status.json'), 'utf8'));
+  assert.equal(status.modelTier, 'sonnet');
+});
+
+test('POST /api/architect/start with an out-of-envelope modelTier ("opus") 400s naming the value and the allowed set — no session dir created', async () => {
+  const before = listArchitectSessionIds();
+  const res = await fetch(`${url}/api/architect/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ project: 'demo', idea: 'A brand new idea.', modelTier: 'opus' }),
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /requested model tier "opus".*allowed tier\(s\): sonnet/);
+  assert.deepEqual(listArchitectSessionIds(), before, 'a rejected modelTier must not create a new session dir');
+});
+
 // ===========================================================================
 // R4-16 PIN 4 — round-3 finding (BLOCKER), applies to /api/architect/start
 // too: `project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot,

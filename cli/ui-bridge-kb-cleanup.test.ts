@@ -122,6 +122,10 @@ function start(kbId: string): Promise<Response> {
   return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/start`, { method: 'POST', headers: CSRF, body: '{}' });
 }
 
+function startWithBody(kbId: string, body: unknown): Promise<Response> {
+  return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/start`, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
+}
+
 /**
  * DEFECT FIX (this file's own AT-1 was originally written with `fetch()`,
  * which cannot deliver a literal ".." path segment to the server at all: the
@@ -313,6 +317,39 @@ test('AT-4: a NON-project-bound KB\'s start route anchors the session under the 
     !existsSync(join(forgeRoot, 'projects', 'unique-cleanup-kb')),
     'a phantom projects/<kbId>/ (without the dot-prefix) must never be created — this is the exact phantom-project defect the KB-create hand-off\'s own MAJOR-2 fix guards against',
   );
+});
+
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — brain-maintenance
+// (the kb-cleanup session's agent) is now strategy:range [sonnet, opus].
+// ---------------------------------------------------------------------------
+
+test('AT-16: a valid modelTier ("opus", within the widened range) is persisted into status.json', async () => {
+  writeKb('modeltier-cleanup-kb', '{ kind: project, ref: demoproj }');
+  mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
+
+  const res = await startWithBody('modeltier-cleanup-kb', { modelTier: 'opus' });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { sessionId: string };
+
+  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup', body.sessionId);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus & { modelTier?: string };
+  assert.equal(status.modelTier, 'opus');
+});
+
+test('AT-17: an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set, no session dir created', async () => {
+  writeKb('modeltier-reject-kb', '{ kind: project, ref: demoproj }');
+  mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
+  const kbCleanupDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup');
+  const before = existsSync(kbCleanupDir) ? readdirSync(kbCleanupDir).sort() : [];
+
+  const res = await startWithBody('modeltier-reject-kb', { modelTier: 'haiku' });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
+  const after = existsSync(kbCleanupDir) ? readdirSync(kbCleanupDir).sort() : [];
+  assert.deepEqual(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
 // ---------------------------------------------------------------------------

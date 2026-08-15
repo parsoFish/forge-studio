@@ -72,7 +72,7 @@ import { promoteManifests } from './promote-manifests.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import {
   runCompletenessCritic,
@@ -136,6 +136,14 @@ export type ArchitectStatus = {
   idea: string;
   updated_at: string;
   completenessCritic?: CompletenessCriticStatus;
+  /**
+   * ADR-043 §3 amendment (2026-08-15, wave-6 kickoff model-tier seam): an
+   * operator-chosen model tier, validated by the bridge's `/api/architect/
+   * start` route against `architectAgentSpec` (`strategy:fixed`, so the only
+   * legal value is the fixed model's own tier) before it is ever persisted
+   * here. Absent ⇒ unchanged default behavior (`ARCHITECT_MODEL`).
+   */
+  modelTier?: ModelTier;
 };
 
 /** One operator-facing question — the reflector's `StructuredQuestion` shape so
@@ -554,6 +562,7 @@ async function runInterviewStep(args: {
     queryFn,
     prompt,
     schema: INTERVIEW_SCHEMA,
+    modelTier: status.modelTier,
     onToolUse,
     onHeartbeat,
     onText,
@@ -687,6 +696,7 @@ async function runExploreStep(args: {
     queryFn,
     prompt,
     schema: EXPLORE_SCHEMA,
+    modelTier: status.modelTier,
     onToolUse,
     onHeartbeat,
     onText,
@@ -856,6 +866,7 @@ async function runDraftStep(args: {
     queryFn,
     prompt,
     schema: DRAFT_SCHEMA,
+    modelTier: status.modelTier,
     onToolUse,
     onHeartbeat,
     onText,
@@ -884,6 +895,7 @@ async function runDraftStep(args: {
       queryFn,
       prompt: `${prompt}\n\n${forceEmitSection}`,
       schema: DRAFT_SCHEMA,
+      modelTier: status.modelTier,
       onToolUse,
       onHeartbeat,
       onText,
@@ -1324,6 +1336,10 @@ async function runStructured<T>(args: {
   queryFn: QueryFn;
   prompt: string;
   schema: unknown;
+  /** ADR-043 §3 amendment (wave-6): the session's requested kickoff tier
+   *  (`status.modelTier`), resolved against `architectAgentSpec` — absent
+   *  resolves to the unchanged `ARCHITECT_MODEL` default. */
+  modelTier?: ModelTier;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
@@ -1333,7 +1349,7 @@ async function runStructured<T>(args: {
     queryFn: args.queryFn,
     prompt: args.prompt,
     schema: args.schema,
-    model: ARCHITECT_MODEL,
+    model: resolveSessionModel(architectAgentSpec, args.modelTier),
     allowedTools: architectAgentSpec.allowedTools,
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,

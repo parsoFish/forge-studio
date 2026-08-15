@@ -4,46 +4,71 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
- * Sticky top nav — the six-pillar Studio IA (R6-03-F3).
+ * Sticky top nav — the six-pillar Studio IA.
  *
- * Every nav item is a live link (the builders all ship — ADR-033):
- *   Home      → /            (Home surface lands in R6-07; `/` redirects to
- *                             /library until then — see forge-ui/next.config.mjs)
- *   Flows     → /flows/forge-develop  (a present seed flow; the library
- *               flows section is the full browser, the monitor selector lists all)
- *   Agents    → /agents/new
+ * R6-03-F3 added the Home pillar and moved Library off `/`; W6-IA-5
+ * repointed every pillar at its real per-kind browse index (once IA-1/2/3
+ * built /projects, /flows, /agents) and rewrote active-pillar detection as
+ * a data-driven prefix table instead of per-id special cases:
+ *   Home      → /            (Home surface, R6-07 — `/` no longer redirects)
  *   Projects  → /projects
- *   Library   → /library     (moved off `/` onto its own pillar)
+ *   Flows     → /flows       (the flows index; a specific flow's own
+ *               monitor — e.g. the OOTB forge-develop flow — is reached via
+ *               a card on that index, not a nav deep-link)
+ *   Agents    → /agents      (the agents roster; the agent-builder is
+ *               reached via a CTA on that index, not a nav deep-link)
+ *   Library   → /library     (shelves-only hub — skills/hooks/connections/
+ *               templates/community; that whole "library island" also
+ *               lights this pillar, see ACTIVE_RULES below)
  *   Knowledge → /knowledge
  *
- * Active link detected from usePathname().
+ * Active pillar resolved by `isNavItemActive()` from `usePathname()`.
+ * Session-shell routes (`/sessions/*`, `/architect/*`, `/project-brain/*`,
+ * `/instructions/*`, `/demo/*`) and `/artifact` deliberately light no
+ * pillar — they're reached from within a page, not the top nav.
  */
 
 export type NavItem = { label: string; href: string; id: string };
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/', id: 'home' },
-  { label: 'Flows', href: '/flows/forge-develop', id: 'flows' },
-  { label: 'Agents', href: '/agents/new', id: 'agents' },
   { label: 'Projects', href: '/projects', id: 'projects' },
+  { label: 'Flows', href: '/flows', id: 'flows' },
+  { label: 'Agents', href: '/agents', id: 'agents' },
   { label: 'Library', href: '/library', id: 'library' },
   { label: 'Knowledge', href: '/knowledge', id: 'knowledge' },
 ];
 
+// Data-driven active-pillar table: `exact` matches only the literal path
+// (Home owns the root slot and nothing else); `prefixes` matches the
+// pathname itself or anything nested under it (`p` or `p/*`). Library's
+// prefix list additionally carries the five-shelf "library island" — those
+// routes are library sub-kinds, not separate pillars.
+type ActiveRule = { exact: string } | { prefixes: string[] };
+
+const ACTIVE_RULES: Record<string, ActiveRule> = {
+  home: { exact: '/' },
+  projects: { prefixes: ['/projects'] },
+  flows: { prefixes: ['/flows'] },
+  agents: { prefixes: ['/agents'] },
+  library: { prefixes: ['/library', '/skills', '/hooks', '/connections', '/templates', '/community'] },
+  knowledge: { prefixes: ['/knowledge'] },
+};
+
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+/** Pure, testable active-pillar check — no router, no component render. */
+export function isNavItemActive(pathname: string, id: string): boolean {
+  const rule = ACTIVE_RULES[id];
+  if (!rule) return false;
+  if ('exact' in rule) return pathname === rule.exact;
+  return rule.prefixes.some((prefix) => matchesPrefix(pathname, prefix));
+}
+
 export function StudioNav() {
   const pathname = usePathname();
-
-  function isActive(item: NavItem): boolean {
-    // Home owns only the exact root slot (which currently redirects to
-    // /library; R6-07 fills it, at which point Home lights up on its own page).
-    if (item.id === 'home')      return pathname === '/';
-    if (item.id === 'library')   return pathname === '/library' || pathname.startsWith('/library/');
-    // Agents nav points to /agents/new but any /agents/* route should be active
-    if (item.id === 'agents')    return pathname.startsWith('/agents');
-    if (item.id === 'projects')  return pathname.startsWith('/projects');
-    if (item.id === 'knowledge') return pathname.startsWith('/knowledge');
-    return pathname.startsWith(item.href);
-  }
 
   return (
     <nav className="afb-nav" data-component="studio-nav">
@@ -57,7 +82,7 @@ export function StudioNav() {
           <Link
             key={item.id}
             href={item.href}
-            className={isActive(item) ? 'active' : undefined}
+            className={isNavItemActive(pathname, item.id) ? 'active' : undefined}
             data-nav={item.id}
           >
             {item.label}

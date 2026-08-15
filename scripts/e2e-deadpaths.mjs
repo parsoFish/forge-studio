@@ -40,10 +40,9 @@ const ROUTES = [
   { path: '/projects/new', name: 'project onboarding' },
   // W6-IA-2: the flows pillar's own browse index (card grid, reuses
   // FlowCard) — new alongside the pre-existing /flows/[id] monitor+build and
-  // /flows/new routes below. `StudioNav`'s Flows nav item still deep-links
-  // straight to /flows/forge-develop (repointed in a later lane, IA-5), so
-  // this route isn't reachable from the nav yet, but it renders a real
-  // [data-page] and must not read as a dead path.
+  // /flows/new routes below. W6-IA-5 repointed `StudioNav`'s Flows nav item
+  // straight at this index (was a direct deep-link to /flows/forge-develop);
+  // it renders a real [data-page] and must not read as a dead path.
   { path: '/flows', name: 'flows index (W6-IA-2)' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },
   // R6-01 WI-2 (F4): the flow-run analogue of the agent-run entry above — an
@@ -81,7 +80,12 @@ const ROUTES = [
   { path: '/templates', name: 'templates library' },
   { path: '/templates/plan', name: 'template detail (real planning template)' },
   { path: '/architect/new', name: 'architect launcher' },
-  { path: '/recovery', name: 'recovery (DEC-6 operator surface)' },
+  // W6-IA-8: `/recovery` is now a wire redirect (next.config.mjs) to
+  // `/library`, not a client-shim page — `page.goto` follows the 308 at the
+  // network level before this crawler ever inspects the DOM, so this row's
+  // [data-page]/dead-CTA/nav-link assertions land on `/library` and are the
+  // honest post-redirect check, unchanged from when it was a client shim.
+  { path: '/recovery', name: 'recovery (DEC-6 operator surface, now a wire redirect -> /library)' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -166,9 +170,14 @@ async function sweepOnce(page, baseUrl, check, pass) {
     // Every nav link resolves to a known route.
     const navHrefs = await page.evaluate(() =>
       Array.from(document.querySelectorAll('[data-nav]')).map((el) => el.getAttribute('href')));
-    const known = ['/', '/flows/', '/agents/', '/projects', '/knowledge'];
+    // W6-IA-5: Flows/Agents now point at their own index (/flows, /agents),
+    // not a deep-link into a specific flow/agent — kept in sync with
+    // StudioNav's NAV_ITEMS hrefs.
+    // Exact membership, not startsWith — '/' as a prefix made the old check a
+    // no-op (every absolute href passed). Nav hrefs are a closed set.
+    const known = ['/', '/projects', '/flows', '/agents', '/library', '/knowledge'];
     for (const href of navHrefs) {
-      const ok = typeof href === 'string' && known.some((k) => href === k || href.startsWith(k));
+      const ok = typeof href === 'string' && known.includes(href);
       check(ok, `[pass ${pass}] route ${route.path}: nav link "${href}" targets a real route`);
     }
   }

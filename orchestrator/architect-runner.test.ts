@@ -1228,6 +1228,81 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
 });
 
 // ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — architectAgentSpec
+// stays strategy:fixed, so the only legal requested tier is the fixed one.
+// ---------------------------------------------------------------------------
+
+/** Mirrors the ADR-024 test's queryFn shape above (line ~1110): interview
+ *  done:true so the SAME call drives interview → explore → draft in one turn;
+ *  captures the model handed on the FIRST call. */
+function makeCapturingQueryFn(onFirstModel: (model: string | undefined) => void): QueryFn {
+  let captured = false;
+  return ({ prompt, options }) => {
+    if (!captured) {
+      captured = true;
+      onFirstModel((options as { model?: string }).model);
+    }
+    let structured: unknown = null;
+    if (prompt.includes('the interview step')) structured = { done: true };
+    else if (prompt.includes('draft the initiative')) {
+      structured = {
+        vision: 'A model-tier test.',
+        initiatives: [
+          {
+            slug: 'tier-test',
+            title: 'Tier test',
+            iteration_budget: 2,
+            cost_budget_usd: 1,
+            body: '## Spec\n\nGiven the tier, when resolved, then it reaches queryFn.',
+          },
+        ],
+      };
+    }
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+}
+
+async function driveOneInterviewTurn(sessionId: string, projectRoot: string, logsRoot: string, queueRoot: string, sessionDir: string): Promise<string | undefined> {
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+  let capturedModel: string | undefined;
+  const queryFn = makeCapturingQueryFn((m) => { capturedModel = m; });
+  const result = await runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  assert.equal(result.phase, 'awaiting-verdict');
+  return capturedModel;
+}
+
+test('status.modelTier equal to the fixed tier ("sonnet") is honored — reaches queryFn as options.model', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ modelTier: 'sonnet' });
+  const capturedModel = await driveOneInterviewTurn(sessionId, projectRoot, logsRoot, queueRoot, sessionDir);
+  assert.equal(capturedModel, 'claude-sonnet-4-6');
+});
+
+test('status.modelTier absent resolves to the unchanged default (sonnet) — byte-identical prior behavior', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  const capturedModel = await driveOneInterviewTurn(sessionId, projectRoot, logsRoot, queueRoot, sessionDir);
+  assert.equal(capturedModel, ARCHITECT_MODEL);
+});
+
+test('status.modelTier mismatching the fixed tier throws naming the value and the allowed set', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession({ modelTier: 'opus' });
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+  const queryFn = makeCapturingQueryFn(() => {});
+  await assert.rejects(
+    () => runArchitectTurn({ sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    /requested model tier "opus".*allowed tier\(s\): sonnet/,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // R4-04-F4: the exploration stage (edge cases + brain constraints)
 // ---------------------------------------------------------------------------
 

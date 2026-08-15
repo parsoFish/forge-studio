@@ -19,6 +19,44 @@ every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
 
+- **Global nav — `StudioNav` (`[data-component="studio-nav"]`,
+  `components/StudioNav.tsx`, W6-IA-5).** The six-pillar top nav rendered on
+  every page. Data contract (`NAV_ITEMS`) and active-pillar rules
+  (`isNavItemActive`, a pure function exported for direct table-driven
+  testing — `components/StudioNav.test.ts`) are both plain data, not scraped
+  from markup:
+
+  | id | label | href |
+  | --- | --- | --- |
+  | `home` | Home | `/` |
+  | `projects` | Projects | `/projects` |
+  | `flows` | Flows | `/flows` |
+  | `agents` | Agents | `/agents` |
+  | `library` | Library | `/library` |
+  | `knowledge` | Knowledge | `/knowledge` |
+
+  Each link carries `data-nav="<id>"` and lights an `active` class per a
+  data-driven prefix table (replacing R6-03-F3's original per-id
+  special-cases): `home` matches the exact root `/` only; `projects`,
+  `flows`, `agents`, `knowledge` match their own href as a prefix (`p` or
+  `p/*` — boundary-checked, so `/agentsomething` does NOT light `agents`);
+  `library` matches `/library` **plus** the five-shelf "library island" —
+  `/skills`, `/hooks`, `/connections`, `/templates`, `/community` (those
+  routes are library sub-kinds, not separate pillars). Session-shell routes
+  (`/sessions/*`, `/architect/*`, `/project-brain/*`, `/instructions/*`,
+  `/demo/*`) and `/artifact` deliberately light no pillar — they're reached
+  from within a page, not the nav. Before W6-IA-5, Flows/Agents deep-linked
+  straight into a specific build/monitor surface (`/flows/forge-develop`,
+  `/agents/new`); now every pillar points at its own kind's real browse
+  index (built by IA-1/2/3), and a specific flow/agent is reached via a card
+  on that index — see the `/flows`, `/agents`, `/projects` entries below.
+  Journey coverage: `scripts/journeys/flows-onboard.mjs`'s `FOB.nav`
+  assertions (pillar count + Home/Library hrefs) and
+  `scripts/journeys/flows-run.mjs`'s `run-build-monitor` clip (a real
+  `[data-nav="flows"]` click lands on the flows index, then a real flow-card
+  click reaches the monitor — not a direct nav deep-link); `scripts/e2e-
+  deadpaths.mjs` additionally crawls every `[data-nav]` href on every route
+  and asserts it resolves to a known, live page.
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
@@ -156,8 +194,8 @@ inventory rather than one shared page-level contract:
   render-test coverage, `lib/library-card-render.test.ts`, is unaffected —
   the component itself is unchanged, just no longer wired into any page).
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
-  (IA-5's lane) — still SIX `[data-nav]` pillars: `home` (`href="/"`), `flows`,
-  `agents`, `projects`, `library` (`href="/library"`), `knowledge`.
+  — see the Global nav entry above (W6-IA-5) for the current six-pillar
+  set/order/hrefs and active-state rules.
   Journey coverage: `scripts/journeys/stand-up-create.mjs`'s
   `su-create-library` beat (the five shelves + the KB cross-link); every
   OTHER journey beat that used to enter creation through a Library shelf now
@@ -202,9 +240,9 @@ inventory rather than one shared page-level contract:
   re-fetches runs on it (the same `loadAll`/`refreshRuns` split
   `lib/use-studio-home-data.ts` now uses for Home, W6-IA-4) so those
   run-derived badges stay live rather than freezing at the
-  page's initial load. `StudioNav`'s Flows nav item still deep-links straight
-  to `/flows/forge-develop`, not here — repointing it is a later lane
-  (IA-5).
+  page's initial load. `StudioNav`'s Flows nav item now points straight here
+  (W6-IA-5 — was a direct deep-link to `/flows/forge-develop`); a specific
+  flow's own monitor is reached via a card on this index, not the nav.
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
@@ -332,9 +370,12 @@ inventory rather than one shared page-level contract:
   fieldset `[data-question-inferred="true"]` (the interactive form stamps
   `"false"`) with a `[data-question-inferred-badge]` and the inferred
   `[data-question-answer]`, and NO submit button. The old `/review/[cycleId]` and `/reflect/[cycleId]`
-  routes are now permanent client-side redirects into `/artifact` (M7-3,
-  ADR-031) — `[data-page="review-redirect"|"reflect-redirect"][data-page-ready="true"]`
-  — kept only so stale bookmarks keep working.
+  routes are now permanent WIRE redirects into `/artifact` (M7-3, ADR-031;
+  converted from client-side shim pages to `next.config.mjs` `redirects()`
+  entries at W6-IA-8 — `?run=<id>&type=verdict&mode=gate` /
+  `?run=<id>&type=reflection&mode=view` respectively) — no page renders at the
+  old path at all now, the 308 lands directly on this route; kept only so
+  stale bookmarks keep working.
 - **`/hooks`, `/hooks/[id]`, `/hooks/new`** (R3-03-F4) — the hooks pillar. A
   library "hook" is an **agent-lifecycle customisation** and a FILE PACKAGE
   (`studio/hooks/<id>/hook.yaml` + its scripts), generic and host-agnostic;
@@ -508,9 +549,9 @@ inventory rather than one shared page-level contract:
   attempt). Action errors surface as `[data-component="community-action-error"]`.
 
 - **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
-  did not exist before. `StudioNav`'s "Agents" nav item still points at
-  `/agents/new` (IA-5's concern, untouched here) — this route gives agents
-  a browsable index of their own, reachable by direct navigation. Root:
+  did not exist before. `StudioNav`'s "Agents" nav item now points straight
+  here (W6-IA-5 — was a direct deep-link to `/agents/new`); the
+  agent-builder is reached via this index's own `new-agent` CTA. Root:
   `main[data-page="agents-index"][data-page-ready][data-agent-count]`. Two
   independently-ready sections (two different fetches, never one shared
   "loading" flag — a page-level `ready` gates the roster, a separate
@@ -1123,12 +1164,17 @@ inventory rather than one shared page-level contract:
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it
-  replaced (`/architect/[sid]/interview`, `/instructions/[sid]`,
-  `/project-brain/[sid]`) are **deleted as implementations and survive as
-  permanent server-side redirects** into this route — `/project-brain`'s
-  redirect forwards its `?project=` query, and `/architect/[sid]` now
-  redirects straight here rather than chaining through `/interview`.
-  Page shell:
+  replaced (`/architect/[sid]`, `/architect/[sid]/interview`,
+  `/instructions/[sid]`, `/project-brain/[sid]`) are **deleted as
+  implementations, with no page file at all left at the old paths** — they
+  survive only as permanent WIRE redirects declared in `forge-ui/next.config.mjs`
+  `redirects()` (converted from client/server-component shim pages to
+  config-level redirects at W6-IA-8, since each destination is knowable from
+  the URL alone) into this route — `/project-brain`'s redirect entry forwards
+  its `?project=` query automatically (Next passes through any query param the
+  destination doesn't consume), and both `/architect/[sid]` and
+  `/architect/[sid]/interview` redirect straight here directly, never chaining
+  through each other. Page shell:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
@@ -1328,7 +1374,11 @@ inventory rather than one shared page-level contract:
   `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
   plus a compact `[data-section="demo-status-strip"]`. The old detached
   `/demo/[sid]` route is a redirect stub
-  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`).
+  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`) —
+  deliberately kept as a CLIENT-side page, not converted to a
+  `next.config.mjs` wire redirect at W6-IA-8 alongside the other six legacy
+  shims: its destination isn't knowable from the URL alone, it needs a live
+  `listDemoSessions()` lookup to resolve which project owns the session id.
 - **Generation gallery — the demo-builder's session artifact (R4-16-F1,
   2026-08-06).** Each completed generate turn is SNAPSHOTTED into the session
   dir (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
@@ -1683,9 +1733,11 @@ inventory rather than one shared page-level contract:
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's card drawer (**W6-RV-2**; see `/projects/[id]`
-  above). The
-  route is now a permanent client-side redirect stub into `/` (bookmarks
-  keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
+  above). The route is now a permanent WIRE redirect (`forge-ui/next.config.mjs`
+  `redirects()`, converted from a client-side shim page at W6-IA-8) straight
+  into `/library` — the future home of the cross-project stuck-initiative
+  attention strip (R4-11-F4) — so bookmarks keep working with no page ever
+  rendering at the old path.
 - **`/skills` + `/skills/new` + `/skills/[id]` — the skills library (R3-01-F3/F4).**
   The OOTB community-sourced skills (`studio/catalog.yaml`, with provenance +
   stars) still surface as draggable chips inside the agent builder's palette

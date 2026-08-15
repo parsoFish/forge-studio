@@ -16,8 +16,10 @@ composition:
   guards: [event-log]
 runtime:
   sdk: claude
-  strategy: fixed
-  model: claude-sonnet-4-6
+  strategy: range
+  range:
+    - claude-sonnet-4-6
+    - claude-opus-4-8
 brainAccess: none
 interactivity: Operator-driven; asks what the package should do, drafts it, and revises on direct feedback until the operator saves.
 allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]

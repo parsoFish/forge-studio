@@ -160,6 +160,34 @@ test('AT-11 (P4): a valid start seeds status.json with the operator\'s prompt ve
   assert.equal(promptMd, `${promptText}\n`, 'prompt.md must STILL be written verbatim — this fix is an addition, not a replacement of the existing contract');
 });
 
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam) — creation-agent is
+// now strategy:range [sonnet, opus].
+// ---------------------------------------------------------------------------
+
+test('AT-12: a valid modelTier ("opus", within the widened range) is persisted into status.json', async () => {
+  const res = await start({ project: 'demoproj', prompt: 'A skill that summarizes PR diffs.', modelTier: 'opus' });
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_authoring', body.sessionId);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { modelTier?: string };
+  assert.equal(status.modelTier, 'opus');
+});
+
+test('AT-13: an out-of-envelope modelTier ("haiku") 400s naming the value and the allowed set, no _authoring session dir created', async () => {
+  const before = existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+    ? readdirSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+    : [];
+  const res = await start({ project: 'demoproj', prompt: 'A skill that summarizes PR diffs.', modelTier: 'haiku' });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/);
+  const after = existsSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+    ? readdirSync(join(forgeRoot, 'projects', 'demoproj', '_authoring'))
+    : [];
+  assert.deepEqual(after, before, 'a rejected modelTier must not create a new session dir');
+});
+
 test('AT-8: two starts against the same project mint two distinct session dirs', async () => {
   const r1 = await start({ project: 'demoproj', prompt: 'first draft' });
   const r2 = await start({ project: 'demoproj', prompt: 'second draft' });

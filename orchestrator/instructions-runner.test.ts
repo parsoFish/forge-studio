@@ -244,6 +244,54 @@ test('ADR-024: instructionsAgentSpec derives phase, tier (sonnet), and read-only
   assert.ok(!instructionsAgentSpec.allowedTools.includes('Edit'));
 });
 
+// ---------------------------------------------------------------------------
+// ADR-043 §3 amendment (wave-6 kickoff model-tier seam)
+// ---------------------------------------------------------------------------
+
+test('status.modelTier is honored: an operator-requested "opus" reaches queryFn as options.model', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting', modelTier: 'opus' });
+  let capturedModel: string | undefined;
+  const queryFn: QueryFn = ({ prompt, options }) => {
+    if (prompt.includes('draft AGENTS.md')) capturedModel = (options as { model?: string }).model;
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = prompt.includes('draft AGENTS.md') ? { agents_md: '# Demo\n\nBuild: `npm run build`.' } : null;
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  assert.equal(capturedModel, 'claude-opus-4-8');
+});
+
+test('status.modelTier absent resolves to the unchanged default (sonnet) — byte-identical prior behavior', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting' });
+  let capturedModel: string | undefined;
+  const queryFn: QueryFn = ({ prompt, options }) => {
+    if (prompt.includes('draft AGENTS.md')) capturedModel = (options as { model?: string }).model;
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = prompt.includes('draft AGENTS.md') ? { agents_md: '# Demo\n\nBuild: `npm run build`.' } : null;
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(capturedModel, INSTRUCTIONS_MODEL);
+  assert.equal(capturedModel, 'claude-sonnet-4-6');
+});
+
+test('status.modelTier outside the declared range throws naming the value and the allowed set', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'drafting', modelTier: 'haiku' });
+  await assert.rejects(
+    () => runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({ draft: { agents_md: 'x' } }), logger: logger(logsRoot, sessionId) }),
+    /requested model tier "haiku".*allowed tier\(s\): sonnet, opus/,
+  );
+});
+
 test('R3-05-F3: a matching-shape project injects seeds into the draft prompt + records composed ids in the footer', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'drafting' });
   // A forge root with an instruction-seed library.

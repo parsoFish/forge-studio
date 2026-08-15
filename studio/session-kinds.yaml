@@ -12,34 +12,92 @@
 # for any new artifact.kind those descriptors need — the session shell is
 # generic over whatever is declared in this file.
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — the two prior entries
+# (/architect/[sessionId], /architect/[sessionId]/interview) named
+# forge-ui/app/ page directories that implemented the redirect themselves;
+# both were PURE path-shape moves (the destination is knowable from the URL
+# alone), so policy converted them to next.config.mjs `redirects()` entries
+# and deleted the page directories outright. `legacyRoutes`/`legacyRouteResolves`
+# (this file's own header comment, orchestrator/studio/session-kinds.ts) model
+# ONLY a forge-ui/app/ route directory — a next.config.mjs wire redirect is a
+# structurally different mechanism, so the honest value here is now `[]`,
+# same as every other kind below with no live forge-ui/app/ predecessor. The
+# old paths still work (see next.config.mjs); collectSessionRows
+# (cli/ui-bridge.ts) falls back to the modern `/sessions/architect/<sid>` href
+# for freshly-generated session rows, which is a strict improvement — no
+# redirect hop on internally-generated links.
 - id: architect
   agent: architect
   title: Planning session
-  legacyRoutes:
-    - /architect/[sessionId]
-    - /architect/[sessionId]/interview
+  legacyRoutes: []
   stages: [roadmap]
   defaultStage: roadmap
   artifact:
     kind: roadmap-draft
     label: Roadmap draft
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — /instructions/[sessionId]
+# was a pure path-shape move (destination knowable from the URL alone),
+# converted to a next.config.mjs `redirects()` entry with its page directory
+# deleted outright (see the "architect" descriptor above for the full
+# rationale — same policy, same mechanism).
 - id: instructions
   agent: instructions-creator
   title: Instructions session
-  legacyRoutes:
-    - /instructions/[sessionId]
+  legacyRoutes: []
   stages: [instructions]
   defaultStage: instructions
   artifact:
     kind: markdown-draft
     label: AGENTS.md draft
+  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
+  # twin of instructions-runner.ts's real state machine (its own header
+  # comment, orchestrator/instructions-runner.ts:17-24). instructions never
+  # gains a turnSpec (2026-08-14 amendment §1 — it is never migrated onto the
+  # primitive), so this is its ONLY source of derivable affordances.
+  panel:
+    phases:
+      # orchestrator/instructions-runner.ts:18, runInterviewStep (agent turn,
+      # orchestrator/instructions-runner.ts:310) — branches (needs input ->
+      # awaiting-answers; ready -> drafting), so no single `next` here.
+      - { phase: interviewing, step: agent }
+      # orchestrator/instructions-runner.ts:18 — the interview Q&A checkpoint.
+      # awaits:questions — this IS the interview Q&A checkpoint the operator
+      # answers. The answer -> interviewing transition is written by
+      # cli/ui-bridge.ts:3264 (POST /api/instructions/answer,
+      # `{ ...status, phase: 'interviewing', round: round + 1 }`), NOT
+      # orchestrator/instructions-runner.ts:247 (which writes the OPPOSITE
+      # entry, drafting/interviewing -> awaiting-answers, when the agent turn
+      # itself decides it needs more input).
+      - { phase: awaiting-answers, step: noop, awaits: questions, next: interviewing }
+      # orchestrator/instructions-runner.ts:20-21, runDraftStep (agent turn,
+      # orchestrator/instructions-runner.ts:373) — writes the AGENTS.md draft
+      # (orchestrator/instructions-runner.ts:457), advances to awaiting-verdict.
+      - { phase: drafting, step: agent, writes: [draft], next: awaiting-verdict }
+      # orchestrator/instructions-runner.ts:21-23 — operator decision point
+      # (bridge: approve -> finalizing; revise -> drafting; reject ->
+      # rejected), no single `next` (3-way branch). awaits:verdict — an
+      # approve/revise/reject decision, not a Q&A checkpoint.
+      - { phase: awaiting-verdict, step: noop, awaits: verdict }
+      # orchestrator/instructions-runner.ts:21, runFinalizeStep (deterministic
+      # write via withStudioWrite, orchestrator/instructions-runner.ts:464,491;
+      # no agent call), advances to committed.
+      - { phase: finalizing, step: finalize, finalizer: writeToRepoRoot, next: committed }
+      # orchestrator/instructions-runner.ts:21 — terminal.
+      - { phase: committed, step: terminal }
+      # orchestrator/instructions-runner.ts:23 — terminal.
+      - { phase: rejected, step: terminal }
 
+# legacyRoutes is deliberately [] as of W6-IA-8 — /project-brain/[sessionId]
+# was a pure path-shape move (destination knowable from the URL alone, its
+# `?project=` query forwarded automatically by Next's redirect passthrough),
+# converted to a next.config.mjs `redirects()` entry with its page directory
+# deleted outright (see the "architect" descriptor above for the full
+# rationale — same policy, same mechanism).
 - id: project-brain
   agent: project-brain-builder
   title: Brain creation session
-  legacyRoutes:
-    - /project-brain/[sessionId]
+  legacyRoutes: []
   stages: [brain]
   defaultStage: brain
   artifact:
@@ -63,6 +121,32 @@
   artifact:
     kind: generation-gallery
     label: Demo generations
+  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
+  # twin of demo-builder-runner.ts's real state machine (its own header
+  # comment, orchestrator/demo-builder-runner.ts:15-20). demo never gains a
+  # turnSpec (2026-08-14 amendment §1 — it is never migrated onto the
+  # primitive), so this is its ONLY source of derivable affordances.
+  panel:
+    phases:
+      # orchestrator/demo-builder-runner.ts:16, runGenerateStep (agent turn,
+      # orchestrator/demo-builder-runner.ts:279) — writes DEMO.html + the
+      # generator skill (orchestrator/demo-builder-runner.ts:402), advances to
+      # awaiting-review.
+      - { phase: generating, step: agent, writes: [demo], next: awaiting-review }
+      # orchestrator/demo-builder-runner.ts:16 — operator decision point
+      # (bridge: feedback -> generating; lock -> locking; abandon ->
+      # abandoned), no single `next` (3-way branch). awaits:verdict — a
+      # feedback/lock/abandon decision, not a Q&A checkpoint.
+      - { phase: awaiting-review, step: noop, awaits: verdict }
+      # orchestrator/demo-builder-runner.ts:19, runLockStep (deterministic —
+      # "record the locked demo for reproducibility",
+      # orchestrator/demo-builder-runner.ts:405-409; no agent call).
+      - { phase: locking, step: finalize, finalizer: recordLockedDemo, next: locked }
+      # orchestrator/demo-builder-runner.ts:19 — terminal.
+      - { phase: locked, step: terminal }
+      # orchestrator/demo-builder-runner.ts:20 — terminal (bridge: abandon,
+      # from awaiting-review).
+      - { phase: abandoned, step: terminal }
 
 # R4-17 — the onboarding session. id is "onboarding" — the bridge derives the
 # session dir as <projectsRoot>/<project>/_<descriptor.id>/<sessionId>
@@ -97,6 +181,27 @@
   artifact:
     kind: contract-buildout
     label: Contract build-out
+  # panel (W6-B3, ADR-043 2026-08-15 amendment §2) — the read-only affordance
+  # twin of onboarding's real phase vocabulary. Unlike the other three panel
+  # kinds, onboarding is NOT a turn-loop (ADR-043 §Consequences: "onboarding
+  # is explicitly out of scope... it runs through `forge agent dispatch` + a
+  # different path") — it is a fire-and-forget dispatch with exactly three
+  # phase values, so this table is genuinely thin, not truncated.
+  panel:
+    phases:
+      # written by POST /api/studio/onboarding/start when the dispatch begins
+      # (cli/ui-bridge.ts:3504, `{ phase: 'running', ... }`); the
+      # onboarding-agent turn itself is the "agent" step
+      # (skills/onboarding-agent/SKILL.md). Branches to complete or failed, so
+      # no single `next` here.
+      - { phase: running, step: agent }
+      # terminal, written by writeSessionTerminalPhase(forgeRoot, sessionDir,
+      # 'complete') when `forge agent dispatch --session-dir` observes the run
+      # finish (cli/agent-run.ts:198, called at cli/agent-run.ts:420,440).
+      - { phase: complete, step: terminal }
+      # terminal, written by writeSessionTerminalPhase(forgeRoot, sessionDir,
+      # 'failed') (cli/agent-run.ts:198, called at cli/agent-run.ts:460).
+      - { phase: failed, step: terminal }
 
 # R4-21 — the authoring session (creation-agent). A single-stage session:
 # 'authoring' is SESSION_STAGES's first-ever extension (session-kinds.ts),
@@ -130,7 +235,7 @@
     style: agent
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
-      - { phase: awaiting-review, step: noop }
+      - { phase: awaiting-review, step: noop, awaits: verdict }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
 
@@ -179,5 +284,5 @@
     style: agent
     phases:
       - { phase: drafting, step: agent, writes: [plan], next: awaiting-approval }
-      - { phase: awaiting-approval, step: noop }
+      - { phase: awaiting-approval, step: noop, awaits: verdict }
       - { phase: applied, step: terminal }

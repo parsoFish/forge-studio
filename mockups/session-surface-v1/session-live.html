@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Surface v1 — live session</title>
+<style>
+  :root{
+    --bg:#0b0e14; --bg-2:#10151f; --panel:#141a26; --panel-2:#1a2230; --panel-3:#202a3c;
+    --line:#28324a; --line-2:#39455f;
+    --text:#e9eef6; --dim:#93a0b4; --faint:#5b6779;
+    --ember:#ff9e4a; --ember-hot:#ff6b35; --steel:#5cc8ff; --violet:#b78cff;
+    --green:#4ade80; --amber:#fbbf24; --red:#f87171;
+    --font-display:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --font-mono:'JetBrains Mono',ui-monospace,Menlo,'Cascadia Code',monospace;
+    --radius:10px; --radius-sm:6px;
+    --hex:polygon(25% 3%,75% 3%,98% 50%,75% 97%,25% 97%,2% 50%);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.55}
+  a{color:var(--steel);text-decoration:none} a:hover{text-decoration:underline}
+  .banner{background:linear-gradient(90deg,#2a1608,#1a1208);border-bottom:1px solid #5a3a1a;
+    color:var(--ember);font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+    padding:9px 20px;text-align:center}
+  .mocknav{display:flex;gap:16px;justify-content:center;padding:8px 0;background:var(--bg-2);
+    border-bottom:1px solid var(--line);font:500 11.5px/1 var(--font-mono)}
+  .mocknav a{color:var(--faint)} .mocknav a.active{color:var(--ember)}
+  .mono{font-family:var(--font-mono);font-size:.92em}
+  .cm{display:inline-flex;align-items:center;justify-content:center;width:21px;height:23px;
+    clip-path:var(--hex);background:var(--ember);color:#0b0e14;font:700 11px/1 var(--font-mono);
+    cursor:help;vertical-align:middle;margin:0 4px;flex:none}
+  /* topbar */
+  .topbar{display:flex;align-items:center;gap:10px;padding:12px 26px;border-bottom:1px solid var(--line);
+    background:var(--bg-2);flex-wrap:wrap}
+  .hexmark{width:22px;height:24px;clip-path:var(--hex);background:var(--ember);flex:none}
+  .brand{font-family:var(--font-display);font-weight:600;font-size:14px}
+  .crumbs{color:var(--faint);font:500 12px/1 var(--font-mono);margin-left:14px}
+  .crumbs b{color:var(--dim);font-weight:500}
+  .topchips{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;
+    font:500 11px/1.4 var(--font-mono);border:1px solid var(--line-2);color:var(--dim);background:var(--panel)}
+  .chip .sw{width:7px;height:7px;border-radius:50%}
+  .chip.project .sw{background:var(--steel)} .chip.agent .sw{background:var(--ember)} .chip.model .sw{background:var(--violet)}
+  /* header */
+  .pagehead{max-width:1320px;margin:0 auto;padding:22px 24px 0;display:flex;align-items:baseline;gap:14px}
+  .pagehead h1{font-family:var(--font-display);font-size:22px;font-weight:600;margin:0}
+  .sid{font:500 12px/1 var(--font-mono);color:var(--faint)}
+  /* main grid */
+  .main{max-width:1320px;margin:0 auto;padding:18px 24px 90px;display:grid;
+    grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:22px;align-items:start}
+  .col-left{display:flex;flex-direction:column;gap:16px;min-width:0}
+  /* transcript */
+  .transcript{display:flex;flex-direction:column;gap:12px}
+  .roundlbl{font:600 10.5px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+    display:flex;align-items:center;gap:10px;margin-top:2px}
+  .roundlbl::after{content:'';flex:1;height:1px;background:var(--line)}
+  .turn{border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;font-size:13.5px}
+  .turn .who{font:600 10.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+  .turn.op{background:var(--panel-2);border-left:3px solid var(--steel)}
+  .turn.op .who{color:var(--steel)}
+  .turn.ag{background:var(--panel);border-left:3px solid var(--ember)}
+  .turn.ag .who{color:var(--ember)}
+  .turn p{margin:0 0 6px} .turn p:last-child{margin:0}
+  .turn ul{margin:4px 0 0;padding-left:20px;color:var(--dim)}
+  /* affordance panel */
+  .afford{border:1px solid var(--line-2);border-radius:var(--radius);background:var(--panel-2);overflow:hidden}
+  .afford .prov{display:block;background:var(--panel-3);
+    border-bottom:1px solid var(--line-2);padding:8px 14px;font:500 10.5px/1.7 var(--font-mono);color:var(--faint)}
+  .afford .prov .cm{margin-right:8px}
+  .afford .prov b{color:var(--dim);font-weight:600}
+  .afford .prov .k{color:var(--violet)}
+  .afford .body{padding:16px 18px}
+  .afford h2{font-family:var(--font-display);font-size:15px;font-weight:600;margin:0 0 12px;display:flex;align-items:center}
+  .q{margin-bottom:14px}
+  .q .qt{font-size:13px;margin-bottom:7px}
+  .q label.opt{display:inline-flex;align-items:center;gap:7px;margin-right:16px;font-size:12.5px;color:var(--dim);cursor:pointer}
+  .q input[type=radio]{accent-color:var(--ember)}
+  .q textarea, .vnote textarea{width:100%;background:var(--bg-2);border:1px solid var(--line-2);border-radius:var(--radius-sm);
+    color:var(--text);font:inherit;font-size:13px;padding:8px 11px;min-height:52px;resize:vertical}
+  .btnrow{display:flex;gap:10px;margin-top:14px;align-items:center}
+  .btn{border:0;border-radius:var(--radius-sm);font:600 13px/1 var(--font-display);padding:10px 18px;cursor:pointer}
+  .btn.primary{background:var(--ember);color:#0b0e14}
+  .btn.primary:hover{background:var(--ember-hot)}
+  .btn.approve{background:var(--green);color:#0b0e14}
+  .btn.ghost{background:none;border:1px solid var(--line-2);color:var(--dim)}
+  .vnote{margin-top:12px}
+  .vtext{color:var(--dim);font-size:13px;margin:0 0 4px}
+  .vtext .mono{color:var(--text)}
+  /* working feed */
+  .feed{border:1px solid var(--line);border-radius:var(--radius);background:#0d1117;overflow:hidden}
+  .feed-head{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);
+    background:var(--panel)}
+  .feed-title{font:600 10.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .phasechip{display:inline-flex;align-items:center;gap:7px;background:var(--panel-3);border:1px solid var(--line-2);
+    border-radius:999px;padding:3px 11px 3px 5px;font:600 11px/1.6 var(--font-mono)}
+  .phasechip .hx{width:13px;height:15px;clip-path:var(--hex)}
+  .phasechip.working{color:var(--steel)} .phasechip.working .hx{background:var(--steel);animation:pulse 1.6s infinite}
+  .phasechip.needsyou{color:var(--amber);border-color:#6a5a2b} .phasechip.needsyou .hx{background:var(--amber)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .cost{margin-left:auto;font:500 11px/1.5 var(--font-mono);color:var(--faint);white-space:nowrap}
+  .cost b{color:var(--dim);font-weight:600}
+  .expandall{background:none;border:0;color:var(--steel);font:500 10.5px/1 var(--font-mono);cursor:pointer;padding:2px 4px;white-space:nowrap}
+  .phasechip{white-space:nowrap}
+  .feed-title{white-space:nowrap}
+  .feed-body{max-height:300px;overflow-y:auto;padding:6px 0}
+  .frow{display:flex;align-items:baseline;gap:9px;padding:4px 14px;font-size:12px;line-height:1.55}
+  .frow .tag{flex:none;font:600 10px/1.7 var(--font-mono);border-radius:4px;padding:0 6px;min-width:58px;text-align:center}
+  .frow.tool .tag{color:var(--green);background:#071e0f;border:1px solid #3fb95044}
+  .frow.think{border-left:2px solid #388bfd44}
+  .frow.think .tag{color:var(--steel);background:#0d1f33;border:1px solid #388bfd44}
+  .frow.redact{border-left:2px solid transparent;opacity:.65}
+  .frow.redact .tag{color:var(--faint);background:var(--panel-2);border:1px solid var(--line-2)}
+  .frow .d{flex:1;min-width:0}
+  .frow.tool .d{font-family:var(--font-mono);font-size:11px;color:var(--text);word-break:break-all}
+  .frow.tool .d .arg{color:var(--dim)}
+  .frow.think .d{font-style:italic;color:#94a3bd}
+  .frow.redact .d{font-style:italic;font-family:var(--font-mono);font-size:11px;color:var(--faint)}
+  .think-clamp{display:inline}
+  .frow.think .more{background:none;border:0;color:var(--steel);font:500 10.5px/1 var(--font-mono);
+    cursor:pointer;padding:0 2px;font-style:normal}
+  .frow.done .tag{color:var(--dim);background:var(--panel-2);border:1px solid var(--line-2)}
+  .frow.done .d{color:var(--faint);font-size:11.5px}
+  /* artifact pane */
+  .artifact{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);overflow:hidden;
+    position:sticky;top:14px}
+  .art-head{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
+    background:var(--panel-2)}
+  .art-title{font-family:var(--font-display);font-weight:600;font-size:13.5px}
+  .art-kind{font:500 10.5px/1.6 var(--font-mono);color:var(--amber);background:#2b2410;border:1px solid #6a5a2b;
+    border-radius:4px;padding:0 7px}
+  .art-meta{margin-left:auto;font:500 10.5px/1.5 var(--font-mono);color:var(--faint)}
+  .stagetabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .stagetab{font:500 11.5px/1 var(--font-mono);color:var(--faint);padding:9px 13px;border-bottom:2px solid transparent}
+  .stagetab.active{color:var(--amber);border-bottom-color:var(--amber)}
+  .art-body{padding:16px 20px;max-height:640px;overflow-y:auto}
+  .md h1{font-family:var(--font-display);font-size:17px;margin:0 0 4px;font-weight:600}
+  .md h2{font-family:var(--font-display);font-size:13.5px;margin:16px 0 6px;font-weight:600;color:var(--steel)}
+  .md p{margin:0 0 8px;font-size:12.5px;color:var(--dim)}
+  .md ul{margin:0 0 8px;padding-left:18px;font-size:12.5px;color:var(--dim)}
+  .md code{font-family:var(--font-mono);font-size:11px;background:var(--bg-2);border:1px solid var(--line);
+    border-radius:4px;padding:1px 5px;color:var(--text)}
+  .md .new{background:#122b1c55;border-left:2px solid var(--green);padding-left:8px;margin-left:-10px}
+  /* mockup state toggle */
+  .stateswitch{position:fixed;right:18px;bottom:18px;z-index:20;background:var(--panel-3);
+    border:1px solid var(--ember);border-radius:999px;padding:6px 8px;display:flex;gap:4px;align-items:center;
+    box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .stateswitch .cap{font:600 9.5px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ember);padding:0 6px}
+  .stateswitch button{border:0;border-radius:999px;background:none;color:var(--dim);
+    font:600 11px/1 var(--font-mono);padding:6px 12px;cursor:pointer}
+  .stateswitch button.on{background:var(--ember);color:#0b0e14}
+  /* legend */
+  .legend{max-width:1320px;margin:0 auto;padding:0 24px 60px}
+  .legend h3{font:600 11px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+  .legend p{color:var(--dim);font-size:12.5px;margin:0 0 10px;max-width:900px}
+  .legend p .cm{margin:0 8px 0 0;vertical-align:-6px}
+  @media (max-width:960px){ .main{grid-template-columns:1fr} .artifact{position:static} }
+</style>
+</head>
+<body data-mock-page="session-live" data-session-kind="instructions" data-session-id="9f3c2e81" data-session-phase="interviewing">
+<div class="banner">Session-surface mockup v1 · live session — the unified running screen</div>
+<nav class="mocknav">
+  <a href="index.html">cover</a><a href="kickoff.html">kickoff</a><a href="session-live.html" class="active">session-live</a><a href="session-demo.html">session-demo</a><a href="sessions-index.html">sessions-index</a>
+</nav>
+<div class="topbar">
+  <div class="hexmark"></div><div class="brand">Forge Studio</div>
+  <div class="crumbs">sessions / <b>instructions</b> / 9f3c2e81</div>
+  <div class="topchips">
+    <span class="chip project"><span class="sw"></span>gitpulse</span>
+    <span class="chip agent"><span class="sw"></span>instructions-creator</span>
+    <span class="chip model" title="picked at kickoff from range [haiku, sonnet]"><span class="sw"></span>sonnet · range</span>
+  </div>
+</div>
+
+<div class="pagehead">
+  <h1>Instructions session</h1><span class="sid">9f3c2e81 · round 2</span>
+</div>
+
+<div class="main">
+  <div class="col-left">
+
+    <!-- transcript -->
+    <div class="transcript" data-section="session-transcript">
+      <div class="roundlbl">Round 1</div>
+      <div class="turn op"><div class="who">operator</div>
+        <p>gitpulse needs an <span class="mono">AGENTS.md</span> so forge dev-loops stop guessing the test runner and lint rules. Keep it contract-level, not a tutorial.</p>
+      </div>
+      <div class="turn ag"><div class="who">instructions-creator</div>
+        <p>Scanned the repo — vitest workspaces, eslint flat config, CI on push plus a nightly snapshot suite. Three questions before I draft (form below):</p>
+        <ul>
+          <li>npm scripts only, or also raw vitest/eslint invocations?</li>
+          <li>should the dev-loop gate include the snapshot suite?</li>
+          <li>anything the dev-loop must never touch?</li>
+        </ul>
+      </div>
+      <div class="roundlbl">Round 2</div>
+      <div class="turn op"><div class="who">operator</div>
+        <p>Scripts only — raw invocations rot. Snapshots stay nightly-only. Never touch <span class="mono">.github/workflows/release.yml</span>.</p>
+      </div>
+      <div class="turn ag"><div class="who">instructions-creator</div>
+        <p>Drafting v2 — commands block from <span class="mono">package.json</span> scripts, gate mirrors the CI push path, release workflow listed under "never touch". Draft is live in the artifact pane.</p>
+      </div>
+    </div>
+
+    <!-- affordance panel — derived from the phase table -->
+    <div class="afford" data-section="session-affordance" id="afford">
+      <div class="prov" id="prov">
+        <span class="cm" title="№7 — affordance placement + visible provenance strip">7</span>
+        derived from <b class="k" id="prov-row">phases[interviewing]</b> · step: <b id="prov-step">structured</b> — <span id="prov-why">a structured phase ⇒ question form (never hand-authored)</span>
+      </div>
+
+      <!-- STATE A: answer-questions -->
+      <div class="body" id="state-questions">
+        <h2>Answer questions</h2>
+        <div class="q">
+          <div class="qt">1 · Should CI commands reference npm scripts only, or also the raw vitest / eslint invocations?</div>
+          <label class="opt"><input type="radio" name="q1" checked> npm scripts only</label>
+          <label class="opt"><input type="radio" name="q1"> both</label>
+        </div>
+        <div class="q">
+          <div class="qt">2 · gitpulse runs unit + snapshot suites — should the dev-loop gate include snapshots?</div>
+          <label class="opt"><input type="radio" name="q2"> yes, gate on both</label>
+          <label class="opt"><input type="radio" name="q2" checked> no — snapshots stay nightly</label>
+        </div>
+        <div class="q">
+          <div class="qt">3 · Anything the dev-loop must never touch?</div>
+          <textarea placeholder="e.g. .github/workflows/release.yml"></textarea>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary">Send answers</button>
+          <span style="color:var(--faint);font-size:12px">runs the next turn — the agent drafts once it has these</span>
+        </div>
+      </div>
+
+      <!-- STATE B: approve/reject verdict -->
+      <div class="body" id="state-verdict" hidden>
+        <h2>Review draft v2</h2>
+        <p class="vtext"><span class="mono">AGENTS.md</span> draft v2 is ready in the artifact pane.
+          Approving runs the finalizer <span class="mono">writeToRepoRoot</span> and writes it to the gitpulse repo root;
+          requesting changes returns the session to <span class="mono">drafting</span> with your note as the next operator turn.</p>
+        <div class="vnote">
+          <textarea placeholder="Optional note — required if requesting changes"></textarea>
+        </div>
+        <div class="btnrow">
+          <button class="btn approve">Approve — write to repo</button>
+          <button class="btn ghost">Request changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- working feed -->
+    <div class="feed" data-section="working-feed">
+      <div class="feed-head">
+        <span class="cm" title="№4 — feed placement: bottom-left vs right rail vs full-width drawer">4</span>
+        <span class="feed-title">working feed · instructions-creator</span>
+        <span class="phasechip working" id="phasechip"><span class="hx"></span><span id="phasename">interviewing</span></span>
+        <span class="cm" title="№8 — phase chip + cost ticker here vs in the page header">8</span>
+        <button class="expandall" id="expandall">expand all</button>
+        <span class="cost"><b>$0.18</b> · 41.3k tok · 3m 12s</span>
+      </div>
+      <div class="feed-body" data-activity-count="9">
+        <div class="frow think" data-activity-kind="thinking">
+          <span class="tag">think</span>
+          <span class="d"><span class="think-clamp">The repo declares vitest workspaces and an eslint flat config. If the operator wants npm-scripts-only, the commands block should name <span class="mono">npm test</span> and <span class="mono">npm run lint</span> — raw invocations would rot the moment package.json changes.</span>
+            <span class="think-rest" hidden> There is also a <span class="mono">pretest</span> hook that regenerates fixtures; the instructions must say the dev-loop never edits generated fixtures directly, or the first cycle will "fix" one and break the regeneration contract.</span>
+            <button class="more">+218 chars</button></span>
+          <span class="cm" title="№5 — thinking verbosity: ~200-char clamp with per-block expand">5</span>
+        </div>
+        <div class="frow tool" data-activity-kind="tool"><span class="tag">Read</span><span class="d">package.json</span></div>
+        <div class="frow tool" data-activity-kind="tool"><span class="tag">Grep</span><span class="d">"scripts"\s*: <span class="arg">· package.json</span></span></div>
+        <div class="frow tool" data-activity-kind="tool"><span class="tag">Read</span><span class="d">.github/workflows/ci.yml</span></div>
+        <div class="frow think" data-activity-kind="thinking">
+          <span class="tag">think</span>
+          <span class="d"><span class="think-clamp">ci.yml runs <span class="mono">npm test -- --coverage</span> on push and the snapshot suite only via nightly workflow_dispatch. The dev-loop gate should mirror the push path exactly — gating on nightly-only suites would block every</span>
+            <span class="think-rest" hidden> cycle behind a job the CI itself doesn't run on push. I'll note the nightly suite under "known suites" instead so it isn't silently invisible.</span>
+            <button class="more">+142 chars</button></span>
+        </div>
+        <div class="frow redact" data-activity-kind="thinking-redacted">
+          <span class="tag">think</span><span class="d">[thinking redacted]</span>
+          <span class="cm" title="№6 — redacted rows: one per block vs collapsed counter row">6</span>
+        </div>
+        <div class="frow tool" data-activity-kind="tool"><span class="tag">Glob</span><span class="d">src/**/*.test.ts <span class="arg">· 14 files</span></span></div>
+        <div class="frow tool" data-activity-kind="tool"><span class="tag">Edit</span><span class="d">_instructions/9f3c2e81/draft/AGENTS.md</span></div>
+        <div class="frow done" data-activity-kind="turn-complete"><span class="tag">turn</span><span class="d">turn complete — waiting on operator (feed streams live while the agent works)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- artifact pane -->
+  <div class="artifact" data-section="session-artifact">
+    <div class="art-head">
+      <span class="art-title">AGENTS.md draft</span>
+      <span class="art-kind">markdown-draft</span>
+      <span class="art-meta">draft v2 · updated 40s ago</span>
+    </div>
+    <div class="stagetabs"><span class="stagetab active">instructions</span></div>
+    <div class="art-body md">
+      <h1>AGENTS.md — gitpulse</h1>
+      <p>Contract for autonomous agents working this repo. Commands are the interface; scripts are the source of truth.</p>
+      <h2>Commands</h2>
+      <ul>
+        <li><code>npm test</code> — vitest, unit workspaces. <b>The dev-loop gate.</b></li>
+        <li><code>npm run lint</code> — eslint flat config; zero warnings.</li>
+        <li><code>npm run build</code> — tsc + bundle; must pass before any PR.</li>
+      </ul>
+      <h2>Known suites</h2>
+      <ul class="new">
+        <li>Snapshot suite runs <b>nightly only</b> (workflow_dispatch) — not part of the push gate. Do not add it to CI push paths.</li>
+      </ul>
+      <h2>Never touch</h2>
+      <ul class="new">
+        <li><code>.github/workflows/release.yml</code> — operator-owned release flow.</li>
+        <li><code>src/fixtures/generated/</code> — regenerated by <code>pretest</code>; edit the generator, not the output.</li>
+      </ul>
+      <h2>Conventions</h2>
+      <ul>
+        <li>Conventional commits; one concern per PR.</li>
+        <li>New features land with their tests in the same PR (bundle-sized work).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- mockup-only affordance-state toggle -->
+<div class="stateswitch" data-section="mock-toggle">
+  <span class="cap">mock state</span>
+  <button id="tg-q" class="on">questions</button>
+  <button id="tg-v">verdict</button>
+</div>
+
+<div class="legend" data-section="page-legend">
+  <h3>Decision points on this page</h3>
+  <p><span class="cm">4</span> Feed placement — bottom-left under transcript + affordances (shown) vs right rail under the artifact vs a full-width collapsible drawer. Bottom-left keeps "what it's doing" next to "what it said"; right rail keeps the artifact taller.</p>
+  <p><span class="cm">5</span> Thinking verbosity — blocks clamp at ~200 chars with a per-block "+N chars" expander and a feed-header "expand all". Alternatives: default-expanded, or thinking behind a feed filter toggle.</p>
+  <p><span class="cm">6</span> Redacted thinking — the literal <span class="mono">[thinking redacted]</span> row is locked (L2); open question is one row per redacted block (shown) vs collapsing runs into "[thinking redacted] ×3".</p>
+  <p><span class="cm">7</span> Affordance panel — pinned between transcript and feed (shown) vs at the artifact-pane foot. And: the "derived from phases[…]" provenance strip stays visible (shown) vs hover-only. Use the bottom-right toggle to flip questions ⇄ verdict — both states fall out of the same phase table.</p>
+  <p><span class="cm">8</span> Phase chip + cost ticker — live in the feed header (shown) vs promoted to the page header. Ticker = spend · tokens · wall time; chip pulses while working, goes amber on <span class="mono">awaiting-*</span> (needs you).</p>
+</div>
+
+<script>
+  // mockup-only: flip the derived affordance between its two states
+  var tq = document.getElementById('tg-q'), tv = document.getElementById('tg-v');
+  function setState(v){
+    document.getElementById('state-questions').hidden = v;
+    document.getElementById('state-verdict').hidden = !v;
+    tq.className = v ? '' : 'on'; tv.className = v ? 'on' : '';
+    var chip = document.getElementById('phasechip');
+    document.getElementById('phasename').textContent = v ? 'awaiting-review' : 'interviewing';
+    chip.className = 'phasechip ' + (v ? 'needsyou' : 'working');
+    document.body.setAttribute('data-session-phase', v ? 'awaiting-review' : 'interviewing');
+    document.getElementById('prov-row').textContent = v ? 'phases[awaiting-review]' : 'phases[interviewing]';
+    document.getElementById('prov-step').textContent = v ? 'noop' : 'structured';
+    document.getElementById('prov-why').textContent = v
+      ? 'an awaiting-* phase ⇒ verdict — the absent next IS the gate'
+      : 'a structured phase ⇒ question form (never hand-authored)';
+  }
+  tq.onclick = function(){ setState(false); };
+  tv.onclick = function(){ setState(true); };
+
+  // per-block thinking expand
+  document.querySelectorAll('.frow.think .more').forEach(function(btn){
+    btn.onclick = function(){
+      var rest = btn.parentElement.querySelector('.think-rest');
+      rest.hidden = !rest.hidden;
+      btn.textContent = rest.hidden ? '+' + rest.textContent.trim().length + ' chars' : 'collapse';
+    };
+  });
+  document.getElementById('expandall').onclick = function(){
+    var anyHidden = !!document.querySelector('.think-rest[hidden]');
+    document.querySelectorAll('.think-rest').forEach(function(r){ r.hidden = !anyHidden; });
+    document.querySelectorAll('.frow.think .more').forEach(function(b){
+      b.textContent = anyHidden ? 'collapse' : '+expand';
+    });
+    this.textContent = anyHidden ? 'collapse all' : 'expand all';
+  };
+</script>
+</body>
+</html>
