@@ -347,7 +347,8 @@ consolidation lands clean before everything else builds on it.
 Execution: an explicit Workflow-script DAG (deterministic fan-out/joins)
 driving tiered agents (`tiered-orchestration` skill), **34 PRs (#136–#170)**
 across four streams plus a mockup gate and a contradiction sweep, each batch
-gated by build+test+journey+reviewer before merge.
+gated by build+test+journey+reviewer before merge, plus a same-day hotfix
+(#171 — see standing lessons, below).
 
 #### Streams and batches
 
@@ -378,7 +379,7 @@ authoring migrated onto the generic panel (#168, combined with B11) · B9
 instructions migrated onto the generic panel — architect is now the only
 bespoke panel left (#170) · B10 demo builder on the dedicated session
 screen, R1-03-F2 reversed (#165) · B11 `/sessions` index + Home
-active-sessions strip (#168) · B12 KB drain-to-green bridge job (#164) ·
+active-sessions strip (#168) · B12 KB drain-to-green bridge job (#164; hotfix #171 — see standing lessons) ·
 B13 one button — Drain to green — on KB health (#166) · B14 every operator
 poll made server-owned + client-observed (#169).
 
@@ -457,6 +458,20 @@ before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
   `node --check`.** B13's CR-2 beat had never been registered in
   `RUN_ORDER` — the harness's own drift check blocked `--list` and caught
   it before the waiver could paper over it.
+- **Main went red for six PRs (#164–#169) and nobody noticed until #170's
+  own gate caught it — root cause AND process, both fixed same-day (hotfix
+  PR #171).** B12's review round moved its no-spawn gate to the fix-turn
+  CALL SITE so it would "hold even for injected turns" — but CI's global
+  `FORGE_ARCHITECT_NO_SPAWN=1` then suppressed every test's injected fake
+  fix-turn too, failing the round-cap/cost-ceiling tests. The fix gates the
+  DEFAULT selection instead (consolidate's own precedent): an injected
+  `runFixTurn` is by definition not a spawn. The process half is the
+  durable lesson: **a merge gate must assert PRESENCE of a green terminal
+  conclusion for the exact head SHA, never absence of red** — the
+  merge-train's flake-retry tooling (`gh pr checks --watch`-shaped) returns
+  exit 0 on "no checks reported" exactly as readily as on "all green," so
+  six red runs rode through undetected until a later PR's own gate
+  happened to reproduce the failure locally.
 
 #### Follow-up beads (not wave-6 blocking)
 
@@ -473,6 +488,9 @@ before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
   shipped as a stopgap, #150/#151).
 - `forge-mlk` — the `check-raw-fs-guarded` allowlist line-drift tax (see
   lessons, above).
+- `forge-87f` — the full-suite test count includes a LOCAL-only scanner
+  that walks `.claude/worktrees` (5055/5056 under CI env vs the operator's
+  real tree; surfaced by hotfix PR #171's verification run).
 
 **WAVE 6 COMPLETE — 2026-08-15.**
 
