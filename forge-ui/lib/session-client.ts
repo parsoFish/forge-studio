@@ -628,15 +628,24 @@ export type SessionAffordance = {
   kind: SessionAffordanceKind;
   phase: string;
   /** Present only when the source phase-table row carried the corresponding
-   *  field (`writes` for `staged-review`, `next` for `next-turn`) — omitted,
-   *  never defaulted, mirroring the server's own omit-don't-default
-   *  discipline (session-kinds.ts's `deriveSessionAffordances`). `verdicts`
-   *  (W6-B6 post-merge review) is the ONE exception: the server ALWAYS
-   *  attaches it to a `verdict`-kind affordance (the row's authored list, or
-   *  the ADR default `['approve','reject']`) — this is the single source of
-   *  "which verdict values are legal here"; the panel renders its buttons
-   *  from THIS field only, never a client-side per-kind table. */
-  meta?: { writes?: string[]; next?: string; verdicts?: string[] };
+   *  field (`writes` for `staged-review`, `next` for `next-turn`, `requires`
+   *  for `verdict` — W6-B9) — omitted, never defaulted, mirroring the
+   *  server's own omit-don't-default discipline (session-kinds.ts's
+   *  `deriveSessionAffordances`). `verdicts` (W6-B6 post-merge review) is
+   *  the ONE exception: the server ALWAYS attaches it to a `verdict`-kind
+   *  affordance (the row's authored list, or the ADR default
+   *  `['approve','reject']`) — this is the single source of "which verdict
+   *  values are legal here"; the panel renders its buttons from THIS field
+   *  only, never a client-side per-kind table. `requires` (W6-B9, reviewer
+   *  finding on W6-B8) is the equally single source of "which extra POST
+   *  body fields this verdict needs beyond `verdict` itself" — unlike the
+   *  other sub-fields here, this one is NOT merely advisory display data:
+   *  `SessionInteractivePanel` gates its Approve button on it (closes the
+   *  class of defect where the client hardcoded a guess at a server-side
+   *  requirement — the file-package "needs an id" rule used to be a
+   *  client-only assumption with no wire signal tying it to
+   *  `handleAuthoringVerdict`'s own `{kind,id}` check). */
+  meta?: { writes?: string[]; next?: string; verdicts?: string[]; requires?: string[] };
 };
 
 function parseSessionAffordanceKind(raw: unknown): SessionAffordanceKind {
@@ -666,8 +675,14 @@ function parseSessionAffordance(raw: unknown): SessionAffordance {
     const writes = Array.isArray(metaRaw['writes']) && metaRaw['writes'].every((w) => typeof w === 'string') ? (metaRaw['writes'] as string[]) : undefined;
     const next = typeof metaRaw['next'] === 'string' ? metaRaw['next'] : undefined;
     const verdicts = Array.isArray(metaRaw['verdicts']) && metaRaw['verdicts'].every((v) => typeof v === 'string') ? (metaRaw['verdicts'] as string[]) : undefined;
-    if (writes !== undefined || next !== undefined || verdicts !== undefined) {
-      meta = { ...(writes !== undefined ? { writes } : {}), ...(next !== undefined ? { next } : {}), ...(verdicts !== undefined ? { verdicts } : {}) };
+    const requires = Array.isArray(metaRaw['requires']) && metaRaw['requires'].every((r) => typeof r === 'string') ? (metaRaw['requires'] as string[]) : undefined;
+    if (writes !== undefined || next !== undefined || verdicts !== undefined || requires !== undefined) {
+      meta = {
+        ...(writes !== undefined ? { writes } : {}),
+        ...(next !== undefined ? { next } : {}),
+        ...(verdicts !== undefined ? { verdicts } : {}),
+        ...(requires !== undefined ? { requires } : {}),
+      };
     }
   }
   return { id, kind, phase, ...(meta !== undefined ? { meta } : {}) };
@@ -705,23 +720,12 @@ export type SessionShellPayload = {
   turns: SessionTurn[];
   artifact: SessionArtifactPayload;
   /**
-   * R4-19-F2 WI-4c BLOCKER fix — the KB id `SessionCleanupPanel` needs as
-   * `applyKbCleanup`'s FIRST argument (cli/bridge-studio-sessions.ts's
-   * `statusParsed.kb_id` forward). Mirrors `dependsOn`'s ABSENCE-TOLERANT
-   * attitude, not its empty-array DEFAULT: `dependsOn` has a sensible "no
-   * deps" default (`[]`), but there is no sentinel "no KB" string, so a
-   * session kind with no real kb_id (e.g. architect) must parse to
-   * `undefined`, never a fabricated `''`. Optional, never hard-required —
-   * a payload omitting the key is not malformed.
-   */
-  kbId?: string;
-  /**
    * W6-B6 (ADR-043 2026-08-15 amendment §1) — the derived, phase-scoped
    * operator affordances (`orchestrator/studio/session-kinds.ts`'s
    * `deriveSessionAffordances`, server-computed). REQUIRED and hard-parsed
-   * like every sibling field above `kbId` — a kind with no derivable
-   * affordances (architect) still carries a genuine `[]`, never an omitted
-   * key. `SessionInteractivePanel` renders EXACTLY this array and never
+   * like every sibling field — a kind with no derivable affordances
+   * (architect) still carries a genuine `[]`, never an omitted key.
+   * `SessionInteractivePanel` renders EXACTLY this array and never
    * re-derives from `phase` itself (the "derived, not authored" discipline).
    */
   affordances: SessionAffordance[];
@@ -730,10 +734,19 @@ export type SessionShellPayload = {
    * kickoff-selected model tier, read live off `status.json.modelTier`.
    * `null` for a session with no recorded tier (predates the seam, or a
    * `strategy:fixed` skill's kickoff never writes one). REQUIRED (the key
-   * is always present on the wire, never omitted) — unlike `kbId`, `null`
-   * IS the honest value here, not an absence to model as `undefined`.
+   * is always present on the wire, never omitted) — `null` IS the honest
+   * value here, not an absence to model as `undefined`.
    */
   modelTier: string | null;
+  /**
+   * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
+   * (`cli/bridge-studio-sessions.ts`), threaded onto the wire so the generic
+   * `SessionInteractivePanel` can gate its ActivityLog drawer without a
+   * second, hand-kept terminal-phase table client-side. REQUIRED and
+   * hard-parsed like every sibling field above — never omitted, never
+   * defaulted to `false`.
+   */
+  terminal: boolean;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -782,35 +795,33 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const artifact = parseSessionArtifact(raw['artifact']);
 
-  // Absence-tolerant like `dependsOn`, but with NO default value (see the
-  // field doc above): a non-string "kbId" is left untyped-absent rather than
-  // thrown on, since a malformed kbId is advisory (it degrades the panel to
-  // its honest not-approvable branch) not envelope-fatal like every other
-  // field in this payload — spread in only when genuinely a string, so the
-  // key is OMITTED (not `undefined`-valued) to match the wire contract.
-  const kbIdRaw = raw['kbId'];
-  const kbId = typeof kbIdRaw === 'string' ? kbIdRaw : undefined;
-
-  // W6-B6 — hard-required like every field above `kbId` (never coerced to a
-  // permissive default): a non-array "affordances" throws, mirroring the
-  // "turns" refusal above this same function.
+  // W6-B6 — hard-required (never coerced to a permissive default): a
+  // non-array "affordances" throws, mirroring the "turns" refusal above
+  // this same function.
   const affordances = parseSessionAffordances(raw['affordances']);
 
-  // modelTier's honest value space is `string | null` — unlike kbId, `null`
-  // IS the real answer for "no recorded tier", so this is REQUIRED (throws
-  // if the key is missing or neither a string nor null), never
-  // absence-tolerant like kbId's own undefined-when-malformed handling.
+  // modelTier's honest value space is `string | null` — `null` IS the real
+  // answer for "no recorded tier", so this is REQUIRED (throws if the key
+  // is missing or neither a string nor null), never absence-tolerant.
   const modelTierRaw = raw['modelTier'];
   if (modelTierRaw !== null && typeof modelTierRaw !== 'string') {
     throw new Error(`missing or invalid "modelTier": expected a string or null, got ${JSON.stringify(modelTierRaw)}`);
   }
   const modelTier = modelTierRaw;
 
+  // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
+  // non-boolean "terminal" throws, never defaulted to false.
+  const terminalRaw = raw['terminal'];
+  if (typeof terminalRaw !== 'boolean') {
+    throw new Error(`missing or invalid "terminal": expected a boolean, got ${JSON.stringify(terminalRaw)}`);
+  }
+  const terminal = terminalRaw;
+
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
-    ...(kbId !== undefined ? { kbId } : {}),
     affordances,
     modelTier,
+    terminal,
   };
 }
 

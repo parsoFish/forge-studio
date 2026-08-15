@@ -1141,6 +1141,45 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
 }
 
 /**
+ * W6-B11 — one row of the aggregate `GET /api/studio/sessions` index. Mirrors
+ * `cli/ui-bridge.ts`'s `SessionIndexRow` wire shape verbatim (server-sourced,
+ * never re-derived client-side): `terminal`/`needsYou` are the bridge's own
+ * `isTerminalPhase`/`deriveSessionAffordances` derivations, threaded through
+ * as-is so the client never re-implements either vocabulary.
+ */
+export type SessionIndexRow = {
+  kind: string;
+  sessionId: string;
+  project: string;
+  phase: string;
+  terminal: boolean;
+  needsYou: boolean;
+  modelTier: string | null;
+  updatedAt: string;
+  href: string;
+};
+
+/**
+ * Fetch the aggregate in-flight sessions index (W6-B11) — every registered
+ * session kind, across every project, flattened by the bridge's
+ * `collectStudioSessionIndexRows` + `sortAndCapSessionIndexRows`
+ * (needs-you-first, then newest). `activeOnly` (default `true`, the shape
+ * every current caller — the /sessions page, Home's active-sessions strip —
+ * wants: operator-locked, in-flight sessions ONLY, never terminal history)
+ * maps onto the bridge's `?active=1` query param; pass `false` for the rare
+ * caller that genuinely wants terminal rows included too. Same fallback
+ * discipline as every other `fetchStudio*` read here: no bridge configured,
+ * a non-2xx, or a thrown fetch all degrade to `[]` rather than rejecting, so
+ * one unavailable endpoint can never blank a sibling surface fed by the same
+ * `Promise.all`.
+ */
+export async function fetchStudioSessions(activeOnly: boolean = true): Promise<SessionIndexRow[]> {
+  const path = activeOnly ? '/api/studio/sessions?active=1' : '/api/studio/sessions';
+  const body = await studioGet<{ sessions: SessionIndexRow[] }>(path, { sessions: [] });
+  return body.sessions ?? [];
+}
+
+/**
  * Fetch a single KB with its graph and health. Returns null if not found.
  *
  * `body.kb` arrives via `studioGet`'s unchecked `as T` cast (same as every
@@ -1770,31 +1809,6 @@ export async function startKbCleanup(
     return { ok: false, error: 'malformed kb-cleanup start response: missing sessionId/project' };
   }
   return { ok: true, sessionId, project };
-}
-
-/** R4-19-F2: approve + apply a drafted cleanup plan (`POST .../kbs/:id/
- *  cleanup/apply`, cli/ui-bridge.ts). The route's SECURITY INVARIANT reads
- *  the KB to drain from the SESSION's own recorded `kb_id`, never the URL's
- *  `:id` — so the body must carry the real session identity `{project,
- *  sessionId}` verbatim; the object is rebuilt field-by-field here (never
- *  spread) so no extra caller-supplied key can ever ride along on the wire.
- *  409s (phase !== 'awaiting-approval') pass their message through
- *  unmodified — the approval-gate refusal must reach the operator as the
- *  server worded it, never replaced by a generic "failed" string. */
-export async function applyKbCleanup(
-  id: string,
-  body: { project: string; sessionId: string },
-): Promise<{ ok: true; runId: string } | { ok: false; error: string }> {
-  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/cleanup/apply`, {
-    project: body.project,
-    sessionId: body.sessionId,
-  });
-  if (!r.ok) return { ok: false, error: r.error ?? 'failed to apply kb-cleanup plan' };
-  const runId = r.data?.runId;
-  if (typeof runId !== 'string') {
-    return { ok: false, error: 'malformed kb-cleanup apply response: missing runId' };
-  }
-  return { ok: true, runId };
 }
 
 /** Delete a knowledge base (removes its brain/<id>/ dir). The forge-owned core

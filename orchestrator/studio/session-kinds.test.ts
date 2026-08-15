@@ -1021,8 +1021,10 @@ function wellFormedTurnSpec(): Record<string, unknown> {
       // declares `verdicts: [approve]` — there is no rejection path for a
       // drafted package — kept in lockstep here so this literal stays a
       // truthful mirror of the checked-in yaml, not just the ADR's original
-      // 4-phase shape.
-      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
+      // 4-phase shape. requires (W6-B9, reviewer finding on W6-B8): approve
+      // ALSO needs an operator-supplied `id` beyond `verdict` itself — same
+      // lockstep reasoning.
+      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve'], requires: ['id'] },
       { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
       { phase: 'committed', step: 'terminal' },
     ],
@@ -1916,6 +1918,57 @@ describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-r
     assert.ok(f, `expected a session-kinds/panel-verdicts-misplaced finding, got: ${JSON.stringify(findings)}`);
     assert.equal(f.level, 'error');
     assert.ok(f.message.includes('drafting'), 'message must name the offending phase');
+  });
+
+  it('W6-B9 (reviewer finding on W6-B8): "requires" declared on a row that is NOT a noop+awaits:verdict row -> session-kinds/panel-requires-misplaced (mirrors verdicts-misplaced\'s exact shape — the field is meaningless anywhere else)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'drafting');
+    phases[idx] = { ...phases[idx], requires: ['id'] }; // "drafting" is step:agent, not noop+awaits:verdict
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-requires-misplaced');
+    assert.ok(f, `expected a session-kinds/panel-requires-misplaced finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('drafting'), 'message must name the offending phase');
+  });
+
+  it('W6-B9 (derivation): a noop+awaits:verdict row declaring "requires: [id]" derives a verdict affordance whose meta.requires deep-equals it verbatim; a row declaring none omits the key entirely (never a fabricated [])', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { ...phases[idx], requires: ['id'] };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const descs = loadSessionKinds(root);
+    const withRequires = descs.find((d) => d.id === 'fixture-kind');
+    assert.ok(withRequires, 'expected the fixture descriptor to load');
+    const affordances = deriveSessionAffordances(withRequires as SessionKindDescriptor, 'awaiting-review');
+    assert.deepEqual(
+      affordances,
+      [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'], requires: ['id'] } }],
+      `expected meta.requires to deep-equal the authored ["id"] list, got: ${JSON.stringify(affordances)}`,
+    );
+
+    // Negative control: the SAME row with no "requires" key at all omits it
+    // entirely from meta — never defaults to [].
+    const panelNoRequires = wellFormedPanel();
+    writeSessionKindsYaml(root, [panelDescriptor(panelNoRequires)]);
+    const descsNoRequires = loadSessionKinds(root);
+    const withoutRequires = descsNoRequires.find((d) => d.id === 'fixture-kind');
+    assert.ok(withoutRequires, 'expected the fixture descriptor to load');
+    const affordancesNoRequires = deriveSessionAffordances(withoutRequires as SessionKindDescriptor, 'awaiting-review');
+    assert.equal(affordancesNoRequires.length, 1);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(affordancesNoRequires[0].meta ?? {}, 'requires'),
+      false,
+      `a row with no "requires" key must omit it from meta entirely, got: ${JSON.stringify(affordancesNoRequires[0].meta)}`,
+    );
   });
 
   it('W6-B6-3 (positive control): a panel verdict row declaring "verdicts: [approve]" (kb-cleanup/authoring\'s real shape) validates CLEAN — zero panel-* findings, and derives ONLY an approve button, never a fabricated reject', () => {

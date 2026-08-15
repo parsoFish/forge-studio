@@ -194,6 +194,9 @@ const WELL_FORMED_PAYLOAD = {
   // model-tier seam, so modelTier is honestly null.
   affordances: [] as { id: string; kind: string; phase: string }[],
   modelTier: null as string | null,
+  // W6-B8 — REQUIRED on every wire payload (never omitted): architect's
+  // fixture session sits at 'awaiting-verdict', a non-terminal phase.
+  terminal: false,
 };
 
 // ===========================================================================
@@ -461,6 +464,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     artifact: WELL_FORMED_MARKDOWN_ARTIFACT,
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
     modelTier: 'sonnet',
+    terminal: false,
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -477,8 +481,28 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     artifact: WELL_FORMED_BRAIN_ARTIFACT,
     affordances: [],
     modelTier: null,
+    terminal: false,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
+});
+
+// ===========================================================================
+// W6-B8 — parseSessionShellPayload gains "terminal" (boolean, REQUIRED, never
+// omitted or defaulted) — mirrors "affordances"' own hard-required treatment
+// immediately above (AT-95..97's own precedent for a field added after the
+// original AT-1..32 sequence): a non-array/missing wire field throws by name.
+// ===========================================================================
+
+test('AT-127: parseSessionShellPayload: "terminal" round-trips true/false verbatim', () => {
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: true }).terminal).toBe(true);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: false }).terminal).toBe(false);
+});
+
+test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS — never defaulted to false', () => {
+  const { terminal: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/terminal/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: 'true' })).toThrow(/terminal/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: null })).toThrow(/terminal/);
 });
 
 // ===========================================================================
@@ -1069,47 +1093,9 @@ test('R4-19-F2 AT-124 (real-capture END-TO-END seam — the ONE test proving ser
   expect(view.plan).toBe(REAL_CLEANUP_PLAN_MD);
 });
 
-// ===========================================================================
-// R4-19-F2 WI-4c BLOCKER FIX — `parseSessionShellPayload` gains `kbId`
-// (cli/bridge-studio-sessions.ts's 200 payload gains it, sourced from the
-// already-read `status.kb_id`, present when the status carries one and
-// OMITTED otherwise — see that file's own AT-KBID-1/AT-KBID-2). This parser
-// is the SECOND sink for the field, mirroring `dependsOn`'s own two-sink
-// shape above (AT-98..101): the server can send `kbId` correctly and this
-// client-side parser would still silently drop it on arrival if it only
-// reads the fixed field list it reads today.
-//
-// TOLERANCE CONVENTION MIRRORED: `dependsOn` (AT-99, immediately above) is
-// this file's only genuinely-optional field today — "missing on the wire is
-// TOLERATED, never thrown" — every OTHER field in `SessionShellPayload`
-// (kind/title/sessionId/project/phase/stages/defaultStage/turns/artifact) is
-// `requireString`/`requireStringArray`-style REQUIRED and throws when absent
-// (AT-95, AT-28, AT-30). `kbId` follows `dependsOn`'s ATTITUDE (tolerate
-// absence, never throw) rather than a required field's — it adapts the
-// SHAPE, not the attitude: `dependsOn` has a sensible non-empty default
-// ("no deps" ⇒ `[]`) so absence parses to `[]`; `kbId` has no such default —
-// there is no "no KB" sentinel string — so absence must parse to `undefined`,
-// never a fabricated `''`. AT-125 is the presence case; AT-126 is the
-// absence case.
-// ===========================================================================
-
-test('R4-19-F2 WI-4c AT-125 (RED): parseSessionShellPayload: "kbId" round-trips verbatim when present on the wire — kills a parser that keeps ignoring the field even after the server starts sending it (the exact fail-open-loss shape AT-98 refused for "dependsOn")', () => {
-  const withKbId = { ...WELL_FORMED_PAYLOAD, kbId: 'forge-dev' };
-  const parsed = parseSessionShellPayload(withKbId) as typeof withKbId;
-  expect(parsed.kbId).toBe('forge-dev');
-});
-
-// Companion guard (not independently red — see this WI's task report): today
-// NO field named "kbId" is read by parseSessionShellPayload at all, for ANY
-// input, so a payload that simply omits the key already parses without
-// throwing before AT-125's fix lands too. Its value is as a permanent
-// regression lock ALONGSIDE AT-125: a fix that makes "kbId" a REQUIRED field
-// (e.g. `requireString(raw, 'kbId')`, the treatment every OTHER field in
-// this payload gets) would flip AT-125 green while making THIS test fail —
-// proving the two tests together pin "present when present, tolerated when
-// absent", never "always required".
-test('R4-19-F2 WI-4c AT-126 (companion guard, not independently red — see comment above): parseSessionShellPayload: a wire payload with NO "kbId" key at all is TOLERATED — parses without throwing, "kbId" is undefined, never a fabricated ""', () => {
-  expect(() => parseSessionShellPayload(WELL_FORMED_PAYLOAD)).not.toThrow();
-  const parsed = parseSessionShellPayload(WELL_FORMED_PAYLOAD) as ReturnType<typeof parseSessionShellPayload> & { kbId?: unknown };
-  expect(parsed.kbId).toBeUndefined();
-});
+// W6-B9 (reviewer finding on W6-B8): `kbId` (R4-19-F2 WI-4c) is REMOVED from
+// `SessionShellPayload` entirely — its one reader, SessionCleanupPanel.tsx,
+// is deleted (W6-B8 migrated kb-cleanup onto the generic session shell; the
+// generic write route reads `status.kb_id` server-side, never off this wire
+// field). AT-125/AT-126, which used to pin its present/absent round-trip,
+// are deleted with it.

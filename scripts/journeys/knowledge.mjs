@@ -1619,13 +1619,27 @@ export const journey = defineJourney({
               const phaseBefore = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
               check(phaseBefore === 'drafting', `kb-cleanup-launch: under FORGE_DRY_BRIDGE=1 the start route writes phase="drafting" and returns WITHOUT spawning an agent (got "${phaseBefore}") — a real drafted plan never appears on its own here`);
 
-              const panelPhaseBefore = await page.evaluate(() => document.querySelector('[data-section="cleanup-status"]')?.getAttribute('data-cleanup-panel-phase') ?? '');
-              check(panelPhaseBefore === 'drafting', `kb-cleanup-launch: [data-section="cleanup-status"]'s data-cleanup-panel-phase mirrors the session's own phase (got "${panelPhaseBefore}")`);
+              // W6-B8 — kb-cleanup now renders the GENERIC SessionInteractivePanel
+              // (its bespoke SessionCleanupPanel/[data-section="cleanup-status"]
+              // is deleted); phase itself lives on the page shell's own
+              // [data-page="session"][data-session-phase] (asserted as
+              // `phaseBefore` above — every migrated kind reads phase from
+              // there now, never a panel-local duplicate attribute).
+              check(await page.locator('[data-component="session-interactive-panel"]').count() > 0,
+                'kb-cleanup-launch: the generic SessionInteractivePanel renders for kind=kb-cleanup');
 
               const planStateBefore = await page.evaluate(() => document.querySelector('[data-component="cleanup-plan"]')?.getAttribute('data-cleanup-plan-state') ?? '');
               check(planStateBefore === 'no-plan', `kb-cleanup-launch: honestly no plan yet (data-cleanup-plan-state="${planStateBefore}") — the harness never fakes the agent having run`);
 
-              check(await page.locator('[data-section="cleanup-not-approvable"]').count() > 0, 'kb-cleanup-launch: with phase="drafting" (not "awaiting-approval"), cleanup-not-approvable renders and no approve button is offered at all');
+              // phase="drafting" is kb-cleanup's turnSpec `{step:'agent',
+              // writes:['plan'], next:'awaiting-approval'}` row — it derives
+              // staged-review + next-turn affordances (both "not yet wired"),
+              // NEVER a verdict affordance: no approve button is offered at
+              // all while the plan is still drafting.
+              check(await page.locator('[data-affordance-kind="verdict"]').count() === 0,
+                'kb-cleanup-launch: phase="drafting" derives no verdict affordance — no approve button is offered at all');
+              check(await page.locator('[data-action="verdict-approve"]').count() === 0,
+                'kb-cleanup-launch: [data-action="verdict-approve"] absent while drafting');
               await frame(page, 'kb-cleanup-1-drafting', 'Sessions — kb-cleanup drafting: dry-bridge suppresses the agent spawn, honestly no plan yet', { key: true });
 
               // Dry-bridge stand-in for the suppressed agent turn: replay the REAL
@@ -1654,18 +1668,27 @@ export const journey = defineJourney({
               check(actionStates.length === 2, `kb-cleanup-launch: both real captured actions parsed off the replayed plan (got ${actionStates.length})`);
               check(actionStates.length > 0 && actionStates.every((s) => s === 'unknown'), `kb-cleanup-launch: both actions honestly read "unknown" (got [${actionStates.join(', ')}]) — their targets name real forge-dev theme paths outside this scratch KB's own scanned domain, the derive-don't-store fail-safe (never a fabricated "open"/"cleared" for a domain this replay never actually scanned)`);
 
-              const panelPhaseAfter = await page.evaluate(() => document.querySelector('[data-section="cleanup-status"]')?.getAttribute('data-cleanup-panel-phase') ?? '');
-              check(panelPhaseAfter === 'awaiting-approval', `kb-cleanup-launch: data-cleanup-panel-phase="${panelPhaseAfter}" after the stand-in phase transition`);
+              const panelPhaseAfter = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
+              check(panelPhaseAfter === 'awaiting-approval', `kb-cleanup-launch: data-session-phase="${panelPhaseAfter}" after the stand-in phase transition`);
 
-              check(await page.locator('[data-section="cleanup-approve"]').count() > 0, 'kb-cleanup-launch: cleanup-approve (with its approve-cleanup-plan button) renders now that phase="awaiting-approval" — absent one step ago');
+              // awaiting-approval is kb-cleanup's `{step:'noop', awaits:'verdict',
+              // verdicts:['approve']}` row — exactly ONE verdict affordance,
+              // approve-only (no reject button — mirrors demo-builder.mjs's own
+              // "unlike kb-cleanup/authoring" note).
+              check(await page.locator('[data-affordance-kind="verdict"]').count() > 0,
+                'kb-cleanup-launch: awaiting-approval derives a verdict affordance');
+              check(await page.locator('[data-action="verdict-approve"]').count() > 0,
+                'kb-cleanup-launch: [data-action="verdict-approve"] renders now that phase="awaiting-approval" — absent one step ago');
+              check(await page.locator('[data-action="verdict-reject"]').count() === 0,
+                'kb-cleanup-launch: no reject button — kb-cleanup declares no rejection path');
               await frame(page, 'kb-cleanup-2-plan-review', 'Sessions — kb-cleanup: the real captured plan replayed, both actions honestly unknown, approve offered', { key: true });
 
         },
       },
       {
         id: 'knowledge-kb-cleanup-approve',
-        title: 'KB cleanup — approve reaches a real, measured terminal (R4-19-F2)',
-        narration: 'Approving is meant to be real end to end: [data-action="approve-cleanup-plan"] POSTs /api/studio/kbs/:id/cleanup/apply, which is gated server-side on the session\'s OWN phase being exactly "awaiting-approval" and, once past that gate, runs the SAME deterministic op=consolidate drain Consolidate itself dispatches (runBrainConsolidateNow, which self-suppresses only its own agent-tier spawn under dry-bridge — the drain itself is real, no harness stand-in needed here). This beat drives the real click and asserts whatever real, settled [data-cleanup-apply-state] the running UI produces — "applied" or "error" — never assuming success. As shipped, it reproducibly reads "error": SessionCleanupPanel.tsx receives no `kbId` prop and calls `applyKbCleanup(sessionId, ...)`, sending the SESSION id as the URL\'s kb-id segment; a session id (`newArchitectSessionId()`, timestamp-first) can never match SLUG_RE (`^[a-z]...`), so the apply route 400s "invalid kb id" before ever reaching the drain — a real wiring defect this beat surfaces verbatim rather than papering over.',
+        title: 'KB cleanup — approve reaches a real, measured terminal (R4-19-F2, generic panel W6-B8)',
+        narration: 'Approving is real end to end: [data-action="verdict-approve"] POSTs the GENERIC affordance write route, POST /api/studio/sessions/kb-cleanup/<sid>/<affordance> (W6-B4), which delegates WHOLESALE to the SAME approveKbCleanup atomic-claim helper the bespoke /api/studio/kbs/:id/cleanup/apply route ALSO calls — gated server-side on the session\'s OWN phase being exactly "awaiting-approval", then running the SAME deterministic op=consolidate drain Consolidate itself dispatches (runBrainConsolidateNow, which self-suppresses only its own agent-tier spawn under dry-bridge — the drain itself is real, no harness stand-in needed here). This beat drives the real click and asserts whatever real, settled phase the running UI produces — "applied" or a surfaced [data-affordance-error] — never assuming success. W6-B8 note: the generic route carries no URL kb-id segment at all (`approveKbCleanup` reads `status.kb_id` server-side) — the shipped defect the pre-migration SessionCleanupPanel reproduced here (a session id mistakenly POSTed where the KB id belonged) is structurally impossible on this path, not merely fixed.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               console.log('\n[R4-19-F2] KB cleanup — approve + apply');
@@ -1679,29 +1702,32 @@ export const journey = defineJourney({
                 () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
-              check(await page.locator('[data-section="cleanup-approve"]').count() > 0, 'kb-cleanup-approve: the replayed plan\'s approve control persisted on disk (cross-beat, same session)');
+              check(await page.locator('[data-action="verdict-approve"]').count() > 0, 'kb-cleanup-approve: the replayed plan\'s approve control persisted on disk (cross-beat, same session)');
 
               await caption(page, 'Approve & apply — the real op=consolidate drain, dispatched through the session\'s own approval gate.');
               await sleep(THINK);
-              await page.locator('[data-action="approve-cleanup-plan"]').click().catch(() => {});
+              await page.locator('[data-action="verdict-approve"]').click().catch(() => {});
 
-              let applyState = '';
+              let phaseAfter = '';
+              let errorText = '';
               try {
                 await page.waitForFunction(() => {
-                  const v = document.querySelector('[data-component="cleanup-panel"]')?.getAttribute('data-cleanup-apply-state');
-                  return v !== null && v !== undefined && v !== '';
+                  const phase = document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase');
+                  return phase === 'applied' || document.querySelector('[data-affordance-error]') !== null;
                 }, null, { timeout: 15000 });
-                applyState = await page.evaluate(() => document.querySelector('[data-component="cleanup-panel"]')?.getAttribute('data-cleanup-apply-state') ?? '');
+                phaseAfter = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
+                errorText = await page.evaluate(() => document.querySelector('[data-affordance-error]')?.textContent ?? '');
               } catch { /* checked below */ }
-              check(applyState === 'applied' || applyState === 'error', `kb-cleanup-approve: [data-cleanup-apply-state] reaches a real, settled terminal — never a silent hang (got "${applyState || '(none)'}")`);
+              check(phaseAfter === 'applied' || errorText.length > 0, `kb-cleanup-approve: reaches a real, settled terminal — never a silent hang (got phase="${phaseAfter || '(none)'}", error="${errorText || '(none)'}")`);
 
-              if (applyState === 'error') {
-                const errorText = await page.evaluate(() => document.querySelector('[data-section="cleanup-approve"]')?.textContent ?? '');
-                check(errorText.includes('invalid kb id'), `kb-cleanup-approve: REAL DEFECT reproduced — the apply route 400s "invalid kb id" (SessionCleanupPanel has no kbId prop, so it POSTs the SESSION id where the KB id belongs, which fails SLUG_RE) — surfaced to the operator verbatim, never swallowed: "${errorText.trim()}"`);
-                await frame(page, 'kb-cleanup-3-apply-error', 'Sessions — kb-cleanup: Approve & apply genuinely 400s — a real wiring defect, surfaced verbatim, never silently retried or hidden', { key: true });
-              } else if (applyState === 'applied') {
-                check(await page.locator('[data-section="cleanup-applied"]').count() > 0, 'kb-cleanup-approve: cleanup-applied renders the settled terminal in place of the approve control');
+              if (phaseAfter === 'applied') {
+                check(await page.locator('[data-section="session-no-affordances"]').count() > 0,
+                  'kb-cleanup-approve: "applied" is terminal — zero affordances derive, so the panel honestly reports no operator action left');
                 await frame(page, 'kb-cleanup-3-applied', 'Sessions — kb-cleanup: Approve & apply reached a real "applied" terminal — the same op=consolidate drain Consolidate itself dispatches', { key: true });
+              } else {
+                // Not expected on this path (see narration) — surfaced
+                // verbatim rather than papered over if it ever does happen.
+                await frame(page, 'kb-cleanup-3-apply-error', `Sessions — kb-cleanup: Approve & apply surfaced an error verbatim: "${errorText.trim()}"`, { key: true });
               }
 
               cleanScratchKbCleanup();

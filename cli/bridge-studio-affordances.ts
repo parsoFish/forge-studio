@@ -45,15 +45,19 @@
  *      affordance id + the CURRENTLY-available set (never the full
  *      registry — the whole point is phase-scoped availability).
  *   4. body → validated per the MATCHED affordance's `kind`
- *      (`question-form` | `verdict`), then per session `kind` within that —
- *      see the per-kind handlers below. Anything this switch does not
- *      explicitly wire (an out-of-scope `verdict` value, or the read-only
- *      `staged-review`/`next-turn` affordance kinds, which have no operator
- *      WRITE action at all — they describe what an `agent` step already did,
- *      not something to trigger) falls through to `UnhandledAffordanceBody`
- *      — 501, naming the affordance kind + the session kind + the phase.
- *      Never a silent 200, never a misrouted write into a DIFFERENT kind's
- *      handler.
+ *      (`question-form` | `verdict`), then — for `verdict` — GENERICALLY
+ *      against `affordance.meta.requires` (W6-B9, reviewer finding on
+ *      W6-B8: any extra POST body field a row's `requires:` list names must
+ *      be present as a non-empty string, checked ONCE here for every
+ *      session kind, never a hand-kept per-kind field list), then per
+ *      session `kind` within that — see the per-kind handlers below.
+ *      Anything this switch does not explicitly wire (an out-of-scope
+ *      `verdict` value, or the read-only `staged-review`/`next-turn`
+ *      affordance kinds, which have no operator WRITE action at all — they
+ *      describe what an `agent` step already did, not something to
+ *      trigger) falls through to `UnhandledAffordanceBody` — 501, naming
+ *      the affordance kind + the session kind + the phase. Never a silent
+ *      200, never a misrouted write into a DIFFERENT kind's handler.
  *
  * DELEGATION (task brief: "DELEGATE to the same underlying write+spawn
  * helpers where they exist rather than reimplement"):
@@ -72,14 +76,17 @@
  *     reason.
  *   - kb-cleanup's approve delegates WHOLESALE to `approveKbCleanup`
  *     (`cli/bridge-studio-kbs.ts`) — the ONE atomic read-check-claim-drain-
- *     finish choreography `POST /api/studio/kbs/:id/cleanup/apply` ALSO now
- *     calls (imported directly; no cycle: `bridge-studio-kbs.ts` does not
- *     import this file or `ui-bridge.ts`). W6-B4 adversarial-review fix:
- *     this used to be duplicated, non-atomic choreography in BOTH routes —
- *     a check-then-await-then-write race, live-reproduced as two concurrent
- *     approves running two independent `runBrainConsolidateNow` drains. See
- *     `approveKbCleanup`'s own doc comment for the fix (a synchronous
- *     phase:'applying' claim written BEFORE the one `await`).
+ *     finish choreography (imported directly; no cycle: `bridge-studio-
+ *     kbs.ts` does not import this file or `ui-bridge.ts`). W6-B4
+ *     adversarial-review fix: this used to be duplicated, non-atomic
+ *     choreography in BOTH this route AND the bespoke `POST /api/studio/
+ *     kbs/:id/cleanup/apply` route — a check-then-await-then-write race,
+ *     live-reproduced as two concurrent approves running two independent
+ *     `runBrainConsolidateNow` drains. See `approveKbCleanup`'s own doc
+ *     comment for the fix (a synchronous phase:'applying' claim written
+ *     BEFORE the one `await`). W6-B9 (reviewer finding on W6-B8): the
+ *     bespoke route is now DELETED — kb-cleanup migrated onto the generic
+ *     session shell, and the bespoke route had no production caller left.
  *   - authoring's approve delegates WHOLESALE to `runFinalize`
  *     (`cli/bridge-studio-authoring.ts`, exported for this file) — the
  *     entire `copyStagingToLibrary` + skill/hook-install sequence is far too
@@ -430,14 +437,16 @@ async function handleDemoVerdict(
 // ---------------------------------------------------------------------------
 // verdict — kb-cleanup (approve only; the turnSpec's `awaiting-approval` row
 // deliberately declares no rejection semantics anywhere in this repo — see
-// `studio/session-kinds.yaml`'s own comment on that row). Mirrors
-// `POST /api/studio/kbs/:id/cleanup/apply` (`cli/ui-bridge.ts:4337`) MINUS
-// the URL `:id` <-> `status.kb_id` equality check that route needs — THIS
-// route carries no URL-supplied kb id at all (there is no `:id` segment in
+// `studio/session-kinds.yaml`'s own comment on that row). This route carries
+// no URL-supplied kb id at all (there is no `:id` segment in
 // `/api/studio/sessions/:kind/:sessionId/:affordance`), so `status.kb_id` is
-// the ONLY candidate value; the security invariant that route's own header
-// documents ("the drain's SOLE source of truth is status.kb_id, never the
-// URL") is satisfied by construction here, not by an extra check.
+// the ONLY candidate value — the security invariant ("the drain's SOLE
+// source of truth is status.kb_id, never a URL segment") is satisfied by
+// construction here, never an extra check. W6-B9 (reviewer finding on
+// W6-B8): this WAS one of two callers of `approveKbCleanup` — the bespoke
+// `POST /api/studio/kbs/:id/cleanup/apply` route (which DID carry a URL
+// `:id`, cross-checked against `status.kb_id`) is now DELETED, so this is
+// the ONLY caller left.
 // ---------------------------------------------------------------------------
 
 async function handleKbCleanupVerdict(
@@ -460,9 +469,10 @@ async function handleKbCleanupVerdict(
   // the phase re-check (belt-and-suspenders on top of the caller's own
   // affordance-membership check AND the generic verdicts gate above), the
   // kb_id presence check, the ATOMIC phase:'applying' claim, the drain, and
-  // the phase:'applied' write all live in exactly one place now, shared
-  // with the bespoke `/cleanup/apply` route (W6-B4 adversarial-review fix —
-  // this used to be duplicated, non-atomic choreography here).
+  // the phase:'applied' write all live in exactly one place now (W6-B4
+  // adversarial-review fix — this used to be duplicated, non-atomic
+  // choreography here; W6-B9 deleted the last other caller, the bespoke
+  // `/cleanup/apply` route).
   const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs);
   if (!outcome.ok) {
     sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
@@ -485,10 +495,33 @@ async function handleKbCleanupVerdict(
 // kb-cleanup, not the other way around.
 // ---------------------------------------------------------------------------
 
+/** Derives the drafted package's shape purely by file PRESENCE (skills/
+ *  creation-agent/SKILL.md's own two package shapes) — mirrors
+ *  `SessionInteractivePanel.tsx`'s client-side `draftShapeOf` EXACTLY, but
+ *  reads the REAL staging files server-side via `guardedReadFile` (the SAME
+ *  guarded primitive `handleInstructionsAnswer` above already uses), never
+ *  a client-supplied `body.kind` (W6-B9, reviewer finding on W6-B8: "keep
+ *  kind derived from artifact" — `kind` is not an operator decision, D4;
+ *  only the library `id` is, and that is what `meta.requires` now enforces
+ *  generically). `null` when neither marker file exists yet under
+ *  `staging/` — still drafting, never guessed. `'staging'` mirrors
+ *  `orchestrator/studio/session-transcript.ts`'s own (unexported)
+ *  `PACKAGE_DIRNAME` literal — not imported, to avoid widening that file's
+ *  export surface for a single constant this route can just as honestly
+ *  hand-copy (the same convention this file's own header already documents
+ *  for `SLUG_RE`-class values). */
+function deriveAuthoringPackageKind(projectsRoot: string, dirSegs: readonly string[]): 'skill' | 'hook' | null {
+  if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', 'SKILL.md']) !== null) return 'skill';
+  if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', 'hook.yaml']) !== null) return 'hook';
+  return null;
+}
+
 async function handleAuthoringVerdict(
   ctx: AffordanceRouteContext,
   res: ServerResponse,
   origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
   project: string,
   sessionId: string,
   body: Record<string, unknown>,
@@ -497,16 +530,23 @@ async function handleAuthoringVerdict(
   // reject-422 now happens generically, reading `affordance.meta.verdicts`
   // (`studio/session-kinds.yaml`'s `awaiting-review` row declares
   // `verdicts: [approve]`). Only ever reached with `verdict === 'approve'`.
-  const kind = body.kind;
-  const id = typeof body.id === 'string' ? body.id.trim() : '';
-  if (kind !== 'skill' && kind !== 'hook') {
-    sendJson(res, 400, { error: 'body.kind is required and must be "skill" or "hook"' }, origin);
+  //
+  // W6-B9 (reviewer finding on W6-B8): `body.kind`/`body.id` used to be
+  // hardcoded, authoring-specific checks here — `kind` duplicated a fact
+  // the server can derive for itself (never an operator decision, D4), and
+  // `id`'s requiredness had no wire signal a client could read back. Both
+  // are gone: `id`'s presence is now the GENERIC `meta.requires` check in
+  // the main dispatcher above (studio/session-kinds.yaml's `requires: [id]`
+  // on this row), and `kind` is derived here, from the REAL staging files,
+  // never trusted from the request body.
+  const kind = deriveAuthoringPackageKind(projectsRoot, dirSegs);
+  if (kind === null) {
+    sendJson(res, 409, { error: 'cannot finalize: the drafted package has neither a SKILL.md nor a hook.yaml at its staging root yet' }, origin);
     return;
   }
-  if (!id) {
-    sendJson(res, 400, { error: 'body.id is required' }, origin);
-    return;
-  }
+  // body.id is already guaranteed a non-empty (post-trim) string by the
+  // generic `requires` check above — re-read (never re-validate) it here.
+  const id = (body.id as string).trim();
   // runFinalize sends its OWN response (success and every failure path) —
   // this route hands off wholesale rather than reimplementing any part of
   // the copyStagingToLibrary + skill/hook-install sequence.
@@ -777,6 +817,33 @@ export async function handleStudioAffordanceRoutes(
         return true;
       }
 
+      // W6-B9 (reviewer finding on W6-B8) — the GENERIC body-shape check:
+      // "which extra POST body fields this verdict needs beyond `verdict`
+      // itself" is now ONE business rule with ONE source, exactly mirroring
+      // `allowedVerdicts` immediately above — `affordance.meta.requires`
+      // (the row's authored `requires:` list, studio/session-kinds.yaml;
+      // omitted when the row needs nothing extra). This REPLACES the
+      // authoring-specific hardcoded `{kind,id}` check that used to live
+      // inside `handleAuthoringVerdict` for the `id` half — a client that
+      // wants to know what a verdict needs now reads the SAME derived
+      // `meta.requires` this check enforces, never a second, hand-kept
+      // per-kind list. Each named field must be present as a non-empty
+      // (post-trim) string; the FIRST missing/empty field 400s, naming it —
+      // never a generic "bad request".
+      const requiresFields = affordance.meta?.requires ?? [];
+      for (const field of requiresFields) {
+        const value = b[field];
+        if (typeof value !== 'string' || value.trim().length === 0) {
+          sendJson(
+            res,
+            400,
+            { error: `body.${field} is required for verdict "${verdict}" on session kind "${descriptor.id}" at phase "${phase}", got ${JSON.stringify(value)}` },
+            origin,
+          );
+          return true;
+        }
+      }
+
       switch (descriptor.id) {
         case 'instructions':
           await handleInstructionsVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict);
@@ -788,7 +855,7 @@ export async function handleStudioAffordanceRoutes(
           await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, project);
           return true;
         case 'authoring':
-          await handleAuthoringVerdict(ctx, res, origin, project, sessionId, b);
+          await handleAuthoringVerdict(ctx, res, origin, projectsRoot, dirSegs, project, sessionId, b);
           return true;
         case 'community-refresh':
           await handleCommunityRefreshVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, verdict);

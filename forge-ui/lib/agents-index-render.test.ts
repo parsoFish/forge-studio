@@ -172,6 +172,20 @@ test('agent-roster: the "+ New agent" CTA is a REAL <a href="/agents/new">, pres
   }
 });
 
+// W6-B11 review fix — both anchors below must be `next/link`'s `Link` (IA-6's
+// single-tab policy: every internal anchor navigates client-side, never a
+// full-page reload), not a plain `<a>`. `Link` renders as a real `<a>` tag
+// under `renderToStaticMarkup`, so `tagOf` still reads `'a'` here — this pin
+// is about the HREF/DATA CONTRACT surviving the conversion, not the tag name.
+test('agent-roster: the "Sessions" secondary-nav link carries data-nav="sessions-secondary" and href="/sessions", present in every ready/loading/empty state', () => {
+  for (const state of [{ ready: false, agents: [] }, { ready: true, agents: [] }, { ready: true, agents: [agent()] }]) {
+    const html = render(state);
+    const markup = elementMarkup(html, 'data-nav="sessions-secondary"');
+    expect(tagOf(markup)).toBe('a');
+    expect(markup).toContain('href="/sessions"');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // RECENT AGENT RUNS — reuses HistoryLedger unchanged (D2)
 // ---------------------------------------------------------------------------
