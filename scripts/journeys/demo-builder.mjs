@@ -173,6 +173,51 @@ export const journey = defineJourney({
       },
     },
     {
+      id: 'demo-builder-session-shell',
+      title: 'The same session, on the shared session shell (the generic panel)',
+      narration: 'The inline project-page panel is not the only door into this session — R1-03-F2 never reversed, but W6-B6 wires "demo" onto the shared, generic session shell too: the SAME awaiting-review session, opened at /sessions/demo/<sid>, now renders the generic interaction panel — derived from the phase table, never re-authored — offering approve/reject with a generation picker.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[DB-2b] demo-builder — the same session on the generic session shell');
+        // READ-ONLY: this beat only navigates and asserts — it never clicks
+        // verdict-approve/verdict-reject, so demoSid's canonical
+        // 'awaiting-review' state (still needed by demo-builder-generations,
+        // the very next beat, on the SAME page object) is never mutated.
+        await page.goto(`${watch.uiUrl}/sessions/demo/${encodeURIComponent(demoSid)}?project=${encodeURIComponent(PROJECT)}`,
+          { waitUntil: 'domcontentloaded' });
+        const shellReady = await page.waitForFunction(
+          () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+        check(shellReady, 'DB-2b: the generic session shell renders for kind=demo ([data-page="session"][data-page-ready="true"])');
+        await caption(page, 'The same demo session, on the shared shell — one generic panel, derived from the phase table.');
+        await page.waitForSelector('[data-component="session-interactive-panel"]', { timeout: 15000 }).catch(() => {});
+        check(await page.locator('[data-component="session-interactive-panel"]').count() > 0,
+          'DB-2b: the generic SessionInteractivePanel renders (W6-B6)');
+        check(await page.locator('[data-section="session-provenance"]').count() > 0,
+          'DB-2b: the provenance strip is visible ("derived from phase …")');
+        check(await page.locator('[data-affordance-kind="verdict"]').count() > 0,
+          'DB-2b: awaiting-review derives a verdict affordance (approve/reject)');
+        check(await page.locator('[data-action="verdict-approve"]').count() > 0
+          && await page.locator('[data-action="verdict-reject"]').count() > 0,
+          'DB-2b: both approve and reject render for demo (unlike kb-cleanup/authoring, which are approve-only)');
+        check(await page.locator('[data-field="session-generation-pick"]').count() > 0,
+          'DB-2b: the demo-only generation picker renders, sourced from the real generation-gallery artifact already on the wire');
+        await frame(page, 'demo-2b-session-shell', 'The generic session shell — the same session, the generic interaction panel', { key: true });
+
+        // Navigate back to the project page's inline panel — demo-builder-
+        // generations (the very next beat) continues driving the SAME `page`
+        // object against the inline panel, unaware this beat took a detour.
+        await page.goto(`${watch.uiUrl}/projects/${PROJECT}?demo=${encodeURIComponent(demoSid)}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
+          null, { timeout: 15000 },
+        ).catch(() => {});
+        check(await page.locator('[data-section="demo-builder-panel"][data-demo-phase="awaiting-review"]').count() > 0,
+          'DB-2b: back on the inline project-page panel, unchanged, for the next beat to continue driving');
+      },
+    },
+    {
       id: 'demo-builder-generations',
       title: 'Feedback drives the next generation — side by side',
       narration: 'The operator does not accept or reject a single take. Real feedback goes back to the agent, the next generation lands beside the first — numbered, accumulating, never overwriting — and the operator can sit on an earlier generation for as long as they like while the panel keeps polling.',
@@ -278,6 +323,69 @@ export const journey = defineJourney({
         // downstream needs .forge/demo/ once the demo is locked.
         cleanDemoBuilderSession(demoClipSid);
         restoreProjectJson(demoJsonStash);
+      },
+    },
+    {
+      id: 'demo-builder-kickoff',
+      title: 'Kick off a brand-new demo session from the generic kickoff screen',
+      narration: 'Every interactive kind now shares ONE kickoff screen (W6-B6, /sessions/<kind>/new) — the operator picks a project AND a model tier within the demo-builder skill\'s own declared range (sonnet/opus), hits Start, and lands on the real, server-minted session, straight on the shared shell, with the picked tier persisted to its status.json. This is a SEPARATE, self-contained session — it never touches demoSid or the shared .forge/demo/ lock this journey\'s own beats already exercised above.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[DB-6] demo-builder — the generic kickoff screen');
+        let kickoffSid = null;
+        try {
+          await page.goto(`${watch.uiUrl}/sessions/demo/new`, { waitUntil: 'domcontentloaded' });
+          const ready = await page.waitForFunction(
+            () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 15000 },
+          ).then(() => true).catch(() => false);
+          check(ready, 'DB-6: the generic kickoff screen renders ([data-page="session-kickoff"])');
+          await caption(page, 'One kickoff screen for every session kind — project, model tier, Start.');
+          await page.locator('[data-field="kickoff-project"]').fill(PROJECT).catch(() => {});
+
+          // W6-B6 post-merge review (MEDIUM): demo-builder is a
+          // strategy:range skill (range: [sonnet, opus]) — the picker must
+          // render as a radio group, never the read-only fixed chip.
+          const pickerKind = await page.evaluate(
+            () => document.querySelector('[data-section="kickoff-model-tier"]')?.getAttribute('data-model-tier-picker') ?? null,
+          );
+          check(pickerKind === 'range', `DB-6: demo-builder's model-tier picker renders as a RANGE radio group (got "${pickerKind}")`);
+          const opusOption = page.locator('[data-field="kickoff-model-tier-option"] input[value="opus"]');
+          check(await opusOption.count() > 0, 'DB-6: the "opus" tier — the top of demo-builder\'s declared range — is offered as a real radio option');
+          await opusOption.check().catch(() => {});
+          await frame(page, 'demo-6-kickoff', 'The generic kickoff screen — demo, model tier picked, ready to start');
+          const startEnabled = await page.locator('[data-action="start-session"]:not([disabled])').count() > 0;
+          check(startEnabled, 'DB-6: Start enables once a project is filled in');
+          await page.locator('[data-action="start-session"]').click().catch(() => {});
+          const navigated = await page.waitForFunction(
+            () => /^\/sessions\/demo\/[^/]+$/.test(window.location.pathname),
+            null, { timeout: 15000 },
+          ).then(() => true).catch(() => false);
+          check(navigated, 'DB-6: Start POSTs the real /api/demo-builder/start route and navigates onto the shared session shell');
+          kickoffSid = navigated ? decodeURIComponent(new URL(page.url()).pathname.split('/').pop() ?? '') : null;
+          check(!!kickoffSid, `DB-6: a real, server-minted session id was captured (got "${kickoffSid}")`);
+          const shellReady = await page.waitForFunction(
+            () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 15000 },
+          ).then(() => true).catch(() => false);
+          check(shellReady, 'DB-6: the freshly-kicked-off session opens live on the shared session shell');
+          await frame(page, 'demo-7-kickoff-session', 'The freshly-kicked-off demo session — briefing, on the shared shell', { key: true });
+
+          // W6-B6 post-merge review (MEDIUM): the picked tier must round-trip
+          // all the way through — POST /api/demo-builder/start persisted it
+          // to status.json, and the shell GET reads it straight back as
+          // "modelTier", never silently dropped.
+          const shellRes = await fetch(`${watch.bridgeUrl}/api/studio/sessions/demo/${encodeURIComponent(kickoffSid)}?project=${encodeURIComponent(PROJECT)}`);
+          const shellBody = shellRes.ok ? await shellRes.json() : null;
+          check(shellBody?.modelTier === 'opus', `DB-6: the kicked-off session's own modelTier reads back as "opus" (the picked tier), got: ${JSON.stringify(shellBody?.modelTier)}`);
+        } finally {
+          // Self-contained (mirrors demo-builder-lock's own tail). This is
+          // the LAST beat in this journey, so cleanDemoBuilderSession's
+          // unconditional wipe of the shared .forge/demo/ dir — already
+          // empty, demo-builder-lock wiped it above once its own lock was
+          // read back — is harmless here; nothing downstream needs it.
+          if (kickoffSid) cleanDemoBuilderSession(kickoffSid);
+        }
       },
     },
   ],

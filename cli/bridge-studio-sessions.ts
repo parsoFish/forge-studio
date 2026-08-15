@@ -16,12 +16,15 @@
  *     "derived, not authored" (ADR-043 §1): the client renders what it is
  *     handed and never re-derives. A descriptor with neither table
  *     (architect, permanently bespoke — amendment §4) always yields `[]`.
- *   - `modelTier` — placeholder passthrough (ADR-043 2026-08-15 amendment
- *     §3, kickoff model-tier selection). Always `null` today: B5 has not yet
- *     landed the write side (`status.json.modelTier`), so this route has
- *     nothing real to read. Wired as an additive field now, ahead of B5, so
- *     the wire contract is stable before the write side exists — the key is
- *     always present (never omitted), its value is just not yet meaningful.
+ *   - `modelTier` — the session's own kickoff-selected tier (ADR-043
+ *     2026-08-15 amendment §3), read straight off `status.json.modelTier`
+ *     (W6-B5 landed the write side: every `/start` route persists
+ *     `resolveKickoffModelTier`'s validated `tier` there when the operator
+ *     supplied one). `null` for a session with no `modelTier` key at all —
+ *     no request predates the seam, and a `strategy:fixed` skill's kickoff
+ *     never writes one (the model chip renders the descriptor's fixed model
+ *     instead) — never fabricated, never defaulted to a guessed tier. The
+ *     key is always present (never omitted) either way.
  *
  * Mirrors bridge-studio-templates.ts's contract exactly: a single
  * `handleStudioSessionsRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
@@ -483,9 +486,11 @@ export async function handleStudioSessionsRoutes(
         // contract note. Computed unconditionally (never omitted) — a kind
         // with no turnSpec/panel (architect) yields `[]`, not a missing key.
         affordances: deriveSessionAffordances(descriptor, phase),
-        // W6-B3 placeholder (ADR-043 2026-08-15 amendment §3) — see this
-        // file's header note; always `null` until B5 lands the write side.
-        modelTier: null,
+        // W6-B6 (ADR-043 2026-08-15 amendment §3) — see this file's header
+        // note. Read directly off the already-parsed `statusParsed`, the
+        // SAME realpath-guarded read every other field on this envelope
+        // comes from; never a second, unguarded status read.
+        modelTier: typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null,
         // R4-19-F2 WI-4c BLOCKER fix — `kbId`, sourced from the already-read
         // `statusParsed.kb_id`, threaded the same way `title` is threaded
         // above: present ONLY when the status genuinely carries a string

@@ -44,6 +44,7 @@
  */
 
 import type {
+  SessionAffordance,
   SessionArtifactPayload,
   SessionShellErrorKind,
   SessionShellFetchResult,
@@ -101,6 +102,14 @@ export type SessionShellReadyState = {
   artifactKind: SessionArtifactPayload['kind'];
   artifactLabel: string;
   artifact: SessionArtifactPayload;
+  /** W6-B6 — the payload's derived, phase-scoped affordances, carried
+   *  through UNCHANGED (never re-derived from `phase` at this layer either —
+   *  the "derived, not authored" discipline holds all the way to the
+   *  component that finally renders them). */
+  affordances: SessionAffordance[];
+  /** W6-B6 — the session's own kickoff-selected model tier, or `null` when
+   *  none was recorded. Carried through verbatim, never guessed. */
+  modelTier: string | null;
   dataAttrs: SessionShellDataAttrs;
 };
 
@@ -163,6 +172,8 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     artifactKind,
     artifactLabel: payload.artifact.label,
     artifact: payload.artifact,
+    affordances: payload.affordances,
+    modelTier: payload.modelTier,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
       stage,
