@@ -250,6 +250,7 @@ export default function SessionShellPage({
                 affordances={viewState.affordances}
                 artifact={viewState.artifact}
                 modelTier={viewState.modelTier}
+                events={events}
                 onChanged={refreshShell}
               />
             ) : null}

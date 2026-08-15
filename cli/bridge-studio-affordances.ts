@@ -317,6 +317,62 @@ async function handleInstructionsVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// question-form — demo (the briefing phase: operator brief -> generating).
+// Mirrors `POST /api/demo-builder/brief` (`cli/ui-bridge.ts:4623`). W6-B10 —
+// added alongside `studio/session-kinds.yaml`'s new `briefing` row (that
+// file's own comment explains why the row was missing until now: every demo
+// session is minted straight into `briefing`, so without this handler a
+// session opened on the dedicated `/sessions/demo/<sid>` screen could never
+// get the agent started). Reuses `answersCapReason`'s shape/size validation
+// (instructions' own guard, generic over any `answers[]` body) rather than a
+// second, hand-kept copy; a brief is a single free-text note, so only the
+// FIRST answer's `.answer` field is read — the client always sends one
+// (`SessionInteractivePanel`'s question-form box), and `question` is
+// discarded (there is no real "question" here, unlike an interview round).
+// ---------------------------------------------------------------------------
+async function handleDemoBrief(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const answersRaw = body.answers;
+  if (
+    !Array.isArray(answersRaw) ||
+    answersRaw.length === 0 ||
+    !answersRaw.every((a) => a !== null && typeof a === 'object' && typeof (a as Record<string, unknown>).question === 'string' && typeof (a as Record<string, unknown>).answer === 'string')
+  ) {
+    sendJson(res, 400, { error: 'body.answers must be a non-empty array of {question: string, answer: string}' }, origin);
+    return;
+  }
+  const answers = answersRaw as { question: string; answer: string }[];
+  const capReason = answersCapReason(answers);
+  if (capReason !== null) {
+    sendJson(res, 400, { error: capReason }, origin);
+    return;
+  }
+  const brief = answers[0].answer;
+
+  // SYNC INVARIANT: no await between the caller's status read and either
+  // write below — see this file's header note.
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: 1, prompt: brief }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+  ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
+  ctx.broadcastDemoChanged();
+  sendJson(res, 200, { ok: true, phase: 'generating' }, origin);
+}
+
+// ---------------------------------------------------------------------------
 // verdict — demo (approve => lock; reject => abandon). Mirrors
 // `POST /api/demo-builder/lock` / `POST /api/demo-builder/abandon`
 // (`cli/ui-bridge.ts:4618`/`4661`).
@@ -567,10 +623,15 @@ export async function handleStudioAffordanceRoutes(
         await handleInstructionsAnswer(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
         return true;
       }
-      // Structurally unreachable today (instructions is the only descriptor
-      // whose panel ever derives a question-form affordance) — fails LOUD
-      // rather than silently guessing a handler if the registry ever grows a
-      // second one.
+      // W6-B10: demo's own `briefing` row (studio/session-kinds.yaml).
+      if (descriptor.id === 'demo') {
+        await handleDemoBrief(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, b);
+        return true;
+      }
+      // Structurally unreachable today (instructions/demo are the only
+      // descriptors whose panel/turnSpec ever derives a question-form
+      // affordance) — fails LOUD rather than silently guessing a handler if
+      // the registry ever grows a third one.
       sendJson(res, 501, unhandledAffordanceBody(affordance.kind, `no question-form write handler is wired for session kind "${descriptor.id}"`), origin);
       return true;
     }

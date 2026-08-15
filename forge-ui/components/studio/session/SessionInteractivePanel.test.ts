@@ -20,6 +20,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { SessionInteractivePanel } from './SessionInteractivePanel';
 import type { SessionAffordance, SessionArtifactPayload } from '@/lib/session-client';
+import type { EventLogEntry } from '@/lib/bridge-client';
 
 function render(props: {
   kind: string;
@@ -29,6 +30,7 @@ function render(props: {
   affordances: SessionAffordance[];
   artifact?: SessionArtifactPayload | null;
   modelTier?: string | null;
+  events?: EventLogEntry[];
 }): string {
   return renderToStaticMarkup(
     React.createElement(SessionInteractivePanel, {
@@ -211,6 +213,52 @@ test('staged-review and next-turn affordances render disabled with an honest "no
   // "verdict-approve"/"submit-answers" leak in for this shape.
   expect(html).not.toContain('data-action="verdict-approve"');
   expect(html).not.toContain('data-action="submit-answers"');
+});
+
+// ---------------------------------------------------------------------------
+// ActivityLog (W6-B10) — shown exactly when every derived affordance is a
+// disabled "not yet wired" one (a working phase with nothing actionable),
+// generic over `kind` — mirrors the retired DemoBuilderPanel's own
+// generating/locking coverage without a kind==='demo' compare.
+// ---------------------------------------------------------------------------
+
+test('ActivityLog renders when every affordance is not-yet-wired (a working phase, e.g. demo generating: writes+next)', () => {
+  const html = render({
+    kind: 'demo',
+    phase: 'generating',
+    affordances: [
+      { id: 'generating-staged-review', kind: 'staged-review', phase: 'generating', meta: { writes: ['demo'] } },
+      { id: 'generating-next-turn', kind: 'next-turn', phase: 'generating', meta: { next: 'awaiting-review' } },
+    ],
+    events: [],
+  });
+  expect(html).toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render when a verdict affordance is present (something actionable)', () => {
+  const html = render({
+    kind: 'demo',
+    phase: 'awaiting-review',
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve', 'reject'] } }],
+  });
+  expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render on zero affordances (a terminal phase, or a kind with no working-phase signal)', () => {
+  const html = render({ kind: 'demo', phase: 'locked', affordances: [] });
+  expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+test('ActivityLog does NOT render when affordances mix an actionable kind with a not-yet-wired one', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-answers',
+    affordances: [
+      { id: 'awaiting-answers-question-form', kind: 'question-form', phase: 'awaiting-answers' },
+      { id: 'awaiting-answers-next-turn', kind: 'next-turn', phase: 'awaiting-answers', meta: { next: 'interviewing' } },
+    ],
+  });
+  expect(html).not.toContain('data-component="activity-drawer"');
 });
 
 // ---------------------------------------------------------------------------

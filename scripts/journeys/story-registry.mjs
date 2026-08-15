@@ -1543,10 +1543,11 @@ export const STORY_REGISTRY = [
       'real DOM and deliberately did NOT take it. Steps 3-5 — the middle of the ' +
       'story and the part R4-16 owns — are now REAL and beat-driven on the ' +
       'demo-builder journey: step 3 "generations iterate on your feedback" ' +
-      '(demo-builder-generations: the operator types into the real review ' +
-      'surface, the real bridge route writes feedback.md, and the gallery ' +
-      'renders generation 2 beside generation 1 showing the operator\'s own ' +
-      'words as the feedback that drove it), step 4 "Generation N. Ship it." ' +
+      'was REAL on the old inline panel (demo-builder-generations beat) but ' +
+      'W6-B10 moved the demo builder onto the generic session surface, whose ' +
+      'verdict vocabulary is approve/reject only — the feedback→regenerate ' +
+      'loop is currently ABSENT and tracked as bead forge-4ei (revise verdict); ' +
+      'step 4 "Generation N. Ship it." ' +
       '(the numbered selector, with the selection proven to survive a poll ' +
       'tick), step 5 "the demo skill lands in the project" ' +
       '(demo-builder-lock: [data-action="finalize-generation"] POSTs the chosen ' +

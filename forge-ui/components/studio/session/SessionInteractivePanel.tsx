@@ -3,6 +3,8 @@
 import { useState } from 'react';
 
 import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload } from '@/lib/session-client';
+import { ActivityLog } from '@/components/studio/ActivityLog';
+import type { EventLogEntry } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -79,6 +81,7 @@ export function SessionInteractivePanel({
   affordances,
   artifact = null,
   modelTier = null,
+  events = [],
   onChanged,
 }: {
   /** The session-kind id (e.g. 'demo', 'onboarding') — the POST route's own
@@ -96,6 +99,15 @@ export function SessionInteractivePanel({
    *  was recorded. Never editable from this panel (ADR-043 §3: the tier is
    *  chosen once, at kickoff). */
   modelTier?: string | null;
+  /** W6-B10: the SAME `useCycleEvents(cycleId)` feed the retired
+   *  `DemoBuilderPanel` used — drives the shared `ActivityLog` drawer
+   *  whenever the current phase has nothing ACTIONABLE for the operator
+   *  (see `showActivityLog` below), so a "working" phase (e.g. demo's
+   *  `generating`) is never a silent hold with the disabled "not yet wired"
+   *  buttons as the only visible signal. Optional — a panel under a DOM-pin
+   *  test never passes one, and an empty feed just renders "Waiting for
+   *  activity…" (ActivityLog's own honest empty state). */
+  events?: EventLogEntry[];
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
    *  DOM-pin test never passes one. */
@@ -112,6 +124,19 @@ export function SessionInteractivePanel({
   // simply the only kind that will ever have one, without this component
   // needing to know its name.
   const generations = generationOptions(artifact);
+
+  // W6-B10: show the shared ActivityLog drawer exactly when every derived
+  // affordance is one of the disabled "not yet wired" kinds — i.e. the
+  // phase table put the operator in an `agent`/`finalize` step (writes
+  // and/or next declared, no `noop`) with nothing ACTIONABLE to click.
+  // Generic over `kind` (no `kind === 'demo'` compare): demo's `generating`
+  // row (`writes: [demo], next: awaiting-review`) derives exactly
+  // `[staged-review, next-turn]`, both not-yet-wired, so this is true for
+  // it — the same phases the retired `DemoBuilderPanel` showed its own
+  // ActivityLog for. A `verdict`/`question-form` affordance (something to
+  // act on) or zero affordances (a terminal phase, or a kind with no
+  // working-phase signal on the wire yet) both leave it false.
+  const showActivityLog = affordances.length > 0 && affordances.every((a) => NOT_YET_WIRED_KINDS.has(a.kind));
 
   async function submit(affordance: SessionAffordance, body: Record<string, unknown>): Promise<void> {
     if (!project) {
@@ -149,6 +174,8 @@ export function SessionInteractivePanel({
   return (
     <div data-component="session-interactive-panel" data-affordance-count={affordances.length}>
       <ProvenanceStrip phase={phase} modelTier={modelTier} />
+
+      {showActivityLog && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />}
 
       {affordances.map((affordance) => {
         const error = errors[affordance.id];

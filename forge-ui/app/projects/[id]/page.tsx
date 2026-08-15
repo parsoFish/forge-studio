@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
@@ -20,6 +20,7 @@ import {
   type ProjectRoadmap, type PlanInitiativeResult, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
+import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
@@ -30,7 +31,6 @@ import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
 import { Instructions } from '@/components/studio/project-builder/Instructions';
 import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
-import { DemoBuilderPanel } from '@/components/studio/project-builder/DemoBuilderPanel';
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
@@ -40,27 +40,9 @@ import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 
-// useSearchParams (below) requires a Suspense boundary in Next.js 14 (see
-// app/artifact/page.tsx's ArtifactPageInner/ArtifactPage split for the
-// established precedent in this codebase).
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
-  return (
-    <Suspense
-      fallback={
-        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 13 }}>
-          Loading project…
-        </div>
-      }
-    >
-      <ProjectBuilderPageInner params={params} />
-    </Suspense>
-  );
-}
-
-function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
-  const searchParams = useSearchParams();
   // A new project is onboarded via a focused minimal form, not the editor.
   const isNew = id === 'new';
 
@@ -179,58 +161,25 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
     return () => { signal.cancelled = true; };
   }, [loadData, loadPreflight, loadRoadmap, loadCycleGroups]);
 
-  // R1-03-F2: the demo-builder panel folds inline beneath the Demo Timeline
-  // panel — this page (not the standalone /demo/<sid> route, retired to a
-  // redirect stub) owns which session is currently shown. `null` = no panel.
-  const [activeDemoSid, setActiveDemoSid] = useState<string | null>(null);
-
-  // On mount: honour an explicit `?demo=<sid>` deep link (from the redirect
-  // stub or a bookmark) first; otherwise auto-resume an in-flight demo
-  // session for this project, if one exists, so navigating away mid-build and
-  // back doesn't lose track of it.
-  useEffect(() => {
-    const demoParam = searchParams.get('demo');
-    if (demoParam) {
-      setActiveDemoSid(demoParam);
-      return;
-    }
-    let cancelled = false;
-    listDemoSessions()
-      .then((sessions) => {
-        if (cancelled) return;
-        const inFlight = sessions.find(
-          (s) => s.project === id && s.phase !== 'locked' && s.phase !== 'abandoned',
-        );
-        if (inFlight) setActiveDemoSid(inFlight.sessionId);
-      })
-      .catch(() => { /* no bridge / no sessions — stay idle */ });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only resolve on mount
-  }, [id]);
-
-  // A demo session started (whole-demo launch from DemoTimeline, a per-element
-  // iterate, or a demo-builder contract-resolution dispatch) — show it inline
-  // and reflect it in the URL so a refresh/deep-link lands back on it.
+  // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
+  // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
+  // shares) — this page no longer owns an inline panel or an active-session
+  // id; a demo session starting here just navigates there.
   const handleDemoSessionStarted = useCallback((sid: string): void => {
-    setActiveDemoSid(sid);
-    router.replace(`/projects/${encodeURIComponent(id)}?demo=${encodeURIComponent(sid)}`);
+    router.push(`/sessions/demo/${encodeURIComponent(sid)}?project=${encodeURIComponent(id)}`);
   }, [id, router]);
 
-  // Lock / abandon / explicit close all funnel through this: clear the active
-  // session, drop the query param, and refetch `project` (hasLockedDemo) +
-  // preflight so ContractReadiness reacts. Refetches only `project` (not the
-  // full loadData) so it never stomps unsaved edits to name/northStar/etc.
-  const closeDemoPanel = useCallback((): void => {
-    setActiveDemoSid(null);
-    router.replace(`/projects/${encodeURIComponent(id)}`);
-    void loadPreflight({ cancelled: false });
-    fetchStudioProjects()
-      .then((ps) => {
-        const p = ps.find((x) => x.id === id) ?? null;
-        if (p) setProject(p);
-      })
-      .catch(() => { /* leave project state as-is */ });
-  }, [id, router, loadPreflight]);
+  // The roadmap's "demo builder →" entrypoint (InitiativeDetail's
+  // [data-link="demo-builder"], W6-B10 — used to be a fake `setTab('editor')`
+  // that no longer lands anywhere real now the demo builder left the editor
+  // tab). Routes honestly: resume the project's in-flight demo session if
+  // one exists, else the kickoff screen prefilled with this project —
+  // `resolveDemoEntryHref` (lib/demo-entry-view.ts) is the single source of
+  // that decision, shared with nothing else today but unit-tested on its own.
+  const handleOpenDemo = useCallback(async (initiativeId: string): Promise<void> => {
+    const sessions = await listDemoSessions().catch(() => []);
+    router.push(resolveDemoEntryHref(sessions, id, initiativeId));
+  }, [id, router]);
 
   // Unified save feedback (X1). The hook owns saving/saved/error state.
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
@@ -413,10 +362,6 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               onChange={(s) => { setDemoSteps(s); markDirty(); }}
               onSessionStarted={handleDemoSessionStarted}
             />
-            {activeDemoSid && (
-              <DemoBuilderPanel projectId={id} sessionId={activeDemoSid} onClose={closeDemoPanel}
-              onSessionStarted={handleDemoSessionStarted} />
-            )}
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
 
             {/* R4-12-F2: permanent cycle ledger — the completed-cycle dig-in.
@@ -510,7 +455,6 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
                 // operator-rebindable to any KB, or unbound entirely).
                 boundKbId={kb}
                 onChanged={() => void loadPreflight({ cancelled: false })}
-                onDemoSessionStarted={handleDemoSessionStarted}
               />
             )}
 
@@ -538,7 +482,7 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
           roadmap={roadmap}
           cycleGroups={cycleGroups}
           onRefresh={refreshRoadmap}
-          onOpenDemo={() => setTab('editor')}
+          onOpenDemo={handleOpenDemo}
         />
       )}
     </main>
@@ -978,8 +922,10 @@ function RoadmapView({
   roadmap: ProjectRoadmap | null;
   cycleGroups: InitiativeGroup[];
   onRefresh: () => Promise<void>;
-  /** R4-07-F3: roadmap → demo-builder tie-in (switches to the editor tab's Demo Timeline). */
-  onOpenDemo?: () => void;
+  /** R4-07-F3 / W6-B10: roadmap → demo-builder tie-in — resumes the
+   *  project's in-flight demo session or opens the kickoff screen, honest
+   *  per initiative rather than a fixed target. */
+  onOpenDemo?: (initiativeId: string) => void | Promise<void>;
 }) {
   const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
   const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});

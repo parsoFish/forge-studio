@@ -95,7 +95,9 @@ export type RoadmapCanvasProps = {
   onPlan?: (initiativeId: string) => void | Promise<void>;
   /** called after a successful requeue/abandon to refetch roadmap + cycle groups. */
   onRecoveryDone?: () => void | Promise<void>;
-  onOpenDemo?: () => void;
+  /** W6-B10: routes honestly — resumes the project's in-flight demo session
+   *  or opens the kickoff screen, keyed off this initiative for context. */
+  onOpenDemo?: (initiativeId: string) => void | Promise<void>;
   /** Testability / future deep-link: open the drawer already selected. */
   initialSelectedId?: string;
   /** Testability: pin the "now" instant driving the now-line instead of
@@ -639,7 +641,7 @@ function RoadmapDrawer({
   onStart?: (initiativeId: string) => void | Promise<void>;
   onPlan?: (initiativeId: string) => void | Promise<void>;
   onRecoveryDone?: () => void | Promise<void>;
-  onOpenDemo?: () => void;
+  onOpenDemo?: (initiativeId: string) => void | Promise<void>;
   onDepJump: (id: string) => void;
 }) {
   const [recoveryDetail, setRecoveryDetail] = useState<RecoveryInspect | null>(null);
@@ -708,7 +710,7 @@ function RoadmapDrawer({
           unplanned={unplanned}
           wiLevels={wiLevels}
           runCycleIds={runCycleIds}
-          onOpenDemo={onOpenDemo}
+          onOpenDemo={onOpenDemo ? () => void onOpenDemo(initiativeId) : undefined}
           plan={plan}
           onPlan={onPlan}
           canStartDevelopment={canStartDevelopment}
