@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Flow } from '@/lib/studio-client';
 
 /**
@@ -37,14 +38,14 @@ export function UsedByFlows({ flows, projectId }: { flows: Flow[]; projectId: st
           >
             {ideaFlows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
-          <a
+          <Link
             className="btn btn-primary"
             data-action="run-a-flow"
             href={href}
             style={{ textDecoration: 'none', textAlign: 'center' }}
           >
             Give this project work →
-          </a>
+          </Link>
           <span style={{ fontSize: 11, color: 'var(--faint)', lineHeight: 1.5 }}>
             Describe the work to the architect; it plans, you approve, and the flow builds it.
           </span>

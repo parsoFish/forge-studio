@@ -30,7 +30,8 @@ import { basename, join, resolve, sep } from 'node:path';
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
-import { listRuns, buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { cachedListRuns } from './run-list-cache.ts';
 import { eventToNodeId } from '../orchestrator/run-model-derive.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
@@ -77,6 +78,30 @@ export type StudioContext = {
 
 // Safe-ID guard: blocks path traversal in run/gate IDs
 export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/** W6-B2 review fix (MEDIUM 2) — terminal-phase sets for the four legacy
+ *  session kinds that predate `studio/session-kinds.yaml`'s `turnSpec`
+ *  table (architect/instructions/demo/project-brain never declare a
+ *  `turnSpec`, so there is no `step: terminal` row to derive a terminal set
+ *  from for them, unlike kb-cleanup/authoring). This is the SAME
+ *  terminal-phase knowledge cli/ui-bridge.ts's four per-kind list routes
+ *  already gate `ensureSessionTail` on — extracted here, into ONE named
+ *  constant BOTH cli/ui-bridge.ts (those four routes) and
+ *  cli/bridge-studio-sessions.ts (the generic `/api/studio/sessions/:kind/
+ *  :id` route) import, so neither hand-writes its own copy. Lives in this
+ *  shared, dependency-free module (not cli/ui-bridge.ts) specifically to
+ *  avoid a cli/bridge-studio-sessions.ts → cli/ui-bridge.ts → cli/
+ *  bridge-studio-sessions.ts import cycle (ui-bridge.ts already imports
+ *  handleStudioSessionsRoutes FROM bridge-studio-sessions.ts). Keyed by
+ *  session-kind id — the SAME string SPAWN_AGENT_SPECS's `logPrefix` uses
+ *  (cli/ui-bridge.ts's `ensureSessionTail` doc comment), so `descriptor.id`
+ *  indexes directly with no translation. */
+export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
+  architect: new Set(['committed', 'rejected']),
+  instructions: new Set(['committed', 'rejected']),
+  demo: new Set(['locked', 'abandoned']),
+  'project-brain': new Set(['committed', 'abandoned']),
+};
 
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
@@ -252,9 +277,12 @@ function classifyEvent(e: EventLogEntry): LogLine {
 // Runs helpers
 // ---------------------------------------------------------------------------
 
-/** Find a Run by id (cycleId or initiativeId). Returns null if not found. */
+/** Find a Run by id (cycleId or initiativeId). Returns null if not found.
+ *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
+ *  — same derivation, same contract as listRuns, but terminal runs skip
+ *  re-parsing their events.jsonl once cached. */
 function findRun(forgeRoot: string, id: string): Run | null {
-  const runs = listRuns(forgeRoot, Date.now());
+  const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? null;
 }
 
@@ -458,7 +486,8 @@ export async function handleStudioRoutes(
     try {
       const qs = parseQuery(rawUrl);
       const flowFilter = qs.get('flow');
-      let runs = listRuns(ctx.forgeRoot, Date.now());
+      // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+      let runs = cachedListRuns(ctx.forgeRoot, Date.now());
       if (flowFilter) {
         // Match by lineage, not just current flowId: a run whose manifest was
         // repointed mid-saga (architect→develop hand-off) stays visible on

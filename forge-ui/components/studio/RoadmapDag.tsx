@@ -30,6 +30,7 @@
 
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 
 import type {
   ProjectRoadmap,
@@ -393,7 +394,7 @@ function RoadmapNode({
           <div data-section="initiative-runs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Runs</div>
             {runCycleIds.map((cycleId, idx) => (
-              <a
+              <Link
                 key={cycleId}
                 data-run-link
                 data-run-cycle-id={cycleId}
@@ -402,7 +403,7 @@ function RoadmapNode({
                 style={{ fontSize: 11, color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline' }}
               >
                 {idx === 0 ? 'active run' : 'prior run'} · {cycleId} →
-              </a>
+              </Link>
             ))}
           </div>
         )}
@@ -444,9 +445,9 @@ function RoadmapNode({
         {unplanned && plan.status === 'started' && (
           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Planning started — the initiative will be decomposed into work items.</span>
-            <a data-action="open-plan-run" href="/flows/forge-architect" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
+            <Link data-action="open-plan-run" href="/flows/forge-architect" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
               view run →
-            </a>
+            </Link>
           </div>
         )}
 
@@ -474,9 +475,9 @@ function RoadmapNode({
         {develop.status === 'started' && (
           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
-            <a data-action="open-develop-run" href="/flows/forge-develop" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
+            <Link data-action="open-develop-run" href="/flows/forge-develop" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
               view run →
-            </a>
+            </Link>
           </div>
         )}
 

@@ -86,8 +86,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { startBridge } from './ui-bridge.ts';
-import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
-import type { StudioContext } from './bridge-studio.ts';
+import { handleStudioSessionsRoutes, type SessionsRouteContext } from './bridge-studio-sessions.ts';
 import { serializeManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
 import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
@@ -679,7 +678,7 @@ test('AT-41: handleStudioSessionsRoutes returns false for a non-matching URL (pa
     end: () => { throw new Error('must not end a response for a non-matching URL'); },
   } as unknown as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
 
   const handled = await handleStudioSessionsRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-sessions URL must return false');
@@ -777,7 +776,7 @@ function assertActionableMessage(variant: string, message: string): void {
 }
 
 test('AT-45: sessionId slug validation rejects every traversal/malformed variant with 400, BEFORE any fs read', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   for (const variant of BAD_PATH_SEGMENT_VARIANTS) {
     const { res, status, body } = captureResponse();
     const rawUrl = `/api/studio/sessions/architect/${variant}?project=demoproj`;
@@ -791,7 +790,7 @@ test('AT-45: sessionId slug validation rejects every traversal/malformed variant
 });
 
 test('AT-46: project slug validation rejects every traversal/malformed variant with 400, BEFORE any fs read', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   for (const variant of BAD_QUERY_VALUE_VARIANTS) {
     const { res, status, body } = captureResponse();
     const rawUrl = `/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}?project=${variant}`;
@@ -1038,7 +1037,7 @@ test('R4-19 WI-2 AT-1 (RED — reachability, flips green on the fix): GET /api/s
 });
 
 test('R4-19 WI-2 AT-2 (containment guard — must stay 400 after the fix): a traversal-shaped ".kb-x/../../etc" project param is rejected, never resolving through the exact-prefix carve-out', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-x/../../etc`;
   const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
@@ -1047,7 +1046,7 @@ test('R4-19 WI-2 AT-2 (containment guard — must stay 400 after the fix): a tra
 });
 
 test('R4-19 WI-2 AT-3 (containment guard — must stay 400 after the fix): ".kb-" with an EMPTY slug after the prefix is rejected', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-`;
   const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
@@ -1056,7 +1055,7 @@ test('R4-19 WI-2 AT-3 (containment guard — must stay 400 after the fix): ".kb-
 });
 
 test('R4-19 WI-2 AT-4 (containment guard — must stay 400 after the fix): "../secret" (no ".kb-" prefix at all) is rejected', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=../secret`;
   const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
@@ -1065,7 +1064,7 @@ test('R4-19 WI-2 AT-4 (containment guard — must stay 400 after the fix): "../s
 });
 
 test('R4-19 WI-2 AT-5 (containment guard — must stay 400 after the fix): ".foo" is dot-prefixed but NOT the ".kb-" prefix — rejected, proving the carve-out is never a general "." allow', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.foo`;
   const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
@@ -1074,7 +1073,7 @@ test('R4-19 WI-2 AT-5 (containment guard — must stay 400 after the fix): ".foo
 });
 
 test('R4-19 WI-2 AT-6 (containment guard — must stay 400 after the fix): ".kb-<id>" whose id contains a "/" is rejected — proves the carve-out validates the POST-prefix slug, not just the literal prefix', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   // %2F decodes (via URLSearchParams, same as AT-46's 'a%2Fb' variant) to a
   // literal "/" embedded inside the post-prefix slug.
@@ -1085,7 +1084,7 @@ test('R4-19 WI-2 AT-6 (containment guard — must stay 400 after the fix): ".kb-
 });
 
 test('R4-19 WI-2 AT-7 (containment guard — must stay 400 after the fix): ".kb-<id>" whose id contains an embedded NUL byte is rejected', async () => {
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx: SessionsRouteContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), ensureSessionTail: () => {} };
   const { res, status, body } = captureResponse();
   // %00 decodes (via URLSearchParams, same as AT-46's '%00' variant) to a
   // literal NUL byte embedded inside the post-prefix slug.

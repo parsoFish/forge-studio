@@ -239,9 +239,10 @@ inventory rather than one shared page-level contract:
   id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
-  root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
-  (that `data-page="flows"` value is the page's own literal, not a typo —
-  every gate/artifact moment folded into this one route). `type=verdict&mode=gate`
+  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
+  mismatch, not a deliberate shared-surface value; every gate/artifact moment
+  is still folded into this one route). `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
   `[data-section="review-findings"][data-findings-count]` with per-row
@@ -887,6 +888,29 @@ inventory rather than one shared page-level contract:
   The editor aside also carries two PERMANENT read-only surfaces (R4-12), on
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
+  **`[data-section="contract-resolution"]` agent-tier buttons**
+  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
+  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  they never dispatch an agent turn themselves, so their label is
+  route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
+  "Open in instructions builder…"/"Open in demo builder…"/"Open in
+  Knowledge…", `contract-resolution-view.ts`'s `agentResolveLabel`). The
+  `brain-fix` route (the BRAIN clause) navigates to
+  `/knowledge?id=<boundKbId>&tab=health`, where `boundKbId` is the project's
+  REAL bound KB id — the `kb` state `KbBind.tsx` owns, threaded into the
+  panel as its `boundKbId` prop, NEVER derived from the project id (a
+  project's KB binding is operator-rebindable to any KB, or unbound
+  entirely — `cli/bridge-studio-writes.ts` deliberately leaves it `null`
+  when no KB seed landed on create). When `boundKbId` is `null` the
+  brain-fix button renders `data-resolve-blocked="true"` and disabled, with
+  an honest `[data-component="brain-fix-unbound-hint"]` row explaining why,
+  instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
+  resolution silently falls back to the first KB in the list on an unknown
+  id — a wrong destination with no indication anything went wrong). The
+  USER-tier `[data-action="apply-clause-decision"]` button genuinely
+  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
+  "Apply with agent" accordingly.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
