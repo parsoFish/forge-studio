@@ -1165,3 +1165,115 @@ function already resolves `destPath` through.
 `scripts/request-path-sinks.baseline.txt` now records
 `orchestrator/interactive-finalizers.ts` `writeFileSync`/`renameSync`/
 `unlinkSync` at 1 each.
+
+### New mechanism, W6-CR-3 review round 2 (bead forge-eip) — the `writeRoots` `canUseTool` fence on interactive agent turns
+
+**Not a raw fs sink — neither `check-request-path-sinks.mjs` nor
+`check-raw-fs-guarded.mjs` scans for this, and neither ever will**, so it is
+disclosed here by hand rather than by a ratchet delta. Both scripts scan
+request-handling TypeScript source for calls into node's own `fs` module;
+this mechanism operates one layer up, inside the Claude Agent SDK's OWN
+tool-execution permission gate (`options.canUseTool`, invoked by the SDK
+itself before a `Write`/`Edit`/`MultiEdit`/`NotebookEdit` tool call ever
+reaches whatever `fs` primitive the SDK's own tool implementation uses
+internally) — there is no `fs` call site in forge's own source for either
+ratchet to find.
+
+**The gap this closes (found live during review, `skills/community-refresh/
+SKILL.md`):** a `SKILL.md`'s `allowed-tools`/`disallowed-tools` frontmatter
+is a tool-NAME allowlist — it decides which tool NAMES an agent may invoke
+at all, never what PATH a permitted tool may target. `community-refresh`
+grants `Write` (needed to draft `staging/registry.yaml`) and denies `Edit`;
+the SKILL.md's own prose used to claim this meant the agent "has no write
+access to `registryPath`/`hubsPath`… `Edit` is not in your tool set" — FALSE:
+`Write` alone, with no path restriction at all, can target ANY absolute
+path the agent names, including the live `studio/community/registry.yaml`
+`registryPath` itself carries verbatim in the turn's own prompt (`buildTurnPrompt`,
+`orchestrator/interactive-runner.ts`, inlines the WHOLE session status as
+JSON — `registryPath`/`hubsPath` included). A model steered by untrusted
+content it fetches (a WebFetch/WebSearch result telling it to "save a
+verified copy directly to the registry") had a real, unfenced path straight
+to the live source of truth, bypassing the entire draft/evidence/approve/
+commit pipeline this whole session kind exists to enforce.
+
+**The fix — a REAL, per-call fence in the shared spine, not a
+community-refresh-specific patch:** `orchestrator/interactive-session.ts`'s
+`runAgentTurn` gained an optional `writeRoots: readonly string[]` parameter.
+When supplied (and non-empty), it installs `options.canUseTool` — a
+synchronous callback the SDK invokes before every `Write`/`Edit`/
+`MultiEdit`/`NotebookEdit` call executes. The callback:
+
+- Passes every OTHER tool through unmodified (never gates reads).
+- Extracts the tool's target path (`file_path`/`notebook_path`/`path`,
+  mirroring `loops/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS`/
+  `extractPath` — kept as an independent literal, not imported, so this
+  spine file's only cross-subsystem edge stays the pre-existing type-only
+  one) — a missing/malformed path field is a hard DENY (fail closed).
+- Resolves `realpathSync(dirname(candidate))` + the literal basename (the
+  file itself may not exist yet — a `Write` creating a new file) and checks
+  it lands under one of `writeRoots`' OWN realpath-resolved locations. A
+  parent directory that fails to resolve at all is a hard DENY — every
+  `writeRoots` entry is pre-provisioned by the caller before the turn
+  starts (see below), so a write naming a not-yet-existing intermediate
+  directory below an already-provisioned root has no legitimate reason to
+  exist.
+- `orchestrator/interactive-runner.ts`'s `runAgentStyleStep` derives
+  `writeRoots` from the CURRENT phase row's OWN declared `writes:` entries
+  (never a hardcoded `staging` literal — `resolveWriteRoots`), resolving
+  each through the SAME `resolveGuardedPath` containment guard every other
+  write in that file uses, GUARD-TERMINAL `mkdirSync`'d into existence if
+  absent (mirrors `runFinalizeStep`'s own `libraryRootGuard` pattern) — so
+  the fence always has a REAL, already-existing root to realpath at turn
+  start, never a not-yet-created path a symlink could race into being
+  ahead of the agent's very first write.
+
+**Generic, not one-kind-specific:** because this lives in the shared spine
+and is DERIVED from each phase row's own `writes:` field, it applies
+identically to every `turnSpec`-bearing session kind that reaches
+`runAgentStyleStep` — `authoring`'s `staging/`, `kb-cleanup`'s `plan/`, and
+`community-refresh`'s `staging/` all get the SAME real, per-call
+enforcement from this one change. `writeRoots` is optional and additive
+(ADR-042 disclose-not-park: an additive-optional parameter on an exported
+function) — every pre-existing caller of `runAgentTurn` that does not pass
+it gets byte-identical prior behaviour (no `canUseTool` installed at all).
+
+**Does this reopen ADR 020 ("interactivity is file-based handoff… NOT SDK
+`canUseTool` interception")?** No — that ruling is about never using
+`canUseTool` to PAUSE a turn for operator interactivity (file-based
+handoff, `questions.json`/`answers.json`, owns that). This fence never
+pauses anything: it is a synchronous, silent allow/deny decided entirely
+from the real filesystem, structurally the same shape as every other
+containment guard in this document — not a reopening of that decision, a
+different concern the ruling never addressed.
+
+**Tests** (both TDD-first, before the production change was accepted as
+correct): `orchestrator/interactive-session.test.ts` pins the pure
+`makeWriteRootCanUseTool` factory directly — allows a new file inside the
+root, allows an edit to an existing file inside the root, denies a path
+outside the root (the `registryPath` shape), denies a symlink-out, denies a
+missing path field, passes non-gated tools through, and proves
+`runAgentTurn` installs (or, when `writeRoots` is absent, does NOT install)
+the callback on the REAL `options` bag a `queryFn` receives.
+`orchestrator/interactive-runner.test.ts` adds the integration-shaped
+proof: the REAL, checked-in `community-refresh` descriptor drives a full
+`runInteractiveTurn`, and the `canUseTool` the run actually built denies a
+`Write` to the session's own real `registryPath` while still allowing the
+legitimate `staging/` write.
+
+**`check-request-path-sinks.mjs` delta (3 rows, all guarded) — this ratchet
+DOES scan the fence's own implementation (it is plain TypeScript calling
+`fs`, unlike the SDK-internal execution the fence gates):**
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/interactive-finalizers.ts` (`loadCommunityRefreshEvidence`) | `readFileSync` | `evidencePath`, where `evidencePath = resolveGuardedPath(sessionDir, ['staging','evidence.json']).realPath` — the SAME already-guarded path `commitRegistryDraft` resolves for `registry.yaml` | guarded `[read]` | Identical shape to the existing `registry.yaml` read this file already had — a guard-verified `realPath`, never a fresh join. |
+| `orchestrator/interactive-runner.ts` (`resolveWriteRoots`) | `mkdirSync` | none — `guarded.realPath`, where `guarded = resolveGuardedPath(sessionDir, [dirName])`; `dirName` is a phase row's OWN declared `writes:` entry (forge-authored `studio/session-kinds.yaml` data, never request data) | guarded `[read]` | GUARD-TERMINAL create: mirrors `runFinalizeStep`'s pre-existing `libraryRootGuard` mkdir exactly — only creates the already-guard-verified `realPath`, only when it does not exist yet (a session's `staging/`/`plan/` before the agent's first write). |
+| `orchestrator/interactive-session.ts` (`isUnderWriteRoot`) | `realpathSync` | `dirname(candidatePath)`, where `candidatePath` is the GATED tool's own input (`file_path`/`notebook_path`/`path`) — request/model-derived, but resolved for IDENTITY, never used to build a write path directly (the resolved result is only ever COMPARED against `realWriteRoots`, never opened) | guarded `[read]` | This IS the containment check itself — a `realpathSync` failure (ENOENT/ELOOP/permission) is treated as a hard DENY (see the mechanism write-up above), never as "not created yet, allow it". No write happens through this call; it is read-only identity resolution feeding a boolean decision. |
+| `orchestrator/interactive-session.ts` (`makeWriteRootCanUseTool`) | `realpathSync` | `root`, one of the CALLER-supplied `writeRoots` (trusted, already-guard-verified by `resolveWriteRoots` above — never request data at this layer) | guarded `[read]` | Resolved ONCE per turn, at fence-construction time, purely to pin the comparison baseline `isUnderWriteRoot` checks candidates against; a root that fails to resolve here is dropped from the effective allow-set (fail that ONE root closed), never treated as a reason to skip the check entirely. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now also records
+`orchestrator/interactive-finalizers.ts` `readFileSync` at 1,
+`orchestrator/interactive-runner.ts` `mkdirSync` at 2 (up from 1 — the
+pre-existing `libraryRootGuard` row plus this new one), and
+`orchestrator/interactive-session.ts` `realpathSync` at 2.

@@ -9,19 +9,30 @@
  * file, mirroring this repo's "small, focused files, organised by feature"
  * convention.
  *
+ * REVIEW ROUND 2 (bead forge-eip's stamping-semantics fix): the stamping
+ * decision moved from a draft-vs-live CONTENT DIFF to the session's own
+ * staged `staging/evidence.json` (machine-readable, required alongside
+ * `registry.yaml`) — the agent's own per-item verification record IS the
+ * fact this finalizer stamps from, never a re-derived guess. This closes
+ * the "verified but the numbers happened not to change" gap the old
+ * content-diff design silently discarded (an honest re-verification with an
+ * unchanged result was previously indistinguishable from "never checked").
+ *
  * THE CONTRACT PINNED HERE:
  *   - validates the staged `staging/registry.yaml` through the CR-1 loader
- *     (`loadCommunityRegistry`) — a malformed draft throws a NAMED
- *     (`InteractiveFinalizerError`) error and writes NOTHING to the real
- *     registry.
- *   - a draft item whose content (every field except `fetchedAt`/
- *     `fetchedBy`) differs from the live registry's same-id row — OR has no
- *     live counterpart at all (a proposed new item) — is stamped
- *     `fetchedAt: <now>`, `fetchedBy: "community-refresh/<sessionId>"` in
- *     the output, discarding whatever the draft itself carried for those two
- *     fields.
- *   - a draft item whose content is IDENTICAL to the live row is written out
- *     as the EXACT live object — untouched, never restamped.
+ *     (`loadCommunityRegistry`) AND the staged `staging/evidence.json`
+ *     (a JSON object mapping item id -> `{status: "verified"|"verifyFailed",
+ *     ...}`) — either malformed throws a NAMED (`InteractiveFinalizerError`)
+ *     error and writes NOTHING to the real registry.
+ *   - a draft item whose evidence entry has `status: "verified"` is stamped
+ *     `fetchedAt: <now>`, `fetchedBy: "community-refresh/<sessionId>"` and
+ *     its OTHER fields are trusted as drafted — UNCONDITIONALLY, even when
+ *     unchanged from the live row (an honest "we checked it again" fact).
+ *   - a draft item with `status: "verifyFailed"`, or NO evidence entry at
+ *     all, is committed as the LIVE registry's own row, byte-for-byte —
+ *     the draft's own content for that row is never trusted.
+ *   - a "new" item (no live counterpart) with no verified evidence entry
+ *     REFUSES the whole commit — there's nothing honest to fall back to.
  *   - the write is containment-guarded (`resolveGuardedPath`) and
  *     temp-then-rename; a source-side (staging/) containment escape throws
  *     and never touches the real registry.
@@ -107,6 +118,10 @@ function writeDraft(s: Scratch, items: unknown[]): void {
   writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }));
 }
 
+function writeEvidence(s: Scratch, evidence: Record<string, { status: 'verified' | 'verifyFailed'; source?: string; note?: string }>): void {
+  writeFileSync(join(s.stagingDir, 'evidence.json'), JSON.stringify(evidence, null, 2));
+}
+
 function readLive(s: Scratch): { meta: { schemaVersion: number; lastRefresh: string | null }; items: Record<string, unknown>[] } {
   return yaml.load(readFileSync(s.registryPath, 'utf8')) as never;
 }
@@ -135,11 +150,13 @@ test('commitRegistryDraft is registered in FINALIZERS and resolveFinalizer', () 
 });
 
 // ---------------------------------------------------------------------------
-// Verified rows are stamped; unverified rows are untouched
+// Evidence-driven stamping: verified rows (changed OR unchanged) get
+// stamped; verifyFailed / no-evidence rows are committed as the live row,
+// byte-for-byte, regardless of what the draft proposed.
 // ---------------------------------------------------------------------------
 
-test('verified-rows-stamped / unverified-untouched: a changed row is stamped, an identical row is preserved byte-for-byte', async () => {
-  const s = mkScratch('cr-stamp-');
+test('verified-CHANGED row is stamped: real new signals carried through, fetchedAt/fetchedBy are the finalizer\'s own stamp, never the draft\'s', async () => {
+  const s = mkScratch('cr-verified-changed-');
   try {
     writeLiveRegistry(s, [ALPHA_LIVE, BETA_LIVE]);
     const alphaUpdated = {
@@ -152,6 +169,10 @@ test('verified-rows-stamped / unverified-untouched: a changed row is stamped, an
       fetchedBy: 'a-lying-draft',
     };
     writeDraft(s, [alphaUpdated, BETA_LIVE]);
+    writeEvidence(s, {
+      alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'stargazers_count=250' },
+      beta: { status: 'verifyFailed', source: 'https://github.com/example/beta', note: '404 Not Found' },
+    });
 
     const before = new Date();
     const wrote = await commitRegistryDraft(ctxFor(s));
@@ -162,8 +183,6 @@ test('verified-rows-stamped / unverified-untouched: a changed row is stamped, an
     const outAlpha = out.items.find((i) => i.id === 'alpha')!;
     const outBeta = out.items.find((i) => i.id === 'beta')!;
 
-    // Verified/changed row: real new signals carried through, fetchedAt/
-    // fetchedBy are the FINALIZER's own stamp — never the draft's lying values.
     assert.equal((outAlpha.signals as { stars: number }).stars, 250);
     assert.equal(outAlpha.upstreamUpdatedAt, '2026-08-01T00:00:00.000Z');
     assert.notEqual(outAlpha.fetchedAt, '1999-01-01T00:00:00.000Z');
@@ -171,11 +190,9 @@ test('verified-rows-stamped / unverified-untouched: a changed row is stamped, an
     const stampedAt = new Date(outAlpha.fetchedAt as string);
     assert.ok(stampedAt >= before && stampedAt <= after, 'fetchedAt must be the real commit time');
 
-    // Unverified/unchanged row: byte-identical to the live entry — never
-    // restamped.
+    // verifyFailed row: byte-identical to the live entry — never restamped.
     assert.deepEqual(outBeta, BETA_LIVE);
 
-    // meta bumped/preserved correctly.
     assert.equal(out.meta.schemaVersion, 1);
     assert.ok(out.meta.lastRefresh !== null);
     const lastRefresh = new Date(out.meta.lastRefresh as string);
@@ -185,8 +202,69 @@ test('verified-rows-stamped / unverified-untouched: a changed row is stamped, an
   }
 });
 
-test('a proposed NEW item (no live counterpart) is stamped exactly like a changed row', async () => {
-  const s = mkScratch('cr-new-');
+test('verified-UNCHANGED row is STILL stamped: an honest re-verification with the same numbers is not fabrication', async () => {
+  const s = mkScratch('cr-verified-unchanged-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    // Draft proposes the EXACT same content as live — the agent re-checked
+    // and nothing had changed, but it DID genuinely verify it this pass.
+    writeDraft(s, [ALPHA_LIVE]);
+    writeEvidence(s, {
+      alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'still 100 stars, confirmed live' },
+    });
+
+    const before = new Date();
+    await commitRegistryDraft(ctxFor(s));
+    const after = new Date();
+
+    const out = readLive(s);
+    const outAlpha = out.items.find((i) => i.id === 'alpha')!;
+    // The whole point of this test: content-unchanged does NOT mean
+    // untouched. A genuinely verified row is stamped regardless.
+    assert.equal(outAlpha.fetchedBy, 'community-refresh/sess-001');
+    assert.ok(outAlpha.fetchedAt !== null);
+    const stampedAt = new Date(outAlpha.fetchedAt as string);
+    assert.ok(stampedAt >= before && stampedAt <= after);
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('verifyFailed row is untouched BYTE-IDENTICAL even when the draft proposes different content for it — the draft is never trusted for an unverified row', async () => {
+  const s = mkScratch('cr-failed-tampered-');
+  try {
+    writeLiveRegistry(s, [BETA_LIVE]);
+    // The draft proposes DIFFERENT content for beta despite marking it
+    // verifyFailed — this must be ignored entirely; the live row wins.
+    const betaTampered = { ...BETA_LIVE, signals: { stars: 9999, starsDisplay: '9999', attributedTo: 'attacker' } };
+    writeDraft(s, [betaTampered]);
+    writeEvidence(s, { beta: { status: 'verifyFailed', note: 'timeout fetching sourceUrl' } });
+
+    await commitRegistryDraft(ctxFor(s));
+    const out = readLive(s);
+    assert.deepEqual(out.items.find((i) => i.id === 'beta'), BETA_LIVE, 'the committed row must be the LIVE entry, ignoring the draft\'s tampered content');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('a draft item with NO evidence entry at all is treated exactly like verifyFailed — untouched, live wins', async () => {
+  const s = mkScratch('cr-noevidence-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    writeDraft(s, [{ ...ALPHA_LIVE, signals: { stars: 999, starsDisplay: '999', attributedTo: 'nope' } }]);
+    writeEvidence(s, {}); // no entry for "alpha" at all
+
+    await commitRegistryDraft(ctxFor(s));
+    const out = readLive(s);
+    assert.deepEqual(out.items.find((i) => i.id === 'alpha'), ALPHA_LIVE);
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('a proposed NEW item (no live counterpart) marked verified is stamped and committed', async () => {
+  const s = mkScratch('cr-new-verified-');
   try {
     writeLiveRegistry(s, [ALPHA_LIVE]);
     const gamma = {
@@ -202,6 +280,10 @@ test('a proposed NEW item (no live counterpart) is stamped exactly like a change
       fetchedBy: 'seed',
     };
     writeDraft(s, [ALPHA_LIVE, gamma]);
+    writeEvidence(s, {
+      alpha: { status: 'verified', note: 'still current' },
+      gamma: { status: 'verified', source: 'https://github.com/example/gamma', note: 'new item found via forge-seed hub' },
+    });
 
     await commitRegistryDraft(ctxFor(s));
     const out = readLive(s);
@@ -213,12 +295,36 @@ test('a proposed NEW item (no live counterpart) is stamped exactly like a change
   }
 });
 
-test('a fresh forge root with no live registry.yaml yet: every draft row is treated as new and stamped', async () => {
+test('a proposed NEW item with NO verified evidence entry refuses the whole commit — nothing honest to fall back to', async () => {
+  const s = mkScratch('cr-new-unverified-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    const before = readFileSync(s.registryPath, 'utf8');
+    const gamma = { ...ALPHA_LIVE, id: 'gamma', name: 'Gamma' };
+    writeDraft(s, [ALPHA_LIVE, gamma]);
+    // "gamma" has NO evidence entry — a brand-new item nobody verified.
+    writeEvidence(s, { alpha: { status: 'verified' } });
+
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    }
+    assertNamedThrow(caught, 'new item, no verified evidence');
+    assert.match((caught as Error).message, /gamma/);
+    assert.equal(readFileSync(s.registryPath, 'utf8'), before, 'a refused commit must leave the live registry untouched');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('a fresh forge root with no live registry.yaml yet: a verified draft row commits; an unverified one refuses (no live fallback exists)', async () => {
   const s = mkScratch('cr-fresh-');
   try {
-    // No writeLiveRegistry call — studio/community/registry.yaml does not exist.
     assert.equal(existsSync(s.registryPath), false);
     writeDraft(s, [ALPHA_LIVE]);
+    writeEvidence(s, { alpha: { status: 'verified' } });
     const wrote = await commitRegistryDraft(ctxFor(s));
     assert.deepEqual(wrote, [s.registryPath]);
     const out = readLive(s);
@@ -229,7 +335,7 @@ test('a fresh forge root with no live registry.yaml yet: every draft row is trea
 });
 
 // ---------------------------------------------------------------------------
-// Malformed draft — throws, no write
+// Malformed draft / evidence — throws, no write
 // ---------------------------------------------------------------------------
 
 test('malformed draft (items not an array): throws a named error and leaves the live registry untouched', async () => {
@@ -238,6 +344,7 @@ test('malformed draft (items not an array): throws a named error and leaves the 
     writeLiveRegistry(s, [ALPHA_LIVE]);
     const beforeRaw = readFileSync(s.registryPath, 'utf8');
     writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items: 'not-an-array' }));
+    writeEvidence(s, { alpha: { status: 'verified' } });
 
     let caught: unknown;
     try {
@@ -259,6 +366,7 @@ test('malformed draft (bad kind vocab): throws a named error and leaves the live
     writeLiveRegistry(s, [ALPHA_LIVE]);
     const beforeRaw = readFileSync(s.registryPath, 'utf8');
     writeDraft(s, [{ ...ALPHA_LIVE, kind: 'not-a-real-kind' }]);
+    writeEvidence(s, { alpha: { status: 'verified' } });
 
     let caught: unknown;
     try {
@@ -293,6 +401,71 @@ test('no staged draft at all: throws a named error and leaves the live registry 
   }
 });
 
+test('no staged evidence.json at all: throws a named error and leaves the live registry untouched', async () => {
+  const s = mkScratch('cr-noevidencefile-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    const beforeRaw = readFileSync(s.registryPath, 'utf8');
+    writeDraft(s, [ALPHA_LIVE]);
+    // No writeEvidence() call at all.
+
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    }
+    assertNamedThrow(caught, 'no staged evidence.json');
+    assert.match((caught as Error).message, /evidence\.json/);
+    assert.equal(readFileSync(s.registryPath, 'utf8'), beforeRaw);
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('malformed evidence.json (bad status value): throws a named error and leaves the live registry untouched', async () => {
+  const s = mkScratch('cr-badstatus-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    const beforeRaw = readFileSync(s.registryPath, 'utf8');
+    writeDraft(s, [ALPHA_LIVE]);
+    writeFileSync(join(s.stagingDir, 'evidence.json'), JSON.stringify({ alpha: { status: 'probably-fine' } }));
+
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    }
+    assertNamedThrow(caught, 'malformed evidence.json (bad status)');
+    assert.match((caught as Error).message, /alpha/);
+    assert.equal(readFileSync(s.registryPath, 'utf8'), beforeRaw);
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('malformed evidence.json (not valid JSON): throws a named error and leaves the live registry untouched', async () => {
+  const s = mkScratch('cr-badjson-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE]);
+    const beforeRaw = readFileSync(s.registryPath, 'utf8');
+    writeDraft(s, [ALPHA_LIVE]);
+    writeFileSync(join(s.stagingDir, 'evidence.json'), '{ not json at all');
+
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    }
+    assertNamedThrow(caught, 'malformed evidence.json (not JSON)');
+    assert.equal(readFileSync(s.registryPath, 'utf8'), beforeRaw);
+  } finally {
+    cleanup(s.base);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Containment — a staged registry.yaml that is a symlink escaping staging/
 // ---------------------------------------------------------------------------
@@ -314,6 +487,7 @@ test('containment: a symlinked staging/registry.yaml pointing outside the sessio
       t.skip('platform cannot create symlinks in this environment');
       return;
     }
+    writeEvidence(s, { alpha: { status: 'verified' } });
 
     let caught: unknown;
     try {

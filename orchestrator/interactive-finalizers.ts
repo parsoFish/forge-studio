@@ -120,6 +120,7 @@ import {
   readSync,
   writeSync,
   closeSync,
+  readFileSync,
   writeFileSync,
   renameSync,
   unlinkSync,
@@ -418,28 +419,39 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 // straight to the `rejected` terminal phase instead, see
 // `studio/session-kinds.yaml`'s own comment on the `community-refresh` row).
 //
-// VALIDATION: the staged draft is parsed through `loadCommunityRegistry`
-// (`orchestrator/studio/registry.ts`) — the SAME structural loader/validator
-// `communitySkillsFromRegistry` and `forge studio lint` already trust for the
-// LIVE registry — never a hand-rolled parallel parser. A malformed draft
-// (missing `meta`, a non-array `items`, a bad `kind`/`signals` shape) throws
-// here, NAMING the exact offending field, BEFORE this function ever opens
-// the real `studio/community/registry.yaml` for writing.
+// VALIDATION: the staged registry.yaml draft is parsed through
+// `loadCommunityRegistry` (`orchestrator/studio/registry.ts`) — the SAME
+// structural loader/validator `communitySkillsFromRegistry` and `forge
+// studio lint` already trust for the LIVE registry — never a hand-rolled
+// parallel parser. A malformed draft (missing `meta`, a non-array `items`, a
+// bad `kind`/`signals` shape) throws here, NAMING the exact offending field,
+// BEFORE this function ever opens the real `studio/community/registry.yaml`
+// for writing.
 //
-// THE STAMP: `fetchedAt`/`fetchedBy` are NEVER trusted from the draft — this
-// function is the SOLE source of both, derived from whether a draft item's
-// CONTENT (every field except those two) differs from the live registry's
-// current row for the same `id` (`itemContentEqual` below). A row the agent
-// verified and updated differs from live in some real field (a star count,
-// an `upstreamUpdatedAt`, a brand-new item's very presence) and is stamped
-// `fetchedAt: <now>`, `fetchedBy: community-refresh/<sessionId>`. A row the
-// agent could not verify is, per `skills/community-refresh/SKILL.md`'s own
-// contract, copied forward BYTE-IDENTICAL to its live entry — content-equal
-// by construction, so it is returned as the EXACT live object, never
-// restamped, never touched. This closes the fabrication surface a
-// draft-supplied `fetchedAt` would otherwise open (an agent — or a
-// compromised draft — claiming a verification that never happened) without
-// requiring a separate `verified: boolean` field in the registry schema.
+// THE STAMP (product call, review round 2): `fetchedAt`/`fetchedBy` are
+// NEVER trusted from the draft — this function is the SOLE source of both.
+// The decision of WHICH rows get stamped is read from the session's OWN
+// staged `staging/evidence.json` (machine-readable, required alongside
+// `registry.yaml`) rather than diffing the draft's content against the live
+// registry: `skills/community-refresh/SKILL.md`'s own procedure has the
+// agent record, per item, whether it genuinely verified that item this pass
+// (`status: "verified"`) or could not (`status: "verifyFailed"`) — that
+// record IS the fact this function stamps from, not a re-derived guess.
+//
+//   - `status: "verified"` -> the item's OTHER fields are trusted AS
+//     DRAFTED (the agent verified them), and `fetchedAt`/`fetchedBy` are
+//     stamped to `<now>` / `community-refresh/<sessionId>` — UNCONDITIONALLY,
+//     even when the verified numbers happen to be unchanged from the live
+//     registry (a verified-but-unchanged row is an honest "we checked it
+//     again and it's still accurate" fact, not a fabrication — the previous
+//     content-diff-only design silently discarded exactly this fact).
+//   - `status: "verifyFailed"`, or NO evidence entry at all for that item
+//     id — the finalizer does NOT trust the draft's content for that row at
+//     all: the COMMITTED row is the corresponding LIVE registry entry,
+//     byte-for-byte, regardless of what the draft proposed. A "new" item
+//     (no live counterpart) with no verified evidence entry has nothing
+//     honest to fall back to, so the whole commit refuses rather than
+//     silently admitting an unverified item.
 //
 // `sessionId` is derived from `basename(ctx.sessionDir)` (the session dir's
 // OWN last path segment — the caller already SEC-04-guarded the whole
@@ -460,26 +472,58 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 // community browser.
 // ---------------------------------------------------------------------------
 
-/** Compares two registry items on every field EXCEPT `fetchedAt`/`fetchedBy`
- *  — those two are what `commitRegistryDraft` itself derives, never what it
- *  compares on (see the section header above). `desc`/`tier` are optional
- *  fields on `CommunityRegistryItem`; `?? null` normalizes "absent" and
- *  "explicitly null-like" to the same comparison value on both sides. */
-function itemContentEqual(a: CommunityRegistryItem, b: CommunityRegistryItem): boolean {
-  return (
-    a.id === b.id &&
-    a.kind === b.kind &&
-    a.name === b.name &&
-    (a.desc ?? null) === (b.desc ?? null) &&
-    a.category === b.category &&
-    a.sourceUrl === b.sourceUrl &&
-    a.provenance === b.provenance &&
-    (a.tier ?? null) === (b.tier ?? null) &&
-    a.signals.stars === b.signals.stars &&
-    a.signals.starsDisplay === b.signals.starsDisplay &&
-    a.signals.attributedTo === b.signals.attributedTo &&
-    a.upstreamUpdatedAt === b.upstreamUpdatedAt
-  );
+/** One `staging/evidence.json` entry — the machine-readable twin of
+ *  `staging/evidence.md`'s human-readable narrative (SKILL.md writes both;
+ *  this finalizer reads ONLY this one, never the prose file, per the design
+ *  note above — "so the finalizer doesn't parse prose"). `source`/`note`
+ *  are informational only (never read by this function's own stamping
+ *  logic) — they exist so a human or a future tool can cross-check the
+ *  evidence file against `evidence.md` without re-deriving it. */
+type CommunityRefreshEvidenceEntry = { status: 'verified' | 'verifyFailed'; source?: string; note?: string };
+type CommunityRefreshEvidence = Readonly<Record<string, CommunityRefreshEvidenceEntry>>;
+
+/** Parses + structurally validates `staging/evidence.json`. Throws on
+ *  anything that is not a JSON object mapping item id -> `{status, ...}`
+ *  with `status` in the closed `verified|verifyFailed` vocabulary — a
+ *  malformed evidence file is the SAME class of refusal as a malformed
+ *  `registry.yaml` (never a half-trusted partial parse). */
+function loadCommunityRefreshEvidence(evidencePath: string): CommunityRefreshEvidence {
+  let raw: string;
+  try {
+    raw = readFileSync(evidencePath, 'utf8');
+  } catch (err) {
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: staged evidence.json could not be read — ${(err as NodeJS.ErrnoException).message}`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new InteractiveFinalizerError(`commitRegistryDraft: staged evidence.json is not valid JSON — ${(err as Error).message}`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new InteractiveFinalizerError('commitRegistryDraft: staged evidence.json must be a JSON object mapping item id -> {status, ...}.');
+  }
+  const out: Record<string, CommunityRefreshEvidenceEntry> = {};
+  for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new InteractiveFinalizerError(`commitRegistryDraft: staged evidence.json entry "${id}" must be an object.`);
+    }
+    const v = value as Record<string, unknown>;
+    const status = v.status;
+    if (status !== 'verified' && status !== 'verifyFailed') {
+      throw new InteractiveFinalizerError(
+        `commitRegistryDraft: staged evidence.json entry "${id}" has status ${JSON.stringify(status)} — must be "verified" or "verifyFailed".`,
+      );
+    }
+    out[id] = {
+      status,
+      ...(typeof v.source === 'string' ? { source: v.source } : {}),
+      ...(typeof v.note === 'string' ? { note: v.note } : {}),
+    };
+  }
+  return out;
 }
 
 /** Renders one `CommunityRegistryItem` back to the plain-object shape
@@ -509,7 +553,8 @@ function serializeCommunityRegistryItem(item: CommunityRegistryItem): Record<str
 export function commitRegistryDraft(ctx: FinalizerContext): string[] {
   const { sessionDir, forgeRoot } = ctx;
 
-  // ---- Phase 1: locate + validate the staged draft. Zero writes. --------
+  // ---- Phase 1: locate + validate the staged draft + evidence. Zero
+  // writes. -----------------------------------------------------------------
   const draftGuard = resolveGuardedPath(sessionDir, ['staging', 'registry.yaml']);
   if (!draftGuard.ok) {
     throw new InteractiveFinalizerError(
@@ -534,11 +579,25 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
     );
   }
 
-  // ---- Phase 1b: the live registry — the diff baseline + write target,
-  // resolved ONCE (the same guarded path serves both the read-for-diff below
-  // and the write at the end). A fresh forge root with no registry.yaml yet
-  // is a legitimate first-ever-commit — `exists:false` degrades to an empty
-  // baseline, never a throw. ------------------------------------------------
+  const evidenceGuard = resolveGuardedPath(sessionDir, ['staging', 'evidence.json']);
+  if (!evidenceGuard.ok) {
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: staged evidence.json failed containment (${evidenceGuard.reason}).`,
+    );
+  }
+  if (!evidenceGuard.exists) {
+    throw new InteractiveFinalizerError(
+      'commitRegistryDraft: no staged evidence.json found under this session\'s staging/ directory — the per-item verification record is required alongside registry.yaml.',
+    );
+  }
+  const evidence = loadCommunityRefreshEvidence(evidenceGuard.realPath);
+
+  // ---- Phase 1b: the live registry — the fallback source for every
+  // unverified row + the write target, resolved ONCE. A fresh forge root
+  // with no registry.yaml yet is a legitimate first-ever-commit —
+  // `exists:false` degrades to an empty baseline, never a throw (every
+  // draft item then needs a "verified" evidence entry, or the commit
+  // refuses it — see Phase 2). -----------------------------------------------
   const registryGuard = resolveGuardedPath(forgeRoot, ['studio', 'community', 'registry.yaml']);
   if (!registryGuard.ok) {
     throw new InteractiveFinalizerError(
@@ -548,21 +607,31 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
   const liveItems = registryGuard.exists ? loadCommunityRegistry(registryGuard.realPath).items : [];
   const liveById = new Map(liveItems.map((item) => [item.id, item] as const));
 
-  // ---- Phase 2: compute the stamped output. Pure — no writes yet. -------
+  // ---- Phase 2: compute the stamped output from evidence status. Pure —
+  // no writes yet. -----------------------------------------------------------
   const sessionId = basename(sessionDir);
   const now = new Date().toISOString();
   const fetchedBy = `community-refresh/${sessionId}`;
 
   const stampedItems: CommunityRegistryItem[] = draft.items.map((item) => {
-    const liveItem = liveById.get(item.id);
-    if (liveItem !== undefined && itemContentEqual(item, liveItem)) {
-      // Untouched row — the live entry itself, byte-identical, never
-      // restamped (see itemContentEqual's doc comment).
-      return liveItem;
+    if (evidence[item.id]?.status === 'verified') {
+      // A genuinely verified row — this function, never the draft, is the
+      // sole source of fetchedAt/fetchedBy; every OTHER field is trusted as
+      // drafted (the agent verified it this pass, unconditionally stamped
+      // even when the verified numbers are unchanged from live).
+      return { ...item, fetchedAt: now, fetchedBy };
     }
-    // A genuinely new or changed row — this function, never the draft, is
-    // the sole source of fetchedAt/fetchedBy.
-    return { ...item, fetchedAt: now, fetchedBy };
+    // verifyFailed, or no evidence entry at all: NEVER trust the draft's
+    // own content for this row — the committed row is the LIVE entry,
+    // byte-for-byte. A brand-new item (no live counterpart) with no
+    // verified evidence has nothing honest to fall back to.
+    const liveItem = liveById.get(item.id);
+    if (liveItem === undefined) {
+      throw new InteractiveFinalizerError(
+        `commitRegistryDraft: item "${item.id}" has no live counterpart and staged evidence.json does not mark it "verified" — refusing to commit an unverified new item.`,
+      );
+    }
+    return liveItem;
   });
 
   const outDoc = {

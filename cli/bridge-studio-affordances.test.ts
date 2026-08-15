@@ -578,6 +578,11 @@ test('TBL-communityrefresh-1: verdict approve at awaiting-review -> 200, delegat
     'utf8',
   );
   writeFileSync(join(sessionDir, 'staging', 'evidence.md'), '# Evidence\n\nalpha: verified via WebFetch of the GitHub API.\n', 'utf8');
+  writeFileSync(
+    join(sessionDir, 'staging', 'evidence.json'),
+    JSON.stringify({ alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'stargazers_count=250' } }, null, 2),
+    'utf8',
+  );
 
   const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
     project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',
