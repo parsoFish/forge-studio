@@ -373,8 +373,44 @@ test('TBL-instructions-4: verdict reject at awaiting-verdict -> 200, phase -> re
 });
 
 // ===========================================================================
-// TABLE TEST — demo (verdict: lock/abandon)
+// TABLE TEST — demo (question-form: brief; verdict: lock/abandon)
 // ===========================================================================
+
+test('TBL-demo-0: question-form (brief) at briefing -> 200, prompt.md written, phase -> generating', async () => {
+  const project = 'tbldemo0';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'Give the CLI capture more contrast.' }],
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  assert.equal(readPhase(sessionDir), 'generating');
+  assert.equal(readStatus(sessionDir).prompt, 'Give the CLI capture more contrast.');
+  assert.ok(existsSync(join(sessionDir, 'prompt.md')), 'prompt.md must be written');
+  assert.equal(readFileSync(join(sessionDir, 'prompt.md'), 'utf8'), 'Give the CLI capture more contrast.');
+});
+
+test('TBL-demo-0b: question-form with malformed answers[] shape at briefing -> 400, nothing written, phase unchanged', async () => {
+  const project = 'tbldemo0b';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'briefing-question-form'), { project, answers: [{ question: 'Operator response' }] });
+  assert.equal(res.status, 400);
+  assert.equal(existsSync(join(sessionDir, 'prompt.md')), false);
+  assert.equal(readPhase(sessionDir), 'briefing');
+});
+
+test('TBL-demo-0c: question-form (brief) with an EMPTY answers[] at briefing -> 400, nothing written', async () => {
+  const project = 'tbldemo0c';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'briefing-question-form'), { project, answers: [] });
+  assert.equal(res.status, 400);
+  assert.equal(existsSync(join(sessionDir, 'prompt.md')), false);
+  assert.equal(readPhase(sessionDir), 'briefing');
+});
 
 test('TBL-demo-1: verdict approve at awaiting-review -> 200, phase -> locking (lock)', async () => {
   const project = 'tbldemo1';
@@ -566,6 +602,26 @@ test('PARITY-instructions: generic verdict-approve and the bespoke /api/instruct
 
   assert.equal(readPhase(bespokeDir), readPhase(genericDir));
   assert.equal(readPhase(genericDir), 'finalizing');
+});
+
+test('PARITY-demo-brief: generic question-form (brief) and the bespoke /api/demo-builder/brief route reach the SAME phase', async () => {
+  const project = 'paritydemobrief';
+  const bespokeId = freshSessionId();
+  const genericId = freshSessionId();
+  const bespokeDir = seedSession(project, '_demo', bespokeId, { session_id: bespokeId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
+  const genericDir = seedSession(project, '_demo', genericId, { session_id: genericId, project, project_repo_path: '', phase: 'briefing', mode: 'create', iteration: 1, prompt: '' });
+
+  const bespokeRes = await postJson(`${bridgeUrl}/api/demo-builder/brief`, { project, sessionId: bespokeId, brief: 'match the bespoke route' });
+  assert.equal(bespokeRes.status, 200);
+  const genericRes = await postJson(affordanceUrl('demo', genericId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'match the bespoke route' }],
+  });
+  assert.equal(genericRes.status, 200, `generic question-form expected 200, got ${genericRes.status}: ${await genericRes.text()}`);
+
+  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
+  assert.equal(readPhase(genericDir), 'generating');
+  assert.equal(readStatus(bespokeDir).prompt, readStatus(genericDir).prompt);
 });
 
 test('PARITY-demo: generic verdict-approve and the bespoke /api/demo-builder/lock route reach the SAME phase', async () => {

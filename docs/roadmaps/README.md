@@ -711,6 +711,10 @@ registry + parity view; §4 story-beat parity rule).
   R6-01/04/05/06 — one-module rule). **R2-10/R4-16 demo-builder premise
   corrected**: three bespoke session pages, not four — the demo-builder is
   the inline R1-03-F2 panel and is NOT re-detached (no silent reversal).
+  *(Superseded 2026-08-15, wave-6 W6-B10: R1-03-F2 is deliberately REVERSED —
+  the demo-builder is now the dedicated `/sessions/demo/<sid>` session
+  screen, not an inline panel; see `docs/roadmaps/R1-contract-componentry.md`
+  R1-03-F2's "F2 REVERSED" note for the full rationale.)*
   **R3-03 gains the guards-migration clause** (the 9 catalog hook ids are
   dispatch-load-bearing: `composition.hooks` sweep, ADR-027 authoring-field
   amendment, band-dispatch vocabulary, spawn-capture parity — boundary move

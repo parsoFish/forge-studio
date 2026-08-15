@@ -33,9 +33,10 @@ export function DemoTimeline({
   steps: DemoStep[];
   hasLockedDemo: boolean;
   onChange: (s: DemoStep[]) => void;
-  /** R1-03-F2: a demo session started (whole-demo launch or a per-element
-   *  iterate) — the page owns which session is active + shows it inline via
-   *  DemoBuilderPanel, rather than this component navigating to /demo/<sid>. */
+  /** W6-B10 (R1-03-F2 reversed): a demo session started (whole-demo launch or
+   *  a per-element iterate) — the page navigates to the dedicated session
+   *  screen (`/sessions/demo/<sid>`), the one session screen every kind
+   *  shares, rather than showing it inline. */
   onSessionStarted: (sessionId: string) => void;
 }) {
   const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));

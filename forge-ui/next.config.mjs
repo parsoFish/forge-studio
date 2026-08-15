@@ -13,9 +13,16 @@ const nextConfig = {
   // source for every *pure path-shape* move (no data lookup needed to know
   // the destination) — W6-IA-8 populated it for the first time, retiring the
   // client-shim pages that used to do this same mapping at runtime. A
-  // data-dependent legacy route (one whose destination needs a lookup, e.g.
-  // `/demo/[sessionId]` resolving its owning project) stays a page, not an
-  // entry here.
+  // data-dependent legacy route (one whose destination ITSELF needs a lookup
+  // it cannot do on its own) stays a page, not an entry here — `/demo/
+  // [sessionId]` was that route until W6-B10: its shim looked up the
+  // session's owning project via `listDemoSessions()` before it could
+  // navigate. W6-B10 taught `/sessions/demo/<sid>` (the destination) to make
+  // that SAME lookup itself (`refreshSummary`'s `demo` branch,
+  // `app/sessions/[kind]/[sessionId]/page.tsx`) — `?project=` is now an
+  // optional optimization, not a hard requirement — so the move is a pure
+  // path-shape one after all, exactly like the six routes below, and the
+  // shim page was deleted.
   async redirects() {
     return [
       // Architect (M7-4 / R2-10 PR2, WI-8, ADR-031): interview + PLAN gate
@@ -44,6 +51,15 @@ const nextConfig = {
       {
         source: '/project-brain/:sessionId',
         destination: '/sessions/project-brain/:sessionId',
+        permanent: true,
+      },
+      // Demo-builder review (W6-B10, R1-03-F2 reversed): same shared-
+      // session-shell consolidation, graduated from a data-dependent client
+      // shim once the destination learned to resolve its own project (see
+      // this file's header comment).
+      {
+        source: '/demo/:sessionId',
+        destination: '/sessions/demo/:sessionId',
         permanent: true,
       },
       // Review human moment (M7-3, ADR-031): unified artifact viewer.

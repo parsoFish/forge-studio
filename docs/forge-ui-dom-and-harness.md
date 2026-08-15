@@ -1011,8 +1011,10 @@ inventory rather than one shared page-level contract:
   ceiling stands, never silently overwritten by the run-level default), and a stamp
   that fails to land is surfaced in the per-item result rather than reported as a
   clean enqueue. Every drawer carries
-  `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
-  Timeline (+ inline builder panel), tying demo upkeep to initiative state.
+  `[data-link="demo-builder"]` (R4-07-F3; entrypoint fixed W6-B10) — routes
+  honestly (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`) to the
+  project's in-flight demo session (`/sessions/demo/<sid>`) or the kickoff
+  screen, tying demo upkeep to initiative state without a fake tab switch.
   Server-side, `RoadmapInitiative.completedAt` (`cli/bridge-studio.ts`'s
   `buildProjectRoadmap`) is threaded from `Run.completedAt`
   (`orchestrator/run-model.ts`) — the `started_at` of a cycle's
@@ -1353,9 +1355,11 @@ inventory rather than one shared page-level contract:
   never fabricated when absent (today only `RunPanel` has a real `costUsd`
   source; the architect/instructions session-summary types carry no cost
   field yet, a disclosed gap, not papered over). Adopted by
-  `SessionArchitectPanel`, `SessionInstructionsPanel`, `DemoBuilderPanel`
-  (all three during their working phases, subscribed via the SAME
-  `useCycleEvents(cycleId)` seam they already held), and `RunPanel`
+  `SessionArchitectPanel`, `SessionInstructionsPanel` (during their working
+  phases, subscribed via the SAME `useCycleEvents(cycleId)` seam they already
+  held), `SessionInteractivePanel` (W6-B10 — generic over `kind`, shown
+  whenever every derived affordance is a not-yet-wired one; see the demo
+  builder entry above), and `RunPanel`
   (`components/studio/agent-builder/RunPanel.tsx`) — for a standalone
   dispatched agent run, whose `runId` (minted `_agent-<slug>-<stamp>`,
   `cli/ui-bridge.ts`'s `POST /api/agents/:slug/run`) IS the run's cycle id
@@ -1447,9 +1451,11 @@ inventory rather than one shared page-level contract:
   set), 422, 501 `UnhandledAffordanceBody` — surfaces verbatim via
   `[data-affordance-error]`, never swallowed. `postSessionAffordance`
   (`forge-ui/lib/session-client.ts`) is the client POST helper; `[data-page="session"]`'s
-  `refreshSummary` gained a real `demo` branch (`listDemoSessions()`, the
-  SAME per-kind list endpoint `DemoBuilderPanel`/the legacy `/demo/[sid]`
-  redirect already use) — previously `demo` fell into the generic
+  `refreshSummary` gained a real `demo` branch (`listDemoSessions()` — the
+  SAME per-kind list endpoint the now-retired `DemoBuilderPanel` used, and
+  the reason W6-B10 could later graduate `/demo/[sid]` from a data-dependent
+  client shim to a plain wire redirect: this page now makes the SAME lookup
+  the shim used to make first) — previously `demo` fell into the generic
   "unrecognised kind" else-branch alongside every kind with no per-kind
   summary fetch at all, so a session-shell deep link carrying no `?project=`
   query param (this batch's own kickoff `Start` button included) left
@@ -1531,37 +1537,78 @@ inventory rather than one shared page-level contract:
   genuinely cannot distinguish a broken bridge from an empty result. Claiming
   a `failed` state it can never enter would be a DOM contract the code does
   not honour; the swallow is filed instead.
-- **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
-  per-project demo-page builder (brief → generate → lock, element-by-element)
-  is an inline panel on the project page, opened by
-  `[data-action="launch-demo-builder"]` / a `?demo=<sid>` deep link:
-  `[data-section="demo-builder-panel"][data-demo-session][data-demo-phase]`
-  containing the preserved inner contract —
-  `[data-section="session-briefing"|"demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`,
-  `[data-component="demo-review"]`, `[data-demo-iframe]`,
-  `[data-field="demo-feedback"]` (the review textarea — named so the harness
-  can drive a real feedback round trip, R4-16),
-  `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
-  plus a compact `[data-section="demo-status-strip"]`. The old detached
-  `/demo/[sid]` route is a redirect stub
-  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`) —
-  deliberately kept as a CLIENT-side page, not converted to a
-  `next.config.mjs` wire redirect at W6-IA-8 alongside the other six legacy
-  shims: its destination isn't knowable from the URL alone, it needs a live
-  `listDemoSessions()` lookup to resolve which project owns the session id.
+- **Demo builder — the dedicated session screen (W6-B10, 2026-08-15, R1-03-F2
+  REVERSED):** the per-project demo-page builder is now `/sessions/demo/<sid>`
+  — the ONE session screen every interactive kind shares (W6-B6) — not an
+  inline panel. `DemoBuilderPanel.tsx` and `DemoReview.tsx` are DELETED, along
+  with the project page's `?demo=` deep-link handling and `activeDemoSid`
+  state; the retired inline contract
+  (`[data-section="demo-builder-panel"]`, `[data-component="demo-review"]`,
+  `[data-field="demo-feedback"]`, `[data-action="submit-brief"|"apply-feedback"|
+  "abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`,
+  `[data-section="demo-history"|"demo-viewer"|"demo-process"]`) is GONE, not
+  relocated — the dedicated screen renders through the SAME generic surfaces
+  every other `GENERIC_PANEL_KINDS` member does:
+  `SessionInteractivePanel` (`[data-component="session-interactive-panel"]`,
+  `[data-affordance-kind="question-form"|"verdict"]`,
+  `[data-action="submit-answers"|"verdict-approve"|"verdict-reject"]`,
+  `[data-field="session-generation-pick"]`) LEFT, `SessionArtifactPane`'s
+  generation-gallery RIGHT — see below. Three entrypoints route here, all via
+  `router.push`: `DemoTimeline`'s `[data-action="launch-demo-builder"]`
+  (project page), `ContractResolutionPanel`'s DEMO-clause
+  `[data-action="resolve-clause-agent"]` (mirrors its own `instructions`
+  branch exactly), and the roadmap's `[data-link="demo-builder"]`
+  (`InitiativeDetail`, via `RoadmapCanvas`'s `onOpenDemo`) — which now routes
+  HONESTLY (`lib/demo-entry-view.ts`'s `resolveDemoEntryHref`: resume the
+  project's in-flight session, else `/sessions/demo/new?project=<p>&
+  initiative=<id>`) rather than the old fake `setTab('editor')`. Kickoff
+  (`/sessions/demo/new`) gained an optional `?project=`/`?initiative=` prefill
+  (`[data-section="kickoff-initiative-context"]` shows the latter as context
+  only — sessions are project-scoped, never initiative-scoped). `/demo/
+  [sessionId]` graduates from the data-dependent client shim W6-IA-8
+  deliberately left behind to a pure `next.config.mjs` wire redirect →
+  `/sessions/demo/:sessionId` — the destination now resolves its own project
+  via the SAME `listDemoSessions()` lookup the shim used to make first (see
+  `refreshSummary`'s `demo` branch below), so `?project=` is an optimization,
+  not a requirement, and the move is knowable from the URL alone like its six
+  siblings. The gap this surfaced: `studio/session-kinds.yaml`'s `demo` panel
+  table had NO row for `briefing` — every session is minted straight into it
+  (`POST /api/demo-builder/start`) — so a session opened here could never get
+  the agent started; it gained `{phase: briefing, step: noop, awaits:
+  questions}`, rendering as the generic question-form box, and
+  `cli/bridge-studio-affordances.ts` gained `handleDemoBrief`, mirroring
+  `POST /api/demo-builder/brief`. `ActivityLog` (the shared bottom drawer,
+  `[data-component="activity-drawer"]`) is now wired generically into
+  `SessionInteractivePanel` — shown whenever every derived affordance is a
+  disabled not-yet-wired one (a working phase with nothing actionable),
+  covering demo's `generating`/`locking` phases the same way the retired
+  panel did, without a `kind === 'demo'` compare. **Disclosed regression, not
+  fixed here** (needs a real affordance-model extension — `VERDICT_VALUES` is
+  a closed `['approve','reject']` set with no "revise in place" semantics):
+  the old panel's free-text "apply feedback & regenerate" loop, per-element
+  iterate-with-its-own-prompt, and "view a previous locked demo" history have
+  no equivalent on the generic panel today.
 - **Generation gallery — the demo-builder's session artifact (R4-16-F1,
-  2026-08-06).** Each completed generate turn is SNAPSHOTTED into the session
-  dir (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
+  2026-08-06; entry point updated W6-B10).** Each completed generate turn is
+  SNAPSHOTTED into the session dir
+  (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
   `meta.json`), so the generations accumulate instead of overwriting each
   other, and a new **live** artifact kind `generation-gallery`
   (`studio/session-kinds.yaml`'s fourth descriptor, `id: demo` — the id IS the
   `_<kind>` session-dir segment the read route derives) renders them through
-  the R2-10 shell's own renderer stack. **Entry stays the project page**
-  (R1-03-F2 is not reversed): the inline `DemoBuilderPanel` mounts the REAL
-  `SessionArtifactPane`, fed by the same
-  `GET /api/studio/sessions/demo/<sid>?project=<p>` route the
-  `/sessions/[kind]/[sessionId]` deep link uses — one derivation, one renderer,
-  two mounts. Contract:
+  the R2-10 shell's own renderer stack. **Entry is the dedicated session
+  screen** (W6-B10 — R1-03-F2's original "entry stays the project page" is
+  itself reversed): `/sessions/demo/<sid>` renders the REAL
+  `SessionArtifactPane`, fed by
+  `GET /api/studio/sessions/demo/<sid>?project=<p>` — the same read route,
+  one mount now instead of two. `finalize-generation` (the gallery's own
+  per-item button) renders honestly DISABLED here (`onFinalizeGeneration` is
+  not wired on this page — `title="Not available from this view"`); the
+  session-shell's own way to finalize a chosen generation is the generic
+  verdict-approve's `[data-field="session-generation-pick"]` picker (posts
+  `{verdict:'approve', generation:<n>}` through the SAME affordance route
+  `handleDemoVerdict` already answers), not a second, redundant call path.
+  Contract:
   `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
   per selector button
   `[data-action="select-generation"][data-generation-number][data-generation-selected="true"|"false"]`,
@@ -1571,7 +1618,8 @@ inventory rather than one shared page-level contract:
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
-  chooser `[data-action="finalize-generation"][data-generation-number]`, and an
+  (on this page, honestly disabled) chooser
+  `[data-action="finalize-generation"][data-generation-number]`, and an
   honest `[data-generation-empty="true"]` naming what was scanned rather than a
   bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
   never an array position, so a corrupt snapshot leaves a visible gap instead
@@ -1580,11 +1628,11 @@ inventory rather than one shared page-level contract:
   polls is the race this campaign already diagnosed once), and the view is
   re-derived with the operator's chosen generation NUMBER preserved across the
   new payload, because a selection that dies every 3 seconds cannot be acted
-  on. `[data-action="lock-demo"]` keeps its meaning (lock the sample currently
-  in the repo); `finalize-generation` restores the CHOSEN snapshot's sample AND
-  its generator skill into the project repo before the same lock runs, so
-  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
-  generation.
+  on. The real way to lock a CHOSEN generation on this page is
+  `verdict-approve`'s generation picker — server-side (`handleDemoVerdict`)
+  it restores that snapshot's sample AND its generator skill into the project
+  repo before the same lock runs, so `demo.lock.json`'s
+  `demo_html`/`demo_skill` pair always comes from one generation.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/
   session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
