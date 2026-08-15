@@ -7,7 +7,7 @@ import { StageHex } from '@/components/StageHex';
 import { SessionBriefing } from '@/components/SessionBriefing';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { InstructionsVerdict } from '@/components/InstructionsVerdict';
-import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
+import { ActivityLog } from '@/components/studio/ActivityLog';
 import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
 
 // ---------------------------------------------------------------------------
@@ -23,6 +23,9 @@ import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/arch
 // `answerInstructions` + the `instructions-interview` section/heading so the
 // rendered `data-section` value and every per-question anchor stay identical
 // to what this panel shipped with.
+//
+// W6-B7: the working-phase activity log is now the shared `ActivityLog`
+// bottom drawer (see `SessionArchitectPanel.tsx`'s identical note).
 // ---------------------------------------------------------------------------
 
 export function SessionInstructionsPanel({
@@ -111,7 +114,7 @@ export function SessionInstructionsPanel({
                     : `The instructions agent is exploring the repo… (round ${session.round})`
                 }
               />
-              <ArchitectActivityLog events={events} />
+              <ActivityLog label="instructions activity" events={events} phaseLabel={session.phase} phaseActive={active} />
             </div>
           )}
 

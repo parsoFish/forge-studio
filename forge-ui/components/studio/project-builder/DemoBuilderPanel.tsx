@@ -21,7 +21,7 @@ import { fetchStudioProjects, type DemoStep } from '@/lib/studio-client';
 import { SessionBriefing } from '@/components/SessionBriefing';
 import { DemoReview } from '@/components/DemoReview';
 import { SessionArtifactPane } from '@/components/studio/session/SessionArtifactPane';
-import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
+import { ActivityLog } from '@/components/studio/ActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { STATUS_COLOR } from '@/lib/status-colors';
 
@@ -343,7 +343,7 @@ export function DemoBuilderPanel({
                     : 'The demo agent is building the demo…'
                 }
               />
-              <ArchitectActivityLog events={events} />
+              <ActivityLog label="demo agent activity" events={events} phaseLabel={session.phase} phaseActive={meta?.active ?? false} />
             </div>
           )}
 

@@ -72,12 +72,12 @@ export const journey = defineJourney({
       },
       {
         id: 'flows-run-grounding',
-        title: 'Architect grounds itself — P3 activity panel',
-        narration: 'Before asking a single question, the architect reads the CLI source and the brain — every tool call and reasoning line streams live into the activity panel, so the operator watches it ground itself in the real codebase rather than guess.',
+        title: 'Architect grounds itself — the live activity drawer',
+        narration: 'Before asking a single question, the architect reads the CLI source and the brain — every tool call and reasoning line streams live into the bottom activity drawer, so the operator watches it ground itself in the real codebase rather than guess.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
-              // ── R1.1: Architect grounds itself — P3 activity panel ────────────────────
-              console.log('\n[R1.1] Architect grounds itself — P3 activity panel');
+              // ── R1.1: Architect grounds itself — live activity drawer (W6-B7) ─────────
+              console.log('\n[R1.1] Architect grounds itself — live activity drawer');
               writeStatus(sid, { phase: 'interviewing', round: 1, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=interviewing, round=1)');
               // R2-10 PR2: the retired per-kind data-page is gone — the shared
@@ -96,33 +96,37 @@ export const journey = defineJourney({
                 archEvent(sid, 'tool_use', `tool.${groundingTools[i]}`, { tool: groundingTools[i] });
                 await sleep(THINK);
                 if (i === 3) {
-                  await frame(page, 'r1-1-activity-midstream', 'R1 (mid-stream) — P3 activity panel filling while the architect reads the CLI source');
+                  await frame(page, 'r1-1-activity-midstream', 'R1 (mid-stream) — activity drawer filling while the architect reads the CLI source');
                 }
               }
               archReasoning(sid, '--write needs a pure src/inject.ts (doc string + toc string → new doc string) that slices the <!-- toc --> / <!-- /toc --> region, then a thin CLI wire that reads the file, injects, and writes it back.');
               await sleep(THINK);
               archReasoning(sid, 'idempotency is the sharp edge — a second --write must be byte-identical. A unit test asserting diff === "" on a re-run plus the acceptance read-back against the built CLI will prove insert + idempotency.');
               await sleep(THINK);
+              // W6-B7: the retired inline `[data-section="architect-activity"]`
+              // panel is now the shared full-width bottom `ActivityLog` drawer —
+              // `[data-component="activity-drawer"]` (docs/forge-ui-dom-and-
+              // harness.md), `data-activity-kind` widened but unchanged in name.
               try {
-                await page.waitForSelector('[data-section="architect-activity"]', { timeout: 8000 });
-                check(true, 'P3: [data-section="architect-activity"] rendered');
-              } catch { check(false, 'P3: [data-section="architect-activity"] rendered'); }
+                await page.waitForSelector('[data-component="activity-drawer"]', { timeout: 8000 });
+                check(true, 'W6-B7: [data-component="activity-drawer"] rendered');
+              } catch { check(false, 'W6-B7: [data-component="activity-drawer"] rendered'); }
               try {
                 await page.waitForFunction(
-                  () => parseInt(document.querySelector('[data-section="architect-activity"]')?.getAttribute('data-activity-count') ?? '0', 10) >= 1,
+                  () => parseInt(document.querySelector('[data-component="activity-drawer"]')?.getAttribute('data-activity-count') ?? '0', 10) >= 1,
                   null, { timeout: 8000 },
                 );
                 const count = await page.evaluate(() =>
-                  parseInt(document.querySelector('[data-section="architect-activity"]')?.getAttribute('data-activity-count') ?? '0', 10));
-                check(count >= 1, `P3: activity panel data-activity-count ≥1 (got ${count})`);
-              } catch { check(false, 'P3: activity panel data-activity-count ≥1 (timeout)'); }
+                  parseInt(document.querySelector('[data-component="activity-drawer"]')?.getAttribute('data-activity-count') ?? '0', 10));
+                check(count >= 1, `W6-B7: activity drawer data-activity-count ≥1 (got ${count})`);
+              } catch { check(false, 'W6-B7: activity drawer data-activity-count ≥1 (timeout)'); }
               const hasReasoningRow = await page.evaluate(() => {
-                const panel = document.querySelector('[data-section="architect-activity"]');
-                if (!panel) return false;
-                return panel.textContent?.includes('reason') || panel.querySelectorAll('[data-activity-kind]').length > 0;
+                const drawer = document.querySelector('[data-component="activity-drawer"]');
+                if (!drawer) return false;
+                return drawer.textContent?.includes('reason') || drawer.querySelectorAll('[data-activity-kind]').length > 0;
               });
-              check(hasReasoningRow, 'P3: at least one reasoning row rendered in the activity panel');
-              await frame(page, 'r1-1-activity-settled', 'R1 (settled) — P3 activity panel: tool calls + reasoning rows persisted');
+              check(hasReasoningRow, 'W6-B7: at least one reasoning row rendered in the activity drawer');
+              await frame(page, 'r1-1-activity-settled', 'R1 (settled) — activity drawer: tool calls + reasoning rows persisted');
 
         },
       },

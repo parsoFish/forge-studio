@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { rerunArchitectSession, type ArchitectSessionSummary, type EventLogEntry } from '@/lib/bridge-client';
 import { StageHex } from '@/components/StageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
-import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
+import { ActivityLog } from '@/components/studio/ActivityLog';
 import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
 
 // ---------------------------------------------------------------------------
@@ -17,6 +17,12 @@ import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/arch
 // rejected terminal states. Every `data-action`/`data-section`/`data-component`
 // name below is byte-identical to the retired page's — the journeys that
 // drive it by name must not need to change when this panel replaces it.
+//
+// W6-B7: the working-phase activity log is now the shared full-width bottom
+// `ActivityLog` drawer (`components/studio/ActivityLog.tsx`), replacing the
+// retired `ArchitectActivityLog` inline panel — `data-section="architect-
+// activity"` is gone, superseded by the drawer's own `data-component=
+// "activity-drawer"` contract (`docs/forge-ui-dom-and-harness.md`).
 // ---------------------------------------------------------------------------
 
 export function SessionArchitectPanel({
@@ -76,7 +82,7 @@ export function SessionArchitectPanel({
                   : `The architect is thinking… (round ${session.round})`
               }
             />
-            <ArchitectActivityLog events={events} />
+            <ActivityLog label="architect activity" events={events} phaseLabel={session.phase} phaseActive={active} />
           </div>
         )}
 
