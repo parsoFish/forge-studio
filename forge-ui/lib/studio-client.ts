@@ -1040,6 +1040,73 @@ export async function fetchStudioAgentsWithMeta(): Promise<{ agents: Agent[]; de
   };
 }
 
+/**
+ * W6-B6 fix (wave-6 final gate, journey demo-builder DB-4) — the FULL server
+ * `AgentCapabilityDescriptor` (orchestrator/studio/derive.ts), fetched
+ * directly for ONE named slug via `fetchAgentCapability` below. NOT the
+ * roster's 3-key `capability` field `parseCapability` above parses (whose
+ * shape is pinned separately — see that function's own header for why); this
+ * type carries every key the server descriptor has, `allowedTiers` included.
+ *
+ * Exists because `/api/studio/agents`' roster (`fetchStudioAgents`) filters
+ * out every `library: false` agent (orchestrator/studio/registry.ts's
+ * `isStudioAgent`) — every kickoff-only system agent (demo-builder,
+ * instructions-creator, brain-maintenance, creation-agent,
+ * project-brain-builder) sets that flag, so NONE of them were ever
+ * resolvable through the roster. This type/fetch pair resolves ONE agent
+ * directly against the bridge's UNFILTERED per-slug capability route
+ * instead.
+ */
+export type AgentCapability = {
+  interactive: boolean;
+  runtimeSdks: string[];
+  fanoutCapable: boolean;
+  materials: string[];
+  costCeilingEnforceable: boolean;
+  allowedTiers?: ModelTier[];
+};
+
+/** Parse `GET /api/studio/agents/:slug/capability`'s `capability` field.
+ *  Returns `null` for an absent/malformed payload (unknown slug, older
+ *  bridge, or the no-bridge-configured fallback `{}`) — never a fabricated
+ *  stand-in descriptor. Exported for direct unit testing, same precedent as
+ *  `parseCapability` above. */
+export function parseAgentCapability(raw: unknown): AgentCapability | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const c = raw as Record<string, unknown>;
+  if (typeof c['interactive'] !== 'boolean' || !Array.isArray(c['runtimeSdks'])) return null;
+  const allowedTiers = parseAllowedTiers(c['allowedTiers']);
+  return {
+    interactive: c['interactive'] as boolean,
+    runtimeSdks: c['runtimeSdks'] as string[],
+    fanoutCapable: c['fanoutCapable'] === true,
+    materials: Array.isArray(c['materials']) ? (c['materials'] as string[]) : [],
+    costCeilingEnforceable: c['costCeilingEnforceable'] === true,
+    // Omit the key entirely when absent (never `allowedTiers: undefined`) —
+    // same discipline as the server's own AgentCapabilityDescriptor
+    // (orchestrator/studio/derive.ts) and PhaseAgentSpec.allowedTiers.
+    ...(allowedTiers ? { allowedTiers } : {}),
+  };
+}
+
+/**
+ * Fetch ONE agent's server-computed capability descriptor by slug — the
+ * UNFILTERED counterpart to `fetchStudioAgents()`'s roster (W6-B6 fix). The
+ * session-kickoff page (app/sessions/[kind]/new/page.tsx) uses this for
+ * `KICKOFF_KINDS[kind].agentSlug`: a `library:false` kickoff-only agent is
+ * never in the roster `fetchStudioAgents()` returns, but still has a real
+ * SKILL.md-declared tier envelope this route reads directly. Returns `null`
+ * for an unknown slug or a malformed/absent bridge response — never a
+ * fabricated fixed-tier stand-in.
+ */
+export async function fetchAgentCapability(slug: string): Promise<AgentCapability | null> {
+  const body = await studioGet<{ capability?: unknown }>(
+    `/api/studio/agents/${encodeURIComponent(slug)}/capability`,
+    {},
+  );
+  return parseAgentCapability(body.capability);
+}
+
 /** Fetch the curated OOTB starter agents (ADR-033) for the New-Agent picker. */
 export async function fetchStarters(): Promise<Agent[]> {
   const body = await studioGet<{ starters: unknown[] }>('/api/studio/starters', { starters: [] });

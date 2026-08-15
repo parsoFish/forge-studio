@@ -1672,16 +1672,24 @@ inventory rather than one shared page-level contract:
   takes its brief on a LATER turn instead, not at kickoff — instructions'
   own `briefing` phase, W6-B9, now takes it via the generic
   `SessionInteractivePanel`'s `question-form` affordance, above, rather than
-  a bespoke panel step) + a model-tier picker,
+  a bespoke panel step) + a model-tier picker
+  (`KickoffModelTierPicker.tsx`, `forge-ui/components/studio/session/`),
   `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"]`,
-  rendered from `agentCapabilityDescriptor.allowedTiers`
-  (`Agent.allowedTiers`, `forge-ui/lib/studio-client.ts` — parsed
-  independently of the pinned 3-key `capability` shape, mirroring
-  `costCeilingEnforceable`'s own precedent) — a radio group
+  rendered from `agentCapabilityDescriptor.allowedTiers` — fetched via
+  `fetchAgentCapability(agentSlug)` (`GET
+  /api/studio/agents/:slug/capability`, `forge-ui/lib/studio-client.ts`'s
+  `AgentCapability` type), the UNFILTERED per-slug route, **not**
+  `fetchStudioAgents()`'s roster: every kickoff-only system agent
+  (`instructions-creator`/`demo-builder`/`brain-maintenance`/
+  `creation-agent`/`project-brain-builder`) declares `library: false`
+  (`orchestrator/studio/registry.ts`'s `isStudioAgent`), so the roster never
+  carries them at all — the W6-B6 fix (wave-6 final gate, journey
+  demo-builder DB-4) — a radio group
   (`[data-field="kickoff-model-tier-option"]`) for a `strategy:range` skill,
-  a read-only chip (`[data-field="kickoff-model-fixed-chip"]`) naming
-  `runtime.model` for `strategy:fixed`; widening a skill's range is a
-  `SKILL.md` edit, never a UI decision. `[data-action="start-session"]`
+  a read-only chip (`[data-field="kickoff-model-fixed-chip"]`, `"fixed ·
+  read-only"`) for `strategy:fixed` or an absent/not-yet-loaded capability;
+  widening a skill's range is a `SKILL.md` edit, never a UI decision.
+  `[data-action="start-session"]`
   POSTs the kind's existing `/start` route (now every one of the six client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
   `startAuthoring`/`startKbCleanup`/`startCommunityRefresh` — threads an

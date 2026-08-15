@@ -14,6 +14,7 @@ import yaml from 'js-yaml';
 
 import {
   isStudioAgent,
+  isUnfilteredStudioAgent,
   loadAgentDefinition,
   serializeAgentDefinition,
   listAgentDefinitions,
@@ -63,6 +64,48 @@ Process body here.
 const LEGACY_AGENT_FIXTURE = `---
 name: legacy-agent
 description: A legacy skill without studio fields.
+---
+
+Some body.
+`;
+
+// W6-B6 fix (wave-6 final gate) — a kickoff-only system agent (demo-builder
+// and its four siblings): `runtime:` present, `library: false` set. Real
+// studio agent, deliberately kept out of the composable roster.
+const LIBRARY_FALSE_AGENT_FIXTURE = `---
+name: kickoff-only
+description: A kickoff-only system agent, out of the composable roster.
+phase: tester
+library: false
+purpose: Test things.
+composition:
+  skills: [demo]
+  tools: []
+  mcps: []
+  guards: [event-log]
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: none
+interactivity: Fully autonomous.
+allowed-tools: [Read, Grep]
+disallowed-tools: [Bash]
+budgets:
+  iterationCap: 15
+---
+
+Process body here.
+`;
+
+const QUARANTINED_AGENT_FIXTURE = `---
+name: quarantined-agent
+description: An installed package that happens to carry a runtime block.
+quarantined: true
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
 ---
 
 Some body.
@@ -152,6 +195,38 @@ describe('isStudioAgent', () => {
   it('returns false for legacy frontmatter (no runtime block)', () => {
     const p = writeAgentFixture('legacy-agent', LEGACY_AGENT_FIXTURE);
     assert.equal(isStudioAgent(p), false);
+  });
+
+  it('returns false for a library:false kickoff-only agent (roster gate)', () => {
+    const p = writeAgentFixture('library-false-agent', LIBRARY_FALSE_AGENT_FIXTURE);
+    assert.equal(isStudioAgent(p), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isUnfilteredStudioAgent (W6-B6 fix) — same checks as isStudioAgent, minus
+// the library:false roster gate.
+// ---------------------------------------------------------------------------
+
+describe('isUnfilteredStudioAgent', () => {
+  it('returns true for studio frontmatter (has runtime block)', () => {
+    const p = writeAgentFixture('unfiltered-studio-agent', AGENT_FIXTURE);
+    assert.equal(isUnfilteredStudioAgent(p), true);
+  });
+
+  it('returns false for legacy frontmatter (no runtime block)', () => {
+    const p = writeAgentFixture('unfiltered-legacy-agent', LEGACY_AGENT_FIXTURE);
+    assert.equal(isUnfilteredStudioAgent(p), false);
+  });
+
+  it('returns TRUE for a library:false kickoff-only agent — the fix this function exists for', () => {
+    const p = writeAgentFixture('unfiltered-library-false-agent', LIBRARY_FALSE_AGENT_FIXTURE);
+    assert.equal(isUnfilteredStudioAgent(p), true);
+  });
+
+  it('returns false for a quarantined installed package, even though it carries a runtime block (D4)', () => {
+    const p = writeAgentFixture('unfiltered-quarantined-agent', QUARANTINED_AGENT_FIXTURE);
+    assert.equal(isUnfilteredStudioAgent(p), false);
   });
 });
 

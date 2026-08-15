@@ -81,6 +81,7 @@ import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
+import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
 import { handleRecoveryRoutes } from './bridge-recovery.ts';
@@ -1702,6 +1703,11 @@ async function handleHttp(
     broadcastDemoChanged: ctx.broadcastDemoChanged,
   }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  // W6-B6 fix — the per-slug capability route, resolved against the
+  // UNFILTERED agent defs (bypasses the library:false roster gate
+  // /api/studio/agents applies). Adjacent to the instructions-draft route:
+  // same /api/studio/agents/:slug/... URL family, same guarded-path posture.
+  if (await handleStudioAgentCapabilityRoute(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --

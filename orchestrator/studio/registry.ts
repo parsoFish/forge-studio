@@ -104,23 +104,54 @@ export const PHASE_EXECUTOR_KINDS = [] as const;
 // Agent / SKILL.md
 // ---------------------------------------------------------------------------
 
-export function isStudioAgent(skillMdPath: string): boolean {
+/** Shared frontmatter read for `isStudioAgent`/`isUnfilteredStudioAgent` —
+ *  one file read + gray-matter parse, not two independently-maintained
+ *  copies. Returns `null` for an unreadable file or non-object frontmatter
+ *  (both callers treat that as "not a studio agent"). */
+function readAgentFrontmatter(skillMdPath: string): Record<string, unknown> | null {
   try {
     const raw = readFileSync(skillMdPath, 'utf8');
     const { data } = matter(raw, {}); // {} opts out of gray-matter's parse cache — see skill-library.ts header
-    if (data == null || typeof data !== 'object') return false;
-    const d = data as Record<string, unknown>;
-    // D4: a `provenance:`/`quarantined:` block ⇒ this went through the install
-    // pipeline and can never be a studio agent again, whatever its `runtime:` looks like.
-    if ('provenance' in d || 'quarantined' in d) return false;
-    // A studio (library) agent has a `runtime` block — UNLESS it opts out with
-    // `library: false`. Internal/system agents (e.g. brain-fix, dispatched by
-    // the bridge, never composed into a flow) set that flag so they keep a
-    // runtime spec for deriveAgentSpec but stay out of the composable roster.
-    return 'runtime' in d && d.library !== false;
+    if (data == null || typeof data !== 'object') return null;
+    return data as Record<string, unknown>;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function isStudioAgent(skillMdPath: string): boolean {
+  const d = readAgentFrontmatter(skillMdPath);
+  if (!d) return false;
+  // D4: a `provenance:`/`quarantined:` block ⇒ this went through the install
+  // pipeline and can never be a studio agent again, whatever its `runtime:` looks like.
+  if ('provenance' in d || 'quarantined' in d) return false;
+  // A studio (library) agent has a `runtime` block — UNLESS it opts out with
+  // `library: false`. Internal/system agents (e.g. brain-fix, dispatched by
+  // the bridge, never composed into a flow) set that flag so they keep a
+  // runtime spec for deriveAgentSpec but stay out of the composable roster.
+  return 'runtime' in d && d.library !== false;
+}
+
+/**
+ * Same "is this a real, non-quarantined studio agent" check as
+ * `isStudioAgent`, WITHOUT the `library:false` roster gate.
+ *
+ * `library:false` keeps an agent OUT of the composable-roster listing
+ * (`listAgentDefinitions`) — it says nothing about whether the SKILL.md
+ * itself is a valid studio agent with a real capability envelope to read.
+ * Every kickoff-only system agent (demo-builder, instructions-creator,
+ * brain-maintenance, creation-agent, project-brain-builder) sets
+ * `library:false` for exactly that roster reason, yet still declares a real
+ * `runtime:` block the session-kickoff page's model-tier picker needs (W6-B6
+ * fix). Used by the capability-only route (`GET
+ * /api/studio/agents/:slug/capability`, cli/bridge-studio-agent-capability.ts)
+ * that resolves ONE named slug directly, never the filtered roster.
+ */
+export function isUnfilteredStudioAgent(skillMdPath: string): boolean {
+  const d = readAgentFrontmatter(skillMdPath);
+  if (!d) return false;
+  if ('provenance' in d || 'quarantined' in d) return false;
+  return 'runtime' in d;
 }
 
 export function loadAgentDefinition(skillMdPath: string): AgentDefinition {

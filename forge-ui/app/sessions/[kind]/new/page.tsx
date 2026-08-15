@@ -6,15 +6,28 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchStudioAgents, fetchStudioKbs, startKbCleanup, type Agent, type Kb, type ModelTier } from '@/lib/studio-client';
+import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, startKbCleanup, type AgentCapability, type Kb } from '@/lib/studio-client';
+import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
 // task item 3). Context card + project/KB select + prompt (when the kind
-// takes one) + a model-tier picker rendered from the agent's OWN
-// `SKILL.md`-declared envelope (`agentCapabilityDescriptor.allowedTiers`,
-// ADR-043 2026-08-15 amendment §3) → Start → the kind's existing `/start`
-// route → `router.push` onto the shared session shell.
+// takes one) + a model-tier picker (`KickoffModelTierPicker`) rendered from
+// the agent's OWN `SKILL.md`-declared envelope
+// (`agentCapabilityDescriptor.allowedTiers`, ADR-043 2026-08-15 amendment
+// §3) → Start → the kind's existing `/start` route → `router.push` onto the
+// shared session shell.
+//
+// W6-B6 fix (wave-6 final gate, journey demo-builder DB-4): the capability is
+// fetched via `fetchAgentCapability(spec.agentSlug)` — the UNFILTERED
+// per-slug route (`GET /api/studio/agents/:slug/capability`) — NEVER
+// `fetchStudioAgents()`'s roster, which drops every `library:false` agent
+// (orchestrator/studio/registry.ts's `isStudioAgent`). Every kickoff-only
+// system agent this page dispatches (instructions-creator, demo-builder,
+// brain-maintenance, creation-agent, project-brain-builder) sets that flag,
+// so the roster lookup never found any of them and the picker always fell
+// back to the read-only 'fixed' chip — even for a real `strategy:range`
+// SKILL.md.
 //
 // Kinds: instructions, demo, kb-cleanup (KB select, not project), authoring
 // (the only one that takes a free-text prompt — its `/start` body REQUIRES
@@ -33,7 +46,9 @@ type KickoffKindId = 'instructions' | 'demo' | 'kb-cleanup' | 'authoring' | 'pro
 type KickoffKindSpec = {
   title: string;
   /** The skill slug this kind's agent runs — resolves the SKILL.md-declared
-   *  model envelope via `fetchStudioAgents()`. */
+   *  model envelope via `fetchAgentCapability()` (the unfiltered per-slug
+   *  route, W6-B6 fix — NOT `fetchStudioAgents()`'s roster, which drops
+   *  every `library:false` kickoff-only agent). */
   agentSlug: string;
   artifactLabel: string;
   /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
@@ -76,7 +91,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
 
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
-  const [agent, setAgent] = useState<Agent | null>(null);
+  const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
 
   const [project, setProject] = useState(prefillProject);
@@ -97,13 +112,20 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     setError(null);
     Promise.all([
       fetchStudioProjects(),
-      fetchStudioAgents(),
+      // W6-B6 fix — the UNFILTERED per-slug capability route, resolved
+      // directly against `spec.agentSlug`. NOT the roster `fetchStudioAgents()`
+      // returns: that roster drops every `library:false` agent
+      // (orchestrator/studio/registry.ts's `isStudioAgent`), which is every
+      // kickoff-only system agent this page's KICKOFF_KINDS names — so the
+      // roster lookup NEVER found them and the picker always fell back to the
+      // read-only 'fixed' chip, even for a real strategy:range SKILL.md.
+      fetchAgentCapability(spec.agentSlug),
       spec.selector === 'kb' ? fetchStudioKbs() : Promise.resolve([]),
     ])
-      .then(([projects, agents, kbList]) => {
+      .then(([projects, cap, kbList]) => {
         if (cancelled) return;
         setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort());
-        setAgent(agents.find((a) => a.id === spec.agentSlug) ?? null);
+        setCapability(cap);
         setKbs(kbList);
       })
       .catch((err) => {
@@ -123,16 +145,10 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 
-  // W6-B6 post-merge review (LOW): a single derivation — `allowedTiers` is
-  // computed inside the SAME conditional as the `agent` null-check, so
-  // TypeScript narrows it without a `!` non-null assertion; `isRangeTier`
-  // is just "this list is non-empty", not a second, separately-computed
-  // condition that could drift from it.
-  const allowedTiers: ModelTier[] =
-    agent && agent.runtime?.strategy === 'range' && Array.isArray(agent.allowedTiers) && agent.allowedTiers.length > 0
-      ? agent.allowedTiers
-      : [];
-  const isRangeTier = allowedTiers.length > 0;
+  // Shared with KickoffModelTierPicker's own internal derivation — ONE rule
+  // for "this agent has a real operator-choosable tier range", not two
+  // independently-computed copies that could drift.
+  const isRangeTier = allowedTiersFromCapability(capability).length > 0;
 
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
   const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
@@ -280,23 +296,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         </div>
       )}
 
-      <div data-section="kickoff-model-tier" data-model-tier-picker={isRangeTier ? 'range' : 'fixed'} style={{ ...cardStyle, marginBottom: 14 }}>
-        <div style={rowLabel}>Model</div>
-        {isRangeTier ? (
-          <div role="radiogroup" aria-label="Model tier" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {allowedTiers.map((t) => (
-              <label key={t} data-field="kickoff-model-tier-option" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text)' }}>
-                <input type="radio" name="modelTier" value={t} checked={modelTier === t} onChange={() => setModelTier(t)} />
-                {t}
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div data-field="kickoff-model-fixed-chip" style={{ fontSize: 12.5, color: 'var(--dim)' }}>
-            {agent?.runtime?.model ?? 'default'} · fixed · read-only
-          </div>
-        )}
-      </div>
+      <KickoffModelTierPicker capability={capability} modelTier={modelTier} onChange={setModelTier} />
 
       {error && (
         <div data-kickoff-error style={{ color: 'var(--red, #f87171)', fontSize: 12.5, marginBottom: 10 }}>
