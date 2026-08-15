@@ -159,6 +159,7 @@ import {
   loadSessionKinds,
   validateSessionKinds,
   FINALIZER_IDS,
+  deriveSessionAffordances,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
 // R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
@@ -1634,11 +1635,362 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
     );
   });
 
-  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row for kb-cleanup — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it', () => {
+  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
     assert.deepEqual(
       FINALIZER_IDS.map((f) => f.id),
-      ['copyStagingToLibrary'],
-      `FINALIZER_IDS must remain exactly the pre-existing single row — kb-cleanup's turnSpec (drafting -> awaiting-approval -> applied) declares no "finalize" step anywhere, so it needs no finalizer. Got: ${JSON.stringify(FINALIZER_IDS.map((f) => f.id))}`,
+      ['copyStagingToLibrary', 'writeToRepoRoot', 'recordLockedDemo'],
+      `FINALIZER_IDS must be exactly these three rows post-W6-B3 — copyStagingToLibrary (authoring's real turnSpec finalizer, pre-existing), plus writeToRepoRoot/recordLockedDemo (W6-B3's panel.phases-only finalizer identities for instructions/demo) — kb-cleanup's own turnSpec (drafting -> awaiting-approval -> applied) still declares no "finalize" step anywhere, so it still contributes none of these three. Got: ${JSON.stringify(FINALIZER_IDS.map((f) => f.id))}`,
     );
+  });
+});
+
+// ===========================================================================
+// W6-B3 — the additive-optional `panel` field (ADR-043 2026-08-15 amendment
+// §2: the read-half twin of `turnSpec` for a legacy kind — demo, onboarding,
+// instructions gain `panel.phases`; architect keeps none, permanently) +
+// `deriveSessionAffordances` (the read-half affordance view B6's UI will
+// consume). Mirrors the AT-R422-* idiom above: fixture-driven vocab/exclusivity
+// coverage, plus real-repo pins for the checked-in yaml.
+// ===========================================================================
+
+/** A well-formed 3-phase panel table — NOT copied from any real kind, just
+ *  small enough to isolate one-field mutations cleanly (mirrors
+ *  wellFormedTurnSpec's own role for turnSpec fixtures). */
+function wellFormedPanel(): Record<string, unknown> {
+  return {
+    phases: [
+      { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-review' },
+      { phase: 'awaiting-review', step: 'noop' },
+      { phase: 'done', step: 'terminal' },
+    ],
+  };
+}
+
+/** A descriptor fixture carrying `panel`, otherwise identical to
+ *  baseDescriptor() — legacyRoutes forced to [] for the same reason
+ *  turnSpecDescriptor does (a fresh tmp root has no forge-ui/app/ dir). */
+function panelDescriptor(panel: Record<string, unknown>): FixtureDescriptor & { panel: Record<string, unknown> } {
+  return { ...baseDescriptor({ legacyRoutes: [] }), panel };
+}
+
+/** Findings scoped to panel-* checks, isolated the same way turnspecFindings
+ *  isolates turnspec-* checks. */
+function panelFindings(findings: Finding[]): Finding[] {
+  return findings.filter((f) => f.check.startsWith('session-kinds/panel-'));
+}
+
+describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-row vocab as turnSpec.phases, under panel-* check ids', () => {
+  it('W6-B3-1: a panel phase.step outside TURN_STEPS → session-kinds/panel-unknown-step naming the offending value AND every id in TURN_STEPS (the panel-side counterpart to AT-R422-2)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-step-at-all';
+    const panel = wellFormedPanel();
+    (panel.phases as Record<string, unknown>[])[0] = { ...(panel.phases as Record<string, unknown>[])[0], step: bogus };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-unknown-step');
+    assert.ok(f, `expected a session-kinds/panel-unknown-step finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    for (const row of TURN_STEPS_FOR_TEST()) {
+      assert.ok(f.message.includes(row), `message must name the allowed set (missing "${row}")`);
+    }
+  });
+
+  it('W6-B3-2: a panel phase.finalizer outside FINALIZER_IDS → session-kinds/panel-unknown-finalizer naming the offending value AND every id in FINALIZER_IDS', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'notARealFinalizerAtAll';
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    phases[phases.length - 1] = { phase: 'finalizing', step: 'finalize', finalizer: bogus }; // replace the terminal row so no-terminal-phase doesn't also fire
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-unknown-finalizer');
+    assert.ok(f, `expected a session-kinds/panel-unknown-finalizer finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    assert.ok(f.message.includes('copyStagingToLibrary'), 'message must name the allowed set (missing "copyStagingToLibrary")');
+    assert.ok(f.message.includes('writeToRepoRoot'), 'message must name the allowed set (missing "writeToRepoRoot")');
+    assert.ok(f.message.includes('recordLockedDemo'), 'message must name the allowed set (missing "recordLockedDemo")');
+  });
+
+  it('W6-B3-3: a panel.phases table with NO `step: terminal` row anywhere → session-kinds/panel-no-terminal-phase naming the offending descriptor', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.step === 'terminal');
+    phases[idx] = { ...phases[idx], step: 'noop' };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-no-terminal-phase');
+    assert.ok(f, `expected a session-kinds/panel-no-terminal-phase finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'));
+  });
+
+  it('W6-B3-4: an EMPTY panel.phases list → session-kinds/panel-empty-phases naming the offending descriptor', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [panelDescriptor({ phases: [] })]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-empty-phases');
+    assert.ok(f, `expected a session-kinds/panel-empty-phases finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'));
+  });
+
+  it('W6-B3-5 (positive control): the well-formed panel fixture validates CLEAN — zero panel-* findings (without this, W6-B3-1..4 could all pass for the wrong reason — an implementation that rejects every panel unconditionally)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [panelDescriptor(wellFormedPanel())]);
+    const findings = panelFindings(validateSessionKinds(root));
+    assert.deepEqual(findings, [], `expected zero panel-* findings for a well-formed panel, got: ${JSON.stringify(findings)}`);
+  });
+});
+
+/** Local literal mirror of TURN_STEPS' ids, used only so the allowed-set
+ *  assertion above doesn't have to (dynamically) import the module a second
+ *  time — the four ids TURN_STEPS is documented to be exactly. */
+function TURN_STEPS_FOR_TEST(): string[] {
+  return ['agent', 'noop', 'finalize', 'terminal'];
+}
+
+describe('validateSessionKinds — turnSpec ⊕ panel mutual exclusion (W6-B3, ADR-043 2026-08-15 amendment §2)', () => {
+  it('W6-B3-6: a descriptor declaring BOTH turnSpec AND panel → EXACTLY ONE finding (session-kinds/turnspec-panel-exclusive), naming the kind AND both field names — and NEITHER field\'s own phase-table checks run (no turnspec-* or panel-* secondary findings, even though both tables here are individually well-formed)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [
+      { ...baseDescriptor({ legacyRoutes: [] }), turnSpec: wellFormedTurnSpec(), panel: wellFormedPanel() },
+    ]);
+
+    const findings = validateSessionKinds(root).filter((f) => f.object === 'session-kind:fixture-kind');
+    const exclusive = findings.filter((f) => f.check === 'session-kinds/turnspec-panel-exclusive');
+    assert.equal(exclusive.length, 1, `expected exactly ONE exclusivity finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(exclusive[0].level, 'error');
+    assert.ok(exclusive[0].message.includes('fixture-kind'), 'message must name the offending kind');
+    assert.ok(exclusive[0].message.includes('turnSpec'), 'message must name the "turnSpec" field');
+    assert.ok(exclusive[0].message.includes('panel'), 'message must name the "panel" field');
+
+    const secondary = findings.filter(
+      (f) => f.check !== 'session-kinds/turnspec-panel-exclusive' && (f.check.startsWith('session-kinds/turnspec-') || f.check.startsWith('session-kinds/panel-')),
+    );
+    assert.deepEqual(
+      secondary,
+      [],
+      `both wellFormedTurnSpec() and wellFormedPanel() are individually valid — a doubly-declared descriptor must produce ONLY the exclusivity finding, not also run either field's phase-table checks. Got secondary findings: ${JSON.stringify(secondary)}`,
+    );
+  });
+
+  it('W6-B3-7 (positive controls): turnSpec-only and panel-only descriptors never trip the exclusivity check', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [
+      turnSpecDescriptor(wellFormedTurnSpec()),
+      { ...panelDescriptor(wellFormedPanel()), id: 'panel-only-kind' },
+    ]);
+    const findings = validateSessionKinds(root);
+    assert.deepEqual(
+      findings.filter((f) => f.check === 'session-kinds/turnspec-panel-exclusive'),
+      [],
+      `a descriptor carrying only ONE of turnSpec/panel must never trip the exclusivity check, got: ${JSON.stringify(findings)}`,
+    );
+  });
+});
+
+describe('loadSessionKinds — panel is STRUCTURAL ONLY (mirrors AT-R422-6\'s split for turnSpec)', () => {
+  it('W6-B3-8: a semantically-invalid panel (bogus step) does NOT throw at load time and the parsed descriptor carries the panel data INTACT, unmodified', () => {
+    const root = makeForgeRoot();
+    const bogusPanel = { phases: [{ phase: 'x', step: 'not-a-real-step' }] };
+    writeSessionKindsYaml(root, [panelDescriptor(bogusPanel)]);
+    let descs: SessionKindDescriptor[] = [];
+    assert.doesNotThrow(() => { descs = loadSessionKinds(root); }, 'loadSessionKinds must not throw on a semantically-bogus panel — only a structurally malformed one');
+    assert.deepEqual((descs[0] as SessionKindDescriptor & { panel?: unknown }).panel, bogusPanel, 'the loader must carry the panel object through unmodified, including the offending step value');
+  });
+});
+
+describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/instructions/onboarding, architect gains none (W6-B3)', () => {
+  it('W6-B3-9: loadSessionKinds(REPO_ROOT) — demo, instructions, and onboarding each carry a `panel` with the exact phase table this initiative authored; project-brain, authoring, kb-cleanup, and architect carry NO panel at all', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+
+    const demo = byId(descs, 'demo');
+    assert.deepEqual(
+      demo.panel,
+      {
+        phases: [
+          { phase: 'generating', step: 'agent', writes: ['demo'], next: 'awaiting-review' },
+          { phase: 'awaiting-review', step: 'noop' },
+          { phase: 'locking', step: 'finalize', finalizer: 'recordLockedDemo', next: 'locked' },
+          { phase: 'locked', step: 'terminal' },
+          { phase: 'abandoned', step: 'terminal' },
+        ],
+      },
+      `demo's panel must deep-equal the generating->awaiting-review->locking->locked/abandoned table mirroring demo-builder-runner.ts:15-20, got: ${JSON.stringify(demo.panel)}`,
+    );
+
+    const instructions = byId(descs, 'instructions');
+    assert.deepEqual(
+      instructions.panel,
+      {
+        phases: [
+          { phase: 'interviewing', step: 'agent' },
+          { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+          { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
+          { phase: 'awaiting-verdict', step: 'noop' },
+          { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
+          { phase: 'committed', step: 'terminal' },
+          { phase: 'rejected', step: 'terminal' },
+        ],
+      },
+      `instructions' panel must deep-equal the interviewing->...->committed/rejected table mirroring instructions-runner.ts:17-24, got: ${JSON.stringify(instructions.panel)}`,
+    );
+
+    const onboarding = byId(descs, 'onboarding');
+    assert.deepEqual(
+      onboarding.panel,
+      { phases: [{ phase: 'running', step: 'agent' }, { phase: 'complete', step: 'terminal' }, { phase: 'failed', step: 'terminal' }] },
+      `onboarding's panel must deep-equal the thin running->complete/failed table mirroring writeSessionTerminalPhase (cli/agent-run.ts:198), got: ${JSON.stringify(onboarding.panel)}`,
+    );
+
+    for (const id of ['architect', 'project-brain', 'authoring', 'kb-cleanup']) {
+      const d = byId(descs, id);
+      assert.equal(
+        (d as SessionKindDescriptor & { panel?: unknown }).panel,
+        undefined,
+        `"${id}" must carry NO panel field — architect keeps its bespoke panel permanently (ADR-043 amendment §4); authoring/kb-cleanup already have turnSpec, which is mutually exclusive with panel; project-brain has neither yet`,
+      );
+    }
+  });
+
+  it('W6-B3-10: validateSessionKinds(REPO_ROOT) reports ZERO panel-* and ZERO turnspec-panel-exclusive findings (the real yaml round-trips clean end to end — reinforces AT-17\'s blanket zero-errors assertion with a check specific to this initiative\'s own new checks)', () => {
+    const findings = validateSessionKinds(REPO_ROOT);
+    const scoped = findings.filter((f) => f.check.startsWith('session-kinds/panel-') || f.check === 'session-kinds/turnspec-panel-exclusive');
+    assert.deepEqual(scoped, [], `expected zero panel-scoped findings in the real repo, got: ${JSON.stringify(scoped)}`);
+  });
+});
+
+// ===========================================================================
+// W6-B3 — deriveSessionAffordances: the derivation table, one test per
+// mapping (ADR-043 §1 "affordances are derived, not authored" + the
+// 2026-08-15 amendment's worked mapping — see the function's own doc comment
+// in session-kinds.ts for the full rule set this table exercises).
+// ===========================================================================
+
+describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
+  const PANEL_DESCRIPTOR: SessionKindDescriptor = {
+    ...baseDescriptor(),
+    panel: {
+      phases: [
+        { phase: 'interviewing', step: 'agent' },
+        { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+        { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
+        { phase: 'awaiting-verdict', step: 'noop' },
+        { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
+        { phase: 'committed', step: 'terminal' },
+      ],
+    },
+  } as SessionKindDescriptor;
+
+  const NO_TABLE_DESCRIPTOR: SessionKindDescriptor = { ...baseDescriptor() } as SessionKindDescriptor;
+
+  it('a descriptor with NEITHER turnSpec NOR panel (architect\'s real shape) → [] for any phase — the honest "no derivable affordances" answer', () => {
+    assert.deepEqual(deriveSessionAffordances(NO_TABLE_DESCRIPTOR, 'anything'), []);
+  });
+
+  it('an unknown/undeclared phase (not in the table at all) → [] — fail closed, never fabricate', () => {
+    assert.deepEqual(deriveSessionAffordances(PANEL_DESCRIPTOR, 'not-a-real-phase'), []);
+  });
+
+  it('a terminal phase → [] (ADR: "terminal ⇒ none"), even though this fixture\'s "committed" row could otherwise be reached via no other field', () => {
+    assert.deepEqual(deriveSessionAffordances(PANEL_DESCRIPTOR, 'committed'), []);
+  });
+
+  it('a `noop` phase named exactly "awaiting-answers" → [question-form] (the ONE interview Q&A checkpoint name this repo uses) — also carries next-turn from its `next` field', () => {
+    const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'awaiting-answers');
+    assert.deepEqual(result, [
+      { id: 'awaiting-answers-question-form', kind: 'question-form', phase: 'awaiting-answers' },
+      { id: 'awaiting-answers-next-turn', kind: 'next-turn', phase: 'awaiting-answers', meta: { next: 'interviewing' } },
+    ]);
+  });
+
+  it('any OTHER `noop` phase (e.g. "awaiting-verdict") → [verdict], never question-form', () => {
+    const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'awaiting-verdict');
+    assert.deepEqual(result, [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict' }]);
+  });
+
+  it('an `agent` step with `writes` AND `next` (e.g. "drafting") → [staged-review, next-turn], in that order', () => {
+    const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'drafting');
+    assert.deepEqual(result, [
+      { id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } },
+      { id: 'drafting-next-turn', kind: 'next-turn', phase: 'drafting', meta: { next: 'awaiting-verdict' } },
+    ]);
+  });
+
+  it('an `agent` step with NEITHER `writes` NOR `next` (e.g. "interviewing", a branching phase) → [] — nothing for the operator to do while the agent is actively working', () => {
+    assert.deepEqual(deriveSessionAffordances(PANEL_DESCRIPTOR, 'interviewing'), []);
+  });
+
+  it('a `finalize` step with `next` but no `writes` (e.g. "finalizing") → [next-turn] only', () => {
+    const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'finalizing');
+    assert.deepEqual(result, [{ id: 'finalizing-next-turn', kind: 'next-turn', phase: 'finalizing', meta: { next: 'committed' } }]);
+  });
+
+  it('positive control: a REAL turnSpec descriptor (authoring, the ADR-043 §1 worked example) derives correctly through turnSpec.phases, not just panel.phases — "analyzing" → [staged-review, next-turn]', () => {
+    const authoring: SessionKindDescriptor = {
+      ...baseDescriptor(),
+      turnSpec: {
+        kindDir: '_authoring',
+        style: 'agent',
+        phases: [
+          { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
+          { phase: 'awaiting-review', step: 'noop' },
+          { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
+          { phase: 'committed', step: 'terminal' },
+        ],
+      },
+    } as SessionKindDescriptor;
+
+    assert.deepEqual(deriveSessionAffordances(authoring, 'analyzing'), [
+      { id: 'analyzing-staged-review', kind: 'staged-review', phase: 'analyzing', meta: { writes: ['staging'] } },
+      { id: 'analyzing-next-turn', kind: 'next-turn', phase: 'analyzing', meta: { next: 'awaiting-review' } },
+    ]);
+    assert.deepEqual(deriveSessionAffordances(authoring, 'awaiting-review'), [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review' }]);
+    assert.deepEqual(deriveSessionAffordances(authoring, 'committed'), []);
+  });
+
+  it('the real repo — every panel-bearing kind EXCEPT onboarding derives at least one non-empty affordance set somewhere in its table, and every terminal phase in every REAL turnSpec/panel table derives []', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    // onboarding is deliberately excluded from the non-empty assertion: its
+    // real table is running(agent, no writes/next, branches to complete OR
+    // failed) -> complete(terminal) -> failed(terminal) — EVERY row derives
+    // [] (running has neither writes nor next; both others are terminal).
+    // This is the HONEST correct answer for a fire-and-forget dispatch with
+    // no operator-facing decision point (ADR-043 §Consequences: "onboarding
+    // is explicitly out of scope... a different path") — not a gap this
+    // table's design failed to fill. See the dedicated onboarding assertion
+    // below instead.
+    for (const id of ['demo', 'instructions', 'authoring', 'kb-cleanup']) {
+      const d = byId(descs, id);
+      const table = d.turnSpec?.phases ?? d.panel?.phases;
+      assert.ok(table, `expected "${id}" to carry a turnSpec or panel table`);
+      const nonEmpty = table!.some((p) => deriveSessionAffordances(d, p.phase).length > 0);
+      assert.ok(nonEmpty, `expected at least one phase in "${id}"'s real table to derive a non-empty affordance set`);
+      for (const p of table!.filter((p) => p.step === 'terminal')) {
+        assert.deepEqual(deriveSessionAffordances(d, p.phase), [], `terminal phase "${p.phase}" of "${id}" must derive []`);
+      }
+    }
+
+    const onboarding = byId(descs, 'onboarding');
+    for (const p of onboarding.panel!.phases) {
+      assert.deepEqual(deriveSessionAffordances(onboarding, p.phase), [], `onboarding phase "${p.phase}" must derive [] — the fire-and-forget table has no operator-facing decision point anywhere`);
+    }
+
+    const architect = byId(descs, 'architect');
+    assert.deepEqual(deriveSessionAffordances(architect, architect.defaultStage), [], 'architect has neither table — must derive [] regardless of phase');
   });
 });

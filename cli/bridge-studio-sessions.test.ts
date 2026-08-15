@@ -162,6 +162,11 @@ function writeSessionKindsYaml(root: string): void {
         defaultStage: 'roadmap',
         artifact: { kind: 'roadmap-draft', label: 'Roadmap draft' },
       },
+      // W6-B3 — carries `panel.phases` (the real studio/session-kinds.yaml
+      // row's own shape, orchestrator/instructions-runner.ts:17-24), the
+      // fixture this file's own AT-39 test below drives affordance
+      // assertions against (fixture phase 'drafting' -> [staged-review,
+      // next-turn], see deriveSessionAffordances's own doc comment for why).
       {
         id: 'instructions',
         agent: 'instructions-creator',
@@ -170,6 +175,17 @@ function writeSessionKindsYaml(root: string): void {
         stages: ['instructions'],
         defaultStage: 'instructions',
         artifact: { kind: 'markdown-draft', label: 'AGENTS.md draft' },
+        panel: {
+          phases: [
+            { phase: 'interviewing', step: 'agent' },
+            { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+            { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
+            { phase: 'awaiting-verdict', step: 'noop' },
+            { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
+            { phase: 'committed', step: 'terminal' },
+            { phase: 'rejected', step: 'terminal' },
+          ],
+        },
       },
       {
         id: 'project-brain',
@@ -589,6 +605,11 @@ type SessionShellTurn = { index: number; role: string; stage: string; text: stri
 type SessionShellBody = {
   ok: boolean; kind: string; sessionId: string; project: string; phase: string;
   stages: string[]; defaultStage: string; turns: SessionShellTurn[]; artifact: unknown;
+  // W6-B3 — always present (never omitted): affordances is [] when the
+  // descriptor carries neither turnSpec nor panel (architect); modelTier is
+  // always null until B5 lands its write side.
+  affordances: { id: string; kind: string; phase: string; meta?: { writes?: string[]; next?: string } }[];
+  modelTier: null;
 };
 
 test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the full shell payload', async () => {
@@ -614,6 +635,13 @@ test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the ful
   const artifact = body.artifact as { kind: string; rows: unknown[] };
   assert.equal(artifact.kind, 'roadmap-draft');
   assert.deepEqual(artifact.rows, [], 'the fixture\'s manifests/ dir is empty — the artifact must be an honest empty roadmap, not a fabricated row');
+
+  // W6-B3 — architect carries NEITHER turnSpec NOR panel (permanently
+  // bespoke, ADR-043 2026-08-15 amendment §4) — deriveSessionAffordances must
+  // yield the honest empty answer, not a fabricated guess. modelTier is the
+  // B5 placeholder, always null today.
+  assert.deepEqual(body.affordances, [], 'architect has no turnSpec/panel — affordances must be [], never fabricated');
+  assert.equal(body.modelTier, null);
 });
 
 test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the full shell payload', async () => {
@@ -639,6 +667,21 @@ test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the 
   assert.equal(artifact.kind, 'markdown-draft');
   assert.equal(artifact.body, '# AGENTS.md\n\nDraft body.\n', 'the draft body must be byte-faithful, including the trailing newline');
   assert.equal(artifact.hasDraft, true);
+
+  // W6-B3 — a PANEL kind (instructions has no turnSpec) at phase "drafting"
+  // ({ step: agent, writes: [draft], next: awaiting-verdict }) must derive
+  // BOTH a staged-review affordance (from `writes`) AND a next-turn
+  // affordance (from `next`) — proves the bridge threads panel.phases
+  // through deriveSessionAffordances, not just turnSpec.phases.
+  assert.deepEqual(
+    body.affordances,
+    [
+      { id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } },
+      { id: 'drafting-next-turn', kind: 'next-turn', phase: 'drafting', meta: { next: 'awaiting-verdict' } },
+    ],
+    `expected the panel-derived affordances for phase "drafting", got: ${JSON.stringify(body.affordances)}`,
+  );
+  assert.equal(body.modelTier, null);
 });
 
 test('AT-40: GET /api/studio/sessions/project-brain/<id>?project=<p> returns the full shell payload, honestly one turn', async () => {
@@ -1181,6 +1224,17 @@ test('R4-19-F2 WI-4c AT-KBID-1 (RED — the shipped-defect regression lock): GET
     body.kbId,
     KB_CLEANUP_RESOLVABLE_KB_ID,
     `the 200 payload must carry "kbId" equal to the session's own status.json "kb_id" (${JSON.stringify(KB_CLEANUP_RESOLVABLE_KB_ID)}) — got kbId: ${JSON.stringify(body.kbId)}. This is the field SessionCleanupPanel needs and today's route never puts on the wire at all.`,
+  );
+
+  // W6-B3 — a TURNSPEC kind (kb-cleanup) at phase "awaiting-approval"
+  // ({ step: noop }, no writes/next — that absence IS the approval gate)
+  // must derive exactly a "verdict" affordance — proves the bridge threads
+  // turnSpec.phases through deriveSessionAffordances, the counterpart to the
+  // AT-39 instructions (panel-kind) affordance assertion above.
+  assert.deepEqual(
+    (body as SessionShellBody).affordances,
+    [{ id: 'awaiting-approval-verdict', kind: 'verdict', phase: 'awaiting-approval' }],
+    `expected the turnSpec-derived affordances for phase "awaiting-approval", got: ${JSON.stringify((body as SessionShellBody).affordances)}`,
   );
 });
 

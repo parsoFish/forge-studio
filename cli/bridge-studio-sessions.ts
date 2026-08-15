@@ -5,7 +5,23 @@
  * Owns the ONE route:
  *
  *   GET /api/studio/sessions/:kind/:sessionId?project=<p>
- *     → { ok, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact }
+ *     → { ok, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
+ *         affordances, modelTier, [kbId] }
+ *
+ * W6-B3 (ADR-043 2026-08-15 amendment §1/§2) data-contract additions:
+ *   - `affordances` — `deriveSessionAffordances(descriptor, phase)`
+ *     (orchestrator/studio/session-kinds.ts), computed server-side from
+ *     whichever phase table the descriptor carries (`turnSpec` for a real
+ *     dispatchable kind, `panel` for a legacy kind's read-only twin) —
+ *     "derived, not authored" (ADR-043 §1): the client renders what it is
+ *     handed and never re-derives. A descriptor with neither table
+ *     (architect, permanently bespoke — amendment §4) always yields `[]`.
+ *   - `modelTier` — placeholder passthrough (ADR-043 2026-08-15 amendment
+ *     §3, kickoff model-tier selection). Always `null` today: B5 has not yet
+ *     landed the write side (`status.json.modelTier`), so this route has
+ *     nothing real to read. Wired as an additive field now, ahead of B5, so
+ *     the wire contract is stable before the write side exists — the key is
+ *     always present (never omitted), its value is just not yet meaningful.
  *
  * Mirrors bridge-studio-templates.ts's contract exactly: a single
  * `handleStudioSessionsRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
@@ -82,7 +98,7 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds, deriveSessionAffordances, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { deriveContractStages } from './contract-stages.ts';
@@ -462,6 +478,14 @@ export async function handleStudioSessionsRoutes(
         defaultStage: descriptor.defaultStage,
         turns: transcriptResult.turns,
         artifact,
+        // W6-B3 (ADR-043 2026-08-15 amendment §1/§2) — the derived affordance
+        // view for the CURRENT phase; see this file's header for the full
+        // contract note. Computed unconditionally (never omitted) — a kind
+        // with no turnSpec/panel (architect) yields `[]`, not a missing key.
+        affordances: deriveSessionAffordances(descriptor, phase),
+        // W6-B3 placeholder (ADR-043 2026-08-15 amendment §3) — see this
+        // file's header note; always `null` until B5 lands the write side.
+        modelTier: null,
         // R4-19-F2 WI-4c BLOCKER fix — `kbId`, sourced from the already-read
         // `statusParsed.kb_id`, threaded the same way `title` is threaded
         // above: present ONLY when the status genuinely carries a string
