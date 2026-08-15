@@ -235,7 +235,12 @@
     style: agent
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
-      - { phase: awaiting-review, step: noop, awaits: verdict }
+      # verdicts (W6-B6 post-merge review): approve-only — there is no
+      # rejection path for a drafted package (the operator either commits it
+      # or leaves the session sitting here); the write route
+      # (cli/bridge-studio-affordances.ts) 422s a reject against this SAME
+      # authored list, never a hardcoded per-kind table.
+      - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve] }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
 
@@ -304,6 +309,10 @@
     style: agent
     phases:
       - { phase: drafting, step: agent, writes: [plan], next: awaiting-approval }
-      - { phase: awaiting-approval, step: noop, awaits: verdict }
+      # verdicts (W6-B6 post-merge review): approve-only — same reasoning as
+      # `awaiting-approval` deliberately declaring no `next` above: there is
+      # no rejection semantics anywhere in this repo for a cleanup plan. The
+      # write route 422s a reject against this SAME authored list.
+      - { phase: awaiting-approval, step: noop, awaits: verdict, verdicts: [approve] }
       - { phase: applying, step: terminal }
       - { phase: applied, step: terminal }

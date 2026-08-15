@@ -262,6 +262,30 @@ export function awaitsKindState(id: string): string | undefined {
   return AWAITS_KINDS.find((s) => s.id === id)?.id;
 }
 
+export type VerdictValueRow = { readonly id: string };
+
+/** The closed set of verdict values a `verdict`-kind affordance may declare
+ *  in its authored `verdicts:` list (a `noop` row's `awaits: 'verdict'`
+ *  case) — reviewer finding (W6-B6 post-merge review): this is the SAME
+ *  business rule `cli/bridge-studio-affordances.ts` used to enforce as a
+ *  hand-kept, per-session-kind 422 table (kb-cleanup/authoring hardcoded to
+ *  approve-only) — a second copy of a server rule that could silently drift
+ *  from this one. Now there is exactly ONE source: this vocabulary plus the
+ *  authored `verdicts:` field on each phase row (default `['approve',
+ *  'reject']` when the row omits it — see `deriveSessionAffordances`); the
+ *  write route validates a posted verdict against the SAME derived
+ *  `meta.verdicts`, and the client renders its buttons from the SAME field.
+ *  Typed `readonly`, as AWAITS_KINDS. */
+export const VERDICT_VALUES: readonly VerdictValueRow[] = Object.freeze([
+  Object.freeze({ id: 'approve' }),
+  Object.freeze({ id: 'reject' }),
+]);
+export type VerdictValue = (typeof VERDICT_VALUES)[number]['id'];
+
+export function verdictValueState(id: string): string | undefined {
+  return VERDICT_VALUES.find((s) => s.id === id)?.id;
+}
+
 /** Renders a closed-vocabulary's allowed set for an error message — honest
  *  even when the set is empty (SCHEMA_IDS today), never silently omitted. */
 function allowedIdsSummary(rows: readonly { readonly id: string }[]): string {
@@ -306,6 +330,16 @@ export type TurnSpecPhase = {
    *  closes the "differently-named question phase silently derives as
    *  verdict" misclassification class (W6-B3 post-merge review). */
   readonly awaits?: string;
+  /** Reviewer finding (W6-B6 post-merge review) — the closed set of verdict
+   *  values a `verdict`-kind affordance (a `noop` row with `awaits:
+   *  'verdict'`) accepts, AUTHORED data like `writes:`/`awaits:` themselves,
+   *  never inferred from the session kind's id. Meaningful ONLY on such a
+   *  row — `validateSessionKinds` rejects it declared anywhere else.
+   *  Omitted (not defaulted) when absent at PARSE time — the semantic
+   *  default (`['approve', 'reject']`) is applied by
+   *  `deriveSessionAffordances`, never baked in here, mirroring `writes`'s
+   *  own omit-don't-default discipline. */
+  readonly verdicts?: readonly string[];
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
@@ -413,6 +447,7 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const next = optString(p, 'next');
   const finalizer = optString(p, 'finalizer');
   const awaits = optString(p, 'awaits');
+  const verdicts = p.verdicts !== undefined ? stringArray(p, 'verdicts', file) : undefined;
   return {
     phase,
     step,
@@ -420,6 +455,7 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
     ...(next !== undefined ? { next } : {}),
     ...(finalizer !== undefined ? { finalizer } : {}),
     ...(awaits !== undefined ? { awaits } : {}),
+    ...(verdicts !== undefined ? { verdicts } : {}),
   };
 }
 
@@ -592,6 +628,17 @@ const CHECK_TURNSPEC_UNKNOWN_AWAITS = 'session-kinds/turnspec-unknown-awaits';
 const CHECK_TURNSPEC_NOOP_MISSING_AWAITS = 'session-kinds/turnspec-noop-missing-awaits';
 const CHECK_PANEL_UNKNOWN_AWAITS = 'session-kinds/panel-unknown-awaits';
 const CHECK_PANEL_NOOP_MISSING_AWAITS = 'session-kinds/panel-noop-missing-awaits';
+// W6-B6 post-merge review — `verdicts` (a `noop`+`awaits:'verdict'` row's
+// OPTIONAL, AUTHORED "which verdict values are legal here" field,
+// VERDICT_VALUES) mirrors `awaits`'s own two-check shape: an UNKNOWN value
+// (a `verdicts` entry outside VERDICT_VALUES) vs a MISPLACED declaration (a
+// `verdicts` key present on a row that is NOT a `noop`+`awaits:'verdict'`
+// row, where the field is meaningless) are distinct failure modes, distinct
+// checks.
+const CHECK_TURNSPEC_UNKNOWN_VERDICT = 'session-kinds/turnspec-unknown-verdict';
+const CHECK_TURNSPEC_VERDICTS_MISPLACED = 'session-kinds/turnspec-verdicts-misplaced';
+const CHECK_PANEL_UNKNOWN_VERDICT = 'session-kinds/panel-unknown-verdict';
+const CHECK_PANEL_VERDICTS_MISPLACED = 'session-kinds/panel-verdicts-misplaced';
 // The turnSpec⊕panel mutual-exclusion check (ADR-043 2026-08-15 amendment
 // §2): a descriptor carrying BOTH is rejected with exactly one finding
 // naming the kind and both fields — see the exclusivity guard in the main
@@ -654,6 +701,8 @@ type PhaseTableCheckIds = {
   readonly emptyPhases: string;
   readonly unknownAwaits: string;
   readonly noopMissingAwaits: string;
+  readonly unknownVerdict: string;
+  readonly verdictsMisplaced: string;
 };
 
 const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -666,6 +715,8 @@ const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   emptyPhases: CHECK_TURNSPEC_EMPTY_PHASES,
   unknownAwaits: CHECK_TURNSPEC_UNKNOWN_AWAITS,
   noopMissingAwaits: CHECK_TURNSPEC_NOOP_MISSING_AWAITS,
+  unknownVerdict: CHECK_TURNSPEC_UNKNOWN_VERDICT,
+  verdictsMisplaced: CHECK_TURNSPEC_VERDICTS_MISPLACED,
 };
 
 const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -678,6 +729,8 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   emptyPhases: CHECK_PANEL_EMPTY_PHASES,
   unknownAwaits: CHECK_PANEL_UNKNOWN_AWAITS,
   noopMissingAwaits: CHECK_PANEL_NOOP_MISSING_AWAITS,
+  unknownVerdict: CHECK_PANEL_UNKNOWN_VERDICT,
+  verdictsMisplaced: CHECK_PANEL_VERDICTS_MISPLACED,
 };
 
 /**
@@ -785,6 +838,37 @@ function validatePhaseTable(
           `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" has step "noop" but is missing the required "awaits" field — must be one of ${allowedIdsSummary(AWAITS_KINDS)}`,
         ),
       );
+    }
+
+    // W6-B6 post-merge review — verdicts-misplaced: `verdicts` is meaningful
+    // ONLY on a `noop` row whose `awaits` is `'verdict'` (the row
+    // `deriveSessionAffordances` turns into a `verdict`-kind affordance) —
+    // declared anywhere else it can never be read, so it is rejected as
+    // dead, confusing authored data rather than silently ignored.
+    if (phase.verdicts !== undefined && !(phase.step === 'noop' && phase.awaits === 'verdict')) {
+      findings.push(
+        err(
+          obj,
+          checkIds.verdictsMisplaced,
+          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares "verdicts" but is not a "noop" step with awaits "verdict" — "verdicts" is only meaningful there`,
+        ),
+      );
+    }
+
+    // unknown-verdict: mirrors unknown-awaits's exact shape — each entry of
+    // a present `verdicts` list must be a real VERDICT_VALUES member.
+    if (phase.verdicts !== undefined) {
+      for (const v of phase.verdicts) {
+        if (verdictValueState(v) === undefined) {
+          findings.push(
+            err(
+              obj,
+              checkIds.unknownVerdict,
+              `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares verdict "${v}" — must be one of ${allowedIdsSummary(VERDICT_VALUES)}`,
+            ),
+          );
+        }
+      }
     }
 
     // dangling-next (AT-R422-13): mirrors CHECK_DEFAULT_STAGE_NOT_IN_STAGES's
@@ -1083,8 +1167,15 @@ export type SessionAffordance = {
   /** Present only when the source row carries the corresponding field
    *  (`writes` for `staged-review`, `next` for `next-turn`) — omitted, never
    *  defaulted, mirroring this file's own `writes`/`next`/`finalizer`
-   *  omit-don't-default discipline in `parseTurnSpecPhase`. */
-  readonly meta?: { readonly writes?: readonly string[]; readonly next?: string };
+   *  omit-don't-default discipline in `parseTurnSpecPhase`. `verdicts`
+   *  (W6-B6 post-merge review) is the ONE exception to "never defaulted": a
+   *  `verdict`-kind affordance ALWAYS carries it — `row.verdicts` when the
+   *  row declares one, else the ADR default `['approve', 'reject']` — so a
+   *  consumer (the write route, the panel) never has to re-implement that
+   *  default itself; this is the single, derived source of the business
+   *  rule "which verdict values are legal for THIS phase", never a second,
+   *  hand-kept copy. */
+  readonly meta?: { readonly writes?: readonly string[]; readonly next?: string; readonly verdicts?: readonly string[] };
 };
 
 /**
@@ -1118,7 +1209,12 @@ export type SessionAffordance = {
  *     `verdict` for ANY interview Q&A checkpoint not spelled with that exact
  *     literal string — a differently-named question phase (e.g.
  *     `awaiting-input`) now derives correctly via its own `awaits: questions`
- *     row, with no dependence on how the phase happens to be spelled.
+ *     row, with no dependence on how the phase happens to be spelled. A
+ *     `verdict` affordance ALWAYS carries `meta.verdicts` (W6-B6 post-merge
+ *     review) — `row.verdicts` verbatim when the row declares one (e.g.
+ *     kb-cleanup/authoring's `['approve']`, no rejection path), else the ADR
+ *     default `['approve', 'reject']` — the ONE place this default is
+ *     computed, so the write route and the panel never keep their own copy.
  *   - `row.writes` has entries (any step) → `staged-review`, carrying
  *     `meta.writes` verbatim
  *   - `row.next` is defined (any step)    → `next-turn`, carrying `meta.next`
@@ -1141,7 +1237,17 @@ export function deriveSessionAffordances(descriptor: SessionKindDescriptor, curr
 
   if (row.step === 'noop') {
     const kind: SessionAffordanceKind = row.awaits === 'questions' ? 'question-form' : 'verdict';
-    affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase });
+    if (kind === 'verdict') {
+      // W6-B6 post-merge review: the ADR's own default when a row declares
+      // no `verdicts:` — `deriveSessionAffordances` is the ONE place this
+      // default is applied; `cli/bridge-studio-affordances.ts`'s write route
+      // and `SessionInteractivePanel` both consume this SAME derived value,
+      // never a second, hand-kept copy of "which kinds are approve-only".
+      const verdicts = row.verdicts ?? ['approve', 'reject'];
+      affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase, meta: { verdicts } });
+    } else {
+      affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase });
+    }
   }
 
   if (row.writes !== undefined && row.writes.length > 0) {

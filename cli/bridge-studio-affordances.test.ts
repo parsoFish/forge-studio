@@ -436,7 +436,13 @@ test('TBL-kbcleanup-2: verdict reject at awaiting-approval -> 422 (no rejection 
     session_id: sessionId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [],
   });
   const res = await postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'reject' });
+  const body = (await res.json()) as { error: string };
   assert.equal(res.status, 422);
+  // W6-B6 post-merge review: the 422 must be driven by the SAME derived
+  // meta.verdicts studio/session-kinds.yaml's "awaiting-approval" row
+  // declares (verdicts: [approve]) — never a hand-kept per-kind table that
+  // could silently drift from it.
+  assert.match(body.error, /allowed: approve/, `expected the allowed set to name "approve" (derived from the yaml row), got: ${body.error}`);
   assert.equal(readPhase(sessionDir), 'awaiting-approval', 'a refused reject must never advance/mutate the phase');
 });
 
@@ -484,7 +490,11 @@ test('TBL-authoring-2: verdict reject at awaiting-review -> 422 (no rejection pa
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
 
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'reject' });
+  const body = (await res.json()) as { error: string };
   assert.equal(res.status, 422);
+  // W6-B6 post-merge review: same derived-data proof as kb-cleanup above —
+  // authoring's "awaiting-review" row also declares verdicts: [approve].
+  assert.match(body.error, /allowed: approve/, `expected the allowed set to name "approve" (derived from the yaml row), got: ${body.error}`);
   assert.equal(readPhase(sessionDir), 'awaiting-review');
 });
 

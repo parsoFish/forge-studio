@@ -188,6 +188,12 @@ const WELL_FORMED_PAYLOAD = {
   defaultStage: 'roadmap',
   turns: [WELL_FORMED_TURN],
   artifact: WELL_FORMED_ROADMAP_ARTIFACT,
+  // W6-B6 — REQUIRED on every wire payload (never omitted): architect
+  // carries neither turnSpec nor panel, so its honest affordances value is
+  // a genuine [], and this fixture's session predates the kickoff
+  // model-tier seam, so modelTier is honestly null.
+  affordances: [] as { id: string; kind: string; phase: string }[],
+  modelTier: null as string | null,
 };
 
 // ===========================================================================
@@ -453,6 +459,8 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     defaultStage: 'instructions',
     turns: [{ index: 0, role: 'operator', stage: 'instructions', text: 'Write AGENTS.md', source: 'prompt.md' }],
     artifact: WELL_FORMED_MARKDOWN_ARTIFACT,
+    affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
+    modelTier: 'sonnet',
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -467,6 +475,8 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     defaultStage: 'brain',
     turns: [{ index: 0, role: 'operator', stage: 'brain', text: 'Seed the brain', source: 'prompt.md' }],
     artifact: WELL_FORMED_BRAIN_ARTIFACT,
+    affordances: [],
+    modelTier: null,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
 });
