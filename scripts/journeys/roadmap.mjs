@@ -289,6 +289,18 @@ export const journey = defineJourney({
                   // old fake tab-switch. This fixture project has no demo
                   // session yet, so it lands on the generic kickoff screen,
                   // prefilled with the project and this initiative for context.
+                  // Fixture rule 3 (own ALL your state): this beat asserts the link lands on
+                  // the KICKOFF, which resolveDemoEntryHref only does when the fixture project
+                  // has NO in-flight demo session. A leftover `_demo/<sid>` from a prior run
+                  // (e.g. a crashed demo-builder journey — the wave-6 final gate hit exactly
+                  // this) makes the link honestly RESUME that session instead. Sweep stale
+                  // demo sessions off the fixture project before asserting.
+                  try { rmSync(join(projectRoot, '_demo'), { recursive: true, force: true }); } catch { /* best-effort */ }
+                  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+                  await page.waitForSelector('[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
+                  await page.locator('[data-tab="roadmap"]').click().catch(() => {});
+                  await page.locator(`[data-initiative-collapsed][data-initiative-id="${INIT}"], [data-initiative-id="${INIT}"]`).first().click().catch(() => {});
+                  await page.waitForSelector(drawerSel, { timeout: 10000 }).catch(() => {});
                   const demoLink = page.locator(`${drawerSel} [data-link="demo-builder"]`);
                   const demoLinkPresent = (await demoLink.count()) >= 1;
                   check(demoLinkPresent, 'roadmap: the drawer carries [data-link="demo-builder"] (R4-07-F3 demo tie-in)');
