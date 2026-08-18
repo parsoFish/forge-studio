@@ -1,0 +1,13 @@
+# W7-A0 — routes whose `[data-page]` root legitimately never reaches
+# data-page-ready="true" without a LIVE stream (a running agent turn, a live
+# daemon) — the walkthrough's never-ready assertion skips them. One route
+# PREFIX per line, `#` comments.
+#
+# The bar: the page's readiness is DEFINED by live data that a read-only crawl
+# of a quiet Studio can never supply. A page that merely forgot to set the
+# attribute is a defect (baseline.json, owned by a lane), never an entry here.
+# `/flows/<id>/run/<runId>` pages are NOT live-only — home-sessions-17 /
+# flows-* (A3) — they must set the attribute once the run is loaded.
+#
+# (empty on introduction — every never-ready page found by the wave-7 crawl
+# was a defect)
