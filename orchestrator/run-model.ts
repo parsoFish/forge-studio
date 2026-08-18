@@ -26,7 +26,7 @@
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parseManifest } from './manifest.ts';
+import { parseManifest, initiativeTitle } from './manifest.ts';
 import type { InitiativeManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import type { QueueState } from './queue.ts';
@@ -612,8 +612,8 @@ function buildRun(args: {
   // --- Failure ---
   const { failedAt, failNote } = findFailure(events, nodeMapping, agentSlugToNodeId);
 
-  // --- Initiative title from manifest body first heading ---
-  const initiative = extractTitle(manifest.body, manifest.initiative_id);
+  // --- Initiative title: manifest metadata (title: / initiative_id), W7-A4 ---
+  const initiative = initiativeTitle(manifest);
 
   const validatedOrigin: Run['origin'] = (origin !== undefined && VALID_ORIGINS.has(origin)) ? (origin as Run['origin']) : 'architect';
 
@@ -792,11 +792,6 @@ function deriveTrigger(
   return undefined;
 }
 
-function extractTitle(body: string, fallback: string): string {
-  const match = body.match(/^#+ (.+)/m);
-  return match ? match[1].trim() : fallback;
-}
-
 /**
  * mtime+size-keyed cache for parsed event logs. At roadmap scale (150+ cycle
  * dirs, 40k+ events) re-parsing every events.jsonl on every listRuns call
@@ -869,7 +864,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
     id: manifest.initiative_id,
     flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
     initiativeId: manifest.initiative_id,
-    initiative: extractTitle(manifest.body, manifest.initiative_id),
+    initiative: initiativeTitle(manifest),
     project: manifest.project,
     status: 'planned',
     origin,

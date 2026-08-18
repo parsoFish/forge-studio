@@ -48,15 +48,13 @@ export type InitiativeManifest = {
   /**
    * W6-RV-1 (mock finding I3), additive-optional field per ADR-042's
    * disclose-not-park rule: an explicit author-supplied title, read
-   * straight off frontmatter. When present, the roadmap card's
-   * title-derivation (cli/bridge-studio.ts `deriveInitiativeTitle`) prefers
-   * it over scraping the body's first heading — betterado manifests
-   * otherwise all open on the same boilerplate heading ("Goal" / "Summary" /
-   * "Context"), collapsing every roadmap card to the same word. Exposed here
-   * (rather than re-parsing frontmatter a second time downstream) so a
-   * polled endpoint like the roadmap builder never parses the same manifest
-   * buffer twice. Absent on manifests authored before this field existed, or
-   * when the architect never set one.
+   * straight off frontmatter. `initiativeTitle()` below is the ONE display
+   * derivation every surface uses (W7-A4): this field when present, else
+   * the initiative id — never a body heading. Exposed here (rather than
+   * re-parsing frontmatter a second time downstream) so a polled endpoint
+   * like the roadmap builder never parses the same manifest buffer twice.
+   * Absent on manifests authored before this field existed, or when the
+   * architect never set one.
    */
   title?: string;
   project: string;
@@ -221,6 +219,23 @@ export type InitiativeManifest = {
 };
 
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * W7-A4 — the ONE initiative-title derivation (findings agents-05, flows-08,
+ * flows-26, projects-10). Used by the run model (`run.initiative` — rails,
+ * HISTORY ledgers, run-detail heading, Home ledger) and the project roadmap
+ * (`RoadmapInitiative.title`), so one initiative has one name across Studio.
+ *
+ * Metadata only: the frontmatter `title:` when the author supplied one, else
+ * the `initiative_id`. Never a markdown heading from the body — a body's first
+ * heading is a SECTION label ("Summary", "Goal", "Background", "Acceptance
+ * criteria"), which is exactly how 52 betterado initiatives came to share
+ * three names and every run rail read "Summary".
+ */
+export function initiativeTitle(manifest: Pick<InitiativeManifest, 'initiative_id' | 'title'>): string {
+  const title = manifest.title?.trim();
+  return title ? title : manifest.initiative_id;
+}
 
 export function parseManifest(content: string): InitiativeManifest {
   const parsed = matter(content);

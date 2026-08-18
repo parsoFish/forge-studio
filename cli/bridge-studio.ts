@@ -62,7 +62,7 @@ import { projectKbBindings } from './kb-sites.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '../orchestrator/config.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
-import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
 import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
@@ -1134,29 +1134,6 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
  * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
  */
 /**
- * mock finding I3: betterado manifests all open their body with the SAME
- * boilerplate heading ("Goal" / "Summary" / "Context" / "Overview"), so a
- * bare first-`##`-heading scrape put an identical word on every roadmap
- * card. Skipped case-insensitively, trimmed.
- */
-const BOILERPLATE_HEADINGS: ReadonlySet<string> = new Set(['goal', 'summary', 'context', 'overview']);
-
-/**
- * Precedence: `manifest.title` (an explicit author-supplied frontmatter
- * `title:`, orchestrator/manifest.ts) → first NON-boilerplate `#`/`##`
- * heading in the body → the initiativeId (never a boilerplate heading, and
- * never blank).
- */
-function deriveInitiativeTitle(initId: string, manifestTitle: string | undefined, body: string): string {
-  if (manifestTitle) return manifestTitle;
-  for (const m of body.matchAll(/^##?\s+(.+)$/gm)) {
-    const heading = m[1].trim();
-    if (heading.length > 0 && !BOILERPLATE_HEADINGS.has(heading.toLowerCase())) return heading;
-  }
-  return initId;
-}
-
-/**
  * W6-RV-2: initiativeId → real cycle-completion instant, sourced from the
  * SAME memoized run derivation `GET /api/runs` already uses
  * (`cachedListRuns`, cli/run-list-cache.ts) — reusing it here means the
@@ -1181,7 +1158,9 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
   const completedAtById = completedAtByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
-    const title = deriveInitiativeTitle(initId, manifest.title, manifest.body);
+    // W7-A4 (projects-10 / flows-26): the ONE title derivation the run model
+    // also uses — manifest metadata (title: / initiative_id), never a heading.
+    const title = initiativeTitle(manifest);
 
     const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
     const workItems = items.length > 0 ? items : undefined;
