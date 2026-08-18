@@ -959,11 +959,23 @@ test('Finding 4: the ADR-024 derivation actually threads into the queryFn call �
     Array.isArray(options.allowedTools) && (options.allowedTools as unknown[]).length > 0,
     'allowedTools handed to queryFn must be present and non-empty',
   );
+  // W7-A2 (sessions-kinds-V01): this phase row declares `writes: [staging]`,
+  // so the write-root fence is ACTIVE for the turn — `runAgentTurn` then
+  // runs in `permissionMode: 'default'` and STRIPS the fence-gated tool
+  // names (Write/Edit/MultiEdit/NotebookEdit) from `allowedTools` so the SDK
+  // routes those calls through `canUseTool` instead of pre-approving them
+  // (both `acceptEdits` and an allowedTools entry bypass canUseTool — the
+  // hole the operator's community-refresh session escaped through). Every
+  // NON-gated grant still equals the derived spec's own grant exactly.
+  const FENCE_GATED = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
   assert.deepEqual(
     options.allowedTools,
-    expectedSpec.allowedTools,
-    'allowedTools handed to queryFn must equal the derived spec\'s own grant exactly — the "assert the call record, not just the outcome" discipline',
+    expectedSpec.allowedTools.filter((t) => !FENCE_GATED.has(t)),
+    'allowedTools handed to queryFn must equal the derived spec\'s own grant minus the fence-gated tools (a writes:-declaring row arms the fence) — the "assert the call record, not just the outcome" discipline',
   );
+  assert.ok(expectedSpec.allowedTools.some((t) => FENCE_GATED.has(t)), 'precondition: the fixture agent grants a gated tool, so the strip is observable');
+  assert.equal(options.permissionMode, 'default', 'a fenced turn must not run under acceptEdits');
+  assert.equal(typeof options.canUseTool, 'function', 'a fenced turn installs canUseTool');
 });
 
 // ---------------------------------------------------------------------------
