@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioKbs, fetchStudioProjects, type Kb, type Project } from '@/lib/studio-client';
-import { ProjectsIndexBody } from '@/components/studio/ProjectsIndex';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { ProjectsIndexBody, type ProjectsIndexFetchError } from '@/components/studio/ProjectsIndex';
 
 // ---------------------------------------------------------------------------
 // /projects — the real projects index (W6-IA-1).
@@ -25,6 +27,12 @@ export default function ProjectsIndexPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
   const [ready, setReady] = useState(false);
+  // W7-A1 (crosscut-01/-22): a failed fetch is an ERROR state, never "No
+  // projects yet"; `loadKey` re-runs the load on Retry + bridge recovery.
+  const [error, setError] = useState<ProjectsIndexFetchError | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -34,12 +42,17 @@ export default function ProjectsIndexPage() {
         if (signal.cancelled) return;
         setProjects(p);
         setKbs(k);
+        setError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        const { error: message, status } = fetchErrorPropsFrom(err);
+        setError(status !== undefined ? { message, status } : { message });
       } finally {
         if (!signal.cancelled) setReady(true);
       }
     })();
     return () => { signal.cancelled = true; };
-  }, []);
+  }, [loadKey]);
 
-  return <ProjectsIndexBody projects={projects} kbs={kbs} ready={ready} />;
+  return <ProjectsIndexBody projects={projects} kbs={kbs} ready={ready} error={error} onRetry={reload} />;
 }

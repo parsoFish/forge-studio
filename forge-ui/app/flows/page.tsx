@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import {
   fetchStudioFlows,
   fetchRuns,
@@ -43,6 +45,13 @@ export default function FlowsIndexPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [ready, setReady] = useState(false);
+  // W7-A1 (crosscut-01/-22): a failed read is an ERROR state, never "No flows
+  // registered at all". `loadKey` re-runs the load on Retry + bridge recovery
+  // (the WS subscription below stays mount-only — it is not re-opened).
+  const [error, setError] = useState<{ message: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
 
   async function loadAll(signal: { cancelled: boolean }): Promise<void> {
     try {
@@ -51,29 +60,47 @@ export default function FlowsIndexPage() {
       setFlows(f);
       setRuns(r);
       setProjects(p);
+      setError(null);
+    } catch (err) {
+      if (signal.cancelled) return;
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setError(status !== undefined ? { message, status } : { message });
     } finally {
       if (!signal.cancelled) setReady(true);
     }
   }
 
   async function refreshRuns(signal: { cancelled: boolean }): Promise<void> {
-    const r = await fetchRuns();
-    if (signal.cancelled) return;
-    setRuns(r);
+    try {
+      const r = await fetchRuns();
+      if (signal.cancelled) return;
+      setRuns(r);
+      setError(null);
+    } catch (err) {
+      if (signal.cancelled) return;
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setError(status !== undefined ? { message, status } : { message });
+    }
   }
 
   useEffect(() => {
-    // intentional mount-only — loadAll/refreshRuns are stable fetch helpers
+    const signal = { cancelled: false };
+    void loadAll(signal);
+    return () => { signal.cancelled = true; };
+    // intentional: re-runs ONLY on loadKey (Retry / bridge recovery) — loadAll is a stable fetch helper
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadKey]);
+
+  useEffect(() => {
+    // intentional mount-only — refreshRuns is a stable fetch helper
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const signal = { cancelled: false };
 
-    void loadAll(signal);
-
     // Subscribe to bridge WS to re-fetch runs on cycle-list-changed (a run
     // starting/gating/completing anywhere) — same event/handler shape as
-    // app/library/page.tsx's own subscription.
+    // app/library/page.tsx's own subscription. Connection STATE is owned by
+    // the app-wide bridge status store (W7-A1) — not re-derived here.
     const sub = subscribe({
-      onState: () => { /* page does not show connection state */ },
       onMessage: (msg) => {
         if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
@@ -93,6 +120,7 @@ export default function FlowsIndexPage() {
       data-page="flows-index"
       data-page-ready={ready ? 'true' : 'false'}
       data-flow-count={flows.length}
+      data-fetch-status={error ? 'error' : ready ? 'ok' : 'loading'}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >
       <StudioNav />
@@ -119,7 +147,9 @@ export default function FlowsIndexPage() {
           </Link>
         </div>
 
-        {ready ? (
+        {error ? (
+          <FetchErrorState what="flows and runs" error={error.message} status={error.status} onRetry={reload} />
+        ) : ready ? (
           <FlowsIndexBody flows={flows} runs={runs} projects={projects} />
         ) : (
           <div style={{ color: 'var(--faint)', fontSize: 13, padding: '24px 0' }}>Loading flows…</div>

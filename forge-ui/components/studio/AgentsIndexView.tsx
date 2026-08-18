@@ -39,6 +39,7 @@
 import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import type { Agent } from '@/lib/studio-client';
 import type { LedgerRow } from '@/lib/history-ledger';
 
@@ -52,14 +53,19 @@ export type AgentsIndexViewProps = {
   /** Threaded through to `HistoryLedger`'s own required `nowMs` prop (D7)
    *  — never `Date.now()` read inside this component. */
   nowMs: number;
+  /** W7-A1 (crosscut-01): the roster fetch's failure — renders the shared
+   *  failure state INSTEAD of "No agents yet — create your first one." */
+  error?: { message: string; status?: number } | null;
+  onRetry?: () => void;
 };
 
-export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, nowMs }: AgentsIndexViewProps) {
+export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry }: AgentsIndexViewProps) {
   return (
     <main
       data-page="agents-index"
       data-page-ready={ready ? 'true' : 'false'}
       data-agent-count={agents.length}
+      data-fetch-status={error ? 'error' : ready ? 'ok' : 'loading'}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >
       <div className="page-wrap" style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 28px 64px' }}>
@@ -107,7 +113,9 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
             </Link>
           </div>
 
-          {!ready ? (
+          {error ? (
+            <FetchErrorState what="the agent roster" error={error.message} status={error.status} onRetry={onRetry} />
+          ) : !ready ? (
             <div data-component="agent-roster-loading" className="muted" style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}>
               Loading agents…
             </div>
