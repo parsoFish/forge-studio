@@ -166,6 +166,10 @@ export function mintTriggeredInitiative(
 
     const manifest: InitiativeManifest = {
       initiative_id: initiativeId,
+      // W7-FIX-A4 (W7A4-01): a human title for the ONE display derivation
+      // (`initiativeTitle`, manifest.ts) — the flow's name + how it fired —
+      // so a triggered run never renders as its raw INIT id in a ledger.
+      title: `${flow.name || flowId} (${req.origin} trigger)`,
       project: flow.project,
       project_repo_path: projectRepoPath,
       created_at: now.toISOString(),

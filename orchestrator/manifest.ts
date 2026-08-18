@@ -49,12 +49,15 @@ export type InitiativeManifest = {
    * W6-RV-1 (mock finding I3), additive-optional field per ADR-042's
    * disclose-not-park rule: an explicit author-supplied title, read
    * straight off frontmatter. `initiativeTitle()` below is the ONE display
-   * derivation every surface uses (W7-A4): this field when present, else
-   * the initiative id — never a body heading. Exposed here (rather than
-   * re-parsing frontmatter a second time downstream) so a polled endpoint
-   * like the roadmap builder never parses the same manifest buffer twice.
-   * Absent on manifests authored before this field existed, or when the
-   * architect never set one.
+   * derivation every surface uses (W7-A4 / W7-FIX-A4): this field when
+   * present, else the body's first level-1 `# ` heading, else the
+   * initiative id — never a `##` section heading. Every manifest PRODUCER
+   * writes it (`buildManifest` from `DraftInitiative.title`,
+   * `mintTriggeredInitiative` from the trigger + flow), so it is absent only
+   * on hand-authored manifests or ones written before W7-FIX-A4. Exposed
+   * here (rather than re-parsing frontmatter a second time downstream) so a
+   * polled endpoint like the roadmap builder never parses the same manifest
+   * buffer twice.
    */
   title?: string;
   project: string;
@@ -222,19 +225,44 @@ const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * W7-A4 — the ONE initiative-title derivation (findings agents-05, flows-08,
- * flows-26, projects-10). Used by the run model (`run.initiative` — rails,
- * HISTORY ledgers, run-detail heading, Home ledger) and the project roadmap
- * (`RoadmapInitiative.title`), so one initiative has one name across Studio.
+ * flows-26, projects-10); W7-FIX-A4 (W7A4-01) documented fallback. Used by
+ * the run model (`run.initiative` — rails, HISTORY ledgers, run-detail
+ * heading, Home ledger) and the project roadmap (`RoadmapInitiative.title`),
+ * so one initiative has one name across Studio.
  *
- * Metadata only: the frontmatter `title:` when the author supplied one, else
- * the `initiative_id`. Never a markdown heading from the body — a body's first
- * heading is a SECTION label ("Summary", "Goal", "Background", "Acceptance
- * criteria"), which is exactly how 52 betterado initiatives came to share
- * three names and every run rail read "Summary".
+ * Order:
+ *   1. the frontmatter `title:` — every producer writes it (`buildManifest`
+ *      from `DraftInitiative.title`, `mintTriggeredInitiative`), so for a
+ *      real initiative this is the answer;
+ *   2. ONLY when no frontmatter title exists (hand-authored / pre-W7-FIX-A4
+ *      manifests): the body's first level-1 `# ` heading — a single-hash
+ *      heading is the document's own name, and fenced code is skipped so a
+ *      `# comment` inside a ```bash block never becomes a title;
+ *   3. else the `initiative_id`.
+ * NEVER a `##`+ section heading — a body's first section heading is a
+ * SECTION label ("Summary", "Goal", "Background", "Acceptance criteria"),
+ * which is exactly how 52 betterado initiatives came to share three names and
+ * every run rail read "Summary".
  */
-export function initiativeTitle(manifest: Pick<InitiativeManifest, 'initiative_id' | 'title'>): string {
+export function initiativeTitle(manifest: Pick<InitiativeManifest, 'initiative_id' | 'title'> & { body?: string }): string {
   const title = manifest.title?.trim();
-  return title ? title : manifest.initiative_id;
+  if (title) return title;
+  const h1 = firstLevelOneHeading(manifest.body);
+  return h1 ?? manifest.initiative_id;
+}
+
+/** First `# <text>` heading outside fenced code blocks, trimmed; null when none. */
+function firstLevelOneHeading(body: string | undefined): string | null {
+  if (!body) return null;
+  let inFence = false;
+  for (const raw of body.split('\n')) {
+    const line = raw.trimEnd();
+    if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    const m = /^# (.+?)\s*#*\s*$/.exec(line);
+    if (m && m[1].trim().length > 0) return m[1].trim();
+  }
+  return null;
 }
 
 export function parseManifest(content: string): InitiativeManifest {
