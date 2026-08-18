@@ -504,6 +504,22 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-section="plan-gate"]', { timeout: 15000 });
               await caption(page, 'The plan is Given/When/Then — the PM uses it verbatim.');
               check(await page.locator('[data-plan-iframe]').count() > 0, 'plan gate renders the rich PLAN.html iframe');
+              // W7-A3 (artifact-plan-01/09, sessions-kinds-14): ONE control set. The
+              // in-body PlanGate is the only Approve; the generic run GateBar (which
+              // could never address an architect session — 400 "invalid run id")
+              // must not mount, so the ONLY [data-gate-state] on the page is the
+              // artifact root's own mirror.
+              const gateShape = await page.evaluate(() => ({
+                approves: document.querySelectorAll('[data-action="approve-plan"]').length,
+                gateStates: document.querySelectorAll('[data-gate-state]').length,
+                armed: document.querySelector('[data-section="architect-plan"]')?.getAttribute('data-gate-armed'),
+                phase: document.querySelector('[data-section="architect-plan"]')?.getAttribute('data-architect-phase'),
+                runKind: document.querySelector('[data-page="artifact"]')?.getAttribute('data-run-kind'),
+              }));
+              check(gateShape.approves === 1, `W7-A3: exactly ONE Approve on the architect plan gate (got ${gateShape.approves})`);
+              check(gateShape.gateStates === 1, `W7-A3: no generic GateBar for an architect plan — only the page root carries data-gate-state (got ${gateShape.gateStates})`);
+              check(gateShape.armed === 'true' && gateShape.phase === 'awaiting-verdict', `W7-A3: the gate is armed by the session phase (got armed=${gateShape.armed} phase=${gateShape.phase})`);
+              check(gateShape.runKind === 'architect-session', `W7-A3: the artifact page resolved this as an architect session, not a cycle (got "${gateShape.runKind}")`);
               await page.locator('[data-plan-iframe]').scrollIntoViewIfNeeded().catch(() => {});
               await sleep(READ);
               await frame(page, 'r2-0-plan-html', 'R2 — rich PLAN.html with Given/When/Then AC cards', { key: true });
@@ -607,6 +623,23 @@ export const journey = defineJourney({
               // + in-flight run propagate through the UI's ~3s poll; first-navigation
               // next-dev compile jitter can push this past 15s (observed flake).
               await page.waitForSelector('[data-action="watch-it-build"]', { timeout: 30000 });
+              // W7-A3 (sessions-kinds-08/12, artifact-plan-22/23): the payoff names the
+              // initiative the plan produced (derived from the session's manifests
+              // dir) and links its run; the "building it now" claim is gated on the
+              // scheduler actually running (it is NOT, under the journey harness) —
+              // so the tone must be an honest non-"building" one.
+              await page.waitForSelector(`[data-section="architect-committed"] [data-initiative-link][data-initiative-id="${INIT}"]`, { timeout: 15000 }).catch(() => {});
+              const committed = await page.evaluate((init) => {
+                const sec = document.querySelector('[data-section="architect-committed"]');
+                return sec ? {
+                  tone: sec.getAttribute('data-commit-tone'),
+                  hasInit: sec.querySelector(`[data-initiative-link][data-initiative-id="${init}"]`) !== null,
+                  claimsBuilding: /the autonomous loop is building/i.test(sec.textContent ?? ''),
+                } : null;
+              }, INIT);
+              check(committed !== null, 'W7-A3: the approved plan renders the committed panel ([data-section="architect-committed"])');
+              check(committed?.hasInit === true, `W7-A3: the committed panel names the initiative the plan produced (${INIT})`);
+              check(committed?.claimsBuilding === false, `W7-A3: no "the autonomous loop is building" claim while the scheduler is stopped (tone=${committed?.tone})`);
               await sleep(ACT);
               await page.locator('[data-action="watch-it-build"]').click();
               await page.waitForFunction(
@@ -1779,6 +1812,19 @@ export const journey = defineJourney({
               try {
                 await page.waitForSelector('main[data-page="flow-run"][data-run-found="true"]', { timeout: 20000 });
                 check(true, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run');
+                // W7-A3 (crosscut-05/23, flows-06): the resolved run page honours the
+                // readiness contract and is no longer a dead end.
+                const runPage = await page.evaluate(() => {
+                  const main = document.querySelector('main[data-page="flow-run"]');
+                  return main ? {
+                    ready: main.getAttribute('data-page-ready'),
+                    back: main.querySelector('[data-section="run-breadcrumb"] a[data-action="back-to-monitor"]')?.getAttribute('href') ?? null,
+                    artifacts: main.querySelector('a[data-action="open-artifacts"]') !== null,
+                  } : null;
+                });
+                check(runPage?.ready === 'true', `W7-A3: main[data-page="flow-run"][data-page-ready="true"] once resolved (got "${runPage?.ready}")`);
+                check(runPage?.back === '/flows/forge-develop', `W7-A3: run page breadcrumb links back to its OWN flow monitor (got ${runPage?.back})`);
+                check(runPage?.artifacts === true, 'W7-A3: run page links into the run\'s artifacts');
               } catch {
                 check(false, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run — route/page not implemented yet');
                 return; // nothing further is measurable without the page
