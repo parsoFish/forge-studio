@@ -4,9 +4,13 @@
  * Unified artifact viewer — /artifact?run=<id>&type=<kind>&mode=<gate|view>
  *
  * URL params:
- *   run  — runId (required)
+ *   run  — runId (required). `_architect-<sid>` = an architect SESSION's plan
+ *          (W7-A3): resolved through /api/architect/sessions, never through
+ *          /api/runs or /api/artifact (which 404 for it); the gate is armed by
+ *          the session phase alone and the ONLY control set is the PlanGate.
  *   type — plan | workitems | pr | demo | verdict | reflection
- *   mode — gate | view (auto-inferred if absent)
+ *   mode — gate | view (auto-inferred if absent; an explicit `gate` is honoured
+ *          ONLY when the run is actually gated for that artifact — lib/artifact-mode.ts)
  *
  * Gate-bar wiring:
  *   plan    → PlanRenderer + GateBar (gateId='plan', approve disabled until decisions resolved)
@@ -53,6 +57,9 @@ import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGat
 import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
+import { resolveArtifactMode } from '@/lib/artifact-mode';
+import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
+import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
 // ---------------------------------------------------------------------------
 // Types for artifact docs fetched from the bridge
@@ -92,29 +99,6 @@ const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
 
 function isValidType(t: string): t is ArtifactKey {
   return ['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'].includes(t);
-}
-
-// Resolve the effective gate/view mode from the explicit ?mode= param and the
-// run's artifactsReady state. Pure (no React state) so it can be called both in
-// render and inside the load callback without capturing derived render values.
-function resolveMode(
-  modeParam: string | null,
-  type: ArtifactKey,
-  run: Run | null,
-): 'gate' | 'view' {
-  if (modeParam === 'gate' || modeParam === 'view') return modeParam;
-  if (!run) return 'view';
-  // verdict is never written to artifactsReady in gate mode by deriveArtifacts
-  // (it writes 'view' only once the verdict file exists). Resolve gate from the
-  // run status directly: a gated or active run with no verdict yet is the gate.
-  if (type === 'verdict') {
-    const verdictReady = run.artifactsReady['verdict' as keyof typeof run.artifactsReady];
-    if (!verdictReady && (run.status === 'gated' || run.status === 'active')) return 'gate';
-    return 'view';
-  }
-  const readyKey = type === 'workitems' ? 'work-items' : type;
-  const ready = run.artifactsReady[readyKey as keyof typeof run.artifactsReady];
-  return ready === 'gate' ? 'gate' : 'view';
 }
 
 // ---------------------------------------------------------------------------
@@ -426,8 +410,14 @@ function ArtifactPageInner() {
   const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
   // R4-08-F3: adversarial-review findings for the verdict surface (both modes).
   const [reviewFindings, setReviewFindings] = useState<ReviewFindingsDoc | null>(null);
-  // For plan gate-mode via an architect session (runId = '_architect-<sessionId>')
+  // For plan via an architect session (runId = '_architect-<sessionId>'):
+  // resolved through the sessions list (never /api/runs). `archSessionResolved`
+  // flips once the first fetch settled so a missing session renders not-found
+  // rather than a loading state — and never an armed gate.
+  const isArchitect = isArchitectRunId(runId);
+  const architectSessionId = architectSessionIdFromRunId(runId);
   const [archSession, setArchSession] = useState<ArchitectSessionSummary | null>(null);
+  const [archSessionResolved, setArchSessionResolved] = useState(false);
   // For reflection: the live Stage-2 questions (user-questions.json) the operator answers.
   const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
   const [ready,      setReady]      = useState(false);
@@ -437,13 +427,22 @@ function ArtifactPageInner() {
 
   const meta = TYPE_META[type];
 
-  // Derive mode: auto-infer when not specified (pure helper, shared with load)
-  const mode = resolveMode(modeParam, type, run);
+  // Derive mode (lib/artifact-mode.ts): `?mode=gate` is honoured only when the
+  // run is actually gated for this artifact; an architect plan is armed by the
+  // session phase alone.
+  const mode = resolveArtifactMode(modeParam, type, run, { architect: isArchitect, architectArmed: architectGateArmed(archSession) });
 
   const isGateMode = mode === 'gate';
 
-  // Gate bar: plan + demo; verdict uses ReviewVerdictForm
-  const showGateBar = isGateMode && (type === 'plan' || type === 'demo');
+  // Gate bar: plan + demo on a real run; verdict uses ReviewVerdictForm. NEVER
+  // for an architect plan — the PlanGate inside ArchitectPlanGate is the one
+  // control set (W7-A3, artifact-plan-01/09, sessions-kinds-14).
+  const showGateBar = isGateMode && !isArchitect && (type === 'plan' || type === 'demo');
+
+  // W7-A3 linkage + scheduler for the architect post-approve payoff: reads the
+  // runs list + scheduler status on a slow visible-only poll (no page-level
+  // fetch when this is not an architect plan).
+  const loop = useLoopClosureState(archSession?.initiativeIds, isArchitect && type === 'plan');
   const gateId = type === 'plan' ? 'plan' : 'verdict';
 
   // Gate bar hint text
@@ -456,6 +455,18 @@ function ArtifactPageInner() {
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     if (!runId) { setReady(true); return; }
     try {
+      // W7-A3 (artifact-plan-04/21/28): an architect session id is NOT a cycle
+      // — /api/runs and /api/artifact 404 for it (four console errors per
+      // visit, and a "not produced" body over a plan that exists). Resolve it
+      // through the sessions list and stop here.
+      if (isArchitect) {
+        const sessions = await fetchArchitectSessions().catch(() => [] as ArchitectSessionSummary[]);
+        if (signal.cancelled) return;
+        setArchSession(sessions.find((s) => s.sessionId === architectSessionId) ?? null);
+        setArchSessionResolved(true);
+        return;
+      }
+
       const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
       setRun(fetchedRun);
@@ -464,7 +475,7 @@ function ArtifactPageInner() {
       // Resolve the effective mode from the explicit param + the freshly
       // fetched run (NOT the derived `mode` render value, which is stale on the
       // initial cold-navigate render where `run` is still null).
-      const effectiveMode = resolveMode(modeParam, type, fetchedRun);
+      const effectiveMode = resolveArtifactMode(modeParam, type, fetchedRun, { architect: false, architectArmed: false });
 
       const artifactDoc = await fetchArtifactDoc(runId, type, fetchedRun);
       if (signal.cancelled) return;
@@ -475,16 +486,6 @@ function ArtifactPageInner() {
       if (type === 'verdict' && effectiveMode === 'gate') {
         const dm = await fetchDemoModel(runId);
         if (!signal.cancelled) setDemoModel(dm);
-      }
-
-      // For plan via an architect session: runId is '_architect-<sessionId>'.
-      // Fetch the session so we can render the PlanGate iframe as a fallback
-      // when no structured plan.json exists.
-      if (type === 'plan' && runId.startsWith('_architect-')) {
-        const sessionId = runId.slice('_architect-'.length);
-        const sessions = await fetchArchitectSessions().catch(() => [] as ArchitectSessionSummary[]);
-        const match = sessions.find((s) => s.sessionId === sessionId) ?? null;
-        if (!signal.cancelled) setArchSession(match);
       }
 
       // For reflection: fetch the live Stage-2 questions (user-questions.json)
@@ -513,12 +514,13 @@ function ArtifactPageInner() {
     } finally {
       if (!signal.cancelled) setReady(true);
     }
-  }, [runId, type, modeParam]);
+  }, [runId, type, modeParam, isArchitect, architectSessionId]);
 
   useEffect(() => {
     const signal = { cancelled: false };
     setReady(false);
     setArtifact(null);
+    setArchSessionResolved(false);
     void load(signal);
     return () => { signal.cancelled = true; };
   }, [load]);
@@ -527,7 +529,7 @@ function ArtifactPageInner() {
   // transitions live (send-back → drafting unmounts the gate; the revised plan
   // → awaiting-verdict remounts it). Drives the harness's beat-8 detach→reattach
   // lifecycle without a page reload, and resets the gate's submitted state.
-  useArchitectSessionPoll(runId, type === 'plan', setArchSession);
+  useArchitectSessionPoll(runId, isArchitect, (s) => { setArchSession(s); setArchSessionResolved(true); });
 
   // For plan gate-mode, decisions start as unresolved only if doc has
   // unresolved decisions. demo gate-mode is always resolved.
@@ -550,7 +552,10 @@ function ArtifactPageInner() {
   // cycle regardless of flow.
   const flowId = run?.flowId;
   const flowIsLive = !!flowId && (liveFlowIds === null || liveFlowIds.has(flowId));
-  const monitorHref = flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/';
+  // W7-A3 (artifact-plan-28): an architect plan's "back" is its owning session,
+  // not the home cascade.
+  const sessionBackHref = archSession ? architectSessionHref(archSession) : '/sessions';
+  const monitorHref = isArchitect ? sessionBackHref : flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/';
 
   // Status pill
   const statusPill = run?.status ?? null;
@@ -580,6 +585,7 @@ function ArtifactPageInner() {
       data-artifact-type={type}
       data-mode={mode}
       data-gate-state={gateState}
+      data-run-kind={isArchitect ? 'architect-session' : 'cycle'}
       style={{ minHeight: '100vh', background: 'var(--bg)', paddingBottom: showGateBar ? 120 : 40 }}
     >
       <StudioNav />
@@ -597,19 +603,38 @@ function ArtifactPageInner() {
         }}>
           <Link href="/" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Forge Studio</Link>
           <span style={{ color: 'var(--line-2)' }}>/</span>
-          {flowId ? (
-            <Link href={monitorHref} style={{ color: 'var(--dim)', textDecoration: 'none' }}>
-              {run?.flowId ?? 'flow'}
-            </Link>
+          {isArchitect ? (
+            <>
+              {archSession ? (
+                <Link href={`/projects/${encodeURIComponent(archSession.project)}`} data-crumb="project" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+                  {archSession.project}
+                </Link>
+              ) : (
+                <span style={{ color: 'var(--dim)' }}>project</span>
+              )}
+              <span style={{ color: 'var(--line-2)' }}>/</span>
+              <Link href={sessionBackHref} data-crumb="session" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+                planning session {architectSessionId}
+              </Link>
+            </>
           ) : (
-            <span style={{ color: 'var(--dim)' }}>flow</span>
+            <>
+              {flowId ? (
+                <Link href={monitorHref} style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+                  {run?.flowId ?? 'flow'}
+                </Link>
+              ) : (
+                <span style={{ color: 'var(--dim)' }}>flow</span>
+              )}
+              <span style={{ color: 'var(--line-2)' }}>/</span>
+              <span>{runId || '—'}</span>
+            </>
           )}
-          <span style={{ color: 'var(--line-2)' }}>/</span>
-          <span>{runId || '—'}</span>
           <span style={{ color: 'var(--line-2)' }}>/</span>
           <span style={{ color: 'var(--c-artifact)' }}>{type.toUpperCase()}</span>
           <Link
             href={monitorHref}
+            data-action={isArchitect ? 'back-to-session' : 'back-to-monitor'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -624,7 +649,7 @@ function ArtifactPageInner() {
               border: '1px solid var(--line)',
             }}
           >
-            ← back to monitor
+            {isArchitect ? '← back to session' : '← back to monitor'}
           </Link>
         </div>
 
@@ -686,12 +711,15 @@ function ArtifactPageInner() {
             )}
           </div>
 
-          {/* Artifact trail */}
-          <ArtifactTrail
-            runId={runId}
-            currentType={type}
-            artifactsReady={artifactsReadyForTrail}
-          />
+          {/* Artifact trail — a cycle's artifact set; an architect session has
+              only its PLAN (the trail would link six 404s). */}
+          {!isArchitect && (
+            <ArtifactTrail
+              runId={runId}
+              currentType={type}
+              artifactsReady={artifactsReadyForTrail}
+            />
+          )}
         </div>
 
         {/* Content */}
@@ -796,7 +824,7 @@ function ArtifactPageInner() {
                   state so the gate bar (rendered unconditionally below) remains
                   reachable. In view mode, show the full empty state.
                   Exception: plan type with an archSession falls through to PlanGate. */}
-              {type !== 'verdict' && type !== 'reflection' && (!artifact || artifact.type === 'empty') && !(type === 'plan' && archSession) && (
+              {!isArchitect && type !== 'verdict' && type !== 'reflection' && (!artifact || artifact.type === 'empty') && (
                 isGateMode ? (
                   <div style={{
                     border: '1px solid var(--line)',
@@ -846,14 +874,25 @@ function ArtifactPageInner() {
                 />
               )}
 
-              {/* Plan gate fallback: render the native architect PLAN gate when
-                  running via an architect session (runId='_architect-<id>') and no
-                  structured plan.json. Preserves data-section="plan-gate" +
-                  data-decisions-resolved + the beat-9 watch-it-build payoff. */}
-              {type === 'plan' && (!artifact || artifact.type === 'empty') && archSession && (
+              {/* The architect PLAN surface (runId='_architect-<sid>', W7-A3):
+                  session-resolved, per-phase honest, one control set (PlanGate
+                  at awaiting-verdict), payoff with initiative → run linkage +
+                  scheduler state; not-found when the session does not exist.
+                  Preserves data-section="plan-gate" + data-decisions-resolved
+                  + the beat-9 watch-it-build payoff. */}
+              {isArchitect && (
                 <ArchitectPlanGate
                   session={archSession}
+                  sessionId={architectSessionId}
+                  sessionResolved={archSessionResolved}
                   onGateState={(s) => setGateState(s)}
+                  linkage={loop.linkage}
+                  linkageReady={loop.linkageReady}
+                  scheduler={loop.status}
+                  schedulerReady={loop.ready}
+                  schedulerBusy={loop.busy}
+                  schedulerError={loop.error}
+                  onSchedulerAction={(a) => void loop.act(a)}
                 />
               )}
 

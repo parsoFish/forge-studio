@@ -258,8 +258,15 @@ export function GateBar({
               Cancel
             </button>
           </div>
-          {error && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>{error}</div>}
         </div>
+      )}
+
+      {/* W7-A3 (artifact-plan-02): the error used to live INSIDE the send-back
+          drawer, so an Approve failure (4xx/5xx) never rendered anywhere — the
+          bar just sat there. Hoisted to the bar root so both verdict paths
+          surface the bridge's error verbatim. */}
+      {error && (
+        <div data-gate-error role="alert" style={{ width: '100%', fontSize: 12, color: 'var(--red)' }}>{error}</div>
       )}
     </div>
   );

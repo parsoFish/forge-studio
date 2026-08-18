@@ -7,7 +7,10 @@ import { rerunArchitectSession, type ArchitectSessionSummary, type EventLogEntry
 import { StageHex } from '@/components/StageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { ActivityLog } from '@/components/studio/ActivityLog';
+import { ArchitectCommittedView } from '@/components/studio/session/ArchitectCommittedView';
 import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
+import { architectPlanArtifactHref } from '@/lib/architect-plan-view';
+import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
 // ---------------------------------------------------------------------------
 // SessionArchitectPanel — the architect kind's live interactive affordance,
@@ -23,6 +26,18 @@ import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/arch
 // retired `ArchitectActivityLog` inline panel — `data-section="architect-
 // activity"` is gone, superseded by the drawer's own `data-component=
 // "activity-drawer"` contract (`docs/forge-ui-dom-and-harness.md`).
+//
+// W7-A3 (sessions-kinds-08/12/13, artifact-plan-22/23):
+//   - `[data-action="open-plan"]` renders EXACTLY ONCE, in every phase where
+//     the session has a PLAN.html (gate mode at awaiting-verdict, view mode
+//     otherwise) — a committed session's plan is no longer unreachable;
+//   - the committed branch is the shared `ArchitectCommittedView`: initiative
+//     ids → queue state → run link, and a scheduler-aware headline with a
+//     Start control (the hardcoded "the autonomous loop is building it now →
+//     /flows/forge-develop" is gone);
+//   - the activity drawer stays available in EVERY phase (collapsed once the
+//     architect is no longer working) so the reasoning trail is there exactly
+//     when the operator judges the plan.
 // ---------------------------------------------------------------------------
 
 export function SessionArchitectPanel({
@@ -37,6 +52,10 @@ export function SessionArchitectPanel({
   const meta = architectHexMeta(session.phase);
   const active = isArchitectWorking(session.phase);
   const stale = isSessionStale(session);
+  const committed = session.phase === 'committed';
+  // Linkage + scheduler only matter once the plan is approved — the hook is
+  // inert (no fetch) for every other phase.
+  const loop = useLoopClosureState(session.initiativeIds, committed);
 
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
@@ -57,7 +76,7 @@ export function SessionArchitectPanel({
         />
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {stale && <StuckWarning session={session} />}
 
         {session.phase === 'awaiting-answers' && (
@@ -77,65 +96,79 @@ export function SessionArchitectPanel({
         )}
 
         {(session.phase === 'interviewing' || session.phase === 'exploring' || session.phase === 'drafting' || session.phase === 'finalizing') && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Status
-              label={
-                session.phase === 'exploring'
-                  ? 'The architect is exploring edge cases…'
-                  : session.phase === 'drafting'
-                  ? 'The architect is drafting the plan…'
-                  : session.phase === 'finalizing'
-                  ? 'The architect is finalizing the plan…'
-                  : `The architect is thinking… (round ${session.round})`
-              }
-            />
-            <ActivityLog label="architect activity" events={events} phaseLabel={session.phase} phaseActive={active} />
-          </div>
+          <Status
+            label={
+              session.phase === 'exploring'
+                ? 'The architect is exploring edge cases…'
+                : session.phase === 'drafting'
+                ? 'The architect is drafting the plan…'
+                : session.phase === 'finalizing'
+                ? 'The architect is finalizing the plan…'
+                : `The architect is thinking… (round ${session.round})`
+            }
+          />
         )}
 
         {session.phase === 'awaiting-verdict' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Status label="Plan ready — opening the review gate…" />
-            <Link
-              href={`/artifact?run=_architect-${encodeURIComponent(session.sessionId)}&type=plan&mode=gate`}
-              data-action="open-plan"
-              style={btnLinkStyle}
-            >
-              Review the plan →
-            </Link>
-          </div>
+          <Status label="Plan ready — opening the review gate…" />
         )}
 
-        {session.phase === 'committed' && (
-          <div
-            data-section="architect-status"
-            style={{
-              border: '1px solid rgba(74,222,128,.4)',
-              borderRadius: 10,
-              padding: '16px 18px',
-              background: 'rgba(74,222,128,.07)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-            }}
-          >
-            <span style={{ fontSize: 13, color: 'var(--green)' }}>
-              Approved — manifests queued; the autonomous loop is building it now.
-            </span>
-            <Link href="/flows/forge-develop" data-action="watch-it-build" style={btnLinkStyle}>
-              Watch it build →
-            </Link>
+        {committed && (
+          <div data-section="architect-status">
+            <ArchitectCommittedView
+              session={session}
+              linkage={loop.linkage}
+              linkageReady={loop.linkageReady}
+              scheduler={loop.status}
+              schedulerReady={loop.ready}
+              busy={loop.busy}
+              error={loop.error}
+              onSchedulerAction={(a) => void loop.act(a)}
+            />
           </div>
         )}
 
         {session.phase === 'rejected' && (
           <Status label="Plan rejected — start a new idea when you're ready." />
         )}
+
+        {/* The plan link — ONCE, whenever a PLAN.html exists (W7-A3,
+            artifact-plan-22): the gate at awaiting-verdict, read-only view in
+            every other phase. Playwright strict mode + the flows-run journey's
+            `open-plan` click both need this to be the only such element. */}
+        {session.planUrl && (
+          <Link
+            href={architectPlanArtifactHref(session.sessionId, session.phase === 'awaiting-verdict' ? 'gate' : 'view')}
+            data-action="open-plan"
+            style={session.phase === 'awaiting-verdict' ? btnLinkStyle : quietLinkStyle}
+          >
+            {session.phase === 'awaiting-verdict' ? 'Review the plan →' : 'View the plan →'}
+          </Link>
+        )}
+
+        {/* The reasoning trail, in every phase (W7-A3, sessions-kinds-13) —
+            open while the architect works, collapsed once it is waiting on the
+            operator or terminal, never gone. */}
+        {events.length > 0 && (
+          <ActivityLog
+            label="architect activity"
+            events={events}
+            phaseLabel={session.phase}
+            phaseActive={active}
+            defaultOpen={active}
+          />
+        )}
       </div>
     </div>
   );
 }
+
+const quietLinkStyle: React.CSSProperties = {
+  alignSelf: 'flex-start',
+  fontSize: 12.5,
+  color: 'var(--accent)',
+  textDecoration: 'none',
+};
 
 const btnLinkStyle: React.CSSProperties = {
   flex: '0 0 auto',
