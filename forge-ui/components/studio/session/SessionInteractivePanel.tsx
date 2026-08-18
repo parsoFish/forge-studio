@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload, type FilePackageFile } from '@/lib/session-client';
+import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import type { EventLogEntry } from '@/lib/bridge-client';
 
@@ -173,6 +174,7 @@ export function SessionInteractivePanel({
   modelTier = null,
   events,
   terminal,
+  lifecycle,
   onChanged,
   onPackageFinalized,
 }: {
@@ -208,6 +210,14 @@ export function SessionInteractivePanel({
    *  are all non-renderable (demo's `generating`) reaches this SAME branch
    *  too (see `isRenderableAffordance`'s doc comment) — one gate, not two. */
   terminal: boolean;
+  /** W7-A2 — the shell payload's server-derived lifecycle
+   *  (session-lifecycle-client.ts). Read ONLY to pick the zero-affordance
+   *  copy below (working / stopped / terminal) — the banner that actually
+   *  shows a crash/stall + the cancel control is `SessionLifecycleBar`,
+   *  rendered by the PAGE for every kind (this panel is generic-kinds
+   *  only). Optional so a DOM-pin test that predates it still renders; the
+   *  real page always passes it. */
+  lifecycle?: SessionLifecycle;
   /** Called after ANY successful POST (question-form submit or verdict) so
    *  the caller can re-fetch the session shell. Optional — a panel under a
    *  DOM-pin test never passes one. */
@@ -281,11 +291,26 @@ export function SessionInteractivePanel({
   const renderableAffordances = affordances.filter(isRenderableAffordance);
 
   if (renderableAffordances.length === 0) {
+    // W7-A2 (sessions-kinds-11/27, home-sessions-09, knowledge-16) — the
+    // zero-affordance branch is lifecycle-aware, never the one flat sentence
+    // for every terminal, working AND crashed state: a terminal session
+    // names its phase; a crashed/stalled one points at the lifecycle banner
+    // above (which carries the error + Cancel); a working one says the agent
+    // is working and nothing is asked of the operator. `data-no-affordance-
+    // reason` mirrors that three-way split for the DOM contract.
+    const reason: 'terminal' | 'stopped' | 'working' =
+      terminal || lifecycle?.state === 'terminal' ? 'terminal'
+      : lifecycle?.state === 'crashed' || lifecycle?.state === 'stalled' ? 'stopped'
+      : 'working';
+    const copy =
+      reason === 'terminal' ? `Session ${phase} — nothing further to do here.`
+      : reason === 'stopped' ? 'The agent turn stopped — see the banner above for the error and to cancel this session.'
+      : 'Agent is working — no operator action needed right now.';
     return (
       <div data-component="session-interactive-panel" data-affordance-count={0}>
         <ProvenanceStrip phase={phase} modelTier={modelTier} />
-        <div data-section="session-no-affordances" style={{ fontSize: 12.5, color: 'var(--faint)', padding: '10px 0' }}>
-          No operator action available for this session kind right now.
+        <div data-section="session-no-affordances" data-no-affordance-reason={reason} style={{ fontSize: 12.5, color: 'var(--faint)', padding: '10px 0' }}>
+          {copy}
         </div>
         {drawer}
       </div>
@@ -488,7 +513,9 @@ function ProvenanceStrip({ phase, modelTier }: { phase: string; modelTier: strin
           color: 'var(--dim)', whiteSpace: 'nowrap',
         }}
       >
-        model: {modelTier ?? 'default'}
+        {/* W7-A2 (sessions-kinds-31) — a null tier is honestly "not recorded",
+            never the literal word "default" (not a tier the picker offers). */}
+        model: {modelTier ?? 'not recorded'}
       </span>
     </div>
   );

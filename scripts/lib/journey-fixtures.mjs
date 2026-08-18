@@ -15,7 +15,7 @@
  * will be added by a later task.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, renameSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, renameSync, existsSync, utimesSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
@@ -1187,6 +1187,36 @@ export function cleanInstructionsSession(sid) {
   if (!sid) return;
   try { rmSync(join(projectRoot, '_instructions', sid), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(join(FORGE_ROOT, '_logs', `_instructions-${sid}`), { recursive: true, force: true }); } catch { /* */ }
+}
+
+/**
+ * W7-A2 — seed a CRASHED instructions session: status.json left at the
+ * working phase `drafting` (the runner refuses to advance on a throw) with an
+ * OLDER mtime, plus `_logs/_instructions-<sid>/stderr.log` holding a runner
+ * error written AFTER it — the exact on-disk shape the operator's stuck
+ * community-refresh 2026-08-18T12-54-32 / kb-cleanup 12-36-59 sessions had
+ * (provenance: their real stderr.log text, transposed to the instructions
+ * kind so it lives under the shared mdtoc reference project like every other
+ * instructions fixture). The bridge derives `state: crashed` + the error at
+ * read time from these two facts (cli/bridge-studio-lifecycle.ts) — nothing
+ * is written into status.json to say "crashed".
+ */
+export const CRASHED_INSTR_STDERR = [
+  'InteractiveRunnerError: runInteractiveTurn: session kind "instructions" phase "drafting" declares writes: [draft], but the turn produced no files there — refusing to advance the session with an empty package rather than persisting a ghost turn to status.json.',
+  '    at runAgentStyleStep (file:///home/parso/forge/orchestrator/interactive-runner.ts:493:11)',
+  '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)',
+  '    at async runInteractiveTurn (file:///home/parso/forge/orchestrator/interactive-runner.ts:328:16)',
+  '',
+].join('\n');
+export function writeCrashedInstrSession(sid) {
+  writeInstrStatus(sid, { phase: 'drafting', round: 2 });
+  const statusPath = join(instrDir(sid), 'status.json');
+  const tenMinAgo = (Date.now() - 10 * 60_000) / 1000;
+  utimesSync(statusPath, tenMinAgo, tenMinAgo);
+  const logDir = join(FORGE_ROOT, '_logs', `_instructions-${sid}`);
+  mkdirSync(logDir, { recursive: true });
+  writeFileSync(join(logDir, 'events.jsonl'), JSON.stringify({ event_id: 'EV_crash_1', cycle_id: `_instructions-${sid}`, initiative_id: `instructions-${sid}`, started_at: new Date().toISOString(), phase: 'architect', skill: 'instructions-runner', event_type: 'start', input_refs: [], output_refs: [], message: 'instructions turn' }) + '\n');
+  writeFileSync(join(logDir, 'stderr.log'), CRASHED_INSTR_STDERR);
 }
 
 // project-brain-builder (seed a project's KB so it grows). Session dir:

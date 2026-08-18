@@ -29,12 +29,18 @@ export default function SessionsIndexPage() {
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
 
+  // Default (`?active=1`) — operator-locked: in-flight sessions ONLY, never
+  // terminal history. Re-run after a row's cancel succeeds (W7-A2) — the
+  // cancelled session is terminal and drops out of the active set.
+  const refresh = useCallback(async (): Promise<void> => {
+    const s = await fetchStudioSessions();
+    setSessions(s);
+  }, []);
+
   useEffect(() => {
     const signal = { cancelled: false };
     (async () => {
       try {
-        // Default (`?active=1`) — operator-locked: in-flight sessions ONLY,
-        // never terminal history.
         const s = await fetchStudioSessions();
         if (signal.cancelled) return;
         setSessions(s);
@@ -50,5 +56,13 @@ export default function SessionsIndexPage() {
     return () => { signal.cancelled = true; };
   }, [loadKey]);
 
-  return <SessionsIndexBody sessions={sessions} ready={ready} error={error} onRetry={reload} />;
+  return (
+    <SessionsIndexBody
+      sessions={sessions}
+      ready={ready}
+      error={error}
+      onRetry={reload}
+      onCancelled={() => { void refresh(); }}
+    />
+  );
 }

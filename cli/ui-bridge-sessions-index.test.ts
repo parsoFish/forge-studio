@@ -379,6 +379,10 @@ function row(overrides: Partial<SessionIndexRow>): SessionIndexRow {
     phase: 'drafting',
     terminal: false,
     needsYou: false,
+    // W7-A2 — the three lifecycle fields every row carries.
+    state: 'working',
+    error: null,
+    idleMs: null,
     modelTier: null,
     updatedAt: '2026-01-01T00:00:00.000Z',
     href: '/sessions/instructions/fixture?project=p',

@@ -44,6 +44,8 @@ cli/bridge-studio-kbs.ts readFileSync 2
 cli/bridge-studio-kbs.ts rmSync 1
 cli/bridge-studio-kbs.ts spawn 1
 cli/bridge-studio-kbs.ts writeFileSync 2
+cli/bridge-studio-lifecycle.ts readFileSync 1
+cli/bridge-studio-lifecycle.ts statSync 1
 cli/bridge-studio-runs.ts existsSync 10
 cli/bridge-studio-runs.ts mkdirSync 1
 cli/bridge-studio-runs.ts openSync 1
@@ -52,6 +54,7 @@ cli/bridge-studio-runs.ts renameSync 1
 cli/bridge-studio-runs.ts rmSync 1
 cli/bridge-studio-runs.ts spawn 1
 cli/bridge-studio-runs.ts writeFileSync 1
+cli/bridge-studio-sessions.ts readdirSync 1
 cli/bridge-studio-skills.ts existsSync 1
 cli/bridge-studio-skills.ts mkdirSync 2
 cli/bridge-studio-skills.ts readFileSync 1

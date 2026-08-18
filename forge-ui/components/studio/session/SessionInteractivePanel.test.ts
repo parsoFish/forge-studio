@@ -69,7 +69,11 @@ test('affordances: [] renders the honest no-affordances state, not an empty shel
   expect(html).toContain('data-component="session-interactive-panel"');
   expect(html).toContain('data-affordance-count="0"');
   expect(html).toContain('data-section="session-no-affordances"');
-  expect(html).toContain('No operator action available');
+  // W7-A2: the copy is lifecycle-aware (a working phase says the agent is
+  // working; see lib/session-lifecycle-render.test.ts) — never the old flat
+  // "No operator action available" sentence for every state.
+  expect(html).toContain('data-no-affordance-reason="working"');
+  expect(html).toContain('no operator action needed right now');
   expect(html).not.toContain('data-section="session-affordance"');
 });
 
@@ -78,7 +82,7 @@ test('affordances: [] renders the honest no-affordances state, not an empty shel
 // mock №7) — always rendered, both on the empty and populated paths.
 // ---------------------------------------------------------------------------
 
-test('provenance strip reads "derived from phase <phase>" verbatim, and the model chip is read-only, showing the real tier or "default"', () => {
+test('provenance strip reads "derived from phase <phase>" verbatim, and the model chip is read-only, showing the real tier or "not recorded" (W7-A2: never the literal "default")', () => {
   const html = render({ kind: 'demo', phase: 'awaiting-review', affordances: [], modelTier: 'opus' });
   expect(html).toContain('data-section="session-provenance"');
   expect(html).toContain('derived from phase awaiting-review');
@@ -87,7 +91,8 @@ test('provenance strip reads "derived from phase <phase>" verbatim, and the mode
   expect(html).toContain('model: opus');
 
   const htmlNoTier = render({ kind: 'demo', phase: 'generating', affordances: [], modelTier: null });
-  expect(htmlNoTier).toContain('model: default');
+  expect(htmlNoTier).toContain('model: not recorded');
+  expect(htmlNoTier).not.toContain('model: default');
   expect(htmlNoTier).toContain('data-model-tier=""');
 });
 
