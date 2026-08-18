@@ -168,6 +168,12 @@ export type Run = {
   origin: 'architect' | 'human-directed';
   costUsd: number;
   startedAt?: string;
+  /**
+   * W7-A3 (flows-29): the real cycle-end instant, mirrored from
+   * orchestrator/run-model.ts's `Run.completedAt` (W6-RV-2). Absent for a
+   * still-open run — never fabricated. MonitorSummary's ELAPSED stops here.
+   */
+  completedAt?: string;
   phases: Record<string, RunPhaseStatus>;
   phaseMeta: Record<string, RunPhaseMeta>;
   artifactsReady: Partial<Record<
@@ -900,6 +906,9 @@ export function parseRun(raw: unknown): Run {
     origin:        r.origin        ?? 'human-directed',
     costUsd:       r.costUsd       ?? 0,
     startedAt:     r.startedAt,
+    // W7-A3 (flows-29): served since W6-RV-2, dropped here until now — the
+    // declared-data-fails-open class the field-parity pin exists for.
+    ...(r.completedAt !== undefined ? { completedAt: r.completedAt } : {}),
     phases:        r.phases        ?? {},
     phaseMeta:     r.phaseMeta     ?? {},
     artifactsReady: r.artifactsReady ?? {},

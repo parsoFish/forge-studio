@@ -431,8 +431,10 @@ export async function fetchLiveness(): Promise<LivenessReport | null> {
 
 export type SchedulerStatus = {
   running: boolean;
-  pid?: number;
+  pid?: number | null;
   paused?: boolean;
+  /** W7-A3: pid-file mtime while running (daemonState), else null. */
+  startedAt?: string | null;
 };
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {
@@ -552,6 +554,48 @@ export async function planInitiative(initiativeId: string): Promise<PlanInitiati
     return { status: 'error', initiativeId, detail: body.error ?? `HTTP ${res.status}` };
   } catch (err) {
     return { status: 'error', initiativeId, detail: String(err) };
+  }
+}
+
+// ---- Per-flow run trigger (W7-A3, flows-02/03) ---------------------------
+
+export type StartFlowRunResult = {
+  ok: boolean;
+  status?: 'enqueued' | 'not-found' | 'already-running' | 'not-planned' | 'error';
+  cycleId?: string;
+  flowId?: string;
+  error?: string;
+};
+
+/**
+ * Enqueue an EXISTING initiative onto a specific flow — the flow monitor's
+ * generic "Start Run" (`POST /api/flows/:id/run`, `enqueueFlowRun` behind it).
+ * Reads the JSON body directly (same reason as `planInitiative`: the route maps
+ * every outcome onto a real HTTP status and every field is meaningful on every
+ * outcome — the generic envelope would drop `status`/`detail`).
+ */
+export async function startFlowRun(flowId: string, initiativeId: string): Promise<StartFlowRunResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, status: 'error', error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/flows/${encodeURIComponent(flowId)}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ initiativeId }),
+    });
+    const body = (await res.json()) as Partial<StartFlowRunResult> & { error?: string; detail?: string };
+    if (body.status) {
+      return {
+        ok: body.status === 'enqueued',
+        status: body.status,
+        cycleId: body.cycleId,
+        flowId: body.flowId,
+        error: body.status === 'enqueued' ? undefined : (body.detail ?? body.error ?? body.status),
+      };
+    }
+    return { ok: false, status: 'error', error: body.error ?? `HTTP ${res.status}` };
+  } catch (err) {
+    return { ok: false, status: 'error', error: String(err) };
   }
 }
 
@@ -693,6 +737,13 @@ export type ArchitectSessionSummary = {
   staleMs?: number;
   /** Null until the critic has run for this session. */
   completenessCritic: CompletenessCriticStatus | null;
+  /**
+   * W7-A3 (sessions-kinds-08/12, artifact-plan-22/23): the initiative ids this
+   * session drafted, DERIVED by the bridge from `<session>/manifests/*.md` at
+   * read time (nothing stored). Present on every phase; `[]` before the
+   * architect has drafted anything.
+   */
+  initiativeIds?: string[];
 };
 
 export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {
