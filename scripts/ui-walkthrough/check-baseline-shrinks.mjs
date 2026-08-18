@@ -33,7 +33,9 @@ function loadPrev() {
     return JSON.parse(execFileSync('git', ['show', `${against}:${rel}`], { cwd: FORGE_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
   } catch (e) {
     const msg = String(e?.stderr ?? e?.message ?? e);
-    if (/exists on disk, but not in|does not exist in|invalid object name|bad revision|not in the tree|Path .* does not exist/i.test(msg)) return null;
+    // Only "the file is not at that ref" is a first introduction. A bad ref
+    // (typo, unfetched branch) must FAIL, not pass as "no previous baseline".
+    if (/exists on disk, but not in|does not exist in/i.test(msg)) return null;
     throw new Error(`git show ${against}:${rel} failed: ${msg}`);
   }
 }

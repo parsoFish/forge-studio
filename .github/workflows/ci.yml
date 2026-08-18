@@ -56,3 +56,55 @@ jobs:
 
       - name: Raw-fs guarded def-use lint (SEC-04)
         run: node scripts/check-raw-fs-guarded.mjs
+
+  # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
+  # (production build; dry-bridge + no-spawn seams — nothing can spawn an
+  # agent, touch a git remote or start the daemon), crawls every reachable
+  # Studio route, and fails on any NEW never-ready page / first-party >=400 /
+  # pageerror / console.error versus scripts/ui-walkthrough/baseline.json
+  # (the wave-7 known-defect set — lanes SHRINK it, never grow it; the last
+  # step fails a PR that adds an entry). The token-spending explorer fan-out
+  # (fanout.workflow.js) stays a manual wave gate and is deliberately NOT here.
+  ui-walkthrough:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Walkthrough crawl (assert against baseline)
+        run: npm run ui:walkthrough:gate -- --boot --out _walkthrough/ci
+        env:
+          FORGE_ARCHITECT_NO_SPAWN: "1"
+          FORGE_DRY_BRIDGE: "1"
+
+      - name: Upload crawl output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-walkthrough
+          path: |
+            _walkthrough/ci/crawl.json
+            _walkthrough/ci/crawl-summary.txt
+            _walkthrough/ci/assert.json
+            _walkthrough/ci/shots
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Baseline may only shrink
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/${{ github.base_ref }}"

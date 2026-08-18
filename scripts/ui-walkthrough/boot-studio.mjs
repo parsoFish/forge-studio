@@ -34,7 +34,7 @@ export async function probeHealthyBridge(bridgeUrl) {
  * @param {{ bridgeUrl: string, timeoutMs?: number, log?: (s: string) => void }} opts
  * @returns {Promise<{ uiUrl: string, bridgeUrl: string, stop: () => Promise<void> }>}
  */
-export async function bootStudio({ bridgeUrl, timeoutMs = 180_000, log = () => {} }) {
+export async function bootStudio({ bridgeUrl, timeoutMs = 300_000, log = () => {} }) {
   const already = await probeHealthyBridge(bridgeUrl);
   if (already) {
     throw new Error(`a healthy forge bridge (pid ${already.pid}) already answers at ${bridgeUrl} — refusing to --boot over it; run without --boot to crawl the running Studio`);

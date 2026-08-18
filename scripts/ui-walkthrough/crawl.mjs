@@ -211,4 +211,12 @@ async function main() {
   return report.ok || !ASSERT ? 0 : 1;
 }
 
-main().then((code) => process.exit(code), (err) => { console.error(err); process.exit(2); });
+main().then(
+  (code) => {
+    // Let stdout drain (the per-route summary can exceed the pipe buffer) and
+    // exit naturally; force the exit only if something lingers.
+    process.exitCode = code;
+    setTimeout(() => process.exit(code), 3000).unref();
+  },
+  (err) => { console.error(err); process.exit(2); },
+);
