@@ -61,7 +61,35 @@ export function failureKey(f) {
   return `${f.kind}|${f.route}|${f.detail}`;
 }
 
-const isFirstParty = (url) => url.startsWith('[bridge]') || (url.startsWith('/') && !url.startsWith('//'));
+// First-party = the bridge or the UI host. Host-ALIAS-proof: the browser may
+// reach the bridge as `localhost` while the harness knows it as `127.0.0.1`
+// (the first CI run of the gate did exactly that, and a prefix-only check
+// silently dropped every bridge 4xx → 0 known / 52 stale / PASS). So absolute
+// loopback URLs are canonicalized by PORT against crawl.bridge / crawl.ui:
+// bridge port → `[bridge]<path>`, UI port → `<path>`; a loopback URL on some
+// other port stays as-is but is still first-party.
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']);
+function loopbackPort(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol) || !LOOPBACK_HOSTS.has(u.hostname)) return null;
+    return u.port || (u.protocol === 'https:' ? '443' : '80');
+  } catch { return null; }
+}
+const portOf = (base) => { try { return base ? loopbackPort(base) : null; } catch { return null; } };
+export function canonicalUrl(url, crawl) {
+  const s = String(url ?? '');
+  if (s.startsWith('[bridge]') || (s.startsWith('/') && !s.startsWith('//'))) return s;
+  const port = loopbackPort(s);
+  if (port == null) return s;
+  const u = new URL(s);
+  const bridgePort = portOf(crawl?.bridge);
+  const uiPort = portOf(crawl?.ui);
+  if (bridgePort && port === bridgePort) return `[bridge]${u.pathname}${u.search}`;
+  if (uiPort && port === uiPort) return `${u.pathname}${u.search}`;
+  return s;
+}
+const isFirstParty = (url) => url.startsWith('[bridge]') || (url.startsWith('/') && !url.startsWith('//')) || loopbackPort(url) != null;
 const stripBridge = (url) => url.replace(/^\[bridge\]/, '');
 const RESOURCE_LOAD_RE = /^Failed to load resource:/;
 const truncate = (s, n = 200) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
@@ -105,7 +133,7 @@ export function collectFailures(crawl, opts = {}) {
     }
 
     for (const req of r.failed ?? []) {
-      const url = String(req.url ?? '');
+      const url = canonicalUrl(req.url, crawl);
       if (!isFirstParty(url) || !(req.status >= 400)) continue;
       const f = makeFailure('first-party-4xx', route, `${req.status} ${url}`, `first-party request answered ${req.status}`);
       const optional = req.status === 404 && knownOptional404s.some((p) => matchesPattern(stripBridge(url), p));

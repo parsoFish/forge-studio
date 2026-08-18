@@ -147,6 +147,36 @@ test('every first-party request >=400 is a first-party-4xx failure, deduped per 
   assert.equal(collectFailures(uiHost, {}).failures.length, 2, 'UI-host relative /api and asset 4xx are first-party');
 });
 
+test('first-party detection is host-alias-proof: a browser that reached the bridge as localhost while the harness knew it as 127.0.0.1 still yields `[bridge]` failures (the CI hole that let 52 baseline entries read as stale + PASS)', () => {
+  // Real shape from the first CI run of PR #174: forge studio reported
+  // bridgeUrl http://127.0.0.1:4123, the page fetched http://localhost:4123,
+  // so the crawl's prefix-replace never produced `[bridge]` and the old
+  // isFirstParty (prefix-only) dropped EVERY bridge 4xx → 0 known, 52 stale, PASS.
+  const crawl = {
+    ui: 'http://localhost:4124', bridge: 'http://127.0.0.1:4123', at: 'now', visited: 3, unvisited: [],
+    results: [
+      row({ route: '/agents/architect', failed: [{ url: 'http://localhost:4123/api/events/', status: 404 }] }),
+      row({ route: '/x', failed: [{ url: 'http://127.0.0.1:4124/_next/static/chunk.js', status: 404 }, { url: 'http://[::1]:4123/api/y', status: 500 }] }),
+      row({ route: '/t', failed: [{ url: 'https://fonts.gstatic.com/x.woff2', status: 404 }, { url: 'http://example.com:4123/api/z', status: 404 }] }),
+    ],
+  };
+  const { failures } = collectFailures(crawl, {});
+  const details = failures.map((f) => `${f.route} ${f.detail}`).sort();
+  assert.deepEqual(details, [
+    '/agents/architect 404 [bridge]/api/events/',
+    '/x 404 /_next/static/chunk.js',
+    '/x 500 [bridge]/api/y',
+  ]);
+  // A crawl.json without a `bridge` field (older capture): loopback URLs are still first-party, kept as-is.
+  const legacy = crawlOf(row({ route: '/l', failed: [{ url: 'http://localhost:9999/api/x', status: 404 }] }));
+  const lf = collectFailures(legacy, {}).failures;
+  assert.equal(lf.length, 1);
+  assert.equal(lf[0].detail, '404 http://localhost:9999/api/x');
+  // And the baseline matches through the same canonicalization.
+  const rep = assertCrawl(crawl, { baseline: { entries: [{ kind: 'first-party-4xx', route: '/agents/architect', detail: '404 [bridge]/api/events/' }] } });
+  assert.equal(rep.known.length, 1);
+});
+
 test('known-optional-404s allowlist moves ONLY matching 404s into `allowed`; other statuses and other artifacts stay failures', () => {
   const opts = { knownOptional404s: ['/api/artifact/*/demo.json'] };
   const { failures, allowed } = collectFailures(loadFixture(), opts);

@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertCrawl, formatReport, parseListFile, toBaseline } from './assert.mjs';
+import { assertCrawl, canonicalUrl, formatReport, parseListFile, toBaseline } from './assert.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -132,7 +132,9 @@ async function crawl() {
     const consoleErrors = [], failed = [], pageErrors = [];
     page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') consoleErrors.push({ type: m.type(), text: m.text().slice(0, 300) }); });
     page.on('pageerror', (e) => pageErrors.push(String(e).slice(0, 300)));
-    page.on('response', (r) => { if (r.status() >= 400) failed.push({ url: r.url().replace(UI, '').replace(BRIDGE, '[bridge]'), status: r.status() }); });
+    // Canonicalize by port (host-alias-proof — see assert.mjs canonicalUrl):
+    // the browser may say `localhost` where the ready signal said `127.0.0.1`.
+    page.on('response', (r) => { if (r.status() >= 400) failed.push({ url: canonicalUrl(r.url(), { ui: UI, bridge: BRIDGE }), status: r.status() }); });
     const t0 = Date.now();
     let status = 'ok', err = null;
     try {
@@ -174,7 +176,7 @@ async function crawl() {
     process.stderr.write(`[${n}] ${status} ${route} (${Date.now() - t0}ms) btn=${info.buttons?.length ?? '?'} err=${consoleErrors.length}/${pageErrors.length}/${failed.length}\n`);
   }
   await browser.close();
-  return { ui: UI, at: new Date().toISOString(), visited: results.length, unvisited: queue, results };
+  return { ui: UI, bridge: BRIDGE, at: new Date().toISOString(), visited: results.length, unvisited: queue, results };
 }
 
 function writeCrawlOutputs(crawlJson) {
