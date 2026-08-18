@@ -167,11 +167,18 @@ inventory rather than one shared page-level contract:
     4-card slice, so the header stays honest once needs-you sessions exceed
     the card budget. Header: an "N need you" pill (present only when
     `needsYouCount>0`) plus `a[data-action="view-all-sessions"]
-    href="/sessions"` reading "all sessions (N) →". Each card:
-    `a[data-session-card][data-session-kind][data-session-phase]
-    [data-needs-you]`, linking to the session's own `href` (the SAME
-    `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
-    carries); a needs-you card additionally renders a `.status-dot
+    href="/sessions"` reading "all sessions (N) →". Each card (W7-A2 shape):
+    `div[data-session-card][data-session-kind][data-session-id]
+    [data-session-phase][data-needs-you][data-session-state]` wrapping an
+    `a[data-action="open-session"]` link to the session's own `href` (the
+    SAME `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
+    carries — the card body: kind, project, phase, and a
+    `span[data-session-state-chip]` lifecycle sentence, `describeLifecycle`)
+    plus, OUTSIDE the link (never nested-interactive), a
+    `button[data-action="cancel-session"]` for every non-terminal card (the
+    SAME two-step `CancelSessionButton` the `/sessions` row mounts; on
+    success Home refetches the sessions index via `useStudioHomeData`'s
+    `refreshSessions`); a needs-you card additionally renders a `.status-dot
     [data-status="retrying"]` visual indicator (styling only — the DOM
     contract attribute is `data-needs-you`, never the dot's own frame value).
   Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
@@ -197,11 +204,25 @@ inventory rather than one shared page-level contract:
   Root: `main[data-page="sessions-index"][data-page-ready]
   [data-session-count]`. Non-empty state: `section[data-section=
   "sessions-table"][data-session-count]` wrapping a table — one
-  `tr[data-session-kind][data-session-phase][data-needs-you]` per session,
-  columns kind/project/phase(+needs-you dot)/model tier/updated/
-  `a[data-action="resume-session"]` ("Resume →", the row's own `href`).
-  Rows render in the SAME order the bridge returned them — this page never
-  re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
+  `tr[data-session-kind][data-session-phase][data-needs-you][data-session-state]`
+  per session, columns kind/project/phase(+needs-you dot)/**state**
+  (`span[data-session-state-chip]`, W7-A2 — the bridge-derived lifecycle
+  sentence from `lib/session-lifecycle-client.ts`'s `describeLifecycle`: a
+  `crashed` row shows the runner's own error text, `title` = the full
+  message; `stalled` names the silence)/model tier/updated/
+  `a[data-action="resume-session"]` ("Open →", the row's own `href`) +
+  `button[data-action="cancel-session"]` (W7-A2 — every non-terminal row;
+  `CancelSessionButton`, `components/studio/session/`, two-step confirm:
+  the first click arms it — `data-confirming="true"`, label "Confirm
+  cancel", a `[data-action="cancel-session-abort"]` "keep" link beside it —
+  the second POSTs `POST /api/studio/sessions/:kind/:sid/cancel`; the
+  server's error text renders verbatim in `[data-cancel-error]`; on success
+  the page refetches and the now-terminal row leaves the active list).
+  Rows: `needsYou` is TRUTHFUL in both directions (W7-A2 — the bridge's
+  `deriveSessionLifecycle(...).needsYou`: an open operator gate or a
+  crashed/stalled runner, never a merely-working agent) and `state` is
+  `working | awaiting-operator | crashed | stalled | terminal`. Rows render
+  in the SAME order the bridge returned them — this page never re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
   false flash before the first fetch resolves):
   `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
   kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
@@ -215,7 +236,11 @@ inventory rather than one shared page-level contract:
   `ProjectsIndexBody`); `app/sessions/page.tsx` is the thin fetch-owning
   wrapper. Journey coverage: `scripts/journeys/sessions-index.mjs` (entry
   point: Home's strip overflow link, per the entry-point rule — never opens
-  mid-flow on `/sessions` itself).
+  mid-flow on `/sessions` itself; W7-A2 adds a CRASHED fixture —
+  `writeCrashedInstrSession`, the operator's stuck-session on-disk shape —
+  asserted `data-session-state="crashed"` on Home and the index, then
+  cancelled from its row with the two-step confirm and gone from the
+  in-flight list).
 - **Library `/library`** — SHELVES ONLY (W6-IA-4 rebuild, 2026-08-15): the
   reusable building blocks every agent and flow composes from, NOT a
   dashboard. `[data-page="library"][data-page-ready]`. The OLD landing page
@@ -1298,6 +1323,39 @@ inventory rather than one shared page-level contract:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
+  **W7-A2 lifecycle bar (every kind — architect/project-brain and the
+  panel-less community-refresh included):**
+  `div[data-section="session-lifecycle"][data-lifecycle-state="working"|
+  "awaiting-operator"|"crashed"|"stalled"|"terminal"][data-needs-you]
+  [data-cancellable]` (`components/studio/session/SessionLifecycleBar.tsx`),
+  rendered above the two panes from the shell payload's server-derived
+  `lifecycle` (below) — never re-derived client-side: `crashed` → the
+  runner's own error text verbatim in `pre[data-lifecycle-error]` +
+  `role="alert"`; `stalled` → "No activity for Nm — the agent may have
+  stalled"; `awaiting-operator` → "Waiting on you"; `working` → a quiet
+  one-liner; `terminal` → honest per-phase copy ("Done — committed" for
+  committed/locked/applied/complete, "<Phase> — nothing further to do
+  here" for rejected/abandoned/cancelled/failed). While `cancellable` a
+  `button[data-action="cancel"]` (the shared two-step `CancelSessionButton`;
+  `[data-action="cancel-abort"]` "keep" link while armed; server error
+  verbatim in `[data-cancel-error]`) POSTs the generic cancel route; on
+  success the page refetches the shell (phase → `cancelled`, terminal). The
+  generic `SessionInteractivePanel`'s zero-affordance branch is
+  lifecycle-aware too — `[data-section="session-no-affordances"]
+  [data-no-affordance-reason="working"|"stopped"|"terminal"]` ("Agent is
+  working — no operator action needed right now" / "The agent turn stopped
+  — see the banner above…" / "Session <phase> — nothing further to do
+  here.") — never the one flat "No operator action available" sentence for
+  every state; and its model chip reads `model: not recorded` (never the
+  literal `default`) for a null tier. **Deep links:** the page fetches the
+  shell WITHOUT `?project=` when neither the per-kind summary nor the URL
+  knows it — the bridge resolves the anchor project server-side — so a bare
+  `/sessions/<kind>/<sid>` is a working address for every kind; "Session
+  not found" (`[data-section="session-not-found"]`) is ONLY the shell
+  route's own 404. **Back link:** `a[data-action="back-to-project"]`
+  renders in EVERY phase (not only terminal); a `.kb-<id>` anchor resolves to
+  `/knowledge?id=<id>` ("Back to Knowledge base <id>"), `.community-registry`
+  to `/community`, a real project to `/projects/<id>`.
   Per turn:
   `[data-turn-index][data-turn-role="agent"|"operator"][data-turn-stage][data-turn-source]`
   — `data-turn-source` names the checkpoint file the turn was DERIVED from
@@ -1468,10 +1526,32 @@ inventory rather than one shared page-level contract:
 - **Session-shell read contract (R2-10-F1/F2, 2026-08-05; W6-B3/B6/B8
   additions, 2026-08-15) — the API side.**
   The session routes above converge on one shared shell. Its data comes
-  from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
+  from a single read route, `GET /api/studio/sessions/:kind/:sessionId[?project=<p>]`
   (`cli/bridge-studio-sessions.ts`), which returns
   `{ok, kind, title, sessionId, project, phase, stages, defaultStage, turns,
-  artifact, affordances, modelTier, terminal, [kbId]}`. Session kinds are
+  artifact, affordances, modelTier, terminal, lifecycle, [kbId]}`. **W7-A2:**
+  `?project=` is OPTIONAL — absent, the bridge resolves the anchor project
+  server-side (`findSessionProject`: enumerates the trusted `projectsRoot`,
+  dot-anchors included, and probes `<name>/_<kind>/<sid>` through
+  `resolveGuardedPath`; 0 hits → 404, ≥2 → 409 asking for `?project=`) and
+  echoes it on the payload. `lifecycle` (W7-A2, ALWAYS present) is
+  `deriveSessionLifecycleFor(...)` (`cli/bridge-studio-lifecycle.ts`):
+  `{state: working|awaiting-operator|crashed|stalled|terminal, needsYou,
+  error, idleMs, cancellable}` — DERIVED at read time, never stored on
+  status.json: `terminal` first (incl. the universal `cancelled` phase);
+  `crashed` = no live tracked turn AND a non-empty
+  `_logs/_<kind>-<sid>/stderr.log` whose mtime is ≥ status.json's (a crash
+  OLDER than the last successful phase write is history, not state);
+  `awaiting-operator` = the phase row's `awaits: questions|verdict` (or
+  `LEGACY_SESSION_AWAITS_PHASES` for architect/project-brain, which carry
+  no table); `stalled` = a working phase (`step: agent|finalize`, or the
+  legacy working table) with a log dir but no heartbeat/event/status write
+  past the kind's ceiling (`stallCeilingForKind`: 180 s default, 120 s for
+  architect — the UI's own `STALE_THRESHOLD_MS`); a session with NO log dir
+  is never `stalled` (no liveness signal → honest `working`). `error` is the
+  runner's last non-stack stderr line, capped. The SAME derivation feeds
+  `GET /api/studio/sessions` rows (`state`/`error`/`idleMs`, and `needsYou`
+  = `lifecycle.needsYou` — truthful in both directions). Session kinds are
   declared as data in `studio/session-kinds.yaml` and validated by
   `forge studio lint` (`validateSessionKinds`, ADR-027's R2-10 amendment).
   `turns` are DERIVED from the runners' existing checkpoint files — each turn
@@ -1499,6 +1579,32 @@ inventory rather than one shared page-level contract:
   `data-session-phase`, `data-turn-index`, `data-turn-role`,
   `data-turn-stage`, `data-artifact-kind` — is named here as the contract;
   the surface that attaches it lands with the shell route itself.
+- **The generic session CANCEL route (W7-A2) — the API side.**
+  `POST /api/studio/sessions/:kind/:sessionId/cancel` `{project?}`
+  (`cli/bridge-studio-session-cancel.ts`; dispatched in `handleHttp` BEFORE
+  the affordance write route below, whose regex would otherwise swallow
+  `cancel` as an affordance id) — for EVERY registered kind, architect
+  included. Chain: kind → registry (404 naming the set); `sessionId` →
+  `invalidSessionIdReason` (400); `project` validated when supplied, else
+  resolved by `findSessionProject` (404 / 409 ambiguous); session dir →
+  `resolveGuardedPath` (a symlinked/escaping dir collapses into the same
+  404 as an absent one); status → `guardedReadSessionStatus`; already
+  terminal → 409 naming the phase (never re-terminalised). Then it signals
+  the session's tracked turn if one is alive (`killTrackedTurn`: the
+  `turn.pid` `spawnAgentTurn` now writes beside stderr.log; `isTurnAlive`
+  proves the pid's own argv carries this session id before any signal —
+  fail-closed ownership; SIGTERM to the detached runner's process group,
+  then the pid) and writes `{...status, phase: 'cancelled', cancelled_at,
+  cancelled_from}` via `guardedWriteSessionStatus` — `cancelled` is the ONE
+  universal reserved terminal phase (`CANCELLED_PHASE`, `cli/bridge-studio.ts`;
+  ADR-043 2026-08-19 amendment), read as terminal by `isTerminalPhase` for
+  every kind BEFORE the per-kind tables, and never a per-kind yaml row.
+  Response `{ok, kind, sessionId, project, phase:'cancelled', previousPhase,
+  killed}`. Covered by the bridge's global `x-forge-csrf` guard (403
+  without it). Client: `cancelStudioSession` (`lib/session-lifecycle-client.ts`).
+  `GET /api/events/:cycleId` (W7-A2): a guard-clean but ABSENT cycle dir is
+  `200 {cycleId, events: []}` (no console 404 on a session's first screen);
+  a guard-rejected path stays 404 (the sec04 pins hold).
 - **The generic session-affordance WRITE endpoint (W6-B4; W6-B9 adds the
   generic `meta.requires` check) — the API side.**
   `POST /api/studio/sessions/:kind/:sessionId/:affordance`
@@ -1689,6 +1795,18 @@ inventory rather than one shared page-level contract:
   a read-only chip (`[data-field="kickoff-model-fixed-chip"]`, `"fixed ·
   read-only"`) for `strategy:fixed` or an absent/not-yet-loaded capability;
   widening a skill's range is a `SKILL.md` edit, never a UI decision.
+  **W7-A2 duplicate guard:** the page also reads `GET /api/studio/sessions?active=1`
+  (the SAME index /sessions and Home read); when a non-terminal session of
+  THIS kind already exists on the chosen target (project id, `.kb-<id>` for
+  the KB selector, `.community-registry` for the selector-less kind) it
+  renders `section[data-section="kickoff-existing-sessions"]
+  [data-existing-count]` listing each (`li[data-existing-session]
+  [data-session-state]` with `a[data-action="open-existing-session"]`, phase
+  and the lifecycle sentence), and `[data-action="start-session"]` — which
+  ALWAYS carries `[data-existing-count]` — reads "Start another session":
+  the first click arms it (`data-confirming="true"`, "Yes, start another",
+  a `[data-action="start-session-abort"]` "keep the existing one" link
+  beside it) and only the second click POSTs; a changed target disarms it.
   `[data-action="start-session"]`
   POSTs the kind's existing `/start` route (now every one of the six client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
