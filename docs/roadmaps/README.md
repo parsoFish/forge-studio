@@ -513,6 +513,206 @@ before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
 
 **WAVE 6 COMPLETE — 2026-08-15.**
 
+### Wave 7 — Close the loops (opened 2026-08-19)
+
+**North star:** every loop an operator can start in Studio must be **finishable
+in Studio, visible while it runs, and cancellable when it goes wrong.** Wave 6
+made the surfaces reachable; the operator's first week of daily-driving found
+that the pieces do not yet snap back together — a plan that cannot be approved,
+an initiative that cannot be started, sessions that cannot be cancelled, a
+drain that says nothing while it works, a refresh agent that writes to the
+wrong place and dies unseen. Wave 7 is judged against one question per
+initiative: *does the operator get from "start" to "done" without a terminal?*
+
+**How the backlog was found — the wave-7 walkthrough instrument.** Instead of
+the operator finding one issue at a time, the orchestrator drove Studio the way
+a human operator does: a baseline crawl of all 160 reachable routes
+(`crawl.mjs`), then ten explorer agents — one per UI cluster (home+sessions ·
+projects · flows · agents · library · community · knowledge · session kinds ·
+artifact/plan · cross-cutting) — each clicking every control, submitting every
+form, and spending real tokens where a path could only be validated by running
+it (sessions of every kickoff kind, standalone agent runs, two live
+drain-to-green runs, one live community refresh); each explorer followed by an
+adversarial verifier. Result: **336 findings (S1 78 · S2 157 · S3 101), 276
+S1/S2 verdicts confirmed**, every one assigned to exactly one initiative below —
+[`wave-7-walkthrough-findings.md`](./wave-7-walkthrough-findings.md). The
+operator's own ten notes were all reproduced with root causes — including the
+one that looked like "does nothing" (note 5: the refresh agent writes its draft
+outside its session dir, exhausts its 16-turn budget, then crashes; the UI has
+no verdict panel for its kind — so it can neither finish nor be seen failing). The
+instrument is promoted into the repo as `scripts/ui-walkthrough/` (W7-A0) and
+becomes a standing wave gate alongside `ui:journey`.
+
+**Execution:** Workflow-script DAG driving tiered agents
+(`tiered-orchestration`), one T2 per initiative in its own worktree, gates
+executed by the T2 (file-scoped red→green, full suite once, `journey-sync`
+per UI PR), reviewer per initiative, T1 serialises `ui:journey` /
+`ui:deadpaths` / `ui:walkthrough` at wave boundaries. Merge gate = presence of
+a green terminal conclusion for the exact head SHA. Standing authority:
+"orchestrate PRs, do not escalate."
+
+#### Operator-locked decisions (from the 2026-08-18 notes)
+
+- **Plan approval lives in ONE place with ONE control** — the architect
+  session's plan gate (`PlanGate`, `/api/plan-verdict`); the generic
+  `GateBar` never renders on an architect plan. Approving shows the approved
+  plan and the initiative it produced, with its next step.
+- **The scheduler is a first-class Studio object again** (status + start /
+  pause / stop) — visible on Home and on the Flows pillar; every "start
+  development / plan" control tells the truth about whether anything will
+  pick the work up, and offers to start the daemon.
+- **Every session kind gets cancel/abandon**, and a session whose runner
+  crashed or stalled reads as such (with the error) — never as a calm
+  "nothing to do."
+- **Home names its strips**: "Sessions needing you" and "Knowledge bases
+  needing attention" are two visibly different components.
+- **Drain-to-green is observable and structural-only.** It streams what it
+  is doing (per-finding status, live activity, elapsed, cancel); it may
+  auto-apply structural fixes (frontmatter, links, index) but any prose
+  rewrite lands as a kb-cleanup **draft the operator approves with a diff**
+  (the walkthrough's real drain silently condensed a forge-dev theme by 26
+  lines — reverted). The KB health tab collapses its five mutating buttons
+  into one gated action group; the two mis-shaped flow buttons are fixed;
+  a recent-runs widget (the agents-page component, reused) sits beneath.
+- **Community grows into its declared capability**: the refresh agent
+  actually works end-to-end (correct write root, adequate turn budget,
+  verdict panel, freshness), takes a **targeted brief** ("find me skills for
+  X") as well as a full refresh, the registry is editable in Studio, and
+  every browsable item has an honest install path or an honest "not
+  installable" state.
+- **Library objects are authorable in Studio** — skills, hooks, templates
+  and connection config get create/edit/delete (file packages, one
+  authoring entry point); the Knowledge-bases card leaves the Library page.
+- **The Reflect flow is retired**; the reflector runs as an agent run
+  triggered post-merge (and on demand from the agent page).
+- **Real tokens are authorised** for the walkthrough gate and for
+  validating fixed loops on the cheap test vehicles (`demo-project`'s
+  `INIT-2026-08-18-add-version-flag`, `gitpulse`).
+
+#### Waves and streams (parallel lanes = file-disjoint route families)
+
+**Wave A — foundations (5 lanes, all independent; everything in B builds on
+them):**
+
+- **W7-A0 walkthrough harness** — promote `crawl.mjs`, `lib.mjs`, the
+  explorer brief and the fan-out workflow into `scripts/ui-walkthrough/`;
+  `npm run ui:walkthrough` = crawl + console/4xx/page-ready assertions
+  (deterministic, CI-able); the explorer fan-out is the wave gate (manual,
+  token-spending). Docs pointer in `forge-ui-dom-and-harness.md`.
+- **W7-A1 honest bridge reads** — `studioGet` (behind ~26 client calls)
+  stops turning every failure into an empty fallback; one shared
+  bridge-status banner (down / reconnecting / recovered) on every pillar;
+  pages recover when the bridge returns; 4xx bodies with actionable text
+  (gitpulse's 409 config-migration message) reach the operator.
+- **W7-A2 session lifecycle** — a generic `cancel`/`abandon` for every
+  session kind (bridge endpoint + panel + `/sessions` row + Home card);
+  runner crash → session `crashed` with `stderr.log` surfaced; stall
+  detection (agent silent past a ceiling → flagged, not "working");
+  `needsYou` derived from the phase-row `awaits` truthfully in both
+  directions; kickoff warns about existing sessions on the same target;
+  deep links resolve without `?project=`; the write-root fence is proven
+  end-to-end (`permissionMode` vs `canUseTool` — walkthrough evidence shows
+  a Write landing outside every declared root).
+- **W7-A3 loop closure** — scheduler status/start/pause/stop re-homed
+  (Home card + Flows pillar); "Start development / Plan" reports queue
+  reality and offers daemon start; plan gate: `_architect-` run ids resolve
+  through the session route, GateBar suppressed, approve → approved plan +
+  initiative link + next step, send-back → the interview it reopened;
+  committed architect session links initiative → queue state → run;
+  flow-monitor "Start Run" fixed and kept after the first run; run detail
+  pages set `data-page-ready`, stop 404-ing `review-findings.json`, and link
+  back to flow / artifacts / project.
+- **W7-A4 identity + not-found hygiene** — one case-preserving id rule for
+  KBs and projects (`trafficGame` reachable; `forge-9bd`), `new` reserved on
+  every dynamic route, one shared honest NotFound for unknown ids (today:
+  seven different treatments, three of which show a *different* object),
+  initiative titles from manifest metadata not the first heading, retired
+  flow ids in ledgers resolve to an honest page.
+
+**Wave B — pillar surfaces (7 lanes, route-family-disjoint; each depends on
+Wave A):**
+
+- **W7-B1 Home + /sessions IA** (n2, n3) · **W7-B2 Knowledge + drain** (n6,
+  n7) · **W7-B3 Community** (n5) · **W7-B4 Library authoring** (n8, n9; also
+  the agent builder's edit/delete/collision/`phase` and the flow builder's
+  starter/validation/delete/kickoff-loss) · **W7-B5 Agents + runs** (live
+  run page, error text, cost-ceiling gate for all twelve agents, outputs
+  wired or removed, ledger usability, onboarding run panel) · **W7-B6
+  Projects** (greenfield create **data-loss** + no `git init` — the S1s land
+  first; config-migration for gitpulse; architect kickoff tier + ceiling +
+  validated project; showcase / cycle ledger / roadmap loop links) ·
+  **W7-B7 Artifact + verdict pages** (gate arming only on gate-able runs,
+  demo gate fixed, PR link, comment edit/delete, plan AC parse, DEMO.md on
+  the evidence page, reflection honesty).
+
+**Wave C — consolidation + richness (3 lanes; C1 after A3, C2 after A2/B7,
+C3 anytime after A):**
+
+- **W7-C1 Flows pillar consolidation** (n10) — retire `forge-reflect`
+  (post-merge chain → reflector agent run; journeys/harness/docs updated;
+  `release-finalizer` / `project-scoped-review` given an entry or removed from
+  the roster), onboard-project flow vs onboarding session dedupe, per-flow
+  history scoping, flows-index recent-runs/attention.
+- **W7-C2 interview + verdict richness** — per-question forms (`forge-lzv`),
+  revise verdict on every draft kind (`forge-4ei`), rationale capture,
+  AGENTS.md diff, authoring revise turn.
+- **W7-C3 cross-cutting polish + a11y** — per-route titles, breadcrumbs,
+  focus/contrast/landmarks, disabled-CTA reasons, `--accent` token, event
+  phase labels, narrow-viewport overflow, `forge-opj` (typecheck forge-ui
+  tests).
+
+**Wave D — gate + closeout:** full `ui:journey` + `ui:deadpaths` +
+`ui:walkthrough` (crawl assertions) + a re-run of the explorer fan-out over
+the ten clusters (target: zero S1, every operator note demonstrably closed
+on the live tree); the operator's own daily-driver walkthrough; ADR/README
+closeout; version 0.8.0.
+
+#### Exit criteria (each names its producer — refuse to spawn a lane whose row is empty)
+
+| Criterion | Delivering WI | Producer (route / agent / beat) | Proof today |
+|---|---|---|---|
+| A plan can be approved from Studio and the approved plan + its initiative are shown | W7-A3 | `/artifact?run=_architect-<sid>&type=plan&mode=gate` → `PlanGate` → `/api/plan-verdict`; journey `sessions-index`/architect beat | `grep -n "approve-plan" forge-ui/components/PlanGate.tsx` |
+| A pending initiative can be started from Studio and a run appears | W7-A3 | Home scheduler card + `/flows` → `POST /api/scheduler/start`; `_queue/pending/INIT-2026-08-18-add-version-flag.md` is the test vehicle | `grep -n "scheduler/start" cli/ui-bridge.ts` |
+| Every session kind can be cancelled from its page and from `/sessions` | W7-A2 | new `POST /api/studio/sessions/:kind/:id/cancel`; generic panel `data-action="cancel"` | (new) |
+| A crashed session reads `crashed` with its stderr on Home, `/sessions`, and its page | W7-A2 | session index derivation (`cli/ui-bridge.ts` sessions index) + panel | operator's `community-refresh 2026-08-18T12-54-32` and two `kb-cleanup` sessions are the fixtures |
+| Home strips are labelled and visually distinct | W7-B1 | `/` `data-section="sessions-needing-you"` / `data-section="kbs-needing-attention"`; journey `home` beat | `grep -n "Active sessions" forge-ui/app/page.tsx` |
+| Drain-to-green streams per-finding progress; prose changes are draft-gated | W7-B2 | `/knowledge?id=<kb>&tab=health` drain panel + `_kb-drain-*` events; journey `knowledge` beat | `grep -rn "Waiting for activity" forge-ui/` |
+| Community refresh (full and targeted) completes and its verdict is reachable | W7-B3 | `/sessions/community-refresh/new` (brief field) → generic panel verdict → `registry.yaml` commit | `grep -n "community-refresh" forge-ui/lib/session-panel*.ts` |
+| Skills / hooks / templates editable + deletable; KB card gone from Library | W7-B4 | `/skills/<id>`, `/hooks/<id>`, `/templates/<id>` edit routes; `/library` | `grep -n "Knowledge" forge-ui/app/library/page.tsx` |
+| Bridge outage shows a banner and recovers without reload | W7-A1 | shared `BridgeStatus` on every pillar; walkthrough crosscut probe (bridge-blocked intercept) | `grep -n "studioGet" forge-ui/lib/studio-client.ts` |
+| Reflect flow gone; reflector runs post-merge as an agent run | W7-C1 | `studio/flows/` (no `forge-reflect`), `orchestrator/finalize-merged.ts` trigger | `grep -rln forge-reflect orchestrator cli forge-ui scripts studio` |
+| Walkthrough re-run: zero S1 across the ten clusters | Wave D | `scripts/ui-walkthrough/` fan-out | (W7-A0) |
+
+#### Pre-authorised park-points
+
+- ADR amendment for the scheduler-as-Studio-object (ADR-031 M7 deleted it
+  with the dashboard; re-homing it is a decision, not a bug fix).
+- ADR-043 amendment if session cancel needs a new frozen `awaits`/verdict
+  token; ADR-027 amendment for editable/deletable library objects and the
+  Reflect-flow retirement (R2/R4 roadmaps note the flow as OOTB).
+- Any change to the write-root fence's `permissionMode` (security-relevant;
+  reviewer brief = `adversarial-containment-review`).
+- Cost ceiling defaults for the six agents that dispatch with none.
+- Registry CRUD write path (Studio writes to `studio/community/registry.yaml`
+  — a repo-tracked file; commit policy).
+
+#### Standing lessons carried in
+
+- Wave-6's: the full journey gate is the real exit criterion; presence of
+  green, not absence of red; any `brain/` content edit shifts the PM
+  spawn-capture snapshot; `check-raw-fs-guarded` line-drift tax → serialise
+  lanes touching `cli/ui-bridge.ts` (`forge-mlk` still open).
+- New from the walkthrough: **an explorer that spends real tokens finds the
+  defects a crawler cannot** (the drain's lossy rewrite, the refresh agent's
+  write-root escape, the plan gate's two Approve buttons all needed a real
+  run); **verifiers confirmed 276/279 — adversarial refutation of UI findings
+  is cheap and worth keeping**, but the near-zero refute rate says the next
+  verifier brief should demand a reproduction script per verdict, not a
+  source read; **throwaway objects created through the UI leave residue the
+  UI cannot delete** (flows, agents, hooks, installed-skills/hook-approvals
+  yaml, phantom project dirs) — W7-B4/B6 close that, and until then the
+  harness's own teardown list is authoritative.
+
 ---
 
 ## 5. Maintenance contract (living-roadmap mechanics)
