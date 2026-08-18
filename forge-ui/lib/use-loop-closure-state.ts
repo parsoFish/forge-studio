@@ -24,7 +24,7 @@ export type LoopClosureState = SchedulerStatusState & {
 };
 
 export function useLoopClosureState(initiativeIds: string[] | undefined, enabled = true, pollMs: number = SCHEDULER_POLL_MS): LoopClosureState {
-  const scheduler = useSchedulerStatus(pollMs);
+  const scheduler = useSchedulerStatus(pollMs, enabled);
   const [runs, setRuns] = useState<Run[]>([]);
   const [linkageReady, setLinkageReady] = useState(false);
   const alive = useRef(true);

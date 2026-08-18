@@ -42,7 +42,6 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
   // choice, COMPLETE starts collapsed once it outgrows the threshold — the
   // rail is height-bounded by its flex parent and scrolls internally.
   const [collapsed, setCollapsed] = useState<RailCollapsed>({});
-  const [hydrated, setHydrated] = useState(false);
   const completeCount = runs.filter((r) => r.status === 'complete').length;
   useEffect(() => {
     let stored: string | null = null;
@@ -52,7 +51,6 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
       /* sessionStorage unavailable (SSR/private mode) — non-fatal */
     }
     setCollapsed(initialCollapsed(stored, { complete: completeCount }));
-    setHydrated(true);
     // Re-derive when the flow changes or the complete pile crosses the
     // threshold before the operator has expressed a choice.
   }, [flowId, completeCount]);
@@ -67,7 +65,6 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
       return next;
     });
   };
-  void hydrated;
 
   if (runs.length === 0) {
     return (

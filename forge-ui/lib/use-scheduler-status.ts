@@ -45,7 +45,7 @@ const ACTIONS: Record<SchedulerAction, () => Promise<{ ok: boolean; error?: stri
 
 export const SCHEDULER_POLL_MS = 10_000;
 
-export function useSchedulerStatus(pollMs: number = SCHEDULER_POLL_MS): SchedulerStatusState {
+export function useSchedulerStatus(pollMs: number = SCHEDULER_POLL_MS, enabled = true): SchedulerStatusState {
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,6 +60,7 @@ export function useSchedulerStatus(pollMs: number = SCHEDULER_POLL_MS): Schedule
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     alive.current = true;
     void refresh();
     const tick = () => {
@@ -71,7 +72,7 @@ export function useSchedulerStatus(pollMs: number = SCHEDULER_POLL_MS): Schedule
       alive.current = false;
       clearInterval(id);
     };
-  }, [refresh, pollMs]);
+  }, [refresh, pollMs, enabled]);
 
   const act = useCallback(async (action: SchedulerAction) => {
     setError(null);
