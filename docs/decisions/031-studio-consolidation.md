@@ -113,6 +113,27 @@ deprecated alias for one milestone.
 > alias was removed. `forge studio` is the sole launcher; the bridge is the
 > operator API.
 
+> **Amended (Wave 7 — W7-A3 loop closure, 2026-08-19): the scheduler is a
+> Studio object again.** Decision 1 deleted the dashboard's `SchedulerBanner`
+> with the dashboard, and decision 4 removed the `start`/`stop`/`pause`/
+> `resume`/`status` CLI commands in favour of the bridge `/api/scheduler/*`
+> routes — but nothing in Studio ever mounted those routes. Every "start"
+> control in Studio (Plan →, Start development, Start Run, the architect
+> approve) is a **queue write**; `forge serve` is the only thing that turns a
+> queued manifest into a run. With no scheduler surface, a queued initiative
+> could never be started from the UI and every enqueue success line read as
+> "started" (walkthrough findings flows-01/23, projects-16, sessions-kinds-08/
+> 12). Wave 7 re-homes the banner as a first-class Studio object:
+> `forge-ui/components/SchedulerCard.tsx` (status running / paused / stopped /
+> unknown, Start / Pause / Resume / Stop, honest copy derived by
+> `lib/scheduler-view.ts`) mounted on Home, `/flows` (index + monitor), the
+> project roadmap tab, and inline wherever an enqueue outcome needs "start
+> it?" (the architect committed panel, the roadmap success lines, the flow
+> kickoff). The bridge routes are unchanged; the CLI commands stay removed —
+> the operator API remains the bridge, now with a UI on top of it. The claim
+> "the autonomous loop is building it now" is only ever rendered when a run
+> is active AND the daemon is running (`describePostCommit`).
+
 ## Consequences
 
 - **One product to reason about, operate, and secure.** A single run view, a

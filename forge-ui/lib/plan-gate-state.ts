@@ -22,17 +22,21 @@ export function isCriticBlocked(
 
 /**
  * True when the gate's optimistic local `approved` flag must be cleared:
- *   - any working/terminal phase outside the gate + payoff pair
- *     (send-back → redraft, finalizing in flight, rejected) — pre-existing
- *     behavior; `committed` is the approved terminal state and keeps the
- *     payoff visible;
+ *   - any working/terminal phase outside the gate + payoff set
+ *     (send-back → redraft, rejected) — pre-existing behavior; `finalizing`
+ *     and `committed` are the post-approve states and keep the payoff
+ *     visible (W7-A3);
  *   - a critic block round-trip: back at `awaiting-verdict` WITH findings.
  */
 export function shouldResetApproval(
   phase: string,
   critic: CompletenessCriticStatus | null | undefined,
 ): boolean {
-  if (phase !== 'awaiting-verdict' && phase !== 'committed') return true;
+  // W7-A3 (artifact-plan-10): `finalizing` is the POST-approve phase (approve
+  // → finalizing → committed). Resetting on it blanked the payoff ~2s after a
+  // successful 200 and re-armed a dead gate bar. The critic-block round-trip
+  // (finalizing → awaiting-verdict WITH findings) is still caught below.
+  if (phase !== 'awaiting-verdict' && phase !== 'finalizing' && phase !== 'committed') return true;
   return isCriticBlocked(phase, critic);
 }
 

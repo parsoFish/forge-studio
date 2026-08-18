@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { Run, Flow } from '@/lib/studio-client';
+import { formatRunElapsed } from '@/lib/run-elapsed';
 
 // ---------------------------------------------------------------------------
 // MonitorSummary — horizontal strip showing cost, elapsed, phase tally,
@@ -14,15 +15,8 @@ interface MonitorSummaryProps {
 }
 
 // Snapshot elapsed time — refreshed on run-update events, not on a timer.
-function elapsed(startedAt: string | undefined): string {
-  if (!startedAt) return '—';
-  const ms = Date.now() - new Date(startedAt).getTime();
-  if (ms < 0) return '—';
-  const totalM = Math.floor(ms / 60_000);
-  const h = Math.floor(totalM / 60);
-  const m = totalM % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
+// W7-A3 (flows-29): a finished run's elapsed is completedAt − startedAt and
+// stops there (lib/run-elapsed.ts); only a live run counts against now.
 
 function phaseTally(run: Run): {
   complete: number;
@@ -79,7 +73,7 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
   const ceiling = flow.costCeilingUsd;
   const pct = ceiling ? Math.min((run.costUsd / ceiling) * 100, 100) : 0;
   const fillClass = pct >= 90 ? ' crit' : pct >= 70 ? ' warn' : '';
-  const elapsedStr = elapsed(run.startedAt);
+  const elapsedStr = formatRunElapsed(run.startedAt, run.completedAt, Date.now());
 
   // Normalise artifactsReady: 'work-items' → 'workitems' so the /artifact
   // page type param resolves correctly (mirrors artifact/page.tsx ~:479-487).
@@ -122,7 +116,7 @@ export function MonitorSummary({ run, flow }: MonitorSummaryProps) {
           value={`$${run.costUsd.toFixed(2)}`}
           ember
         />
-        <SummaryKV label="Elapsed" value={elapsedStr} />
+        <SummaryKV label="Elapsed" value={elapsedStr} final={!!run.completedAt} />
 
         <div style={{ fontSize: 12, color: 'var(--dim)' }}>
           <span style={{ color: 'var(--green)' }}>{tally.complete} complete</span>
@@ -232,13 +226,16 @@ function SummaryKV({
   label,
   value,
   ember,
+  final,
 }: {
   label: string;
   value: string;
   ember?: boolean;
+  /** W7-A3 (flows-29): the value is a finished run's fixed duration. */
+  final?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} {...(final ? { 'data-elapsed-final': 'true' } : {})}>
       <span
         style={{
           fontFamily: 'var(--font-display)',

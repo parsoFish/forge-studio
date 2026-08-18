@@ -233,9 +233,20 @@ function DrawerBody({
   const [stderrOnly, setStderrOnly] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
 
+  // W7-A3 (flows-15): a node that never started has no log — don't fire a
+  // guaranteed-404 fetch (console error per hex click on a queued run). Keyed
+  // on the pending BOOLEAN, not the raw status, so a later active→complete
+  // flip does not re-run the identity effect (Effect 2 owns live refresh).
+  const pendingNode = status === 'pending';
+
   // Effect 1 — identity: clear + fetch on identity change (new node / filter toggle)
   useEffect(() => {
     const signal = { cancelled: false };
+    if (pendingNode) {
+      setLogLines([]);
+      setLogLoading(false);
+      return () => { signal.cancelled = true; };
+    }
     setLogLoading(true);
     setLogLines([]);
     void (async () => {
@@ -247,7 +258,7 @@ function DrawerBody({
       }
     })();
     return () => { signal.cancelled = true; };
-  }, [cycleId, nodeId, stderrOnly, isWi, wiId]);
+  }, [cycleId, nodeId, stderrOnly, isWi, wiId, pendingNode]);
 
   const lastProgressAt = meta?.lastProgressAt;
   // R6-01 WI-1 F1: the log-refresh effect keys off lastEventAt (via this

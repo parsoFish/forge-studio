@@ -6,8 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, startKbCleanup, type AgentCapability, type Kb } from '@/lib/studio-client';
+import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
+import { describeLifecycle } from '@/lib/session-lifecycle-client';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -91,6 +92,12 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
 
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
+  // W7-A2 (home-sessions-22, sessions-kinds-28) — every in-flight session
+  // (the SAME `GET /api/studio/sessions?active=1` read /sessions and Home
+  // use), so this screen can show the ones already open for the chosen
+  // kind + target and require an explicit "start another".
+  const [activeSessions, setActiveSessions] = useState<SessionIndexRow[]>([]);
+  const [confirmingAnother, setConfirmingAnother] = useState(false);
   const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -121,12 +128,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       // read-only 'fixed' chip, even for a real strategy:range SKILL.md.
       fetchAgentCapability(spec.agentSlug),
       spec.selector === 'kb' ? fetchStudioKbs() : Promise.resolve([]),
+      fetchStudioSessions(),
     ])
-      .then(([projects, cap, kbList]) => {
+      .then(([projects, cap, kbList, sessions]) => {
         if (cancelled) return;
         setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort());
         setCapability(cap);
         setKbs(kbList);
+        setActiveSessions(sessions);
       })
       .catch((err) => {
         // W6-B6 post-merge review (LOW): the prior `.catch(() => [])` on
@@ -154,8 +163,35 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
 
+  // W7-A2 — the in-flight sessions of THIS kind on the SAME target. The
+  // target is the session's anchor project exactly as the bridge indexes it:
+  // the project id; for a KB-anchored kind, the KB's OWN binding decides —
+  // a `project`-bound KB nests its sessions under that real project, every
+  // other binding under the `.kb-<id>` dot-anchor (`POST /api/studio/kbs/
+  // :id/cleanup/start`, cli/ui-bridge.ts — mirrored here, never guessed
+  // from the id alone); `.community-registry` for the selector-less
+  // community refresh (the bridge's own COMMUNITY_REFRESH_PROJECT_ANCHOR
+  // literal — see forge-ui/lib/session-shell-view.ts's parity-tested mirror).
+  const selectedKb = spec?.selector === 'kb' ? kbs.find((k) => k.id === kbId.trim()) ?? null : null;
+  const targetAnchor =
+    spec?.selector === 'kb'
+      ? (selectedKb === null ? null : selectedKb.binding.kind === 'project' ? selectedKb.binding.ref : `.kb-${selectedKb.id}`)
+    : spec?.selector === 'none' ? '.community-registry'
+    : project.trim() || null;
+  const existingSessions = targetAnchor !== null ? activeSessions.filter((r) => r.kind === kind && r.project === targetAnchor && !r.terminal) : [];
+  const hasExisting = existingSessions.length > 0;
+  // A changed target disarms a pending "start another" confirm.
+  useEffect(() => { setConfirmingAnother(false); }, [targetAnchor]);
+
   async function onSubmit(): Promise<void> {
     if (!spec || !canSubmit) return;
+    // W7-A2 — duplicate guard: with a session of this kind already open on
+    // this target, the FIRST click only arms the button ("Yes, start
+    // another"); the second click really starts one. Never silent.
+    if (hasExisting && !confirmingAnother) {
+      setConfirmingAnother(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     const tier = isRangeTier && modelTier ? modelTier : undefined;
@@ -298,6 +334,31 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
 
       <KickoffModelTierPicker capability={capability} modelTier={modelTier} onChange={setModelTier} />
 
+      {hasExisting && (
+        <section
+          data-section="kickoff-existing-sessions"
+          data-existing-count={existingSessions.length}
+          aria-label="Sessions already open on this target"
+          style={{ ...cardStyle, marginBottom: 14, borderColor: 'var(--ember)' }}
+        >
+          <div style={rowLabel}>Already open on this target</div>
+          <p style={{ fontSize: 12.5, color: 'var(--dim)', margin: '0 0 8px', lineHeight: 1.5 }}>
+            {existingSessions.length === 1 ? 'A' : `${existingSessions.length}`} {kind} session{existingSessions.length === 1 ? ' is' : 's are'} already in flight for this target. Open it instead, or start another on purpose.
+          </p>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {existingSessions.map((r) => (
+              <li key={`${r.kind}-${r.sessionId}`} data-existing-session data-session-state={r.state} style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 12.5 }}>
+                <Link href={r.href} data-action="open-existing-session" style={{ color: 'var(--ember)', fontFamily: 'ui-monospace, Menlo, monospace', textDecoration: 'none' }}>
+                  {r.sessionId} →
+                </Link>
+                <span style={{ color: 'var(--dim)', fontFamily: 'ui-monospace, Menlo, monospace' }}>{r.phase}</span>
+                <span style={{ color: 'var(--faint)' }}>{describeLifecycle(r.state, r.error, r.idleMs)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {error && (
         <div data-kickoff-error style={{ color: 'var(--red, #f87171)', fontSize: 12.5, marginBottom: 10 }}>
           {error}
@@ -308,12 +369,24 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         type="button"
         className="btn btn-primary"
         data-action="start-session"
+        data-existing-count={existingSessions.length}
+        data-confirming={hasExisting && confirmingAnother}
         disabled={!canSubmit}
         onClick={() => void onSubmit()}
         style={{ opacity: canSubmit ? 1 : 0.5 }}
       >
-        {submitting ? 'Starting…' : 'Start session'}
+        {submitting ? 'Starting…' : hasExisting ? (confirmingAnother ? 'Yes, start another' : 'Start another session') : 'Start session'}
       </button>
+      {hasExisting && confirmingAnother && !submitting && (
+        <button
+          type="button"
+          data-action="start-session-abort"
+          onClick={() => setConfirmingAnother(false)}
+          style={{ marginLeft: 10, fontSize: 12.5, background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          keep the existing one
+        </button>
+      )}
     </StudioArchitectShell>
   );
 }

@@ -128,12 +128,12 @@ export function hooksDir(root: string = FORGE_ROOT): string {
 }
 
 export function hookDir(id: string, root: string = FORGE_ROOT): string {
-  assertSkillSlug(id);
+  assertSkillSlug(id, 'hook');
   return join(hooksDir(root), id);
 }
 
 export function hookYamlPath(id: string, root: string = FORGE_ROOT): string {
-  assertSkillSlug(id);
+  assertSkillSlug(id, 'hook');
   return join(hooksDir(root), id, 'hook.yaml');
 }
 

@@ -425,7 +425,7 @@ export async function handleStudioHooksRoutes(
     try {
       let id: string;
       try { id = decodeIdSegment(detailMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
-      try { assertSkillSlug(id); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
+      try { assertSkillSlug(id, 'hook'); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
 
       const entry = listHookLibrary(ctx.forgeRoot).find((e) => e.id === id);
       if (!entry || entry.ok !== true) {

@@ -67,6 +67,7 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
       data-run-state={state}
       data-run-cost={costUsd}
       data-run-found={found ? 'true' : 'false'}
+      data-page-ready="true"
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
     >
       {!found ? (

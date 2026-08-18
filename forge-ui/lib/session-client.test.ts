@@ -197,6 +197,9 @@ const WELL_FORMED_PAYLOAD = {
   // W6-B8 — REQUIRED on every wire payload (never omitted): architect's
   // fixture session sits at 'awaiting-verdict', a non-terminal phase.
   terminal: false,
+  // W7-A2 — REQUIRED on every wire payload (never omitted): the bridge's
+  // derived lifecycle; awaiting-verdict is an operator gate.
+  lifecycle: { state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true },
 };
 
 // ===========================================================================
@@ -465,6 +468,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
     modelTier: 'sonnet',
     terminal: false,
+    lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -482,6 +486,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [],
     modelTier: null,
     terminal: false,
+    lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
 });

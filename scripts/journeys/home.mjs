@@ -293,7 +293,7 @@ export const journey = defineJourney({
     {
       id: 'home-landing',
       title: 'Landing on Home — the live constellation',
-      narration: 'The operator\'s FIRST stop, not a mid-flow screen: `/` now serves the Home dashboard directly (R6-07 retired the interim redirect to /library). The hex constellation renders one hex per flow/agent/project/KB, its status DERIVED from the same run-model and attention aggregate every other Studio surface reads — never a fabricated `.status` field.',
+      narration: 'The operator\'s FIRST stop, not a mid-flow screen: `/` now serves the Home dashboard directly (R6-07 retired the interim redirect to /library). The hex constellation renders one hex per flow/agent/project/KB, its status DERIVED from the same run-model and attention aggregate every other Studio surface reads — never a fabricated `.status` field. Wave 7 (A1) adds the honesty layer under it: the app shell carries the shared bridge-status banner (`[data-bridge-status]`, hidden while the bridge is up) and Home reports `data-fetch-status="ok"` — a bridge outage now renders an explicit failure state with Retry, never the first-run "Nothing registered yet" screen.',
       drive: async (ctx) => {
         const { page, watch, check, countAtLeast, frame } = ctx;
         console.log('\n[HOME.1] Home dashboard — landing');
@@ -323,6 +323,57 @@ export const journey = defineJourney({
           const ready = await page.evaluate(() =>
             document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
           check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
+
+          // W7-A1 (home-sessions-13 / crosscut-01): the app-shell bridge
+          // banner (components/BridgeStatus.tsx, mounted once in
+          // app/layout.tsx) reports the LIVE bridge as up — the same
+          // `[data-bridge-status]` every route carries — and Home's own read
+          // settled OK (`data-fetch-status="ok"`), i.e. the roster below is a
+          // real read, not the "Nothing registered yet" render an outage
+          // used to produce. The WS may open a beat after page-ready, so
+          // wait for the real transition, never a fixed sleep.
+          await page.waitForFunction(
+            () => document.querySelector('[data-component="bridge-status"]')?.getAttribute('data-bridge-status') === 'up',
+            null, { timeout: 10000 },
+          ).catch(() => {});
+          const bridge = await page.evaluate(() => {
+            const el = document.querySelector('[data-component="bridge-status"]');
+            return el
+              ? { status: el.getAttribute('data-bridge-status'), everUp: el.getAttribute('data-bridge-ever-up'), hidden: el.hasAttribute('hidden') }
+              : null;
+          });
+          check(bridge !== null, 'HOME.1: [data-component="bridge-status"] is mounted in the app shell (every route carries it)');
+          check(bridge?.status === 'up', `HOME.1: [data-bridge-status="up"] — the live bridge is reported up (got "${bridge?.status}")`);
+          check(bridge?.everUp === 'true', `HOME.1: data-bridge-ever-up="true" once the bridge has been seen up (got "${bridge?.everUp}")`);
+          check(bridge?.hidden === true, 'HOME.1: the bridge banner is HIDDEN while up (no banner text on a healthy bridge)');
+          const fetchStatus = await page.evaluate(() =>
+            document.querySelector('[data-page="home"]')?.getAttribute('data-fetch-status') ?? '(absent)');
+          check(fetchStatus === 'ok', `HOME.1: [data-page="home"][data-fetch-status="ok"] — Home's read settled without a bridge failure (got "${fetchStatus}")`);
+          const fetchErrorCount = await page.evaluate(() => document.querySelectorAll('[data-component="fetch-error"]').length);
+          check(fetchErrorCount === 0, `HOME.1: no [data-component="fetch-error"] on a healthy bridge (got ${fetchErrorCount})`);
+
+          // W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment): the
+          // scheduler daemon is a Studio object again. The journey harness runs
+          // with the daemon STOPPED (its daemon guard refuses a live one), so
+          // the card must say so honestly and offer exactly one control: Start.
+          try {
+            await page.waitForFunction(
+              () => document.querySelector('[data-component="scheduler-card"]')?.getAttribute('data-scheduler-ready') === 'true',
+              null, { timeout: 10000 },
+            );
+          } catch { /* asserted below */ }
+          const sched = await page.evaluate(() => {
+            const el = document.querySelector('[data-component="scheduler-card"]');
+            return el ? {
+              status: el.getAttribute('data-scheduler-status'),
+              ready: el.getAttribute('data-scheduler-ready'),
+              actions: [...el.querySelectorAll('[data-action^="scheduler-"]')].map((b) => b.getAttribute('data-action')),
+            } : null;
+          });
+          check(sched !== null, 'HOME.1 (W7-A3): [data-component="scheduler-card"] is mounted on Home');
+          check(sched?.ready === 'true', `HOME.1 (W7-A3): the scheduler card read the bridge (data-scheduler-ready, got "${sched?.ready}")`);
+          check(sched?.status === 'stopped', `HOME.1 (W7-A3): the daemon is honestly reported stopped under the journey harness (got "${sched?.status}")`);
+          check(JSON.stringify(sched?.actions) === JSON.stringify(['scheduler-start']), `HOME.1 (W7-A3): a stopped scheduler offers exactly [Start] (got ${JSON.stringify(sched?.actions)})`);
 
           // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
           // onboarding entry point from Home — it must land on the real

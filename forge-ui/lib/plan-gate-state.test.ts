@@ -45,9 +45,18 @@ test('isCriticBlocked: findings outside awaiting-verdict do not block (gate is n
 });
 
 test('shouldResetApproval: working phases reset the optimistic approval (pre-existing behavior)', () => {
-  for (const phase of ['interviewing', 'awaiting-answers', 'drafting', 'finalizing', 'rejected']) {
+  for (const phase of ['interviewing', 'awaiting-answers', 'drafting', 'rejected']) {
     expect(shouldResetApproval(phase, null)).toBe(true);
   }
+});
+
+test('shouldResetApproval: W7-A3 (artifact-plan-10) — finalizing is the POST-approve phase and keeps the payoff', () => {
+  // A successful approve moves the session awaiting-verdict → finalizing →
+  // committed. Resetting on `finalizing` blanked the payoff 2s after a 200 and
+  // re-armed a dead gate bar. The critic-block round-trip is still caught by
+  // the awaiting-verdict+findings rule below, so keeping finalizing is safe.
+  expect(shouldResetApproval('finalizing', null)).toBe(false);
+  expect(shouldResetApproval('finalizing', withFindings)).toBe(false);
 });
 
 test('shouldResetApproval: committed keeps the payoff — even with acknowledged findings on status', () => {

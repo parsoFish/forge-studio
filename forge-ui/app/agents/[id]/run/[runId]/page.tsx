@@ -24,6 +24,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
@@ -44,6 +45,9 @@ const EMPTY_DETAIL: RunDetail = {
 export default function AgentRunPage() {
   const params = useParams();
   const runId = decodeURIComponent((params?.runId as string) ?? '');
+  // W7-A3 (agents-12): the agent slug from the URL is shown and linked back
+  // to — the run page used to ignore `params.id` entirely.
+  const agentSlug = decodeURIComponent((params?.id as string) ?? '');
 
   const [detail, setDetail] = useState<RunDetail>(EMPTY_DETAIL);
   // Distinct from `detail.found` — the fetch simply hasn't resolved yet, so
@@ -74,8 +78,19 @@ export default function AgentRunPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }} data-agent-slug={agentSlug}>
       <StudioNav />
+      {/* W7-A3 (agents-12 / agents-37 / crosscut-23): the run page is no
+          longer a terminus — a breadcrumb back to the agent that ran it. */}
+      <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px 0', fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+        <Link href="/agents" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Agents</Link>
+        <span style={{ color: 'var(--line-2)' }}>/</span>
+        <Link href={`/agents/${encodeURIComponent(agentSlug)}`} data-action="back-to-agent" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+          <span data-agent-slug={agentSlug}>{agentSlug || 'agent'}</span>
+        </Link>
+        <span style={{ color: 'var(--line-2)' }}>/</span>
+        <span>run {runId}</span>
+      </nav>
       {!loaded ? (
         <div data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
           Loading run…

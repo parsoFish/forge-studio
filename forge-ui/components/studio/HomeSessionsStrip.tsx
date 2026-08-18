@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import type { HomeSessionsStrip as HomeSessionsStripData } from '@/lib/home-view';
+import type { SessionIndexRow } from '@/lib/studio-client';
+import { describeLifecycle } from '@/lib/session-lifecycle-client';
+import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
 
 // ---------------------------------------------------------------------------
 // HomeSessionsStrip — Home's active-sessions strip (W6-B11, the IA-4 marked
@@ -21,7 +24,14 @@ import type { HomeSessionsStrip as HomeSessionsStripData } from '@/lib/home-view
 // the caller (app/page.tsx); this component only renders it.
 // ---------------------------------------------------------------------------
 
-export function HomeSessionsStrip({ strip }: { strip: HomeSessionsStripData }) {
+export function HomeSessionsStrip({
+  strip,
+  onCancelled,
+}: {
+  strip: HomeSessionsStripData;
+  /** W7-A2 — fired after a card's cancel succeeds so Home refetches. */
+  onCancelled?: (row: SessionIndexRow) => void;
+}) {
   if (strip.totalCount === 0) return null;
 
   return (
@@ -62,22 +72,26 @@ export function HomeSessionsStrip({ strip }: { strip: HomeSessionsStripData }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
         {strip.cards.map((s) => (
-          <Link
+          // W7-A2 — the card is a DIV wrapping the link + a cancel control
+          // (a button inside an <a> is nested-interactive; the whole card
+          // used to be the <Link>). Layout otherwise unchanged (B1 owns
+          // Home's IA — this lane adds the button only).
+          <div
             key={`${s.kind}-${s.sessionId}`}
-            href={s.href}
             data-session-card
             data-session-kind={s.kind}
+            data-session-id={s.sessionId}
             data-session-phase={s.phase}
             data-needs-you={s.needsYou}
+            data-session-state={s.state}
             style={{
               display: 'flex',
               flexDirection: 'column',
               gap: 4,
               padding: '10px 12px',
               background: 'var(--panel)',
-              border: `1px solid ${s.needsYou ? 'var(--ember)' : 'var(--line)'}`,
+              border: `1px solid ${s.state === 'crashed' ? 'var(--red, #f87171)' : s.needsYou ? 'var(--ember)' : 'var(--line)'}`,
               borderRadius: 'var(--radius-sm)',
-              textDecoration: 'none',
               color: 'var(--text)',
               position: 'relative',
             }}
@@ -90,14 +104,31 @@ export function HomeSessionsStrip({ strip }: { strip: HomeSessionsStripData }) {
                 style={{ position: 'absolute', top: 10, right: 10 }}
               />
             )}
-            <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)', textTransform: 'capitalize' }}>
-              {s.kind}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{s.project}</span>
-            <span style={{ fontSize: 11, color: s.needsYou ? 'var(--ember)' : 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
-              {s.phase}
-            </span>
-          </Link>
+            <Link href={s.href} data-action="open-session" style={{ display: 'flex', flexDirection: 'column', gap: 4, textDecoration: 'none', color: 'inherit' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)', textTransform: 'capitalize' }}>
+                {s.kind}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{s.project}</span>
+              <span style={{ fontSize: 11, color: s.needsYou ? 'var(--ember)' : 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
+                {s.phase}
+              </span>
+              <span
+                data-session-state-chip
+                title={s.error ?? undefined}
+                style={{
+                  fontSize: 10.5, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  color: s.state === 'crashed' ? 'var(--red, #f87171)' : s.state === 'stalled' ? 'var(--ember)' : 'var(--faint)',
+                }}
+              >
+                {describeLifecycle(s.state, s.error, s.idleMs)}
+              </span>
+            </Link>
+            {s.state !== 'terminal' && (
+              <div style={{ marginTop: 4 }}>
+                <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={() => onCancelled?.(s)} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </section>

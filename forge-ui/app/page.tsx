@@ -6,8 +6,10 @@ import { useStudioHomeData } from '@/lib/use-studio-home-data';
 import { fetchRecentAgentRuns } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
+import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import {
   buildConstellation,
@@ -64,7 +66,7 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const { agents, flows, projects, kbs, runs, attention, sessions, ready } = useStudioHomeData();
+  const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
 
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
@@ -124,6 +126,9 @@ export default function HomePage() {
         'data-live-count': liveCount,
         'data-attention-count': attentionItems.length,
         'data-hex-count': constellation.length,
+        // W7-A1: loading | ok | error — an outage is an honest ERROR state,
+        // never the first-run empty fleet (home-sessions-30 / crosscut-01).
+        'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
       }}
       eyebrow="forge studio"
       title="Everything running, at a glance"
@@ -145,12 +150,35 @@ export default function HomePage() {
         </>
       }
     >
+      {/* ===== W7-A1: BRIDGE READ FAILED — the shared failure state renders
+          FIRST (never the "Nothing registered yet" fleet-is-empty screen).
+          If an earlier read succeeded in this tab, that last-known snapshot
+          stays visible UNDER the failure box (it is real data, just not
+          fresh); with nothing ever loaded, the box is the whole body. Retry
+          re-runs the hook's load; a bridge recovery does the same
+          automatically (useBridgeRecovery inside the hook). ===== */}
+      {error ? (
+        <div style={{ marginBottom: 24 }}>
+          <FetchErrorState what="the fleet" error={error.message} status={error.status} onRetry={reload} />
+        </div>
+      ) : null}
+      {error && constellation.length === 0 ? null : (
+      <>
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
           (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip
           (review fix) so its data-* contract gets a renderToStaticMarkup
           pin — see components/studio/HomeSessionsStrip.tsx for the full
           contract description. ===== */}
-      <HomeSessionsStrip strip={sessionsStrip} />
+      <HomeSessionsStrip strip={sessionsStrip} onCancelled={() => { void refreshSessions(); }} />
+
+      {/* ===== SCHEDULER — the daemon that turns queued work into runs (W7-A3,
+          flows-01/23; ADR-031 wave-7 amendment). Its own component owns its
+          read (`useSchedulerStatus`, slow visible-only poll) — Home itself
+          adds no fetch, no interval, no endpoint literal. `queuedCount` is
+          derived from the runs the shared hook already loaded. ===== */}
+      <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 24 }}>
+        <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
+      </section>
 
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (
@@ -304,6 +332,8 @@ export default function HomePage() {
         </h2>
         <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
       </section>
+      </>
+      )}
     </StudioPage>
   );
 }

@@ -106,6 +106,49 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
   'project-brain': new Set(['committed', 'abandoned']),
 };
 
+/** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
+ *  terminal phase every session kind shares: written by the generic
+ *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
+ *  (cli/bridge-studio-lifecycle.ts) and read as terminal by
+ *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
+ *  the per-kind tables are consulted. Deliberately NOT a per-kind
+ *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
+ *  is the same fact for all eight kinds, and eight copies of one fact in
+ *  eight tables is exactly the drift shape ADR-043's "derived, not authored"
+ *  discipline exists to prevent. `deriveSessionAffordances` already yields
+ *  `[]` for any phase a table does not name, so a cancelled session derives
+ *  no affordance without any table change. */
+export const CANCELLED_PHASE = 'cancelled';
+
+/** W7-A2 — operator-gate phases for the two kinds that carry NEITHER a
+ *  `turnSpec` nor a `panel` table (architect — permanently bespoke per
+ *  ADR-043 amendment §4 — and project-brain): which phases WAIT ON THE
+ *  OPERATOR, and for what (`questions` | `verdict`, the SAME AWAITS_KINDS
+ *  vocabulary the yaml rows use). The lifecycle derivation
+ *  (cli/bridge-studio-lifecycle.ts) reads a table-bearing kind's `awaits:`
+ *  from its own phase row and falls back to THIS table for the two legacy
+ *  kinds — mirroring how `isTerminalPhase` falls back to
+ *  `LEGACY_SESSION_TERMINAL_PHASES` immediately above. Sourced from the
+ *  runners' own phase vocabularies: `ArchitectPhase`
+ *  (orchestrator/architect-runner.ts) and `ProjectBrainPhase`
+ *  (orchestrator/project-brain-builder-runner.ts) + the two bespoke panels
+ *  (SessionArchitectPanel / SessionProjectBrainPanel), which render an
+ *  operator control at exactly these phases and nowhere else. */
+export const LEGACY_SESSION_AWAITS_PHASES: Readonly<Record<string, Readonly<Record<string, 'questions' | 'verdict'>>>> = {
+  architect: { 'awaiting-answers': 'questions', 'awaiting-verdict': 'verdict' },
+  'project-brain': { briefing: 'questions', 'awaiting-review': 'verdict' },
+};
+
+/** W7-A2 — the AGENT-WORKING phases for the same two legacy kinds (the
+ *  twin of a table-bearing kind's `step: agent | finalize` rows): a session
+ *  sitting here is the runner's to advance, so silence past the stall
+ *  ceiling means "stalled", never "needs you". Same sourcing as
+ *  LEGACY_SESSION_AWAITS_PHASES above. */
+export const LEGACY_SESSION_WORKING_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
+  architect: new Set(['interviewing', 'exploring', 'drafting', 'finalizing']),
+  'project-brain': new Set(['analyzing', 'committing']),
+};
+
 // ---------------------------------------------------------------------------
 // Anti-CSRF + CORS helpers
 // ---------------------------------------------------------------------------
@@ -283,10 +326,18 @@ function classifyEvent(e: EventLogEntry): LogLine {
 /** Find a Run by id (cycleId or initiativeId). Returns null if not found.
  *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
  *  — same derivation, same contract as listRuns, but terminal runs skip
- *  re-parsing their events.jsonl once cached. */
+ *  re-parsing their events.jsonl once cached.
+ *
+ *  W7-A3 (projects-32, sessions-kinds-08): a run's `id` CHANGES when the
+ *  scheduler claims it (planned = the initiative id; claimed = the cycle id),
+ *  so a link minted at enqueue time by run id goes dead on claim. The
+ *  initiativeId is the stable handle — match it second, so
+ *  `/api/runs/<initiativeId>` (and `/flows/<flow>/run/<initiativeId>`)
+ *  resolves the initiative's run in every queue state. Unknown ids still 404
+ *  (an INIT- id never collides with a `<iso>_INIT-…` cycle id). */
 function findRun(forgeRoot: string, id: string): Run | null {
   const runs = cachedListRuns(forgeRoot, Date.now());
-  return runs.find((r) => r.id === id) ?? null;
+  return runs.find((r) => r.id === id) ?? runs.find((r) => r.initiativeId === id) ?? null;
 }
 
 // ---------------------------------------------------------------------------

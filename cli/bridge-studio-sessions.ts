@@ -100,8 +100,9 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, type StudioContext } from './bridge-studio.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
@@ -111,6 +112,7 @@ import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession }
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
+import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -276,6 +278,47 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
   return guarded.realPath;
 }
 
+/**
+ * W7-A2 (community-06, knowledge-18, sessions-kinds-20) — resolve the anchor
+ * project of `<kindDirName>/<sessionId>` when the caller did not supply one
+ * (a deep link with no `?project=`, or a cancel POST with no body.project).
+ * Enumerates the REAL on-disk project names under the trusted `projectsRoot`
+ * (server-enumerated — never a client string; dot-anchors such as
+ * `.kb-<id>` / `.community-registry` are real session homes and are
+ * INCLUDED), skips any name `invalidProjectReason` would refuse (so an
+ * escaping/odd directory can never become a resolved project), and checks
+ * each candidate through the SAME `resolveGuardedPath` choke point every
+ * other session read here uses (`ok && exists`, an escaping symlink is
+ * simply not a match). Exactly one hit resolves; zero is `not-found`; two
+ * or more is `ambiguous` (the caller 409s and asks for `?project=` — the
+ * response never names the candidates, so this is not a project-name
+ * oracle beyond what the aggregate index already lists).
+ */
+export function findSessionProject(
+  projectsRoot: string,
+  kindDirName: string,
+  sessionId: string,
+): { ok: true; project: string } | { ok: false; reason: 'not-found' | 'ambiguous' } {
+  // `projectsRoot` is the config-derived trusted root (never request data);
+  // enumerating it raw mirrors `collectStudioSessionIndexRows`
+  // (cli/ui-bridge.ts) exactly — the per-candidate check below is what is
+  // guarded, and every candidate name is server-enumerated.
+  let names: string[];
+  try {
+    names = readdirSync(projectsRoot);
+  } catch {
+    names = [];
+  }
+  const hits: string[] = [];
+  for (const name of names) {
+    if (invalidProjectReason(name) !== null) continue;
+    const guarded = resolveGuardedPath(projectsRoot, [name, kindDirName, sessionId]);
+    if (guarded.ok && guarded.exists) hits.push(name);
+  }
+  if (hits.length === 1) return { ok: true, project: hits[0] };
+  return { ok: false, reason: hits.length === 0 ? 'not-found' : 'ambiguous' };
+}
+
 // ---------------------------------------------------------------------------
 // W6-B2 review fix (MEDIUM 2) — terminal-phase gate for ensureSessionTail
 // ---------------------------------------------------------------------------
@@ -332,6 +375,12 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
  * first-class phase-table source.
  */
 export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
+  // W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal reserved
+  // terminal phase, checked FIRST for every kind: written only by the
+  // generic cancel route (cli/bridge-studio-lifecycle.ts), never by any
+  // runner, and deliberately absent from every per-kind table (see
+  // CANCELLED_PHASE's own doc comment, cli/bridge-studio.ts).
+  if (phase === CANCELLED_PHASE) return true;
   const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;
   if (phases !== undefined) {
     return phases.some((p) => p.step === 'terminal' && p.phase === phase);
@@ -377,17 +426,18 @@ export async function handleStudioSessionsRoutes(
       return true;
     }
 
+    // W7-A2 — `?project=` is OPTIONAL: when present it is validated exactly
+    // as before; when absent the anchor project is resolved server-side via
+    // `findSessionProject` (below), so a deep link that omits it (or names
+    // no guessable dot-anchor like `.kb-cycles`) still resolves.
     const projectRaw = parseQuery(rawUrl).get('project');
-    if (projectRaw === null) {
-      sendJson(res, 400, { error: 'project query parameter is required' }, origin);
-      return true;
+    if (projectRaw !== null) {
+      const projectInvalidReason = invalidProjectReason(projectRaw);
+      if (projectInvalidReason) {
+        sendJson(res, 400, { error: projectInvalidReason }, origin);
+        return true;
+      }
     }
-    const projectInvalidReason = invalidProjectReason(projectRaw);
-    if (projectInvalidReason) {
-      sendJson(res, 400, { error: projectInvalidReason }, origin);
-      return true;
-    }
-    const project = projectRaw;
 
     // Resolve `kind` against the live registry — never a hardcoded switch, so
     // a new descriptor needs no code change here.
@@ -407,6 +457,21 @@ export async function handleStudioSessionsRoutes(
 
     const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
     const kindDirName = `_${descriptor.id}`;
+    let project: string;
+    if (projectRaw !== null) {
+      project = projectRaw;
+    } else {
+      const found = findSessionProject(projectsRoot, kindDirName, sessionId);
+      if (!found.ok) {
+        if (found.reason === 'ambiguous') {
+          sendJson(res, 409, { error: `session "${sessionId}" (kind "${kind}") exists under more than one project — pass ?project= to disambiguate`, kind, sessionId }, origin);
+        } else {
+          sendJson(res, 404, { error: 'session not found', kind, sessionId }, origin);
+        }
+        return true;
+      }
+      project = found.project;
+    }
     const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
     if (!sessionDir) {
       sendJson(res, 404, { error: 'session not found', kind, sessionId, project }, origin);
@@ -562,6 +627,16 @@ export async function handleStudioSessionsRoutes(
         // `SessionInteractivePanel` can gate its ActivityLog drawer without a
         // second, hand-kept terminal-phase table client-side.
         terminal: isTerminalPhase(descriptor, phase),
+        // W7-A2 — the DERIVED lifecycle view (cli/bridge-studio-lifecycle.ts):
+        // state (working | awaiting-operator | crashed | stalled | terminal),
+        // a truthful `needsYou`, the runner's crash text read live off
+        // `_logs/_<kind>-<sid>/stderr.log`, idle time, and cancellability.
+        // Derived at read time from the phase row + on-disk liveness facts —
+        // nothing here is ever stored on status.json (derive-don't-store).
+        // ALWAYS present, mirroring `affordances`/`terminal`.
+        lifecycle: deriveSessionLifecycleFor({
+          descriptor, phase, terminal: isTerminalPhase(descriptor, phase), project, sessionId, projectsRoot, logsRoot: ctx.logsRoot,
+        }),
       },
       origin,
     );

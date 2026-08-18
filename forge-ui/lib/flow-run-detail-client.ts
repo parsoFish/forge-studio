@@ -97,3 +97,13 @@ export async function fetchReviewFindings(runId: string): Promise<ReviewFindings
     return null;
   }
 }
+
+/**
+ * W7-A3 (flows-07 / home-sessions-17): `review-findings.json` is produced by
+ * the develop flow's `adversarial-review` node — fetch it ONLY once that node
+ * completed, so a run page never fires a guaranteed-404 request (a console
+ * error on every visit, on every Home ledger row).
+ */
+export function shouldFetchReviewFindings(run: Run): boolean {
+  return run.phases['adversarial-review'] === 'complete';
+}

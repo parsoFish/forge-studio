@@ -44,7 +44,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
-import { fetchFlowRunDetail, fetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
+import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchFlow, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
@@ -77,7 +77,9 @@ export default function FlowRunPage() {
     setLoaded(false);
     const [res, flowDef] = await Promise.all([fetchFlowRunDetail(runId), fetchFlow(flowId)]);
     if (signal.cancelled) return;
-    const findingsDoc = res.kind === 'found' ? await fetchReviewFindings(res.run.id) : null;
+    // W7-A3 (flows-07 / home-sessions-17): findings are produced by the
+    // adversarial-review node — only fetch once it completed (no 404 spam).
+    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run) ? await fetchReviewFindings(res.run.id) : null;
     if (signal.cancelled) return;
     setResolution(res);
     setFlow(flowDef);
@@ -130,6 +132,7 @@ export default function FlowRunPage() {
           data-run-id={runId}
           data-flow-id={flowId}
           data-run-resolution="unresolved"
+          data-page-ready="true"
           className="muted"
           style={{ padding: 20, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}
         >
@@ -183,6 +186,7 @@ export default function FlowRunPage() {
         expandedNodeId={expandedNodeId}
         nodeLogLines={nodeLogLines}
         onNodeClick={handleNodeClick}
+        ready
       />
     </div>
   );

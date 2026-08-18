@@ -133,6 +133,8 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
+  // W7-A2 — awaiting-verdict is an operator gate.
+  lifecycle: { state: 'awaiting-operator' as const, needsYou: true, error: null, idleMs: null, cancellable: true },
 };
 
 // Mandatory multi-stage fixture — no shipped kind is multi-stage today, but
@@ -164,6 +166,8 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
+  // W7-A2 — a synthetic working phase.
+  lifecycle: { state: 'working' as const, needsYou: false, error: null, idleMs: null, cancellable: true },
 };
 
 // ===========================================================================
@@ -557,16 +561,20 @@ test('AT-104b: PARITY — forge-ui\'s hardcoded ".community-registry" literal (C
 });
 
 test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the community-refresh anchor resolves to Community; an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {
-  expect(pseudoProjectAnchorDestination('.kb-forge-dev')).toEqual({ label: 'Knowledge', href: '/knowledge' });
+  expect(pseudoProjectAnchorDestination('.kb-forge-dev')).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
   expect(pseudoProjectAnchorDestination('.community-registry')).toEqual({ label: 'Community', href: '/community' });
   expect(pseudoProjectAnchorDestination('.some-future-anchor')).toBeNull();
 });
 
 test('AT-106: backToProjectLink — null when not terminal, null when project is null, the real /projects/<id> for an honest project, the pseudo-anchor\'s own destination for a pseudo-anchor, and null (not a dead-ended link) for an unrecognised pseudo-anchor', () => {
-  expect(backToProjectLink('mdtoc', false)).toBeNull();
+  // W7-A2 (sessions-kinds-35): the link renders in EVERY phase now (the
+  // operator most needs a way out mid-flight), and a KB anchor resolves to
+  // that KB's own page rather than the bare index — see
+  // lib/session-lifecycle-render.test.ts for the full W7-A2 pin.
+  expect(backToProjectLink('mdtoc', false)).toEqual({ label: 'project', href: '/projects/mdtoc' });
   expect(backToProjectLink(null, true)).toBeNull();
   expect(backToProjectLink('mdtoc', true)).toEqual({ label: 'project', href: '/projects/mdtoc' });
-  expect(backToProjectLink('.kb-forge-dev', true)).toEqual({ label: 'Knowledge', href: '/knowledge' });
+  expect(backToProjectLink('.kb-forge-dev', true)).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
   expect(backToProjectLink('.community-registry', true)).toEqual({ label: 'Community', href: '/community' });
   expect(backToProjectLink('.some-future-anchor', true)).toBeNull();
 });

@@ -43,6 +43,7 @@ import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest, persistManifestCostCeiling } from '../orchestrator/manifest.ts';
 import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '../orchestrator/enqueue-plan-run.ts';
+import { enqueueFlowRun } from '../orchestrator/enqueue-flow-run.ts';
 import {
   readReviewComments,
   writeReviewComments,
@@ -80,6 +81,8 @@ import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
+import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
+import { deriveSessionLifecycleFor, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -149,7 +152,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
-import { loadSessionKinds, deriveSessionAffordances, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -1190,12 +1193,25 @@ export type SessionIndexRow = {
    *  SAME derivation the single-session route's tail-gating already uses,
    *  never a second, hand-kept terminal-phase notion. */
   terminal: boolean;
-  /** True iff `deriveSessionAffordances(descriptor, phase).length > 0` — a
-   *  derivable operator affordance exists at this phase, never re-derived a
-   *  second way. Architect (no turnSpec/panel table at all) is always
-   *  `false` here, matching the single-session route's own `affordances: []`
-   *  for that kind (ADR-043 amendment §4, "permanently bespoke"). */
+  /** W7-A2 — TRUTHFUL in both directions: `deriveSessionLifecycle(...)
+   *  .needsYou` (cli/bridge-studio-lifecycle.ts) — true iff an operator
+   *  gate is open (`awaits: questions|verdict` on the phase row, or the
+   *  LEGACY_SESSION_AWAITS_PHASES table for architect/project-brain) OR the
+   *  runner crashed/stalled. An agent that is merely working (a `step:
+   *  agent` row's staged-review/next-turn affordances) is NOT "needs you" —
+   *  the pre-W7 derivation (`deriveSessionAffordances(...).length > 0`)
+   *  counted those and inverted the signal for four of eight kinds
+   *  (home-sessions-08, sessions-kinds-15). */
   needsYou: boolean;
+  /** W7-A2 — the derived lifecycle state (`working` | `awaiting-operator` |
+   *  `crashed` | `stalled` | `terminal`); see cli/bridge-studio-lifecycle.ts. */
+  state: SessionLifecycleState;
+  /** W7-A2 — the runner's crash message read live off
+   *  `_logs/_<kind>-<sid>/stderr.log` for a `crashed` row; `null` otherwise. */
+  error: string | null;
+  /** W7-A2 — ms since the last on-disk sign of life; `null` when the
+   *  session has no log dir (no liveness signal). */
+  idleMs: number | null;
   modelTier: string | null;
   /** ISO timestamp of the session's last known write, or `''` — honest-absent,
    *  never fabricated — when the kind's status.json carries no timestamp
@@ -1275,7 +1291,7 @@ function readGuardedSessionIndexSummary(
  * traversal surface at all (unlike the single-session GET, whose `kind` path
  * segment IS request-derived and validated against the registry).
  */
-function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string }): SessionIndexRow[] {
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
 
@@ -1298,13 +1314,23 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // makes that true structurally rather than merely as an observed
     // consequence of the affordance table's own shape.
     const terminal = isTerminalPhase(descriptor, phase);
+    // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
+    // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
+    // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
+    // computed at read time, never stored. `needsYou` is its truthful verdict.
+    const lifecycle = deriveSessionLifecycleFor({
+      descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
+    });
     rows.push({
       kind: descriptor.id,
       sessionId,
       project,
       phase,
       terminal,
-      needsYou: !terminal && deriveSessionAffordances(descriptor, phase).length > 0,
+      needsYou: lifecycle.needsYou,
+      state: lifecycle.state,
+      error: lifecycle.error,
+      idleMs: lifecycle.idleMs,
       modelTier,
       updatedAt,
       href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
@@ -1406,7 +1432,7 @@ async function handleStudioSessionsIndex(
   const origin = allowedOrigin(req);
   try {
     const activeOnly = parseQuery(url).get('active') === '1';
-    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
+    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
     const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
     const sessions = sortAndCapSessionIndexRows(filtered);
     sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
@@ -1488,6 +1514,17 @@ async function handleHttp(
     // was followed out of root. Route the WHOLE path (cycleId as its OWN
     // segment under the trusted logsRoot, leaf included) through the guard;
     // a rejected/absent path both collapse to 404 (no existence oracle).
+    // W7-A2 (sessions-kinds-24, home-sessions-11): a guard-CLEAN path whose
+    // events.jsonl simply does not exist yet (a session minted seconds ago,
+    // or one whose turn never ran) is 200 `{events: []}` — never a console
+    // 404 on the operator's first screen. A guard-REJECTED path (traversal,
+    // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
+    // (cli/sec04-cycleid-containment.test.ts) hold.
+    const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
+    if (eventsGuard.ok && !eventsGuard.exists) {
+      sendJson(res, 200, { cycleId, events: [] }, origin);
+      return;
+    }
     const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
     if (raw === null) {
       sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
@@ -1690,6 +1727,20 @@ async function handleHttp(
   // keeps the two GET /api/studio/sessions... routes textually adjacent.
   if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
+  // W7-A2 — the generic session CANCEL route. MUST be dispatched BEFORE the
+  // affordance write route immediately below: that route's regex matches
+  // any `/api/studio/sessions/:kind/:sid/<segment>` and would swallow the
+  // literal `cancel` segment as an affordance id (409 "not available").
+  if (await handleSessionCancelRoute(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    broadcastKindChanged: (kind) => {
+      if (kind === 'architect') ctx.broadcastArchitectChanged();
+      else if (kind === 'instructions') ctx.broadcastInstructionsChanged();
+      else if (kind === 'demo') ctx.broadcastDemoChanged();
+      else if (kind === 'project-brain') ctx.broadcastProjectBrainChanged();
+    },
+  }, url, method)) return;
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
   // module's own function) rather than imported by bridge-studio-affordances.ts
@@ -2226,6 +2277,52 @@ async function handleHttp(
     return;
   }
 
+  // W7-A3 (flows-02/03) — per-flow run trigger: enqueue an EXISTING
+  // initiative onto THIS flow (`enqueueFlowRun`, the ADR-041 generic per-flow
+  // claimable enqueue). The flow monitor's generic "Start Run" used to POST the
+  // flow id as an initiativeId to /api/runs (always 400, silently). Same
+  // status→HTTP mapping as the plan route above; the scheduler claims it later.
+  if (method === 'POST' && url.startsWith('/api/flows/') && url.endsWith('/run')) {
+    const flowId = decodeURIComponent(url.slice('/api/flows/'.length, url.length - '/run'.length));
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(flowId)) {
+      sendJson(res, 400, { error: 'invalid flow id' }, origin);
+      return;
+    }
+    // Existence through the guard family (never a raw fs probe on a
+    // request-derived segment): the flow id is a single slug segment under the
+    // trusted forgeRoot/studio/flows.
+    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
+      sendJson(res, 404, { error: 'flow not found', flowId }, origin);
+      return;
+    }
+    let body: unknown;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+      return;
+    }
+    const initiativeId = typeof (body as Record<string, unknown>)?.['initiativeId'] === 'string'
+      ? ((body as Record<string, unknown>)['initiativeId'] as string)
+      : '';
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    try {
+      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot });
+      const httpStatus =
+        result.status === 'enqueued' ? 200 :
+        result.status === 'not-found' ? 404 :
+        result.status === 'already-running' || result.status === 'not-planned' ? 409 :
+        500;
+      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
   // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
   // comments. GET reads them + the derived verdict; POST appends one; POST
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
@@ -2398,6 +2495,15 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     );
     closeSync(stderrFd);
     proc.unref();
+    // W7-A2 — track the turn's pid so the generic cancel route
+    // (cli/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
+    // live turn, and the lifecycle derivation can tell "re-run in flight"
+    // from "crashed" (isTurnAlive additionally proves ownership via the
+    // sessionId in the process's own argv above). Same logDir, same guard
+    // posture as stderr.log; best-effort like the rest of this helper.
+    if (typeof proc.pid === 'number') {
+      guardedWriteFile(join(forgeRoot, '_logs'), [`_${logPrefix}-${sessionId}`, 'turn.pid'], `${proc.pid}\n`);
+    }
   } catch { /* best-effort */ }
 }
 
@@ -3033,6 +3139,15 @@ async function handleArchitect(
       const planUrl = guardedFile(ctx.projectsRoot, [...dirSegs, 'PLAN.html'], 'read') !== null
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
+      // W7-A3 (sessions-kinds-08/12, artifact-plan-22/23): the initiative ids
+      // this session drafted — DERIVED at read time from its `manifests/*.md`
+      // (the same files finalize promotes to `_queue/pending`), never stored
+      // on status.json. Same guard family as the leaves above: a symlinked
+      // `manifests` dir yields [] rather than being followed out of root.
+      const initiativeIds = (guardedReadDir(ctx.projectsRoot, [...dirSegs, 'manifests']) ?? [])
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.slice(0, -'.md'.length))
+        .sort();
 
       // staleMs: ms since the last sign of life — heartbeat mtime if present,
       // else the status.json updated_at timestamp.
@@ -3056,6 +3171,7 @@ async function handleArchitect(
         planUrl,
         staleMs,
         completenessCritic: s.completenessCritic ?? null,
+        initiativeIds,
       };
     });
     sendJson(res, 200, { sessions }, origin);

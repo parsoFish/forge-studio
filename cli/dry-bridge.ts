@@ -200,6 +200,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/projects/create', classification: 'exempt-local', reason: 'greenfield create (R4-03): local template scaffold + brain seed, no spawn/remote' },
   { method: 'POST', route: '/api/develop/start', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
+  { method: 'POST', route: '/api/flows/:id/run', classification: 'exempt-local', reason: 'W7-A3 per-flow enqueue: manifest move only (enqueueFlowRun); the scheduler claims it later, no in-request spawn' },
   { method: 'POST', route: '/api/runs', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
   // ---- exempt-local: kb drain-to-green (W6-B12) --------------------------
@@ -232,6 +233,11 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/project-brain/abandon', classification: 'exempt-local', reason: 'writes local session status only — confirmed it does NOT call spawnProjectBrainTurn (only /approve does)' },
   { method: 'POST', route: '/api/demo-builder/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/feedback/lock/abandon' },
   { method: 'POST', route: '/api/hooks/:hookId', classification: 'exempt-local', reason: 'signature-verified webhook receipt: stages a claimable flow-run request file only — dispatch happens in the daemon sweep behind NO_SPAWN/dry-bridge' },
+  // W7-A2 — the generic session cancel: writes the universal `cancelled`
+  // terminal phase onto the session's own status.json and SIGTERMs the
+  // session's tracked turn pid IF one is alive and provably ours (a
+  // journey/dry seed never has one). No spawn, no remote, no daemon.
+  { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/cancel', classification: 'exempt-local', reason: 'writes local session status (phase=cancelled) + SIGTERMs an owned live turn pid when one is tracked — no spawn/remote/daemon' },
 
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },

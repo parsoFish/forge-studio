@@ -90,8 +90,8 @@
 
 import { test, expect } from 'vitest';
 
-import { resolveFlowRunDetailFromResponse, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
-import { type Run } from './studio-client.ts';
+import { resolveFlowRunDetailFromResponse, shouldFetchReviewFindings, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
+import { parseRun, type Run } from './studio-client.ts';
 
 const REAL_RUN_BODY = {
   run: {
@@ -249,3 +249,17 @@ function _typeCheck(r: FlowRunDetailResolution): Run | null {
   return null;
 }
 void _typeCheck;
+
+// ---------------------------------------------------------------------------
+// W7-A3 (flows-07 / home-sessions-17) — the optional review-findings.json fetch
+// is GATED on the node that produces it, so a run page never fires a
+// guaranteed-404 request (a console error on every visit, 23/23 Home rows).
+// ---------------------------------------------------------------------------
+
+test('shouldFetchReviewFindings: only when the adversarial-review node completed', () => {
+  const base = parseRun(REAL_RUN_BODY.run);
+  expect(shouldFetchReviewFindings({ ...base, phases: {} })).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { dev: 'complete', demo: 'complete' } })).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'active' } })).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'complete' } })).toBe(true);
+});

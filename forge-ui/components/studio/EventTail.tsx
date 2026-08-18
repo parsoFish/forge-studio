@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { EventLogEntry } from '@/lib/bridge-client';
+import type { Run } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
 // EventTail — live event log for the active run.
@@ -14,9 +15,36 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 interface EventTailProps {
   events: EventLogEntry[];
   activeRunId: string | null;
+  /**
+   * W7-A3 (flows-30): the selected run's status — the empty-state copy says
+   * "finished"/"failed"/"queued" instead of "Waiting for events…" forever on
+   * a run that ended weeks ago. Optional; absent ⇒ the pre-existing copy.
+   */
+  runStatus?: Run['status'] | null;
 }
 
-export function EventTail({ events, activeRunId }: EventTailProps) {
+// W7-A3 (flows-30): the empty-state is keyed on the run's STATUS, not merely on
+// whether a run is selected — a finished run is not "waiting for events".
+export type TailState = 'none' | 'live' | 'finished' | 'failed' | 'queued';
+
+export function deriveTailState(activeRunId: string | null, runStatus: Run['status'] | null | undefined): TailState {
+  if (!activeRunId) return 'none';
+  if (runStatus === 'complete') return 'finished';
+  if (runStatus === 'failed') return 'failed';
+  if (runStatus === 'planned') return 'queued';
+  return 'live';
+}
+
+const EMPTY_COPY: Record<TailState, string> = {
+  none: 'No active run selected.',
+  live: 'Waiting for events…',
+  finished: 'This run finished — open a phase hex for its logs.',
+  failed: 'This run failed — open a phase hex for its logs.',
+  queued: 'Queued — no events until the scheduler claims it.',
+};
+
+export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
+  const tailState = deriveTailState(activeRunId, runStatus);
   const logRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new events arrive
@@ -57,6 +85,7 @@ export function EventTail({ events, activeRunId }: EventTailProps) {
         {activeRunId && (
           <span
             data-tail-count={events.length}
+        data-tail-state={tailState}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
@@ -84,7 +113,7 @@ export function EventTail({ events, activeRunId }: EventTailProps) {
       >
         {events.length === 0 ? (
           <div style={{ color: 'var(--faint)', fontStyle: 'italic', fontSize: 11 }}>
-            {activeRunId ? 'Waiting for events…' : 'No active run selected.'}
+            {EMPTY_COPY[tailState]}
           </div>
         ) : (
           events.slice(-100).map((evt, i) => (

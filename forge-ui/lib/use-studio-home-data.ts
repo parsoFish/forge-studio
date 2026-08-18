@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from './bridge-client';
+import { describeBridgeError } from './bridge-result';
+import { useBridgeRecovery } from './use-bridge-status';
 import {
   fetchRuns,
   fetchStudioAgents,
@@ -61,7 +63,18 @@ import { debounceLeadingTrailing } from './debounce';
  * `fetchStudioSessions` for this addition specifically — it is not a new,
  * bespoke endpoint invented for Home; it is the existing W6-B11 bridge route
  * this hook composes exactly like the other six reads.
+ *
+ * W7-A1 (home-sessions-30 / crosscut-01 / crosscut-22): the seven reads now
+ * THROW on a bridge failure (lib/studio-client.ts, lib/bridge-client.ts) —
+ * `loadAll` catches and exposes `error`, so Home renders the shared failure
+ * state instead of the "Nothing registered yet — Onboard your first project"
+ * first-run screen. Recovery is `useBridgeRecovery` (the app-wide bridge
+ * status store, `lib/use-bridge-status.ts`): when the bridge comes back the
+ * hook re-runs `loadAll` — no page-level poll, no new transport. `reload`
+ * is the same re-run, for the failure state's Retry button.
  */
+export type StudioHomeFetchError = { message: string; status?: number };
+
 export type StudioHomeData = {
   agents: Agent[];
   flows: Flow[];
@@ -70,8 +83,16 @@ export type StudioHomeData = {
   runs: Run[];
   attention: ProjectAttentionItem[];
   sessions: SessionIndexRow[];
-  /** True once the first `loadAll` Promise.all has settled. */
+  /** True once the first `loadAll` Promise.all has settled (success OR failure). */
   ready: boolean;
+  /** W7-A2 — refetch ONLY the sessions index (the SAME `fetchStudioSessions`
+   *  read `loadAll` folds in), for a caller that just changed a session
+   *  (Home's card cancel) — never a new endpoint, never a poll. */
+  refreshSessions: () => Promise<void>;
+  /** W7-A1: the last load's failure (bridge unreachable / refused), null when the last load succeeded. */
+  error: StudioHomeFetchError | null;
+  /** W7-A1: re-run the full load (Retry button + bridge recovery). */
+  reload: () => void;
 };
 
 /**
@@ -98,6 +119,13 @@ export function useStudioHomeData(): StudioHomeData {
   const [attention, setAttention] = useState<ProjectAttentionItem[]>([]);
   const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<StudioHomeFetchError | null>(null);
+  // W7-A1: bumping this re-runs the load effect (Retry / bridge recovery)
+  // WITHOUT re-subscribing the WS — the subscription lives in its own,
+  // mount-only effect below.
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -121,33 +149,55 @@ export function useStudioHomeData(): StudioHomeData {
         setRuns(r);
         setAttention(at);
         setSessions(s);
+        setError(null);
+      } catch (err) {
+        // W7-A1: a failed read is a FAILURE, not an empty fleet — every
+        // derivation below keeps whatever it last knew, and Home renders the
+        // shared failure state off `error` (home-sessions-30 / crosscut-01).
+        if (signal.cancelled) return;
+        const d = describeBridgeError(err);
+        setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
       } finally {
         if (!signal.cancelled) setReady(true);
       }
     }
 
+    void loadAll();
+    return () => { signal.cancelled = true; };
+  }, [loadKey]);
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+
     // W6-B11: refreshes BOTH runs and the sessions index off the same
     // cycle-list-changed signal — see this file's header for why one shared
     // debounced refetch covers both rather than a second WS handler.
     async function refreshRunsAndSessions(): Promise<void> {
-      const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
-      if (signal.cancelled) return;
-      setRuns(r);
-      setSessions(s);
+      try {
+        const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
+        if (signal.cancelled) return;
+        setRuns(r);
+        setSessions(s);
+        setError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        const d = describeBridgeError(err);
+        setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
+      }
     }
-
-    void loadAll();
 
     // Subscribe to bridge WS to re-fetch runs (+ sessions, W6-B11) on
     // cycle-list-changed — the ONE live-refresh transport Studio has.
     // ADR-044 P1: debounce leading+trailing 500ms (createDebouncedRefreshRuns,
     // above) so a burst of cycle-list-changed messages collapses into at
     // most two round-trips instead of one per message.
+    // W7-A1: connection STATE is no longer discarded here — it is owned by
+    // the app-wide bridge status store (lib/use-bridge-status.ts), which
+    // renders the shared banner and drives `reload` on recovery.
     const debouncedRefresh = createDebouncedRefreshRuns(() => {
       void refreshRunsAndSessions();
     });
     const sub = subscribe({
-      onState: () => { /* this hook does not surface connection state */ },
       onMessage: (msg) => {
         if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
@@ -161,9 +211,13 @@ export function useStudioHomeData(): StudioHomeData {
       debouncedRefresh.cancel();
       sub.close();
     };
-    // intentional mount-only — loadAll/refreshRunsAndSessions are stable fetch helpers
+    // intentional mount-only — refreshRunsAndSessions is a stable fetch helper
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { agents, flows, projects, kbs, runs, attention, sessions, ready };
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    setSessions(await fetchStudioSessions());
+  }, []);
+
+  return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions };
 }

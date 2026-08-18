@@ -107,6 +107,64 @@ inventory rather than one shared page-level contract:
   not-found. The literal id `new` (any case) is reserved on every create
   route because `/x/new` is each builder's static segment
   (`isReservedId`); `/projects/new` fires no per-project fetch.
+- **Global — bridge status banner (`[data-component="bridge-status"]`,
+  `components/BridgeStatus.tsx`, mounted ONCE in `app/layout.tsx`, W7-A1).**
+  Every route carries the app-shell bridge-liveness element:
+  `[data-bridge-status="up"|"down"|"reconnecting"][data-bridge-ever-up="true"|"false"]`.
+  The root is ALWAYS in the DOM (automation reads the state whether or not
+  the banner is showing); it is `hidden` while `up`, and renders a
+  `role="alert"` banner + `[data-action="bridge-retry"]` only when `down`
+  (a health probe FAILED — confirmed unreachable) or `reconnecting` after
+  the bridge had already been up in this tab (a lost socket). The initial
+  connect never flashes a banner. State is derived by ONE store
+  (`lib/bridge-status.ts`, DI'd + fake-timer-tested; wired in
+  `lib/use-bridge-status.ts`): the existing bridge WS (`subscribe()`) is
+  the liveness signal while up; a `GET /api/health` probe (must answer with
+  the forge-bridge identity) runs ONLY while not up (initial 1.5s delay,
+  then every 3s) — no page ever polls. A page's failed bridge fetch (transport
+  throw) triggers an immediate probe (`onBridgeTransportFailure`). On
+  recovery (down→up, or a lost socket regained) the store fires
+  `onRecovered`; pages subscribe via `useBridgeRecovery(reload)` and re-run
+  their own load — the pinned tab refills itself instead of waiting for F5
+  (crosscut-22). Journey coverage: `scripts/journeys/home.mjs` `home-landing`
+  asserts `[data-bridge-status="up"]` + hidden banner on the live bridge.
+- **Shared — failed-read state (`[data-component="fetch-error"]`,
+  `components/FetchErrorState.tsx`, W7-A1).** The ONE failure state every
+  pillar page / panel renders when a bridge read fails — INSTEAD of its
+  zero-state (never "Nothing registered yet" / "No sessions in flight" /
+  "No projects yet" / "No flows registered at all" / "No agents yet" / "No
+  knowledge bases yet" on an outage — home-sessions-29/-30, crosscut-01).
+  Contract: `[role="alert"][data-component="fetch-error"][data-fetch-status="error"]
+  [data-fetch-reachable="true"|"false"]` (+ `[data-fetch-http-status=<n>]`
+  when the bridge answered) and `[data-action="retry-fetch"]` when a retry
+  is wired. Two framings, never conflated (library-13): the bridge ANSWERED
+  (`reachable="true"`) → "The forge bridge refused to read <what> (HTTP n):
+  <the bridge's own error/message text VERBATIM>" — a 409
+  "project-config: … migrate: …" is the operator's fix instruction, a 400
+  "invalid hook id" is not an outage; the bridge was never reached
+  (`reachable="false"`) → "Could not reach the forge bridge — <what>
+  unavailable (<transport text>)". Fed by `lib/bridge-result.ts`
+  (`describeBridgeError` / `fetchErrorPropsFrom`) — the ONE classification
+  behind both clients: `studio-client.ts` and `bridge-client.ts` reads no
+  longer resolve a caller-supplied empty fallback on 4xx/5xx/network/
+  malformed-JSON; they THROW `BridgeReadError{status?,message,body?}` (or
+  map a 404 to `null` where "no such object" is a real answer — `fetchRun`,
+  `fetchKb`, `fetchFlow`, `fetchPreflight`, `fetchWorkItem`, `fetchRoadmap`,
+  … ; `fetchPhaseLog`/`fetchEvents` map 404 to `[]` = "no log yet"), and
+  status-shaped reads carry `ok:false` + the real `error`. Both clients ride
+  ONE transport (`bridgeFetch`: URL resolution + the W6-P4 port correction,
+  re-armed after every successful call — crosscut-26). Pillar roots
+  (`[data-page="home"|"sessions-index"|"projects-index"|"flows-index"|"agents-index"|"knowledge"]`)
+  additionally carry `data-fetch-status="loading"|"ok"|"error"`; on `error`
+  the page is still `data-page-ready="true"` (it HAS settled — into an honest
+  failure) and the body is this component. `/sessions/<kind>/<sid>` renders
+  it inside `[data-section="session-error"]` (framed by the shell route's
+  `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
+  the bridge answered) with Retry (crosscut-09); the project page's contract
+  panel renders it inside `[data-section="contract-checklist-error"]` in the
+  checklist's place — never a `data-checklist-row-count="0"` list on a
+  404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
+  detail pages render it in their `error` state with the real HTTP status.
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
@@ -129,7 +187,22 @@ inventory rather than one shared page-level contract:
   develop"` unconditionally; `home-view.ts`'s `deriveWatchLiveRunHref(runs)`
   now derives it from an ACTUAL live run (`active` beats `gated`; no
   active/gated run at all falls back to `/flows`, never a fabricated specific
-  flow). Three sections:
+  flow). **W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment):**
+  `section[data-section="scheduler"]` mounts the shared **SchedulerCard**
+  (`components/SchedulerCard.tsx`, its own `useSchedulerStatus()` read on a
+  slow visible-only poll — Home itself adds no fetch/interval/endpoint):
+  `[data-component="scheduler-card"][data-scheduler-status="running|paused|
+  stopped|unknown"][data-scheduler-variant="card|strip"][data-scheduler-ready]
+  [data-scheduler-queued]` (+ `[data-scheduler-pid]` only while running,
+  `[data-scheduler-busy="true"]` while an action POST is in flight,
+  `[data-scheduler-error]` carrying the bridge error verbatim); its buttons
+  are exactly the actions the state admits —
+  `button[data-action="scheduler-start"|"scheduler-pause"|"scheduler-resume"|
+  "scheduler-stop"]` (running → pause+stop, paused → resume+stop, stopped →
+  start, unknown/unread → none) — derived by `lib/scheduler-view.ts`, never a
+  fixed row. The same component is mounted on `/flows` (index + monitor), the
+  project roadmap tab, and inline as a `strip` wherever an enqueue outcome
+  needs "start it?". Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when
     `[...buildHomeAttention(attention), ...buildKbAttention(kbs)]` returns ≥1
     row (a real condition, never rendered on the mere existence of a project
@@ -177,7 +250,10 @@ inventory rather than one shared page-level contract:
     `/knowledge?id=<id>`). Status (`active|gated|idle`) is ALWAYS derived —
     never a `.status` field the wire types don't carry (`home-view.ts`'s own
     declared-data-fails-open discipline); a KB has no live-status source at
-    all and is always `idle`. Empty state:
+    all and is always `idle`. Empty state (a genuinely empty fleet ONLY — a
+    failed bridge read renders the shared `[data-component="fetch-error"]`
+    in place of every Home section, root `data-fetch-status="error"`, W7-A1 /
+    home-sessions-30):
     `[data-component="constellation-empty"]` — W6-IA-4 sweep finding C1#4: NOW
     carries a real `[data-action="constellation-empty-cta"]`
     (`href="/projects/new"`) alongside the "Nothing registered yet." text —
@@ -217,11 +293,18 @@ inventory rather than one shared page-level contract:
     4-card slice, so the header stays honest once needs-you sessions exceed
     the card budget. Header: an "N need you" pill (present only when
     `needsYouCount>0`) plus `a[data-action="view-all-sessions"]
-    href="/sessions"` reading "all sessions (N) →". Each card:
-    `a[data-session-card][data-session-kind][data-session-phase]
-    [data-needs-you]`, linking to the session's own `href` (the SAME
-    `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
-    carries); a needs-you card additionally renders a `.status-dot
+    href="/sessions"` reading "all sessions (N) →". Each card (W7-A2 shape):
+    `div[data-session-card][data-session-kind][data-session-id]
+    [data-session-phase][data-needs-you][data-session-state]` wrapping an
+    `a[data-action="open-session"]` link to the session's own `href` (the
+    SAME `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
+    carries — the card body: kind, project, phase, and a
+    `span[data-session-state-chip]` lifecycle sentence, `describeLifecycle`)
+    plus, OUTSIDE the link (never nested-interactive), a
+    `button[data-action="cancel-session"]` for every non-terminal card (the
+    SAME two-step `CancelSessionButton` the `/sessions` row mounts; on
+    success Home refetches the sessions index via `useStudioHomeData`'s
+    `refreshSessions`); a needs-you card additionally renders a `.status-dot
     [data-status="retrying"]` visual indicator (styling only — the DOM
     contract attribute is `data-needs-you`, never the dot's own frame value).
   Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
@@ -247,12 +330,30 @@ inventory rather than one shared page-level contract:
   Root: `main[data-page="sessions-index"][data-page-ready]
   [data-session-count]`. Non-empty state: `section[data-section=
   "sessions-table"][data-session-count]` wrapping a table — one
-  `tr[data-session-kind][data-session-phase][data-needs-you]` per session,
-  columns kind/project/phase(+needs-you dot)/model tier/updated/
-  `a[data-action="resume-session"]` ("Resume →", the row's own `href`).
-  Rows render in the SAME order the bridge returned them — this page never
-  re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
-  false flash before the first fetch resolves):
+  `tr[data-session-kind][data-session-phase][data-needs-you][data-session-state]`
+  per session, columns kind/project/phase(+needs-you dot)/**state**
+  (`span[data-session-state-chip]`, W7-A2 — the bridge-derived lifecycle
+  sentence from `lib/session-lifecycle-client.ts`'s `describeLifecycle`: a
+  `crashed` row shows the runner's own error text, `title` = the full
+  message; `stalled` names the silence)/model tier/updated/
+  `a[data-action="resume-session"]` ("Open →", the row's own `href`) +
+  `button[data-action="cancel-session"]` (W7-A2 — every non-terminal row;
+  `CancelSessionButton`, `components/studio/session/`, two-step confirm:
+  the first click arms it — `data-confirming="true"`, label "Confirm
+  cancel", a `[data-action="cancel-session-abort"]` "keep" link beside it —
+  the second POSTs `POST /api/studio/sessions/:kind/:sid/cancel`; the
+  server's error text renders verbatim in `[data-cancel-error]`; on success
+  the page refetches and the now-terminal row leaves the active list).
+  Rows: `needsYou` is TRUTHFUL in both directions (W7-A2 — the bridge's
+  `deriveSessionLifecycle(...).needsYou`: an open operator gate or a
+  crashed/stalled runner, never a merely-working agent) and `state` is
+  `working | awaiting-operator | crashed | stalled | terminal`. Rows render
+  in the SAME order the bridge returned them — this page never re-sorts.
+  Empty state (only once `ready` AND genuinely zero rows AND the fetch did
+  not fail — never a false flash before the first fetch resolves, and never
+  on a failed read: W7-A1 adds `data-fetch-status` on the root and the
+  shared `[data-component="fetch-error"]` body on failure, see "Shared —
+  failed-read state" above; home-sessions-29):
   `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
   kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
   kickoff kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
@@ -265,7 +366,11 @@ inventory rather than one shared page-level contract:
   `ProjectsIndexBody`); `app/sessions/page.tsx` is the thin fetch-owning
   wrapper. Journey coverage: `scripts/journeys/sessions-index.mjs` (entry
   point: Home's strip overflow link, per the entry-point rule — never opens
-  mid-flow on `/sessions` itself).
+  mid-flow on `/sessions` itself; W7-A2 adds a CRASHED fixture —
+  `writeCrashedInstrSession`, the operator's stuck-session on-disk shape —
+  asserted `data-session-state="crashed"` on Home and the index, then
+  cancelled from its row with the two-step confirm and gone from the
+  in-flight list).
 - **Library `/library`** — SHELVES ONLY (W6-IA-4 rebuild, 2026-08-15): the
   reusable building blocks every agent and flow composes from, NOT a
   dashboard. `[data-page="library"][data-page-ready]`. The OLD landing page
@@ -358,8 +463,33 @@ inventory rather than one shared page-level contract:
   page's initial load. `StudioNav`'s Flows nav item now points straight here
   (W6-IA-5 — was a direct deep-link to `/flows/forge-develop`); a specific
   flow's own monitor is reached via a card on this index, not the nav.
-- **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
-  (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
+- **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab][data-kickoff-open]`
+  (`data-active-tab` is `monitor | build`). **W7-A3 (flows-02/03/15/29/30/31,
+  flows-01/23):** the launch surface is PERMANENT — the header carries
+  `button[data-action="toggle-kickoff"]` ("Run flow"), `data-kickoff-open`
+  mirrors whether `[data-section="flow-kickoff"]` is mounted (open by default
+  only while the flow has no runs). The generic kickoff
+  (`[data-kickoff-kind="generic"]`) is now an initiative picker —
+  `select[data-field="kickoff-initiative"]` (candidates derived from the runs
+  list: queued/finished/failed manifests) + `button[data-action="start-run"]`
+  (always enabled outside submission) → `POST /api/flows/:id/run
+  {initiativeId}` (`enqueueFlowRun` onto THIS flow; it used to post the flow
+  id as an initiativeId — 400, silently); the outcome renders
+  `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
+  through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
+  [data-needs-scheduler-start]` line (`a[data-action="open-kickoff-run"]` to
+  the run, and a `strip` SchedulerCard with `[data-action="scheduler-start"]`
+  when the daemon is stopped). Clicking Start with nothing picked renders
+  `[data-kickoff-result="error"]` and sends nothing. The monitor column also
+  mounts a `strip` SchedulerCard (see Home) above the summary. The summary
+  strip's ELAPSED stops at `run.completedAt` for a finished run
+  (`[data-elapsed-final="true"]`, `lib/run-elapsed.ts`); the event tail's
+  empty copy is keyed on the run's STATUS via `[data-tail-state="live|
+  finished|failed|queued|none"]` (a finished run is never "Waiting for
+  events…"); the run rail persists group collapse per flow
+  (`sessionStorage forge-run-groups:<flowId>`, `lib/run-rail-collapse.ts`;
+  COMPLETE starts collapsed above 10 rows) and the phase drawer skips the log
+  fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
@@ -453,10 +583,39 @@ inventory rather than one shared page-level contract:
   id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
-  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state][data-run-kind="cycle"|"architect-session"]`
   (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
   mismatch, not a deliberate shared-surface value; every gate/artifact moment
-  is still folded into this one route). `type=verdict&mode=gate`
+  is still folded into this one route). **W7-A3 (artifact-plan-01…33,
+  sessions-kinds-14, crosscut-05):** `?mode=gate` is a REQUEST, not a fact —
+  `lib/artifact-mode.ts`'s `resolveArtifactMode` honours it only when the run
+  is actually gated for that artifact (`data-mode` reads `view` and no gate
+  bar renders on a completed/planned run). The generic gate bar surfaces its
+  error for BOTH verdicts (`[data-gate-error]`, hoisted out of the send-back
+  drawer). An **architect session's plan** (`run=_architect-<sid>`) is
+  resolved through `/api/architect/sessions` — never `/api/runs` or
+  `/api/artifact` (zero 404s) — and renders `[data-section="architect-plan"]
+  [data-architect-phase="not-found|awaiting-answers|working|awaiting-verdict|
+  finalizing|committed|rejected"][data-gate-armed]`: the gate is armed by the
+  session PHASE alone (`awaiting-verdict` → the PlanGate `[data-section=
+  "plan-gate"]` with `[data-action="approve-plan"|"revise-plan"|"reject-plan"]`
+  — the ONLY Approve on the page; the generic GateBar never mounts for an
+  architect id); every other phase renders `[data-section="architect-plan-
+  status"]` with honest copy + a link to the owning session
+  (`a[data-action="answer-questions"]` at awaiting-answers — the send-back
+  no longer strands the operator — or `a[data-action="open-session"]`) and the
+  plan itself read-only whenever one exists (`iframe[data-plan-iframe]
+  [data-plan-readonly="true"]`); a missing session renders
+  `[data-component="run-not-found"][data-run-kind="architect-session"]` +
+  `a[data-action="back-to-sessions"]` (never an armed gate). After approve
+  the payoff persists through `finalizing` → `committed` as the shared
+  `[data-section="architect-committed"][data-commit-tone][data-needs-
+  scheduler-start]` panel (see the sessions/architect entry) — initiative rows
+  linking the RUN, `a[data-action="open-roadmap"]`, `a[data-action="watch-it-
+  build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
+  breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
+  / planning session (`a[data-crumb="session"]`) / PLAN with
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`. `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
   `[data-section="review-findings"][data-findings-count]` with per-row
@@ -726,7 +885,9 @@ inventory rather than one shared page-level contract:
     linking to `/agents/<id>`, plus a `a[data-action="new-agent"]` CTA to
     `/agents/new`. `[data-component="agent-roster-loading"]` before the
     roster fetch resolves, `[data-component="agent-roster-empty"]` once
-    resolved with zero agents — honest-empty, never a fabricated card.
+    resolved with zero agents — honest-empty, never a fabricated card; a
+    FAILED roster read renders the shared `[data-component="fetch-error"]`
+    in their place (root `data-fetch-status="error"`, W7-A1).
   - `section[data-section="recent-agent-runs"]` — a cross-agent "recent
     runs" ledger, rendered by the SAME shared `HistoryLedger.tsx` the flow
     monitor and `/agents/[id]`'s own per-agent ledger use (reused
@@ -910,16 +1071,20 @@ inventory rather than one shared page-level contract:
   `[data-page="agent-run"][data-run-id][data-page-ready="false"]` only; once
   resolved, `RunView`'s own root takes over and carries
   `[data-page="agent-run"][data-run-id][data-run-state][data-run-cost]
-  [data-run-found="true"|"false"]` — **note this loaded state carries no
-  `data-page-ready="true"` companion at all** (a genuine, as-built departure
-  from every other route's `data-page-ready` convention; a journey/automation
-  waiting on this route must key off `[data-run-found]`'s mere presence, not
-  a `data-page-ready` flip). `found:false` (no `_logs/<runId>` directory
-  exists — never dispatched, the R6-04 D22 404 case) — the ROUTE renders the
-  shared not-found page instead (`main[data-page="not-found"]
-  [data-not-found-kind="run"]`, W7-A4; `RunView`'s own
-  `[data-component="run-not-found"]` body is a component-level guard no longer
-  reached from this route). `found:true` renders (forge-pet, 2026-08-09)
+  [data-run-found="true"|"false"][data-page-ready="true"]` — **W7-A3
+  (agents-11/12/37, crosscut-05/23):** the loaded state now carries
+  `data-page-ready="true"` (the earlier as-built departure is closed), and the
+  page shell renders `nav[data-section="run-breadcrumb"]` with
+  `a[data-action="back-to-agent"]` → `/agents/<slug>` showing the slug from the
+  URL (`[data-agent-slug]`; the shell root mirrors it as `data-agent-slug`).
+  `found:false` (no `_logs/<runId>` directory exists — never dispatched, the
+  R6-04 D22 404 case) — the ROUTE renders the shared not-found page instead
+  (`main[data-page="not-found"][data-not-found-kind="run"]`, W7-A4;
+  `RunView`'s own `[data-component="run-not-found"]` body is a
+  component-level guard no longer reached from this route — `page.tsx`
+  returns the shared `NotFound` before `RunView` is ever invoked, so
+  `RunView` only renders with `found:true` from this route today).
+  `found:true` renders (forge-pet, 2026-08-09)
   a reserved `[data-section="run-trigger"]` provenance section
   (`data-trigger-kind`/`data-trigger-source`/`data-trigger-scope`, `scope ?? ''`)
   when the run carries a `trigger`, mirroring the flow run-detail vocabulary —
@@ -996,6 +1161,18 @@ inventory rather than one shared page-level contract:
     the link resolves; only the flow MONITOR for such an id (`/flows/<id>`)
     is a not-found (`variant="retired"` when runs still name it).
 
+  **W7-A3 (crosscut-05/23, flows-06/07, home-sessions-17):** both the
+  `unresolved` and the resolved `main` carry `data-page-ready="true"` (only
+  the in-flight shell renders `"false"`), so the route honours the
+  DOM-as-metrics readiness contract like every other. The resolved page opens
+  with `nav[data-section="run-breadcrumb"]`: `a[data-action="back-to-monitor"]`
+  → `/flows/<flowId>`, and for a found run `a[data-action="open-artifacts"]`
+  → `/artifact?run=<id>&type=plan&mode=view` plus `a[data-action="open-project"]`
+  → `/projects/<project>` when the run carries a project (never fabricated).
+  The optional `review-findings.json` fetch is gated on
+  `shouldFetchReviewFindings(run)` (`run.phases['adversarial-review'] ===
+  'complete'`) — no guaranteed-404 request per visit.
+
   A found run renders: `[data-section="run-trigger"]` with the reserved
   provenance vocabulary above (omitted entirely when the run has no trigger);
   `[data-section="run-timeline"]` with **one
@@ -1054,8 +1231,10 @@ inventory rather than one shared page-level contract:
   LibraryCard.tsx`) `/library`'s old projects shelf used to render, before
   W6-IA-4 retired that shelf in favour of this real index, each linking to
   its own `/projects/<id>`. Zero-state
-  (`[data-section="projects-empty"]`, honestly gated on `ready &&
-  projects.length === 0` — never flashed mid-fetch) offers BOTH an onboard
+  (`[data-section="projects-empty"]`, honestly gated on `ready && !error &&
+  projects.length === 0` — never flashed mid-fetch, never on a failed read:
+  W7-A1 root `data-fetch-status` + the shared `[data-component="fetch-error"]`
+  body on failure) offers BOTH an onboard
   CTA and a greenfield-create CTA (`[data-action="create-project-cta"]`),
   both routing to `/projects/new` (the one form hosts both paths); never
   terminal text. The presentational piece
@@ -1184,8 +1363,22 @@ inventory rather than one shared page-level contract:
   `[data-action="plan-initiative"]` button plus a blocked-until-planned lock
   badge (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
-  dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. The roadmap toolbar carries an optional
+  dispatching a plan run surfaces `[data-action="open-plan-run"]` — **W7-A3
+  (projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
+  [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start]` line
+  (`components/studio/EnqueueOutcomeLine.tsx`): its claim is derived from the
+  REAL scheduler status (`lib/scheduler-view.ts`'s `describeEnqueueOutcome` —
+  "Enqueued — the scheduler is stopped, so nothing will run until you start
+  it." with a `strip` SchedulerCard + `[data-action="scheduler-start"]` when
+  the daemon is down; the develop copy names the develop flow, never the
+  retired unifier), and `open-plan-run` / `[data-action="open-develop-run"]`
+  link the RUN the enqueue returned (`/flows/<flowId>/run/<initiativeId>` — the
+  initiative id is the STABLE run handle: a planned run's own id IS its
+  initiative id, and the bridge's `findRun` matches `initiativeId` second so
+  the same URL resolves after the scheduler's claim renames the run to its
+  cycle id), not the flow index. The roadmap tab also mounts a `strip`
+  SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
+  Roadmap tab. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
   accepts `costCeilingUsd` **only** for a single-initiative Start and stamps it onto
   that initiative's manifest `cost_ceiling_usd`; the field is **opt-in gated**
@@ -1368,6 +1561,39 @@ inventory rather than one shared page-level contract:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
+  **W7-A2 lifecycle bar (every kind — architect/project-brain and the
+  panel-less community-refresh included):**
+  `div[data-section="session-lifecycle"][data-lifecycle-state="working"|
+  "awaiting-operator"|"crashed"|"stalled"|"terminal"][data-needs-you]
+  [data-cancellable]` (`components/studio/session/SessionLifecycleBar.tsx`),
+  rendered above the two panes from the shell payload's server-derived
+  `lifecycle` (below) — never re-derived client-side: `crashed` → the
+  runner's own error text verbatim in `pre[data-lifecycle-error]` +
+  `role="alert"`; `stalled` → "No activity for Nm — the agent may have
+  stalled"; `awaiting-operator` → "Waiting on you"; `working` → a quiet
+  one-liner; `terminal` → honest per-phase copy ("Done — committed" for
+  committed/locked/applied/complete, "<Phase> — nothing further to do
+  here" for rejected/abandoned/cancelled/failed). While `cancellable` a
+  `button[data-action="cancel"]` (the shared two-step `CancelSessionButton`;
+  `[data-action="cancel-abort"]` "keep" link while armed; server error
+  verbatim in `[data-cancel-error]`) POSTs the generic cancel route; on
+  success the page refetches the shell (phase → `cancelled`, terminal). The
+  generic `SessionInteractivePanel`'s zero-affordance branch is
+  lifecycle-aware too — `[data-section="session-no-affordances"]
+  [data-no-affordance-reason="working"|"stopped"|"terminal"]` ("Agent is
+  working — no operator action needed right now" / "The agent turn stopped
+  — see the banner above…" / "Session <phase> — nothing further to do
+  here.") — never the one flat "No operator action available" sentence for
+  every state; and its model chip reads `model: not recorded` (never the
+  literal `default`) for a null tier. **Deep links:** the page fetches the
+  shell WITHOUT `?project=` when neither the per-kind summary nor the URL
+  knows it — the bridge resolves the anchor project server-side — so a bare
+  `/sessions/<kind>/<sid>` is a working address for every kind; "Session
+  not found" (`[data-section="session-not-found"]`) is ONLY the shell
+  route's own 404. **Back link:** `a[data-action="back-to-project"]`
+  renders in EVERY phase (not only terminal); a `.kb-<id>` anchor resolves to
+  `/knowledge?id=<id>` ("Back to Knowledge base <id>"), `.community-registry`
+  to `/community`, a real project to `/projects/<id>`.
   Per turn:
   `[data-turn-index][data-turn-role="agent"|"operator"][data-turn-stage][data-turn-source]`
   — `data-turn-source` names the checkpoint file the turn was DERIVED from
@@ -1409,9 +1635,29 @@ inventory rather than one shared page-level contract:
   `[data-architect-stale="true"][data-architect-stale-ms]` and its re-run
   `[data-action="architect-rerun"][data-rerun-state="idle"|"rerunning"|"error"]`
   (POSTs `/api/architect/rerun`, no answers/round mutation);
-  `[data-action="open-plan"]` into
-  `/artifact?run=_architect-<sid>&type=plan&mode=gate` (the PLAN gate is still
-  just another gate — M7-4, ADR-031) and `[data-action="watch-it-build"]`;
+  `[data-action="open-plan"]` — **W7-A3 (artifact-plan-22): rendered EXACTLY
+  ONCE in every phase where the session has a PLAN.html** — into
+  `/artifact?run=_architect-<sid>&type=plan&mode=gate` at awaiting-verdict
+  ("Review the plan →"; the PLAN gate is still just another gate — M7-4,
+  ADR-031) and `…&mode=view` otherwise ("View the plan →"); the committed
+  phase renders the shared **ArchitectCommittedView** inside
+  `[data-section="architect-status"]`: `[data-section="architect-committed"]
+  [data-commit-tone="building|claimed-stopped|queued-running|queued-stopped|
+  gated|done|failed|unknown"][data-needs-scheduler-start]` whose headline is
+  derived (`lib/architect-plan-view.ts`'s `describePostCommit`) from the
+  session's `initiativeIds` (bridge-derived from its manifests dir, never
+  stored) joined to the runs list — one `[data-initiative-link]
+  [data-initiative-id][data-queue-state="queued|building|gated|complete|failed|
+  unknown"]` row per initiative with `a[data-action="open-initiative-run"]` to
+  its `/flows/<flowId>/run/<runId>` when a run exists — plus the scheduler
+  status; "the autonomous loop is building it now" is rendered ONLY for
+  `building` (an active run AND a running daemon). It always carries
+  `a[data-action="open-roadmap"]` (`/projects/<p>#roadmap`) and
+  `[data-action="watch-it-build"]` (the run's own flow monitor, `/flows`
+  when none), and a `strip` SchedulerCard with `[data-action="scheduler-
+  start"]` when the daemon is stopped. The activity drawer
+  (`[data-component="activity-drawer"]`) renders in EVERY phase once events
+  exist (open while working, collapsed otherwise — sessions-kinds-13);
   the project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
@@ -1538,10 +1784,32 @@ inventory rather than one shared page-level contract:
 - **Session-shell read contract (R2-10-F1/F2, 2026-08-05; W6-B3/B6/B8
   additions, 2026-08-15) — the API side.**
   The session routes above converge on one shared shell. Its data comes
-  from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
+  from a single read route, `GET /api/studio/sessions/:kind/:sessionId[?project=<p>]`
   (`cli/bridge-studio-sessions.ts`), which returns
   `{ok, kind, title, sessionId, project, phase, stages, defaultStage, turns,
-  artifact, affordances, modelTier, terminal, [kbId]}`. Session kinds are
+  artifact, affordances, modelTier, terminal, lifecycle, [kbId]}`. **W7-A2:**
+  `?project=` is OPTIONAL — absent, the bridge resolves the anchor project
+  server-side (`findSessionProject`: enumerates the trusted `projectsRoot`,
+  dot-anchors included, and probes `<name>/_<kind>/<sid>` through
+  `resolveGuardedPath`; 0 hits → 404, ≥2 → 409 asking for `?project=`) and
+  echoes it on the payload. `lifecycle` (W7-A2, ALWAYS present) is
+  `deriveSessionLifecycleFor(...)` (`cli/bridge-studio-lifecycle.ts`):
+  `{state: working|awaiting-operator|crashed|stalled|terminal, needsYou,
+  error, idleMs, cancellable}` — DERIVED at read time, never stored on
+  status.json: `terminal` first (incl. the universal `cancelled` phase);
+  `crashed` = no live tracked turn AND a non-empty
+  `_logs/_<kind>-<sid>/stderr.log` whose mtime is ≥ status.json's (a crash
+  OLDER than the last successful phase write is history, not state);
+  `awaiting-operator` = the phase row's `awaits: questions|verdict` (or
+  `LEGACY_SESSION_AWAITS_PHASES` for architect/project-brain, which carry
+  no table); `stalled` = a working phase (`step: agent|finalize`, or the
+  legacy working table) with a log dir but no heartbeat/event/status write
+  past the kind's ceiling (`stallCeilingForKind`: 180 s default, 120 s for
+  architect — the UI's own `STALE_THRESHOLD_MS`); a session with NO log dir
+  is never `stalled` (no liveness signal → honest `working`). `error` is the
+  runner's last non-stack stderr line, capped. The SAME derivation feeds
+  `GET /api/studio/sessions` rows (`state`/`error`/`idleMs`, and `needsYou`
+  = `lifecycle.needsYou` — truthful in both directions). Session kinds are
   declared as data in `studio/session-kinds.yaml` and validated by
   `forge studio lint` (`validateSessionKinds`, ADR-027's R2-10 amendment).
   `turns` are DERIVED from the runners' existing checkpoint files — each turn
@@ -1569,6 +1837,32 @@ inventory rather than one shared page-level contract:
   `data-session-phase`, `data-turn-index`, `data-turn-role`,
   `data-turn-stage`, `data-artifact-kind` — is named here as the contract;
   the surface that attaches it lands with the shell route itself.
+- **The generic session CANCEL route (W7-A2) — the API side.**
+  `POST /api/studio/sessions/:kind/:sessionId/cancel` `{project?}`
+  (`cli/bridge-studio-session-cancel.ts`; dispatched in `handleHttp` BEFORE
+  the affordance write route below, whose regex would otherwise swallow
+  `cancel` as an affordance id) — for EVERY registered kind, architect
+  included. Chain: kind → registry (404 naming the set); `sessionId` →
+  `invalidSessionIdReason` (400); `project` validated when supplied, else
+  resolved by `findSessionProject` (404 / 409 ambiguous); session dir →
+  `resolveGuardedPath` (a symlinked/escaping dir collapses into the same
+  404 as an absent one); status → `guardedReadSessionStatus`; already
+  terminal → 409 naming the phase (never re-terminalised). Then it signals
+  the session's tracked turn if one is alive (`killTrackedTurn`: the
+  `turn.pid` `spawnAgentTurn` now writes beside stderr.log; `isTurnAlive`
+  proves the pid's own argv carries this session id before any signal —
+  fail-closed ownership; SIGTERM to the detached runner's process group,
+  then the pid) and writes `{...status, phase: 'cancelled', cancelled_at,
+  cancelled_from}` via `guardedWriteSessionStatus` — `cancelled` is the ONE
+  universal reserved terminal phase (`CANCELLED_PHASE`, `cli/bridge-studio.ts`;
+  ADR-043 2026-08-19 amendment), read as terminal by `isTerminalPhase` for
+  every kind BEFORE the per-kind tables, and never a per-kind yaml row.
+  Response `{ok, kind, sessionId, project, phase:'cancelled', previousPhase,
+  killed}`. Covered by the bridge's global `x-forge-csrf` guard (403
+  without it). Client: `cancelStudioSession` (`lib/session-lifecycle-client.ts`).
+  `GET /api/events/:cycleId` (W7-A2): a guard-clean but ABSENT cycle dir is
+  `200 {cycleId, events: []}` (no console 404 on a session's first screen);
+  a guard-rejected path stays 404 (the sec04 pins hold).
 - **The generic session-affordance WRITE endpoint (W6-B4; W6-B9 adds the
   generic `meta.requires` check) — the API side.**
   `POST /api/studio/sessions/:kind/:sessionId/:affordance`
@@ -1759,6 +2053,18 @@ inventory rather than one shared page-level contract:
   a read-only chip (`[data-field="kickoff-model-fixed-chip"]`, `"fixed ·
   read-only"`) for `strategy:fixed` or an absent/not-yet-loaded capability;
   widening a skill's range is a `SKILL.md` edit, never a UI decision.
+  **W7-A2 duplicate guard:** the page also reads `GET /api/studio/sessions?active=1`
+  (the SAME index /sessions and Home read); when a non-terminal session of
+  THIS kind already exists on the chosen target (project id, `.kb-<id>` for
+  the KB selector, `.community-registry` for the selector-less kind) it
+  renders `section[data-section="kickoff-existing-sessions"]
+  [data-existing-count]` listing each (`li[data-existing-session]
+  [data-session-state]` with `a[data-action="open-existing-session"]`, phase
+  and the lifecycle sentence), and `[data-action="start-session"]` — which
+  ALWAYS carries `[data-existing-count]` — reads "Start another session":
+  the first click arms it (`data-confirming="true"`, "Yes, start another",
+  a `[data-action="start-session-abort"]` "keep the existing one" link
+  beside it) and only the second click POSTs; a changed target disarms it.
   `[data-action="start-session"]`
   POSTs the kind's existing `/start` route (now every one of the six client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
@@ -2668,5 +2974,18 @@ an operator does — every reachable route, every control, real sessions where
 a path can only be validated by running it — and files verified defects as
 JSONL. It produced the wave-7 backlog
 ([`docs/roadmaps/wave-7-walkthrough-findings.md`](./docs/roadmaps/wave-7-walkthrough-findings.md))
-and is a standing wave gate from wave 7 on (W7-A0 adds the crawl's assertion
-mode).
+and is a standing wave gate from wave 7 on. **W7-A0 (2026-08-19) added the
+crawl's assertion mode**: `npm run ui:walkthrough:gate` (`crawl.mjs --assert
+--baseline scripts/ui-walkthrough/baseline.json`) fails on any *new*
+`never-ready` page (a `[data-page]` root that never sets
+`data-page-ready="true"` — the same attribute the journeys wait on),
+`first-party-4xx` (any bridge/UI-host request ≥400; a 404-only allowlist
+`known-optional-404s.txt` covers artifacts that legitimately may not exist),
+`page-error`, `console-error` or `nav-error`, versus a committed baseline of
+wave-7 known defects that lanes **shrink and never grow**
+(`check-baseline-shrinks.mjs`, enforced in CI). The `ui-walkthrough` CI job
+boots Studio (`--boot`: production build, dry-bridge + no-spawn seams; refuses
+to boot over a healthy bridge) and runs it on every PR; `--only <route-prefix>`
+narrows a local run, `--from <crawl.json>` re-asserts an existing crawl without
+a browser. Contract: `scripts/ui-walkthrough/crawl.test.ts` over
+`fixtures/crawl.sample.json` (a slice of the real wave-7 crawl).

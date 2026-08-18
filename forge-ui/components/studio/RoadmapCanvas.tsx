@@ -69,10 +69,13 @@ import { InitiativeDetail } from './InitiativeDetail';
 // Per-initiative trigger state — SAME two shapes RV-1's RoadmapDag carried
 // (InitiativeDetail imports these two types from this file by name).
 // ---------------------------------------------------------------------------
-export type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
+// W7-A3 (projects-32): `flowId` carries the flow the enqueue targeted so the
+// success line can link THAT run (`/flows/<flowId>/run/<initiativeId>`), not
+// the flow index.
+export type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null; flowId?: string };
 const IDLE_DEVELOP: DevelopCardState = { status: 'idle', error: null };
 
-export type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
+export type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null; flowId?: string };
 const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
 
 const DEFAULT_ATTEMPT: AttemptInfo = { attemptCount: 1, priorCycleIds: [] };

@@ -120,6 +120,10 @@ import type { AgentDefinition, FlowDefinition } from '../../orchestrator/studio/
 // bridge-client, so the module graph still loads for the pure tests above.
 vi.mock('./bridge-client.ts', () => ({
   resolveBridgeUrl: vi.fn(async () => 'http://bridge.test'),
+  // W7-A1: studio-client rides bridge-client's `bridgeFetch` (one transport,
+  // crosscut-26) — the mock forwards to the stubbed global fetch against the
+  // same fixed base, so each test's `vi.stubGlobal('fetch', …)` still drives it.
+  bridgeFetch: vi.fn(async (path: string, init?: RequestInit) => (init === undefined ? fetch(`http://bridge.test${path}`) : fetch(`http://bridge.test${path}`, init))),
 }));
 
 test('parseRunInputs: one key:value per line → inputs map; blanks ignored', () => {
@@ -844,6 +848,10 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     origin: 'architect',       // NOT parseRun's default ('human-directed')
     costUsd: 9.99,               // NOT parseRun's default (0)
     startedAt: '2026-01-01T00:00:00Z',
+    // W7-A3 (flows-29): served by orchestrator/run-model.ts since W6-RV-2, but
+    // was silently dropped here — the exact declared-data-fails-open class
+    // this pin exists for. MonitorSummary's ELAPSED depends on it.
+    completedAt: '2026-01-01T01:04:00Z',
     phases: { dev: 'complete' },                        // non-empty (default would be {})
     phaseMeta: { dev: { costUsd: 1.5, retries: 2 } },    // non-empty
     artifactsReady: { plan: 'view' },                    // non-empty
@@ -1036,11 +1044,16 @@ test('fetchStudioSessions(false) fetches the unfiltered index (no ?active= query
   expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/sessions`);
 });
 
-test('fetchStudioSessions() degrades to [] (never throws) when the bridge responds non-2xx', async () => {
+// W7-A1 (home-sessions-29 / home-sessions-V01): this pin used to assert the
+// DEFECT — "degrades to [] (never throws) on non-2xx" — the exact swallow that
+// made /sessions render "No sessions in flight" on a 500. Flipped: a non-2xx
+// REJECTS with a BridgeReadError carrying the bridge's own status + text, so no
+// caller can receive a value it could mistake for an empty index.
+test('fetchStudioSessions() REJECTS with BridgeReadError{status:500, message:"boom"} when the bridge responds non-2xx — never resolves []', async () => {
   const fetchSpy = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'boom' }) }));
   vi.stubGlobal('fetch', fetchSpy);
 
-  await expect(fetchStudioSessions()).resolves.toEqual([]);
+  await expect(fetchStudioSessions()).rejects.toMatchObject({ name: 'BridgeReadError', status: 500, message: 'boom' });
 });
 
 // ---------------------------------------------------------------------------
@@ -1196,6 +1209,9 @@ test('W6-B13: fetchKbDrainRun: a 404 "unknown drain run" degrades to an honest o
   const result = await fetchKbDrainRun('forge-dev', 'bogus-run');
   expect(result.ok).toBe(false);
   expect(result.runId).toBe('bogus-run');
+  // W7-A1: the bridge's OWN text, verbatim — not a neutral "no drain status
+  // available" that hides what the server actually said.
+  expect(result.error).toBe('unknown drain run');
 });
 
 test('W6-B13: fetchActiveOrLatestKbDrain(id) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain (no trailing runId segment) and passes runId:null through when no run has ever been dispatched', async () => {

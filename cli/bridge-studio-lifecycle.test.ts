@@ -1,0 +1,592 @@
+/**
+ * W7-A2 — session lifecycle acceptance + unit tests (pinned BEFORE the
+ * implementation; RED at branch base).
+ *
+ * Findings closed here: home-sessions-04/05/08/09/10/11/21/22 (bridge half),
+ * sessions-kinds-10/11/15/16/20/24/33, community-02/06/15/20, knowledge-16/
+ * 17/18/27, flows-28 (session half).
+ *
+ * The on-disk shapes are the operator's REAL stuck sessions, copied
+ * verbatim (status.json + `_logs/_<kind>-<sid>/stderr.log`):
+ *   - community-refresh 2026-08-18T12-54-32-abdfd26b — phase `gathering`,
+ *     stderr.log = InteractiveRunnerError (writes: [staging] produced no files)
+ *   - kb-cleanup 2026-08-18T12-36-59-1b8305ab (.kb-cycles) — phase
+ *     `drafting`, stderr.log = InteractiveRunnerError (writes: [plan] …)
+ *   - kb-cleanup 2026-08-14T15-07-02-f357b6df (.kb-cycles) — same shape
+ * All three were `needsYou:true` on /sessions with a calm "No operator
+ * action available" page and no cancel anywhere.
+ *
+ * Test shape mirrors cli/ui-bridge-sessions-index.test.ts: a real bridge
+ * (startBridge) + fetch for the acceptance level, plus direct import of the
+ * pure derivation for the unit matrix. The REAL studio/session-kinds.yaml is
+ * copied into the fixture root so the real kinds/tables are exercised (the
+ * bridge only loads it structurally — no agent-ref resolution at load time).
+ *
+ * RUN: node --test --experimental-strip-types cli/bridge-studio-lifecycle.test.ts
+ */
+
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, copyFileSync, utimesSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
+
+import { startBridge, type SessionIndexRow } from './ui-bridge.ts';
+import {
+  deriveSessionLifecycle,
+  extractErrorMessage,
+  stallCeilingForKind,
+  isTurnAlive,
+  DEFAULT_STALL_CEILING_MS,
+  type SessionLifecycleInputs,
+} from './bridge-studio-lifecycle.ts';
+import { CANCELLED_PHASE } from './bridge-studio.ts';
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ---------------------------------------------------------------------------
+// The operator's real stderr text (verbatim from _logs/_kb-cleanup-2026-08-18T12-36-59-1b8305ab/stderr.log)
+// ---------------------------------------------------------------------------
+const KB_CLEANUP_STDERR = [
+  'InteractiveRunnerError: runInteractiveTurn: session kind "kb-cleanup" phase "drafting" declares writes: [plan], but the turn produced no files there — refusing to advance the session with an empty package rather than persisting a ghost turn to status.json.',
+  '    at runAgentStyleStep (file:///home/parso/forge/orchestrator/interactive-runner.ts:493:11)',
+  '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)',
+  '    at async runInteractiveTurn (file:///home/parso/forge/orchestrator/interactive-runner.ts:328:16)',
+  '    at async runTurnSpecAgent (file:///home/parso/forge/cli/agent-run.ts:571:18)',
+  '    at async cmdAgentRun (file:///home/parso/forge/cli/agent-run.ts:601:14)',
+  '    at async cmdAgent (file:///home/parso/forge/cli/agent-run.ts:137:29)',
+  '    at async file:///home/parso/forge/orchestrator/cli.ts:101:14',
+  '',
+].join('\n');
+const COMMUNITY_STDERR = KB_CLEANUP_STDERR.replace('kind "kb-cleanup" phase "drafting" declares writes: [plan]', 'kind "community-refresh" phase "gathering" declares writes: [staging]');
+
+// ---------------------------------------------------------------------------
+// Unit matrix — deriveSessionLifecycle is pure
+// ---------------------------------------------------------------------------
+
+const NOW = Date.parse('2026-08-19T00:00:00.000Z');
+const MIN = 60_000;
+
+function inputs(over: Partial<SessionLifecycleInputs> = {}): SessionLifecycleInputs {
+  return {
+    terminal: false,
+    awaits: null,
+    working: true,
+    statusMtimeMs: NOW - 10 * MIN,
+    stderr: null,
+    lastActivityMs: NOW - 5_000,
+    turnAlive: false,
+    nowMs: NOW,
+    stallCeilingMs: DEFAULT_STALL_CEILING_MS,
+    ...over,
+  };
+}
+
+test('lifecycle unit: terminal wins over everything — state terminal, needsYou false, not cancellable, error null (even with a stale stderr present)', () => {
+  const l = deriveSessionLifecycle(inputs({ terminal: true, stderr: { text: KB_CLEANUP_STDERR, mtimeMs: NOW }, awaits: 'verdict' }));
+  assert.equal(l.state, 'terminal');
+  assert.equal(l.needsYou, false);
+  assert.equal(l.cancellable, false);
+  assert.equal(l.error, null);
+});
+
+test('lifecycle unit: the operator\'s crashed kb-cleanup shape — working phase, non-empty stderr NEWER than status.json, no live turn ⇒ crashed + needsYou + the error message (not the stack)', () => {
+  const l = deriveSessionLifecycle(inputs({
+    statusMtimeMs: NOW - 2 * MIN,
+    stderr: { text: KB_CLEANUP_STDERR, mtimeMs: NOW - MIN },
+    lastActivityMs: NOW - MIN,
+  }));
+  assert.equal(l.state, 'crashed');
+  assert.equal(l.needsYou, true);
+  assert.equal(l.cancellable, true);
+  assert.ok(l.error !== null && l.error.startsWith('InteractiveRunnerError: runInteractiveTurn: session kind "kb-cleanup" phase "drafting" declares writes: [plan]'), `error must be the message line, got ${l.error}`);
+  assert.ok(!l.error!.includes('    at '), 'stack frames must not leak into the error text');
+});
+
+test('lifecycle unit: stderr OLDER than status.json (a prior crash, then a later successful phase write) is NOT a crash — derive from the newest fact, never a stale copy', () => {
+  const l = deriveSessionLifecycle(inputs({
+    statusMtimeMs: NOW - MIN,
+    stderr: { text: KB_CLEANUP_STDERR, mtimeMs: NOW - 5 * MIN },
+    lastActivityMs: NOW - 5_000,
+  }));
+  assert.equal(l.state, 'working');
+  assert.equal(l.needsYou, false);
+  assert.equal(l.error, null);
+});
+
+test('lifecycle unit: a LIVE tracked turn (turnAlive) with old stderr present is working, not crashed — the re-run case', () => {
+  const l = deriveSessionLifecycle(inputs({
+    statusMtimeMs: NOW - 10 * MIN,
+    stderr: { text: KB_CLEANUP_STDERR, mtimeMs: NOW - MIN },
+    turnAlive: true,
+  }));
+  assert.equal(l.state, 'working');
+  assert.equal(l.needsYou, false);
+});
+
+test('lifecycle unit: an operator gate (awaits questions|verdict) ⇒ awaiting-operator, needsYou true — the architect awaiting-verdict shape that used to read needsYou=false', () => {
+  for (const awaits of ['questions', 'verdict'] as const) {
+    const l = deriveSessionLifecycle(inputs({ awaits, working: false }));
+    assert.equal(l.state, 'awaiting-operator', awaits);
+    assert.equal(l.needsYou, true, awaits);
+    assert.equal(l.error, null);
+    assert.equal(l.cancellable, true);
+  }
+});
+
+test('lifecycle unit: an operator gate that ALSO has a stale crash log — crash wins (the operator must see the failure, the gate is moot)', () => {
+  const l = deriveSessionLifecycle(inputs({ awaits: 'verdict', working: false, statusMtimeMs: NOW - 2 * MIN, stderr: { text: KB_CLEANUP_STDERR, mtimeMs: NOW - MIN } }));
+  assert.equal(l.state, 'crashed');
+});
+
+test('lifecycle unit: a working phase silent past the stall ceiling ⇒ stalled + needsYou; inside the ceiling ⇒ working, needsYou false', () => {
+  const stalled = deriveSessionLifecycle(inputs({ lastActivityMs: NOW - DEFAULT_STALL_CEILING_MS - 1 }));
+  assert.equal(stalled.state, 'stalled');
+  assert.equal(stalled.needsYou, true);
+  assert.equal(stalled.idleMs, DEFAULT_STALL_CEILING_MS + 1);
+  const working = deriveSessionLifecycle(inputs({ lastActivityMs: NOW - DEFAULT_STALL_CEILING_MS + 1 }));
+  assert.equal(working.state, 'working');
+  assert.equal(working.needsYou, false);
+});
+
+test('lifecycle unit: NO liveness signal at all (lastActivityMs null — the session has no log dir) is NEVER stalled, however old status.json is — honest "unknown", not a guess', () => {
+  const l = deriveSessionLifecycle(inputs({ lastActivityMs: null, statusMtimeMs: NOW - 400 * MIN }));
+  assert.equal(l.state, 'working');
+  assert.equal(l.needsYou, false);
+  assert.equal(l.idleMs, null);
+});
+
+test('lifecycle unit: an operator gate is never stalled — waiting on the operator is not the agent being silent', () => {
+  const l = deriveSessionLifecycle(inputs({ awaits: 'verdict', working: false, lastActivityMs: NOW - 400 * MIN }));
+  assert.equal(l.state, 'awaiting-operator');
+});
+
+test('lifecycle unit: extractErrorMessage picks the last non-stack line, trimmed and capped', () => {
+  assert.equal(extractErrorMessage('Error: boom\n    at x (y:1:1)\n    at z\n'), 'Error: boom');
+  assert.equal(extractErrorMessage('warn line\nError: second\n    at frame\n'), 'Error: second');
+  const long = 'E'.repeat(700);
+  assert.equal(extractErrorMessage(long).length, 601, 'capped at 600 + ellipsis');
+});
+
+test('lifecycle unit: isTurnAlive fails CLOSED — the bridge\'s own pid is never "ours", and a session id that is only a SUBSTRING of an argv element (not a whole element) does not match', async () => {
+  // Our own process: alive, but never a turn we may signal, whatever its argv holds.
+  const ownArg = process.argv[process.argv.length - 1];
+  assert.equal(isTurnAlive(process.pid, ownArg), false);
+  // A live child whose argv element is `setTimeout(() => {}, 120000)`: the
+  // session id "setTimeout" is a substring of it, not a whole element.
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'whole-element-sid'], { detached: true, stdio: 'ignore' });
+  child.unref();
+  try {
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(isTurnAlive(child.pid!, 'setTimeout'), false, 'substring of an argv element must not count as ownership');
+    assert.equal(isTurnAlive(child.pid!, 'whole-element-sid'), true, 'positive control: the whole-element session id matches');
+  } finally {
+    try { process.kill(child.pid!, 'SIGKILL'); } catch { /* ignore */ }
+  }
+});
+
+test('lifecycle unit: stallCeilingForKind — architect matches the UI\'s 120s STALE_THRESHOLD_MS, unknown kinds get the default', () => {
+  assert.equal(stallCeilingForKind('architect'), 120_000);
+  assert.equal(stallCeilingForKind('kb-cleanup'), DEFAULT_STALL_CEILING_MS);
+  assert.equal(stallCeilingForKind('never-heard-of-it'), DEFAULT_STALL_CEILING_MS);
+});
+
+// ---------------------------------------------------------------------------
+// Acceptance — real bridge + fetch over the operator's on-disk shapes
+// ---------------------------------------------------------------------------
+
+let forgeRoot: string;
+let projectsRoot: string;
+let logsRoot: string;
+let bridgeUrl: string;
+let closeBridge: () => Promise<void>;
+
+const CRASHED_KB_SID = '2026-08-18T12-36-59-1b8305ab';
+const CRASHED_KB_SID_2 = '2026-08-14T15-07-02-f357b6df';
+const CRASHED_CR_SID = '2026-08-18T12-54-32-abdfd26b';
+const ARCHITECT_VERDICT_SID = '2026-08-01T10-00-00';
+const STALLED_KB_SID = '2026-08-05T14-00-00';
+const DEMO_WORKING_SID = '2026-08-03T12-00-00';
+const INSTR_VERDICT_SID = '2026-08-02T11-00-00';
+const INSTR_TERMINAL_SID = '2026-08-02T11-05-00';
+const INSTR_CRASHED_SID = '2026-08-02T11-20-00';
+const RERUN_KB_SID = '2026-08-05T14-30-00';
+const AMBIGUOUS_SID = '2026-08-09T09-00-00';
+const KILL_SID = '2026-08-10T10-00-00';
+const CANCEL_TERMINAL_SID = '2026-08-11T11-00-00';
+
+function writeStatus(dir: string, status: Record<string, unknown>, mtimeMs?: number): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  if (mtimeMs !== undefined) utimesSync(join(dir, 'status.json'), mtimeMs / 1000, mtimeMs / 1000);
+}
+
+function writeLog(kind: string, sid: string, files: Record<string, string>, mtimeMs?: number): string {
+  const dir = join(logsRoot, `_${kind}-${sid}`);
+  mkdirSync(dir, { recursive: true });
+  for (const [name, body] of Object.entries(files)) {
+    writeFileSync(join(dir, name), body, 'utf8');
+    if (mtimeMs !== undefined) utimesSync(join(dir, name), mtimeMs / 1000, mtimeMs / 1000);
+  }
+  return dir;
+}
+
+const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
+
+/** Read the body ONCE: assert the status (with the body text as the failure
+ *  message) and return the parsed JSON. */
+async function expectJson<T>(res: Response, status: number): Promise<T> {
+  const text = await res.text();
+  assert.equal(res.status, status, `expected HTTP ${status}, got ${res.status}: ${text}`);
+  return JSON.parse(text) as T;
+}
+
+async function indexRows(activeOnly = false): Promise<SessionIndexRow[]> {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions${activeOnly ? '?active=1' : ''}`);
+  assert.equal(res.status, 200);
+  return ((await res.json()) as { sessions: SessionIndexRow[] }).sessions;
+}
+
+function row(rows: SessionIndexRow[], kind: string, sid: string): SessionIndexRow {
+  const r = rows.find((x) => x.kind === kind && x.sessionId === sid);
+  assert.ok(r, `expected an index row for ${kind}/${sid}; got ${rows.map((x) => `${x.kind}/${x.sessionId}`).join(', ')}`);
+  return r!;
+}
+
+let killChildPid: number | null = null;
+
+before(async () => {
+  forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-lifecycle-'));
+  projectsRoot = join(forgeRoot, 'projects');
+  logsRoot = join(forgeRoot, '_logs');
+  for (const state of ['in-flight', 'done', 'failed', 'pending']) mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
+  mkdirSync(logsRoot, { recursive: true });
+  mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'));
+  // The REAL registry — real kinds, real phase tables.
+  copyFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), join(forgeRoot, 'studio', 'session-kinds.yaml'));
+
+  const now = Date.now();
+  const T = { statusOld: now - 10 * MIN, crash: now - 8 * MIN, recent: now - 5_000, stale: now - 30 * MIN };
+
+  // --- the operator's three crashed sessions (dot-anchor projects) --------
+  writeStatus(join(projectsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID), {
+    session_id: CRASHED_KB_SID, project: '.kb-cycles', phase: 'drafting', kb_id: 'cycles', findings: [], modelTier: 'sonnet',
+  }, T.statusOld);
+  writeLog('kb-cleanup', CRASHED_KB_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': new Date(T.crash).toISOString(), 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
+  writeStatus(join(projectsRoot, '.kb-cycles', '_kb-cleanup', CRASHED_KB_SID_2), {
+    session_id: CRASHED_KB_SID_2, project: '.kb-cycles', phase: 'drafting', kb_id: 'cycles', findings: [],
+  }, T.statusOld);
+  writeLog('kb-cleanup', CRASHED_KB_SID_2, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
+  writeStatus(join(projectsRoot, '.community-registry', '_community-refresh', CRASHED_CR_SID), {
+    session_id: CRASHED_CR_SID, project: '.community-registry', phase: 'gathering', package_id: 'community-registry',
+    registryPath: '/x/registry.yaml', hubsPath: '/x/hubs.yaml', modelTier: 'opus', updated_at: '2026-08-18T12:54:32.132Z',
+  }, T.statusOld);
+  writeLog('community-refresh', CRASHED_CR_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': COMMUNITY_STDERR }, T.crash);
+
+  // --- architect at awaiting-verdict: an operator gate the OLD needsYou never flagged
+  writeStatus(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID), {
+    session_id: ARCHITECT_VERDICT_SID, project: 'proja', phase: 'awaiting-verdict', updated_at: '2026-08-01T10:00:00.000Z',
+  });
+  writeFileSync(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'idea.md'), 'An idea.\n');
+
+  // --- kb-cleanup drafting, live log dir, EMPTY stderr, silent 30 min ⇒ stalled
+  writeStatus(join(projectsRoot, 'projc', '_kb-cleanup', STALLED_KB_SID), {
+    session_id: STALLED_KB_SID, project: 'projc', phase: 'drafting', kb_id: 'k', findings: [],
+  }, T.stale);
+  writeLog('kb-cleanup', STALLED_KB_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': '' }, T.stale);
+
+  // --- kb-cleanup drafting, OLD stderr, then a fresh heartbeat/status (re-run) ⇒ working
+  writeStatus(join(projectsRoot, 'projc', '_kb-cleanup', RERUN_KB_SID), {
+    session_id: RERUN_KB_SID, project: 'projc', phase: 'drafting', kb_id: 'k', findings: [],
+  }, T.recent);
+  const rerunDir = writeLog('kb-cleanup', RERUN_KB_SID, { 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
+  writeFileSync(join(rerunDir, '.heartbeat'), 'x');
+
+  // --- demo generating with NO log dir: the OLD needsYou said true (staged-review/next-turn), truth is working/false
+  writeStatus(join(projectsRoot, 'projb', '_demo', DEMO_WORKING_SID), {
+    session_id: DEMO_WORKING_SID, project: 'projb', phase: 'generating', updated_at: '2026-08-03T12:00:00.000Z', iteration: 0,
+  });
+
+  // --- instructions: verdict gate (positive control), terminal, crashed-at-drafting
+  const instr = (sid: string, phase: string, extra: Record<string, unknown> = {}) => {
+    const dir = join(projectsRoot, 'proja', '_instructions', sid);
+    writeStatus(dir, { session_id: sid, project: 'proja', phase, updated_at: '2026-08-02T11:00:00.000Z', ...extra }, T.statusOld);
+    writeFileSync(join(dir, 'prompt.md'), 'Author AGENTS.md.\n');
+  };
+  instr(INSTR_VERDICT_SID, 'awaiting-verdict');
+  instr(INSTR_TERMINAL_SID, 'committed');
+  instr(INSTR_CRASHED_SID, 'drafting');
+  writeLog('instructions', INSTR_CRASHED_SID, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': 'TypeError: Cannot read properties of undefined (reading "toFixed")\n    at runDraftStep (file:///x/instructions-runner.ts:400:1)\n' }, T.crash);
+  instr(CANCEL_TERMINAL_SID, 'rejected');
+
+  // --- the SAME session id under two projects (deep-link ambiguity probe)
+  writeStatus(join(projectsRoot, 'proja', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'proja', phase: 'briefing', updated_at: 'x' });
+  writeStatus(join(projectsRoot, 'projb', '_demo', AMBIGUOUS_SID), { session_id: AMBIGUOUS_SID, project: 'projb', phase: 'briefing', updated_at: 'x' });
+
+  // --- a session with a LIVE tracked turn process (kill test): a real
+  // detached child whose argv carries the session id (what isTurnAlive's
+  // ownership check reads from /proc/<pid>/cmdline).
+  writeStatus(join(projectsRoot, 'projb', '_demo', KILL_SID), { session_id: KILL_SID, project: 'projb', phase: 'generating', updated_at: 'x' });
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', KILL_SID], { detached: true, stdio: 'ignore' });
+  child.unref();
+  killChildPid = child.pid ?? null;
+  writeLog('demo', KILL_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': '', 'turn.pid': `${killChildPid}\n` });
+
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const result = await startBridge({ forgeRoot, port: 0 });
+  bridgeUrl = result.url;
+  closeBridge = result.close;
+});
+
+after(async () => {
+  await closeBridge();
+  if (killChildPid !== null) { try { process.kill(killChildPid, 'SIGKILL'); } catch { /* already dead */ } }
+  rmSync(forgeRoot, { recursive: true, force: true });
+});
+
+// ---- index: state + needsYou truthful in both directions -------------------
+
+test('index: the operator\'s three crashed sessions read state=crashed, needsYou=true, error = the InteractiveRunnerError message — the crash is no longer invisible', async () => {
+  const rows = await indexRows();
+  for (const [kind, sid, needle] of [
+    ['kb-cleanup', CRASHED_KB_SID, 'declares writes: [plan]'],
+    ['kb-cleanup', CRASHED_KB_SID_2, 'declares writes: [plan]'],
+    ['community-refresh', CRASHED_CR_SID, 'declares writes: [staging]'],
+  ] as const) {
+    const r = row(rows, kind, sid);
+    assert.equal(r.state, 'crashed', `${kind}/${sid}`);
+    assert.equal(r.needsYou, true, `${kind}/${sid}`);
+    assert.equal(r.terminal, false);
+    assert.ok(typeof r.error === 'string' && r.error.includes(needle), `${kind}/${sid} error must carry the runner's own message, got ${r.error}`);
+    assert.ok(!r.error!.includes('    at '), 'no stack frames on the wire');
+  }
+});
+
+test('index: architect awaiting-verdict is awaiting-operator with needsYou=true (was ALWAYS false — no panel table), and instructions awaiting-verdict stays true', async () => {
+  const rows = await indexRows();
+  const a = row(rows, 'architect', ARCHITECT_VERDICT_SID);
+  assert.equal(a.state, 'awaiting-operator');
+  assert.equal(a.needsYou, true);
+  assert.equal(a.error, null);
+  const i = row(rows, 'instructions', INSTR_VERDICT_SID);
+  assert.equal(i.state, 'awaiting-operator');
+  assert.equal(i.needsYou, true);
+});
+
+test('index: demo generating (agent working, no liveness signal) is working with needsYou=FALSE — staged-review/next-turn no longer count as "needs you"', async () => {
+  const r = row(await indexRows(), 'demo', DEMO_WORKING_SID);
+  assert.equal(r.state, 'working');
+  assert.equal(r.needsYou, false);
+  assert.equal(r.idleMs, null, 'no log dir ⇒ no liveness signal ⇒ idleMs null');
+});
+
+test('index: a working kb-cleanup silent 30 minutes with an EMPTY stderr is stalled (needsYou true, error null); the re-run shape (old stderr, fresh heartbeat) is working', async () => {
+  const rows = await indexRows();
+  const s = row(rows, 'kb-cleanup', STALLED_KB_SID);
+  assert.equal(s.state, 'stalled');
+  assert.equal(s.needsYou, true);
+  assert.equal(s.error, null);
+  assert.ok(typeof s.idleMs === 'number' && s.idleMs > 20 * MIN, `idleMs must reflect the 30-minute silence, got ${s.idleMs}`);
+  const w = row(rows, 'kb-cleanup', RERUN_KB_SID);
+  assert.equal(w.state, 'working');
+  assert.equal(w.needsYou, false);
+});
+
+test('index: a terminal session reads state=terminal, needsYou=false', async () => {
+  const r = row(await indexRows(), 'instructions', INSTR_TERMINAL_SID);
+  assert.equal(r.state, 'terminal');
+  assert.equal(r.terminal, true);
+  assert.equal(r.needsYou, false);
+});
+
+test('index: every row carries the three new fields (state/error/idleMs) — no row omits them', async () => {
+  for (const r of await indexRows()) {
+    assert.ok(['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'].includes(r.state), `${r.kind}/${r.sessionId} state=${r.state}`);
+    assert.ok('error' in r && 'idleMs' in r, `${r.kind}/${r.sessionId} must carry error + idleMs keys`);
+  }
+});
+
+// ---- shell payload: lifecycle + deep links without ?project= ---------------
+
+test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the anchor project (a dot-anchor too) and carries lifecycle', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_CRASHED_SID}`);
+  const body = await expectJson<{ project: string; lifecycle: { state: string; needsYou: boolean; error: string | null; cancellable: boolean } }>(res, 200);
+  assert.equal(body.project, 'proja');
+  assert.equal(body.lifecycle.state, 'crashed');
+  assert.equal(body.lifecycle.needsYou, true);
+  assert.equal(body.lifecycle.cancellable, true);
+  assert.ok(body.lifecycle.error?.startsWith('TypeError: Cannot read properties of undefined'), body.lifecycle.error ?? 'null');
+
+  const cr = await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`);
+  const crBody = await expectJson<{ project: string; lifecycle: { state: string } }>(cr, 200);
+  assert.equal(crBody.project, '.community-registry');
+  assert.equal(crBody.lifecycle.state, 'crashed');
+});
+
+test('shell: an explicit ?project= still works and agrees with the resolved one; a terminal session\'s lifecycle is terminal/not cancellable', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_TERMINAL_SID}?project=proja`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lifecycle: { state: string; cancellable: boolean; needsYou: boolean } };
+  assert.equal(body.lifecycle.state, 'terminal');
+  assert.equal(body.lifecycle.cancellable, false);
+  assert.equal(body.lifecycle.needsYou, false);
+});
+
+test('shell: an unknown session id without ?project= is 404 (never a 400 "project required"); the SAME id under two projects is 409 asking for ?project=, and resolves with it', async () => {
+  const missing = await fetch(`${bridgeUrl}/api/studio/sessions/demo/2099-01-01T00-00-00`);
+  assert.equal(missing.status, 404);
+  const ambiguous = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${AMBIGUOUS_SID}`);
+  assert.equal(ambiguous.status, 409);
+  const ambBody = (await ambiguous.json()) as { error: string };
+  assert.ok(/project/.test(ambBody.error), ambBody.error);
+  const explicit = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${AMBIGUOUS_SID}?project=projb`);
+  assert.equal(explicit.status, 200);
+});
+
+// ---- events: an absent log dir is 200-empty, never a console 404 ------------
+
+test('events: GET /api/events/_demo-<sid> for a session that never ran a turn is 200 {events: []} — not a 404 on the operator\'s first screen', async () => {
+  const res = await fetch(`${bridgeUrl}/api/events/_demo-${DEMO_WORKING_SID}`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { cycleId: string; events: unknown[] };
+  assert.equal(body.cycleId, `_demo-${DEMO_WORKING_SID}`);
+  assert.deepEqual(body.events, []);
+});
+
+test('events: a traversal cycleId is STILL rejected 4xx (the sec04 pin) — 200-empty is only for a guard-clean absent path', async () => {
+  const res = await fetch(`${bridgeUrl}/api/events/..%2F..%2Fetc`);
+  assert.ok(res.status >= 400 && res.status < 500, `got ${res.status}`);
+});
+
+// ---- cancel ----------------------------------------------------------------
+
+test('cancel: POST without the CSRF header is 403 (the global guard covers the new write route)', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${DEMO_WORKING_SID}/cancel`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(res.status, 403);
+});
+
+test('cancel: unknown kind is 404 naming the registry; unknown session is 404; a malformed sid is 400', async () => {
+  const kind = await fetch(`${bridgeUrl}/api/studio/sessions/nope/${DEMO_WORKING_SID}/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
+  assert.equal(kind.status, 404);
+  const sid = await fetch(`${bridgeUrl}/api/studio/sessions/demo/2099-01-01T00-00-00/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
+  assert.equal(sid.status, 404);
+  const bad = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${encodeURIComponent('../../etc')}/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
+  assert.ok(bad.status === 400 || bad.status === 404, `got ${bad.status}`);
+});
+
+test('cancel: a terminal session is 409 — never re-terminalised', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${CANCEL_TERMINAL_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'proja' }) });
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error: string; phase: string };
+  assert.equal(body.phase, 'rejected');
+  const status = JSON.parse(readFileSync(join(projectsRoot, 'proja', '_instructions', CANCEL_TERMINAL_SID, 'status.json'), 'utf8')) as { phase: string };
+  assert.equal(status.phase, 'rejected', 'status.json must be byte-unchanged on a refused cancel');
+});
+
+test('cancel: a working demo session (no live turn) → 200 phase=cancelled, previousPhase kept, killed=false; status.json rewritten; index reads terminal; ?active=1 drops it; a second cancel is 409', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${DEMO_WORKING_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
+  const body = await expectJson<{ ok: boolean; phase: string; previousPhase: string; killed: boolean; project: string }>(res, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, CANCELLED_PHASE);
+  assert.equal(body.previousPhase, 'generating');
+  assert.equal(body.killed, false);
+  assert.equal(body.project, 'projb');
+
+  const status = JSON.parse(readFileSync(join(projectsRoot, 'projb', '_demo', DEMO_WORKING_SID, 'status.json'), 'utf8')) as Record<string, unknown>;
+  assert.equal(status.phase, CANCELLED_PHASE);
+  assert.equal(status.cancelled_from, 'generating');
+  assert.equal(typeof status.cancelled_at, 'string');
+  assert.equal(status.session_id, DEMO_WORKING_SID, 'the rest of status.json is preserved');
+
+  const all = row(await indexRows(), 'demo', DEMO_WORKING_SID);
+  assert.equal(all.terminal, true);
+  assert.equal(all.state, 'terminal');
+  assert.equal(all.needsYou, false);
+  assert.equal(all.phase, CANCELLED_PHASE);
+  const active = await indexRows(true);
+  assert.equal(active.find((r) => r.kind === 'demo' && r.sessionId === DEMO_WORKING_SID), undefined, '?active=1 must exclude a cancelled session');
+
+  const again = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${DEMO_WORKING_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
+  assert.equal(again.status, 409);
+
+  // The generic affordance route must NOT have swallowed `cancel` as an
+  // affordance id (it would 409 "not available … currently available: …").
+  const shell = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${DEMO_WORKING_SID}?project=projb`);
+  assert.equal(shell.status, 200);
+  const shellBody = (await shell.json()) as { phase: string; terminal: boolean; affordances: unknown[]; lifecycle: { state: string; cancellable: boolean } };
+  assert.equal(shellBody.phase, CANCELLED_PHASE);
+  assert.equal(shellBody.terminal, true, 'isTerminalPhase must treat the universal cancelled phase as terminal for EVERY kind');
+  assert.deepEqual(shellBody.affordances, []);
+  assert.equal(shellBody.lifecycle.cancellable, false);
+});
+
+test('cancel: body.project omitted → the anchor project is resolved server-side (the operator\'s .kb-cycles crash) → 200; the row is gone from ?active=1', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${CRASHED_KB_SID}/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
+  const body = await expectJson<{ project: string; previousPhase: string }>(res, 200);
+  assert.equal(body.project, '.kb-cycles');
+  assert.equal(body.previousPhase, 'drafting');
+  const active = await indexRows(true);
+  assert.equal(active.find((r) => r.kind === 'kb-cleanup' && r.sessionId === CRASHED_KB_SID), undefined);
+});
+
+test('cancel: an ARCHITECT session (no panel/turnSpec — the "permanently bespoke" kind) cancels through the SAME generic route', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'proja' }) });
+  await expectJson<unknown>(res, 200);
+  const status = JSON.parse(readFileSync(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'status.json'), 'utf8')) as { phase: string };
+  assert.equal(status.phase, CANCELLED_PHASE);
+  const r = row(await indexRows(), 'architect', ARCHITECT_VERDICT_SID);
+  assert.equal(r.terminal, true, 'LEGACY terminal derivation must also honour the universal cancelled phase');
+});
+
+test('cancel: a session with a LIVE tracked turn (turn.pid alive, argv carries the sid) → killed=true and the process is gone; before the cancel the row read working (turnAlive), not crashed', async () => {
+  assert.ok(killChildPid !== null, 'precondition: a child was spawned');
+  const before = row(await indexRows(), 'demo', KILL_SID);
+  assert.equal(before.state, 'working', 'a live tracked turn is working');
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${KILL_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
+  const body = await expectJson<{ killed: boolean }>(res, 200);
+  assert.equal(body.killed, true, 'the tracked turn pid must be signalled');
+  // The child must actually die (SIGTERM on a plain node -e loop is fatal).
+  const deadline = Date.now() + 5_000;
+  let alive = true;
+  while (Date.now() < deadline) {
+    try { process.kill(killChildPid!, 0); } catch { alive = false; break; }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(alive, false, 'the tracked turn process must be dead after cancel');
+});
+
+test('cancel: turn.pid pointing at a pid whose argv does NOT carry the session id is never signalled (ownership check fails closed) — killed=false', async () => {
+  // A live, unrelated child (argv carries a DIFFERENT sid).
+  const stranger = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'not-this-session'], { detached: true, stdio: 'ignore' });
+  stranger.unref();
+  const sid = '2026-08-12T12-00-00';
+  writeStatus(join(projectsRoot, 'projb', '_demo', sid), { session_id: sid, project: 'projb', phase: 'generating', updated_at: 'x' });
+  writeLog('demo', sid, { 'events.jsonl': '', '.heartbeat': 'x', 'stderr.log': '', 'turn.pid': `${stranger.pid}\n` });
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${sid}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
+    const body = await expectJson<{ killed: boolean }>(res, 200);
+    assert.equal(body.killed, false);
+    let stillAlive = true;
+    try { process.kill(stranger.pid!, 0); } catch { stillAlive = false; }
+    assert.equal(stillAlive, true, 'an unowned process must never be signalled');
+  } finally {
+    try { process.kill(stranger.pid!, 'SIGKILL'); } catch { /* ignore */ }
+  }
+});
+
+test('cancel: a symlinked session dir (the AT-47 escape shape) is 404 and the victim status.json is byte-unchanged', async () => {
+  const victimDir = join(projectsRoot, 'victimproj', '_demo', '2026-08-13T13-00-00');
+  writeStatus(victimDir, { session_id: 'v', project: 'victimproj', phase: 'generating' });
+  const beforeBytes = readFileSync(join(victimDir, 'status.json'));
+  const attackerKindDir = join(projectsRoot, 'attackerproj', '_demo');
+  mkdirSync(attackerKindDir, { recursive: true });
+  const { symlinkSync } = await import('node:fs');
+  symlinkSync(victimDir, join(attackerKindDir, 'evil-session'));
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/evil-session/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'attackerproj' }) });
+  assert.equal(res.status, 404);
+  assert.deepEqual(readFileSync(join(victimDir, 'status.json')), beforeBytes, 'victim status.json must be untouched');
+  assert.equal(existsSync(join(victimDir, 'status.json')), true);
+});
