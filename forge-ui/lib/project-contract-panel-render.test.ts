@@ -347,3 +347,41 @@ test('AT-F1-6: a partial payload (secrets absent, instructions absent) with NO n
   // no north-star supplied -> an explicit missing state, never a fabricated one
   expect(html).toContain('data-contract-northstar-state="missing"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-A1 (projects-03 / crosscut-12) — a FAILED contract-stages read renders
+// the shared failure state, never an empty-but-successful-looking checklist
+// ---------------------------------------------------------------------------
+
+const GITPULSE_409_TEXT =
+  'project-config: the flat gate keys moved to the typed testProcess object (R1-03) — migrate: quality_gate_cmd → testProcess.local.cmd; acceptance_gate → testProcess.acceptance';
+
+test('W7-A1: a 409 contract-stages reply (the REAL gitpulse config-migration body) renders [data-component="fetch-error"][data-fetch-http-status="409"] carrying the bridge text VERBATIM inside [data-section="contract-panel"], NO data-checklist-row-count="0", and the north-star VIEW still renders — kills the silent-empty checklist', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ ok: false, error: GITPULSE_409_TEXT }) })));
+
+  const html = await renderPanel({ projectId: 'gitpulse', northStar: 'Ship it' });
+
+  expect(html).toContain('data-section="contract-panel"');
+  expect(html).toContain('data-section="contract-checklist-error"');
+  expect(html).toContain('data-component="fetch-error"');
+  expect(html).toContain('data-fetch-http-status="409"');
+  expect(html).toContain('data-fetch-reachable="true"');
+  expect(html).toContain('migrate: quality_gate_cmd → testProcess.local.cmd');
+  expect(html).not.toContain('data-checklist-row-count="0"');
+  expect(html).not.toContain('data-checklist-row-count');
+  expect(html).not.toContain('Could not reach'); // the bridge ANSWERED — never framed as unreachable
+  expect(html).toContain('data-contract-northstar-state="present"');
+});
+
+test('W7-A1: a transport failure (bridge unreachable) renders the fetch-error state with data-fetch-reachable="false" and no http status — still no empty checklist, still no throw', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+
+  const html = await renderPanel({ projectId: 'mdtoc' });
+
+  expect(html).toContain('data-section="contract-panel"');
+  expect(html).toContain('data-component="fetch-error"');
+  expect(html).toContain('data-fetch-reachable="false"');
+  expect(html).not.toContain('data-fetch-http-status');
+  expect(html).toContain('bridge unreachable (Failed to fetch)');
+  expect(html).not.toContain('data-checklist-row-count');
+});

@@ -303,7 +303,7 @@ function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: st
     return null;
   }
   try {
-    assertSkillSlug(id);
+    assertSkillSlug(id, 'community item');
   } catch (err) {
     sendJson(res, 400, { error: sanitizeError(err) }, origin);
     return null;

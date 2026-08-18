@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
@@ -270,8 +271,19 @@ export default function SessionShellPage({
           </div>
         </div>
       ) : viewState.status === 'error' ? (
-        <div data-section="session-error" style={{ fontSize: 13, color: '#f85149' }}>
-          {viewState.error}
+        // W7-A1 (crosscut-09): the shared failure state instead of a bare
+        // "TypeError: Failed to fetch" body — framed by WHETHER the bridge was
+        // reached (network-error / no-bridge = unreachable; bad-request /
+        // stage-conflict / server-error / non-json / malformed = it answered),
+        // with the server's own message verbatim and a Retry that re-runs the
+        // shell read (the SHELL_POLL_MS poll keeps retrying on its own too).
+        <div data-section="session-error">
+          <FetchErrorState
+            what="this session"
+            error={viewState.error}
+            reachable={viewState.errorKind !== 'network-error' && viewState.errorKind !== 'no-bridge'}
+            onRetry={refreshShell}
+          />
         </div>
       ) : viewState.status === 'no-session' || noProjectKnown ? (
         <div style={{ color: 'var(--dim)', fontSize: 13 }}>

@@ -28,6 +28,10 @@ export type FetchErrorProps = {
   error: string;
   /** HTTP status iff the bridge answered. */
   status?: number;
+  /** Override for callers whose error shape knows the bridge ANSWERED but
+   *  not the numeric status (session-shell errorKinds) — defaults to
+   *  `status !== undefined`. */
+  reachable?: boolean;
   onRetry?: () => void;
   /** Inline one-liner (inside a panel) instead of the boxed page section. */
   compact?: boolean;
@@ -74,20 +78,20 @@ const RETRY_STYLE: CSSProperties = {
   cursor: 'pointer',
 };
 
-export function FetchErrorState({ what, error, status, onRetry, compact }: FetchErrorProps) {
-  const reachable = status !== undefined;
+export function FetchErrorState({ what, error, status, reachable: reachableProp, onRetry, compact }: FetchErrorProps) {
+  const reachable = reachableProp ?? status !== undefined;
   return (
     <div
       role="alert"
       data-component="fetch-error"
       data-fetch-status="error"
       data-fetch-reachable={reachable ? 'true' : 'false'}
-      {...(reachable ? { 'data-fetch-http-status': String(status) } : {})}
+      {...(status !== undefined ? { 'data-fetch-http-status': String(status) } : {})}
       style={compact ? COMPACT_STYLE : BOX_STYLE}
     >
       <span style={{ flex: '1 1 auto', minWidth: 0 }}>
         {reachable
-          ? <>The forge bridge refused to read {what} (HTTP {status}): <span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span></>
+          ? <>The forge bridge refused to read {what}{status !== undefined ? ` (HTTP ${status})` : ''}: <span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span></>
           : <>Could not reach the forge bridge — {what} unavailable (<span data-fetch-error-text style={{ fontFamily: 'var(--font-mono, ui-monospace)' }}>{error}</span>). This is NOT an empty result; it will refill when the bridge is back.</>}
       </span>
       {onRetry ? (

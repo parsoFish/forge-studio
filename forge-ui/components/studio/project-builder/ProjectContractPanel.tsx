@@ -1,5 +1,6 @@
 import { fetchContractStages } from '@/lib/studio-client';
 import type { ContractStageRow } from '@/lib/session-client';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 
 // ---------------------------------------------------------------------------
 // ProjectContractPanel (R4-12-F1) — the project page's read-only "contract
@@ -29,6 +30,14 @@ import type { ContractStageRow } from '@/lib/session-client';
 // Honest degradation: absent stages render `data-checklist-status="absent"`; a
 // missing north-star renders `data-contract-northstar-state="missing"`; the
 // panel root always renders (a partial project never throws or blanks it).
+//
+// W7-A1 (projects-03 / crosscut-12): a FAILED contract-stages read (the
+// bridge unreachable, or a 404/409/500 — e.g. gitpulse's 409 "project-config:
+// … migrate: …" whose text IS the operator's fix instruction) renders the
+// shared failure state (`[data-component="fetch-error"]`, the bridge's text
+// verbatim) in the checklist's place — never an empty-but-successful-looking
+// `data-checklist-row-count="0"` list. The north-star / conventions VIEW still
+// renders from its props (they were never part of the failed read).
 // ---------------------------------------------------------------------------
 
 const STAGE_LABELS: Record<string, string> = {
@@ -64,10 +73,17 @@ export async function ProjectContractPanel({
   instructions?: string | null;
   instructionsSource?: string | null;
 }): Promise<JSX.Element> {
-  // Own GET — exactly one, validated at the studio-client boundary. A missing
-  // bridge / non-2xx / thrown fetch degrades to an empty checklist there, so
-  // this await never rejects the render.
-  const stages = await fetchContractStages(projectId);
+  // Own GET — exactly one, validated at the studio-client boundary. W7-A1: a
+  // missing bridge / non-2xx / thrown fetch REJECTS there (BridgeReadError with
+  // the bridge's own text) — caught here into `stagesError` so the panel
+  // renders the failure honestly and never rejects the caller's render.
+  let stages: ContractStageRow[] = [];
+  let stagesError: { error: string; status?: number } | null = null;
+  try {
+    stages = await fetchContractStages(projectId);
+  } catch (err) {
+    stagesError = fetchErrorPropsFrom(err);
+  }
 
   const ns = (northStar ?? '').trim();
   const nsState: 'present' | 'missing' = ns.length > 0 ? 'present' : 'missing';
@@ -79,7 +95,13 @@ export async function ProjectContractPanel({
     <section data-section="contract-panel" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div>
         <div style={HEADING_STYLE}>Contract Buildout</div>
-        <ContractChecklist rows={stages} />
+        {stagesError ? (
+          <div data-section="contract-checklist-error">
+            <FetchErrorState what="the contract stages" error={stagesError.error} status={stagesError.status} compact />
+          </div>
+        ) : (
+          <ContractChecklist rows={stages} />
+        )}
       </div>
 
       <div>

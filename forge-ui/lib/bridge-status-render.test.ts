@@ -101,6 +101,17 @@ test('reachable (status present): "The forge bridge refused to read <what> (HTTP
   expect(html).not.toContain('data-action="retry-fetch"'); // no onRetry supplied → no dead button
 });
 
+test('reachable override without a status: "refused to read <what>: <text>" (no HTTP n), data-fetch-reachable="true", no http-status attr — for the session shell\'s errorKind-shaped failures', () => {
+  const html = renderToStaticMarkup(React.createElement(FetchErrorState, {
+    what: 'this session', error: 'stage conflict: session is committed', reachable: true, onRetry: () => {},
+  }));
+  expect(html).toContain('data-fetch-reachable="true"');
+  expect(html).not.toContain('data-fetch-http-status');
+  expect(html).toContain('The forge bridge refused to read this session: ');
+  expect(html).not.toContain('HTTP');
+  expect(html).not.toContain('Could not reach');
+});
+
 test('fetchErrorPropsFrom: BridgeReadError with status → {error,status}; without status → {error} only; a plain TypeError → its message, no status', () => {
   expect(fetchErrorPropsFrom(new BridgeReadError('/p', { ok: false, status: 400, error: 'invalid hook id "x"' })))
     .toEqual({ error: 'invalid hook id "x"', status: 400 });

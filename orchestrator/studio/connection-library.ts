@@ -225,6 +225,6 @@ export function connectionById(forgeRoot: string, id: string): ConnectionDefinit
   // pass a client-supplied id through exactly this function. Guarding at the
   // one shared lookup point means a traversal-shaped id is rejected here
   // before any future caller ever learns to build a path from it.
-  assertSkillSlug(id);
+  assertSkillSlug(id, 'connection');
   return listConnections(forgeRoot).find((e) => e.id === id);
 }
