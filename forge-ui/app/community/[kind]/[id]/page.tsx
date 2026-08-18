@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { FilePackage } from '@/components/studio/FilePackage';
 import {
   fetchCommunityItemDetail,
@@ -36,7 +37,9 @@ import { installStateLabel, signalsLabel, hubLabel } from '@/lib/community-view'
 // never asserted as fact before the server confirms it.
 // ---------------------------------------------------------------------------
 
-type PageState = 'loading' | 'ready' | 'not-found' | 'error';
+// W7-A4 (community-11): the two failure modes are DISTINCT states — an
+// unrecognised kind never reaches the bridge, an unknown id 404s there.
+type PageState = 'loading' | 'ready' | 'unknown-kind' | 'not-found' | 'error';
 
 function isCommunityKind(x: string): x is CommunityKind {
   return (COMMUNITY_KINDS as readonly string[]).includes(x);
@@ -83,7 +86,7 @@ export default function CommunityDetailPage() {
     setActionError(null);
     if (!isCommunityKind(k)) {
       setItem(null);
-      setState('not-found');
+      setState('unknown-kind');
       return;
     }
     const r = await fetchCommunityItemDetail(k, itemId);
@@ -120,6 +123,16 @@ export default function CommunityDetailPage() {
     void load(item.kind, item.id); // refresh so installState reflects the real post-install fact
   }
 
+  // W7-A4 (community-11 / crosscut-27): unknown kind and unknown id are two
+  // different honest answers, both through the ONE shared not-found treatment
+  // with a way back to the community index.
+  if (state === 'unknown-kind') {
+    return <NotFound kind="community kind" id={kindParam} backHref="/community" backLabel="Community" detail="Community items are skills, hooks, MCP servers or tools — the kind in this URL is none of those." />;
+  }
+  if (state === 'not-found') {
+    return <NotFound kind={`community ${kindParam}`} id={id} backHref="/community" backLabel="Community" detail="No item with this id is known to the community index." />;
+  }
+
   return (
     <main
       data-page="community-detail"
@@ -142,13 +155,6 @@ export default function CommunityDetailPage() {
             style={{ marginTop: 16, color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
           >
             Could not reach the forge bridge ({error}).
-          </div>
-        )}
-
-        {state === 'not-found' && (
-          <div style={{ marginTop: 16, color: 'var(--faint)', fontSize: 13.5, fontStyle: 'italic' }}>
-            No community item &quot;{kindParam}/{id}&quot; — either the kind is unrecognised or no such id is known
-            to the community index.
           </div>
         )}
 

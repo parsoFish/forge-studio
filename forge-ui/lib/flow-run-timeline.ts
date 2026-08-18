@@ -68,8 +68,34 @@ function buildNote(meta: RunPhaseMeta | undefined): string | null {
   return segments.length > 0 ? segments.join(' · ') : null;
 }
 
-export function deriveFlowRunTimeline(flow: Flow, run: Run | null): FlowRunTimelineRow[] {
+/**
+ * One row per flow node, in the flow definition's own order — every fact on
+ * the row comes from the run's OWN `phases`/`phaseMeta` for that node.
+ *
+ * W7-A4 (flows-05 / crosscut-04): `flow === null` means the run's flow
+ * DEFINITION no longer exists (a retired flow id such as `release-refine`, or
+ * the pre-flow_id `unknown` sentinel). The rows then come from the run's own
+ * recorded phases, in recorded order, with `agent: null` (the definition that
+ * named the agents is gone — nothing is invented). A 7-phase completed run
+ * therefore still shows its 7 phases instead of an empty timeline that reads
+ * as valid. A registered flow always drives the rows (a node with no events
+ * still appears, pending); the fallback is ONLY for a missing definition.
+ */
+export function deriveFlowRunTimeline(flow: Flow | null, run: Run | null): FlowRunTimelineRow[] {
   if (!run) return [];
+  if (flow === null) {
+    return Object.entries(run.phases).map(([nodeId, status]) => {
+      const meta = run.phaseMeta[nodeId];
+      return {
+        nodeId,
+        agent: null,
+        status,
+        costUsd: meta?.costUsd ?? 0,
+        note: buildNote(meta),
+        artifacts: [],
+      };
+    });
+  }
   return flow.nodes.map((node) => {
     const meta = run.phaseMeta[node.id];
     return {

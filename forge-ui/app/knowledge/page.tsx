@@ -9,6 +9,7 @@ import {
 import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
 import { resolveActiveKbId } from '@/lib/knowledge-id-resolution';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
 import { NodeArticle } from '@/components/studio/knowledge/NodeArticle';
 import { ThemeList } from '@/components/studio/knowledge/ThemeList';
@@ -90,6 +91,12 @@ function KnowledgePageInner() {
   // forever.
   const [kbListReady,  setKbListReady]  = useState(false);
   const [currentId,    setCurrentId]    = useState<string>('');
+  // W7-A4 (crosscut-03 / knowledge-04 / knowledge-30): a `?id=` the settled
+  // roster does not contain, or a `?node=`/`?theme=` no KB owns, is a
+  // NOT-FOUND — rendered as the shared NotFound, never silently swapped for
+  // the first KB with the wrong id still in the address bar. `null` = no
+  // such miss (the normal path).
+  const [notFound, setNotFound] = useState<{ kind: 'knowledge base' | 'theme'; id: string } | null>(null);
   const [kbDetail,     setKbDetail]     = useState<KbDetail | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [article,      setArticle]      = useState<KbNodeArticle | null>(null);
@@ -163,18 +170,22 @@ function KnowledgePageInner() {
       resolveKbNode(pendingParam).then((result) => {
         if (signal.cancelled) return;
         if (result?.kbId) {
+          setNotFound(null);
           setCurrentId(result.kbId);
-        } else if (allKbs.length > 0) {
-          // Node not found in any KB — fall back to first KB, clear pending node.
+        } else {
+          // W7-A4 (knowledge-30): no KB owns this node — say so; never fall
+          // back to the first KB with nothing selected.
           pendingNodeRef.current = null;
           pendingIsThemeRef.current = false;
-          setCurrentId(allKbs[0].id);
+          setNotFound({ kind: 'theme', id: pendingParam });
+          setReady(true);
         }
       }).catch(() => {
         if (signal.cancelled) return;
         pendingNodeRef.current = null;
         pendingIsThemeRef.current = false;
-        if (allKbs.length > 0) setCurrentId(allKbs[0].id);
+        setNotFound({ kind: 'theme', id: pendingParam });
+        setReady(true);
       });
       return () => { signal.cancelled = true; };
     }
@@ -190,6 +201,16 @@ function KnowledgePageInner() {
       // below).
       const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
       setIdConfirmed(resolution.source !== 'url-optimistic');
+      // W7-A4 (crosscut-03 / knowledge-04): `source: 'fallback'` with a
+      // non-empty ?id= means the settled roster does NOT contain that id —
+      // the page renders NotFound for it instead of silently showing the
+      // first KB under the wrong URL. (`'none'` = empty roster, handled below.)
+      if (resolution.source === 'fallback') {
+        setNotFound({ kind: 'knowledge base', id: idParam });
+        setReady(true);
+        return;
+      }
+      setNotFound(null);
       if (currentId !== resolution.id) setCurrentId(resolution.id);
       if (resolution.source === 'none') {
         // Mirrors the id-less empty-roster branch below — a stale ?id=
@@ -201,6 +222,7 @@ function KnowledgePageInner() {
       return;
     }
     setIdConfirmed(true);
+    setNotFound(null); // bare /knowledge (the NotFound's own back link) clears any prior miss
     if (allKbs.length > 0 && !currentId) {
       setCurrentId(allKbs[0].id);
       return;
@@ -303,6 +325,12 @@ function KnowledgePageInner() {
 
   // ── Current KB meta ───────────────────────────────────────────────────────
   const currentKb = kbDetail?.kb ?? allKbs.find((k) => k.id === currentId) ?? null;
+
+  // W7-A4 (crosscut-27): the ONE shared not-found treatment; back = /knowledge
+  // (the roster's own default selection, with a clean URL).
+  if (notFound) {
+    return <NotFound kind={notFound.kind} id={notFound.id} backHref="/knowledge" backLabel="Knowledge" />;
+  }
 
   return (
     <main

@@ -36,6 +36,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { ArtifactTrail, type ArtifactKey } from '@/components/studio/artifact/ArtifactTrail';
 import { GateBar, type GateState } from '@/components/studio/artifact/GateBar';
 import { PlanRenderer, type PlanDoc } from '@/components/studio/artifact/PlanRenderer';
@@ -90,8 +91,10 @@ const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
   reflection: { title: 'Reflection',      filename: 'reflection.md' },
 };
 
+const ARTIFACT_TYPES: readonly ArtifactKey[] = ['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'];
+
 function isValidType(t: string): t is ArtifactKey {
-  return ['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'].includes(t);
+  return (ARTIFACT_TYPES as readonly string[]).includes(t);
 }
 
 // Resolve the effective gate/view mode from the explicit ?mode= param and the
@@ -410,10 +413,16 @@ function EmptyState({ type, backHref }: { type: ArtifactKey; backHref: string })
 
 function ArtifactPageInner() {
   const params = useSearchParams();
-  const runId    = params.get('run') ?? '';
+  // W7-A4 (artifact-plan-06): `?cycle=` is an alias of `?run=` — the bridge
+  // calls the same id `cycleId` everywhere, and Home/showcase links use it.
+  const runId    = params.get('run') ?? params.get('cycle') ?? '';
   const typeRaw  = params.get('type') ?? 'plan';
   const modeParam = params.get('mode');
 
+  // W7-A4 (crosscut-08): an unknown ?type= is a not-found, never silently
+  // coerced to PLAN. `type` stays a valid key for the hooks below; the
+  // render short-circuits to NotFound when `typeInvalid`.
+  const typeInvalid = !isValidType(typeRaw);
   const type: ArtifactKey = isValidType(typeRaw) ? typeRaw : 'plan';
 
   const [run,        setRun]        = useState<Run | null>(null);
@@ -431,6 +440,11 @@ function ArtifactPageInner() {
   // For reflection: the live Stage-2 questions (user-questions.json) the operator answers.
   const [reflectionData, setReflectionData] = useState<ReflectionData | null>(null);
   const [ready,      setReady]      = useState(false);
+  // W7-A4 (artifact-plan-08 / crosscut-08): the run itself was looked up and
+  // is unknown to the bridge — distinct from "run exists, artifact not yet
+  // produced" (the EmptyState). Never set for `_architect-<sid>` ids, which
+  // resolve through the architect session, not /api/runs.
+  const [runNotFound, setRunNotFound] = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
   // For plan gate-mode: track whether all decisions are resolved
   const [decisionsResolved, setDecisionsResolved] = useState(false);
@@ -459,6 +473,7 @@ function ArtifactPageInner() {
       const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
       setRun(fetchedRun);
+      setRunNotFound(fetchedRun === null && !runId.startsWith('_architect-'));
       setLiveFlowIds(new Set(flows.map((f) => f.id)));
 
       // Resolve the effective mode from the explicit param + the freshly
@@ -570,6 +585,36 @@ function ArtifactPageInner() {
       const key = k === 'work-items' ? 'workitems' : k;
       if (isValidType(key)) artifactsReadyForTrail[key as ArtifactKey] = v;
     }
+  }
+
+  // W7-A4 (artifact-plan-07 / artifact-plan-08 / crosscut-08 / crosscut-27):
+  // three honest answers through the ONE shared NotFound — never a furnished
+  // artifact page for a run that was never named or does not exist.
+  if (typeInvalid) {
+    return (
+      <NotFound
+        kind="artifact type"
+        id={typeRaw}
+        backHref={runId ? `/artifact?run=${encodeURIComponent(runId)}` : '/flows'}
+        backLabel={runId ? 'Run artifacts' : 'Flows'}
+        detail={`Valid types: ${ARTIFACT_TYPES.join(', ')}.`}
+      />
+    );
+  }
+  if (!runId) {
+    return (
+      <NotFound
+        kind="run"
+        id=""
+        variant="unselected"
+        backHref="/flows"
+        backLabel="Flows"
+        detail="Open a run from a flow monitor or a HISTORY ledger, then its artifacts."
+      />
+    );
+  }
+  if (ready && runNotFound) {
+    return <NotFound kind="run" id={runId} backHref="/flows" backLabel="Flows" />;
   }
 
   return (

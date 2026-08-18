@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { fetchTemplate, type TemplateDetail } from '@/lib/template-client';
 import { templateBadges, previewClassFor } from '@/lib/template-library-view';
@@ -67,6 +68,11 @@ export default function TemplateDetailPage() {
       ? (detail!.endpointsVerified ? 'true' : 'false')
       : undefined;
 
+  // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
+  if (state === 'not-found') {
+    return <NotFound kind="template" id={id} backHref="/templates" backLabel="Templates" />;
+  }
+
   return (
     <main
       data-page="template-detail"
@@ -90,15 +96,6 @@ export default function TemplateDetailPage() {
             style={{ marginTop: 16, color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
           >
             Could not reach the forge bridge ({error}).
-          </div>
-        )}
-
-        {state === 'not-found' && (
-          <div
-            data-component="not-found"
-            style={{ marginTop: 16, color: 'var(--faint)', fontSize: 13.5, fontStyle: 'italic' }}
-          >
-            No template "{id}" in the registry.
           </div>
         )}
 

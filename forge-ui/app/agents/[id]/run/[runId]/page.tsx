@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { RunView } from '@/components/studio/agent-builder/RunView';
 import { fetchRunDetail, type RunDetail } from '@/lib/run-view-client';
 
@@ -62,6 +63,15 @@ export default function AgentRunPage() {
     void load();
     return () => { cancelled = true; };
   }, [runId]);
+
+  // W7-A4 (crosscut-27): a run id the bridge does not know renders the ONE
+  // shared NotFound (RunView's own found:false body is no longer reached from
+  // this route). `found:false` is also what an unreachable bridge yields
+  // today (fetchRunDetail fails open to NOT_FOUND_DETAIL) — the honest-reads
+  // lane owns splitting those two facts.
+  if (loaded && !detail.found) {
+    return <NotFound kind="run" id={runId} backHref="/agents" backLabel="Agents" />;
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>

@@ -103,6 +103,7 @@ export function FlowRunDetail({
       data-run-found={found ? 'true' : 'false'}
       data-run-status={run?.status ?? ''}
       data-flow-id={flowId}
+      data-flow-resolution={flow ? 'registered' : 'unregistered'}
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
     >
       <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -111,6 +112,19 @@ export function FlowRunDetail({
           {runId} · flow {flowId || '—'}
         </div>
       </header>
+
+      {/* W7-A4 (flows-05 / crosscut-04): a found run whose flow DEFINITION is
+          gone (retired id, or the pre-flow_id `unknown` sentinel) says so —
+          and still renders its own recorded phases below (see
+          deriveFlowRunTimeline's null-flow arm), never an empty timeline. */}
+      {found && !flow && (
+        <div
+          data-component="flow-unregistered"
+          style={{ fontSize: 12.5, color: 'var(--dim)', padding: '8px 12px', border: '1px dashed var(--line-2)', borderRadius: 'var(--radius-sm, 6px)' }}
+        >
+          Flow &ldquo;{flowId || 'unknown'}&rdquo; is no longer registered (retired, or this run predates flow ids) — showing the run&apos;s own recorded phases.
+        </div>
+      )}
 
       {!found ? (
         <RunNotFound runId={runId} />

@@ -41,6 +41,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
 import { fetchFlowRunDetail, fetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
@@ -48,8 +49,6 @@ import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchFlow, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { RunLogLine } from '@/lib/run-log-line';
-
-const EMPTY_FLOW: Flow = { id: '', name: '', goal: '', nodes: [], edges: [], triggers: [] };
 
 export default function FlowRunPage() {
   const params = useParams();
@@ -149,9 +148,27 @@ export default function FlowRunPage() {
     );
   }
 
+  // W7-A4 (crosscut-27 / artifact-plan-08's run-page sibling): a run id the
+  // bridge does not know renders the ONE shared NotFound (back to the flow's
+  // monitor, or to /flows when the flow itself is unknown).
+  if (resolution?.kind === 'not-found') {
+    return (
+      <NotFound
+        kind="run"
+        id={runId}
+        backHref={flow ? `/flows/${encodeURIComponent(flowId)}` : '/flows'}
+        backLabel={flow ? `${flow.name} monitor` : 'Flows'}
+      />
+    );
+  }
+
   const found = resolution?.kind === 'found';
   const run: Run | null = resolution?.kind === 'found' ? resolution.run : null;
-  const rows = deriveFlowRunTimeline(flow ?? EMPTY_FLOW, run);
+  // W7-A4 (flows-05 / crosscut-04): a missing flow DEFINITION (retired id, or
+  // the pre-flow_id `unknown` sentinel) is passed through as `null` — the
+  // timeline then derives from the run's OWN recorded phases and FlowRunDetail
+  // says so, instead of an empty timeline that reads as valid.
+  const rows = deriveFlowRunTimeline(flow, run);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>

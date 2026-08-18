@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
+import { NotFound } from '@/components/NotFound';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
@@ -201,6 +202,30 @@ export default function SessionShellPage({
   // registered project — /projects/<that> would be a dead end).
   const backTo = viewState.status === 'ready' ? backToProjectLink(project, viewState.terminal) : null;
 
+  // W7-A4 (sessions-kinds-18 / crosscut-27): the two "nothing here" facts are
+  // two honest answers through the ONE shared NotFound — and the page's DOM
+  // state can no longer read "loading" while the body says "not found".
+  //   - an unknown KIND: the shell route 404s with `unknown session kind …`
+  //     (it resolves kinds against the live registry — there is deliberately
+  //     no client-side kind list to mirror, so the server's own message is the
+  //     discriminator here);
+  //   - an unknown ID (or no ?project= and no per-kind summary to resolve one
+  //     from — `noProjectKnown`): a session of a real kind that does not exist.
+  if (viewState.status === 'no-session' && /unknown session kind/i.test(viewState.error ?? '')) {
+    return <NotFound kind="session kind" id={kind} backHref="/sessions" backLabel="Sessions" detail={viewState.error} />;
+  }
+  if (viewState.status === 'no-session' || noProjectKnown) {
+    return (
+      <NotFound
+        kind={`${kind} session`}
+        id={sessionId}
+        backHref="/sessions"
+        backLabel="Sessions"
+        detail="It may still be starting, or has been committed, rejected or abandoned."
+      />
+    );
+  }
+
   return (
     <StudioArchitectShell
       dataPage="session"
@@ -272,14 +297,6 @@ export default function SessionShellPage({
       ) : viewState.status === 'error' ? (
         <div data-section="session-error" style={{ fontSize: 13, color: '#f85149' }}>
           {viewState.error}
-        </div>
-      ) : viewState.status === 'no-session' || noProjectKnown ? (
-        <div style={{ color: 'var(--dim)', fontSize: 13 }}>
-          Session not found (it may still be starting, or has been committed/rejected/abandoned).{' '}
-          <Link href="/" style={{ color: 'var(--ember)' }}>
-            Back to Forge Studio
-          </Link>
-          .
         </div>
       ) : (
         <div style={{ color: 'var(--dim)', fontSize: 13 }}>Loading session…</div>

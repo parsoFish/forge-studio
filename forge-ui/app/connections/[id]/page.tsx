@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import {
   fetchConnectionDetail,
   probeConnection,
@@ -116,6 +117,11 @@ export default function ConnectionDetailPage() {
 
   const badges = connection ? connectionBadges(connection) : [];
 
+  // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
+  if (state === 'not-found') {
+    return <NotFound kind="connection" id={id} backHref="/connections" backLabel="Connections" detail="Either no connection has this id, or its catalog entry failed to compose (missing install/probe/provenance/config metadata)." />;
+  }
+
   return (
     <main
       data-page="connection-detail"
@@ -153,13 +159,6 @@ export default function ConnectionDetailPage() {
             }}
           >
             Could not reach the forge bridge ({error}).
-          </div>
-        )}
-
-        {state === 'not-found' && (
-          <div style={{ marginTop: 16, color: 'var(--faint)', fontSize: 13.5, fontStyle: 'italic' }}>
-            No connection &quot;{id}&quot; — either it doesn&apos;t exist, or its catalog entry failed to compose
-            (missing install/probe/provenance/config metadata).
           </div>
         )}
 
