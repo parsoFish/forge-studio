@@ -2455,7 +2455,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     // sessionId in the process's own argv above). Same logDir, same guard
     // posture as stderr.log; best-effort like the rest of this helper.
     if (typeof proc.pid === 'number') {
-      try { writeFileSync(join(logDir, 'turn.pid'), `${proc.pid}\n`); } catch { /* best-effort */ }
+      guardedWriteFile(join(forgeRoot, '_logs'), [`_${logPrefix}-${sessionId}`, 'turn.pid'], `${proc.pid}\n`);
     }
   } catch { /* best-effort */ }
 }
