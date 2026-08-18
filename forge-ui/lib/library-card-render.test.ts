@@ -65,6 +65,10 @@ import type { Provenance, KbLintSummary } from './studio-client.ts';
 // per-test.
 vi.mock('./bridge-client.ts', () => ({
   resolveBridgeUrl: vi.fn(async () => 'http://bridge.test'),
+  // W7-A1: studio-client rides bridge-client's `bridgeFetch` (one transport,
+  // crosscut-26) — the mock forwards to the stubbed global fetch against the
+  // same fixed base, so each test's `vi.stubGlobal('fetch', …)` still drives it.
+  bridgeFetch: vi.fn(async (path: string, init?: RequestInit) => (init === undefined ? fetch(`http://bridge.test${path}`) : fetch(`http://bridge.test${path}`, init))),
 }));
 
 afterEach(() => {

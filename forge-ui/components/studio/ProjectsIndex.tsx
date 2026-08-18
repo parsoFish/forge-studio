@@ -2,6 +2,7 @@
 
 import type { Kb, Project } from '@/lib/studio-client';
 import { StudioPage } from '@/components/StudioPage';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { ProjectCard } from './LibraryCard';
 
 // ---------------------------------------------------------------------------
@@ -19,25 +20,37 @@ import { ProjectCard } from './LibraryCard';
 // projects section renders — one card, two shelves.
 // ---------------------------------------------------------------------------
 
+export type ProjectsIndexFetchError = { message: string; status?: number };
+
 export function ProjectsIndexBody({
   projects,
   kbs,
   ready,
+  error = null,
+  onRetry,
 }: {
   projects: Project[];
   kbs: Kb[];
   ready: boolean;
+  /** W7-A1 (crosscut-01): the last fetch's failure — renders the shared
+   *  failure state INSTEAD of the "No projects yet" zero-state. */
+  error?: ProjectsIndexFetchError | null;
+  onRetry?: () => void;
 }) {
   // Zero-state is honest: only once the first fetch has actually settled
-  // (`ready`) AND the roster is genuinely empty — an in-flight fetch must
-  // never flash a false "no projects" before real data arrives.
-  const isEmpty = ready && projects.length === 0;
+  // (`ready`) AND the roster is genuinely empty AND the fetch did not fail —
+  // an in-flight fetch must never flash a false "no projects" before real
+  // data arrives, and a FAILED fetch must never claim there are no projects.
+  const isEmpty = ready && !error && projects.length === 0;
 
   return (
     <StudioPage
       dataPage="projects-index"
       ready={ready}
-      data={{ 'data-project-count': projects.length }}
+      data={{
+        'data-project-count': projects.length,
+        'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
+      }}
       eyebrow="forge studio"
       title="Projects"
       lede="Every project forge can build. Open one to work its editor and roadmap, or bring a new repo online."
@@ -52,7 +65,12 @@ export function ProjectsIndexBody({
         </a>
       }
     >
-      {isEmpty ? (
+      {error ? (
+        <div style={{ marginBottom: projects.length > 0 ? 18 : 0 }}>
+          <FetchErrorState what="the project roster" error={error.message} status={error.status} onRetry={onRetry} />
+        </div>
+      ) : null}
+      {error && projects.length === 0 ? null : isEmpty ? (
         <section
           data-section="projects-empty"
           aria-label="No projects yet"

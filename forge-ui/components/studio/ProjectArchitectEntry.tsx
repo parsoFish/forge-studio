@@ -23,18 +23,15 @@ import { fetchArchitectSessions, type ArchitectPhase, type ArchitectSessionSumma
  *  session SETTLED yet, distinct from `activeSession` being null (the
  *  legitimate "no in-flight session" result).
  *
- *  HONEST LIMIT, stated rather than implied away (adversarial-review round 2,
- *  2026-08-06): there is deliberately NO `'failed'` value, because this
- *  component cannot observe one. `fetchArchitectSessions` goes through
- *  `bridgeGet` (`lib/bridge-client.ts`), whose whole contract is
- *  "no-bridge / non-ok / throw → return the fallback" — every transport
- *  failure, HTTP error and JSON parse failure resolves to `{sessions: []}`
- *  and NOTHING ever rejects. A `'failed'` state here would be a value that
- *  can never occur: a guard that cannot fire, and a claim in the DOM contract
- *  that the code does not honour. Distinguishing a broken bridge from an empty
- *  result requires the shared envelope to stop swallowing hard errors — a
- *  change to a client with dozens of callers that depend on the benign
- *  fallback, so it is FILED, not smuggled in here. */
+ *  HONEST LIMIT (adversarial-review round 2, 2026-08-06; re-stated W7-A1):
+ *  there is deliberately still NO `'failed'` value here. Since W7-A1
+ *  `fetchArchitectSessions` DOES reject on a bridge failure (`BridgeReadError`
+ *  — lib/bridge-client.ts no longer swallows into `{sessions: []}`), so the
+ *  `.catch` below is now the REAL failure branch (not defensive decoration):
+ *  a failed probe settles with no resume link, and the app-shell BridgeStatus
+ *  banner (components/BridgeStatus.tsx) is what tells the operator the bridge
+ *  is down. Surfacing a per-component `'failed'` probe state on the project
+ *  page is B6's (Projects lane) call, not this seam's. */
 type ResumeProbeState = 'pending' | 'settled';
 
 export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX.Element {
@@ -53,9 +50,10 @@ export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX
         setResumeProbe('settled');
       })
       .catch(() => {
-        // Defensive only — `bridgeGet` never rejects (see ResumeProbeState).
-        // The resume link is a convenience, never load-bearing: the
-        // start-a-session path below does not depend on this fetch.
+        // W7-A1: the read REJECTS on a bridge failure — this is the real
+        // failure branch (see ResumeProbeState). The resume link is a
+        // convenience, never load-bearing: the start-a-session path below
+        // does not depend on this fetch.
         if (!cancelled) {
           setActiveSession(null);
           setResumeProbe('settled');

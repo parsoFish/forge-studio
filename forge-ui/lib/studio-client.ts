@@ -6,13 +6,26 @@
  * imported into 'use client' components without pulling in Node.js modules.
  * Same pattern as EventLogEntry declared in bridge-client.ts.
  *
- * All helpers share the same no-bridge fallback pattern as bridge-client.ts:
- * returns the fallback value when the bridge URL is absent or the fetch fails.
+ * W7-A1 (home-sessions-V01 / crosscut-01 / crosscut-26): every helper rides
+ * bridge-client's ONE transport (`bridgeFetch` — URL resolution + the W6-P4
+ * port correction, shared, never a second copy) and NO read resolves with a
+ * caller-supplied empty fallback any more. Reads either THROW `BridgeReadError`
+ * (`studioRead`) or map a 404 to `null` where "no such object" is a real
+ * answer (`studioReadOr404`); status-shaped reads (`{ok, …}`) carry `ok:false`
+ * + the bridge's own `error` text. A caller can therefore never mistake
+ * "bridge unreachable / refused" for "genuinely empty" — the exact swallow the
+ * walkthrough found behind every pillar's false zero-state.
  */
 
 import { Cron } from 'croner';
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
+import {
+  readBridgeJson,
+  unwrapBridgeRead,
+  unwrapBridgeReadOr404,
+  type BridgeReadResult,
+} from './bridge-result';
 // R6-01 WI-4: the standing-trigger wire type + its boundary validation live
 // in their own module (with the agent-selection rule they belong to); this
 // module only adds the fetch. The import is one-way — standing-triggers.ts
@@ -785,15 +798,46 @@ export type PhaseLogLine = {
 // Fetch helpers
 // ---------------------------------------------------------------------------
 
-async function studioGet<T>(path: string, fallback: T): Promise<T> {
-  const base = await resolveBridgeUrl();
-  if (!base) return fallback;
+/**
+ * W7-A1 — GET a Studio bridge route as an explicit `BridgeReadResult`.
+ * `{ok:false,status,error,body}` when the bridge answered non-2xx (its own
+ * `error`/`message` verbatim — a 409's migration instructions reach the
+ * operator, crosscut-12), `{ok:false,error}` (no status) when the transport
+ * threw. Shares `bridge-client`'s `bridgeFetch` (crosscut-26) and
+ * `bridge-result`'s classification with `bridgeRead`.
+ */
+async function studioGet<T>(path: string): Promise<BridgeReadResult<T>> {
+  return readBridgeJson<T>(() => bridgeFetch(path));
+}
+
+/** GET as a value; THROWS `BridgeReadError` on any failure. */
+async function studioRead<T>(path: string): Promise<T> {
+  return unwrapBridgeRead(path, await studioGet<T>(path));
+}
+
+/** GET as a value where 404 is a real answer (→ null); other failures throw. */
+async function studioReadOr404<T>(path: string): Promise<T | null> {
+  return unwrapBridgeReadOr404(path, await studioGet<T>(path));
+}
+
+async function studioSend(
+  method: 'PUT' | 'POST',
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   try {
-    const res = await fetch(`${base}${path}`);
-    if (!res.ok) return fallback;
-    return (await res.json()) as T;
-  } catch {
-    return fallback;
+    const res = await bridgeFetch(path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}` };
+    // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
+    // (e.g. the lint maintenance op) is success — not a silent failure.
+    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 }
 
@@ -801,50 +845,20 @@ async function studioPut(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}${path}`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-    // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
-    // (e.g. the lint maintenance op) is success — not a silent failure.
-    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return studioSend('PUT', path, body);
 }
 
 async function studioPost(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-  try {
-    const res = await fetch(`${base}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-    // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
-    // (e.g. the lint maintenance op) is success — not a silent failure.
-    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
-  } catch (err) {
-    return { ok: false, error: String(err) };
-  }
+  return studioSend('POST', path, body);
 }
 
 /** Fetch all runs (optionally filtered by flowId). */
 export async function fetchRuns(flowId?: string): Promise<Run[]> {
   const qs = flowId ? `?flow=${encodeURIComponent(flowId)}` : '';
-  const body = await studioGet<{ runs: unknown[] }>(`/api/runs${qs}`, { runs: [] });
+  const body = await studioRead<{ runs?: unknown[] }>(`/api/runs${qs}`);
   return (body.runs ?? []).map(parseRun);
 }
 
@@ -859,15 +873,14 @@ export type PlannedInitiative = {
 
 /** Fetch the develop-able (planned) initiatives for the initiative-select kickoff. */
 export async function fetchPlannedInitiatives(): Promise<PlannedInitiative[]> {
-  const body = await studioGet<{ planned: PlannedInitiative[] }>('/api/runs/planned', { planned: [] });
+  const body = await studioRead<{ planned?: PlannedInitiative[] }>('/api/runs/planned');
   return body.planned ?? [];
 }
 
-/** Fetch a single run by id. */
+/** Fetch a single run by id. 404 → null; any other failure throws. */
 export async function fetchRun(id: string): Promise<Run | null> {
-  const body = await studioGet<{ run: unknown } | null>(
+  const body = await studioReadOr404<{ run?: unknown }>(
     `/api/runs/${encodeURIComponent(id)}`,
-    null,
   );
   if (!body?.run) return null;
   return parseRun(body.run);
@@ -884,11 +897,12 @@ export async function fetchPhaseLog(
   if (stderr) params.set('stderr', '1');
   if (wiId) params.set('wiId', wiId); // per-WI scoping (#11)
   const qs = params.toString() ? `?${params.toString()}` : '';
-  const body = await studioGet<{ lines: PhaseLogLine[] }>(
+  // 404 = "no events.jsonl for run" (a planned run that hasn't started) — an
+  // honest empty log; every other failure throws.
+  const body = await studioReadOr404<{ lines?: PhaseLogLine[] }>(
     `/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(nodeId)}/log${qs}`,
-    { lines: [] },
   );
-  return body.lines;
+  return body?.lines ?? [];
 }
 
 /**
@@ -1039,10 +1053,7 @@ export async function fetchStudioAgents(): Promise<Agent[]> {
  * fabricated plausible-looking default.
  */
 export async function fetchStudioAgentsWithMeta(): Promise<{ agents: Agent[]; defaultCostCeilingUsd: number }> {
-  const body = await studioGet<{ agents: unknown[]; defaultCostCeilingUsd?: unknown }>(
-    '/api/studio/agents',
-    { agents: [] },
-  );
+  const body = await studioRead<{ agents?: unknown[]; defaultCostCeilingUsd?: unknown }>('/api/studio/agents');
   return {
     agents: (body.agents ?? []).map(parseAgentDefinition),
     defaultCostCeilingUsd: typeof body.defaultCostCeilingUsd === 'number' ? body.defaultCostCeilingUsd : 0,
@@ -1109,22 +1120,21 @@ export function parseAgentCapability(raw: unknown): AgentCapability | null {
  * fabricated fixed-tier stand-in.
  */
 export async function fetchAgentCapability(slug: string): Promise<AgentCapability | null> {
-  const body = await studioGet<{ capability?: unknown }>(
+  const body = await studioReadOr404<{ capability?: unknown }>(
     `/api/studio/agents/${encodeURIComponent(slug)}/capability`,
-    {},
   );
-  return parseAgentCapability(body.capability);
+  return parseAgentCapability(body?.capability);
 }
 
 /** Fetch the curated OOTB starter agents (ADR-033) for the New-Agent picker. */
 export async function fetchStarters(): Promise<Agent[]> {
-  const body = await studioGet<{ starters: unknown[] }>('/api/studio/starters', { starters: [] });
+  const body = await studioRead<{ starters?: unknown[] }>('/api/studio/starters');
   return (body.starters ?? []).map(parseAgentDefinition);
 }
 
 /** Fetch the curated starter flow (plan → dev → review) the New-Flow canvas seeds from. */
 export async function fetchStarterFlow(): Promise<Flow | null> {
-  const body = await studioGet<{ flow?: Flow | null }>('/api/studio/starters', { flow: null });
+  const body = await studioRead<{ flow?: Flow | null }>('/api/studio/starters');
   return body.flow ?? null;
 }
 
@@ -1136,7 +1146,7 @@ export async function fetchStarterFlow(): Promise<Flow | null> {
  * through raw or default to `'operator'`.
  */
 export async function fetchStudioFlows(): Promise<Flow[]> {
-  const body = await studioGet<{ flows: unknown[] }>('/api/studio/flows', { flows: [] });
+  const body = await studioRead<{ flows?: unknown[] }>('/api/studio/flows');
   return (body.flows ?? []).map((raw) => ({
     ...(raw as Flow),
     provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
@@ -1169,18 +1179,17 @@ export function deriveKbBandOptions(
  * R6-01 WI-4 — fetch every standing trigger declared across the whole flow
  * roster (`GET /api/triggers`, a pure read).
  *
- * Shares this module's `studioGet` error convention exactly like
- * `fetchStudioFlows`/`fetchStudioProjects`: no bridge configured, a non-2xx,
- * or a thrown fetch all degrade to the empty fallback instead of rejecting,
- * so one unavailable endpoint can never reject a caller's `Promise.all` and
- * blank the surfaces fed by the sibling fetches.
+ * Shares this module's read convention exactly like `fetchStudioFlows`/
+ * `fetchStudioProjects` (W7-A1): a bridge that is unreachable or refuses
+ * THROWS `BridgeReadError` — a caller's `Promise.all` rejects and renders the
+ * shared failure state rather than a false empty roster.
  *
  * The rows are validated at this boundary (`parseStandingTriggers`) rather
  * than cast, because they are rendered inside the agent page's React tree —
  * an unvalidated malformed row would throw during render.
  */
 export async function fetchStandingTriggers(): Promise<StandingTrigger[]> {
-  const body = await studioGet<{ triggers?: unknown }>('/api/triggers', { triggers: [] });
+  const body = await studioRead<{ triggers?: unknown }>('/api/triggers');
   return parseStandingTriggers(body.triggers);
 }
 
@@ -1192,7 +1201,7 @@ export async function fetchStandingTriggers(): Promise<StandingTrigger[]> {
  * default to `'operator'`.
  */
 export async function fetchStudioProjects(): Promise<Project[]> {
-  const body = await studioGet<{ projects: unknown[] }>('/api/studio/projects', { projects: [] });
+  const body = await studioRead<{ projects?: unknown[] }>('/api/studio/projects');
   return (body.projects ?? []).map((raw) => ({
     ...(raw as Project),
     provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
@@ -1208,7 +1217,7 @@ export async function fetchStudioProjects(): Promise<Project[]> {
  * `{errors:0,flags:0}` "clean" verdict.
  */
 export async function fetchStudioKbs(): Promise<Kb[]> {
-  const body = await studioGet<{ kbs: unknown[] }>('/api/studio/kbs', { kbs: [] });
+  const body = await studioRead<{ kbs?: unknown[] }>('/api/studio/kbs');
   return (body.kbs ?? []).map((raw) => ({
     ...(raw as Kb),
     provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
@@ -1243,22 +1252,22 @@ export type SessionIndexRow = {
  * every current caller — the /sessions page, Home's active-sessions strip —
  * wants: operator-locked, in-flight sessions ONLY, never terminal history)
  * maps onto the bridge's `?active=1` query param; pass `false` for the rare
- * caller that genuinely wants terminal rows included too. Same fallback
- * discipline as every other `fetchStudio*` read here: no bridge configured,
- * a non-2xx, or a thrown fetch all degrade to `[]` rather than rejecting, so
- * one unavailable endpoint can never blank a sibling surface fed by the same
- * `Promise.all`.
+ * caller that genuinely wants terminal rows included too. Same read
+ * discipline as every other `fetchStudio*` read here (W7-A1): a bridge that
+ * is unreachable or refuses THROWS `BridgeReadError` — /sessions and Home
+ * render the shared failure state, never "No sessions in flight"
+ * (home-sessions-29/-30).
  */
 export async function fetchStudioSessions(activeOnly: boolean = true): Promise<SessionIndexRow[]> {
   const path = activeOnly ? '/api/studio/sessions?active=1' : '/api/studio/sessions';
-  const body = await studioGet<{ sessions: SessionIndexRow[] }>(path, { sessions: [] });
+  const body = await studioRead<{ sessions?: SessionIndexRow[] }>(path);
   return body.sessions ?? [];
 }
 
 /**
  * Fetch a single KB with its graph and health. Returns null if not found.
  *
- * `body.kb` arrives via `studioGet`'s unchecked `as T` cast (same as every
+ * `body.kb` arrives via `studioReadOr404`'s unchecked `as T` cast (same as every
  * other wire boundary in this module) — `provenance` and `lint` are
  * REAL-parsed here through the same `parseProvenance`/`parseKbLintSummary`
  * helpers `fetchStudioKbs` uses (forge-3oq review), so a detail-fetched KB
@@ -1266,9 +1275,8 @@ export async function fetchStudioSessions(activeOnly: boolean = true): Promise<S
  * `Kb.provenance`/`Kb.lint` being declared REQUIRED.
  */
 export async function fetchKb(id: string): Promise<KbDetail | null> {
-  const body = await studioGet<{ kb?: Kb; graph?: KbGraph; health?: KbHealth } | null>(
+  const body = await studioReadOr404<{ kb?: Kb; graph?: KbGraph; health?: KbHealth }>(
     `/api/studio/kbs/${encodeURIComponent(id)}`,
-    null,
   );
   if (!body?.kb || !body.graph || !body.health) return null;
   const rawKb = body.kb as unknown as Record<string, unknown>;
@@ -1282,9 +1290,8 @@ export async function fetchKb(id: string): Promise<KbDetail | null> {
 
 /** Fetch a single KB node article. Returns null if not found. */
 export async function fetchKbNode(id: string, nodeId: string): Promise<KbNodeArticle | null> {
-  const body = await studioGet<{ node?: KbNodeArticle } | null>(
+  const body = await studioReadOr404<{ node?: KbNodeArticle }>(
     `/api/studio/kbs/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeId)}`,
-    null,
   );
   return body?.node ?? null;
 }
@@ -1300,16 +1307,15 @@ export type KbIngestEvent = {
 /** Fetch a KB's read-only ingest-activity feed (R6-08 WI-2). GET-only — this
  *  never triggers an ingest; it only lists past `reflect.kb-ingest` events. */
 export async function fetchKbIngestActivity(id: string): Promise<KbIngestEvent[]> {
-  const body = await studioGet<{ events?: KbIngestEvent[] }>(
+  const body = await studioRead<{ events?: KbIngestEvent[] }>(
     `/api/studio/kbs/${encodeURIComponent(id)}/ingest-activity`,
-    { events: [] },
   );
   return body.events ?? [];
 }
 
 /** Fetch the studio catalog. */
 export async function fetchStudioCatalog(): Promise<Catalog> {
-  const body = await studioGet<{ catalog?: Catalog }>('/api/studio/catalog', {});
+  const body = await studioRead<{ catalog?: Catalog }>('/api/studio/catalog');
   return body.catalog ?? {};
 }
 
@@ -1357,11 +1363,17 @@ export async function createSkill(
  *  straight into {@link pollAgentFix} to resume live polling. */
 export async function fetchActiveOrLatestConsolidate(
   kbId: string,
-): Promise<{ ok: boolean; runId: string | null; state: AgentFixStatus['state'] | null; cleared: boolean }> {
-  return studioGet(
+): Promise<{ ok: boolean; runId: string | null; state: AgentFixStatus['state'] | null; cleared: boolean; error?: string }> {
+  const r = await studioGet<{ ok?: boolean; runId?: string | null; state?: AgentFixStatus['state'] | null; cleared?: boolean }>(
     `/api/studio/kbs/${encodeURIComponent(kbId)}/consolidate/active`,
-    { ok: false, runId: null, state: null, cleared: false },
   );
+  if (!r.ok) return { ok: false, runId: null, state: null, cleared: false, error: r.error };
+  return {
+    ok: r.data.ok !== false,
+    runId: r.data.runId ?? null,
+    state: r.data.state ?? null,
+    cleared: r.data.cleared === true,
+  };
 }
 
 /** Run a manual brain-maintenance op on a KB (K3): 'lint', 'index', or
@@ -1404,10 +1416,8 @@ export type AgentFixStatus = { ok: boolean; state: 'running' | 'cleared' | 'not-
 
 /** Poll a dispatched agent-fix run's state. */
 export async function getAgentFixStatus(id: string, runId: string): Promise<AgentFixStatus> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, state: 'running', cleared: false };
   try {
-    const res = await fetch(`${base}/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`);
+    const res = await bridgeFetch(`/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`);
     const data = (await res.json()) as { state?: string; cleared?: boolean };
     return {
       ok: res.ok,
@@ -1463,15 +1473,15 @@ export type KbDrainStatus = {
   error?: string;
 };
 
-/** `studioGet`'s fallback can't distinguish "no bridge configured" from a
- *  real non-2xx (a 404 unknown run, say) — it never parses the body on
- *  either path — so this stays a neutral, honest-for-both-cases message
- *  rather than asserting a specific cause it can't actually know. */
-function emptyKbDrainStatus(runId: string | null): KbDrainStatus {
+/** W7-A1: the failed-read shape for a drain-status poll — `ok:false` plus the
+ *  bridge's OWN error text (a 404's "unknown drain run", a transport failure's
+ *  "bridge unreachable (…)") — never a fabricated terminal state, and never a
+ *  neutral string when the server said something specific. */
+function failedKbDrainStatus(runId: string | null, error: string): KbDrainStatus {
   return {
     ok: false, runId, state: 'running', round: 0,
     counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0,
-    updatedAt: new Date(0).toISOString(), error: 'no drain status available',
+    updatedAt: new Date(0).toISOString(), error,
   };
 }
 
@@ -1488,10 +1498,10 @@ export async function dispatchKbDrain(id: string): Promise<{ ok: boolean; error?
 
 /** Poll one specific drain run's status: `GET /api/studio/kbs/:id/drain/:runId`. */
 export async function fetchKbDrainRun(id: string, runId: string): Promise<KbDrainStatus> {
-  return studioGet<KbDrainStatus>(
+  const r = await studioGet<KbDrainStatus>(
     `/api/studio/kbs/${encodeURIComponent(id)}/drain/${encodeURIComponent(runId)}`,
-    emptyKbDrainStatus(runId),
   );
+  return r.ok ? r.data : failedKbDrainStatus(runId, r.error);
 }
 
 /** Reattach to the active-or-latest drain run for a kb:
@@ -1499,10 +1509,10 @@ export async function fetchKbDrainRun(id: string, runId: string): Promise<KbDrai
  *  This is what makes nav-away-and-back a true reattach: the panel calls
  *  this on mount instead of assuming a fresh, run-less state. */
 export async function fetchActiveOrLatestKbDrain(id: string): Promise<KbDrainStatus> {
-  return studioGet<KbDrainStatus>(
+  const r = await studioGet<KbDrainStatus>(
     `/api/studio/kbs/${encodeURIComponent(id)}/drain`,
-    emptyKbDrainStatus(null),
   );
+  return r.ok ? r.data : failedKbDrainStatus(null, r.error);
 }
 
 /** Parse the RunPanel inputs textarea — one `key: value` per line — into the
@@ -1567,10 +1577,8 @@ export type AgentRunStatus = {
 /** Poll a dispatched generic agent run's state (reads its `_logs/<runId>/`
  *  event log server-side). */
 export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, state: 'unknown', costUsd: 0, events: 0 };
   try {
-    const res = await fetch(`${base}/api/agents/runs/${encodeURIComponent(runId)}`);
+    const res = await bridgeFetch(`/api/agents/runs/${encodeURIComponent(runId)}`);
     const data = (await res.json()) as { state?: string; costUsd?: number; events?: number };
     return {
       ok: res.ok,
@@ -1597,9 +1605,8 @@ export type StandaloneHistoryRow = { id: string; status: string; when: string };
  *  one with the latest `when`, or `null` if none is currently running. The
  *  row's `id` IS the runId {@link pollAgentRun} needs — no separate lookup. */
 export async function fetchLatestStandaloneRun(slug: string): Promise<StandaloneHistoryRow | null> {
-  const body = await studioGet<{ ok?: boolean; rows?: Array<Record<string, unknown>> }>(
+  const body = await studioRead<{ ok?: boolean; rows?: Array<Record<string, unknown>> }>(
     `/api/agents/${encodeURIComponent(slug)}/history`,
-    { ok: false, rows: [] },
   );
   const running = (body.rows ?? []).filter(
     (r) => r['linkKind'] === 'standalone' && r['status'] === 'running' && typeof r['id'] === 'string',
@@ -1620,11 +1627,17 @@ export async function fetchLatestStandaloneRun(slug: string): Promise<Standalone
  *  `sessionId: null` means this project has never run onboarding. */
 export async function fetchActiveOnboarding(
   projectId: string,
-): Promise<{ ok: boolean; sessionId: string | null; runId: string | null; phase: string | null }> {
-  return studioGet(
+): Promise<{ ok: boolean; sessionId: string | null; runId: string | null; phase: string | null; error?: string }> {
+  const r = await studioGet<{ ok?: boolean; sessionId?: string | null; runId?: string | null; phase?: string | null }>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/onboarding/active`,
-    { ok: false, sessionId: null, runId: null, phase: null },
   );
+  if (!r.ok) return { ok: false, sessionId: null, runId: null, phase: null, error: r.error };
+  return {
+    ok: r.data.ok !== false,
+    sessionId: r.data.sessionId ?? null,
+    runId: r.data.runId ?? null,
+    phase: r.data.phase ?? null,
+  };
 }
 
 /**
@@ -1688,15 +1701,8 @@ export async function createProject(
 
 /** The curated greenfield app-type templates (R4-03). */
 export async function fetchProjectStarters(): Promise<string[]> {
-  const base = await resolveBridgeUrl();
-  if (!base) return [];
-  try {
-    const res = await fetch(`${base}/api/studio/projects/starters`);
-    const data = (await res.json()) as { appTypes?: string[] };
-    return Array.isArray(data.appTypes) ? data.appTypes : [];
-  } catch {
-    return [];
-  }
+  const data = await studioRead<{ appTypes?: string[] }>('/api/studio/projects/starters');
+  return Array.isArray(data.appTypes) ? data.appTypes : [];
 }
 
 /** Create a greenfield project from a framework template (R4-03). */
@@ -1724,9 +1730,8 @@ export async function createGreenfieldProject(input: {
  * review) rather than cast straight through — matches the fix at `fetchKb`.
  */
 export async function fetchFlow(id: string): Promise<Flow | null> {
-  const body = await studioGet<{ flow?: Flow } | null>(
+  const body = await studioReadOr404<{ flow?: Flow }>(
     `/api/studio/flows/${encodeURIComponent(id)}`,
-    null,
   );
   if (!body?.flow) return null;
   return {
@@ -1770,11 +1775,9 @@ export type PreflightResult = {
 };
 
 export async function fetchPreflight(projectId: string): Promise<PreflightResult | null> {
-  const body = await studioGet<PreflightResult | null>(
+  return studioReadOr404<PreflightResult>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/preflight`,
-    null,
   );
-  return body;
 }
 
 /**
@@ -1784,15 +1787,14 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
  * The 200 body is `{ok, project, stages, sourcesScanned}`; the rows are
  * validated at THIS boundary via session-client's `parseContractStageRow` —
  * the SAME parser + row type the session-shell's contract-buildout artifact
- * uses, never a re-derived client mirror. Shares this module's `studioGet`
- * error convention (no bridge / non-2xx / thrown fetch all degrade to the
- * empty fallback), so exactly ONE GET is issued and a missing checklist never
- * rejects a caller's render.
+ * uses, never a re-derived client mirror. W7-A1 (crosscut-12 / projects-03):
+ * exactly ONE GET is issued and any failure THROWS `BridgeReadError` carrying
+ * the bridge's own text — a 409 "project-config: … migrate: …" reaches the
+ * operator instead of collapsing into an empty checklist.
  */
 export async function fetchContractStages(id: string): Promise<ContractStageRow[]> {
-  const body = await studioGet<{ stages?: unknown[] }>(
+  const body = await studioRead<{ stages?: unknown[] }>(
     `/api/studio/projects/${encodeURIComponent(id)}/contract-stages`,
-    { stages: [] },
   );
   return (body.stages ?? []).map((row, i) => parseContractStageRow(row, i));
 }
@@ -1802,9 +1804,8 @@ export async function fetchContractStages(id: string): Promise<ContractStageRow[
 /** Whether the project repo has forge-UI changes accumulated on forge-studio,
  *  pending a merge to main. */
 export async function fetchRepoStatus(projectId: string): Promise<{ pending: boolean; branch: string }> {
-  return studioGet<{ pending: boolean; branch: string }>(
+  return studioRead<{ pending: boolean; branch: string }>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/repo-status`,
-    { pending: false, branch: 'forge-studio' },
   );
 }
 
@@ -1861,10 +1862,8 @@ export async function preflightFixStatus(
   projectId: string,
   runId: string,
 ): Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, state: 'running', cleared: false };
   try {
-    const res = await fetch(`${base}/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`);
+    const res = await bridgeFetch(`/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`);
     const data = (await res.json()) as { state?: string; cleared?: boolean };
     return {
       ok: res.ok,
@@ -1902,9 +1901,8 @@ export async function pinGuidance(
  * Returns null if the node is not found or the bridge is offline.
  */
 export async function resolveKbNode(nodeId: string): Promise<{ kbId: string } | null> {
-  const body = await studioGet<{ kbId?: string } | null>(
+  const body = await studioReadOr404<{ kbId?: string }>(
     `/api/studio/kbs/resolve-node/${encodeURIComponent(nodeId)}`,
-    null,
   );
   if (!body?.kbId) return null;
   return { kbId: body.kbId };
@@ -1953,10 +1951,8 @@ export async function startKbCleanup(
 /** Delete a knowledge base (removes its brain/<id>/ dir). The forge-owned core
  *  brains (cycles, forge-dev) are server-guarded against deletion. */
 export async function deleteKb(id: string): Promise<{ ok: boolean; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/kbs/${encodeURIComponent(id)}`, {
+    const res = await bridgeFetch(`/api/studio/kbs/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       headers: { 'x-forge-csrf': '1' },
     });
@@ -2094,10 +2090,8 @@ export async function requestInstructionsDraft(
   slug: string,
   body: Record<string, unknown>,
 ): Promise<InstructionsDraftResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/agents/${encodeURIComponent(slug)}/instructions-draft`, {
+    const res = await bridgeFetch(`/api/studio/agents/${encodeURIComponent(slug)}/instructions-draft`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),

@@ -1,0 +1,288 @@
+{
+ "ui": "http://localhost:4124",
+ "at": "2026-08-18T13:19:27.640Z",
+ "visited": 9,
+ "unvisited": [],
+ "results": [
+  {
+   "route": "/",
+   "status": "ok",
+   "err": null,
+   "ms": 2006,
+   "consoleErrors": [],
+   "pageErrors": [],
+   "failed": [],
+   "shot": "_wave7/explore/shots/root.png",
+   "title": "forge",
+   "dataPage": "home",
+   "pageReady": "true",
+   "h1": [
+    "Everything running, at a glance",
+    "Active sessions",
+    "Active status",
+    "Recent activity"
+   ],
+   "bodyLen": 3284,
+   "hasErrorText": "ting-verdict Demo gitpulse briefing Cycle Patterns · 1 lint error · 2 flagged 10/12 checks run open → Forge Engineering · 2 f"
+  },
+  {
+   "route": "/projects/gitpulse",
+   "status": "ok",
+   "err": null,
+   "ms": 1920,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+    },
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/studio/projects/gitpulse/contract-stages",
+     "status": 409
+    },
+    {
+     "url": "[bridge]/api/studio/projects/gitpulse/contract-stages",
+     "status": 409
+    }
+   ],
+   "shot": "_wave7/explore/shots/projects_gitpulse.png",
+   "title": "forge",
+   "dataPage": "projects",
+   "pageReady": "true",
+   "h1": [],
+   "bodyLen": 13604,
+   "hasErrorText": "ORY — INIT-2026-08-03-init-coupling-change-coupling-command FAILED — INIT-2026-07-11-cli-sort-flag DONE merged — INIT-2026-07-"
+  },
+  {
+   "route": "/projects/mdtoc/showcase",
+   "status": "ok",
+   "err": null,
+   "ms": 1468,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/artifact/2026-01-01T00-00-00_INIT-r6-06-agent-ledger-flow-node/demo.json",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/projects_mdtoc_showcase.png",
+   "title": "forge",
+   "dataPage": "project-showcase",
+   "pageReady": "true",
+   "h1": [
+    "Demo showcase",
+    "No showcase yet"
+   ],
+   "bodyLen": 356,
+   "hasErrorText": null
+  },
+  {
+   "route": "/flows/forge-develop/run/2026-08-03T01-16-00_INIT-2026-08-03-init-coupling-change-coupling-command",
+   "status": "ok",
+   "err": null,
+   "ms": 1480,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/artifact/2026-08-03T01-16-00_INIT-2026-08-03-init-coupling-change-coupling-command/review-findings.json",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/flows_forge_develop_run_2026_08_03T01_16_00_INIT_2026_08_03_init_coupling_change_coupling_command.png",
+   "title": "forge",
+   "dataPage": "flow-run",
+   "pageReady": null,
+   "h1": [
+    "Summary"
+   ],
+   "bodyLen": 382,
+   "hasErrorText": null
+  },
+  {
+   "route": "/flows/unknown/run/2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples",
+   "status": "ok",
+   "err": null,
+   "ms": 1482,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/studio/flows/unknown",
+     "status": 404
+    },
+    {
+     "url": "[bridge]/api/artifact/2026-06-20T05-12-11_INIT-2026-06-19-framework-docs-examples/review-findings.json",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/flows_unknown_run_2026_06_20T05_12_11_INIT_2026_06_19_framework_docs_examples.png",
+   "title": "forge",
+   "dataPage": "flow-run",
+   "pageReady": null,
+   "h1": [
+    "Context"
+   ],
+   "bodyLen": 171,
+   "hasErrorText": null
+  },
+  {
+   "route": "/agents/architect",
+   "status": "ok",
+   "err": null,
+   "ms": 1882,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/events/",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/agents_architect.png",
+   "title": "forge",
+   "dataPage": "agents",
+   "pageReady": "true",
+   "h1": [],
+   "bodyLen": 19156,
+   "hasErrorText": null
+  },
+  {
+   "route": "/sessions/demo/2026-08-14T15-17-37-5d6b6e6d?project=gitpulse",
+   "status": "ok",
+   "err": null,
+   "ms": 1470,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/events/_demo-2026-08-14T15-17-37-5d6b6e6d",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/sessions_demo_2026_08_14T15_17_37_5d6b6e6d_project_gitpulse.png",
+   "title": "forge",
+   "dataPage": "session",
+   "pageReady": "true",
+   "h1": [],
+   "bodyLen": 362,
+   "hasErrorText": null
+  },
+  {
+   "route": "/projects/new",
+   "status": "ok",
+   "err": null,
+   "ms": 1565,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/studio/projects/new/preflight",
+     "status": 404
+    }
+   ],
+   "shot": "_wave7/explore/shots/projects_new.png",
+   "title": "forge",
+   "dataPage": "projects",
+   "pageReady": "true",
+   "h1": [
+    "Onboard a project",
+    "Or create a new project"
+   ],
+   "bodyLen": 918,
+   "hasErrorText": null
+  },
+  {
+   "route": "/knowledge?id=trafficGame&tab=health",
+   "status": "ok",
+   "err": null,
+   "ms": 1567,
+   "consoleErrors": [
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    },
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+     "type": "error",
+     "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+    }
+   ],
+   "pageErrors": [],
+   "failed": [
+    {
+     "url": "[bridge]/api/studio/kbs/trafficGame/consolidate/active",
+     "status": 400
+    },
+    {
+     "url": "[bridge]/api/studio/kbs/trafficGame/drain",
+     "status": 400
+    },
+    {
+     "url": "[bridge]/api/events/",
+     "status": 404
+    },
+    {
+     "url": "[bridge]/api/studio/kbs/trafficGame",
+     "status": 400
+    }
+   ],
+   "shot": "_wave7/explore/shots/knowledge_id_trafficGame_tab_health.png",
+   "title": "forge",
+   "dataPage": "knowledge",
+   "pageReady": "true",
+   "h1": [],
+   "bodyLen": 630,
+   "hasErrorText": null
+  }
+ ],
+ "_provenance": "Trimmed from the wave-7 baseline crawl of main (2026-08-18T23:19Z, 160 routes); interactive inventories stripped, failure fields kept verbatim."
+}

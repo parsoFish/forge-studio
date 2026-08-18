@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { FilePackage } from '@/components/studio/FilePackage';
 import {
   fetchSkill,
@@ -41,6 +42,10 @@ export default function SkillDetailPage() {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [libraryEntry, setLibraryEntry] = useState<SkillLibraryEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // W7-A1 (library-13): the HTTP status when the bridge ANSWERED (a 400
+  // "invalid skill id" is a refusal, not an outage) — undefined when it was
+  // never reached. Drives FetchErrorState's framing.
+  const [errorStatus, setErrorStatus] = useState<number | undefined>(undefined);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
@@ -68,6 +73,7 @@ export default function SkillDetailPage() {
       return;
     }
     setError(skillResult.error ?? 'could not load this skill');
+    setErrorStatus(skillResult.status);
     setState('error');
   }, []);
 
@@ -108,11 +114,8 @@ export default function SkillDetailPage() {
         )}
 
         {state === 'error' && (
-          <div
-            data-component="fetch-error"
-            style={{ marginTop: 16, color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
-          >
-            Could not reach the forge bridge ({error}).
+          <div style={{ marginTop: 16 }}>
+            <FetchErrorState what="this skill" error={error ?? 'could not load this skill'} status={errorStatus} onRetry={() => { if (id) void load(id); }} />
           </div>
         )}
 

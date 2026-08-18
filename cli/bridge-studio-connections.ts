@@ -85,7 +85,7 @@ function resolveConnectionOrRespond(
     return null;
   }
   try {
-    assertSkillSlug(id);
+    assertSkillSlug(id, 'connection');
   } catch (err) {
     sendJson(res, 400, { error: sanitizeError(err) }, origin);
     return null;

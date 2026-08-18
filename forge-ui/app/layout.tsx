@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import './globals.css';
 import { DEFAULT_BRIDGE_PORT } from '@/lib/bridge-port';
+import { BridgeStatus } from '@/components/BridgeStatus';
 
 export const metadata = {
   title: 'forge',
@@ -29,6 +30,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // bridge off the default), `resolveBridgeUrl` falls back to the
   // authoritative, env-derived `/api/forge-config` route and retries once —
   // see that file's header for the full resolution order.
+  //
+  // W7-A1: `<BridgeStatus />` (a client component) is mounted HERE, once,
+  // so every route carries the shared bridge-liveness banner + the
+  // `[data-bridge-status]` attribute — see components/BridgeStatus.tsx.
+  // Mounting a client component keeps this layout a static server shell.
   return (
     <html lang="en">
       <body
@@ -43,6 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script
           dangerouslySetInnerHTML={{ __html: `window.__FORGE_BRIDGE_PORT__=${DEFAULT_BRIDGE_PORT};` }}
         />
+        <BridgeStatus />
         {children}
       </body>
     </html>
