@@ -456,3 +456,35 @@ test('an explicit CLEAN PASS renders as such, and is not confused with no review
   expect(clean).toContain('data-findings-count="0"');
   expect(absent).not.toContain('data-section="review-findings"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-A4 (flows-05 / crosscut-04) — a found run whose flow definition is gone
+// renders its own recorded phases under an honest "flow no longer registered"
+// banner: never an empty timeline that reads as valid, never a typo-shaped
+// not-found for a run that exists.
+// ---------------------------------------------------------------------------
+
+test('a found run under a RETIRED/unregistered flow id keeps its rows and says so — data-flow-resolution="unregistered" + a banner naming the flow id', () => {
+  const run = archivedRun({ flowId: 'release-refine', phases: { dev: 'complete', review: 'complete' } });
+  const html = render({
+    flow: null,
+    run,
+    rows: [
+      { nodeId: 'dev', agent: null, status: 'complete', costUsd: 3.5, note: null, artifacts: [] },
+      { nodeId: 'review', agent: null, status: 'complete', costUsd: 0, note: null, artifacts: [] },
+    ],
+  });
+  expect(html).toContain('data-run-found="true"');
+  expect(html).toContain('data-flow-resolution="unregistered"');
+  expect(html).toContain('data-flow-id="release-refine"');
+  expect(html).toContain('data-component="flow-unregistered"');
+  expect(html).toMatch(/release-refine[^<]*(no longer registered|retired)/);
+  expect(html).toContain('data-node-id="dev"');
+  expect(html).toContain('data-node-id="review"');
+});
+
+test('a found run under a REGISTERED flow carries data-flow-resolution="registered" and no banner', () => {
+  const html = render();
+  expect(html).toContain('data-flow-resolution="registered"');
+  expect(html).not.toContain('data-component="flow-unregistered"');
+});
