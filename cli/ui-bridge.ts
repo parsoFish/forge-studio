@@ -2238,7 +2238,10 @@ async function handleHttp(
       sendJson(res, 400, { error: 'invalid flow id' }, origin);
       return;
     }
-    if (!existsSync(join(ctx.forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'))) {
+    // Existence through the guard family (never a raw fs probe on a
+    // request-derived segment): the flow id is a single slug segment under the
+    // trusted forgeRoot/studio/flows.
+    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
       sendJson(res, 404, { error: 'flow not found', flowId }, origin);
       return;
     }
