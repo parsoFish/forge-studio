@@ -202,12 +202,16 @@ function guardedMtime(root: string, segments: readonly string[]): number | null 
 }
 
 /** True iff `pid` is alive AND provably ours: its argv (Linux `/proc/<pid>/
- *  cmdline`) carries this session id — `spawnAgentTurn` always passes the
- *  session id as an argv element. Fails CLOSED: an unreadable /proc, a
- *  recycled pid running something else, or a mismatch all read `false`, so
- *  the cancel route can never signal a stranger's process. */
+ *  cmdline`, NUL-separated) carries this session id as a WHOLE argv element
+ *  — `spawnAgentTurn` always passes the session id as its own argv element
+ *  (`... <verb> <sessionId> --project <p>`). Fails CLOSED: an unreadable
+ *  /proc, a recycled pid running something else, a substring-only match (a
+ *  short session id inside some unrelated argument), the bridge's own pid or
+ *  its parent, all read `false` — the cancel route can never signal a
+ *  stranger's process, and never itself. */
 export function isTurnAlive(pid: number, sessionId: string): boolean {
   if (!Number.isInteger(pid) || pid <= 1) return false;
+  if (pid === process.pid || pid === process.ppid) return false;
   try {
     process.kill(pid, 0);
   } catch {
@@ -217,8 +221,8 @@ export function isTurnAlive(pid: number, sessionId: string): boolean {
     // `/proc/<pid>/cmdline` — pid is a validated integer read off a
     // guarded file, never a request string; this is a kernel pseudo-file,
     // not a project/request-derived path.
-    const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
-    return cmdline.includes(sessionId);
+    const argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+    return argv.includes(sessionId);
   } catch {
     return false;
   }

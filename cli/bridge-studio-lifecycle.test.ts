@@ -38,6 +38,7 @@ import {
   deriveSessionLifecycle,
   extractErrorMessage,
   stallCeilingForKind,
+  isTurnAlive,
   DEFAULT_STALL_CEILING_MS,
   type SessionLifecycleInputs,
 } from './bridge-studio-lifecycle.ts';
@@ -167,6 +168,23 @@ test('lifecycle unit: extractErrorMessage picks the last non-stack line, trimmed
   assert.equal(extractErrorMessage('warn line\nError: second\n    at frame\n'), 'Error: second');
   const long = 'E'.repeat(700);
   assert.equal(extractErrorMessage(long).length, 601, 'capped at 600 + ellipsis');
+});
+
+test('lifecycle unit: isTurnAlive fails CLOSED — the bridge\'s own pid is never "ours", and a session id that is only a SUBSTRING of an argv element (not a whole element) does not match', async () => {
+  // Our own process: alive, but never a turn we may signal, whatever its argv holds.
+  const ownArg = process.argv[process.argv.length - 1];
+  assert.equal(isTurnAlive(process.pid, ownArg), false);
+  // A live child whose argv element is `setTimeout(() => {}, 120000)`: the
+  // session id "setTimeout" is a substring of it, not a whole element.
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'whole-element-sid'], { detached: true, stdio: 'ignore' });
+  child.unref();
+  try {
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(isTurnAlive(child.pid!, 'setTimeout'), false, 'substring of an argv element must not count as ownership');
+    assert.equal(isTurnAlive(child.pid!, 'whole-element-sid'), true, 'positive control: the whole-element session id matches');
+  } finally {
+    try { process.kill(child.pid!, 'SIGKILL'); } catch { /* ignore */ }
+  }
 });
 
 test('lifecycle unit: stallCeilingForKind — architect matches the UI\'s 120s STALE_THRESHOLD_MS, unknown kinds get the default', () => {
