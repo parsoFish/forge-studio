@@ -508,17 +508,40 @@ export async function runAgentTurn(args: {
   label?: string;
 }): Promise<{ costUsd: number }> {
   const abortController = new AbortController();
+  const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
+  // W7-A2 (sessions-kinds-V01, beads forge-w08/forge-eip) — a fence the SDK
+  // never consults is dead code. `canUseTool` is the SDK's PERMISSION-PROMPT
+  // handler: it runs only for a tool call the CLI would otherwise prompt on.
+  // Two settings in this very object used to short-circuit that prompt for
+  // exactly the tools the fence gates:
+  //   - `permissionMode: 'acceptEdits'` auto-accepts Write/Edit/MultiEdit/
+  //     NotebookEdit at the SDK level;
+  //   - `allowedTools` pre-approves every listed name, and every real
+  //     turnSpec agent (community-refresh / brain-maintenance /
+  //     creation-agent SKILL.md) lists `Write` there.
+  // Live evidence: the operator's community-refresh 2026-08-18T12-54-32 turn
+  // ran with a non-empty writeRoots and still wrote three files under
+  // /home/parso/forge/studio/community/staging/ — outside every declared
+  // root. So when a fence is requested the turn runs in `default` mode and
+  // the fence-gated tool names are STRIPPED from `allowedTools` (they stay
+  // callable — never pushed into disallowedTools — the SDK just routes each
+  // call through `canUseTool`, which allows in-root writes and denies the
+  // rest). Every non-gated grant (Read/Grep/Glob/WebFetch/…) survives
+  // verbatim. An unfenced turn keeps the exact prior shape (acceptEdits,
+  // allowedTools verbatim, no canUseTool). Pinned by
+  // interactive-session-fence-mode.test.ts; live-proven once by
+  // scripts/probe-write-fence.mjs (recorded in the W7-A2 PR).
   const options: Record<string, unknown> = {
     cwd: args.cwd,
     model: args.model,
-    permissionMode: 'acceptEdits',
-    allowedTools: args.allowedTools,
+    permissionMode: fenced ? 'default' : 'acceptEdits',
+    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_GATED_TOOLS.has(t)) : args.allowedTools,
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
   };
-  if (args.writeRoots && args.writeRoots.length > 0) {
-    options.canUseTool = makeWriteRootCanUseTool(args.writeRoots);
+  if (fenced) {
+    options.canUseTool = makeWriteRootCanUseTool(args.writeRoots!);
   }
 
   let costUsd = 0;
