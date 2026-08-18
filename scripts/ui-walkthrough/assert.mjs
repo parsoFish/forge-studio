@@ -175,7 +175,8 @@ export function toBaseline(report, meta = {}) {
       + 'Regenerate only from main with `--write-baseline` (ids are normalized to <id>).',
     generatedAt: meta.generatedAt ?? new Date().toISOString(),
     source: meta.source ?? 'unknown',
-    entries: [...uniq.values()].sort((a, b) => failureKey(a).localeCompare(failureKey(b))),
+    // Code-unit order (not localeCompare): deterministic across hosts/locales.
+    entries: [...uniq.values()].sort((a, b) => (failureKey(a) < failureKey(b) ? -1 : failureKey(a) > failureKey(b) ? 1 : 0)),
   };
 }
 

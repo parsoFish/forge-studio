@@ -4,7 +4,7 @@
 // (W7-A0) ASSERT on the result so it can gate.
 //
 // Usage: node scripts/ui-walkthrough/crawl.mjs
-//          [--max 200] [--out _walkthrough/explore] [--only <route-prefix>]…
+//          [--max 500] [--out _walkthrough/explore] [--only <route-prefix>]…
 //          [--assert] [--baseline scripts/ui-walkthrough/baseline.json]
 //          [--known-optional-404s <file>] [--live-only-routes <file>]
 //          [--write-baseline <file>] [--from <crawl.json>] [--boot]
@@ -36,7 +36,7 @@ const flag = (name) => args.includes(name);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 && i + 1 < args.length ? args[i + 1] : dflt; };
 const optAll = (name) => args.flatMap((a, i) => (a === name && i + 1 < args.length ? [args[i + 1]] : []));
 
-const MAX = Number(opt('--max', 200));
+const MAX = Number(opt('--max', 500));
 const OUT = opt('--out', '_walkthrough/explore');
 const ONLY = optAll('--only');
 const ASSERT = flag('--assert');
