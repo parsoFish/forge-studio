@@ -24,7 +24,8 @@ import {
 
 let singleton: BridgeStatusStore | null = null;
 
-/** The app-wide store. Created lazily; started (WS + probe) in the browser only. */
+/** The app-wide store. Created lazily (pure — no side effect at creation);
+ *  STARTED (WS + probe) from the hooks' effects below, browser-only. */
 export function getBridgeStatusStore(): BridgeStatusStore {
   if (singleton) return singleton;
   const store = createBridgeStatusStore({
@@ -35,15 +36,23 @@ export function getBridgeStatusStore(): BridgeStatusStore {
   });
   onBridgeTransportFailure((error) => store.noteTransportFailure(error));
   singleton = store;
-  if (typeof window !== 'undefined') store.start();
   return store;
 }
 
 const getServerSnapshot = (): BridgeStatusSnapshot => INITIAL_BRIDGE_STATUS;
 
+/** Start the store once, from an effect (never during render). Idempotent;
+ *  the store lives for the tab — nothing stops it on unmount. */
+function useEnsureBridgeStatusStarted(): void {
+  useEffect(() => {
+    if (typeof window !== 'undefined') getBridgeStatusStore().start();
+  }, []);
+}
+
 /** The live bridge status snapshot (re-renders on change). */
 export function useBridgeStatus(): BridgeStatusSnapshot {
   const store = getBridgeStatusStore();
+  useEnsureBridgeStatusStarted();
   return useSyncExternalStore(store.subscribe, store.getSnapshot, getServerSnapshot);
 }
 
@@ -56,6 +65,7 @@ export function useBridgeStatus(): BridgeStatusSnapshot {
 export function useBridgeRecovery(onRecovered: () => void): void {
   const cbRef = useRef(onRecovered);
   cbRef.current = onRecovered;
+  useEnsureBridgeStatusStarted();
   useEffect(() => {
     const store = getBridgeStatusStore();
     return store.onRecovered(() => { cbRef.current(); });

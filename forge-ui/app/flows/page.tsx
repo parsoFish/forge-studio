@@ -148,8 +148,11 @@ export default function FlowsIndexPage() {
         </div>
 
         {error ? (
-          <FetchErrorState what="flows and runs" error={error.message} status={error.status} onRetry={reload} />
-        ) : ready ? (
+          <div style={{ marginBottom: flows.length > 0 ? 18 : 0 }}>
+            <FetchErrorState what="flows and runs" error={error.message} status={error.status} onRetry={reload} />
+          </div>
+        ) : null}
+        {error && flows.length === 0 ? null : ready ? (
           <FlowsIndexBody flows={flows} runs={runs} projects={projects} />
         ) : (
           <div style={{ color: 'var(--faint)', fontSize: 13, padding: '24px 0' }}>Loading flows…</div>

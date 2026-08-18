@@ -201,12 +201,16 @@ export function createBridgeStatusStore(deps: BridgeStatusDeps): BridgeStatusSto
     },
     noteTransportFailure(error) {
       if (!started) return;
+      // A probe already in flight decides on its own — its result (not this
+      // side signal) sets the state; ignoring the signal here also keeps a
+      // failing probe's OWN transport error from double-notifying.
+      if (probeInFlight) return;
       // While up this is a SUSPECT signal (flip to reconnecting); while not
       // up it merely refreshes the reason. Either way, confirm NOW rather
-      // than waiting for the armed poll — coalesced: an in-flight probe or
-      // an already-immediate one absorbs a burst of failing reads.
+      // than waiting for the armed poll — coalesced: an already-immediate
+      // probe absorbs a burst of failing reads.
       set(snapshot.status === 'up' ? { status: 'reconnecting', lastError: error } : { lastError: error });
-      if (!probeInFlight) scheduleProbe(0);
+      scheduleProbe(0);
     },
     retryNow() {
       if (!started || probeInFlight) return;

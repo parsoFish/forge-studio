@@ -149,13 +149,19 @@ export default function HomePage() {
         </>
       }
     >
-      {/* ===== W7-A1: BRIDGE READ FAILED — the shared failure state REPLACES
-          every section below (never the "Nothing registered yet" fleet-is-
-          empty screen). Retry re-runs the hook's load; a bridge recovery does
-          the same automatically (useBridgeRecovery inside the hook). ===== */}
+      {/* ===== W7-A1: BRIDGE READ FAILED — the shared failure state renders
+          FIRST (never the "Nothing registered yet" fleet-is-empty screen).
+          If an earlier read succeeded in this tab, that last-known snapshot
+          stays visible UNDER the failure box (it is real data, just not
+          fresh); with nothing ever loaded, the box is the whole body. Retry
+          re-runs the hook's load; a bridge recovery does the same
+          automatically (useBridgeRecovery inside the hook). ===== */}
       {error ? (
-        <FetchErrorState what="the fleet" error={error.message} status={error.status} onRetry={reload} />
-      ) : (
+        <div style={{ marginBottom: 24 }}>
+          <FetchErrorState what="the fleet" error={error.message} status={error.status} onRetry={reload} />
+        </div>
+      ) : null}
+      {error && constellation.length === 0 ? null : (
       <>
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
           (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip

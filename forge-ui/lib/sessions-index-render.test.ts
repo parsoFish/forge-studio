@@ -152,3 +152,15 @@ test('W7-A1: data-fetch-status="loading" before the first fetch settles, "ok" on
   expect(renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [], ready: false }))).toContain('data-fetch-status="loading"');
   expect(renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [], ready: true }))).toContain('data-fetch-status="ok"');
 });
+
+test('W7-A1: error AFTER a successful read (rows already known) keeps the last-known table visible UNDER the failure state — real data is not hidden, and the zero-state still never renders', () => {
+  const sessions = [makeRow({ kind: 'instructions', sessionId: 's1' })];
+  const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, {
+    sessions, ready: true, error: { message: 'bridge unreachable (Failed to fetch)' },
+  }));
+  expect(html).toContain('data-fetch-status="error"');
+  expect(html).toContain('data-component="fetch-error"');
+  expect(html).toContain('data-section="sessions-table"');
+  expect(html).toContain('data-session-count="1"');
+  expect(html).not.toContain('data-section="sessions-empty"');
+});

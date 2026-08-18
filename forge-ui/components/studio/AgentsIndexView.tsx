@@ -114,8 +114,11 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
           </div>
 
           {error ? (
-            <FetchErrorState what="the agent roster" error={error.message} status={error.status} onRetry={onRetry} />
-          ) : !ready ? (
+            <div style={{ marginBottom: agents.length > 0 ? 14 : 0 }}>
+              <FetchErrorState what="the agent roster" error={error.message} status={error.status} onRetry={onRetry} />
+            </div>
+          ) : null}
+          {error && agents.length === 0 ? null : !ready ? (
             <div data-component="agent-roster-loading" className="muted" style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}>
               Loading agents…
             </div>

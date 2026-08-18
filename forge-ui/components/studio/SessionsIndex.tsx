@@ -88,8 +88,11 @@ export function SessionsIndexBody({
       lede="Every in-flight interactive session, across kinds and projects. Sorted needs-you first, then last-updated. Terminal sessions are not listed here — they live on their artifacts."
     >
       {error ? (
-        <FetchErrorState what="sessions" error={error.message} status={error.status} onRetry={onRetry} />
-      ) : isEmpty ? (
+        <div style={{ marginBottom: sessions.length > 0 ? 18 : 0 }}>
+          <FetchErrorState what="sessions" error={error.message} status={error.status} onRetry={onRetry} />
+        </div>
+      ) : null}
+      {error && sessions.length === 0 ? null : isEmpty ? (
         <section
           data-section="sessions-empty"
           aria-label="No sessions in flight"

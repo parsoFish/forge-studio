@@ -66,8 +66,11 @@ export function ProjectsIndexBody({
       }
     >
       {error ? (
-        <FetchErrorState what="the project roster" error={error.message} status={error.status} onRetry={onRetry} />
-      ) : isEmpty ? (
+        <div style={{ marginBottom: projects.length > 0 ? 18 : 0 }}>
+          <FetchErrorState what="the project roster" error={error.message} status={error.status} onRetry={onRetry} />
+        </div>
+      ) : null}
+      {error && projects.length === 0 ? null : isEmpty ? (
         <section
           data-section="projects-empty"
           aria-label="No projects yet"
