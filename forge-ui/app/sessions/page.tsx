@@ -12,13 +12,22 @@
  * (`components/studio/SessionsIndex.tsx`).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
-import { SessionsIndexBody } from '@/components/studio/SessionsIndex';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { SessionsIndexBody, type SessionsIndexFetchError } from '@/components/studio/SessionsIndex';
 
 export default function SessionsIndexPage() {
   const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
   const [ready, setReady] = useState(false);
+  // W7-A1 (home-sessions-29): a failed fetch is an ERROR state, never the
+  // "No sessions in flight" zero-state. `loadKey` re-runs the load on Retry
+  // and on bridge recovery (no page-level poll).
+  const [error, setError] = useState<SessionsIndexFetchError | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -29,12 +38,17 @@ export default function SessionsIndexPage() {
         const s = await fetchStudioSessions();
         if (signal.cancelled) return;
         setSessions(s);
+        setError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        const { error: message, status } = fetchErrorPropsFrom(err);
+        setError(status !== undefined ? { message, status } : { message });
       } finally {
         if (!signal.cancelled) setReady(true);
       }
     })();
     return () => { signal.cancelled = true; };
-  }, []);
+  }, [loadKey]);
 
-  return <SessionsIndexBody sessions={sessions} ready={ready} />;
+  return <SessionsIndexBody sessions={sessions} ready={ready} error={error} onRetry={reload} />;
 }

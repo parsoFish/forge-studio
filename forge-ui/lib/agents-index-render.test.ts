@@ -230,3 +230,23 @@ test('the roster and the runs ledger are two INDEPENDENT readiness facts — the
   expect(rosterLoadingRunsReady).toContain('data-component="agent-roster-loading"');
   expect(rosterLoadingRunsReady).toContain('data-section="history-ledger"');
 });
+
+// ---- W7-A1 (crosscut-01): a FAILED roster fetch renders the shared failure -
+// ---- state, never "No agents yet — create your first one." -----------------
+
+test('W7-A1: error → data-fetch-status="error", [data-component="fetch-error"] + retry, and NO agent-roster-empty / loading placeholder', () => {
+  const html = render({ ready: true, agents: [], error: { message: 'bridge unreachable (Failed to fetch)' }, onRetry: () => {} });
+  expect(html).toContain('data-page="agents-index"');
+  expect(html).toContain('data-fetch-status="error"');
+  expect(html).toContain('data-component="fetch-error"');
+  expect(html).toContain('bridge unreachable (Failed to fetch)');
+  expect(html).toContain('data-action="retry-fetch"');
+  expect(html).not.toContain('data-component="agent-roster-empty"');
+  expect(html).not.toContain('data-component="agent-roster-loading"');
+  expect(html).not.toContain('No agents yet');
+});
+
+test('W7-A1: data-fetch-status="loading" before the roster settles, "ok" once it settles without error', () => {
+  expect(render({ ready: false, agents: [] })).toContain('data-fetch-status="loading"');
+  expect(render({ ready: true })).toContain('data-fetch-status="ok"');
+});

@@ -18,6 +18,8 @@ import { KbDrainPanel } from '@/components/studio/knowledge/KbDrainPanel';
 import { KbMaintenance } from '@/components/studio/knowledge/KbMaintenancePanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import Link from 'next/link';
 
 // ── Tabs (R6-08 WI-3, RULING 5: URL-synced via ?tab=) ─────────────────────────
@@ -89,6 +91,13 @@ function KnowledgePageInner() {
   // install must reach an honest ready state, not hang on "Loading…"
   // forever.
   const [kbListReady,  setKbListReady]  = useState(false);
+  // W7-A1 (crosscut-01/-22): a failed roster read is an ERROR state, never
+  // "No knowledge bases yet"; `loadKey` re-runs the load on Retry + bridge
+  // recovery (no page-level poll).
+  const [kbsError,     setKbsError]     = useState<{ message: string; status?: number } | null>(null);
+  const [loadKey,      setLoadKey]      = useState(0);
+  const reloadKbs = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reloadKbs);
   const [currentId,    setCurrentId]    = useState<string>('');
   const [kbDetail,     setKbDetail]     = useState<KbDetail | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -124,17 +133,23 @@ function KnowledgePageInner() {
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  // ── Load KB list once ─────────────────────────────────────────────────────
+  // ── Load KB list (on mount + Retry/bridge recovery via loadKey) ───────────
   useEffect(() => {
     const signal = { cancelled: false };
     fetchStudioKbs().then((kbs) => {
       if (signal.cancelled) return;
       setAllKbs(kbs);
-    }).catch(() => {/* bridge offline — empty list is fine */}).finally(() => {
+      setKbsError(null);
+    }).catch((err: unknown) => {
+      // W7-A1: bridge offline / refused is a FAILURE, not an empty roster.
+      if (signal.cancelled) return;
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setKbsError(status !== undefined ? { message, status } : { message });
+    }).finally(() => {
       if (!signal.cancelled) setKbListReady(true);
     });
     return () => { signal.cancelled = true; };
-  }, []);
+  }, [loadKey]);
 
   // ── Resolve active KB id (from URL params → first KB) ────────────────────
   // Priority: ?node= (or its ?theme= alias, RULING 1) drives KB resolution
@@ -308,6 +323,7 @@ function KnowledgePageInner() {
     <main
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
+      data-fetch-status={kbsError ? 'error' : kbListReady ? 'ok' : 'loading'}
       {...(selectedNode ? { 'data-selected-node': selectedNode } : {})}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
     >
@@ -415,7 +431,11 @@ function KnowledgePageInner() {
           the honest KnowledgeEmptyState (name + CTA), never the generic
           "No KB data available." text a real-but-quiet KB graph also used
           to share. */}
-      {tab === 'explore' && ready && allKbs.length === 0 ? (
+      {tab === 'explore' && kbsError ? (
+        <div style={{ padding: '24px 20px', maxWidth: 720 }}>
+          <FetchErrorState what="knowledge bases" error={kbsError.message} status={kbsError.status} onRetry={reloadKbs} />
+        </div>
+      ) : tab === 'explore' && ready && allKbs.length === 0 ? (
         <KnowledgeEmptyState />
       ) : tab === 'explore' && (
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>

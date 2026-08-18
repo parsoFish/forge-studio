@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import {
   fetchConnectionDetail,
   probeConnection,
@@ -47,6 +48,10 @@ export default function ConnectionDetailPage() {
   const [state, setState] = useState<PageState>('loading');
   const [connection, setConnection] = useState<ConnectionWire | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // W7-A1 (library-13): the HTTP status when the bridge ANSWERED (a 400
+  // "invalid connection id" is a refusal, not an outage) — undefined when it
+  // was never reached. Drives FetchErrorState's framing.
+  const [errorStatus, setErrorStatus] = useState<number | undefined>(undefined);
   const [probing, setProbing] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -67,6 +72,7 @@ export default function ConnectionDetailPage() {
       return;
     }
     setError(r.error ?? 'could not load this connection');
+    setErrorStatus(r.status);
     setState('error');
   }, []);
 
@@ -140,19 +146,8 @@ export default function ConnectionDetailPage() {
         {state === 'loading' && <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>}
 
         {state === 'error' && (
-          <div
-            data-component="fetch-error"
-            style={{
-              marginTop: 16,
-              color: '#f87171',
-              fontSize: 13,
-              padding: '14px 16px',
-              border: '1px solid rgba(248,113,113,.35)',
-              borderRadius: 'var(--radius-sm, 6px)',
-              background: 'rgba(248,113,113,.06)',
-            }}
-          >
-            Could not reach the forge bridge ({error}).
+          <div style={{ marginTop: 16 }}>
+            <FetchErrorState what="this connection" error={error ?? 'could not load this connection'} status={errorStatus} onRetry={() => { if (id) void load(id); }} />
           </div>
         )}
 
