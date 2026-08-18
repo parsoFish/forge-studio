@@ -220,12 +220,14 @@ export default function SessionShellPage({
   //     (it resolves kinds against the live registry — there is deliberately
   //     no client-side kind list to mirror, so the server's own message is the
   //     discriminator here);
-  //   - an unknown ID (or no ?project= and no per-kind summary to resolve one
-  //     from — `noProjectKnown`): a session of a real kind that does not exist.
+  //   - an unknown ID: the shell route's own 404 (W7-A2: the bridge resolves
+  //     the anchor project server-side via `findSessionProject` and 404s when
+  //     it can't — there is no longer a separate client-side "no project
+  //     known" outcome to check; a `ready` viewState always carries a project).
   if (viewState.status === 'no-session' && /unknown session kind/i.test(viewState.error ?? '')) {
     return <NotFound kind="session kind" id={kind} backHref="/sessions" backLabel="Sessions" detail={viewState.error} />;
   }
-  if (viewState.status === 'no-session' || noProjectKnown) {
+  if (viewState.status === 'no-session') {
     return (
       <NotFound
         kind={`${kind} session`}
