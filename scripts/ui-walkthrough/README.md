@@ -47,6 +47,7 @@
 | `--from <crawl.json>` | no browser: re-assert an existing crawl output (T1 re-checks a lane's claim offline) |
 | `--boot` | CI / idle host: spawn `forge studio --no-open` (dry-bridge + no-spawn seams), crawl, tear down. **Refuses** if a healthy bridge already answers on :4123 — never takes over the operator's Studio |
 | `--write-baseline <file>` | write the run's full failure set as a baseline |
+| `--min-routes <n>` | harness sanity floor (default 40 for a live crawl, 0 under `--from`): fewer crawled routes is a **harness error** (exit 2, no verdict) — together with the bridge `/api/health` precheck it stops "the bridge was down, every page rendered its empty state" from reading as green |
 | `known-optional-404s.txt` | 404-only allowlist of artifact URLs that legitimately may not exist (`*` one segment, `**` any depth). Each entry is reviewed against the findings register; known defects (review-findings.json, `/api/events/`, `/projects/new` preflight …) are NOT allowed here — they stay in the baseline until their lane fixes them |
 | `live-only-routes.txt` | route prefixes whose readiness is defined by a live stream — the never-ready check skips them (empty on introduction: every never-ready page the wave-7 crawl found was a defect) |
 | CI job `ui-walkthrough` (`.github/workflows/ci.yml`) | `--boot --assert --baseline` on every PR + push to main, crawl output uploaded as an artifact, then the shrink-only check |

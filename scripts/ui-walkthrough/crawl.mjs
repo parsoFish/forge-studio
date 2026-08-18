@@ -20,6 +20,11 @@
 //   --boot            CI / idle host: spawn `forge studio` (dry-bridge +
 //                     no-spawn seams) on the fixed ports, crawl, tear it down.
 //                     Refuses if a healthy bridge is already there.
+//   --min-routes <n>  harness sanity floor: a live crawl that visits fewer
+//                     routes than this is a HARNESS failure (exit 2), never a
+//                     pass — default 40 (0 under --from). Together with the
+//                     bridge health precheck this stops "the bridge was down so
+//                     every page rendered its empty state" from reading green.
 //
 // Without --boot the crawl targets the ALREADY-RUNNING Studio (bridge :4123,
 // UI :4124 — override with FORGE_BRIDGE_URL / FORGE_UI_URL). It never starts,
@@ -44,6 +49,7 @@ const BOOT = flag('--boot');
 const FROM = opt('--from', null);
 const BASELINE_FILE = opt('--baseline', null);
 const WRITE_BASELINE = opt('--write-baseline', null);
+const MIN_ROUTES = Number(opt('--min-routes', FROM ? 0 : 40));
 const KNOWN_404S_FILE = opt('--known-optional-404s', resolve(HERE, 'known-optional-404s.txt'));
 const LIVE_ONLY_FILE = opt('--live-only-routes', resolve(HERE, 'live-only-routes.txt'));
 
@@ -94,8 +100,22 @@ async function seeds() {
 
 const inScope = (route) => ONLY.length === 0 || ONLY.some((p) => route.startsWith(p));
 
+class HarnessError extends Error {}
+
+async function requireHealthyBridge() {
+  let body = null;
+  try {
+    const r = await fetch(`${BRIDGE}/api/health`, { signal: AbortSignal.timeout(3000) });
+    body = r.ok ? await r.json() : null;
+  } catch { body = null; }
+  if (body?.service !== 'forge-bridge') {
+    throw new HarnessError(`no healthy forge bridge at ${BRIDGE}/api/health — a crawl against a bridge-less UI reads every page as its empty state and would pass for the wrong reason; refusing to gate`);
+  }
+}
+
 async function crawl() {
   const { chromium } = await import('playwright-core');
+  await requireHealthyBridge();
   fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true });
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -181,6 +201,9 @@ function runAssertion(crawlJson) {
     fs.writeFileSync(WRITE_BASELINE, JSON.stringify(toBaseline(report, { source }), null, 1) + '\n');
     console.log(`[walkthrough --assert] baseline written: ${WRITE_BASELINE} (${report.failures.length + report.known.length} entries)`);
   }
+  if (ASSERT && report.routes < MIN_ROUTES) {
+    throw new HarnessError(`only ${report.routes} route(s) crawled (< --min-routes ${MIN_ROUTES}) — the crawl did not see the Studio it was meant to gate (bridge seeds empty? --only too narrow?); refusing to report a verdict`);
+  }
   console.log('\n' + formatReport(report));
   return report;
 }
@@ -218,5 +241,5 @@ main().then(
     process.exitCode = code;
     setTimeout(() => process.exit(code), 3000).unref();
   },
-  (err) => { console.error(err); process.exit(2); },
+  (err) => { console.error(err instanceof HarnessError ? `[walkthrough] HARNESS ERROR: ${err.message}` : err); process.exit(2); },
 );

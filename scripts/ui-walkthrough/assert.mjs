@@ -148,7 +148,11 @@ export function assertCrawl(crawl, opts = {}) {
     const k = failureKey(f);
     if (bl.has(k)) { known.push(f); matched.add(k); } else fresh.push(f);
   }
-  const stale = [...bl.entries()].filter(([k]) => !matched.has(k)).map(([, e]) => e);
+  // Stale = baseline entries nothing matched. Under `only`, judge staleness
+  // only inside the crawled prefixes — entries outside them were never tested.
+  const only = opts.only ?? [];
+  const inScope = (e) => only.length === 0 || only.some((p) => e.route.startsWith(p) || e.route.startsWith(normalizeVolatile(p)));
+  const stale = [...bl.entries()].filter(([k, e]) => !matched.has(k) && inScope(e)).map(([, e]) => e);
   const byKind = Object.fromEntries(FAILURE_KINDS.map((k) => [k, fresh.filter((f) => f.kind === k).length]));
   return {
     ok: fresh.length === 0,

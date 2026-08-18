@@ -183,10 +183,15 @@ test('every pageerror is a page-error failure; console `error` entries are conso
 
 // ── group 5: --only, baseline matching, report shape ─────────────────────────
 
-test('`only` prefixes restrict the routes considered (and the count reported)', () => {
+test('`only` prefixes restrict the routes considered (and the count reported); staleness is judged inside the prefixes only', () => {
   const rep = assertCrawl(loadFixture(), { only: ['/flows'] });
   assert.equal(rep.routes, 2);
   assert.ok(rep.failures.every((f) => f.rawRoute.startsWith('/flows')));
+  const scoped = assertCrawl(loadFixture(), { only: ['/flows'], baseline: { entries: [
+    { kind: 'first-party-4xx', route: '/projects/gitpulse', detail: '409 [bridge]/api/studio/projects/gitpulse/contract-stages' },
+    { kind: 'never-ready', route: '/flows/gone/run/<id>', detail: 'data-page=flow-run data-page-ready=null' },
+  ] } });
+  assert.deepEqual(scoped.stale.map((e) => e.route), ['/flows/gone/run/<id>'], 'an out-of-scope baseline entry is not stale — it was never tested');
   const rep2 = assertCrawl(loadFixture(), { only: ['/flows', '/projects/new'] });
   assert.equal(rep2.routes, 3);
 });
@@ -289,6 +294,12 @@ test('crawl.mjs --from <crawl.json> --assert: exits 1 on new failures, writes as
     assert.equal(rep5.routes, 1);
     assert.equal(rep5.failures.length, 1, 'gitpulse carries exactly the contract-stages 409');
     assert.equal(r5.status, 1);
+
+    // Harness sanity floor: too few routes is a HARNESS error (exit 2), never a verdict.
+    const r6 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o6'), '--baseline', bl, '--min-routes', '10', '--known-optional-404s', join(tmp, 'none.txt'), '--live-only-routes', join(tmp, 'none.txt')], HERE);
+    assert.equal(r6.status, 2, `expected exit 2 (harness error) for 9 routes < 10\nstdout:${r6.stdout}\nstderr:${r6.stderr}`);
+    assert.match(r6.stderr, /HARNESS ERROR/);
+    assert.doesNotMatch(r6.stdout + r6.stderr, /\bPASS\b/, 'a starved crawl must never print PASS');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
