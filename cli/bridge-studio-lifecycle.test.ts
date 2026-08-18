@@ -217,6 +217,14 @@ function writeLog(kind: string, sid: string, files: Record<string, string>, mtim
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
+/** Read the body ONCE: assert the status (with the body text as the failure
+ *  message) and return the parsed JSON. */
+async function expectJson<T>(res: Response, status: number): Promise<T> {
+  const text = await res.text();
+  assert.equal(res.status, status, `expected HTTP ${status}, got ${res.status}: ${text}`);
+  return JSON.parse(text) as T;
+}
+
 async function indexRows(activeOnly = false): Promise<SessionIndexRow[]> {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions${activeOnly ? '?active=1' : ''}`);
   assert.equal(res.status, 200);
@@ -387,8 +395,7 @@ test('index: every row carries the three new fields (state/error/idleMs) — no 
 
 test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the anchor project (a dot-anchor too) and carries lifecycle', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_CRASHED_SID}`);
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { project: string; lifecycle: { state: string; needsYou: boolean; error: string | null; cancellable: boolean } };
+  const body = await expectJson<{ project: string; lifecycle: { state: string; needsYou: boolean; error: string | null; cancellable: boolean } }>(res, 200);
   assert.equal(body.project, 'proja');
   assert.equal(body.lifecycle.state, 'crashed');
   assert.equal(body.lifecycle.needsYou, true);
@@ -396,8 +403,7 @@ test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the 
   assert.ok(body.lifecycle.error?.startsWith('TypeError: Cannot read properties of undefined'), body.lifecycle.error ?? 'null');
 
   const cr = await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`);
-  assert.equal(cr.status, 200, await cr.text());
-  const crBody = (await cr.json()) as { project: string; lifecycle: { state: string } };
+  const crBody = await expectJson<{ project: string; lifecycle: { state: string } }>(cr, 200);
   assert.equal(crBody.project, '.community-registry');
   assert.equal(crBody.lifecycle.state, 'crashed');
 });
@@ -464,8 +470,7 @@ test('cancel: a terminal session is 409 — never re-terminalised', async () => 
 
 test('cancel: a working demo session (no live turn) → 200 phase=cancelled, previousPhase kept, killed=false; status.json rewritten; index reads terminal; ?active=1 drops it; a second cancel is 409', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${DEMO_WORKING_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { ok: boolean; phase: string; previousPhase: string; killed: boolean; project: string };
+  const body = await expectJson<{ ok: boolean; phase: string; previousPhase: string; killed: boolean; project: string }>(res, 200);
   assert.equal(body.ok, true);
   assert.equal(body.phase, CANCELLED_PHASE);
   assert.equal(body.previousPhase, 'generating');
@@ -502,8 +507,7 @@ test('cancel: a working demo session (no live turn) → 200 phase=cancelled, pre
 
 test('cancel: body.project omitted → the anchor project is resolved server-side (the operator\'s .kb-cycles crash) → 200; the row is gone from ?active=1', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${CRASHED_KB_SID}/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { project: string; previousPhase: string };
+  const body = await expectJson<{ project: string; previousPhase: string }>(res, 200);
   assert.equal(body.project, '.kb-cycles');
   assert.equal(body.previousPhase, 'drafting');
   const active = await indexRows(true);
@@ -512,7 +516,7 @@ test('cancel: body.project omitted → the anchor project is resolved server-sid
 
 test('cancel: an ARCHITECT session (no panel/turnSpec — the "permanently bespoke" kind) cancels through the SAME generic route', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'proja' }) });
-  assert.equal(res.status, 200, await res.text());
+  await expectJson<unknown>(res, 200);
   const status = JSON.parse(readFileSync(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID, 'status.json'), 'utf8')) as { phase: string };
   assert.equal(status.phase, CANCELLED_PHASE);
   const r = row(await indexRows(), 'architect', ARCHITECT_VERDICT_SID);
@@ -524,8 +528,7 @@ test('cancel: a session with a LIVE tracked turn (turn.pid alive, argv carries t
   const before = row(await indexRows(), 'demo', KILL_SID);
   assert.equal(before.state, 'working', 'a live tracked turn is working');
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${KILL_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { killed: boolean };
+  const body = await expectJson<{ killed: boolean }>(res, 200);
   assert.equal(body.killed, true, 'the tracked turn pid must be signalled');
   // The child must actually die (SIGTERM on a plain node -e loop is fatal).
   const deadline = Date.now() + 5_000;
@@ -546,8 +549,7 @@ test('cancel: turn.pid pointing at a pid whose argv does NOT carry the session i
   writeLog('demo', sid, { 'events.jsonl': '', '.heartbeat': 'x', 'stderr.log': '', 'turn.pid': `${stranger.pid}\n` });
   try {
     const res = await fetch(`${bridgeUrl}/api/studio/sessions/demo/${sid}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
-    assert.equal(res.status, 200, await res.text());
-    const body = (await res.json()) as { killed: boolean };
+    const body = await expectJson<{ killed: boolean }>(res, 200);
     assert.equal(body.killed, false);
     let stillAlive = true;
     try { process.kill(stranger.pid!, 0); } catch { stillAlive = false; }

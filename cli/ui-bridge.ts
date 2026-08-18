@@ -80,6 +80,8 @@ import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
+import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
+import { deriveSessionLifecycleFor, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -1190,12 +1192,25 @@ export type SessionIndexRow = {
    *  SAME derivation the single-session route's tail-gating already uses,
    *  never a second, hand-kept terminal-phase notion. */
   terminal: boolean;
-  /** True iff `deriveSessionAffordances(descriptor, phase).length > 0` — a
-   *  derivable operator affordance exists at this phase, never re-derived a
-   *  second way. Architect (no turnSpec/panel table at all) is always
-   *  `false` here, matching the single-session route's own `affordances: []`
-   *  for that kind (ADR-043 amendment §4, "permanently bespoke"). */
+  /** W7-A2 — TRUTHFUL in both directions: `deriveSessionLifecycle(...)
+   *  .needsYou` (cli/bridge-studio-lifecycle.ts) — true iff an operator
+   *  gate is open (`awaits: questions|verdict` on the phase row, or the
+   *  LEGACY_SESSION_AWAITS_PHASES table for architect/project-brain) OR the
+   *  runner crashed/stalled. An agent that is merely working (a `step:
+   *  agent` row's staged-review/next-turn affordances) is NOT "needs you" —
+   *  the pre-W7 derivation (`deriveSessionAffordances(...).length > 0`)
+   *  counted those and inverted the signal for four of eight kinds
+   *  (home-sessions-08, sessions-kinds-15). */
   needsYou: boolean;
+  /** W7-A2 — the derived lifecycle state (`working` | `awaiting-operator` |
+   *  `crashed` | `stalled` | `terminal`); see cli/bridge-studio-lifecycle.ts. */
+  state: SessionLifecycleState;
+  /** W7-A2 — the runner's crash message read live off
+   *  `_logs/_<kind>-<sid>/stderr.log` for a `crashed` row; `null` otherwise. */
+  error: string | null;
+  /** W7-A2 — ms since the last on-disk sign of life; `null` when the
+   *  session has no log dir (no liveness signal). */
+  idleMs: number | null;
   modelTier: string | null;
   /** ISO timestamp of the session's last known write, or `''` — honest-absent,
    *  never fabricated — when the kind's status.json carries no timestamp
@@ -1275,7 +1290,7 @@ function readGuardedSessionIndexSummary(
  * traversal surface at all (unlike the single-session GET, whose `kind` path
  * segment IS request-derived and validated against the registry).
  */
-function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string }): SessionIndexRow[] {
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
 
@@ -1298,13 +1313,23 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // makes that true structurally rather than merely as an observed
     // consequence of the affordance table's own shape.
     const terminal = isTerminalPhase(descriptor, phase);
+    // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
+    // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
+    // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
+    // computed at read time, never stored. `needsYou` is its truthful verdict.
+    const lifecycle = deriveSessionLifecycleFor({
+      descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
+    });
     rows.push({
       kind: descriptor.id,
       sessionId,
       project,
       phase,
       terminal,
-      needsYou: !terminal && deriveSessionAffordances(descriptor, phase).length > 0,
+      needsYou: lifecycle.needsYou,
+      state: lifecycle.state,
+      error: lifecycle.error,
+      idleMs: lifecycle.idleMs,
       modelTier,
       updatedAt,
       href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
@@ -1406,7 +1431,7 @@ async function handleStudioSessionsIndex(
   const origin = allowedOrigin(req);
   try {
     const activeOnly = parseQuery(url).get('active') === '1';
-    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
+    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
     const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
     const sessions = sortAndCapSessionIndexRows(filtered);
     sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
@@ -1488,6 +1513,17 @@ async function handleHttp(
     // was followed out of root. Route the WHOLE path (cycleId as its OWN
     // segment under the trusted logsRoot, leaf included) through the guard;
     // a rejected/absent path both collapse to 404 (no existence oracle).
+    // W7-A2 (sessions-kinds-24, home-sessions-11): a guard-CLEAN path whose
+    // events.jsonl simply does not exist yet (a session minted seconds ago,
+    // or one whose turn never ran) is 200 `{events: []}` — never a console
+    // 404 on the operator's first screen. A guard-REJECTED path (traversal,
+    // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
+    // (cli/sec04-cycleid-containment.test.ts) hold.
+    const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
+    if (eventsGuard.ok && !eventsGuard.exists) {
+      sendJson(res, 200, { cycleId, events: [] }, origin);
+      return;
+    }
     const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
     if (raw === null) {
       sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
@@ -1690,6 +1726,20 @@ async function handleHttp(
   // keeps the two GET /api/studio/sessions... routes textually adjacent.
   if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
+  // W7-A2 — the generic session CANCEL route. MUST be dispatched BEFORE the
+  // affordance write route immediately below: that route's regex matches
+  // any `/api/studio/sessions/:kind/:sid/<segment>` and would swallow the
+  // literal `cancel` segment as an affordance id (409 "not available").
+  if (await handleSessionCancelRoute(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    broadcastKindChanged: (kind) => {
+      if (kind === 'architect') ctx.broadcastArchitectChanged();
+      else if (kind === 'instructions') ctx.broadcastInstructionsChanged();
+      else if (kind === 'demo') ctx.broadcastDemoChanged();
+      else if (kind === 'project-brain') ctx.broadcastProjectBrainChanged();
+    },
+  }, url, method)) return;
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
   // module's own function) rather than imported by bridge-studio-affordances.ts
@@ -2398,6 +2448,15 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     );
     closeSync(stderrFd);
     proc.unref();
+    // W7-A2 — track the turn's pid so the generic cancel route
+    // (cli/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
+    // live turn, and the lifecycle derivation can tell "re-run in flight"
+    // from "crashed" (isTurnAlive additionally proves ownership via the
+    // sessionId in the process's own argv above). Same logDir, same guard
+    // posture as stderr.log; best-effort like the rest of this helper.
+    if (typeof proc.pid === 'number') {
+      try { writeFileSync(join(logDir, 'turn.pid'), `${proc.pid}\n`); } catch { /* best-effort */ }
+    }
   } catch { /* best-effort */ }
 }
 
