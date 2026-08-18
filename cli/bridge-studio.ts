@@ -282,10 +282,18 @@ function classifyEvent(e: EventLogEntry): LogLine {
 /** Find a Run by id (cycleId or initiativeId). Returns null if not found.
  *  ADR-044 P1: routes through the per-manifest memo (cli/run-list-cache.ts)
  *  — same derivation, same contract as listRuns, but terminal runs skip
- *  re-parsing their events.jsonl once cached. */
+ *  re-parsing their events.jsonl once cached.
+ *
+ *  W7-A3 (projects-32, sessions-kinds-08): a run's `id` CHANGES when the
+ *  scheduler claims it (planned = the initiative id; claimed = the cycle id),
+ *  so a link minted at enqueue time by run id goes dead on claim. The
+ *  initiativeId is the stable handle — match it second, so
+ *  `/api/runs/<initiativeId>` (and `/flows/<flow>/run/<initiativeId>`)
+ *  resolves the initiative's run in every queue state. Unknown ids still 404
+ *  (an INIT- id never collides with a `<iso>_INIT-…` cycle id). */
 function findRun(forgeRoot: string, id: string): Run | null {
   const runs = cachedListRuns(forgeRoot, Date.now());
-  return runs.find((r) => r.id === id) ?? null;
+  return runs.find((r) => r.id === id) ?? runs.find((r) => r.initiativeId === id) ?? null;
 }
 
 // ---------------------------------------------------------------------------

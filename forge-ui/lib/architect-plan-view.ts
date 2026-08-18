@@ -116,7 +116,10 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[]): I
       flowId: run.flowId,
       runStatus: run.status,
       queueState: QUEUE_STATE_FOR_RUN[run.status] ?? 'unknown',
-      runHref: `/flows/${flow}/run/${encodeURIComponent(run.id)}`,
+      // The INITIATIVE id is the stable run handle (the bridge's findRun
+      // matches it in every queue state); a run's own `id` flips from the
+      // initiative id to the cycle id the moment the scheduler claims it.
+      runHref: `/flows/${flow}/run/${encodeURIComponent(initiativeId)}`,
       monitorHref: `/flows/${flow}`,
     };
   });

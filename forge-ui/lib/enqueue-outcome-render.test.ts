@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { EnqueueOutcomeLineView } from '@/components/studio/EnqueueOutcomeLine';
 
-const CYCLE = '2026-08-18T13-35-37_INIT-2026-08-18-add-version-flag';
+const INIT = 'INIT-2026-08-18-add-version-flag';
 
 function render(props: Partial<React.ComponentProps<typeof EnqueueOutcomeLineView>>): string {
   return renderToStaticMarkup(React.createElement(EnqueueOutcomeLineView, {
@@ -27,19 +27,19 @@ function render(props: Partial<React.ComponentProps<typeof EnqueueOutcomeLineVie
   }));
 }
 
-test('develop enqueue, scheduler running → develop-flow claim (no unifier), run link carries flow + cycle', () => {
-  const html = render({ cycleId: CYCLE, flowId: 'forge-develop' });
+test('develop enqueue, scheduler running → develop-flow claim (no unifier), run link carries flow + the initiative (stable run handle)', () => {
+  const html = render({ runId: INIT, flowId: 'forge-develop' });
   expect(html).toContain('data-component="enqueue-outcome"');
   expect(html).toContain('data-enqueue-kind="develop"');
   expect(html).toContain('Development enqueued — the develop flow will open a PR for review.');
   expect(html.toLowerCase()).not.toContain('unifier');
-  expect(html).toMatch(new RegExp(`<a[^>]*data-action="open-develop-run"[^>]*href="/flows/forge-develop/run/${encodeURIComponent(CYCLE)}"`));
+  expect(html).toMatch(new RegExp(`<a[^>]*data-action="open-develop-run"[^>]*href="/flows/forge-develop/run/${INIT}"`));
   expect(html).toContain('data-needs-scheduler-start="false"');
   expect(html).not.toContain('data-action="scheduler-start"');
 });
 
 test('plan enqueue, scheduler stopped → honest "nothing will run" + Start control right here + the run link kept', () => {
-  const html = render({ kind: 'plan', runAction: 'open-plan-run', cycleId: 'c1', flowId: 'forge-architect', scheduler: { running: false } });
+  const html = render({ kind: 'plan', runAction: 'open-plan-run', runId: 'c1', flowId: 'forge-architect', scheduler: { running: false } });
   expect(html).toContain('Enqueued — the scheduler is stopped, so nothing will run until you start it.');
   expect(html).toContain('data-needs-scheduler-start="true"');
   expect(html).toContain('data-action="scheduler-start"');
@@ -47,7 +47,7 @@ test('plan enqueue, scheduler stopped → honest "nothing will run" + Start cont
 });
 
 test('scheduler not yet read → neither claim is asserted (reading…), no Start button', () => {
-  const html = render({ scheduler: null, schedulerReady: false, cycleId: 'c1', flowId: 'forge-develop' });
+  const html = render({ scheduler: null, schedulerReady: false, runId: 'c1', flowId: 'forge-develop' });
   expect(html).toContain('Enqueued — reading the scheduler…');
   expect(html).not.toContain('data-action="scheduler-start"');
 });

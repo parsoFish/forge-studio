@@ -72,11 +72,15 @@ const KIND_CLAIM: Record<'plan' | 'develop' | 'flow', string> = {
   flow: 'Run enqueued — the scheduler will pick it up.',
 };
 
-/** Href for the run an enqueue just returned — flow + cycle when both are
- *  known, the flow monitor when only the flow is, else null (never fabricated). */
-export function enqueuedRunHref(enqueued: { cycleId?: string; flowId?: string }): string | null {
-  if (enqueued.flowId && enqueued.cycleId) {
-    return `/flows/${encodeURIComponent(enqueued.flowId)}/run/${encodeURIComponent(enqueued.cycleId)}`;
+/** Href for the run an enqueue just returned — flow + run handle when both are
+ *  known, the flow monitor when only the flow is, else null (never fabricated).
+ *  `runId` is the STABLE handle: the initiative id (the bridge's findRun matches
+ *  it in every queue state — a planned run's own id IS the initiative id, and a
+ *  claimed run is found by its initiativeId), never the cycle id, which only
+ *  resolves once the scheduler has claimed the manifest. */
+export function enqueuedRunHref(enqueued: { runId?: string; flowId?: string }): string | null {
+  if (enqueued.flowId && enqueued.runId) {
+    return `/flows/${encodeURIComponent(enqueued.flowId)}/run/${encodeURIComponent(enqueued.runId)}`;
   }
   if (enqueued.flowId) return `/flows/${encodeURIComponent(enqueued.flowId)}`;
   return null;
@@ -85,7 +89,7 @@ export function enqueuedRunHref(enqueued: { cycleId?: string; flowId?: string })
 export function describeEnqueueOutcome(
   kind: 'plan' | 'develop' | 'flow',
   scheduler: SchedulerStatus | null,
-  enqueued: { cycleId?: string; flowId?: string },
+  enqueued: { runId?: string; flowId?: string },
 ): EnqueueOutcome {
   const runHref = enqueuedRunHref(enqueued);
   if (!scheduler || !scheduler.running) {

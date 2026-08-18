@@ -317,10 +317,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // /api/flows/:id/run itself (FlowKickoff); on success re-read the rail,
   // pinning selection to the run just enqueued (or whatever was selected) —
   // without preserveRunId, loadData re-derives via pickDefaultRun.
-  const handleEnqueued = useCallback((runId: string | undefined) => {
+  const handleEnqueued = useCallback((initiativeId: string) => {
     const signal = { cancelled: false };
-    void loadData(signal, runId ?? activeRun?.id);
-  }, [loadData, activeRun]);
+    // A freshly enqueued (planned) run's id IS its initiative id (run-model).
+    void loadData(signal, initiativeId);
+  }, [loadData]);
 
   // Candidates for the generic kickoff: every initiative that can be
   // (re)enqueued — queued / finished / failed manifests — deduped by id.

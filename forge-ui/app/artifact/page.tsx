@@ -398,7 +398,10 @@ function ArtifactPageInner() {
   const typeRaw  = params.get('type') ?? 'plan';
   const modeParam = params.get('mode');
 
-  const type: ArtifactKey = isValidType(typeRaw) ? typeRaw : 'plan';
+  // W7-A3: an architect session (`_architect-<sid>`) has exactly one artifact —
+  // its PLAN — so any other `type` for it resolves to plan rather than
+  // rendering a cycle-artifact header over a session.
+  const type: ArtifactKey = isArchitectRunId(runId) ? 'plan' : isValidType(typeRaw) ? typeRaw : 'plan';
 
   const [run,        setRun]        = useState<Run | null>(null);
   // Live flow ids — used to avoid linking "back to monitor" at a retired flow
@@ -442,7 +445,7 @@ function ArtifactPageInner() {
   // W7-A3 linkage + scheduler for the architect post-approve payoff: reads the
   // runs list + scheduler status on a slow visible-only poll (no page-level
   // fetch when this is not an architect plan).
-  const loop = useLoopClosureState(archSession?.initiativeIds, isArchitect && type === 'plan');
+  const loop = useLoopClosureState(archSession?.initiativeIds, isArchitect);
   const gateId = type === 'plan' ? 'plan' : 'verdict';
 
   // Gate bar hint text

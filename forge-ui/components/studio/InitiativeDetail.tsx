@@ -218,7 +218,7 @@ export function InitiativeDetail({
       {/* W7-A3 (projects-16/32): the enqueue outcome, honest about the
           scheduler and linking the run the enqueue actually returned. */}
       {unplanned && plan.status === 'started' && (
-        <EnqueueOutcomeLine kind="plan" runAction="open-plan-run" cycleId={plan.cycleId} flowId={plan.flowId ?? 'forge-architect'} />
+        <EnqueueOutcomeLine kind="plan" runAction="open-plan-run" runId={initiativeId} flowId={plan.flowId ?? 'forge-architect'} />
       )}
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
@@ -245,7 +245,7 @@ export function InitiativeDetail({
       {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
           the develop flow does; and the claim + run link are real. */}
       {develop.status === 'started' && (
-        <EnqueueOutcomeLine kind="develop" runAction="open-develop-run" cycleId={develop.cycleId} flowId={develop.flowId ?? 'forge-develop'} />
+        <EnqueueOutcomeLine kind="develop" runAction="open-develop-run" runId={initiativeId} flowId={develop.flowId ?? 'forge-develop'} />
       )}
 
       {/* R4-11-T3: recovery affordances — gated on the recoverable set

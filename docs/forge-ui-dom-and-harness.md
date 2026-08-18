@@ -1206,8 +1206,11 @@ inventory rather than one shared page-level contract:
   it." with a `strip` SchedulerCard + `[data-action="scheduler-start"]` when
   the daemon is down; the develop copy names the develop flow, never the
   retired unifier), and `open-plan-run` / `[data-action="open-develop-run"]`
-  link the RUN the enqueue returned (`/flows/<flowId>/run/<cycleId>`, kept on
-  the card state), not the flow index. The roadmap tab also mounts a `strip`
+  link the RUN the enqueue returned (`/flows/<flowId>/run/<initiativeId>` — the
+  initiative id is the STABLE run handle: a planned run's own id IS its
+  initiative id, and the bridge's `findRun` matches `initiativeId` second so
+  the same URL resolves after the scheduler's claim renames the run to its
+  cycle id), not the flow index. The roadmap tab also mounts a `strip`
   SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
   Roadmap tab. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`

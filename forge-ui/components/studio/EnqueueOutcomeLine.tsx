@@ -8,7 +8,8 @@
  * running. The old success copy said "started" (and still named the retired
  * unifier) with a hardcoded flow-index link. This line derives its claim from
  * the real scheduler status (`describeEnqueueOutcome`), links the run the
- * enqueue just returned (`/flows/<flowId>/run/<cycleId>`), and — when the
+ * enqueue just returned (`/flows/<flowId>/run/<initiativeId>` — the initiative
+ * id is the run handle that stays valid across the scheduler's claim), and — when the
  * daemon is stopped — puts the Start control right here.
  *
  * `EnqueueOutcomeLineView` is the pure half (render-pinned);
@@ -30,7 +31,8 @@ import type { SchedulerStatus } from '@/lib/bridge-client';
 
 export type EnqueueOutcomeLineViewProps = {
   kind: 'plan' | 'develop' | 'flow';
-  cycleId?: string;
+  /** The stable run handle — the INITIATIVE id (see `enqueuedRunHref`). */
+  runId?: string;
   flowId?: string;
   /** The `data-action` name on the run link (kept per surface for the journeys). */
   runAction: string;
@@ -43,7 +45,7 @@ export type EnqueueOutcomeLineViewProps = {
 
 export function EnqueueOutcomeLineView({
   kind,
-  cycleId,
+  runId,
   flowId,
   runAction,
   scheduler,
@@ -53,8 +55,8 @@ export function EnqueueOutcomeLineView({
   onSchedulerAction,
 }: EnqueueOutcomeLineViewProps): JSX.Element {
   const outcome = schedulerReady
-    ? describeEnqueueOutcome(kind, scheduler, { cycleId, flowId })
-    : { claim: 'Enqueued — reading the scheduler…', needsSchedulerStart: false, runHref: describeEnqueueOutcome(kind, { running: true }, { cycleId, flowId }).runHref };
+    ? describeEnqueueOutcome(kind, scheduler, { runId, flowId })
+    : { claim: 'Enqueued — reading the scheduler…', needsSchedulerStart: false, runHref: describeEnqueueOutcome(kind, { running: true }, { runId, flowId }).runHref };
   return (
     <div
       data-component="enqueue-outcome"

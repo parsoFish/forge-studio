@@ -210,3 +210,43 @@ test('POST /api/flows/:id/run: an initiative not in any queue dir → 404 not-fo
   assert.equal(r.status, 404);
   assert.equal(r.json.status, 'not-found');
 });
+
+// ---------------------------------------------------------------------------
+// W7-A3 (projects-32, sessions-kinds-08): the initiative id is the STABLE run
+// handle — a run's own id flips from the initiative id (planned) to the cycle
+// id (claimed), so a link minted at enqueue time by run id goes dead on claim.
+// GET /api/runs/<initiativeId> resolves the initiative's run in every state.
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<initiativeId>: a PLANNED manifest resolves (its run id IS the initiative id)', async () => {
+  const res = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_PENDING)}`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { run: { id: string; initiativeId: string; status: string } };
+  assert.equal(body.run.initiativeId, INIT_PENDING);
+  assert.equal(body.run.status, 'planned');
+});
+
+test('GET /api/runs/<initiativeId>: a CLAIMED manifest (run id = cycle id) still resolves by initiative id; an unknown id still 404s', async () => {
+  const cycleId = `2026-08-19T00-00-00_${INIT_B}`;
+  mkdirSync(join(forgeRoot, '_queue', 'in-flight'), { recursive: true });
+  writeFileSync(join(forgeRoot, '_queue', 'in-flight', `${INIT_B}.md`),
+    manifestBody(INIT_B, 'forge-develop').replace('phase: pending', `phase: in-flight\ncycle_id: ${cycleId}`));
+  const logDir = join(forgeRoot, '_logs', cycleId);
+  mkdirSync(logDir, { recursive: true });
+  writeFileSync(join(logDir, 'events.jsonl'), JSON.stringify({
+    event_id: 'EV_a3_1', cycle_id: cycleId, initiative_id: INIT_B, phase: 'orchestrator', skill: 'scheduler',
+    event_type: 'start', started_at: new Date().toISOString(), message: 'cycle.start',
+  }) + '\n');
+
+  const byInit = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_B)}`);
+  assert.equal(byInit.status, 200, 'initiative id resolves the claimed run');
+  const body = (await byInit.json()) as { run: { id: string; initiativeId: string } };
+  assert.equal(body.run.id, cycleId, 'the run keeps its own (cycle) id');
+  assert.equal(body.run.initiativeId, INIT_B);
+
+  const byCycle = await fetch(`${url}/api/runs/${encodeURIComponent(cycleId)}`);
+  assert.equal(byCycle.status, 200, 'the cycle id still resolves too');
+
+  const unknown = await fetch(`${url}/api/runs/INIT-2026-01-01-never-existed`);
+  assert.equal(unknown.status, 404, 'unknown ids still 404 — the fallback is not an oracle for anything');
+});

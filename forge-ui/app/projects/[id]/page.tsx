@@ -780,16 +780,16 @@ function ProjectOnboardForm() {
 // plan-everything-before-kickoff: per-card develop state, lifted to RoadmapView
 // so the batch "start eligible" button and individual card buttons share one
 // source of truth (both funnel through the same startDevelopment() call).
-type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null; cycleId?: string; flowId?: string };
+type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null; flowId?: string };
 
 /** Map a batch item result onto the per-card develop state. W7-A3
- *  (projects-32): keep the enqueue's cycleId/flowId so the card links the run. */
+ *  (projects-32): keep the enqueue's flowId so the card links the run. */
 function developStateFromResult(
-  item: { ok: boolean; status?: string; detail?: string; cycleId?: string; flowId?: string } | undefined,
+  item: { ok: boolean; status?: string; detail?: string; flowId?: string } | undefined,
   requestError: string | undefined,
 ): DevelopCardState {
   return item?.ok
-    ? { status: 'started', error: null, cycleId: item.cycleId, flowId: item.flowId }
+    ? { status: 'started', error: null, flowId: item.flowId }
     : { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
 }
 
@@ -797,13 +797,13 @@ function developStateFromResult(
 // DevelopCardState above. `planned` (whether `workItems` exists) is server
 // truth from the roadmap fetch, not tracked here — this only tracks the
 // transient client-side request lifecycle of clicking "Plan".
-type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null; cycleId?: string; flowId?: string };
+type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null; flowId?: string };
 
 /** Map a single plan-dispatch result onto the per-card plan state (W7-A3:
- *  cycleId/flowId kept so the card links the run, projects-32). */
+ *  flowId kept so the card links the run, projects-32). */
 function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
   return result.status === 'enqueued'
-    ? { status: 'started', error: null, cycleId: result.cycleId, flowId: result.flowId }
+    ? { status: 'started', error: null, flowId: result.flowId }
     : { status: 'error', error: result.detail ?? result.status };
 }
 

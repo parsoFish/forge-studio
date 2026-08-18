@@ -116,6 +116,14 @@ test('linkage: queue state maps from run status; no run → unknown with null hr
   expect(missing.runId).toBeNull();
 });
 
+test('linkage: the run href is keyed on the INITIATIVE id (stable across the scheduler\'s claim), never the cycle id', () => {
+  const claimed = run({ id: '2026-08-18T13-35-37_INIT-2026-08-18-add-version-flag', flowId: 'forge-develop', status: 'active' });
+  const [row] = deriveInitiativeLinkage(['INIT-2026-08-18-add-version-flag'], [claimed]);
+  expect(row.runId).toBe('2026-08-18T13-35-37_INIT-2026-08-18-add-version-flag');
+  expect(row.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
+  expect(row.queueState).toBe('building');
+});
+
 test('linkage keeps input order and does not cross-attribute a neighbour\'s run', () => {
   const runs = [run({ id: 'B-run', initiativeId: 'INIT-2026-01-01-b', status: 'active' })];
   const rows = deriveInitiativeLinkage(['INIT-2026-01-01-a', 'INIT-2026-01-01-b'], runs);

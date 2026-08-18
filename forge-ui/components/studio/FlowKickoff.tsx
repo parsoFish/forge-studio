@@ -44,8 +44,9 @@ export function FlowKickoff({
   knownProjects?: string[];
   /** Generic kickoff only: the initiatives that can be enqueued onto this flow. */
   candidates?: KickoffCandidate[];
-  /** Generic kickoff only: fired after a successful enqueue (the page refetches). */
-  onEnqueued?: (runId: string | undefined) => void;
+  /** Generic kickoff only: fired after a successful enqueue with the initiative
+   *  id (= the planned run's id in the rail; the page refetches + selects it). */
+  onEnqueued?: (initiativeId: string) => void;
 }): JSX.Element {
   const kind = flow.kickoff?.kind;
 
@@ -136,12 +137,12 @@ function GenericKickoff({
 }: {
   flowId: string;
   candidates: KickoffCandidate[];
-  onEnqueued?: (runId: string | undefined) => void;
+  onEnqueued?: (initiativeId: string) => void;
 }): JSX.Element {
   const [initiativeId, setInitiativeId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<
-    | { kind: 'enqueued'; cycleId?: string; flowId?: string }
+    | { kind: 'enqueued'; initiativeId: string; flowId?: string }
     | { kind: 'error'; message: string }
     | null
   >(null);
@@ -157,8 +158,8 @@ function GenericKickoff({
     try {
       const r = await startFlowRun(flowId, initiativeId);
       if (r.ok) {
-        setResult({ kind: 'enqueued', cycleId: r.cycleId, flowId: r.flowId ?? flowId });
-        onEnqueued?.(r.cycleId);
+        setResult({ kind: 'enqueued', initiativeId, flowId: r.flowId ?? flowId });
+        onEnqueued?.(initiativeId);
       } else {
         setResult({ kind: 'error', message: r.error ?? r.status ?? 'enqueue failed' });
       }
@@ -194,7 +195,7 @@ function GenericKickoff({
       )}
       {result?.kind === 'enqueued' && (
         <div data-kickoff-result="enqueued" style={{ width: '100%' }}>
-          <EnqueueOutcomeLine kind="flow" runAction="open-kickoff-run" cycleId={result.cycleId} flowId={result.flowId} />
+          <EnqueueOutcomeLine kind="flow" runAction="open-kickoff-run" runId={result.initiativeId} flowId={result.flowId} />
         </div>
       )}
     </div>

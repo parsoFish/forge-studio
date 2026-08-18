@@ -11,7 +11,9 @@
  *    state with NO actions;
  *  - an enqueue success line that claims "started"/"building" while the
  *    scheduler is stopped, or that still names the retired unifier phase;
- *  - a run link that drops the cycleId the enqueue just returned.
+ *  - a run link that drops the run the enqueue just returned, or one keyed on
+ *    the CYCLE id (dead until the scheduler claims — the initiative id is the
+ *    stable handle the bridge resolves in every queue state).
  */
 import { test, expect } from 'vitest';
 
@@ -67,17 +69,17 @@ test('stopped + queued count → the hint says the queued runs will NOT start (h
 
 // ---- describeEnqueueOutcome ------------------------------------------------
 
-const enq = { cycleId: '2026-08-18T13-35-37_INIT-2026-08-18-add-version-flag', flowId: 'forge-develop' };
+const enq = { runId: 'INIT-2026-08-18-add-version-flag', flowId: 'forge-develop' };
 
-test('enqueue while the scheduler runs → the kind-specific claim, no start needed, run href carries flow AND cycle', () => {
+test('enqueue while the scheduler runs → the kind-specific claim, no start needed, run href carries flow AND the stable run handle', () => {
   const dev = describeEnqueueOutcome('develop', { running: true, paused: false }, enq);
   expect(dev.claim).toBe('Development enqueued — the develop flow will open a PR for review.');
   expect(dev.needsSchedulerStart).toBe(false);
-  expect(dev.runHref).toBe(`/flows/forge-develop/run/${encodeURIComponent(enq.cycleId)}`);
+  expect(dev.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
 
-  const plan = describeEnqueueOutcome('plan', { running: true }, { cycleId: 'c1', flowId: 'forge-architect' });
+  const plan = describeEnqueueOutcome('plan', { running: true }, { runId: 'INIT-2026-01-01-a', flowId: 'forge-architect' });
   expect(plan.claim).toBe('Planning enqueued — the scheduler will decompose it into work items.');
-  expect(plan.runHref).toBe('/flows/forge-architect/run/c1');
+  expect(plan.runHref).toBe('/flows/forge-architect/run/INIT-2026-01-01-a');
 
   const flow = describeEnqueueOutcome('flow', { running: true }, { flowId: 'my-flow' });
   expect(flow.claim).toBe('Run enqueued — the scheduler will pick it up.');
@@ -90,12 +92,12 @@ test('enqueue while the scheduler is stopped (or unknown) → honest "nothing wi
     expect(o.claim).toBe('Enqueued — the scheduler is stopped, so nothing will run until you start it.');
     expect(o.needsSchedulerStart).toBe(true);
     // The link to the run the enqueue returned is kept even when nothing runs yet.
-    expect(o.runHref).toBe(`/flows/forge-develop/run/${encodeURIComponent(enq.cycleId)}`);
+    expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
   }
 });
 
 test('enqueue while paused → kind claim + paused rider, no start needed', () => {
-  const o = describeEnqueueOutcome('plan', { running: true, paused: true }, { cycleId: 'c', flowId: 'forge-architect' });
+  const o = describeEnqueueOutcome('plan', { running: true, paused: true }, { runId: 'INIT-2026-01-01-c', flowId: 'forge-architect' });
   expect(o.claim).toBe('Planning enqueued — the scheduler will decompose it into work items. The scheduler is paused — resume it to let this run start.');
   expect(o.needsSchedulerStart).toBe(false);
 });
