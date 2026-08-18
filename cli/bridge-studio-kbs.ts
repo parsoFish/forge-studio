@@ -31,7 +31,7 @@ import matter from 'gray-matter';
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
 import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { SLUG_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
+import { KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
 import { kbSites } from './kb-sites.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
