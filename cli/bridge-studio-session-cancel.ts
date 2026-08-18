@@ -53,8 +53,6 @@ import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestr
 import { invalidSessionIdReason, invalidProjectReason, findSessionProject, isTerminalPhase } from './bridge-studio-sessions.ts';
 import { killTrackedTurn } from './bridge-studio-lifecycle.ts';
 
-const CANCEL_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/;
-
 export type SessionCancelRouteContext = StudioContext & {
   /** Optional per-kind "list changed" broadcasts (the legacy kinds' WS
    *  signals) — invoked after a successful cancel so an open bespoke panel
@@ -71,7 +69,10 @@ export async function handleSessionCancelRoute(
 ): Promise<boolean> {
   if (method !== 'POST') return false;
   const url = pathOnly(rawUrl);
-  const routeMatch = url.match(CANCEL_ROUTE_RE);
+  // Inline regex (not a named const) so cli/dry-bridge-coverage.test.ts's
+  // dispatch scanner can pair this route with its BRIDGE_ROUTE_CLASSIFICATION
+  // row (`/api/studio/sessions/:kind/:sessionId/cancel`, exempt-local).
+  const routeMatch = url.match(/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/cancel$/);
   if (!routeMatch) return false;
   const origin = allowedOrigin(req);
 

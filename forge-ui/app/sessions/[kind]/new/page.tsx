@@ -165,12 +165,17 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
 
   // W7-A2 — the in-flight sessions of THIS kind on the SAME target. The
   // target is the session's anchor project exactly as the bridge indexes it:
-  // the project id, `.kb-<id>` for a KB-anchored kind, `.community-registry`
-  // for the selector-less community refresh (mirrors the bridge's own
-  // KB_SEEDING_ANCHOR_PREFIX / COMMUNITY_REFRESH_PROJECT_ANCHOR literals —
-  // see forge-ui/lib/session-shell-view.ts's parity-tested mirror).
+  // the project id; for a KB-anchored kind, the KB's OWN binding decides —
+  // a `project`-bound KB nests its sessions under that real project, every
+  // other binding under the `.kb-<id>` dot-anchor (`POST /api/studio/kbs/
+  // :id/cleanup/start`, cli/ui-bridge.ts — mirrored here, never guessed
+  // from the id alone); `.community-registry` for the selector-less
+  // community refresh (the bridge's own COMMUNITY_REFRESH_PROJECT_ANCHOR
+  // literal — see forge-ui/lib/session-shell-view.ts's parity-tested mirror).
+  const selectedKb = spec?.selector === 'kb' ? kbs.find((k) => k.id === kbId.trim()) ?? null : null;
   const targetAnchor =
-    spec?.selector === 'kb' ? (kbId.trim() ? `.kb-${kbId.trim()}` : null)
+    spec?.selector === 'kb'
+      ? (selectedKb === null ? null : selectedKb.binding.kind === 'project' ? selectedKb.binding.ref : `.kb-${selectedKb.id}`)
     : spec?.selector === 'none' ? '.community-registry'
     : project.trim() || null;
   const existingSessions = targetAnchor !== null ? activeSessions.filter((r) => r.kind === kind && r.project === targetAnchor && !r.terminal) : [];
