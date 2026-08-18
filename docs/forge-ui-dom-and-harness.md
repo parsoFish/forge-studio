@@ -57,6 +57,64 @@ inventory rather than one shared page-level contract:
   click reaches the monitor — not a direct nav deep-link); `scripts/e2e-
   deadpaths.mjs` additionally crawls every `[data-nav]` href on every route
   and asserts it resolves to a known, live page.
+- **Global — bridge status banner (`[data-component="bridge-status"]`,
+  `components/BridgeStatus.tsx`, mounted ONCE in `app/layout.tsx`, W7-A1).**
+  Every route carries the app-shell bridge-liveness element:
+  `[data-bridge-status="up"|"down"|"reconnecting"][data-bridge-ever-up="true"|"false"]`.
+  The root is ALWAYS in the DOM (automation reads the state whether or not
+  the banner is showing); it is `hidden` while `up`, and renders a
+  `role="alert"` banner + `[data-action="bridge-retry"]` only when `down`
+  (a health probe FAILED — confirmed unreachable) or `reconnecting` after
+  the bridge had already been up in this tab (a lost socket). The initial
+  connect never flashes a banner. State is derived by ONE store
+  (`lib/bridge-status.ts`, DI'd + fake-timer-tested; wired in
+  `lib/use-bridge-status.ts`): the existing bridge WS (`subscribe()`) is
+  the liveness signal while up; a `GET /api/health` probe (must answer with
+  the forge-bridge identity) runs ONLY while not up (initial 1.5s delay,
+  then every 3s) — no page ever polls. A page's failed bridge fetch (transport
+  throw) triggers an immediate probe (`onBridgeTransportFailure`). On
+  recovery (down→up, or a lost socket regained) the store fires
+  `onRecovered`; pages subscribe via `useBridgeRecovery(reload)` and re-run
+  their own load — the pinned tab refills itself instead of waiting for F5
+  (crosscut-22). Journey coverage: `scripts/journeys/home.mjs` `home-landing`
+  asserts `[data-bridge-status="up"]` + hidden banner on the live bridge.
+- **Shared — failed-read state (`[data-component="fetch-error"]`,
+  `components/FetchErrorState.tsx`, W7-A1).** The ONE failure state every
+  pillar page / panel renders when a bridge read fails — INSTEAD of its
+  zero-state (never "Nothing registered yet" / "No sessions in flight" /
+  "No projects yet" / "No flows registered at all" / "No agents yet" / "No
+  knowledge bases yet" on an outage — home-sessions-29/-30, crosscut-01).
+  Contract: `[role="alert"][data-component="fetch-error"][data-fetch-status="error"]
+  [data-fetch-reachable="true"|"false"]` (+ `[data-fetch-http-status=<n>]`
+  when the bridge answered) and `[data-action="retry-fetch"]` when a retry
+  is wired. Two framings, never conflated (library-13): the bridge ANSWERED
+  (`reachable="true"`) → "The forge bridge refused to read <what> (HTTP n):
+  <the bridge's own error/message text VERBATIM>" — a 409
+  "project-config: … migrate: …" is the operator's fix instruction, a 400
+  "invalid hook id" is not an outage; the bridge was never reached
+  (`reachable="false"`) → "Could not reach the forge bridge — <what>
+  unavailable (<transport text>)". Fed by `lib/bridge-result.ts`
+  (`describeBridgeError` / `fetchErrorPropsFrom`) — the ONE classification
+  behind both clients: `studio-client.ts` and `bridge-client.ts` reads no
+  longer resolve a caller-supplied empty fallback on 4xx/5xx/network/
+  malformed-JSON; they THROW `BridgeReadError{status?,message,body?}` (or
+  map a 404 to `null` where "no such object" is a real answer — `fetchRun`,
+  `fetchKb`, `fetchFlow`, `fetchPreflight`, `fetchWorkItem`, `fetchRoadmap`,
+  … ; `fetchPhaseLog`/`fetchEvents` map 404 to `[]` = "no log yet"), and
+  status-shaped reads carry `ok:false` + the real `error`. Both clients ride
+  ONE transport (`bridgeFetch`: URL resolution + the W6-P4 port correction,
+  re-armed after every successful call — crosscut-26). Pillar roots
+  (`[data-page="home"|"sessions-index"|"projects-index"|"flows-index"|"agents-index"|"knowledge"]`)
+  additionally carry `data-fetch-status="loading"|"ok"|"error"`; on `error`
+  the page is still `data-page-ready="true"` (it HAS settled — into an honest
+  failure) and the body is this component. `/sessions/<kind>/<sid>` renders
+  it inside `[data-section="session-error"]` (framed by the shell route's
+  `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
+  the bridge answered) with Retry (crosscut-09); the project page's contract
+  panel renders it inside `[data-section="contract-checklist-error"]` in the
+  checklist's place — never a `data-checklist-row-count="0"` list on a
+  404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
+  detail pages render it in their `error` state with the real HTTP status.
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
@@ -127,7 +185,10 @@ inventory rather than one shared page-level contract:
     `/knowledge?id=<id>`). Status (`active|gated|idle`) is ALWAYS derived —
     never a `.status` field the wire types don't carry (`home-view.ts`'s own
     declared-data-fails-open discipline); a KB has no live-status source at
-    all and is always `idle`. Empty state:
+    all and is always `idle`. Empty state (a genuinely empty fleet ONLY — a
+    failed bridge read renders the shared `[data-component="fetch-error"]`
+    in place of every Home section, root `data-fetch-status="error"`, W7-A1 /
+    home-sessions-30):
     `[data-component="constellation-empty"]` — W6-IA-4 sweep finding C1#4: NOW
     carries a real `[data-action="constellation-empty-cta"]`
     (`href="/projects/new"`) alongside the "Nothing registered yet." text —
@@ -201,8 +262,11 @@ inventory rather than one shared page-level contract:
   columns kind/project/phase(+needs-you dot)/model tier/updated/
   `a[data-action="resume-session"]` ("Resume →", the row's own `href`).
   Rows render in the SAME order the bridge returned them — this page never
-  re-sorts. Empty state (only once `ready` AND genuinely zero rows — never a
-  false flash before the first fetch resolves):
+  re-sorts. Empty state (only once `ready` AND genuinely zero rows AND the
+  fetch did not fail — never a false flash before the first fetch resolves,
+  and never on a failed read: W7-A1 adds `data-fetch-status` on the root and
+  the shared `[data-component="fetch-error"]` body on failure, see "Shared —
+  failed-read state" above; home-sessions-29):
   `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
   kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
   kickoff kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
@@ -676,7 +740,9 @@ inventory rather than one shared page-level contract:
     linking to `/agents/<id>`, plus a `a[data-action="new-agent"]` CTA to
     `/agents/new`. `[data-component="agent-roster-loading"]` before the
     roster fetch resolves, `[data-component="agent-roster-empty"]` once
-    resolved with zero agents — honest-empty, never a fabricated card.
+    resolved with zero agents — honest-empty, never a fabricated card; a
+    FAILED roster read renders the shared `[data-component="fetch-error"]`
+    in their place (root `data-fetch-status="error"`, W7-A1).
   - `section[data-section="recent-agent-runs"]` — a cross-agent "recent
     runs" ledger, rendered by the SAME shared `HistoryLedger.tsx` the flow
     monitor and `/agents/[id]`'s own per-agent ledger use (reused
@@ -986,8 +1052,10 @@ inventory rather than one shared page-level contract:
   LibraryCard.tsx`) `/library`'s old projects shelf used to render, before
   W6-IA-4 retired that shelf in favour of this real index, each linking to
   its own `/projects/<id>`. Zero-state
-  (`[data-section="projects-empty"]`, honestly gated on `ready &&
-  projects.length === 0` — never flashed mid-fetch) offers BOTH an onboard
+  (`[data-section="projects-empty"]`, honestly gated on `ready && !error &&
+  projects.length === 0` — never flashed mid-fetch, never on a failed read:
+  W7-A1 root `data-fetch-status` + the shared `[data-component="fetch-error"]`
+  body on failure) offers BOTH an onboard
   CTA and a greenfield-create CTA (`[data-action="create-project-cta"]`),
   both routing to `/projects/new` (the one form hosts both paths); never
   terminal text. The presentational piece
