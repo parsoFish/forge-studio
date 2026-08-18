@@ -2594,5 +2594,18 @@ an operator does — every reachable route, every control, real sessions where
 a path can only be validated by running it — and files verified defects as
 JSONL. It produced the wave-7 backlog
 ([`docs/roadmaps/wave-7-walkthrough-findings.md`](./docs/roadmaps/wave-7-walkthrough-findings.md))
-and is a standing wave gate from wave 7 on (W7-A0 adds the crawl's assertion
-mode).
+and is a standing wave gate from wave 7 on. **W7-A0 (2026-08-19) added the
+crawl's assertion mode**: `npm run ui:walkthrough:gate` (`crawl.mjs --assert
+--baseline scripts/ui-walkthrough/baseline.json`) fails on any *new*
+`never-ready` page (a `[data-page]` root that never sets
+`data-page-ready="true"` — the same attribute the journeys wait on),
+`first-party-4xx` (any bridge/UI-host request ≥400; a 404-only allowlist
+`known-optional-404s.txt` covers artifacts that legitimately may not exist),
+`page-error`, `console-error` or `nav-error`, versus a committed baseline of
+wave-7 known defects that lanes **shrink and never grow**
+(`check-baseline-shrinks.mjs`, enforced in CI). The `ui-walkthrough` CI job
+boots Studio (`--boot`: production build, dry-bridge + no-spawn seams; refuses
+to boot over a healthy bridge) and runs it on every PR; `--only <route-prefix>`
+narrows a local run, `--from <crawl.json>` re-asserts an existing crawl without
+a browser. Contract: `scripts/ui-walkthrough/crawl.test.ts` over
+`fixtures/crawl.sample.json` (a slice of the real wave-7 crawl).
