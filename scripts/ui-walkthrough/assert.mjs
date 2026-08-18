@@ -136,6 +136,9 @@ export function collectFailures(crawl, opts = {}) {
     for (const req of r.failed ?? []) {
       const url = canonicalUrl(req.url, crawl);
       if (!isFirstParty(url) || !(req.status >= 400)) continue;
+      // The main document's own >=400 is already the row's nav-error — don't
+      // double-count it as a first-party-4xx (two keys for one defect).
+      if (r.status !== 'ok' && url === route) continue;
       const f = makeFailure('first-party-4xx', route, `${req.status} ${url}`, `first-party request answered ${req.status}`);
       const optional = req.status === 404 && knownOptional404s.some((p) => matchesPattern(allowlistPath(url), p));
       push(optional ? allowed : failures, f);

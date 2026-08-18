@@ -112,15 +112,18 @@ test('a declared live-only route prefix suppresses never-ready for that route on
 test('a page with no [data-page] root at all is never-ready too, and a navigation failure is nav-error', () => {
   const crawl = crawlOf(
     row({ route: '/a', dataPage: null, pageReady: null }),
-    row({ route: '/b', status: 'http-500' }),
+    // What crawl.mjs really records for a 500 document: the response listener
+    // sees the main document too, so `failed` carries the route itself.
+    row({ route: '/b', status: 'http-500', failed: [{ url: '/b', status: 500 }, { url: '[bridge]/api/x', status: 404 }] }),
     row({ route: '/c', status: 'nav-error', err: 'Timeout' }),
     row({ route: '/d' }),
   );
   const { failures } = collectFailures(crawl, {});
   const byRoute = Object.fromEntries(failures.map((f) => [f.route, f]));
   assert.equal(byRoute['/a'].kind, 'never-ready');
-  assert.equal(byRoute['/b'].kind, 'nav-error');
-  assert.match(byRoute['/b'].detail, /http-500/);
+  const b = failures.filter((f) => f.route === '/b');
+  assert.deepEqual(b.map((f) => f.kind).sort(), ['first-party-4xx', 'nav-error'], 'the document 500 is ONE nav-error (not also a first-party-4xx); the api 404 is still its own failure');
+  assert.match(b.find((f) => f.kind === 'nav-error').detail, /http-500/);
   assert.equal(byRoute['/c'].kind, 'nav-error');
   assert.equal(byRoute['/d'], undefined);
 });
@@ -340,6 +343,24 @@ test('crawl.mjs --from <crawl.json> --assert: exits 1 on new failures, writes as
     const r7 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o7'), '--write-baseline', bl2, '--min-routes', '10', '--known-optional-404s', join(tmp, 'none.txt'), '--live-only-routes', join(tmp, 'none.txt')], HERE);
     assert.equal(r7.status, 2, `starved --write-baseline must be a harness error\n${r7.stdout}\n${r7.stderr}`);
     assert.equal(existsSync(bl2), false, 'no baseline written by a starved crawl');
+    // An EMPTY capture is never green even under --from (default floor 1 there).
+    const empty = join(tmp, 'empty.json');
+    writeFileSync(empty, JSON.stringify({ ui: 'x', results: [] }));
+    const r8 = runNode([CRAWL, '--from', empty, '--assert', '--out', join(tmp, 'o8'), '--known-optional-404s', join(tmp, 'none.txt'), '--live-only-routes', join(tmp, 'none.txt')], HERE);
+    assert.equal(r8.status, 2, `empty capture must be a harness error\n${r8.stdout}\n${r8.stderr}`);
+    assert.doesNotMatch(r8.stdout, /\bPASS\b/);
+    const notCrawl = join(tmp, 'notcrawl.json');
+    writeFileSync(notCrawl, '{}');
+    const r9 = runNode([CRAWL, '--from', notCrawl, '--assert', '--out', join(tmp, 'o9')], HERE);
+    assert.equal(r9.status, 2, 'a JSON without results is not a crawl.json');
+    // A valued flag followed by another flag is a usage error (exit 2), never a NaN that disables the floor.
+    const r10 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o10'), '--min-routes', '--boot'], HERE);
+    assert.equal(r10.status, 2, `--min-routes without a value must fail\n${r10.stdout}\n${r10.stderr}`);
+    assert.match(r10.stderr, /HARNESS ERROR/);
+    const r11 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o11'), '--min-routes', 'abc'], HERE);
+    assert.equal(r11.status, 2, '--min-routes must be a non-negative integer');
+    const r12 = runNode([CRAWL, '--from', FIXTURE, '--boot', '--assert', '--out', join(tmp, 'o12')], HERE);
+    assert.equal(r12.status, 2, '--from + --boot is rejected, not silently ignored');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -360,6 +381,10 @@ test('check-baseline-shrinks.mjs: exit 0 when next ⊆ prev (or prev absent), ex
     assert.match(bad.stdout + bad.stderr, /\/z/);
     const first = runNode([SHRINK, '--prev', join(tmp, 'missing.json'), '--next', next], HERE);
     assert.equal(first.status, 0, 'no previous baseline = first introduction, allowed');
+    // Removing the baseline file outright is NOT a shrink.
+    const gone = runNode([SHRINK, '--prev', prev, '--next', join(tmp, 'gone.json')], HERE);
+    assert.equal(gone.status, 1, 'a missing next while prev had entries must fail');
+    assert.match(gone.stderr, /missing/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

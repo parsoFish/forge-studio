@@ -22,8 +22,8 @@
 //                     Refuses if a healthy bridge is already there.
 //   --min-routes <n>  harness sanity floor: a crawl that visits fewer routes
 //                     than this is a HARNESS failure (exit 2) — no verdict, no
-//                     baseline written. Default 40 (1 under --only, 0 under
-//                     --from). Together with the bridge health precheck this
+//                     baseline written. Default 40 (1 under --only or --from —
+//                     an empty capture is never green). With the health precheck this
 //                     stops "the bridge was down so every page rendered its
 //                     empty state" from reading green (or from being written
 //                     into a baseline).
@@ -39,11 +39,29 @@ import { assertCrawl, canonicalUrl, formatReport, parseListFile, toBaseline } fr
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
+class HarnessError extends Error {}
+// Usage/harness errors (including ones thrown while parsing argv below) exit 2:
+// distinct from a verdict (0/1), never a silent default.
+process.on('uncaughtException', (err) => { console.error(err instanceof HarnessError ? `[walkthrough] HARNESS ERROR: ${err.message}` : err); process.exit(2); });
 const flag = (name) => args.includes(name);
-const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 && i + 1 < args.length ? args[i + 1] : dflt; };
-const optAll = (name) => args.flatMap((a, i) => (a === name && i + 1 < args.length ? [args[i + 1]] : []));
+// A valued flag must be followed by a real value — `--min-routes --boot` is a
+// usage error, never a silent NaN/undefined that disables the check it feeds.
+const valueAt = (name, i) => {
+  const v = args[i + 1];
+  if (v === undefined || v.startsWith('--')) throw new HarnessError(`${name} needs a value (got ${v ?? 'nothing'})`);
+  return v;
+};
+const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? valueAt(name, i) : dflt; };
+const optAll = (name) => args.flatMap((a, i) => (a === name ? [valueAt(name, i)] : []));
+const optInt = (name, dflt) => {
+  const raw = opt(name, null);
+  if (raw === null) return dflt;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) throw new HarnessError(`${name} must be a non-negative integer (got ${JSON.stringify(raw)})`);
+  return n;
+};
 
-const MAX = Number(opt('--max', 500));
+const MAX = optInt('--max', 500);
 const OUT = opt('--out', '_walkthrough/explore');
 const ONLY = optAll('--only');
 const ASSERT = flag('--assert');
@@ -51,9 +69,11 @@ const BOOT = flag('--boot');
 const FROM = opt('--from', null);
 const BASELINE_FILE = opt('--baseline', null);
 const WRITE_BASELINE = opt('--write-baseline', null);
-// Harness floor default: 40 for a live full crawl; 1 under --only (a pillar can
-// be small — the floor then only guards "saw nothing"); 0 under --from.
-const MIN_ROUTES = Number(opt('--min-routes', FROM ? 0 : ONLY.length ? 1 : 40));
+// Harness floor default: 40 for a live full crawl; 1 under --only or --from (a
+// pillar / a replayed capture can be small — the floor then only guards "saw
+// nothing": an empty or truncated crawl.json is never a PASS).
+const MIN_ROUTES = optInt('--min-routes', FROM || ONLY.length ? 1 : 40);
+if (FROM && BOOT) throw new HarnessError('--from replays an existing crawl.json; it cannot be combined with --boot');
 const KNOWN_404S_FILE = opt('--known-optional-404s', resolve(HERE, 'known-optional-404s.txt'));
 const LIVE_ONLY_FILE = opt('--live-only-routes', resolve(HERE, 'live-only-routes.txt'));
 
@@ -103,8 +123,6 @@ async function seeds() {
 }
 
 const inScope = (route) => ONLY.length === 0 || ONLY.some((p) => route.startsWith(p));
-
-class HarnessError extends Error {}
 
 async function requireHealthyBridge() {
   let body = null;
@@ -220,6 +238,7 @@ async function main() {
   let crawlJson;
   if (FROM) {
     crawlJson = readJson(FROM);
+    if (!Array.isArray(crawlJson?.results)) throw new HarnessError(`${FROM} is not a crawl.json (no results array)`);
     if (ONLY.length) crawlJson = { ...crawlJson, results: crawlJson.results.filter((r) => inScope(r.route)) };
     fs.mkdirSync(OUT, { recursive: true });
   } else {
