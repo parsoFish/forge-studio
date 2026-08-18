@@ -2585,3 +2585,14 @@ files) and the **betterado terraform provider**
 ceiling, plus a 5th gate asserting the demo carries **live REST
 evidence**, not a test-name table). Tiered (frozen-SHA routine /
 greenfield release).
+
+**UI walkthrough harness** — [`scripts/ui-walkthrough/`](./scripts/ui-walkthrough/README.md)
+(`npm run ui:walkthrough` = the deterministic crawl; the explorer fan-out is
+a `Workflow` script run from a Claude Code session). Where `ui:journey`
+proves the *scripted* paths still work, the walkthrough drives Studio the way
+an operator does — every reachable route, every control, real sessions where
+a path can only be validated by running it — and files verified defects as
+JSONL. It produced the wave-7 backlog
+([`docs/roadmaps/wave-7-walkthrough-findings.md`](./docs/roadmaps/wave-7-walkthrough-findings.md))
+and is a standing wave gate from wave 7 on (W7-A0 adds the crawl's assertion
+mode).
