@@ -87,7 +87,7 @@ import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { KB_ID_RE } from '../orchestrator/studio/validate.ts';
 import {
   applyAutoFixesUntilStable,
   resolutionCounts,
@@ -200,7 +200,7 @@ export type KbDrainOpts = {
  *  raw-fs-guarded lint's curated taint-list name, but at every real call
  *  site the value is TRUSTED AT CONSTRUCTION — either freshly minted by
  *  `POST /api/studio/kbs/:id/drain` as `` `${kbId}-drain-${Date.now()
- *  .toString(36)}` `` (kbId already `SLUG_RE`-gated at that same route
+ *  .toString(36)}` `` (kbId already `KB_ID_RE`-gated at that same route
  *  strictly before this is ever called), or read back via `isSafeRunId` +
  *  an explicit `${kbId}-drain-` PREFIX check at the two GET routes below
  *  (never trusted on charset alone). Documented in
@@ -628,7 +628,7 @@ export async function handleStudioKbDrainRoutes(
   if (specificMatch && method === 'GET') {
     const kbId = decodeURIComponent(specificMatch[1]);
     const runId = decodeURIComponent(specificMatch[2]);
-    if (!SLUG_RE.test(kbId)) {
+    if (!KB_ID_RE.test(kbId)) {
       sendJson(res, 400, { error: 'invalid kb id' }, origin);
       return true;
     }
@@ -655,7 +655,7 @@ export async function handleStudioKbDrainRoutes(
   if (baseMatch && method === 'POST') {
     try {
       const kbId = decodeURIComponent(baseMatch[1]);
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
@@ -697,7 +697,7 @@ export async function handleStudioKbDrainRoutes(
   if (baseMatch && method === 'GET') {
     try {
       const kbId = decodeURIComponent(baseMatch[1]);
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }

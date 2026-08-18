@@ -42,6 +42,34 @@ import { join, resolve } from 'node:path';
  */
 export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
+/**
+ * W7-A4 — the ONE id rule for projects and knowledge bases: the id IS the
+ * on-disk directory name, case-preserving, matched exactly (see
+ * `orchestrator/studio/validate.ts` for the full contract + the reserved-id
+ * and reason helpers). Defined in this leaf for the same cycle reason as
+ * SLUG_RE; `PROJECT_ID_RE`/`KB_ID_RE` are named aliases of one predicate so
+ * a project and the KB bound to it can never disagree about legality.
+ */
+export const EXACT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+export const PROJECT_ID_RE = EXACT_ID_RE;
+export const KB_ID_RE = EXACT_ID_RE;
+/** Length cap shared by every project/KB id validator (one path segment). */
+export const MAX_EXACT_ID_LENGTH = 128;
+
+/**
+ * Ids the UI reserves as static route segments (`/projects/new`, `/agents/new`,
+ * `/flows/new`, `/skills/new`, `/hooks/new`, `/knowledge/new`). An object
+ * literally named `new` would be permanently shadowed by the builder that lives
+ * at that path (W7-A4, projects-30 / crosscut-20), so every create route refuses
+ * it — case-insensitively, since slugs are lowercased at creation and a
+ * case-preserving KB id `New` would still sit next to the static segment.
+ */
+export const RESERVED_OBJECT_IDS: ReadonlySet<string> = new Set(['new']);
+
+export function isReservedId(id: string): boolean {
+  return RESERVED_OBJECT_IDS.has(id.toLowerCase());
+}
+
 /** Hard cap on a skill id's length. Without this, a charset-valid but
  *  absurdly long id sails past the regex guard and dies later as a raw
  *  `ENAMETOOLONG` from `mkdir`/`writeFileSync` — an opaque OS error instead

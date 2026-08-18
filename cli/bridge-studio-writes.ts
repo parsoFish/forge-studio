@@ -40,7 +40,7 @@ import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, PathGuardContainmentError } from './studio-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
-import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
@@ -293,7 +293,7 @@ function resolveManagedProject(
   res: ServerResponse,
   origin: string | undefined,
 ): string | null {
-  if (!SLUG_RE.test(id)) {
+  if (!PROJECT_ID_RE.test(id)) {
     sendJson(res, 400, { error: 'invalid project id' }, origin);
     return null;
   }
@@ -456,6 +456,12 @@ export async function handleStudioWriteRoutes(
       // 1. Validate slug before any fs operation (blocks path traversal)
       if (!SLUG_RE.test(slug)) {
         sendJson(res, 400, { error: 'invalid slug — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+      // W7-A4 (crosscut-20): `new` is the /agents/new builder segment, never
+      // an agent — refuse it here so it can never be minted or shadowed.
+      if (isReservedId(slug)) {
+        sendJson(res, 400, { error: `agent slug "${slug}" is reserved (the /agents/new builder lives at that path) — choose another slug` }, origin);
         return true;
       }
 
@@ -797,6 +803,9 @@ export async function handleStudioWriteRoutes(
       const rawId = typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name;
       const id = rawId.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       if (!SLUG_RE.test(id)) { sendJson(res, 400, { error: 'could not derive a valid slug id from the name' }, origin); return true; }
+      // W7-A4 (projects-30): `new` is the /projects/new onboarding segment —
+      // a project named "new" would be permanently shadowed by the form.
+      if (isReservedId(id)) { sendJson(res, 400, { error: `project id "${id}" is reserved (the /projects/new onboarding form lives at that path) — choose another name` }, origin); return true; }
 
       // quality_gate_cmd: accept argv array or a whitespace-split string.
       const toArgv = (v: unknown): string[] | null =>
@@ -1033,9 +1042,10 @@ export async function handleStudioWriteRoutes(
     try {
       const id = decodeURIComponent(projectMatch[1]);
 
-      // 1. Validate id before any fs operation
-      if (!SLUG_RE.test(id)) {
-        sendJson(res, 400, { error: 'invalid project id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+      // 1. Validate id before any fs operation (W7-A4: the case-preserving
+      //    directory name, matched exactly — PROJECT_ID_RE)
+      if (!PROJECT_ID_RE.test(id)) {
+        sendJson(res, 400, { error: `invalid project id — must match ${PROJECT_ID_RE}` }, origin);
         return true;
       }
 
@@ -1174,6 +1184,11 @@ export async function handleStudioWriteRoutes(
       // 1. Slug-guard before any fs path construction (blocks path traversal)
       if (!SLUG_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid flow id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+        return true;
+      }
+      // W7-A4 (crosscut-20): `new` is the /flows/new builder segment, never a flow.
+      if (isReservedId(id)) {
+        sendJson(res, 400, { error: `flow id "${id}" is reserved (the /flows/new builder lives at that path) — choose another id` }, origin);
         return true;
       }
 

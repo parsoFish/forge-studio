@@ -57,7 +57,8 @@ import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
+import { projectKbBindings } from './kb-sites.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '../orchestrator/config.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
@@ -323,6 +324,12 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // `forge studio lint` warns about the missing contract file separately).
   const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const discovered = discoverProjects(projectsDir, forgeRoot);
+  // W7-A4 (projects-34): a project's KB is DERIVED from the KB whose
+  // `binding: { kind: project, ref: <id> }` names it — the descriptor is the
+  // source of truth; nothing is stored back. Exact-match on the case-preserving
+  // id (`trafficGame` ↔ `trafficGame`). An explicit project.json `kb` (an
+  // operator rebind) still wins below.
+  const kbBoundToProject = projectKbBindings(forgeRoot);
 
   return discovered.map((ref) => {
     const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path, provenance: PROJECT_PROVENANCE };
@@ -353,6 +360,8 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
     // Locked-demo state (read regardless of project.json) — the demo-builder lock.
     result.hasLockedDemo =
       guardedFile(projectsDir, [dirName, '.forge', 'demo', 'demo.lock.json'], 'read') !== null;
+    const derivedKb = kbBoundToProject.get(ref.id);
+    if (derivedKb !== undefined) result.kb = derivedKb;
     if (!ref.hasConfig) return result;
     const projectJsonRaw = guardedReadFile(projectsDir, [dirName, '.forge', 'project.json']);
     if (projectJsonRaw === null) return result; // absent, unreadable, or containment-refused
@@ -360,7 +369,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
-      if (typeof raw.kb === 'string') result.kb = raw.kb;
+      if (typeof raw.kb === 'string') result.kb = raw.kb; // explicit rebind wins over the derived binding
       // Only fall back to the legacy project.json `instructions` field when no
       // agent-instruction file exists (the agent file always wins — single source).
       if (!agentFile && typeof raw.instructions === 'string') {
@@ -866,7 +875,7 @@ export async function handleStudioRoutes(
   if (preflightMatch) {
     try {
       const id = decodeURIComponent(preflightMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -910,7 +919,7 @@ export async function handleStudioRoutes(
   if (repoStatusMatch) {
     try {
       const id = decodeURIComponent(repoStatusMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -944,7 +953,7 @@ export async function handleStudioRoutes(
   if (roadmapMatch) {
     try {
       const id = decodeURIComponent(roadmapMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -967,7 +976,7 @@ export async function handleStudioRoutes(
   if (contractStagesMatch) {
     try {
       const id = decodeURIComponent(contractStagesMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }

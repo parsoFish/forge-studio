@@ -66,7 +66,7 @@ import {
   pathOnly,
   parseQuery,
 } from './bridge-studio.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import {
   handleStudioKbRoutes,
   loadKbDescriptors,
@@ -2409,8 +2409,10 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
 const SAFE_AGENT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 /** Project dir name: real projects carry uppercase / `_` (e.g. `trafficGame`,
  *  `terraform-provider-betterado`), so this is broader than a slug — but still
- *  no `.`/`/` (traversal) and no leading `-` (flag shape). */
-const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+ *  no `.`/`/` (traversal) and no leading `-` (flag shape). W7-A4: this IS the
+ *  one project-id rule (`PROJECT_ID_RE`, orchestrator/studio/validate.ts) —
+ *  aliased here so the existing call site reads unchanged. */
+const SAFE_PROJECT_NAME_RE = PROJECT_ID_RE;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 /** R6-04-F2 WI-1 contract point 3 — a `materials:` upload's `filename` must
@@ -2594,7 +2596,7 @@ const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
  *  ever runs; that choke point only proves containment relative to whatever
  *  `sessionDir` it is handed, so an escaping caller-supplied dir defeats it
  *  entirely (reproduced live: AT-36). */
-const MAX_GENERATION_PROJECT_LENGTH = MAX_SKILL_ID_LENGTH;
+const MAX_GENERATION_PROJECT_LENGTH = MAX_EXACT_ID_LENGTH;
 const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
 /** R4-21 (T3) — the authoring session's initial free-text description
@@ -2608,8 +2610,9 @@ function invalidGenerationProjectReason(id: string): string | null {
   if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
     return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_PROJECT_LENGTH}-character length limit`;
   }
-  if (!SLUG_RE.test(id)) {
-    return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;
+  // W7-A4: the ONE project-id rule (case-preserving directory name, exact).
+  if (!PROJECT_ID_RE.test(id)) {
+    return `invalid project "${id}" — must match ${PROJECT_ID_RE} (the project's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
   }
   return null;
 }
@@ -4717,7 +4720,7 @@ async function handleDemoBuilder(
   if (method === 'POST' && kbCleanupStartMatch) {
     try {
       const kbId = decodeURIComponent(kbCleanupStartMatch[1]);
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }

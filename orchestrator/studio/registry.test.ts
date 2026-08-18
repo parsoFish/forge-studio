@@ -1822,13 +1822,14 @@ describe('discoverProjects', () => {
     assert.equal(found[0].hasConfig, false);
   });
 
-  it('slugifies a mixed-case dir name to a SLUG_RE id', () => {
+  it('publishes a mixed-case dir name VERBATIM as the id (W7-A4 — the id IS the directory name) and skips an un-routable dir name', () => {
     const forgeRoot = join(tmpDir, 'disc-slug');
     mkdirSync(join(forgeRoot, 'projects', 'trafficGame'), { recursive: true });
+    mkdirSync(join(forgeRoot, 'projects', 'not a project'), { recursive: true });
 
     const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
     assert.equal(found.length, 1);
-    assert.equal(found[0].id, 'trafficgame');
+    assert.equal(found[0].id, 'trafficGame');
     assert.equal(found[0].path, 'projects/trafficGame');
   });
 

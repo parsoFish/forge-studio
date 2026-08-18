@@ -39,7 +39,7 @@ import {
 import { skillPath, skillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { stageSkillPackage } from './skill-staging.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, isReservedId } from '../orchestrator/studio/validate.ts';
 import { isStudioAgent } from '../orchestrator/studio/registry.ts';
 import {
   listSkillLibrary,
@@ -135,6 +135,8 @@ export async function handleStudioSkillsRoutes(
       const slug = (typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name)
         .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
+      // W7-A4 (crosscut-20): `new` is the /skills/new builder segment, never a skill.
+      if (isReservedId(slug)) { sendJson(res, 400, { error: `skill id "${slug}" is reserved (the /skills/new builder lives at that path) — choose another name` }, origin); return true; }
 
       // Guard through the shared containment guard (cli/studio-path-guard.ts
       // — 2026-08-06, this route's own BLOCKER: the prior lexical

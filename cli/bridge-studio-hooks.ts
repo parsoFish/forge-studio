@@ -69,7 +69,7 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
-import { assertSkillSlug } from '../orchestrator/skill-path.ts';
+import { assertSkillSlug, isReservedId } from '../orchestrator/skill-path.ts';
 import {
   hookDir,
   hooksDir,
@@ -285,6 +285,11 @@ export async function handleStudioHooksRoutes(
         hookDir(slug, ctx.forgeRoot);
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return true;
+      }
+      // W7-A4 (crosscut-20): `new` is the /hooks/new builder segment, never a hook.
+      if (isReservedId(slug)) {
+        sendJson(res, 400, { error: `hook id "${slug}" is reserved (the /hooks/new builder lives at that path) — choose another name` }, origin);
         return true;
       }
 

@@ -593,11 +593,12 @@ test('KBs present but none declaring binding.kind=unique → kb:none unique-bind
 // checkout). This test bypasses that scan-depth gap and asserts each real
 // descriptor directly: it must load and carry exactly the migrated binding.
 //
-// trafficGame is a pre-existing (not R1-01-introduced) exception: its id is
-// mixed-case and so fails the `slug` check in validateKb — the brief is
-// explicit that this id must be kept verbatim, not renamed, as part of this
-// migration. So trafficGame is asserted to produce exactly that one known
-// `slug` finding; the other 5 descriptors must lint fully clean.
+// trafficGame's mixed-case id used to be the ONE known `slug` finding here
+// (SLUG_RE was lowercase-only while the id had to stay verbatim). W7-A4
+// (finding knowledge-03, bead forge-9bd) made the id rule case-preserving
+// (KB_ID_RE) — a listed id must be routable — so all 6 descriptors now lint
+// fully clean; a reappearing `slug` finding on trafficGame would mean the
+// roster/route disagreement is back.
 // ---------------------------------------------------------------------------
 
 test('all 6 real brain kb.yaml descriptors load with the migrated binding contract and lint clean', () => {
@@ -605,19 +606,10 @@ test('all 6 real brain kb.yaml descriptors load with the migrated binding contra
     { path: join(process.cwd(), 'brain', 'forge-dev', 'kb.yaml'), binding: { kind: 'unique' } },
     { path: join(process.cwd(), 'brain', 'cycles', 'kb.yaml'), binding: { kind: 'flow', ref: 'forge-develop' } },
     {
-      // Pre-existing mixed-case id (violates SLUG_RE) — the brief mandates
-      // keeping `trafficGame` verbatim, so this one descriptor is expected
-      // to carry exactly its known `slug` lint error, not a clean result.
+      // Mixed-case id, kept verbatim — clean under the case-preserving
+      // KB_ID_RE (W7-A4).
       path: join(process.cwd(), 'brain', 'projects', 'trafficGame', 'kb.yaml'),
       binding: { kind: 'project', ref: 'trafficGame' },
-      expectedFindings: [
-        {
-          check: 'slug',
-          level: 'error',
-          message: 'KB id "trafficGame" does not match /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/',
-          object: 'kb:trafficGame',
-        },
-      ],
     },
     {
       path: join(process.cwd(), 'brain', 'projects', 'mdtoc', 'kb.yaml'),

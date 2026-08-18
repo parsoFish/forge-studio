@@ -31,7 +31,8 @@ import matter from 'gray-matter';
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
 import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
+import { kbSites } from './kb-sites.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
@@ -865,9 +866,6 @@ function newProjectBrainSessionId(): string {
  * about when or how it runs).
  */
 export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
-  const brainRoot = join(resolve(forgeRoot), 'brain');
-  if (!existsSync(brainRoot)) return [];
-
   const result: KbWithCounts[] = [];
 
   // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
@@ -883,6 +881,11 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
     if (!yamlGuard.ok || !yamlGuard.exists) return;
     try {
       const kb = loadKbDescriptor(yamlGuard.realPath);
+      // W7-A4 (knowledge-03): a listed id MUST be routable. Every per-KB route
+      // resolves `kbId` → `brain/**/<kbId>/`, so a descriptor whose id is not
+      // its directory name, or fails the id rule, is skipped here rather than
+      // listed as a KB no route will ever accept.
+      if (kb.id !== name || !KB_ID_RE.test(kb.id)) return;
       // Each layer path is independently guarded — a real kb.yaml is no
       // warrant for a symlinked `themes/` or `_raw/` beside it.
       const layer = (tail: string): string | null => {
@@ -906,14 +909,13 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
     }
   };
 
-  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
-  // own, so it is naturally skipped here).
-  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
-  // a SECOND containment root and gets the identical treatment — a fix that
-  // hardens only the primary root leaves the fallback wide open.
-  const projectsRoot = join(brainRoot, 'projects');
-  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
+  // Both containment roots — brain/<id>/kb.yaml and brain/projects/<id>/kb.yaml
+  // (ADR 035) — come from the ONE enumeration in cli/kb-sites.ts, shared with
+  // the project roster's derived `kb` field (W7-A4), so the KB roster and the
+  // project↔KB pairing can never see different descriptors. Each site gets
+  // the identical guarded treatment — a fix that hardens only the primary
+  // root leaves the fallback wide open.
+  for (const { base, name } of kbSites(forgeRoot)) pushFrom(base, name);
 
   return result;
 }
@@ -1024,7 +1026,7 @@ export async function handleStudioKbRoutes(
 
       // Slug-guard both ids (SLUG_RE covers typical slugs; nodeIds may have
       // 'raw:' prefix — use a slightly broader guard for nodeId).
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
@@ -1074,7 +1076,7 @@ export async function handleStudioKbRoutes(
       const kbId = decodeURIComponent(kbGetMatch[1]);
 
       // Slug-guard before any fs operation
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
@@ -1142,8 +1144,12 @@ export async function handleStudioKbRoutes(
         sendJson(res, 400, { error: 'id is required' }, origin);
         return true;
       }
-      if (!SLUG_RE.test(id)) {
-        sendJson(res, 400, { error: 'invalid kb id — must match [a-z][a-z0-9]*(-[a-z0-9]+)*' }, origin);
+      if (!KB_ID_RE.test(id)) {
+        sendJson(res, 400, { error: `invalid kb id — must match ${KB_ID_RE} (one path segment, case-preserving)` }, origin);
+        return true;
+      }
+      if (isReservedId(id)) {
+        sendJson(res, 400, { error: `kb id "${id}" is reserved (the /knowledge/new builder lives at that path) — choose another id` }, origin);
         return true;
       }
 
@@ -1312,7 +1318,7 @@ export async function handleStudioKbRoutes(
   if (kbDeleteMatch && method === 'DELETE') {
     try {
       const id = decodeURIComponent(kbDeleteMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!KB_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
@@ -1348,7 +1354,7 @@ export async function handleStudioKbRoutes(
       const kbId = decodeURIComponent(guidanceMatch[1]);
 
       // 1. Slug-guard kbId before any fs operation (blocks path traversal)
-      if (!SLUG_RE.test(kbId)) {
+      if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
@@ -1503,7 +1509,7 @@ export async function handleStudioKbRoutes(
   const consolidateActiveMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/consolidate\/active$/);
   if (consolidateActiveMatch && method === 'GET') {
     const kbId = decodeURIComponent(consolidateActiveMatch[1]);
-    if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+    if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
     const prefix = `_brainfix-${kbId}-consolidate-`;
     const runIds = subDirs(join(ctx.forgeRoot, '_logs'))
       .filter((d) => d.startsWith(prefix))
@@ -1530,7 +1536,7 @@ export async function handleStudioKbRoutes(
   if (ingestActivityMatch && method === 'GET') {
     try {
       const kbId = decodeURIComponent(ingestActivityMatch[1]);
-      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+      if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
 
       const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
       for (const cycleId of listCycles(ctx.logsRoot)) {
@@ -1563,7 +1569,7 @@ export async function handleStudioKbRoutes(
   if (maintMatch && method === 'POST') {
     try {
       const kbId = decodeURIComponent(maintMatch[1]);
-      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+      if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
       let body: unknown;
       try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const op = (body as Record<string, unknown>)?.['op'];

@@ -1701,9 +1701,9 @@ describe('validateFlow — trigger-shape', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateKb — slug', () => {
-  it('id failing SLUG_RE → error slug', () => {
+  it('id failing KB_ID_RE → error slug (W7-A4: "Cycles_KB" is legal; a path-shaped id is not)', () => {
     const kb: KbDescriptor = {
-      id: 'Cycles_KB',
+      id: 'cycles/../kb',
       name: 'Cycles',
       binding: { kind: 'flow', ref: 'forge-develop' },
       desc: 'Patterns.',
@@ -1713,7 +1713,7 @@ describe('validateKb — slug', () => {
     const f = findings.find((x) => x.check === 'slug');
     assert.ok(f, 'expected slug finding');
     assert.equal(f.level, 'error');
-    assert.ok(f.message.includes('Cycles_KB'));
+    assert.ok(f.message.includes('cycles/../kb'));
   });
 
   it('valid kb → no findings', () => {
@@ -1883,14 +1883,15 @@ describe('validateDiscoveredProjects — unique-ids', () => {
 });
 
 describe('validateDiscoveredProjects — slug', () => {
-  it('id failing SLUG_RE → error slug', () => {
+  it('id failing PROJECT_ID_RE → error slug (W7-A4: mixed case/underscore are legal; path/space shapes are not)', () => {
     const findings = validateDiscoveredProjects([
-      { id: 'My_Project', path: 'projects/my', hasConfig: true },
+      { id: 'my project', path: 'projects/my', hasConfig: true },
     ]);
     const f = findings.find((x) => x.check === 'slug');
     assert.ok(f, 'expected slug finding');
     assert.equal(f.level, 'error');
-    assert.ok(f.message.includes('My_Project'));
+    assert.ok(f.message.includes('my project'));
+    assert.ok(!validateDiscoveredProjects([{ id: 'My_Project', path: 'projects/My_Project', hasConfig: true }]).some((x) => x.check === 'slug'));
   });
 
   it('clean, configured projects → no findings', () => {
@@ -1935,12 +1936,13 @@ function makeProject(overrides: Partial<ProjectDefinition> = {}): ProjectDefinit
 }
 
 describe('validateProject — slug', () => {
-  it('id not matching SLUG_RE → error slug', () => {
-    const findings = validateProject(makeProject({ id: 'My_Project' }));
+  it('id not matching PROJECT_ID_RE → error slug (W7-A4: "My_Project" is legal; "../x" is not)', () => {
+    const findings = validateProject(makeProject({ id: '../x' }));
     const f = findings.find((x) => x.check === 'slug');
     assert.ok(f, 'expected slug finding');
     assert.equal(f.level, 'error');
-    assert.ok(f.message.includes('My_Project'));
+    assert.ok(f.message.includes('../x'));
+    assert.ok(!validateProject(makeProject({ id: 'My_Project' })).some((x) => x.check === 'slug'));
   });
 
   it('valid id → no slug finding', () => {

@@ -102,7 +102,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, type StudioContext } from './bridge-studio.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -129,7 +129,7 @@ const STATUS_FILENAME = 'status.json';
  *  (or, worse, a resource-exhaustion vector) instead of an actionable 400. No
  *  real session id or project slug is remotely close to this length. */
 const MAX_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
-const MAX_PROJECT_ID_LENGTH = MAX_SKILL_ID_LENGTH;
+const MAX_PROJECT_ID_LENGTH = MAX_EXACT_ID_LENGTH;
 
 const SESSION_ROUTE_RE = /^\/api\/studio\/sessions\/([^/]+)\/([^/]+)$/;
 
@@ -232,8 +232,10 @@ export function invalidProjectReason(id: string): string | null {
   if (id === COMMUNITY_REFRESH_PROJECT_ANCHOR) {
     return null;
   }
-  if (!SLUG_RE.test(id)) {
-    return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;
+  // W7-A4 (forge-9bd): the project id IS the directory name — case-preserving,
+  // matched exactly (`trafficGame` is valid; `../x`, `a/b`, `.hidden` are not).
+  if (!PROJECT_ID_RE.test(id)) {
+    return `invalid project "${id}" — must match ${PROJECT_ID_RE} (the project's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
   }
   return null;
 }

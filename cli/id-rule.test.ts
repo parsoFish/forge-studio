@@ -43,7 +43,7 @@ let closeBridge: () => Promise<void>;
 const PROJECT_JSON = JSON.stringify({
   name: 'trafficGame',
   northStar: 'A traffic game.',
-  quality_gate_cmd: ['npm', 'test'],
+  testProcess: { local: { cmd: ['npm', 'test'] } },
 }, null, 2);
 
 before(async () => {
