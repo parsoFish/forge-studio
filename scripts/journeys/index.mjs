@@ -263,6 +263,7 @@ export const RUN_ORDER = [
   ['templates', 'templates-search'],
   ['templates', 'templates-detail-planning'],
   ['templates', 'templates-detail-scaffold'],
+  ['templates', 'templates-not-found'],
 
   ['connections', 'connections-library'],
   ['connections', 'connections-detail-tool'],
