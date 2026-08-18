@@ -6,6 +6,7 @@ import type { SessionIndexRow } from '@/lib/studio-client';
 import { StudioPage } from '@/components/StudioPage';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
+import { FetchErrorState } from '@/components/FetchErrorState';
 
 // ---------------------------------------------------------------------------
 // SessionsIndexBody — the /sessions in-flight index (W6-B11).
@@ -67,10 +68,14 @@ function stateTone(state: SessionIndexRow['state']): string {
   }
 }
 
+export type SessionsIndexFetchError = { message: string; status?: number };
+
 export function SessionsIndexBody({
   sessions,
   ready,
   onCancelled,
+  error = null,
+  onRetry,
 }: {
   sessions: SessionIndexRow[];
   ready: boolean;
@@ -78,22 +83,35 @@ export function SessionsIndexBody({
    *  refetches; this component stays props-driven and never re-derives a
    *  row's state itself. */
   onCancelled?: (row: SessionIndexRow) => void;
+  /** W7-A1 (home-sessions-29): the last fetch's failure — renders the shared
+   *  failure state INSTEAD of the "No sessions in flight" zero-state. */
+  error?: SessionsIndexFetchError | null;
+  onRetry?: () => void;
 }) {
   // Honest zero-state: only once the first fetch has actually settled
-  // (`ready`) AND the set is genuinely empty — an in-flight fetch must never
-  // flash a false "no sessions" before real data arrives.
-  const isEmpty = ready && sessions.length === 0;
+  // (`ready`) AND the set is genuinely empty AND the fetch did not fail — an
+  // in-flight fetch must never flash a false "no sessions" before real data
+  // arrives, and a FAILED fetch must never claim "nothing is waiting on you".
+  const isEmpty = ready && !error && sessions.length === 0;
 
   return (
     <StudioPage
       dataPage="sessions-index"
       ready={ready}
-      data={{ 'data-session-count': sessions.length }}
+      data={{
+        'data-session-count': sessions.length,
+        'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
+      }}
       eyebrow="forge studio"
       title="Sessions"
       lede="Every in-flight interactive session, across kinds and projects. Sorted needs-you first, then last-updated. Terminal sessions are not listed here — they live on their artifacts."
     >
-      {isEmpty ? (
+      {error ? (
+        <div style={{ marginBottom: sessions.length > 0 ? 18 : 0 }}>
+          <FetchErrorState what="sessions" error={error.message} status={error.status} onRetry={onRetry} />
+        </div>
+      ) : null}
+      {error && sessions.length === 0 ? null : isEmpty ? (
         <section
           data-section="sessions-empty"
           aria-label="No sessions in flight"

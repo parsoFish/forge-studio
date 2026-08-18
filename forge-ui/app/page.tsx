@@ -6,6 +6,7 @@ import { useStudioHomeData } from '@/lib/use-studio-home-data';
 import { fetchRecentAgentRuns } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -64,7 +65,7 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const { agents, flows, projects, kbs, runs, attention, sessions, ready, refreshSessions } = useStudioHomeData();
+  const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
 
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
@@ -124,6 +125,9 @@ export default function HomePage() {
         'data-live-count': liveCount,
         'data-attention-count': attentionItems.length,
         'data-hex-count': constellation.length,
+        // W7-A1: loading | ok | error — an outage is an honest ERROR state,
+        // never the first-run empty fleet (home-sessions-30 / crosscut-01).
+        'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
       }}
       eyebrow="forge studio"
       title="Everything running, at a glance"
@@ -145,6 +149,20 @@ export default function HomePage() {
         </>
       }
     >
+      {/* ===== W7-A1: BRIDGE READ FAILED — the shared failure state renders
+          FIRST (never the "Nothing registered yet" fleet-is-empty screen).
+          If an earlier read succeeded in this tab, that last-known snapshot
+          stays visible UNDER the failure box (it is real data, just not
+          fresh); with nothing ever loaded, the box is the whole body. Retry
+          re-runs the hook's load; a bridge recovery does the same
+          automatically (useBridgeRecovery inside the hook). ===== */}
+      {error ? (
+        <div style={{ marginBottom: 24 }}>
+          <FetchErrorState what="the fleet" error={error.message} status={error.status} onRetry={reload} />
+        </div>
+      ) : null}
+      {error && constellation.length === 0 ? null : (
+      <>
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
           (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip
           (review fix) so its data-* contract gets a renderToStaticMarkup
@@ -304,6 +322,8 @@ export default function HomePage() {
         </h2>
         <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
       </section>
+      </>
+      )}
     </StudioPage>
   );
 }

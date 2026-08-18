@@ -48,18 +48,28 @@ export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
  *  of an actionable validation message naming the actual limit. */
 export const MAX_SKILL_ID_LENGTH = 100;
 
+/** The slug rule as PLAIN PROSE + the bare pattern source (no leading `/`):
+ *  `sanitizeError` (cli/bridge-studio.ts) redacts every `/…` token from
+ *  bridge error strings, and a RegExp literal's own `/^…$/` was being eaten
+ *  into `[path]:-[a-z0-9]+)*$/` on the wire (walkthrough library-13). */
+export const SLUG_RULE_TEXT = `a single lowercase-kebab path segment matching ${SLUG_RE.source} (lowercase letters, digits and hyphens); no "/", "\\", ".", or ".."`;
+
 /** Reject any `name` that is not a bare slug component — no `/`, `\`, `.`,
  *  `..`, or empty string can ever reach a path join past this point — and no
- *  id longer than `MAX_SKILL_ID_LENGTH` characters. */
-export function assertSkillSlug(name: string): void {
+ *  id longer than `MAX_SKILL_ID_LENGTH` characters. `noun` names the object
+ *  kind in the message (skill / hook / connection / community item) — the
+ *  same rule guards every file-package id, so the caller supplies the word
+ *  the operator will read (library-13: a hooks route used to say "invalid
+ *  skill id"). Additive-optional (ADR 042: disclose-not-park). */
+export function assertSkillSlug(name: string, noun: string = 'skill'): void {
   if (name.length > MAX_SKILL_ID_LENGTH) {
     throw new Error(
-      `invalid skill id "${name.slice(0, 40)}…" — ${name.length} characters exceeds the ${MAX_SKILL_ID_LENGTH}-character length limit for a skill id`,
+      `invalid ${noun} id "${name.slice(0, 40)}…" — ${name.length} characters exceeds the ${MAX_SKILL_ID_LENGTH}-character length limit for a ${noun} id`,
     );
   }
   if (!SLUG_RE.test(name)) {
     throw new Error(
-      `invalid skill id "${name}" — must match ${SLUG_RE} (a single lowercase-kebab path segment; no "/", "\\", ".", or "..")`,
+      `invalid ${noun} id "${name}" — must be ${SLUG_RULE_TEXT}`,
     );
   }
 }

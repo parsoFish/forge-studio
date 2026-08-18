@@ -17,6 +17,12 @@
  * for every live cycle.
  */
 import { DEFAULT_BRIDGE_PORT } from './bridge-port.ts';
+import {
+  readBridgeJson,
+  unwrapBridgeRead,
+  unwrapBridgeReadOr404,
+  type BridgeReadResult,
+} from './bridge-result.ts';
 
 export type Cycle = {
   cycleId: string;
@@ -161,49 +167,114 @@ function clearBridgeCache(): void {
 }
 
 // ---- fetch envelopes -----------------------------------------------------
-// Every read/write helper below shares one of these two shapes. Keeping the
-// envelope in one place means the "no bridge → fallback", "non-ok → fallback",
-// and "throw → fallback" semantics can't drift between endpoints.
+// Every read/write helper below shares one of these shapes. W7-A1
+// (home-sessions-V01 / crosscut-01): reads NEVER resolve with a caller-
+// supplied empty fallback any more — `bridgeRead` returns an explicit
+// `BridgeReadResult` and the typed helpers THROW `BridgeReadError` (or map a
+// 404 to `null` where "no such object" is a real answer). Writes keep the
+// `{ok, error}` envelope, with the bridge's own `error`/`message` verbatim.
 
-// W6-P4: one-shot correction gate for `bridgeFetch`. Set the first time ANY
-// bridge call's raw `fetch()` throws (a network-level failure — nothing is
+// W6-P4: one-shot correction gate for `bridgeFetch`. Set when a bridge
+// call's raw `fetch()` throws (a network-level failure — nothing is
 // listening at the guessed URL, e.g. a `--bridge-port` override moved the
-// bridge off the fixed-port default) — never re-armed, so a since-broken
-// bridge doesn't retry-storm `/api/forge-config` on every later failure.
+// bridge off the fixed-port default). W7-A1 (crosscut-22/-26): RE-ARMED by
+// any bridge call whose fetch RESOLVES (regardless of status) — so a bridge
+// that later restarts on a different port is re-discovered again, while a
+// since-broken bridge still can't retry-storm `/api/forge-config` (the gate
+// only re-arms on a real success, and each failure spends it once).
 let correctionAttempted = false;
 
 /**
- * `fetch(base + path, init)` against the CURRENTLY resolved bridge URL, with
- * the W6-P4 one-shot correction: if the very first real bridge fetch this
- * tab makes THROWS (connection refused / DNS failure — not a normal
- * non-ok status, which is left entirely to the caller), invalidate the
- * cached URL, re-resolve via the authoritative route, and retry exactly
- * once against the corrected URL.
+ * W7-A1: listeners told when a bridge fetch THROWS (transport-level — the
+ * bridge was never reached). The bridge-status store (lib/bridge-status.ts)
+ * registers here so a page's failed read triggers an immediate health probe
+ * instead of waiting for the WS reconnect loop. A registry (not a direct
+ * import) keeps this module free of any import back into the store.
  */
-async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
-  const base = await resolveBridgeUrl();
-  if (!base) throw new Error('no bridge configured');
-  try {
-    return await fetch(`${base}${path}`, init);
-  } catch (err) {
-    if (correctionAttempted) throw err;
-    correctionAttempted = true;
-    clearBridgeCache();
-    const corrected = await resolveBridgeUrl();
-    if (!corrected || corrected === base) throw err; // nothing to gain from retrying
-    return fetch(`${corrected}${path}`, init);
+type TransportFailureListener = (error: string) => void;
+const transportFailureListeners = new Set<TransportFailureListener>();
+
+export function onBridgeTransportFailure(listener: TransportFailureListener): () => void {
+  transportFailureListeners.add(listener);
+  return () => { transportFailureListeners.delete(listener); };
+}
+
+function notifyTransportFailure(err: unknown): void {
+  const text = err instanceof Error ? err.message : String(err);
+  for (const l of transportFailureListeners) {
+    try { l(text); } catch { /* a listener must never break a fetch */ }
   }
 }
 
-/** GET a bridge JSON endpoint; returns `fallback` on no-bridge / non-ok / throw. */
-async function bridgeGet<T>(path: string, fallback: T): Promise<T> {
+/**
+ * `fetch(base + path, init)` against the CURRENTLY resolved bridge URL, with
+ * the W6-P4 one-shot correction: if a real bridge fetch THROWS (connection
+ * refused / DNS failure — not a normal non-ok status, which is left entirely
+ * to the caller) and the correction is armed, invalidate the cached URL,
+ * re-resolve via the authoritative route, and retry exactly once against
+ * the corrected URL. Exported (W7-A1, crosscut-26) so `studio-client.ts`
+ * rides the SAME transport — one URL resolution + correction policy for
+ * every bridge call in Studio, not two.
+ */
+export async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
+  const base = await resolveBridgeUrl();
+  if (!base) throw new Error('no bridge configured');
   try {
-    const res = await bridgeFetch(path);
-    if (!res.ok) return fallback;
-    return (await res.json()) as T;
-  } catch {
-    return fallback;
+    const res = await fetch(`${base}${path}`, init);
+    correctionAttempted = false; // reached the bridge — re-arm for a future move
+    return res;
+  } catch (err) {
+    if (correctionAttempted) { notifyTransportFailure(err); throw err; }
+    correctionAttempted = true;
+    clearBridgeCache();
+    const corrected = await resolveBridgeUrl();
+    if (!corrected || corrected === base) { notifyTransportFailure(err); throw err; } // nothing to gain from retrying
+    try {
+      const res = await fetch(`${corrected}${path}`, init);
+      correctionAttempted = false;
+      return res;
+    } catch (err2) {
+      notifyTransportFailure(err2);
+      throw err2;
+    }
   }
+}
+
+/**
+ * W7-A1 — GET a bridge JSON endpoint as an explicit result. NEVER resolves
+ * with a caller-supplied fallback: `{ok:false,status,error}` when the bridge
+ * refused, `{ok:false,error}` (no status) when it was never reached. The
+ * classification itself lives in `./bridge-result.ts` (shared with
+ * studio-client.ts).
+ */
+export async function bridgeRead<T>(path: string): Promise<BridgeReadResult<T>> {
+  return readBridgeJson<T>(() => bridgeFetch(path));
+}
+
+/** GET as a value; THROWS `BridgeReadError` on any failure — a caller with a
+ *  plain `Promise<T>` signature receives no value it could mistake for empty. */
+async function bridgeReadOrThrow<T>(path: string): Promise<T> {
+  return unwrapBridgeRead(path, await bridgeRead<T>(path));
+}
+
+/** GET as a value where a 404 is a real answer (→ null); every other failure
+ *  throws `BridgeReadError`. */
+async function bridgeReadOr404<T>(path: string): Promise<T | null> {
+  return unwrapBridgeReadOr404(path, await bridgeRead<T>(path));
+}
+
+/**
+ * W7-A1 — the bridge-status store's health probe: `GET /api/health` must
+ * answer 2xx with the forge bridge identity (`service: 'forge-bridge'`, the
+ * same identity `forge studio` itself probes before reusing a port —
+ * CLAUDE.md "Studio session workflow"). A foreign process on the port, a
+ * non-2xx, or a transport throw are all `ok:false` with the reason.
+ */
+export async function probeBridgeHealth(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const r = await bridgeRead<{ service?: unknown }>('/api/health');
+  if (!r.ok) return { ok: false, error: r.error };
+  if (r.data?.service !== 'forge-bridge') return { ok: false, error: 'port answered, but not by the forge bridge' };
+  return { ok: true };
 }
 
 /**
@@ -219,8 +290,8 @@ async function bridgePost(
     const res = await bridgeFetch(path, body === undefined
       ? { method: 'POST', headers: { 'x-forge-csrf': '1' } }
       : { method: 'POST', headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' }, body: JSON.stringify(body) });
-    const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}` };
     return { ok: !!data.ok, data };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -235,12 +306,15 @@ export async function fetchCycles(): Promise<CycleListSnapshot> {
   return res.json();
 }
 
+/** W7-A1: a 404 (no event log written yet — home-sessions-11, A2's bridge
+ *  fix) is the honest empty tail; every OTHER failure throws `BridgeReadError`
+ *  (the tail hook keeps its last snapshot; it never renders a failed read as
+ *  "no events"). */
 export async function fetchEvents(cycleId: string): Promise<EventLogEntry[]> {
-  const body = await bridgeGet<{ events: EventLogEntry[] }>(
+  const body = await bridgeReadOr404<{ events: EventLogEntry[] }>(
     `/api/events/${encodeURIComponent(cycleId)}`,
-    { events: [] },
   );
-  return body.events;
+  return body?.events ?? [];
 }
 
 // ---- Work-item definition (WI detail — /artifact viewer) -----------------
@@ -262,9 +336,8 @@ export type WorkItemDetail = {
  * null when the bridge is offline or the WI isn't found yet (pre-PM emission).
  */
 export async function fetchWorkItem(cycleId: string, wiId: string): Promise<WorkItemDetail | null> {
-  return bridgeGet<WorkItemDetail | null>(
+  return bridgeReadOr404<WorkItemDetail>(
     `/api/work-item/${encodeURIComponent(cycleId)}/${encodeURIComponent(wiId)}`,
-    null,
   );
 }
 
@@ -330,9 +403,8 @@ export type ProjectRoadmap = {
  * Returns null when the bridge is offline or the project is unknown.
  */
 export async function fetchRoadmap(projectId: string): Promise<ProjectRoadmap | null> {
-  const body = await bridgeGet<{ roadmap: ProjectRoadmap } | null>(
+  const body = await bridgeReadOr404<{ roadmap: ProjectRoadmap }>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/roadmap`,
-    null,
   );
   return body?.roadmap ?? null;
 }
@@ -358,13 +430,13 @@ export type ProjectAttentionItem = {
 
 /**
  * Fetch the cross-project attention aggregate (R4-11-F4) — one best-effort
- * entry per registered project — for the library landing strip. Returns `[]`
- * (never null) when the bridge is offline, so callers can render an empty
- * strip rather than special-case a missing fetch.
+ * entry per registered project — for Home's attention strip. W7-A1: THROWS
+ * `BridgeReadError` when the bridge is unreachable or refuses (it used to
+ * resolve `[]`, so an outage rendered as "nothing needs you" — crosscut-01).
  */
 export async function fetchProjectAttention(): Promise<ProjectAttentionItem[]> {
-  const body = await bridgeGet<{ attention: ProjectAttentionItem[] } | null>('/api/studio/projects/attention', null);
-  return body?.attention ?? [];
+  const body = await bridgeReadOrThrow<{ attention?: ProjectAttentionItem[] }>('/api/studio/projects/attention');
+  return body.attention ?? [];
 }
 
 export type CostSummary = {
@@ -375,7 +447,7 @@ export type CostSummary = {
 };
 
 export async function fetchCost(cycleId: string): Promise<CostSummary | null> {
-  return bridgeGet<CostSummary | null>(`/api/cost/${encodeURIComponent(cycleId)}`, null);
+  return bridgeReadOr404<CostSummary>(`/api/cost/${encodeURIComponent(cycleId)}`);
 }
 
 // ---- Recovery surface (DEC-6 — replaces forge review/requeue/abandon CLI) ----
@@ -397,7 +469,7 @@ export type RecoveryInspect = {
 
 /** Inspect a stuck cycle (read-only): worktree / branch / commits / diff / PR draft. */
 export async function fetchRecovery(initiativeId: string): Promise<RecoveryInspect | null> {
-  return bridgeGet<RecoveryInspect | null>(`/api/recovery/${encodeURIComponent(initiativeId)}`, null);
+  return bridgeReadOr404<RecoveryInspect>(`/api/recovery/${encodeURIComponent(initiativeId)}`);
 }
 
 /** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-demo). */
@@ -426,7 +498,7 @@ export type LivenessReport = {
 /** Fetch the daemon-stall liveness report (max heartbeat age across in-flight
  *  cycles vs the stall threshold). Returns null when the bridge is offline. */
 export async function fetchLiveness(): Promise<LivenessReport | null> {
-  return bridgeGet<LivenessReport | null>('/api/liveness', null);
+  return bridgeReadOr404<LivenessReport>('/api/liveness');
 }
 
 export type SchedulerStatus = {
@@ -436,7 +508,7 @@ export type SchedulerStatus = {
 };
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {
-  return bridgeGet<SchedulerStatus | null>('/api/scheduler/status', null);
+  return bridgeReadOr404<SchedulerStatus>('/api/scheduler/status');
 }
 
 export async function startScheduler(): Promise<{ ok: boolean; error?: string }> {
@@ -642,7 +714,7 @@ export type DemoModel = {
 /** Fetch the cycle's structured demo (mirrored into _logs/<cycle>/artifacts/
  *  by snapshotCycleArtefacts). Returns null when absent or unparseable. */
 export async function fetchDemoModel(cycleId: string): Promise<DemoModel | null> {
-  return bridgeGet<DemoModel | null>(`/api/artifact/${encodeURIComponent(cycleId)}/demo.json`, null);
+  return bridgeReadOr404<DemoModel>(`/api/artifact/${encodeURIComponent(cycleId)}/demo.json`);
 }
 
 // ---- Architect (ADR 020) -------------------------------------------------
@@ -696,10 +768,7 @@ export type ArchitectSessionSummary = {
 };
 
 export async function fetchArchitectSessions(): Promise<ArchitectSessionSummary[]> {
-  const body = await bridgeGet<{ sessions: ArchitectSessionSummary[] }>(
-    '/api/architect/sessions',
-    { sessions: [] },
-  );
+  const body = await bridgeReadOrThrow<{ sessions?: ArchitectSessionSummary[] }>('/api/architect/sessions');
   return body.sessions ?? [];
 }
 
@@ -786,10 +855,7 @@ export type InstructionsSessionSummary = {
 };
 
 export async function listInstructionsSessions(): Promise<InstructionsSessionSummary[]> {
-  const body = await bridgeGet<{ sessions: InstructionsSessionSummary[] }>(
-    '/api/instructions/sessions',
-    { sessions: [] },
-  );
+  const body = await bridgeReadOrThrow<{ sessions?: InstructionsSessionSummary[] }>('/api/instructions/sessions');
   return body.sessions ?? [];
 }
 
@@ -884,10 +950,7 @@ export function demoGenerationFileUrl(project: string, sessionId: string, genera
 }
 
 export async function listDemoSessions(): Promise<DemoSessionSummary[]> {
-  const body = await bridgeGet<{ sessions: DemoSessionSummary[] }>(
-    '/api/demo-builder/sessions',
-    { sessions: [] },
-  );
+  const body = await bridgeReadOrThrow<{ sessions?: DemoSessionSummary[] }>('/api/demo-builder/sessions');
   return body.sessions ?? [];
 }
 
@@ -903,9 +966,8 @@ export type DemoHistoryEntry = {
 
 /** List a project's previously-locked demos (snapshots under .forge/demo/history/). */
 export async function listDemoHistory(project: string): Promise<DemoHistoryEntry[]> {
-  const body = await bridgeGet<{ history: DemoHistoryEntry[] }>(
+  const body = await bridgeReadOrThrow<{ history?: DemoHistoryEntry[] }>(
     `/api/demo-builder/history/${encodeURIComponent(project)}`,
-    { history: [] },
   );
   return body.history ?? [];
 }
@@ -989,15 +1051,14 @@ export async function projectBrainAbandon(input: { project: string; sessionId: s
 
 /** Fetch all project-brain sessions. */
 export async function fetchProjectBrainSessions(): Promise<ProjectBrainSession[]> {
-  const body = await bridgeGet<{ sessions: ProjectBrainSession[] }>('/api/project-brain/sessions', { sessions: [] });
+  const body = await bridgeReadOrThrow<{ sessions?: ProjectBrainSession[] }>('/api/project-brain/sessions');
   return body.sessions ?? [];
 }
 
 /** Fetch the staged theme files for a session under review. */
 export async function fetchStagedThemes(project: string, sessionId: string): Promise<Array<{ name: string; content: string }>> {
-  const body = await bridgeGet<{ themes: Array<{ name: string; content: string }> }>(
+  const body = await bridgeReadOrThrow<{ themes?: Array<{ name: string; content: string }> }>(
     `/api/project-brain/themes/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}`,
-    { themes: [] },
   );
   return body.themes ?? [];
 }
@@ -1096,7 +1157,7 @@ export type DemoElementSummary = {
 
 /** List the forge demo-element library (skill-creating skills) for the composer palette. */
 export async function listDemoElements(): Promise<DemoElementSummary[]> {
-  const body = await bridgeGet<{ elements: DemoElementSummary[] }>('/api/studio/demo-elements', { elements: [] });
+  const body = await bridgeReadOrThrow<{ elements?: DemoElementSummary[] }>('/api/studio/demo-elements');
   return body.elements ?? [];
 }
 
@@ -1192,7 +1253,7 @@ export type ReflectionData = {
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {
-  return bridgeGet<ReflectionData | null>(`/api/reflect/${encodeURIComponent(cycleId)}`, null);
+  return bridgeReadOr404<ReflectionData>(`/api/reflect/${encodeURIComponent(cycleId)}`);
 }
 
 export async function postReflectionAnswers(input: {

@@ -110,3 +110,24 @@ test('the persistent "Onboard a project" CTA is present even with projects alrea
   expect(html).toContain('data-action="onboard-project-cta"');
   expect(html).toContain('href="/projects/new"');
 });
+
+// ---- W7-A1 (crosscut-01): a FAILED fetch renders the shared failure state, -
+// ---- never the "No projects yet" zero-state. -------------------------------
+
+test('W7-A1: error → data-fetch-status="error", [data-component="fetch-error"] + retry, and NO projects-empty section', () => {
+  const html = renderToStaticMarkup(React.createElement(ProjectsIndexBody, {
+    projects: [], kbs: [], ready: true, error: { message: 'bridge unreachable (Failed to fetch)' }, onRetry: () => {},
+  }));
+  expect(html).toContain('data-page="projects-index"');
+  expect(html).toContain('data-fetch-status="error"');
+  expect(html).toContain('data-component="fetch-error"');
+  expect(html).toContain('bridge unreachable (Failed to fetch)');
+  expect(html).toContain('data-action="retry-fetch"');
+  expect(html).not.toContain('data-section="projects-empty"');
+  expect(html).not.toContain('No projects yet');
+});
+
+test('W7-A1: data-fetch-status="loading" before the first fetch settles, "ok" once it settles without error', () => {
+  expect(renderToStaticMarkup(React.createElement(ProjectsIndexBody, { projects: [], kbs: [], ready: false }))).toContain('data-fetch-status="loading"');
+  expect(renderToStaticMarkup(React.createElement(ProjectsIndexBody, { projects: [], kbs: [], ready: true }))).toContain('data-fetch-status="ok"');
+});

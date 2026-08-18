@@ -30,9 +30,11 @@
  * see the second effect's `if (!ready) return;` guard below.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StudioNav } from '@/components/StudioNav';
 import { AgentsIndexView } from '@/components/studio/AgentsIndexView';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { fetchStudioAgents, type Agent } from '@/lib/studio-client';
 import { fetchRecentAgentRuns } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
@@ -42,19 +44,33 @@ export default function AgentsIndexPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [recentRunsReady, setRecentRunsReady] = useState(false);
   const [recentRuns, setRecentRuns] = useState<LedgerRow[]>([]);
+  // W7-A1 (crosscut-01/-22): a failed roster read is an ERROR state, never
+  // "No agents yet"; `loadKey` re-runs the load on Retry + bridge recovery.
+  const [error, setError] = useState<{ message: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
 
   // ---- roster fetch ----
   useEffect(() => {
     let cancelled = false;
     async function loadAgents() {
-      const a = await fetchStudioAgents();
-      if (cancelled) return;
-      setAgents(a);
-      setReady(true);
+      try {
+        const a = await fetchStudioAgents();
+        if (cancelled) return;
+        setAgents(a);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const { error: message, status } = fetchErrorPropsFrom(err);
+        setError(status !== undefined ? { message, status } : { message });
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     }
     void loadAgents();
     return () => { cancelled = true; };
-  }, []);
+  }, [loadKey]);
 
   // ---- recent-runs fetch — depends on the roster, so it waits for `ready` ----
   useEffect(() => {
@@ -83,6 +99,8 @@ export default function AgentsIndexPage() {
         recentRunsReady={recentRunsReady}
         recentRuns={recentRuns}
         nowMs={Date.now()}
+        error={error}
+        onRetry={reload}
       />
     </div>
   );
