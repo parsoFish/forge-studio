@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
+import { SchedulerCard } from '@/components/SchedulerCard';
 import {
   fetchStudioFlows,
   fetchRuns,
@@ -118,6 +119,12 @@ export default function FlowsIndexPage() {
             + New flow
           </Link>
         </div>
+
+        {/* W7-A3 (flows-01/23): the scheduler is what turns a queued run into
+            a running one — surface it where the runs are. */}
+        <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 20 }}>
+          <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
+        </section>
 
         {ready ? (
           <FlowsIndexBody flows={flows} runs={runs} projects={projects} />

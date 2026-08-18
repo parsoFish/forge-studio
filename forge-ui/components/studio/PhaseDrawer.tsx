@@ -236,6 +236,13 @@ function DrawerBody({
   // Effect 1 — identity: clear + fetch on identity change (new node / filter toggle)
   useEffect(() => {
     const signal = { cancelled: false };
+    // W7-A3 (flows-15): a node that never started has no log — don't fire a
+    // guaranteed-404 fetch (console error per hex click on a queued run).
+    if (status === 'pending') {
+      setLogLines([]);
+      setLogLoading(false);
+      return () => { signal.cancelled = true; };
+    }
     setLogLoading(true);
     setLogLines([]);
     void (async () => {
@@ -247,7 +254,7 @@ function DrawerBody({
       }
     })();
     return () => { signal.cancelled = true; };
-  }, [cycleId, nodeId, stderrOnly, isWi, wiId]);
+  }, [cycleId, nodeId, stderrOnly, isWi, wiId, status]);
 
   const lastProgressAt = meta?.lastProgressAt;
   // R6-01 WI-1 F1: the log-refresh effect keys off lastEventAt (via this

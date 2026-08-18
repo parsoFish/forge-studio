@@ -346,3 +346,15 @@ test('companion: a run with no trigger prop renders no run-trigger section', () 
   const html = render();
   expect(html).not.toContain('data-section="run-trigger"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-A3 (agents-11 / crosscut-05) — the loaded RunView carries the
+// data-page-ready flip every other Studio route honours (the shell's loading
+// branch renders "false"; RunView, which replaces it, used to drop the
+// attribute entirely).
+// ---------------------------------------------------------------------------
+
+test('W7-A3: RunView root carries data-page-ready="true" (found AND not-found)', () => {
+  expect(render()).toMatch(/data-page="agent-run"[^>]*data-page-ready="true"/);
+  expect(render({ found: false })).toMatch(/data-page="agent-run"[^>]*data-page-ready="true"/);
+});

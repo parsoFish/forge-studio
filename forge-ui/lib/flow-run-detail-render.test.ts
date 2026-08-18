@@ -456,3 +456,30 @@ test('an explicit CLEAN PASS renders as such, and is not confused with no review
   expect(clean).toContain('data-findings-count="0"');
   expect(absent).not.toContain('data-section="review-findings"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-A3 (crosscut-05 / crosscut-23 / flows-06 / home-sessions-17) — the run
+// page reaches data-page-ready and is no longer a dead end: a breadcrumb back
+// to the flow monitor, the run's artifacts, and (when known) its project.
+// ---------------------------------------------------------------------------
+
+test('W7-A3: main[data-page="flow-run"] carries data-page-ready="true" once resolved (found AND not-found)', () => {
+  expect(render()).toMatch(/<main[^>]*data-page="flow-run"[^>]*data-page-ready="true"/);
+  expect(render({ found: false, run: null, rows: [] })).toMatch(/<main[^>]*data-page="flow-run"[^>]*data-page-ready="true"/);
+});
+
+test('W7-A3: a found run renders the breadcrumb — back to its OWN flow monitor, its artifacts, and its project', () => {
+  const html = render({ run: archivedRun({ project: 'mdtoc' }) });
+  expect(html).toContain('data-section="run-breadcrumb"');
+  expect(html).toMatch(/<a[^>]*data-action="back-to-monitor"[^>]*href="\/flows\/forge-develop"/);
+  expect(html).toMatch(/<a[^>]*data-action="open-artifacts"[^>]*href="\/artifact\?run=2026-01-01T00-00-00_INIT-done-2&(amp;)?type=plan&(amp;)?mode=view"/);
+  expect(html).toMatch(/<a[^>]*data-action="open-project"[^>]*href="\/projects\/mdtoc"/);
+});
+
+test('W7-A3: no project on the run → no project link fabricated; not-found still links back to the flow', () => {
+  const html = render();
+  expect(html).not.toContain('data-action="open-project"');
+  const nf = render({ found: false, run: null, rows: [] });
+  expect(nf).toMatch(/<a[^>]*data-action="back-to-monitor"[^>]*href="\/flows\/forge-develop"/);
+  expect(nf).not.toContain('data-action="open-artifacts"');
+});
