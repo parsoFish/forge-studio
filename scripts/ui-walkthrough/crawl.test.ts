@@ -187,6 +187,11 @@ test('known-optional-404s allowlist moves ONLY matching 404s into `allowed`; oth
   // A 500 on an allowlisted path is still a failure — the list is a 404 allowlist.
   const c = crawlOf(row({ route: '/s', failed: [{ url: '[bridge]/api/artifact/x/demo.json', status: 500 }] }));
   assert.equal(collectFailures(c, opts).failures.length, 1);
+  // Patterns match the PATH: a cache-busting query on the same artifact is still allowed.
+  const q = crawlOf(row({ route: '/s', failed: [{ url: '[bridge]/api/artifact/x/demo.json?t=123', status: 404 }] }));
+  const rq = collectFailures(q, opts);
+  assert.equal(rq.failures.length, 0);
+  assert.equal(rq.allowed.length, 1);
 });
 
 // ── group 3/4: page errors + console errors ──────────────────────────────────
@@ -330,6 +335,11 @@ test('crawl.mjs --from <crawl.json> --assert: exits 1 on new failures, writes as
     assert.equal(r6.status, 2, `expected exit 2 (harness error) for 9 routes < 10\nstdout:${r6.stdout}\nstderr:${r6.stderr}`);
     assert.match(r6.stderr, /HARNESS ERROR/);
     assert.doesNotMatch(r6.stdout + r6.stderr, /\bPASS\b/, 'a starved crawl must never print PASS');
+    // …and must never WRITE a baseline (a starved --write-baseline would shrink the gate to a handful of entries).
+    const bl2 = join(tmp, 'starved-baseline.json');
+    const r7 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o7'), '--write-baseline', bl2, '--min-routes', '10', '--known-optional-404s', join(tmp, 'none.txt'), '--live-only-routes', join(tmp, 'none.txt')], HERE);
+    assert.equal(r7.status, 2, `starved --write-baseline must be a harness error\n${r7.stdout}\n${r7.stderr}`);
+    assert.equal(existsSync(bl2), false, 'no baseline written by a starved crawl');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

@@ -81,6 +81,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cheap and independent of the crawl — runs FIRST so a PR that grows the
+      # baseline is caught even if the boot/crawl below fails.
+      - name: Baseline may only shrink
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/${{ github.base_ref }}"
+
       - name: Install Playwright chromium
         run: npx playwright-core install --with-deps chromium
 
@@ -102,9 +110,3 @@ jobs:
             _walkthrough/ci/shots
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Baseline may only shrink
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/${{ github.base_ref }}"

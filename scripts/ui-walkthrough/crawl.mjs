@@ -20,11 +20,13 @@
 //   --boot            CI / idle host: spawn `forge studio` (dry-bridge +
 //                     no-spawn seams) on the fixed ports, crawl, tear it down.
 //                     Refuses if a healthy bridge is already there.
-//   --min-routes <n>  harness sanity floor: a live crawl that visits fewer
-//                     routes than this is a HARNESS failure (exit 2), never a
-//                     pass — default 40 (0 under --from). Together with the
-//                     bridge health precheck this stops "the bridge was down so
-//                     every page rendered its empty state" from reading green.
+//   --min-routes <n>  harness sanity floor: a crawl that visits fewer routes
+//                     than this is a HARNESS failure (exit 2) — no verdict, no
+//                     baseline written. Default 40 (1 under --only, 0 under
+//                     --from). Together with the bridge health precheck this
+//                     stops "the bridge was down so every page rendered its
+//                     empty state" from reading green (or from being written
+//                     into a baseline).
 //
 // Without --boot the crawl targets the ALREADY-RUNNING Studio (bridge :4123,
 // UI :4124 — override with FORGE_BRIDGE_URL / FORGE_UI_URL). It never starts,
@@ -49,7 +51,9 @@ const BOOT = flag('--boot');
 const FROM = opt('--from', null);
 const BASELINE_FILE = opt('--baseline', null);
 const WRITE_BASELINE = opt('--write-baseline', null);
-const MIN_ROUTES = Number(opt('--min-routes', FROM ? 0 : 40));
+// Harness floor default: 40 for a live full crawl; 1 under --only (a pillar can
+// be small — the floor then only guards "saw nothing"); 0 under --from.
+const MIN_ROUTES = Number(opt('--min-routes', FROM ? 0 : ONLY.length ? 1 : 40));
 const KNOWN_404S_FILE = opt('--known-optional-404s', resolve(HERE, 'known-optional-404s.txt'));
 const LIVE_ONLY_FILE = opt('--live-only-routes', resolve(HERE, 'live-only-routes.txt'));
 
@@ -198,13 +202,15 @@ function runAssertion(crawlJson) {
   });
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'assert.json'), JSON.stringify({ at: new Date().toISOString(), ui: crawlJson.ui, baseline: BASELINE_FILE, only: ONLY, ...report }, null, 1));
+  // The floor guards BOTH the verdict and the baseline write: a starved crawl
+  // must never overwrite baseline.json with a handful of entries.
+  if (report.routes < MIN_ROUTES) {
+    throw new HarnessError(`only ${report.routes} route(s) crawled (< --min-routes ${MIN_ROUTES}) — the crawl did not see the Studio it was meant to gate (bridge seeds empty? --only too narrow?); refusing to report a verdict or write a baseline`);
+  }
   if (WRITE_BASELINE) {
     const source = FROM ? `crawl.json ${FROM}` : `${crawlJson.ui} at ${crawlJson.at}`;
     fs.writeFileSync(WRITE_BASELINE, JSON.stringify(toBaseline(report, { source }), null, 1) + '\n');
     console.log(`[walkthrough --assert] baseline written: ${WRITE_BASELINE} (${report.failures.length + report.known.length} entries)`);
-  }
-  if (ASSERT && report.routes < MIN_ROUTES) {
-    throw new HarnessError(`only ${report.routes} route(s) crawled (< --min-routes ${MIN_ROUTES}) — the crawl did not see the Studio it was meant to gate (bridge seeds empty? --only too narrow?); refusing to report a verdict`);
   }
   console.log('\n' + formatReport(report));
   return report;

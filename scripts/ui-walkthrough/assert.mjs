@@ -90,7 +90,8 @@ export function canonicalUrl(url, crawl) {
   return s;
 }
 const isFirstParty = (url) => url.startsWith('[bridge]') || (url.startsWith('/') && !url.startsWith('//')) || loopbackPort(url) != null;
-const stripBridge = (url) => url.replace(/^\[bridge\]/, '');
+// Allowlist patterns match the PATH only (bridge prefix + query string stripped).
+const allowlistPath = (url) => url.replace(/^\[bridge\]/, '').replace(/[?#].*$/, '');
 const RESOURCE_LOAD_RE = /^Failed to load resource:/;
 const truncate = (s, n = 200) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
 
@@ -136,7 +137,7 @@ export function collectFailures(crawl, opts = {}) {
       const url = canonicalUrl(req.url, crawl);
       if (!isFirstParty(url) || !(req.status >= 400)) continue;
       const f = makeFailure('first-party-4xx', route, `${req.status} ${url}`, `first-party request answered ${req.status}`);
-      const optional = req.status === 404 && knownOptional404s.some((p) => matchesPattern(stripBridge(url), p));
+      const optional = req.status === 404 && knownOptional404s.some((p) => matchesPattern(allowlistPath(url), p));
       push(optional ? allowed : failures, f);
     }
 
