@@ -53,7 +53,16 @@ export function useSchedulerStatus(pollMs: number = SCHEDULER_POLL_MS, enabled =
   const alive = useRef(true);
 
   const refresh = useCallback(async () => {
-    const s = await fetchSchedulerStatus();
+    // W7-A1 made bridge reads THROW on failure (BridgeReadError). An
+    // unreachable bridge is `status: null` here — the card renders that as
+    // its own honest "unknown" state with NO controls (fail-closed), and the
+    // next poll tick retries.
+    let s: SchedulerStatus | null = null;
+    try {
+      s = await fetchSchedulerStatus();
+    } catch {
+      s = null;
+    }
     if (!alive.current) return;
     setStatus(s);
     setReady(true);

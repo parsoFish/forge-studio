@@ -34,7 +34,16 @@ export function useLoopClosureState(initiativeIds: string[] | undefined, enabled
     if (!enabled) return;
     alive.current = true;
     const load = async () => {
-      const r = await fetchRuns();
+      // W7-A1: reads THROW on a bridge failure. Keep `linkageReady` false on a
+      // failed read (the panel keeps saying "Reading the queue…" — never the
+      // false negative "no queue entry found"); the next tick retries and the
+      // app-shell BridgeStatus banner owns the outage message.
+      let r: Run[];
+      try {
+        r = await fetchRuns();
+      } catch {
+        return;
+      }
       if (!alive.current) return;
       setRuns(r);
       setLinkageReady(true);

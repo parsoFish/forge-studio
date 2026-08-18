@@ -463,7 +463,17 @@ function ArtifactPageInner() {
       // visit, and a "not produced" body over a plan that exists). Resolve it
       // through the sessions list and stop here.
       if (isArchitect) {
-        const sessions = await fetchArchitectSessions().catch(() => [] as ArchitectSessionSummary[]);
+        // W7-A1: the read THROWS on a bridge failure. A failed read is NOT
+        // "no such session" — leave `archSessionResolved` false (the page
+        // keeps its loading line; the app-shell BridgeStatus banner owns the
+        // outage) rather than asserting not-found off a transient error. The
+        // 2s session poll re-resolves once the bridge answers.
+        let sessions: ArchitectSessionSummary[];
+        try {
+          sessions = await fetchArchitectSessions();
+        } catch {
+          return;
+        }
         if (signal.cancelled) return;
         setArchSession(sessions.find((s) => s.sessionId === architectSessionId) ?? null);
         setArchSessionResolved(true);
