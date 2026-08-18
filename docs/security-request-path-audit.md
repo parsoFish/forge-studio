@@ -744,6 +744,15 @@ Fix: `approveKbCleanup` (`cli/bridge-studio-kbs.ts`) makes the read-check-claim 
 
 Baseline accepted via `node scripts/check-request-path-sinks.mjs --write` — the three-line delta above, no other file's counts changed.
 
+### Guarded in W7-A4 — the ONE KB-site enumeration (`cli/kb-sites.ts`) + the derived project→KB binding
+
+W7-A4 (findings knowledge-03 / projects-34) moved the "where may a `kb.yaml` live" walk out of `loadKbDescriptors` (`cli/bridge-studio-kbs.ts`) into a leaf, `cli/kb-sites.ts`, so the project roster (`loadProjectsWithMeta`, `cli/bridge-studio.ts`) can DERIVE a project's `kb` from the descriptor whose `binding: { kind: project, ref }` names it without importing the KB route module back (an ESM cycle). This row is the reason `scripts/check-request-path-sinks.mjs`'s baseline changed (`cli/kb-sites.ts` `existsSync` 0→2, `readdirSync` 0→1; `cli/bridge-studio-kbs.ts` `existsSync` 5→4 — the same sinks, relocated, not new surface):
+
+- `kbSites(forgeRoot)` is `subDirs(brain/)` + `subDirs(brain/projects/)` — `existsSync` + `readdirSync(dir, {withFileTypes:true})` over the two FIXED, `forgeRoot`-derived containment roots (ADR 035). Neither call takes a request-derived value: both routes that consume it (`GET /api/studio/kbs`, `GET /api/studio/projects`) carry no path segment at all, and every name that flows out is a name the filesystem itself just enumerated (READDIR-ENUM + FILTER-PREDICATE-FP, dot-prefixed dirs skipped). It is byte-for-byte the `subDirs` shape `loadKbDescriptors` already carried and this audit already classified (Table 1, `loadKbDescriptors`/`pushFrom` row) — the function moved files, the surface did not grow.
+- Each site is returned as `{ base, name }` — the fixed root and the directory's own name as a separate segment, never a pre-joined path — so both callers re-enter the guard with the id as its own identity-checked segment: `resolveGuardedPath(base, [name, 'kb.yaml'])`. `projectKbBindings` reads ONLY `guard.realPath` (guard-terminal), and additionally refuses a descriptor whose `id` is not its directory name or fails `KB_ID_RE` (a listed id must be routable — the same rule `loadKbDescriptors` now applies before listing). Nothing derived here is ever written back; the binding is recomputed from the descriptors on every roster read.
+
+Baseline accepted via `node scripts/check-request-path-sinks.mjs --write` — the three-line delta above, no other file's counts changed.
+
 ### Accidentally-safe — the accident is the protection, and nothing knows it
 
 These are **not** fixed. Each is blocked by a side effect of unrelated code; a refactor of that unrelated code removes the protection silently. Every one carries a regression-lock test with the accident named in a comment.

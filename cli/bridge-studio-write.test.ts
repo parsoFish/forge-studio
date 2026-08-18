@@ -1201,8 +1201,8 @@ test('PUT /api/studio/projects/write-project with northStar 141 chars → 400, f
 // PUT /api/studio/projects — invalid id guard
 // ---------------------------------------------------------------------------
 
-test('PUT /api/studio/projects/INVALID → 400 (id must be slug)', async () => {
-  const res = await putJson(`${bridgeUrl}/api/studio/projects/INVALID`, { northStar: 'x' });
+test('PUT /api/studio/projects/<malformed> → 400 (W7-A4: the id rule is case-preserving, so a path/whitespace shape is the malformed case)', async () => {
+  const res = await putJson(`${bridgeUrl}/api/studio/projects/${encodeURIComponent('not a project')}`, { northStar: 'x' });
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
   assert.ok(body.error.includes('invalid project id'), `expected invalid id error, got: ${body.error}`);

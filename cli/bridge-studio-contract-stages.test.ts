@@ -56,9 +56,11 @@ after(async () => {
 // Validation (AT-1, AT-2, AT-3)
 // ---------------------------------------------------------------------------
 
-test('R4-17 AT-1: GET /api/studio/projects/<id>/contract-stages — malformed id (uppercase, invalid slug) → 400', async () => {
-  const res = await fetch(`${url}/api/studio/projects/Not_A_Slug/contract-stages`);
+test('R4-17 AT-1: GET /api/studio/projects/<id>/contract-stages — malformed id (whitespace / path shape; W7-A4: uppercase + underscore are LEGAL) → 400', async () => {
+  const res = await fetch(`${url}/api/studio/projects/${encodeURIComponent('not a project')}/contract-stages`);
   assert.equal(res.status, 400);
+  const dot = await fetch(`${url}/api/studio/projects/.hidden/contract-stages`);
+  assert.equal(dot.status, 400);
 });
 
 test('R4-17 AT-2 (real client path — percent-encoded traversal survives client-side normalization): id = "%2e%2e%2fetc" reaches the server verbatim and is rejected server-side (not merely client-normalized away)', async () => {

@@ -357,13 +357,13 @@ test('R4-16 AT-36 (BLOCKER, live exploit reproduction): project=".." + sessionId
   }
 });
 
-test('R4-16 AT-37: project failing SLUG_RE (e.g. "Bad_Project", uppercase + underscore) → 400, naming the offending value', async () => {
+test('R4-16 AT-37: project failing PROJECT_ID_RE (e.g. "Bad Project" — whitespace; W7-A4: uppercase + underscore are LEGAL) → 400, naming the offending value', async () => {
   const sid = await startSession();
   writeGenerationFixture(sid, 1, { 'DEMO.html': '<html/>' });
-  const res = await fetch(`${url}/api/demo-builder/generation/${encodeURIComponent('Bad_Project')}/${encodeURIComponent(sid)}/1/DEMO.html`);
-  assert.equal(res.status, 400, `an invalid-slug project must be rejected with 400, got ${res.status}`);
+  const res = await fetch(`${url}/api/demo-builder/generation/${encodeURIComponent('Bad Project')}/${encodeURIComponent(sid)}/1/DEMO.html`);
+  assert.equal(res.status, 400, `an invalid project id must be rejected with 400, got ${res.status}`);
   const body = await res.json() as Record<string, unknown>;
-  assert.ok(String(body.error ?? '').includes('Bad_Project'), `error must name the offending project value, got: ${JSON.stringify(body)}`);
+  assert.ok(String(body.error ?? '').includes('Bad Project'), `error must name the offending project value, got: ${JSON.stringify(body)}`);
 });
 
 test('R4-16 AT-38: sessionId failing SAFE_ID_RE (embedded "/"/".." via one opaque encoded segment, matching AT-30/31\'s technique) → 400, naming the offending value', async () => {
@@ -374,8 +374,8 @@ test('R4-16 AT-38: sessionId failing SAFE_ID_RE (embedded "/"/".." via one opaqu
   assert.ok(String(body.error ?? '').includes(maliciousSessionId), `error must name the offending sessionId value, got: ${JSON.stringify(body)}`);
 });
 
-test('R4-16 AT-39: an over-length project (past the MAX_SKILL_ID_LENGTH cap the sibling route uses) → 400', async () => {
-  const overLongProject = 'a'.repeat(101); // charset-valid (all lowercase), only the LENGTH is the violation
+test('R4-16 AT-39: an over-length project (past the MAX_EXACT_ID_LENGTH cap every project-id validator shares, W7-A4) → 400', async () => {
+  const overLongProject = 'a'.repeat(129); // charset-valid (all lowercase), only the LENGTH is the violation
   const res = await fetch(`${url}/api/demo-builder/generation/${overLongProject}/some-sid/1/DEMO.html`);
   assert.equal(res.status, 400, `an over-length project must be rejected with 400, got ${res.status}`);
 });
@@ -500,11 +500,11 @@ test('R4-16 AT-44 (Finding A, /start): POST /start with project=".." is rejected
   assert.ok(!existsSync(outsideParent), 'no forgeRoot/_demo/ directory may ever be created — /start must never write outside projectsRoot');
 });
 
-test('R4-16 AT-45: charset rejection — POST /lock with project failing SLUG_RE (e.g. "Bad_Project") → 400, naming the offending value', async () => {
+test('R4-16 AT-45: charset rejection — POST /lock with project failing PROJECT_ID_RE (e.g. "Bad Project"; W7-A4: uppercase + underscore are LEGAL) → 400, naming the offending value', async () => {
   const sid = await startSession();
-  const { status, json } = await post('/api/demo-builder/lock', { project: 'Bad_Project', sessionId: sid, generation: 1 });
-  assert.equal(status, 400, `an invalid-slug project must be rejected with 400, got ${status}`);
-  assert.ok(String(json.error ?? '').includes('Bad_Project'), `error must name the offending project value, got: ${JSON.stringify(json)}`);
+  const { status, json } = await post('/api/demo-builder/lock', { project: 'Bad Project', sessionId: sid, generation: 1 });
+  assert.equal(status, 400, `an invalid project id must be rejected with 400, got ${status}`);
+  assert.ok(String(json.error ?? '').includes('Bad Project'), `error must name the offending project value, got: ${JSON.stringify(json)}`);
 });
 
 test('R4-16 AT-46: charset rejection — POST /brief with sessionId failing SAFE_ID_RE (embedded "/") → 400, naming the offending value', async () => {
