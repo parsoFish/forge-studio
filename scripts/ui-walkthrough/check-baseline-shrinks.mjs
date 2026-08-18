@@ -41,7 +41,12 @@ function loadPrev() {
 }
 
 const prev = loadPrev();
+if (!existsSync(nextFile) && prev && (prev.entries?.length ?? 0) > 0) {
+  console.error(`[baseline-shrinks] FAIL — ${nextFile} is missing but the previous baseline had ${prev.entries.length} entries; removing the file is not a shrink (the gate would lose every known defect). Restore it and drop only the entries your PR fixes.`);
+  process.exit(1);
+}
 const next = existsSync(nextFile) ? JSON.parse(readFileSync(nextFile, 'utf8')) : { entries: [] };
+if (!Array.isArray(next.entries)) { console.error(`[baseline-shrinks] FAIL — ${nextFile} has no entries array`); process.exit(1); }
 const { grew, shrank } = baselineGrowth(prev, next);
 const label = prevFile ?? `${against}:${relative(FORGE_ROOT, nextFile)}`;
 if (!prev) {
