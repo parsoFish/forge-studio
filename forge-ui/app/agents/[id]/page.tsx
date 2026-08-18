@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { CatalogPalette } from '@/components/studio/agent-builder/CatalogPalette';
@@ -281,6 +282,12 @@ export default function AgentBuilderPage() {
   const [state,   setState]   = useState<AgentState>({ ...EMPTY_STATE });
   const [dirty,   setDirty]   = useState(false);
   const [ready,   setReady]   = useState(false);
+  // W7-A4 (crosscut-02 / agents-10): an unknown slug is a NOT-FOUND state, never
+  // a silent redirect into the blank /agents/new builder. `'empty-roster'`
+  // keeps the two operator facts apart: the roster loaded and lacks the slug
+  // (a real not-found) vs. the roster came back empty (an unreachable bridge —
+  // the fetch fails open to [] today; the honest-reads lane owns that).
+  const [slugResolution, setSlugResolution] = useState<'pending' | 'found' | 'not-found' | 'empty-roster'>('pending');
   const [toasts,  setToasts]  = useState<Toast[]>([]);
   // R3-04-F3: real probe-derived connections library, fetched independently
   // of the agent load (it's the same catalog regardless of which agent is
@@ -409,6 +416,7 @@ export default function AgentBuilderPage() {
   // ---- data loading ----
   useEffect(() => {
     const signal = { cancelled: false };
+    setSlugResolution('pending');
 
     async function load() {
       try {
@@ -437,11 +445,15 @@ export default function AgentBuilderPage() {
             setState(parseAgent(found));
             setStarterChosen(true); // existing agent → skip the picker
             loadedSlug.current = slugParam;
+            setSlugResolution('found');
           } else {
-            // unknown slug → redirect to /agents/new
-            router.replace('/agents/new');
+            // W7-A4: unknown slug → the shared NotFound (rendered below), never
+            // a redirect into the blank builder — the builder is reserved for
+            // the literal `new` slug.
+            setSlugResolution(a.length === 0 ? 'empty-roster' : 'not-found');
           }
         } else {
+          setSlugResolution('found');
           setState({ ...EMPTY_STATE });
           setStarterChosen(false); // new agent → show the starter picker first
           setAdvancedOpen(false);
@@ -605,6 +617,23 @@ export default function AgentBuilderPage() {
   const historyRows = historyResolution?.kind === 'found' ? historyResolution.rows : [];
 
   // ---- render ----
+  // W7-A4 (crosscut-02 / agents-10 / crosscut-27): unknown slug → the ONE
+  // shared not-found treatment with a way back to the roster.
+  if (ready && !isNew && slugResolution === 'not-found') {
+    return <NotFound kind="agent" id={slugParam} backHref="/agents" backLabel="Agents" />;
+  }
+  if (ready && !isNew && slugResolution === 'empty-roster') {
+    return (
+      <NotFound
+        kind="agent"
+        id={slugParam}
+        backHref="/agents"
+        backLabel="Agents"
+        detail="The agent roster came back empty — if the forge bridge is unreachable this agent may still exist; retry once it is back."
+      />
+    );
+  }
+
   return (
     <div
       data-page="agents"

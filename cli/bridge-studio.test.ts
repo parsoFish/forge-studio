@@ -425,7 +425,9 @@ test('GET /api/runs/<id> returns the seeded run', async () => {
   const body = (await res.json()) as { run: { id: string; status: string; initiative: string; costUsd: number } };
   assert.equal(body.run.id, CYCLE_ID);
   assert.equal(body.run.status, 'complete');
-  assert.equal(body.run.initiative, 'Test initiative title');
+  // W7-A4: the run title is manifest METADATA (frontmatter title: / the
+  // initiative id) — never the body's "# Test initiative title" heading.
+  assert.equal(body.run.initiative, 'INIT-TEST-001');
   assert.ok(typeof body.run.costUsd === 'number');
 });
 

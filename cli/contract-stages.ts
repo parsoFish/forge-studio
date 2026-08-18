@@ -33,7 +33,7 @@
  * could read past the `ok` check. An unknown/escaping `projectId` is a
  * DISTINCT `{ok:false}` from "project exists but nothing onboarded yet".
  *
- * Containment: `projectId` is SLUG_RE + length-cap validated before any fs
+ * Containment: `projectId` is PROJECT_ID_RE + length-cap validated before any fs
  * call, then resolved via `realpathSync` and required to land inside the
  * resolved `projectsRoot` (never a lexical prefix check on an unresolved
  * path). This is deliberately the SAME shape as
@@ -62,7 +62,7 @@ import {
   type ContractStageStatus,
 } from '../orchestrator/studio/session-transcript.ts';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from '../orchestrator/project-config.ts';
-import { SLUG_RE, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
+import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { guardedFile } from './studio-path-guard.ts';
 
 export type { ContractStageRow, ContractStageStatus } from '../orchestrator/studio/session-transcript.ts';
@@ -77,7 +77,7 @@ export type DeriveContractStagesResult =
   | { readonly ok: true; readonly rows: ContractStageRow[]; readonly sourcesScanned: string[] }
   | { readonly ok: false; readonly error: { readonly message: string } };
 
-const MAX_PROJECT_ID_LENGTH = MAX_SKILL_ID_LENGTH;
+const MAX_PROJECT_ID_LENGTH = MAX_EXACT_ID_LENGTH;
 const COMPLIANCE_REPORT_REL_PATH = join('.forge', 'contract-compliance-report.json');
 const DEMO_LOCK_REL_PATH = join('.forge', 'demo', 'demo.lock.json');
 const ROADMAP_REL_PATH = 'roadmap.md';
@@ -224,7 +224,7 @@ function deriveRoadmapRow(projectDir: string, forgeRoot: string, projectId: stri
 
   // SEC-04 (bd forge-ebj): the brain-profile presence probe now rides
   // `guardedFile` in read mode against the TRUSTED `forgeRoot` root, with
-  // `projectId` (already SLUG_RE + length-cap validated by
+  // `projectId` (already PROJECT_ID_RE + length-cap validated by
   // `deriveContractStages`) as its OWN `segments[]` element — never folded into
   // the root — alongside the fixed `brain`/`projects`/`profile.md` literals.
   // `guardedFile` walks every segment with a realpath identity check + `nlink`
@@ -259,10 +259,12 @@ export function deriveContractStages(input: {
 }): DeriveContractStagesResult {
   const { forgeRoot, projectsRoot, projectId } = input;
 
-  if (projectId.length === 0 || projectId.length > MAX_PROJECT_ID_LENGTH || !SLUG_RE.test(projectId)) {
+  // W7-A4: the project id IS the directory name (case-preserving, exact —
+  // PROJECT_ID_RE), so `trafficGame` resolves and `trafficgame` is unknown.
+  if (projectId.length === 0 || projectId.length > MAX_PROJECT_ID_LENGTH || !PROJECT_ID_RE.test(projectId)) {
     return {
       ok: false,
-      error: { message: `invalid project id ${JSON.stringify(projectId.slice(0, 60))} — must match ${SLUG_RE}` },
+      error: { message: `invalid project id ${JSON.stringify(projectId.slice(0, 60))} — must match ${PROJECT_ID_RE}` },
     };
   }
 

@@ -23,6 +23,7 @@ import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { PageHeader } from '@/components/StudioPage';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -160,13 +161,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   }, [loadRoadmap, loadCycleGroups]);
 
   useEffect(() => {
+    // W7-A4 (projects-04 / home-sessions-18): `new` is the onboarding form,
+    // not a project — no per-project fetch may fire for it (the preflight /
+    // roadmap / cycles routes 404'd on every visit to /projects/new).
+    if (isNew) return;
     const signal = { cancelled: false };
     void loadData(signal);
     void loadPreflight(signal);
     void loadRoadmap(signal);
     void loadCycleGroups(signal);
     return () => { signal.cancelled = true; };
-  }, [loadData, loadPreflight, loadRoadmap, loadCycleGroups]);
+  }, [isNew, loadData, loadPreflight, loadRoadmap, loadCycleGroups]);
 
   // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
   // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
@@ -251,23 +256,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // W6-SW-3 (sweep C2#3): loadData leaves `project` null when the URL `id`
   // isn't in fetchStudioProjects() (a stale/bad :id route param) — without
   // this branch the return below rendered the full editable editor with a
-  // blank name/northStar/etc, no honest "not found" state.
+  // blank name/northStar/etc, no honest "not found" state. W7-A4
+  // (crosscut-27): that state is the ONE shared NotFound.
   if (ready && !project) {
-    return (
-      <main
-        data-page="projects"
-        data-project-id={id}
-        data-page-ready="true"
-        data-project-not-found="true"
-        style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
-      >
-        <StudioNav />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--faint)', fontSize: 14 }}>
-          Project &ldquo;{id}&rdquo; not found.
-          <Link href="/projects" style={{ color: 'var(--accent)' }}>← Back to projects</Link>
-        </div>
-      </main>
-    );
+    return <NotFound kind="project" id={id} backHref="/projects" backLabel="Projects" />;
   }
 
   return (

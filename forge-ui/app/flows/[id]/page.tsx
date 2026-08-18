@@ -9,6 +9,7 @@ import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
 import { runsForFlow } from '@/lib/home-view';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
 import { FlowTopology } from '@/components/studio/FlowTopology';
@@ -408,6 +409,29 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   const flowNotFound = view.ready && !view.flow;
 
+  // W7-A4 (flows-16 / crosscut-27 / flows-04): an unknown flow id renders the
+  // ONE shared NotFound for the WHOLE page — never the monitor chrome with a
+  // selector showing a DIFFERENT flow's name. A flow id that runs still name
+  // (`runs` is `runsForFlow(id, everyRun)`) but that has no definition —
+  // `release-refine`, or the pre-flow_id `unknown` sentinel — is a RETIRED
+  // flow: its runs remain openable from any flow HISTORY ledger
+  // (`/flows/<id>/run/<runId>` renders the run's own recorded phases).
+  if (flowNotFound && !isNew) {
+    const retired = view.runs.length > 0;
+    return (
+      <NotFound
+        kind="flow"
+        id={id}
+        backHref="/flows"
+        backLabel="Flows"
+        variant={retired ? 'retired' : 'unknown'}
+        detail={retired
+          ? `${view.runs.length} run${view.runs.length === 1 ? '' : 's'} still reference this flow id — open one from a flow HISTORY ledger; its recorded phases render there.`
+          : undefined}
+      />
+    );
+  }
+
   return (
     <main
       data-page="flow-monitor"
@@ -559,25 +583,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               position: 'relative',
             }}
           >
-            {flowNotFound ? (
-              <div
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                  color: 'var(--faint)',
-                  fontSize: 14,
-                }}
-              >
-                Flow &ldquo;{id}&rdquo; not found.
-                {/* W6-SW-3 (sweep C3#2): the only prior escape was the
-                    persistent top StudioNav bar — no local CTA. */}
-                <Link href="/flows" style={{ color: 'var(--accent)', fontSize: 13 }}>← Back to flows</Link>
-              </div>
-            ) : (
+            {flowNotFound ? null : (
           <>
             {/* Left: Run rail */}
             <RunRail

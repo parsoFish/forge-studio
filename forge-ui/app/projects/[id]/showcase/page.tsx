@@ -34,8 +34,10 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
+import { fetchStudioProjects } from '@/lib/studio-client';
 import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
 import { deriveShowcaseStats, type ShowcaseStats } from '@/lib/project-showcase';
 
@@ -44,9 +46,19 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
 
   const [result, setResult] = useState<ShowcaseLoadResult | null>(null);
   const [ready, setReady] = useState(false);
+  // W7-A4 (projects-23): the showcase is a PROJECT surface — an id the roster
+  // does not know renders the shared NotFound, not a plausible "No showcase
+  // yet" for a project that does not exist. `null` = roster not consulted yet.
+  const [projectKnown, setProjectKnown] = useState<boolean | null>(null);
 
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     try {
+      const roster = await fetchStudioProjects();
+      if (signal.cancelled) return;
+      // An empty roster (bridge unreachable — the fetch fails open to [] today)
+      // is not evidence the project is unknown; only a NON-empty roster that
+      // lacks the id is.
+      setProjectKnown(roster.length === 0 ? null : roster.some((p) => p.id === id));
       const snapshot = await fetchCycles();
       const cycles = [...(snapshot?.live ?? []), ...(snapshot?.recent ?? [])];
       const loaded = await loadShowcase({ cycles, projectId: id, fetchDemo: fetchDemoModel });
@@ -76,6 +88,10 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // Distinguish a genuinely-absent terminal cycle from a terminal cycle whose
   // demo.json was never captured (both render empty, but honestly differently).
   const emptyReason: 'no-cycle' | 'no-demo' = result?.kind === 'loaded' ? 'no-demo' : 'no-cycle';
+
+  if (ready && projectKnown === false) {
+    return <NotFound kind="project" id={id} backHref="/projects" backLabel="Projects" />;
+  }
 
   return (
     <main

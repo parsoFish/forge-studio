@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { FilePackage } from '@/components/studio/FilePackage';
 import {
@@ -52,10 +53,19 @@ export default function SkillDetailPage() {
   const load = useCallback(async (skillId: string) => {
     setState('loading');
     setApproveError(null);
-    const [libraryResult, skillResult] = await Promise.all([fetchSkillLibrary(), fetchSkill(skillId)]);
-
+    // W7-A4 (crosscut-10 / library-03): the roster is consulted FIRST — a
+    // community-only (not-installed) skill has no on-disk package, so the
+    // detail route is not fetched for it (no 404 spam); the page renders the
+    // roster's own metadata + the community link instead.
+    const libraryResult = await fetchSkillLibrary();
     const entry = libraryResult.ok ? libraryResult.skills.find((e) => e.id === skillId) ?? null : null;
     setLibraryEntry(entry);
+    if (entry && entry.source === 'community' && !entry.installed) {
+      setDetail(null);
+      setState('not-installed');
+      return;
+    }
+    const skillResult = await fetchSkill(skillId);
 
     if (skillResult.ok && skillResult.detail) {
       setDetail(skillResult.detail);
@@ -65,11 +75,7 @@ export default function SkillDetailPage() {
 
     setDetail(null);
     if (skillResult.status === 404) {
-      if (entry && entry.source === 'community' && !entry.installed) {
-        setState('not-installed');
-      } else {
-        setState('not-found');
-      }
+      setState('not-found');
       return;
     }
     setError(skillResult.error ?? 'could not load this skill');
@@ -96,6 +102,11 @@ export default function SkillDetailPage() {
   const trustAttr = state === 'ready' ? detail!.trust : state === 'not-installed' ? libraryEntry?.trust : undefined;
   const sourceAttr = state === 'ready' ? detail!.source : state === 'not-installed' ? libraryEntry?.source : undefined;
 
+  // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
+  if (state === 'not-found') {
+    return <NotFound kind="skill" id={id} backHref="/skills" backLabel="Skills" detail="Neither on disk nor in the community catalog." />;
+  }
+
   return (
     <main
       data-page="skill-detail"
@@ -116,12 +127,6 @@ export default function SkillDetailPage() {
         {state === 'error' && (
           <div style={{ marginTop: 16 }}>
             <FetchErrorState what="this skill" error={error ?? 'could not load this skill'} status={errorStatus} onRetry={() => { if (id) void load(id); }} />
-          </div>
-        )}
-
-        {state === 'not-found' && (
-          <div style={{ marginTop: 16, color: 'var(--faint)', fontSize: 13.5, fontStyle: 'italic' }}>
-            No skill "{id}" — neither on disk nor in the community catalog.
           </div>
         )}
 

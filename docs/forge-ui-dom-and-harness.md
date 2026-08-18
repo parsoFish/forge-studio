@@ -57,6 +57,56 @@ inventory rather than one shared page-level contract:
   click reaches the monitor — not a direct nav deep-link); `scripts/e2e-
   deadpaths.mjs` additionally crawls every `[data-nav]` href on every route
   and asserts it resolves to a known, live page.
+- **Not-found contract — the ONE shared `NotFound`
+  (`components/NotFound.tsx`, W7-A4, findings crosscut-27 / crosscut-07).**
+  Every route whose id/param does not resolve renders the same page — never a
+  different object (the first KB, the blank builder), never a blank editor,
+  never a fake "not yet produced":
+
+  ```text
+  main[data-page="not-found"][data-page-ready="true"]
+      [data-not-found-kind="<kind>"]      the object kind asked for
+      [data-not-found-id="<id>"]          the id asked for, verbatim ("" for unselected)
+      [data-not-found-variant="unknown"|"retired"|"unselected"]
+    StudioNav                             nav intact — never a bare page
+    [data-component="not-found"]          heading names kind + id, optional detail
+      a[data-action="not-found-back"][href=<kind's index>]   always a way back
+  ```
+
+  Variants: `unknown` (no object with this id); `retired` (the id was real
+  once — a retired flow id such as `release-refine`, or the pre-flow_id
+  `unknown` sentinel — reads as retired, not as a typo); `unselected` (no id
+  given at all, e.g. bare `/artifact`). Wired routes and their `kind` /
+  back target: `/projects/[id]` + `/projects/[id]/showcase` → `project` →
+  `/projects`; `/flows/[id]` → `flow` (retired variant when runs still name
+  the id) → `/flows`; `/flows/[id]/run/[runId]` → `run` → the flow monitor
+  (or `/flows`); `/agents/[id]` → `agent` → `/agents` (an unknown slug is a
+  not-found — it no longer redirects into the blank `/agents/new` builder);
+  `/agents/[id]/run/[runId]` → `run` → `/agents`; `/skills|hooks|
+  connections|templates/[id]` → `skill|hook|connection|template` → the shelf;
+  `/community/[kind]/[id]` → `community kind` (unrecognised kind) or
+  `community <kind>` (unknown id) → `/community`; `/sessions/[kind]/[id]` →
+  `session kind` (unknown kind — the shell route's `unknown session kind`
+  404) or `<kind> session` → `/sessions`; `/knowledge?id=` → `knowledge
+  base`, `/knowledge?node=|?theme=` → `theme` → `/knowledge`; `/artifact` →
+  `run` (`unselected` when neither `?run=` nor its `?cycle=` alias is given;
+  `unknown` when `/api/runs/:id` 404s for a non-`_architect-` id) or
+  `artifact type` (an unrecognised `?type=`, naming the valid set) → `/flows`;
+  and `app/not-found.tsx` → `page` (the pathname) → `/` for any unmatched
+  path. Pinned: `forge-ui/lib/not-found-render.test.ts` (render contract) +
+  `scripts/not-found-consolidation.test.ts` (every route family wired; the
+  legacy hand-rolled bodies gone). Journey: `templates-not-found`
+  (`scripts/journeys/templates.mjs`) probes `/templates/nope`,
+  `/projects/nope` and an unmatched path against this contract.
+
+  The id rule the routes resolve against (W7-A4, bead forge-9bd): a project
+  id IS its directory name and a KB id IS its kb.yaml `id` (== directory
+  name), case-preserving, matched exactly end to end (`PROJECT_ID_RE` /
+  `KB_ID_RE`, `orchestrator/studio/validate.ts`) — so `trafficGame` is
+  reachable everywhere the roster lists it, and `trafficgame` is a genuine
+  not-found. The literal id `new` (any case) is reserved on every create
+  route because `/x/new` is each builder's static segment
+  (`isReservedId`); `/projects/new` fires no per-project fetch.
 - **Global — bridge status banner (`[data-component="bridge-status"]`,
   `components/BridgeStatus.tsx`, mounted ONCE in `app/layout.tsx`, W7-A1).**
   Every route carries the app-shell bridge-liveness element:
@@ -1027,10 +1077,14 @@ inventory rather than one shared page-level contract:
   page shell renders `nav[data-section="run-breadcrumb"]` with
   `a[data-action="back-to-agent"]` → `/agents/<slug>` showing the slug from the
   URL (`[data-agent-slug]`; the shell root mirrors it as `data-agent-slug`).
-  `found:false` (no `_logs/<runId>` directory
-  exists — never dispatched, the R6-04 D22 404 case) renders ONLY
-  `[data-component="run-not-found"]`, suppressing every other section even if
-  the caller supplied non-empty data. `found:true` renders (forge-pet, 2026-08-09)
+  `found:false` (no `_logs/<runId>` directory exists — never dispatched, the
+  R6-04 D22 404 case) — the ROUTE renders the shared not-found page instead
+  (`main[data-page="not-found"][data-not-found-kind="run"]`, W7-A4;
+  `RunView`'s own `[data-component="run-not-found"]` body is a
+  component-level guard no longer reached from this route — `page.tsx`
+  returns the shared `NotFound` before `RunView` is ever invoked, so
+  `RunView` only renders with `found:true` from this route today).
+  `found:true` renders (forge-pet, 2026-08-09)
   a reserved `[data-section="run-trigger"]` provenance section
   (`data-trigger-kind`/`data-trigger-source`/`data-trigger-scope`, `scope ?? ''`)
   when the run carries a `trigger`, mirroring the flow run-detail vocabulary —
@@ -1087,9 +1141,25 @@ inventory rather than one shared page-level contract:
     `[data-action="retry-run-load"]` (W6-SW-3 sweep C3#5) — re-invokes the same
     load instead of requiring a manual browser reload;
   - resolved — `[data-page="flow-run"][data-run-id][data-flow-id]
-    [data-run-found="true"|"false"][data-run-status]`. `found:false` (the
-    server's honest 404 for a runId that never existed) renders only
-    `[data-component="run-not-found"]`.
+    [data-run-found="true"][data-run-status]
+    [data-flow-resolution="registered"|"unregistered"]`. A `not-found`
+    resolution (the server's honest 404 for a runId that never existed)
+    renders the shared not-found page instead (`main[data-page="not-found"]
+    [data-not-found-kind="run"]`, W7-A4 — `FlowRunDetail`'s own
+    `[data-component="run-not-found"]` body is a component-level guard no
+    longer reached from this route). **Retired / unregistered flow ids**
+    (W7-A4, flows-05 / crosscut-04): when the run exists but `GET
+    /api/studio/flows/:id` 404s (a retired id such as `release-refine`, or
+    the pre-flow_id `unknown` sentinel that ~26 HISTORY-ledger rows link
+    to), the page still renders the run — `data-flow-resolution=
+    "unregistered"` + `[data-component="flow-unregistered"]` banner naming
+    the flow id, and the timeline rows come from the run's OWN recorded
+    `phases` (in recorded order, `agent` null — nothing invented) via
+    `deriveFlowRunTimeline(null, run)`, so a 7-phase completed run shows its
+    7 phases instead of an empty timeline that reads as valid. Ledger rows
+    therefore keep linking to `/flows/<flowId>/run/<id>` for retired ids —
+    the link resolves; only the flow MONITOR for such an id (`/flows/<id>`)
+    is a not-found (`variant="retired"` when runs still name it).
 
   **W7-A3 (crosscut-05/23, flows-06/07, home-sessions-17):** both the
   `unresolved` and the resolved `main` carry `data-page-ready="true"` (only
@@ -1195,10 +1265,12 @@ inventory rather than one shared page-level contract:
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
-  A stale/bad `:id` (not `new`, not in `fetchStudioProjects()`) renders a
-  dedicated not-found body instead of a blank editor:
-  `[data-page="projects"][data-project-not-found="true"]` with a link back to
-  `/projects` (W6-SW-3 sweep C2#3).
+  A stale/bad `:id` (not `new`, not in `fetchStudioProjects()`) renders the
+  shared not-found page instead of a blank editor —
+  `main[data-page="not-found"][data-not-found-kind="project"]` with the back
+  link to `/projects` (W6-SW-3 sweep C2#3; consolidated onto the shared
+  contract by W7-A4). `/projects/new` (the onboarding form) fires NO
+  per-project fetch (W7-A4, projects-04).
   Roadmap renders `RoadmapCanvas.tsx` (**W6-RV-2**, replacing `RoadmapDag.tsx`
   — R4-13's dependency-depth **column** layout, itself the replacement for
   the retired `SerpentineTimeline` time-ordered spine): a **completion-time
@@ -2668,9 +2740,12 @@ inventory rather than one shared page-level contract:
   known (deliberately ABSENT while loading, on a bridge-fetch error, and for
   an unknown id — no fabricated trust value is ever rendered). Three other
   non-`ready` page states: `[data-component="fetch-error"]` (bridge
-  unreachable), a plain not-found message (neither on disk nor in the
-  catalog), and `[data-component="not-installed"]` (a community catalog entry
-  with no on-disk package yet — the bridge 404s for it by design, D2). The
+  unreachable), the shared not-found page (`main[data-page="not-found"]
+  [data-not-found-kind="skill"]` — neither on disk nor in the catalog, W7-A4),
+  and `[data-component="not-installed"]` (a community catalog entry with no
+  on-disk package yet — decided from the roster BEFORE any detail fetch, so
+  the route no longer 404s the bridge for it, W7-A4 crosscut-10; the body
+  links to `/community/skill/<id>`). The
   `ready` state renders `[data-component="file-package"][data-file-count][data-active-file]`
   (SKILL.md plus every supporting file, tabbed; shared with R2-10-F3 —
   `forge-ui/components/studio/FilePackage.tsx` is kind-agnostic) with per-tab
@@ -2719,7 +2794,8 @@ inventory rather than one shared page-level contract:
   once the fetch resolves — the latter present ONLY when the template
   declares a producer and/or consumer (planning-only; absent, not `false`,
   when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
-  (bridge unreachable) and `[data-component="not-found"]` (unknown id — the
+  (bridge unreachable) and the shared not-found page (`main[data-page=
+  "not-found"][data-not-found-kind="template"]`, W7-A4 — unknown id, the
   bridge 404s for it by design). The ready state renders
   `[data-section="definition"]` (format/provenance/definition-ref); for a
   malformed definition, `[data-section="parse-error"]` instead; planning-only,

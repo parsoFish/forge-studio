@@ -259,5 +259,59 @@ export const journey = defineJourney({
         await frame(page, 'tpl-3-detail-scaffold', 'Part 2 (templates) — a project-scaffold detail page: the real file tree, tabbed', { key: true });
       },
     },
+    {
+      // W7-A4 (crosscut-27 / crosscut-07): the ONE shared not-found treatment.
+      // Sited on the templates journey as the crosscut probe — the same
+      // `NotFound` (components/NotFound.tsx) is what every [id] route's unknown
+      // branch and app/not-found.tsx render, so one beat pins the contract for
+      // all of them (docs/forge-ui-dom-and-harness.md → "Not-found contract").
+      id: 'templates-not-found',
+      title: 'An unknown id — one honest not-found, everywhere',
+      narration:
+        'A mistyped or stale id renders the SAME honest page on every route: it names the kind ' +
+        'and the id you asked for, keeps the Studio nav, and always offers a way back — never a ' +
+        'different object, never a blank builder, never a bare framework 404. Here it is on a ' +
+        'template, on a project, and on a path that matches nothing.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[TPL-4] Unknown ids render the shared NotFound (/templates/nope, /projects/nope, /no-such-route)');
+
+        const probe = async (path, kind, id, backHref) => {
+          await page.goto(watch.uiUrl + path, { waitUntil: 'domcontentloaded' });
+          await page.waitForFunction(
+            () => document.querySelector('main[data-page="not-found"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 20000 }).catch(() => {});
+          const got = await page.evaluate(() => {
+            const m = document.querySelector('main[data-page="not-found"]');
+            if (!m) return null;
+            return {
+              kind: m.getAttribute('data-not-found-kind'),
+              id: m.getAttribute('data-not-found-id'),
+              variant: m.getAttribute('data-not-found-variant'),
+              nav: m.querySelector('[data-component="studio-nav"]') !== null,
+              body: m.querySelector('[data-component="not-found"]') !== null,
+              back: m.querySelector('a[data-action="not-found-back"]')?.getAttribute('href') ?? null,
+            };
+          });
+          check(got !== null, `TPL-4: ${path} renders main[data-page="not-found"] (got ${JSON.stringify(got)})`);
+          check(got?.kind === kind, `TPL-4: ${path} names the kind — data-not-found-kind="${kind}" (got "${got?.kind}")`);
+          check(got?.id === id, `TPL-4: ${path} names the id verbatim — data-not-found-id="${id}" (got "${got?.id}")`);
+          check(got?.variant === 'unknown', `TPL-4: ${path} is the plain unknown variant (got "${got?.variant}")`);
+          check(got?.nav === true, `TPL-4: ${path} keeps the Studio nav inside the not-found page`);
+          check(got?.body === true, `TPL-4: ${path} renders the [data-component="not-found"] body`);
+          check(got?.back === backHref, `TPL-4: ${path} offers a way back to ${backHref} (got "${got?.back}")`);
+          return got;
+        };
+
+        await probe('/templates/nope', 'template', 'nope', '/templates');
+        await caption(page, 'A stale template id: the shared not-found — kind, id, nav, and a way back.');
+        await frame(page, 'tpl-4-not-found-template', 'Part 2 (templates) — /templates/nope: the ONE shared not-found', { key: true });
+
+        await probe('/projects/nope', 'project', 'nope', '/projects');
+        // A path no route matches — Next's app/not-found.tsx renders the SAME component.
+        await probe('/no-such-route-w7', 'page', '/no-such-route-w7', '/');
+        await frame(page, 'tpl-4-not-found-route', 'Part 2 (templates) — an unmatched path: Studio chrome, not a bare 404');
+      },
+    },
   ],
 });

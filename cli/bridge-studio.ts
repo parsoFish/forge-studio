@@ -57,11 +57,12 @@ import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
+import { projectKbBindings } from './kb-sites.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '../orchestrator/config.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
-import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
 import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
@@ -374,6 +375,12 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // `forge studio lint` warns about the missing contract file separately).
   const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const discovered = discoverProjects(projectsDir, forgeRoot);
+  // W7-A4 (projects-34): a project's KB is DERIVED from the KB whose
+  // `binding: { kind: project, ref: <id> }` names it — the descriptor is the
+  // source of truth; nothing is stored back. Exact-match on the case-preserving
+  // id (`trafficGame` ↔ `trafficGame`). An explicit project.json `kb` (an
+  // operator rebind) still wins below.
+  const kbBoundToProject = projectKbBindings(forgeRoot);
 
   return discovered.map((ref) => {
     const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path, provenance: PROJECT_PROVENANCE };
@@ -404,6 +411,8 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
     // Locked-demo state (read regardless of project.json) — the demo-builder lock.
     result.hasLockedDemo =
       guardedFile(projectsDir, [dirName, '.forge', 'demo', 'demo.lock.json'], 'read') !== null;
+    const derivedKb = kbBoundToProject.get(ref.id);
+    if (derivedKb !== undefined) result.kb = derivedKb;
     if (!ref.hasConfig) return result;
     const projectJsonRaw = guardedReadFile(projectsDir, [dirName, '.forge', 'project.json']);
     if (projectJsonRaw === null) return result; // absent, unreadable, or containment-refused
@@ -411,7 +420,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
-      if (typeof raw.kb === 'string') result.kb = raw.kb;
+      if (typeof raw.kb === 'string') result.kb = raw.kb; // explicit rebind wins over the derived binding
       // Only fall back to the legacy project.json `instructions` field when no
       // agent-instruction file exists (the agent file always wins — single source).
       if (!agentFile && typeof raw.instructions === 'string') {
@@ -917,7 +926,7 @@ export async function handleStudioRoutes(
   if (preflightMatch) {
     try {
       const id = decodeURIComponent(preflightMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -961,7 +970,7 @@ export async function handleStudioRoutes(
   if (repoStatusMatch) {
     try {
       const id = decodeURIComponent(repoStatusMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -995,7 +1004,7 @@ export async function handleStudioRoutes(
   if (roadmapMatch) {
     try {
       const id = decodeURIComponent(roadmapMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -1018,7 +1027,7 @@ export async function handleStudioRoutes(
   if (contractStagesMatch) {
     try {
       const id = decodeURIComponent(contractStagesMatch[1]);
-      if (!SLUG_RE.test(id)) {
+      if (!PROJECT_ID_RE.test(id)) {
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
@@ -1176,29 +1185,6 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
  * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
  */
 /**
- * mock finding I3: betterado manifests all open their body with the SAME
- * boilerplate heading ("Goal" / "Summary" / "Context" / "Overview"), so a
- * bare first-`##`-heading scrape put an identical word on every roadmap
- * card. Skipped case-insensitively, trimmed.
- */
-const BOILERPLATE_HEADINGS: ReadonlySet<string> = new Set(['goal', 'summary', 'context', 'overview']);
-
-/**
- * Precedence: `manifest.title` (an explicit author-supplied frontmatter
- * `title:`, orchestrator/manifest.ts) → first NON-boilerplate `#`/`##`
- * heading in the body → the initiativeId (never a boilerplate heading, and
- * never blank).
- */
-function deriveInitiativeTitle(initId: string, manifestTitle: string | undefined, body: string): string {
-  if (manifestTitle) return manifestTitle;
-  for (const m of body.matchAll(/^##?\s+(.+)$/gm)) {
-    const heading = m[1].trim();
-    if (heading.length > 0 && !BOILERPLATE_HEADINGS.has(heading.toLowerCase())) return heading;
-  }
-  return initId;
-}
-
-/**
  * W6-RV-2: initiativeId → real cycle-completion instant, sourced from the
  * SAME memoized run derivation `GET /api/runs` already uses
  * (`cachedListRuns`, cli/run-list-cache.ts) — reusing it here means the
@@ -1223,7 +1209,9 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
   const completedAtById = completedAtByInitiative(forgeRoot);
 
   const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
-    const title = deriveInitiativeTitle(initId, manifest.title, manifest.body);
+    // W7-A4 (projects-10 / flows-26): the ONE title derivation the run model
+    // also uses — manifest metadata (title: / initiative_id), never a heading.
+    const title = initiativeTitle(manifest);
 
     const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
     const workItems = items.length > 0 ? items : undefined;

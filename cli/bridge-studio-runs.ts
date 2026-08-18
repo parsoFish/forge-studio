@@ -39,7 +39,7 @@ import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
 import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
-import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
@@ -618,11 +618,11 @@ export async function applyPlanVerdict(
   }
   // C2: validate project + sessionId BEFORE any path construction to block path
   // traversal into _architectSessionDir(<projectsRoot>/<project>/_architect/<sessionId>).
-  // project uses SLUG_RE (lowercase slug convention, e.g. "betterado").
-  // sessionId uses SAFE_ID_RE — real ids are YYYY-MM-DDTHH-mm-ss (uppercase T,
-  // digit-leading) which SLUG_RE rejects; SAFE_ID_RE covers both formats.
-  if (!SLUG_RE.test(project)) {
-    sendJson(res, 400, { error: 'project must match slug format (e.g. my-project)' }, origin);
+  // project uses PROJECT_ID_RE (W7-A4: the case-preserving directory name,
+  // e.g. "betterado" or "trafficGame"). sessionId uses SAFE_ID_RE — real ids
+  // are YYYY-MM-DDTHH-mm-ss (uppercase T, digit-leading).
+  if (!PROJECT_ID_RE.test(project)) {
+    sendJson(res, 400, { error: `project must match ${PROJECT_ID_RE} (the project directory name)` }, origin);
     return;
   }
   if (!SAFE_ID_RE.test(sessionId)) {
@@ -634,7 +634,7 @@ export async function applyPlanVerdict(
     return;
   }
 
-  // SEC-04 (AT-47): the SLUG_RE/SAFE_ID_RE charset gates above are defense in
+  // SEC-04 (AT-47): the PROJECT_ID_RE/SAFE_ID_RE charset gates above are defense in
   // depth, but charset does NOT catch a symlinked `_architect` DIR — a
   // valid-charset project+sessionId can still resolve, through the symlink, to
   // an out-of-root session whose status.json would be read AND mutated (a

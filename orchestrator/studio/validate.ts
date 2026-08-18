@@ -11,7 +11,7 @@ import { DEMO_STEP_KINDS } from './types.ts';
 import { FANOUT_ISOLATION_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
-import { SLUG_RE } from '../skill-path.ts';
+import { SLUG_RE, EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH, RESERVED_OBJECT_IDS, isReservedId } from '../skill-path.ts';
 import { isSafeProjectName } from '../../cli/manifest-path-guard.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
@@ -44,6 +44,60 @@ export type Finding = {
 // skill-path→validate→registry→skill-path cycle; re-exported so this file's
 // 20+ existing call sites stay untouched.
 export { SLUG_RE };
+
+/**
+ * W7-A4 — the ONE id rule for projects and knowledge bases (findings
+ * knowledge-03, crosscut-11, projects-02, projects-34; bead forge-9bd).
+ *
+ * A project id IS its on-disk directory name and a KB id IS its kb.yaml
+ * `id` (which equals its directory name): case-preserving, matched exactly
+ * end to end — discovery, the roster, every `:id` route, every validator.
+ * Real installs carry `trafficGame` and `terraform-provider-betterado`, so the
+ * charset is wider than `SLUG_RE` (which stays the rule for skills, agents,
+ * flows, templates and hooks — the studio-authored, slug-minted objects) but
+ * still one path-safe segment: no `.`/`/`/`\` (traversal), no leading `-`
+ * (flag shape), no whitespace. A directory whose name fails this predicate
+ * is not a project/KB and is never listed — a listed id must be routable.
+ *
+ * Defined in `orchestrator/skill-path.ts` (the leaf module, next to SLUG_RE,
+ * for the same registry↔validate cycle reason) and re-exported here.
+ */
+export { EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH };
+
+/**
+ * Ids the UI reserves as static route segments (`/projects/new`,
+ * `/agents/new`, `/flows/new`, `/skills/new`, `/hooks/new`, `/knowledge/new`).
+ * An object literally named `new` would be permanently shadowed by the
+ * builder that lives at that path (projects-30, crosscut-20), so every
+ * create route refuses it — case-insensitively, since project/skill slugs
+ * are lowercased at creation and a case-preserving KB id `New` would still
+ * be unreachable next to the static segment.
+ */
+export { RESERVED_OBJECT_IDS, isReservedId };
+
+/** `null` when `id` is a routable project id, else the operator-facing reason. */
+export function invalidProjectIdReason(id: string): string | null {
+  if (id.length === 0) return 'invalid project "" — an id is required';
+  if (id.length > MAX_EXACT_ID_LENGTH) {
+    return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_EXACT_ID_LENGTH}-character length limit`;
+  }
+  if (!PROJECT_ID_RE.test(id)) {
+    return `invalid project "${id}" — must match ${PROJECT_ID_RE} (the project's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
+  }
+  return null;
+}
+
+/** `null` when `id` is a routable KB id, else the operator-facing reason. */
+export function invalidKbIdReason(id: string): string | null {
+  if (id.length === 0) return 'invalid kb id "" — an id is required';
+  if (id.length > MAX_EXACT_ID_LENGTH) {
+    return `invalid kb id "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_EXACT_ID_LENGTH}-character length limit`;
+  }
+  if (!KB_ID_RE.test(id)) {
+    return `invalid kb id "${id}" — must match ${KB_ID_RE} (the KB's directory name: one path segment; no "/", "\\", ".", "..", or a leading "-")`;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -752,8 +806,8 @@ export function validateKb(kb: KbDescriptor): Finding[] {
   const findings: Finding[] = [];
   const obj = `kb:${kb.id}`;
 
-  if (!SLUG_RE.test(kb.id)) {
-    findings.push(err(obj, 'slug', `KB id "${kb.id}" does not match ${SLUG_RE}`));
+  if (!KB_ID_RE.test(kb.id)) {
+    findings.push(err(obj, 'slug', `KB id "${kb.id}" does not match ${KB_ID_RE}`));
   }
 
   // backend (optional) must be a known storage backend. Loader parses it leniently
@@ -885,9 +939,9 @@ export function validateProject(def: ProjectDefinition): Finding[] {
   const findings: Finding[] = [];
   const obj = `project:${def.id}`;
 
-  // slug
-  if (!SLUG_RE.test(def.id)) {
-    findings.push(err(obj, 'slug', `Project id "${def.id}" does not match ${SLUG_RE}`));
+  // id rule (W7-A4: case-preserving, matched exactly — see PROJECT_ID_RE)
+  if (!PROJECT_ID_RE.test(def.id)) {
+    findings.push(err(obj, 'slug', `Project id "${def.id}" does not match ${PROJECT_ID_RE}`));
   }
 
   // northStar: empty → flag; >140 → error
@@ -950,13 +1004,14 @@ export function validateDiscoveredProjects(
 
   // unique-ids
   for (const dup of findDuplicates(projects.map((p) => p.id))) {
-    findings.push(err(obj, 'unique-ids', `Duplicate project id "${dup}" (two project dirs slug to the same id)`));
+    findings.push(err(obj, 'unique-ids', `Duplicate project id "${dup}" (two project dirs carry the same id)`));
   }
 
   for (const project of projects) {
-    // slug per project id (defensive — discoverProjects already slugifies)
-    if (!SLUG_RE.test(project.id)) {
-      findings.push(err(obj, 'slug', `Project id "${project.id}" does not match ${SLUG_RE}`));
+    // id rule per project id (defensive — discoverProjects only publishes
+    // ids that already satisfy PROJECT_ID_RE, W7-A4)
+    if (!PROJECT_ID_RE.test(project.id)) {
+      findings.push(err(obj, 'slug', `Project id "${project.id}" does not match ${PROJECT_ID_RE}`));
     }
     // half-onboarded: a dir without the contract file is a warn, not an error.
     if (!project.hasConfig) {

@@ -388,3 +388,36 @@ test('per-node artifacts stay EMPTY even when the run has artifacts ready — th
     expect(row.artifacts).toEqual([]);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7-A4 (flows-05 / crosscut-04) — a run whose flow DEFINITION no longer
+// exists (retired flow id, or the pre-flow_id 'unknown' sentinel) must still
+// show its own recorded phases. KILLS: a timeline derived purely from the
+// definition, which yields an EMPTY (not error) timeline for a 7-phase
+// completed run — the walkthrough's exact repro.
+// ---------------------------------------------------------------------------
+
+test('flow definition missing (null) → rows come from the run\'s OWN recorded phases, in recorded order, with no invented agent', () => {
+  const run = archivedRun({
+    flowId: 'unknown',
+    phases: { architect: 'complete', pm: 'complete', dev: 'complete', review: 'failed' },
+    phaseMeta: { dev: meta({ costUsd: 3.5 }), review: meta({ costUsd: 0.2, retries: 1 }) },
+  });
+  const rows = deriveFlowRunTimeline(null, run);
+  expect(rows.map((r) => r.nodeId)).toEqual(['architect', 'pm', 'dev', 'review']);
+  expect(rows.map((r) => r.status)).toEqual(['complete', 'complete', 'complete', 'failed']);
+  expect(rows.every((r) => r.agent === null)).toBe(true);
+  expect(rowFor(rows, 'dev').costUsd).toBe(3.5);
+  expect(rowFor(rows, 'review').note).toBe('1 retries');
+  expect(rowFor(rows, 'architect').costUsd).toBe(0);
+});
+
+test('flow definition missing AND run missing → no rows (never a fabricated timeline for nothing)', () => {
+  expect(deriveFlowRunTimeline(null, null)).toEqual([]);
+});
+
+test('a REGISTERED flow still drives the rows (definition order, nodes with no events included) — the fallback is only for a missing definition', () => {
+  const run = archivedRun({ phases: { review: 'complete', dev: 'complete' } });
+  const rows = deriveFlowRunTimeline(developFlow(), run);
+  expect(rows.map((r) => r.nodeId)).toEqual(['dev', 'demo', 'adversarial-review', 'review']);
+});

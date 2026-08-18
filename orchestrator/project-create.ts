@@ -20,7 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { seedProjectBrain, checkProjectBrainSeedContainment } from './project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from '../cli/preflight.ts';
-import { skillsDir } from './skill-path.ts';
+import { skillsDir, isReservedId } from './skill-path.ts';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the
@@ -232,6 +232,8 @@ export function scaffoldGreenfieldProject(input: {
   const manifest = validateCreationManifest(input.manifest);
   const id = slugifyProjectName(manifest.name);
   if (!SLUG_RE.test(id)) throw new Error(`could not derive a valid slug id from name "${manifest.name}"`);
+  // W7-A4 (projects-30): `new` is the /projects/new onboarding segment — never a project id.
+  if (isReservedId(id)) throw new Error(`project id "${id}" is reserved (the /projects/new onboarding form lives at that path) — choose another name`);
 
   // Whitelist appType against the actual template dirs — NOT an existsSync on a
   // joined path, which a traversal value like '../agents' would satisfy.

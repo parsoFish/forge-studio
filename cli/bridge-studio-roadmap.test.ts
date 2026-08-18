@@ -183,13 +183,16 @@ test('roadmap: pending initiative with cycle_id + WI snapshot → workItems defi
 });
 
 // ---------------------------------------------------------------------------
-// mock finding I3 — title-source fix. betterado manifests all open their body
-// with the SAME boilerplate heading ("Goal" / "Summary" / "Context" /
-// "Overview"), so every roadmap card showed the identical word. Precedence:
-// frontmatter `title:` > first NON-boilerplate heading > initiativeId.
+// mock finding I3 → W7-A4 (projects-10 / flows-26): title source. betterado
+// manifests all open their body with the SAME boilerplate heading ("Goal" /
+// "Summary" / "Context" / "Overview"), so a heading scrape put one word on
+// every card — and the "skip boilerplate" refinement still titled 52 cards
+// "Background" / "Constraints" / "Acceptance criteria". The ONE derivation
+// (`initiativeTitle`, orchestrator/manifest.ts) is metadata-only: frontmatter
+// `title:` > initiativeId. A body heading is NEVER a title.
 // ---------------------------------------------------------------------------
 
-test('roadmap: betterado-shaped body (first heading is boilerplate "Goal") — the card title skips it for the next real heading', async () => {
+test('roadmap: a body whose headings are section labels — the card title is the initiativeId, never a scraped heading (W7-A4)', async () => {
   const path = join(forgeRoot, '_queue', 'pending', 'INIT-TITLE1.md');
   writeFileSync(
     path,
@@ -201,7 +204,7 @@ test('roadmap: betterado-shaped body (first heading is boilerplate "Goal") — t
     const roadmap = await fetchRoadmap();
     const t = roadmap.initiatives.find((i) => i.initiativeId === 'INIT-TITLE1');
     assert.ok(t, 'INIT-TITLE1 present in roadmap');
-    assert.equal(t!.title, 'Add dark mode toggle');
+    assert.equal(t!.title, 'INIT-TITLE1');
   } finally {
     rmSync(path, { force: true });
   }

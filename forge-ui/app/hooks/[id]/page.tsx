@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
+import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { fetchHook, approveHook, overrideHookBlock, type HookDetail } from '@/lib/hook-client';
@@ -86,6 +87,11 @@ export default function HookDetailPage() {
 
   const view = state === 'ready' && detail ? buildHookDetailView(detail) : null;
 
+  // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
+  if (state === 'not-found') {
+    return <NotFound kind="hook" id={id} backHref="/hooks" backLabel="Hooks" detail="Either no hook has this id, or its definition failed to load as a valid hook." />;
+  }
+
   return (
     <main
       data-page="hook-detail"
@@ -105,12 +111,6 @@ export default function HookDetailPage() {
         {state === 'error' && (
           <div style={{ marginTop: 16 }}>
             <FetchErrorState what="this hook" error={error ?? 'could not load this hook'} status={errorStatus} onRetry={() => { if (id) void load(id); }} />
-          </div>
-        )}
-
-        {state === 'not-found' && (
-          <div style={{ marginTop: 16, color: 'var(--faint)', fontSize: 13.5, fontStyle: 'italic' }}>
-            No hook &quot;{id}&quot; — either it doesn&apos;t exist, or it failed to load as a valid hook definition.
           </div>
         )}
 

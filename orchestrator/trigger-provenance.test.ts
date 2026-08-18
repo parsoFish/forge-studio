@@ -465,7 +465,7 @@ test('trigger.scope is normalizeProjectId-agreeing for a resolved project (fixtu
     // normalized in every real production caller.
     planFlow(root, 'worker-scoped', 'My_Project');
     const normalized = normalizeProjectId('My_Project');
-    assert.equal(normalized, 'my-project', 'sanity on the normalizer itself');
+    assert.equal(normalized, 'My_Project', 'sanity on the normalizer itself (W7-A4: identity for a rule-shaped name)');
     // forge-76y: built through the fixture builder, with an explicit
     // sourceFlowId override — deriveTriggerFields's cron arm reads ONLY
     // sourceFlowId now, so a trigger with none derives no trigger at all.

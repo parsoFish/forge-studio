@@ -1058,7 +1058,10 @@ describe('flow-runner trigger firing', () => {
       // hand-rolled regex in this test.
       const [discovered] = discoverProjects(projectsRoot, projectsRoot);
       assert.ok(discovered, 'expected discoverProjects to find the fixture directory');
-      assert.notEqual(discovered!.id, rawDirName, 'sanity: the fixture name must actually require normalization');
+      // W7-A4: the id IS the directory name (case-preserving, exact) — the
+      // invariant under test is AGREEMENT between discovery and dispatch, which
+      // for a rule-shaped name is identity on both sides.
+      assert.equal(discovered!.id, rawDirName, 'sanity: under the W7-A4 id rule a rule-shaped dir name is its own id');
 
       const flow: FlowDefinition = {
         id: 'trigger-test-n1',
