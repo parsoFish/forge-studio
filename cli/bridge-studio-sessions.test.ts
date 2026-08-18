@@ -876,11 +876,20 @@ test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns
   assert.equal(body.project, 'demoproj');
 });
 
-test('AT-44: GET /api/studio/sessions/architect/<id> with NO project query param returns 400 naming its ACTUAL cause (strengthened)', async () => {
+// W7-A2 (community-06, knowledge-18, sessions-kinds-20) SUPERSEDES the
+// pre-wave-7 AT-44 (which pinned a 400 "project query parameter is
+// required"): `?project=` is now OPTIONAL — a deep link that omits it
+// resolves the anchor project server-side (`findSessionProject`) and
+// returns the SAME 200 payload, `project` filled in. The unresolvable /
+// ambiguous cases are pinned in cli/bridge-studio-lifecycle.test.ts.
+test('AT-44 (W7-A2): GET /api/studio/sessions/architect/<id> with NO project query param resolves the project server-side and returns 200 with it filled in', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}`);
-  assert.equal(res.status, 400);
-  const body = (await res.json()) as { error: string };
-  assert.equal(body.error, 'project query parameter is required', `expected the exact missing-project message, got: ${JSON.stringify(body)}`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; project: string; sessionId: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.sessionId, REAL_ARCHITECT_SESSION);
+  assert.equal(typeof body.project, 'string');
+  assert.ok(body.project.length > 0, 'the resolved project must be filled in');
 });
 
 // ---------------------------------------------------------------------------

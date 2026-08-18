@@ -85,6 +85,10 @@ export type StudioHomeData = {
   sessions: SessionIndexRow[];
   /** True once the first `loadAll` Promise.all has settled (success OR failure). */
   ready: boolean;
+  /** W7-A2 — refetch ONLY the sessions index (the SAME `fetchStudioSessions`
+   *  read `loadAll` folds in), for a caller that just changed a session
+   *  (Home's card cancel) — never a new endpoint, never a poll. */
+  refreshSessions: () => Promise<void>;
   /** W7-A1: the last load's failure (bridge unreachable / refused), null when the last load succeeded. */
   error: StudioHomeFetchError | null;
   /** W7-A1: re-run the full load (Retry button + bridge recovery). */
@@ -211,5 +215,9 @@ export function useStudioHomeData(): StudioHomeData {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload };
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    setSessions(await fetchStudioSessions());
+  }, []);
+
+  return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions };
 }

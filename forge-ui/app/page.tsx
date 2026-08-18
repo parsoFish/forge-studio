@@ -66,7 +66,7 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload } = useStudioHomeData();
+  const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
 
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
@@ -169,7 +169,7 @@ export default function HomePage() {
           (review fix) so its data-* contract gets a renderToStaticMarkup
           pin — see components/studio/HomeSessionsStrip.tsx for the full
           contract description. ===== */}
-      <HomeSessionsStrip strip={sessionsStrip} />
+      <HomeSessionsStrip strip={sessionsStrip} onCancelled={() => { void refreshSessions(); }} />
 
       {/* ===== SCHEDULER — the daemon that turns queued work into runs (W7-A3,
           flows-01/23; ADR-031 wave-7 amendment). Its own component owns its

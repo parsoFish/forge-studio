@@ -4,6 +4,8 @@ import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import { StudioPage } from '@/components/StudioPage';
+import { describeLifecycle } from '@/lib/session-lifecycle-client';
+import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
 import { FetchErrorState } from '@/components/FetchErrorState';
 
 // ---------------------------------------------------------------------------
@@ -54,16 +56,33 @@ function formatUpdatedAt(iso: string): string {
   return new Date(parsedMs).toLocaleString();
 }
 
+/** W7-A2 — the lifecycle chip's colour per state (the chip text itself is
+ *  `describeLifecycle`, shared with Home and the session page). */
+function stateTone(state: SessionIndexRow['state']): string {
+  switch (state) {
+    case 'crashed': return 'var(--red, #f87171)';
+    case 'stalled': return 'var(--ember)';
+    case 'awaiting-operator': return 'var(--ember)';
+    case 'terminal': return 'var(--faint)';
+    default: return 'var(--dim)';
+  }
+}
+
 export type SessionsIndexFetchError = { message: string; status?: number };
 
 export function SessionsIndexBody({
   sessions,
   ready,
+  onCancelled,
   error = null,
   onRetry,
 }: {
   sessions: SessionIndexRow[];
   ready: boolean;
+  /** W7-A2 — fired after a row's cancel POST succeeds so the owning page
+   *  refetches; this component stays props-driven and never re-derives a
+   *  row's state itself. */
+  onCancelled?: (row: SessionIndexRow) => void;
   /** W7-A1 (home-sessions-29): the last fetch's failure — renders the shared
    *  failure state INSTEAD of the "No sessions in flight" zero-state. */
   error?: SessionsIndexFetchError | null;
@@ -133,6 +152,7 @@ export function SessionsIndexBody({
                 <th style={cellHeadStyle}>Kind</th>
                 <th style={cellHeadStyle}>Project</th>
                 <th style={cellHeadStyle}>Phase</th>
+                <th style={cellHeadStyle}>State</th>
                 <th style={cellHeadStyle}>Model</th>
                 <th style={cellHeadStyle}>Updated</th>
                 <th style={cellHeadStyle} />
@@ -145,6 +165,7 @@ export function SessionsIndexBody({
                   data-session-kind={s.kind}
                   data-session-phase={s.phase}
                   data-needs-you={s.needsYou}
+                  data-session-state={s.state}
                   style={{ borderBottom: '1px solid var(--line)' }}
                 >
                   <td style={cellStyle}>
@@ -163,6 +184,21 @@ export function SessionsIndexBody({
                       <span className="status-dot" data-status="retrying" title="needs you" style={{ marginLeft: 8 }} />
                     )}
                   </td>
+                  <td style={{ ...cellStyle, maxWidth: 360 }}>
+                    {/* W7-A2 — the bridge-derived lifecycle, verbatim: a crashed
+                        row shows the runner's own error, a stalled row the
+                        silence; never re-derived from phase/timestamps here. */}
+                    <span
+                      data-session-state-chip
+                      title={s.error ?? undefined}
+                      style={{
+                        display: 'inline-block', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        fontSize: 11.5, color: stateTone(s.state), fontFamily: 'var(--font-mono)', verticalAlign: 'middle',
+                      }}
+                    >
+                      {describeLifecycle(s.state, s.error, s.idleMs)}
+                    </span>
+                  </td>
                   <td style={cellStyle}>
                     <span style={{ color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{s.modelTier ?? '—'}</span>
                   </td>
@@ -171,14 +207,20 @@ export function SessionsIndexBody({
                       {formatUpdatedAt(s.updatedAt)}
                     </span>
                   </td>
-                  <td style={cellStyle}>
+                  <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
                     <Link
                       href={s.href}
                       data-action="resume-session"
-                      style={{ color: 'var(--ember)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                      style={{ color: 'var(--ember)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', marginRight: 10 }}
                     >
-                      Resume →
+                      Open →
                     </Link>
+                    {/* W7-A2 — cancel for every kind, from the row (two-step
+                        confirm inside the button); a terminal row has nothing
+                        to cancel. */}
+                    {s.state !== 'terminal' && (
+                      <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={() => onCancelled?.(s)} />
+                    )}
                   </td>
                 </tr>
               ))}
