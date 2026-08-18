@@ -52,10 +52,11 @@
  * consecutive lexical-check failures in this campaign):
  *   - `sessionId` is validated with SAFE_ID_RE (cli/bridge-studio.ts) — real
  *     session ids are ISO-ish timestamps (`2026-08-05T10-00-00`, uppercase
- *     `T`) which the lowercase-only SLUG_RE rejects. `project` is validated
- *     with SLUG_RE. Exact precedent: cli/bridge-studio-runs.ts's plan-verdict
- *     route ("project uses SLUG_RE ... sessionId uses SAFE_ID_RE"). BOTH are
- *     validated (length cap + charset) BEFORE any fs call.
+ *     `T`) which a lowercase-only slug rule rejects. `project` is validated
+ *     with the ONE case-preserving id rule (PROJECT_ID_RE; a `.kb-<id>`
+ *     seeding anchor with KB_ID_RE — W7-A4 / W7-FIX-A4). Exact precedent:
+ *     cli/bridge-studio-runs.ts's plan-verdict route. BOTH are validated
+ *     (length cap + charset) BEFORE any fs call.
  *   - The session dir is resolved via `resolveGuardedPath`
  *     (cli/studio-path-guard.ts) — a per-segment IDENTITY walk, never a
  *     lexical `startsWith(dir + sep)` check on the unresolved path, and
@@ -103,7 +104,7 @@ import { resolve } from 'node:path';
 import { readdirSync } from 'node:fs';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE, type StudioContext } from './bridge-studio.ts';
-import { SLUG_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
+import { KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '../orchestrator/studio/validate.ts';
 import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -127,7 +128,7 @@ const STATUS_FILENAME = 'status.json';
 /** Hard length caps on the two path-derived inputs — the same value and
  *  rationale as `MAX_SKILL_ID_LENGTH` (orchestrator/skill-path.ts), imported
  *  rather than re-declared: without a cap, a charset-valid but absurdly long
- *  id sails past SAFE_ID_RE/SLUG_RE and only dies later as an opaque fs error
+ *  id sails past SAFE_ID_RE/PROJECT_ID_RE and only dies later as an opaque fs error
  *  (or, worse, a resource-exhaustion vector) instead of an actionable 400. No
  *  real session id or project slug is remotely close to this length. */
 const MAX_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
@@ -217,16 +218,21 @@ export function invalidProjectReason(id: string): string | null {
   // R4-19 WI-2 — bounded carve-out: a non-project KB seeding session anchors
   // under `projects/.kb-<id>/` (KB_SEEDING_ANCHOR_PREFIX, so it never surfaces
   // as a phantom project — discoverProjects still filters ALL dot-dirs). To
-  // make that session viewable/drivable, allow EXACTLY `.kb-<valid-slug>` here,
-  // validating the post-prefix remainder with the SAME SLUG_RE (so a `/`, `..`,
-  // NUL, or empty slug still rejects — traversal defense is unchanged; this is
-  // never a general leading-"." allow).
+  // make that session viewable/drivable, allow EXACTLY `.kb-<valid KB id>`
+  // here, validating the post-prefix remainder with the SAME KB_ID_RE the
+  // create + cleanup routes validate the id against (W7-FIX-A4 / W7A4-02:
+  // the id rule is case-preserving and digit-leading-OK — `MyNotes`,
+  // `2026-notes` — so the anchor charset MUST be that rule, or a session the
+  // create route wrote is unreachable through both `?project=` and the bare
+  // deep link). A `/`, `..`, NUL, `.`-leading, `-`-leading or empty
+  // remainder still rejects — traversal defense is unchanged; this is never
+  // a general leading-"." allow.
   if (id.startsWith(KB_SEEDING_ANCHOR_PREFIX)) {
-    const anchorSlug = id.slice(KB_SEEDING_ANCHOR_PREFIX.length);
-    if (SLUG_RE.test(anchorSlug)) {
+    const anchorId = id.slice(KB_SEEDING_ANCHOR_PREFIX.length);
+    if (KB_ID_RE.test(anchorId)) {
       return null;
     }
-    return `invalid KB seeding anchor "${id}" — the id after "${KB_SEEDING_ANCHOR_PREFIX}" must match ${SLUG_RE}`;
+    return `invalid KB seeding anchor "${id}" — the id after "${KB_SEEDING_ANCHOR_PREFIX}" must match ${KB_ID_RE} (the KB id rule)`;
   }
   // W6-CR-3 — the SAME bounded carve-out for the community-refresh anchor:
   // EXACTLY this one literal value is allowed, never a general leading-"."

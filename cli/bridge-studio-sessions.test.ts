@@ -494,6 +494,12 @@ const KB_SEEDING_ID = 'seedkb';
 const KB_SEEDING_PROJECT = `.kb-${KB_SEEDING_ID}`;
 const KB_SEEDING_SESSION = '2026-08-10T09-10-00';
 const GITPULSE_SESSION = '2026-08-10T09-11-00';
+// W7-FIX-A4 (W7A4-02): the same anchor for a KB whose id is KB_ID_RE-valid
+// but NOT SLUG_RE-valid — mixed case + digit-leading — exactly what the create
+// route accepts and the seeding hand-off writes to disk.
+const KB_SEEDING_MIXED_ID = '2026-MyNotes';
+const KB_SEEDING_MIXED_PROJECT = `.kb-${KB_SEEDING_MIXED_ID}`;
+const KB_SEEDING_MIXED_SESSION = '2026-08-19T09-12-00';
 
 /**
  * Mirrors the REAL create hand-off (cli/bridge-studio-kbs.ts:1026-1044)
@@ -580,6 +586,7 @@ before(async () => {
   // R4-19 WI-2 — the ".kb-" seeding-anchor reachability fixture, plus a
   // normal (non-dot) project-brain session as the companion baseline.
   writeKbSeedingHandoffSession(projectsRoot, KB_SEEDING_ID, KB_SEEDING_SESSION);
+  writeKbSeedingHandoffSession(projectsRoot, KB_SEEDING_MIXED_ID, KB_SEEDING_MIXED_SESSION);
   writeProjectBrainSession(projectsRoot, 'gitpulse', GITPULSE_SESSION);
 
   // R4-17 — onboarding session fixtures: a well-formed project (contract
@@ -1207,6 +1214,27 @@ test('R4-19 WI-2 AT-1 (RED — reachability, flips green on the fix): GET /api/s
   assert.equal(body.sessionId, KB_SEEDING_SESSION);
   assert.equal(body.project, KB_SEEDING_PROJECT, 'the dot-anchored project id must be echoed back verbatim, not stripped/normalized');
   assert.equal(body.phase, 'briefing', 'phase must be the REAL value written by the create hand-off (guardedWriteSessionStatus), never fabricated');
+});
+
+test('W7A4-02 (RED on main): a mixed-case / digit-leading KB id\'s seeding session is reachable via ?project=.kb-<id> — the anchor gate is KB_ID_RE, the same rule the create route applied', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/project-brain/${KB_SEEDING_MIXED_SESSION}?project=${encodeURIComponent(KB_SEEDING_MIXED_PROJECT)}`);
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200 for the KB_ID_RE-valid anchor "${KB_SEEDING_MIXED_PROJECT}", got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'project-brain');
+  assert.equal(body.sessionId, KB_SEEDING_MIXED_SESSION);
+  assert.equal(body.project, KB_SEEDING_MIXED_PROJECT, 'the case-preserving anchor is echoed verbatim — never lowercased');
+  assert.equal(body.phase, 'briefing');
+});
+
+test('W7A4-02 (RED on main): the same session resolves through the BARE deep link (no ?project=) — findSessionProject must not skip a KB_ID_RE-valid anchor dir', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/project-brain/${KB_SEEDING_MIXED_SESSION}`);
+  const text = await res.text();
+  assert.equal(res.status, 200, `bare deep link → expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.ok, true);
+  assert.equal(body.project, KB_SEEDING_MIXED_PROJECT, 'the resolved anchor project is filled in verbatim');
 });
 
 test('R4-19 WI-2 AT-2 (containment guard — must stay 400 after the fix): a traversal-shaped ".kb-x/../../etc" project param is rejected, never resolving through the exact-prefix carve-out', async () => {

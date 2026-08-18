@@ -158,6 +158,25 @@ test('invalidProjectReason (session routes, forge-9bd): accepts "trafficGame"; s
   assert.notEqual(invalidProjectReason('.hidden'), null);
 });
 
+test('W7A4-02: invalidProjectReason accepts the `.kb-<id>` seeding anchor for EVERY KB_ID_RE-valid id (mixed case, digit-leading, underscore) — the anchor charset IS the KB id rule', () => {
+  // The create route (POST /api/studio/kbs) validates the id with KB_ID_RE, and
+  // the seeding/cleanup sessions anchor under projects/.kb-<that id>/ — so the
+  // anchor gate must accept exactly what KB_ID_RE accepts, or those sessions
+  // are unreachable via BOTH ?project= and the bare deep link.
+  for (const kbId of ['MyNotes', '2026-notes', 'trafficGame', 'My_KB', 'seedkb']) {
+    assert.ok(KB_ID_RE.test(kbId), `precondition: KB_ID_RE accepts "${kbId}"`);
+    assert.equal(invalidProjectReason(`.kb-${kbId}`), null, `.kb-${kbId} must be a valid seeding anchor`);
+  }
+  // …and rejects exactly what KB_ID_RE rejects — the carve-out widens case,
+  // never path safety (traversal / empty / nested / dot / flag shapes).
+  for (const bad of ['', '../x', 'a/b', 'a\\b', '.hidden', '-flag', 'a b', 'x\u0000y']) {
+    assert.notEqual(invalidProjectReason(`.kb-${bad}`), null, `.kb-${JSON.stringify(bad)} must be rejected`);
+  }
+  // The rejection message names the KB id rule it enforces, not the retired SLUG_RE.
+  const reason = invalidProjectReason('.kb-a/b');
+  assert.ok(reason !== null && reason.includes(String(KB_ID_RE)), `reason must cite KB_ID_RE, got: ${reason}`);
+});
+
 test('deriveContractStages: resolves a mixed-case project id (projects-02)', () => {
   const r = deriveContractStages({ forgeRoot, projectsRoot: join(forgeRoot, 'projects'), projectId: 'trafficGame' });
   assert.equal(r.ok, true, `expected ok, got ${JSON.stringify(r)}`);
