@@ -1,0 +1,24 @@
+# W7-A0 — first-party 404s the walkthrough assertion may IGNORE.
+#
+# One URL pattern per line (`*` = one path segment, `**` = any depth, `#`
+# comments). Matched against the request path with the bridge host stripped.
+# ONLY a 404 can be allowed here — a 4xx of any other status on a listed path
+# still fails the gate.
+#
+# The bar for an entry: an artifact file that legitimately may not exist for
+# an object the page is otherwise honest about — NOT a fetch the page should
+# never have made. Every entry below was reviewed against
+# docs/roadmaps/wave-7-walkthrough-findings.md before being allowed. Known
+# DEFECTS never go here — they live in baseline.json (owned by a lane, burned
+# down) so the gate keeps naming them:
+#   - `/api/artifact/<cycle>/review-findings.json` — flows-07 / artifact-plan-16
+#     (guaranteed-404 fetch on every run page; A3 guards the fetch)
+#   - `/api/events/` (empty id) and `/api/events/_<kind>-<sid>` at t0 —
+#     agents-01 / crosscut-15 / home-sessions-11 / sessions-kinds-24 (A2, B5)
+#   - `/api/studio/projects/new/preflight` — projects-04 (A4 reserved `new`)
+#
+# demo.json: a cycle only carries a demo when the demo agent ran and captured
+# one; the project showcase reads the latest cycle's demo.json and renders an
+# honest "no demo yet" empty state when it is absent (projects-21 is about
+# that empty state's missing links, not the fetch).
+/api/artifact/*/demo.json
