@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
+import { SchedulerCard } from '@/components/SchedulerCard';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import {
@@ -146,6 +147,12 @@ export default function FlowsIndexPage() {
             + New flow
           </Link>
         </div>
+
+        {/* W7-A3 (flows-01/23): the scheduler is what turns a queued run into
+            a running one — surface it where the runs are. */}
+        <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 20 }}>
+          <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
+        </section>
 
         {error ? (
           <div style={{ marginBottom: flows.length > 0 ? 18 : 0 }}>

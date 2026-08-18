@@ -137,7 +137,22 @@ inventory rather than one shared page-level contract:
   develop"` unconditionally; `home-view.ts`'s `deriveWatchLiveRunHref(runs)`
   now derives it from an ACTUAL live run (`active` beats `gated`; no
   active/gated run at all falls back to `/flows`, never a fabricated specific
-  flow). Three sections:
+  flow). **W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment):**
+  `section[data-section="scheduler"]` mounts the shared **SchedulerCard**
+  (`components/SchedulerCard.tsx`, its own `useSchedulerStatus()` read on a
+  slow visible-only poll — Home itself adds no fetch/interval/endpoint):
+  `[data-component="scheduler-card"][data-scheduler-status="running|paused|
+  stopped|unknown"][data-scheduler-variant="card|strip"][data-scheduler-ready]
+  [data-scheduler-queued]` (+ `[data-scheduler-pid]` only while running,
+  `[data-scheduler-busy="true"]` while an action POST is in flight,
+  `[data-scheduler-error]` carrying the bridge error verbatim); its buttons
+  are exactly the actions the state admits —
+  `button[data-action="scheduler-start"|"scheduler-pause"|"scheduler-resume"|
+  "scheduler-stop"]` (running → pause+stop, paused → resume+stop, stopped →
+  start, unknown/unread → none) — derived by `lib/scheduler-view.ts`, never a
+  fixed row. The same component is mounted on `/flows` (index + monitor), the
+  project roadmap tab, and inline as a `strip` wherever an enqueue outcome
+  needs "start it?". Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when
     `[...buildHomeAttention(attention), ...buildKbAttention(kbs)]` returns ≥1
     row (a real condition, never rendered on the mere existence of a project
@@ -398,8 +413,33 @@ inventory rather than one shared page-level contract:
   page's initial load. `StudioNav`'s Flows nav item now points straight here
   (W6-IA-5 — was a direct deep-link to `/flows/forge-develop`); a specific
   flow's own monitor is reached via a card on this index, not the nav.
-- **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
-  (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
+- **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab][data-kickoff-open]`
+  (`data-active-tab` is `monitor | build`). **W7-A3 (flows-02/03/15/29/30/31,
+  flows-01/23):** the launch surface is PERMANENT — the header carries
+  `button[data-action="toggle-kickoff"]` ("Run flow"), `data-kickoff-open`
+  mirrors whether `[data-section="flow-kickoff"]` is mounted (open by default
+  only while the flow has no runs). The generic kickoff
+  (`[data-kickoff-kind="generic"]`) is now an initiative picker —
+  `select[data-field="kickoff-initiative"]` (candidates derived from the runs
+  list: queued/finished/failed manifests) + `button[data-action="start-run"]`
+  (always enabled outside submission) → `POST /api/flows/:id/run
+  {initiativeId}` (`enqueueFlowRun` onto THIS flow; it used to post the flow
+  id as an initiativeId — 400, silently); the outcome renders
+  `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
+  through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
+  [data-needs-scheduler-start]` line (`a[data-action="open-kickoff-run"]` to
+  the run, and a `strip` SchedulerCard with `[data-action="scheduler-start"]`
+  when the daemon is stopped). Clicking Start with nothing picked renders
+  `[data-kickoff-result="error"]` and sends nothing. The monitor column also
+  mounts a `strip` SchedulerCard (see Home) above the summary. The summary
+  strip's ELAPSED stops at `run.completedAt` for a finished run
+  (`[data-elapsed-final="true"]`, `lib/run-elapsed.ts`); the event tail's
+  empty copy is keyed on the run's STATUS via `[data-tail-state="live|
+  finished|failed|queued|none"]` (a finished run is never "Waiting for
+  events…"); the run rail persists group collapse per flow
+  (`sessionStorage forge-run-groups:<flowId>`, `lib/run-rail-collapse.ts`;
+  COMPLETE starts collapsed above 10 rows) and the phase drawer skips the log
+  fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
@@ -493,10 +533,39 @@ inventory rather than one shared page-level contract:
   id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
-  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state][data-run-kind="cycle"|"architect-session"]`
   (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
   mismatch, not a deliberate shared-surface value; every gate/artifact moment
-  is still folded into this one route). `type=verdict&mode=gate`
+  is still folded into this one route). **W7-A3 (artifact-plan-01…33,
+  sessions-kinds-14, crosscut-05):** `?mode=gate` is a REQUEST, not a fact —
+  `lib/artifact-mode.ts`'s `resolveArtifactMode` honours it only when the run
+  is actually gated for that artifact (`data-mode` reads `view` and no gate
+  bar renders on a completed/planned run). The generic gate bar surfaces its
+  error for BOTH verdicts (`[data-gate-error]`, hoisted out of the send-back
+  drawer). An **architect session's plan** (`run=_architect-<sid>`) is
+  resolved through `/api/architect/sessions` — never `/api/runs` or
+  `/api/artifact` (zero 404s) — and renders `[data-section="architect-plan"]
+  [data-architect-phase="not-found|awaiting-answers|working|awaiting-verdict|
+  finalizing|committed|rejected"][data-gate-armed]`: the gate is armed by the
+  session PHASE alone (`awaiting-verdict` → the PlanGate `[data-section=
+  "plan-gate"]` with `[data-action="approve-plan"|"revise-plan"|"reject-plan"]`
+  — the ONLY Approve on the page; the generic GateBar never mounts for an
+  architect id); every other phase renders `[data-section="architect-plan-
+  status"]` with honest copy + a link to the owning session
+  (`a[data-action="answer-questions"]` at awaiting-answers — the send-back
+  no longer strands the operator — or `a[data-action="open-session"]`) and the
+  plan itself read-only whenever one exists (`iframe[data-plan-iframe]
+  [data-plan-readonly="true"]`); a missing session renders
+  `[data-component="run-not-found"][data-run-kind="architect-session"]` +
+  `a[data-action="back-to-sessions"]` (never an armed gate). After approve
+  the payoff persists through `finalizing` → `committed` as the shared
+  `[data-section="architect-committed"][data-commit-tone][data-needs-
+  scheduler-start]` panel (see the sessions/architect entry) — initiative rows
+  linking the RUN, `a[data-action="open-roadmap"]`, `a[data-action="watch-it-
+  build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
+  breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
+  / planning session (`a[data-crumb="session"]`) / PLAN with
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`. `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
   `[data-section="review-findings"][data-findings-count]` with per-row
@@ -952,11 +1021,13 @@ inventory rather than one shared page-level contract:
   `[data-page="agent-run"][data-run-id][data-page-ready="false"]` only; once
   resolved, `RunView`'s own root takes over and carries
   `[data-page="agent-run"][data-run-id][data-run-state][data-run-cost]
-  [data-run-found="true"|"false"]` — **note this loaded state carries no
-  `data-page-ready="true"` companion at all** (a genuine, as-built departure
-  from every other route's `data-page-ready` convention; a journey/automation
-  waiting on this route must key off `[data-run-found]`'s mere presence, not
-  a `data-page-ready` flip). `found:false` (no `_logs/<runId>` directory
+  [data-run-found="true"|"false"][data-page-ready="true"]` — **W7-A3
+  (agents-11/12/37, crosscut-05/23):** the loaded state now carries
+  `data-page-ready="true"` (the earlier as-built departure is closed), and the
+  page shell renders `nav[data-section="run-breadcrumb"]` with
+  `a[data-action="back-to-agent"]` → `/agents/<slug>` showing the slug from the
+  URL (`[data-agent-slug]`; the shell root mirrors it as `data-agent-slug`).
+  `found:false` (no `_logs/<runId>` directory
   exists — never dispatched, the R6-04 D22 404 case) renders ONLY
   `[data-component="run-not-found"]`, suppressing every other section even if
   the caller supplied non-empty data. `found:true` renders (forge-pet, 2026-08-09)
@@ -1019,6 +1090,18 @@ inventory rather than one shared page-level contract:
     [data-run-found="true"|"false"][data-run-status]`. `found:false` (the
     server's honest 404 for a runId that never existed) renders only
     `[data-component="run-not-found"]`.
+
+  **W7-A3 (crosscut-05/23, flows-06/07, home-sessions-17):** both the
+  `unresolved` and the resolved `main` carry `data-page-ready="true"` (only
+  the in-flight shell renders `"false"`), so the route honours the
+  DOM-as-metrics readiness contract like every other. The resolved page opens
+  with `nav[data-section="run-breadcrumb"]`: `a[data-action="back-to-monitor"]`
+  → `/flows/<flowId>`, and for a found run `a[data-action="open-artifacts"]`
+  → `/artifact?run=<id>&type=plan&mode=view` plus `a[data-action="open-project"]`
+  → `/projects/<project>` when the run carries a project (never fabricated).
+  The optional `review-findings.json` fetch is gated on
+  `shouldFetchReviewFindings(run)` (`run.phases['adversarial-review'] ===
+  'complete'`) — no guaranteed-404 request per visit.
 
   A found run renders: `[data-section="run-trigger"]` with the reserved
   provenance vocabulary above (omitted entirely when the run has no trigger);
@@ -1208,8 +1291,22 @@ inventory rather than one shared page-level contract:
   `[data-action="plan-initiative"]` button plus a blocked-until-planned lock
   badge (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
-  dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. The roadmap toolbar carries an optional
+  dispatching a plan run surfaces `[data-action="open-plan-run"]` — **W7-A3
+  (projects-16/17/32):** inside the shared `[data-component="enqueue-outcome"]
+  [data-enqueue-kind="plan"|"develop"][data-needs-scheduler-start]` line
+  (`components/studio/EnqueueOutcomeLine.tsx`): its claim is derived from the
+  REAL scheduler status (`lib/scheduler-view.ts`'s `describeEnqueueOutcome` —
+  "Enqueued — the scheduler is stopped, so nothing will run until you start
+  it." with a `strip` SchedulerCard + `[data-action="scheduler-start"]` when
+  the daemon is down; the develop copy names the develop flow, never the
+  retired unifier), and `open-plan-run` / `[data-action="open-develop-run"]`
+  link the RUN the enqueue returned (`/flows/<flowId>/run/<initiativeId>` — the
+  initiative id is the STABLE run handle: a planned run's own id IS its
+  initiative id, and the bridge's `findRun` matches `initiativeId` second so
+  the same URL resolves after the scheduler's claim renames the run to its
+  cycle id), not the flow index. The roadmap tab also mounts a `strip`
+  SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
+  Roadmap tab. The roadmap toolbar carries an optional
   per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
   accepts `costCeilingUsd` **only** for a single-initiative Start and stamps it onto
   that initiative's manifest `cost_ceiling_usd`; the field is **opt-in gated**
@@ -1466,9 +1563,29 @@ inventory rather than one shared page-level contract:
   `[data-architect-stale="true"][data-architect-stale-ms]` and its re-run
   `[data-action="architect-rerun"][data-rerun-state="idle"|"rerunning"|"error"]`
   (POSTs `/api/architect/rerun`, no answers/round mutation);
-  `[data-action="open-plan"]` into
-  `/artifact?run=_architect-<sid>&type=plan&mode=gate` (the PLAN gate is still
-  just another gate — M7-4, ADR-031) and `[data-action="watch-it-build"]`;
+  `[data-action="open-plan"]` — **W7-A3 (artifact-plan-22): rendered EXACTLY
+  ONCE in every phase where the session has a PLAN.html** — into
+  `/artifact?run=_architect-<sid>&type=plan&mode=gate` at awaiting-verdict
+  ("Review the plan →"; the PLAN gate is still just another gate — M7-4,
+  ADR-031) and `…&mode=view` otherwise ("View the plan →"); the committed
+  phase renders the shared **ArchitectCommittedView** inside
+  `[data-section="architect-status"]`: `[data-section="architect-committed"]
+  [data-commit-tone="building|claimed-stopped|queued-running|queued-stopped|
+  gated|done|failed|unknown"][data-needs-scheduler-start]` whose headline is
+  derived (`lib/architect-plan-view.ts`'s `describePostCommit`) from the
+  session's `initiativeIds` (bridge-derived from its manifests dir, never
+  stored) joined to the runs list — one `[data-initiative-link]
+  [data-initiative-id][data-queue-state="queued|building|gated|complete|failed|
+  unknown"]` row per initiative with `a[data-action="open-initiative-run"]` to
+  its `/flows/<flowId>/run/<runId>` when a run exists — plus the scheduler
+  status; "the autonomous loop is building it now" is rendered ONLY for
+  `building` (an active run AND a running daemon). It always carries
+  `a[data-action="open-roadmap"]` (`/projects/<p>#roadmap`) and
+  `[data-action="watch-it-build"]` (the run's own flow monitor, `/flows`
+  when none), and a `strip` SchedulerCard with `[data-action="scheduler-
+  start"]` when the daemon is stopped. The activity drawer
+  (`[data-component="activity-drawer"]`) renders in EVERY phase once events
+  exist (open while working, collapsed otherwise — sessions-kinds-13);
   the project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),

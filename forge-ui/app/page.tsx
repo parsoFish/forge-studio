@@ -9,6 +9,7 @@ import { StudioPage } from '@/components/StudioPage';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
+import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import {
   buildConstellation,
@@ -169,6 +170,15 @@ export default function HomePage() {
           pin — see components/studio/HomeSessionsStrip.tsx for the full
           contract description. ===== */}
       <HomeSessionsStrip strip={sessionsStrip} onCancelled={() => { void refreshSessions(); }} />
+
+      {/* ===== SCHEDULER — the daemon that turns queued work into runs (W7-A3,
+          flows-01/23; ADR-031 wave-7 amendment). Its own component owns its
+          read (`useSchedulerStatus`, slow visible-only poll) — Home itself
+          adds no fetch, no interval, no endpoint literal. `queuedCount` is
+          derived from the runs the shared hook already loaded. ===== */}
+      <section data-section="scheduler" aria-label="Scheduler" style={{ marginBottom: 24 }}>
+        <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
+      </section>
 
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (

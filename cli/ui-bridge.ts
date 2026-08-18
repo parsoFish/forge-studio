@@ -43,6 +43,7 @@ import { getPaths, listInFlight } from '../orchestrator/queue.ts';
 import { parseManifest, persistManifestCostCeiling } from '../orchestrator/manifest.ts';
 import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '../orchestrator/enqueue-plan-run.ts';
+import { enqueueFlowRun } from '../orchestrator/enqueue-flow-run.ts';
 import {
   readReviewComments,
   writeReviewComments,
@@ -2276,6 +2277,52 @@ async function handleHttp(
     return;
   }
 
+  // W7-A3 (flows-02/03) — per-flow run trigger: enqueue an EXISTING
+  // initiative onto THIS flow (`enqueueFlowRun`, the ADR-041 generic per-flow
+  // claimable enqueue). The flow monitor's generic "Start Run" used to POST the
+  // flow id as an initiativeId to /api/runs (always 400, silently). Same
+  // status→HTTP mapping as the plan route above; the scheduler claims it later.
+  if (method === 'POST' && url.startsWith('/api/flows/') && url.endsWith('/run')) {
+    const flowId = decodeURIComponent(url.slice('/api/flows/'.length, url.length - '/run'.length));
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(flowId)) {
+      sendJson(res, 400, { error: 'invalid flow id' }, origin);
+      return;
+    }
+    // Existence through the guard family (never a raw fs probe on a
+    // request-derived segment): the flow id is a single slug segment under the
+    // trusted forgeRoot/studio/flows.
+    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
+      sendJson(res, 404, { error: 'flow not found', flowId }, origin);
+      return;
+    }
+    let body: unknown;
+    try {
+      body = await readJson(req);
+    } catch {
+      sendJson(res, 400, { error: 'invalid JSON body' }, origin);
+      return;
+    }
+    const initiativeId = typeof (body as Record<string, unknown>)?.['initiativeId'] === 'string'
+      ? ((body as Record<string, unknown>)['initiativeId'] as string)
+      : '';
+    if (!initiativeId) {
+      sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    try {
+      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot });
+      const httpStatus =
+        result.status === 'enqueued' ? 200 :
+        result.status === 'not-found' ? 404 :
+        result.status === 'already-running' || result.status === 'not-planned' ? 409 :
+        500;
+      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
   // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
   // comments. GET reads them + the derived verdict; POST appends one; POST
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
@@ -3089,6 +3136,15 @@ async function handleArchitect(
       const planUrl = guardedFile(ctx.projectsRoot, [...dirSegs, 'PLAN.html'], 'read') !== null
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
+      // W7-A3 (sessions-kinds-08/12, artifact-plan-22/23): the initiative ids
+      // this session drafted — DERIVED at read time from its `manifests/*.md`
+      // (the same files finalize promotes to `_queue/pending`), never stored
+      // on status.json. Same guard family as the leaves above: a symlinked
+      // `manifests` dir yields [] rather than being followed out of root.
+      const initiativeIds = (guardedReadDir(ctx.projectsRoot, [...dirSegs, 'manifests']) ?? [])
+        .filter((f) => f.endsWith('.md'))
+        .map((f) => f.slice(0, -'.md'.length))
+        .sort();
 
       // staleMs: ms since the last sign of life — heartbeat mtime if present,
       // else the status.json updated_at timestamp.
@@ -3112,6 +3168,7 @@ async function handleArchitect(
         planUrl,
         staleMs,
         completenessCritic: s.completenessCritic ?? null,
+        initiativeIds,
       };
     });
     sendJson(res, 200, { sessions }, origin);

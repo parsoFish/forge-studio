@@ -46,6 +46,7 @@
  */
 
 import { Fragment } from 'react';
+import Link from 'next/link';
 
 import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import { RunLog } from '@/components/studio/RunLog';
@@ -74,6 +75,10 @@ export type FlowRunDetailProps = {
    *  (`app/flows/[id]/run/[runId]/page.tsx`) — this component stays pure and
    *  props-driven, only reporting the click. */
   onNodeClick?: (nodeId: string) => void;
+  /** W7-A3 (crosscut-05 / flows-06): mirrored to `data-page-ready` — the page
+   *  shell's loading branch renders "false"; this resolved surface renders
+   *  "true" (default) so the route honours the DOM-as-metrics contract. */
+  ready?: boolean;
 };
 
 export function FlowRunDetail({
@@ -86,8 +91,10 @@ export function FlowRunDetail({
   expandedNodeId = null,
   nodeLogLines = {},
   onNodeClick,
+  ready = true,
 }: FlowRunDetailProps) {
   const flowId = flow?.id ?? run?.flowId ?? '';
+  const monitorHref = flowId ? `/flows/${encodeURIComponent(flowId)}` : '/flows';
 
   return (
     // <main>, not <div>: the Studio page convention (27 routes render their
@@ -103,8 +110,35 @@ export function FlowRunDetail({
       data-run-found={found ? 'true' : 'false'}
       data-run-status={run?.status ?? ''}
       data-flow-id={flowId}
+      data-page-ready={ready ? 'true' : 'false'}
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
     >
+      {/* W7-A3 (crosscut-23): the run page is no longer a dead end — back to
+          the flow monitor, into the run's artifacts, and to its project. */}
+      <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
+        <Link href="/flows" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Flows</Link>
+        <span style={{ color: 'var(--line-2)' }}>/</span>
+        <Link href={monitorHref} data-action="back-to-monitor" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+          {flowId || 'flow'}
+        </Link>
+        <span style={{ color: 'var(--line-2)' }}>/</span>
+        <span>run</span>
+        <span style={{ flex: 1 }} />
+        {found && (
+          <Link
+            href={`/artifact?run=${encodeURIComponent(runId)}&type=plan&mode=view`}
+            data-action="open-artifacts"
+            style={{ color: 'var(--c-artifact, var(--amber))', textDecoration: 'none' }}
+          >
+            artifacts →
+          </Link>
+        )}
+        {found && run?.project && (
+          <Link href={`/projects/${encodeURIComponent(run.project)}`} data-action="open-project" style={{ color: 'var(--c-project, var(--accent))', textDecoration: 'none' }}>
+            project {run.project} →
+          </Link>
+        )}
+      </nav>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <h2 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h2>
         <div style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { subscribe, type EventLogEntry, type ConnectionState, startRun, resumeRun } from '@/lib/bridge-client';
+import { subscribe, type EventLogEntry, type ConnectionState, resumeRun } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
@@ -17,8 +17,9 @@ import { EventTail } from '@/components/studio/EventTail';
 import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
 import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
-import { FlowKickoff } from '@/components/studio/FlowKickoff';
+import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   const [flow,        setFlow]        = useState<Flow | null>(null);
   const [runs,        setRuns]        = useState<Run[]>([]);
+  // W7-A3 (flows-02): every run across every flow — the generic kickoff's
+  // initiative picker is derived from it (one run per queued manifest).
+  const [allQueueRuns, setAllQueueRuns] = useState<Run[]>([]);
+  // W7-A3 (flows-03): the kickoff surface is persistent behind a header
+  // toggle; open by default only while the flow has no runs (null = not yet
+  // decided — resolved once the first load lands).
+  const [kickoffOpen, setKickoffOpen] = useState<boolean | null>(null);
   const [activeRun,   setActiveRun]   = useState<Run | null>(null);
   const [ready,       setReady]       = useState(false);
   const [tailEvents,  setTailEvents]  = useState<EventLogEntry[]>([]);
@@ -129,6 +137,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         const found = flows.find((f) => f.id === id) ?? null;
         setFlow(found);
         setAllFlows(flows);
+        setAllQueueRuns(everyRun);
         // A threaded spine run surfaces under every flow in its lineage
         // (architect→develop→reflect), so each flow's RUNS rail + monitor shows it.
         setFlowsWithRuns(new Set(everyRun.flatMap((r) => (r.flowLineage?.length ? r.flowLineage : [r.flowId]))));
@@ -153,6 +162,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           (sticky ? allRuns.find((r) => r.id === sticky) : undefined) ??
           pickDefaultRun(allRuns);
         setActiveRun(next);
+        setKickoffOpen((prev) => (prev === null ? allRuns.length === 0 : prev));
       } finally {
         if (!signal.cancelled) setReady(true);
       }
@@ -303,16 +313,29 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   // ---- start / resume ----
 
-  const handleStartRun = useCallback(async () => {
+  // W7-A3 (flows-02): the generic kickoff POSTs a REAL initiative to
+  // /api/flows/:id/run itself (FlowKickoff); on success re-read the rail,
+  // pinning selection to the run just enqueued (or whatever was selected) —
+  // without preserveRunId, loadData re-derives via pickDefaultRun.
+  const handleEnqueued = useCallback((initiativeId: string) => {
     const signal = { cancelled: false };
-    const r = await startRun(flow?.project ?? id);
-    if (r.ok) {
-      // Pin selection to the run just created (or whatever was selected) —
-      // without preserveRunId, loadData re-derives via pickDefaultRun and the
-      // selection snaps to the highest-priority run in the rail.
-      void loadData(signal, r.runId ?? activeRun?.id);
+    // A freshly enqueued (planned) run's id IS its initiative id (run-model).
+    void loadData(signal, initiativeId);
+  }, [loadData]);
+
+  // Candidates for the generic kickoff: every initiative that can be
+  // (re)enqueued — queued / finished / failed manifests — deduped by id.
+  const kickoffCandidates: KickoffCandidate[] = (() => {
+    const seen = new Set<string>();
+    const out: KickoffCandidate[] = [];
+    for (const r of allQueueRuns) {
+      if (!(r.status === 'planned' || r.status === 'complete' || r.status === 'failed')) continue;
+      if (!r.initiativeId || seen.has(r.initiativeId)) continue;
+      seen.add(r.initiativeId);
+      out.push({ initiativeId: r.initiativeId, project: r.project ?? null });
     }
-  }, [flow, id, loadData, activeRun]);
+    return out;
+  })();
 
   const handleResumeRun = useCallback(async () => {
     if (!activeRun) return;
@@ -394,6 +417,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       data-run-count={view.runs.length}
       data-can-start={view.flow ? 'true' : 'false'}
       data-active-tab={tab}
+      data-kickoff-open={kickoffOpen ? 'true' : 'false'}
       style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <StudioNav />
@@ -485,6 +509,20 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   {view.flow.goal}
                 </span>
               )}
+              {/* W7-A3 (flows-03): the launch control is a PERMANENT header
+                  affordance — a flow no longer loses it after its first run. */}
+              {view.flow && (
+                <button
+                  type="button"
+                  className={kickoffOpen ? 'btn' : 'btn btn-primary'}
+                  data-action="toggle-kickoff"
+                  aria-expanded={!!kickoffOpen}
+                  onClick={() => setKickoffOpen((v) => !v)}
+                  style={{ fontSize: 12 }}
+                >
+                  {kickoffOpen ? 'Hide launcher' : 'Run flow'}
+                </button>
+              )}
               {/* W6-SW-3 (sweep C3#6): live-connection indicator — without
                   this a dropped WS socket looked identical to a genuinely
                   quiet run. */}
@@ -546,6 +584,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               runs={view.runs}
               activeRunId={view.activeRun?.id ?? null}
               onSelect={handleSelectRun}
+              flowId={id}
             />
 
             {/* Center: Monitor main */}
@@ -603,15 +642,25 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 </div>
               )}
 
-              {/* Stage C kickoff surface — shown when the flow is known but no
-                  runs exist yet. Renders the launch UI matching flow.kickoff.kind
-                  (idea / initiative-select / trigger-only), else a generic Start Run. */}
-              {view.ready && view.flow && view.runs.length === 0 && (
+              {/* Stage C kickoff surface — W7-A3 (flows-03): behind the
+                  header's "Run flow" toggle in EVERY state (open by default
+                  when the flow has no runs). Renders the launch UI matching
+                  flow.kickoff.kind (idea / initiative-select / trigger-only),
+                  else the generic initiative picker → POST /api/flows/:id/run. */}
+              {view.ready && view.flow && kickoffOpen && (
                 <FlowKickoff
                   flow={view.flow}
-                  onStartGeneric={() => void handleStartRun()}
+                  candidates={kickoffCandidates}
+                  onEnqueued={handleEnqueued}
                 />
               )}
+
+              {/* W7-A3 (flows-01/23): the scheduler is what turns the QUEUED
+                  rows in the rail into running ones — its real state and
+                  Start/Pause/Stop sit right here on the monitor. */}
+              <div style={{ padding: '6px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+                <SchedulerCard variant="strip" queuedCount={view.runs.filter((r) => r.status === 'planned').length} />
+              </div>
 
               {/* Resume CTA — shown when the active run has failed */}
               {view.activeRun?.status === 'failed' && (
@@ -669,6 +718,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               <EventTail
                 events={tailEvents}
                 activeRunId={view.activeRun?.id ?? null}
+                runStatus={view.activeRun?.status ?? null}
               />
 
               {/* History ledger — every run this flow has ever had (all six

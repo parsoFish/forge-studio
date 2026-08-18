@@ -352,6 +352,29 @@ export const journey = defineJourney({
           const fetchErrorCount = await page.evaluate(() => document.querySelectorAll('[data-component="fetch-error"]').length);
           check(fetchErrorCount === 0, `HOME.1: no [data-component="fetch-error"] on a healthy bridge (got ${fetchErrorCount})`);
 
+          // W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment): the
+          // scheduler daemon is a Studio object again. The journey harness runs
+          // with the daemon STOPPED (its daemon guard refuses a live one), so
+          // the card must say so honestly and offer exactly one control: Start.
+          try {
+            await page.waitForFunction(
+              () => document.querySelector('[data-component="scheduler-card"]')?.getAttribute('data-scheduler-ready') === 'true',
+              null, { timeout: 10000 },
+            );
+          } catch { /* asserted below */ }
+          const sched = await page.evaluate(() => {
+            const el = document.querySelector('[data-component="scheduler-card"]');
+            return el ? {
+              status: el.getAttribute('data-scheduler-status'),
+              ready: el.getAttribute('data-scheduler-ready'),
+              actions: [...el.querySelectorAll('[data-action^="scheduler-"]')].map((b) => b.getAttribute('data-action')),
+            } : null;
+          });
+          check(sched !== null, 'HOME.1 (W7-A3): [data-component="scheduler-card"] is mounted on Home');
+          check(sched?.ready === 'true', `HOME.1 (W7-A3): the scheduler card read the bridge (data-scheduler-ready, got "${sched?.ready}")`);
+          check(sched?.status === 'stopped', `HOME.1 (W7-A3): the daemon is honestly reported stopped under the journey harness (got "${sched?.status}")`);
+          check(JSON.stringify(sched?.actions) === JSON.stringify(['scheduler-start']), `HOME.1 (W7-A3): a stopped scheduler offers exactly [Start] (got ${JSON.stringify(sched?.actions)})`);
+
           // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
           // onboarding entry point from Home — it must land on the real
           // onboarding form (/projects/new), never the bare /projects index

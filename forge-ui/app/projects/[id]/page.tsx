@@ -39,6 +39,7 @@ import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectC
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
+import { SchedulerCard } from '@/components/SchedulerCard';
 
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -60,6 +61,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [demoDesignNeeded, setDemoDesignNeeded] = useState(false);
   // S6: Editor|Roadmap tab + the read-only roadmap read model.
   const [tab, setTab] = useState<'editor' | 'roadmap'>('editor');
+  // W7-A3: `/projects/<id>#roadmap` (the architect committed panel's "Open the
+  // roadmap →") lands on the Roadmap tab. Read on mount only — SSR renders the
+  // editor tab and the hash is a client-only fact.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#roadmap') setTab('roadmap');
+  }, []);
   const [roadmap, setRoadmap] = useState<ProjectRoadmap | null>(null);
   // R4-11-T3: cycle groups (one per initiative, attemptCount + priorCycleIds)
   // back the roadmap's recovery affordances — a different data source than
@@ -773,15 +780,16 @@ function ProjectOnboardForm() {
 // plan-everything-before-kickoff: per-card develop state, lifted to RoadmapView
 // so the batch "start eligible" button and individual card buttons share one
 // source of truth (both funnel through the same startDevelopment() call).
-type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
+type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null; flowId?: string };
 
-/** Map a batch item result onto the per-card develop state. */
+/** Map a batch item result onto the per-card develop state. W7-A3
+ *  (projects-32): keep the enqueue's flowId so the card links the run. */
 function developStateFromResult(
-  item: { ok: boolean; status?: string; detail?: string } | undefined,
+  item: { ok: boolean; status?: string; detail?: string; flowId?: string } | undefined,
   requestError: string | undefined,
 ): DevelopCardState {
   return item?.ok
-    ? { status: 'started', error: null }
+    ? { status: 'started', error: null, flowId: item.flowId }
     : { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
 }
 
@@ -789,12 +797,13 @@ function developStateFromResult(
 // DevelopCardState above. `planned` (whether `workItems` exists) is server
 // truth from the roadmap fetch, not tracked here — this only tracks the
 // transient client-side request lifecycle of clicking "Plan".
-type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
+type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null; flowId?: string };
 
-/** Map a single plan-dispatch result onto the per-card plan state. */
+/** Map a single plan-dispatch result onto the per-card plan state (W7-A3:
+ *  flowId kept so the card links the run, projects-32). */
 function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
   return result.status === 'enqueued'
-    ? { status: 'started', error: null }
+    ? { status: 'started', error: null, flowId: result.flowId }
     : { status: 'error', error: result.detail ?? result.status };
 }
 
@@ -987,6 +996,11 @@ function RoadmapView({
       data-dep-count={String(initLevels.maxLevel)}
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
+      {/* W7-A3 (projects-16 / flows-23): every Plan / Start development
+          control below is a queue write — the scheduler daemon does the
+          running. Its real state + Start/Pause/Stop sit right above them. */}
+      <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+
       {/* W6-RV-2: the roadmap is a completion-time canvas — done initiatives
           placed on a real day-by-day time axis in completion order, pending
           work banded right of the now-line by dependency-feasibility (no

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import type { Run } from '@/lib/studio-client';
+import { initialCollapsed, railStorageKey, serializeCollapsed, type RailCollapsed } from '@/lib/run-rail-collapse';
 
 // ---------------------------------------------------------------------------
 // RunRail — left panel listing runs grouped by status. Each group is a
@@ -17,6 +18,9 @@ interface RunRailProps {
   runs: Run[];
   activeRunId: string | null;
   onSelect: (runId: string) => void;
+  /** W7-A3 (flows-31): the flow id keys the persisted group-collapse state
+   *  (`forge-run-groups:<flowId>`, next to the run selection's own key). */
+  flowId?: string;
 }
 
 const GROUPS: Array<{ label: string; status: Run['status'] }> = [
@@ -32,12 +36,35 @@ function statusDotStatus(status: Run['status']): string {
   return status;
 }
 
-export function RunRail({ runs, activeRunId, onSelect }: RunRailProps) {
-  // Per-group collapse state. Groups default expanded; the operator minimises
-  // the ones they don't care about (e.g. the COMPLETE pile) to keep the rail
-  // navigable. The run rail itself is height-bounded by its flex parent and
-  // scrolls internally — it no longer grows the page (see flows/[id]/page.tsx).
-  const [collapsed, setCollapsed] = useState<Partial<Record<Run['status'], boolean>>>({});
+export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailProps) {
+  // Per-group collapse state. W7-A3 (flows-31): persisted per flow in
+  // sessionStorage (the run SELECTION already was) and, absent a stored
+  // choice, COMPLETE starts collapsed once it outgrows the threshold — the
+  // rail is height-bounded by its flex parent and scrolls internally.
+  const [collapsed, setCollapsed] = useState<RailCollapsed>({});
+  const completeCount = runs.filter((r) => r.status === 'complete').length;
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem(railStorageKey(flowId));
+    } catch {
+      /* sessionStorage unavailable (SSR/private mode) — non-fatal */
+    }
+    setCollapsed(initialCollapsed(stored, { complete: completeCount }));
+    // Re-derive when the flow changes or the complete pile crosses the
+    // threshold before the operator has expressed a choice.
+  }, [flowId, completeCount]);
+  const toggle = (status: Run['status']) => {
+    setCollapsed((c) => {
+      const next = { ...c, [status]: !(c[status] ?? false) };
+      try {
+        sessionStorage.setItem(railStorageKey(flowId), serializeCollapsed(next));
+      } catch {
+        /* non-fatal */
+      }
+      return next;
+    });
+  };
 
   if (runs.length === 0) {
     return (
@@ -84,7 +111,7 @@ export function RunRail({ runs, activeRunId, onSelect }: RunRailProps) {
               type="button"
               data-action="toggle-run-group"
               aria-expanded={!isCollapsed}
-              onClick={() => setCollapsed((c) => ({ ...c, [status]: !(c[status] ?? false) }))}
+              onClick={() => toggle(status)}
               style={{
                 display: 'flex',
                 alignItems: 'center',

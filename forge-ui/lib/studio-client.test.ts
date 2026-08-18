@@ -848,6 +848,10 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     origin: 'architect',       // NOT parseRun's default ('human-directed')
     costUsd: 9.99,               // NOT parseRun's default (0)
     startedAt: '2026-01-01T00:00:00Z',
+    // W7-A3 (flows-29): served by orchestrator/run-model.ts since W6-RV-2, but
+    // was silently dropped here — the exact declared-data-fails-open class
+    // this pin exists for. MonitorSummary's ELAPSED depends on it.
+    completedAt: '2026-01-01T01:04:00Z',
     phases: { dev: 'complete' },                        // non-empty (default would be {})
     phaseMeta: { dev: { costUsd: 1.5, retries: 2 } },    // non-empty
     artifactsReady: { plan: 'view' },                    // non-empty

@@ -39,6 +39,7 @@ import type { RoadmapWorkItem, RecoveryInspect } from '@/lib/bridge-client';
 import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
+import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -214,13 +215,10 @@ export function InitiativeDetail({
       {unplanned && plan.status === 'error' && plan.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
       )}
+      {/* W7-A3 (projects-16/32): the enqueue outcome, honest about the
+          scheduler and linking the run the enqueue actually returned. */}
       {unplanned && plan.status === 'started' && (
-        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Planning started — the initiative will be decomposed into work items.</span>
-          <Link data-action="open-plan-run" href="/flows/forge-architect" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
-            view run →
-          </Link>
-        </div>
+        <EnqueueOutcomeLine kind="plan" runAction="open-plan-run" runId={initiativeId} flowId={plan.flowId ?? 'forge-architect'} />
       )}
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
@@ -244,13 +242,10 @@ export function InitiativeDetail({
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
       )}
+      {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
+          the develop flow does; and the claim + run link are real. */}
       {develop.status === 'started' && (
-        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
-          <Link data-action="open-develop-run" href="/flows/forge-develop" style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', textDecoration: 'none' }}>
-            view run →
-          </Link>
-        </div>
+        <EnqueueOutcomeLine kind="develop" runAction="open-develop-run" runId={initiativeId} flowId={develop.flowId ?? 'forge-develop'} />
       )}
 
       {/* R4-11-T3: recovery affordances — gated on the recoverable set
