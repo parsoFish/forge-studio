@@ -10,9 +10,9 @@
 
 Severity: **S1** blocks an operator path / data loss / silently wrong · **S2** works but confusing, missing an
 expected capability, or an error surfaced badly · **S3** polish. `n<k>` = relates to operator note k:
-n1 approve plan does nothing; n2 home strips indistinguishable; n3 no session cancel / bad-state sessions; n4 betterado plan stuck; loops don't tie together; n5 community too light; refresh agent inert; targeted search; n6 drain-to-green opaque; health tab busy/overlapping; n7 two flow buttons on KB screen; recent-runs widget; n8 library artifacts not creatable/editable; n9 remove KB card from Library; n10 remove reflection flow.
+n1 approve plan does nothing; n2 home strips indistinguishable; n3 no session cancel / bad-state sessions; n4 betterado plan stuck; loops don't tie together; n5 community too light; refresh agent inert; targeted search; n6 drain-to-green opaque; health tab busy/overlapping; n7 two flow buttons on KB screen; recent-runs widget; n8 library artifacts not creatable/editable; n9 remove KB card from Library; n10 remove reflection flow; n11 project kick-off control buried at page bottom.
 
-**Totals:** 337 findings — S1 79 · S2 156 · S3 102.
+**Totals:** 338 findings — S1 79 · S2 157 · S3 102.
 
 ## Initiative → findings
 
@@ -28,7 +28,7 @@ n1 approve plan does nothing; n2 home strips indistinguishable; n3 no session ca
 | **W7-B3** Community | 6 | 11 | 7 | n5, n8, n9 |
 | **W7-B4** Library authoring | 9 | 21 | 16 | n4, n5, n6, n8, n9 |
 | **W7-B5** Agents + runs | 8 | 11 | 8 | n3, n4, n6, n7 |
-| **W7-B6** Projects | 3 | 13 | 11 | n3, n4, n6 |
+| **W7-B6** Projects | 3 | 14 | 11 | n3, n4, n6, n11 |
 | **W7-B7** Artifact + verdict pages | 1 | 12 | 6 | n1 |
 | **W7-C1** Flows pillar consolidation | 0 | 4 | 6 | n4, n7, n10 |
 | **W7-C2** Interview + verdict richness | 1 | 5 | 2 | n1, n3 |
@@ -339,6 +339,7 @@ Pre-existing beads folded in: forge-75j (typed outputs no source), forge-irn, fo
 - **S1** `projects-11` — Onboarding never git-inits a project created under projects/ — the new project silently inherits FORGE's own git repo _( `/projects/new` )_
 - **S1** `projects-35` — DATA LOSS: the greenfield "Create project" form silently DELETES an existing project (and its brain) when the name collides — returns 200 and opens the wiped project _( `/projects/new (Or create a new project)` )_
 - **S2** `crosscut-21` `n4` — Architect entry accepts an unknown project and enables "Start architect" — and its project picker offers project NAMES while every link carries project IDS _( `/architect/new?project=<id>` )_
+- **S2** `orch-02` `n11` — Operator note 11: the project page's 'kick off / run a flow' control sits at the very bottom of a very long page — an operator scrolling from the top never finds it; relocate to the primary action area (header/roadmap tab top) and make it a real control (projects-20 says the select is inert) _( `/projects/<id>` )_
 - **S2** `projects-05` — Unsaved project-editor edits are discarded silently by any navigation — nav link, project switcher, or tab close _( `/projects/<id>` )_
 - **S2** `projects-08` `n4` — Projects index shows no health, activity or progress — a contract-broken project is indistinguishable from a healthy one, and there is no filter/sort/search _( `/projects` )_
 - **S2** `projects-12` — The quality-gate command is accepted and reported green without ever being validated — an unrunnable gate passes preflight C1 _( `/projects/new` )_
