@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from './bridge-client';
 import {
   fetchRuns,
@@ -72,6 +72,10 @@ export type StudioHomeData = {
   sessions: SessionIndexRow[];
   /** True once the first `loadAll` Promise.all has settled. */
   ready: boolean;
+  /** W7-A2 — refetch ONLY the sessions index (the SAME `fetchStudioSessions`
+   *  read `loadAll` folds in), for a caller that just changed a session
+   *  (Home's card cancel) — never a new endpoint, never a poll. */
+  refreshSessions: () => Promise<void>;
 };
 
 /**
@@ -165,5 +169,9 @@ export function useStudioHomeData(): StudioHomeData {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { agents, flows, projects, kbs, runs, attention, sessions, ready };
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    setSessions(await fetchStudioSessions());
+  }, []);
+
+  return { agents, flows, projects, kbs, runs, attention, sessions, ready, refreshSessions };
 }

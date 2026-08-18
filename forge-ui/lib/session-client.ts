@@ -45,6 +45,9 @@
  */
 
 import { resolveBridgeUrl } from './bridge-client';
+import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
+
+export type { SessionLifecycle } from './session-lifecycle-client';
 
 // ---------------------------------------------------------------------------
 // Generic structural-parse helpers (re-declared locally per this file set's
@@ -747,6 +750,14 @@ export type SessionShellPayload = {
    * defaulted to `false`.
    */
   terminal: boolean;
+  /**
+   * W7-A2 — the bridge's DERIVED lifecycle (`cli/bridge-studio-lifecycle.ts`):
+   * `state` (working | awaiting-operator | crashed | stalled | terminal), a
+   * truthful `needsYou`, the runner's crash `error` text, `idleMs`, and
+   * `cancellable`. REQUIRED and hard-parsed (`parseSessionLifecycle`) — a
+   * missing lifecycle throws, never defaults to "working".
+   */
+  lifecycle: SessionLifecycle;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -817,11 +828,15 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const terminal = terminalRaw;
 
+  // W7-A2 — REQUIRED like "terminal" above; every malformed shape throws.
+  const lifecycle = parseSessionLifecycle(raw['lifecycle']);
+
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     affordances,
     modelTier,
     terminal,
+    lifecycle,
   };
 }
 
@@ -910,8 +925,13 @@ export function interpretSessionShellOutcome(outcome: SessionShellFetchOutcome):
 // fetchSessionShell — thin, untested-here wrapper (see module header)
 // ---------------------------------------------------------------------------
 
-function sessionShellPath(kind: string, sessionId: string, project: string): string {
-  return `/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`;
+/** W7-A2 — `project` is OPTIONAL: `null` omits the query entirely and the
+ *  bridge resolves the anchor project server-side (`findSessionProject`,
+ *  cli/bridge-studio-sessions.ts) — a deep link that carries no `?project=`
+ *  is a working address for every kind. */
+function sessionShellPath(kind: string, sessionId: string, project: string | null): string {
+  const base = `/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}`;
+  return project !== null ? `${base}?project=${encodeURIComponent(project)}` : base;
 }
 
 /** Fetch a session's shell payload from the bridge. Resolves the bridge URL,
@@ -921,7 +941,7 @@ function sessionShellPath(kind: string, sessionId: string, project: string): str
  *  exists. Untested in session-client.test.ts by design (that file's own
  *  header); the over-the-wire behaviour is pinned by cli/bridge-studio-
  *  sessions.test.ts. */
-export async function fetchSessionShell(kind: string, sessionId: string, project: string): Promise<SessionShellFetchResult> {
+export async function fetchSessionShell(kind: string, sessionId: string, project: string | null): Promise<SessionShellFetchResult> {
   const base = await resolveBridgeUrl();
   if (!base) return { ok: false, errorKind: 'no-bridge', error: 'no bridge configured' };
 

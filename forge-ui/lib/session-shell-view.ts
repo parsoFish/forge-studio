@@ -46,6 +46,7 @@
 import type {
   SessionAffordance,
   SessionArtifactPayload,
+  SessionLifecycle,
   SessionShellErrorKind,
   SessionShellFetchResult,
   SessionShellPayload,
@@ -114,6 +115,10 @@ export type SessionShellReadyState = {
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
   terminal: boolean;
+  /** W7-A2 — the payload's own derived lifecycle (server-derived, see
+   *  session-lifecycle-client.ts), carried through UNCHANGED across a
+   *  `selectStage` switch — a session-level fact, like `terminal`. */
+  lifecycle: SessionLifecycle;
   dataAttrs: SessionShellDataAttrs;
 };
 
@@ -131,9 +136,17 @@ function turnsForStage(turns: readonly SessionTurn[], stage: string): SessionTur
   return turns.filter((t) => t.stage === stage);
 }
 
-function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[]): string | null {
+/** W7-A2 (knowledge-25) — phase-aware: "not YET" is only honest while the
+ *  session is still working toward a transcript. A session that has moved
+ *  past its working phases (an operator gate open, or terminal) with no
+ *  turns for this stage will never grow one — some kinds (kb-cleanup,
+ *  authoring, community-refresh) record their work in the artifact pane,
+ *  not as transcript turns — so the message says that instead of promising
+ *  a turn that is not coming. */
+function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], lifecycle: SessionLifecycle): string | null {
   if (turns.length > 0) return null;
-  return `No turns recorded yet for stage "${stage}"`;
+  if (lifecycle.state === 'working') return `No turns recorded yet for stage "${stage}"`;
+  return `No transcript for stage "${stage}" — this session records its work in the artifact pane`;
 }
 
 function readyDataAttrs(input: {
@@ -172,13 +185,14 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     stageSelectorVisible,
     allTurns: [...payload.turns],
     turnsForStage: turns,
-    emptyStageMessage: emptyStageMessageFor(stage, turns),
+    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.lifecycle),
     artifactKind,
     artifactLabel: payload.artifact.label,
     artifact: payload.artifact,
     affordances: payload.affordances,
     modelTier: payload.modelTier,
     terminal: payload.terminal,
+    lifecycle: payload.lifecycle,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
       stage,
@@ -222,7 +236,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
       ...state,
       selectedStage: stage,
       turnsForStage: turns,
-      emptyStageMessage: emptyStageMessageFor(stage, turns),
+      emptyStageMessage: emptyStageMessageFor(stage, turns, state.lifecycle),
       dataAttrs: readyDataAttrs({
         kind: state.kind,
         stage,
@@ -303,7 +317,14 @@ const COMMUNITY_REGISTRY_ANCHOR = '.community-registry';
  *  taught yet) — both cases the caller treats identically: render no link
  *  rather than one to a dead end or a guessed destination. */
 export function pseudoProjectAnchorDestination(project: string): PseudoProjectDestination | null {
-  if (project.startsWith(KB_SEEDING_ANCHOR_PREFIX)) return { label: 'Knowledge', href: '/knowledge' };
+  // W7-A2 (sessions-kinds-35) — a `.kb-<id>` anchor resolves to THAT KB's
+  // own page (`/knowledge?id=<id>`, the Knowledge pillar's detail address),
+  // never the bare index; the community anchor to the registry browser.
+  if (project.startsWith(KB_SEEDING_ANCHOR_PREFIX)) {
+    const kbId = project.slice(KB_SEEDING_ANCHOR_PREFIX.length);
+    if (kbId.length === 0) return null;
+    return { label: `Knowledge base ${kbId}`, href: `/knowledge?id=${encodeURIComponent(kbId)}` };
+  }
   if (project === COMMUNITY_REGISTRY_ANCHOR) return { label: 'Community', href: '/community' };
   return null;
 }
@@ -315,8 +336,12 @@ export function pseudoProjectAnchorDestination(project: string): PseudoProjectDe
  *  — a real project's own `/projects/<id>` for an honest project id, or the
  *  pseudo-anchor's own destination otherwise. Pure and total: never throws,
  *  never fabricates a destination this file hasn't been told about. */
-export function backToProjectLink(project: string | null, terminal: boolean): PseudoProjectDestination | null {
-  if (!terminal || project === null) return null;
+export function backToProjectLink(project: string | null, _terminal: boolean): PseudoProjectDestination | null {
+  // W7-A2 (sessions-kinds-35) — rendered in EVERY phase, not only terminal:
+  // the operator most needs a way out of a session they are actively
+  // working on. `_terminal` is kept in the signature (call sites and pins
+  // pass it) but no longer gates anything.
+  if (project === null) return null;
   if (isPseudoProjectAnchor(project)) return pseudoProjectAnchorDestination(project);
   return { label: 'project', href: `/projects/${encodeURIComponent(project)}` };
 }

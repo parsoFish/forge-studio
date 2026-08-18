@@ -82,7 +82,7 @@ test('describeLifecycle: crashed carries the error text; stalled names the silen
 const BASE_PAYLOAD = {
   ok: true, kind: 'demo', title: 'Demo capability session', sessionId: '2026-08-03T12-00-00', project: 'projb',
   phase: 'generating', stages: ['demo'], defaultStage: 'demo', turns: [],
-  artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [] },
+  artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: [] },
   affordances: [], modelTier: null, terminal: false,
 };
 

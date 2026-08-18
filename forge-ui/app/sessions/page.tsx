@@ -12,7 +12,7 @@
  * (`components/studio/SessionsIndex.tsx`).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 import { SessionsIndexBody } from '@/components/studio/SessionsIndex';
 
@@ -20,12 +20,18 @@ export default function SessionsIndexPage() {
   const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
   const [ready, setReady] = useState(false);
 
+  // Default (`?active=1`) — operator-locked: in-flight sessions ONLY, never
+  // terminal history. Re-run after a row's cancel succeeds (W7-A2) — the
+  // cancelled session is terminal and drops out of the active set.
+  const refresh = useCallback(async (): Promise<void> => {
+    const s = await fetchStudioSessions();
+    setSessions(s);
+  }, []);
+
   useEffect(() => {
     const signal = { cancelled: false };
     (async () => {
       try {
-        // Default (`?active=1`) — operator-locked: in-flight sessions ONLY,
-        // never terminal history.
         const s = await fetchStudioSessions();
         if (signal.cancelled) return;
         setSessions(s);
@@ -36,5 +42,5 @@ export default function SessionsIndexPage() {
     return () => { signal.cancelled = true; };
   }, []);
 
-  return <SessionsIndexBody sessions={sessions} ready={ready} />;
+  return <SessionsIndexBody sessions={sessions} ready={ready} onCancelled={() => { void refresh(); }} />;
 }

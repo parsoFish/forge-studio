@@ -26,6 +26,7 @@ import { SessionArtifactPane } from '@/components/studio/session/SessionArtifact
 import { SessionArchitectPanel } from '@/components/studio/session/SessionArchitectPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
+import { SessionLifecycleBar } from '@/components/studio/session/SessionLifecycleBar';
 
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
  *  added `kb-cleanup`/`authoring`; W6-B9 adds `instructions`, deleting its
@@ -60,14 +61,14 @@ const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 
  *     demo fix, below) — every instructions affordance now renders from the
  *     generic `SessionInteractivePanel` instead.
  *
- * `project` is required by `fetchSessionShell` but not by the per-kind list
- * endpoints (which return every session, `.project` included) — so `project`
- * is sourced from the per-kind summary once it resolves, falling back to an
- * optional `?project=` query param (the one piece of state project-brain's
- * retired page already read this way). If neither ever resolves (the
- * session-id genuinely doesn't exist for this kind), the page fails closed
- * to the same "session not found" state the shell route's own 404 produces
- * — never an infinite loading spinner.
+ * `project` (W7-A2): the shell route no longer REQUIRES it — the page hands
+ * it whatever hint it has (the per-kind summary's `.project`, else the
+ * optional `?project=` query param) and otherwise omits it; the bridge
+ * resolves the anchor project server-side (`findSessionProject`,
+ * cli/bridge-studio-sessions.ts) and echoes it on the payload, so a bare
+ * `/sessions/<kind>/<sid>` deep link is a working address for every kind.
+ * "Session not found" is ONLY the shell route's own 404 — never a missing
+ * query param, never an infinite loading spinner.
  *
  * The page-chrome `title` (the breadcrumb + heading `StudioArchitectShell`
  * renders) is sourced from the shell route's `title` field — the session-kind
@@ -93,26 +94,24 @@ export default function SessionShellPage({
   // ---- per-kind session summary (drives the live interactive panel) -------
 
   const [summary, setSummary] = useState<KindSummary | null>(null);
-  const [summaryAttempted, setSummaryAttempted] = useState(false);
   const [themes, setThemes] = useState<Array<{ name: string; content: string }>>([]);
 
   const refreshSummary = useCallback(() => {
     const settle = (next: KindSummary | null) => {
       setSummary(next);
-      setSummaryAttempted(true);
     };
     if (kind === 'architect') {
       fetchArchitectSessions()
         .then((list) => settle(toArchitectSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => setSummaryAttempted(true));
+        .catch(() => {});
     } else if (kind === 'instructions') {
       listInstructionsSessions()
         .then((list) => settle(toInstructionsSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => setSummaryAttempted(true));
+        .catch(() => {});
     } else if (kind === 'project-brain') {
       fetchProjectBrainSessions()
         .then((list) => settle(toProjectBrainSummary(list.find((s) => s.session_id === sessionId) ?? null)))
-        .catch(() => setSummaryAttempted(true));
+        .catch(() => {});
     } else if (kind === 'demo') {
       // W6-B6 fix (the demo "Session not found" bug) — `demo` had NO branch
       // here at all, unlike architect/instructions/project-brain: it fell
@@ -129,10 +128,11 @@ export default function SessionShellPage({
       // above.
       listDemoSessions()
         .then((list) => settle(toDemoSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
-        .catch(() => setSummaryAttempted(true));
-    } else {
-      setSummaryAttempted(true); // an unrecognised kind — nothing to fetch here; the shell route's own 404 carries the page
+        .catch(() => {});
     }
+    // Every other kind (kb-cleanup / authoring / community-refresh /
+    // onboarding) has no per-kind list route — the shell route alone carries
+    // the page, resolving the project itself (W7-A2).
   }, [kind, sessionId]);
 
   useEffect(() => {
@@ -159,28 +159,34 @@ export default function SessionShellPage({
     };
   }, [summary, sessionId]);
 
-  const project = summary?.data.project ?? queryProject ?? null;
-
   // ---- session-shell read route (drives the transcript + artifact panes) --
 
+  // W7-A2 (community-06, knowledge-18, sessions-kinds-20) — the shell route
+  // is fetched WITHOUT `?project=` when neither the per-kind summary nor the
+  // URL knows it: the bridge resolves the anchor project server-side
+  // (`findSessionProject`) and echoes it back on the payload, so a bare
+  // `/sessions/<kind>/<sid>` deep link is a working address for EVERY kind
+  // (kb-cleanup / authoring / community-refresh / onboarding included —
+  // none of which has a per-kind list branch above, and whose anchor is a
+  // pseudo-project no operator would guess). "Session not found" is now
+  // ONLY the shell route's own 404, never a missing query param.
   const [shellResult, setShellResult] = useState<SessionShellFetchResult | null>(null);
+  const shellProject = shellResult?.ok ? shellResult.payload.project : null;
+  const project = summary?.data.project ?? queryProject ?? shellProject;
+  const projectHint = summary?.data.project ?? queryProject ?? null;
   const refreshShell = useCallback(() => {
-    if (!project) return;
-    void fetchSessionShell(kind, sessionId, project).then(setShellResult);
-  }, [kind, sessionId, project]);
+    void fetchSessionShell(kind, sessionId, projectHint).then(setShellResult);
+  }, [kind, sessionId, projectHint]);
 
   useEffect(() => {
-    if (!project) return;
     refreshShell();
     const poll = setInterval(refreshShell, SHELL_POLL_MS);
     return () => clearInterval(poll);
-  }, [project, refreshShell]);
+  }, [refreshShell]);
 
   const viewState = useMemo(() => deriveSessionShellViewState(shellResult), [shellResult]);
 
-  // Fail-closed: no session found in the per-kind list AND no ?project= to
-  // even attempt the shell route — never leave the page spinning forever.
-  const noProjectKnown = project === null && summaryAttempted;
+
 
   // ---- live events (StageHex burst chips + activity log; architect/instructions) --
 
@@ -191,7 +197,7 @@ export default function SessionShellPage({
     if (listChangedType && msg.type === listChangedType) refreshSummary();
   });
 
-  const ready = viewState.status !== 'loading' || noProjectKnown;
+  const ready = viewState.status !== 'loading';
 
   // W6-B9 reviewer fix — computed ONCE, pure (lib/session-shell-view.ts),
   // never re-derived inline in the JSX below: null for a non-terminal
@@ -199,6 +205,10 @@ export default function SessionShellPage({
   // recognised destination (an unbound kb-cleanup/community-refresh session
   // anchored under ".kb-<id>"/".community-registry" is never a REAL
   // registered project — /projects/<that> would be a dead end).
+  // W7-A2 (sessions-kinds-35): rendered in EVERY phase now (backToProjectLink
+  // no longer gates on `terminal`) — the operator most needs a way out of a
+  // session they are actively working on; a `.kb-<id>` anchor resolves to
+  // that KB's own page, the community anchor to /community.
   const backTo = viewState.status === 'ready' ? backToProjectLink(project, viewState.terminal) : null;
 
   return (
@@ -244,6 +254,21 @@ export default function SessionShellPage({
               ← Back to {backTo.label}
             </Link>
           )}
+          {/* W7-A2 — the lifecycle banner for EVERY kind (architect and
+              project-brain included, and kinds with no generic panel):
+              crashed → the runner's error verbatim; stalled → the silence;
+              terminal → honest per-phase copy; plus the ONE cancel control
+              (`data-action="cancel"`) whenever the bridge says cancellable.
+              Rendered from the shell payload's server-derived `lifecycle`,
+              never re-derived here. */}
+          <SessionLifecycleBar
+            lifecycle={viewState.lifecycle}
+            phase={viewState.phase}
+            kind={kind}
+            sessionId={sessionId}
+            project={project}
+            onCancelled={() => { refreshShell(); refreshSummary(); }}
+          />
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
             <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>
               {summary && summary.kind === 'architect' ? (
@@ -261,6 +286,7 @@ export default function SessionShellPage({
                   modelTier={viewState.modelTier}
                   events={events}
                   terminal={viewState.terminal}
+                  lifecycle={viewState.lifecycle}
                   onChanged={refreshShell}
                   onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
                 />
@@ -273,9 +299,10 @@ export default function SessionShellPage({
         <div data-section="session-error" style={{ fontSize: 13, color: '#f85149' }}>
           {viewState.error}
         </div>
-      ) : viewState.status === 'no-session' || noProjectKnown ? (
-        <div style={{ color: 'var(--dim)', fontSize: 13 }}>
-          Session not found (it may still be starting, or has been committed/rejected/abandoned).{' '}
+      ) : viewState.status === 'no-session' ? (
+        <div data-section="session-not-found" style={{ color: 'var(--dim)', fontSize: 13 }}>
+          Session not found — no <span style={{ fontFamily: 'var(--font-mono)' }}>{kind}</span> session with id{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{sessionId}</span> exists under any project.{' '}
           <Link href="/" style={{ color: 'var(--ember)' }}>
             Back to Forge Studio
           </Link>

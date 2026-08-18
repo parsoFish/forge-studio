@@ -64,7 +64,7 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const { agents, flows, projects, kbs, runs, attention, sessions, ready } = useStudioHomeData();
+  const { agents, flows, projects, kbs, runs, attention, sessions, ready, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
 
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
@@ -150,7 +150,7 @@ export default function HomePage() {
           (review fix) so its data-* contract gets a renderToStaticMarkup
           pin — see components/studio/HomeSessionsStrip.tsx for the full
           contract description. ===== */}
-      <HomeSessionsStrip strip={sessionsStrip} />
+      <HomeSessionsStrip strip={sessionsStrip} onCancelled={() => { void refreshSessions(); }} />
 
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (
