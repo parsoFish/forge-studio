@@ -76,6 +76,9 @@ import { debounceLeadingTrailing } from './debounce';
 /** W7-FIX-A1 (A1-03): carries the failed read set's `scope` (lib/fetch-error-scope.ts). */
 export type StudioHomeFetchError = ScopedFetchError;
 
+/** Scope tag for {@link useStudioHomeData}'s post-cancel sessions-only refetch (W7A2-06). */
+const SESSIONS_REFRESH_SCOPE = 'sessions';
+
 export type StudioHomeData = {
   agents: Agent[];
   flows: Flow[];
@@ -222,13 +225,14 @@ export function useStudioHomeData(): StudioHomeData {
   // W7A2-06 — the post-cancel refetch: a failure routes into the SAME
   // `error` state Home already renders (never an escaped rejection that
   // leaves the cancelled card showing as in-flight with no explanation).
+  // Scoped per W7-FIX-A1 (A1-03): a failing sessions-only refetch must not
+  // stomp a wider full-load error, and its own success clears only its own scope.
   const refreshSessions = useCallback(async (): Promise<void> => {
     try {
       setSessions(await fetchStudioSessions());
-      setError(null);
+      setError((prev) => afterRefreshSuccess(prev, SESSIONS_REFRESH_SCOPE));
     } catch (err) {
-      const d = describeBridgeError(err);
-      setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
+      setError((prev) => afterRefreshFailure(prev, scopedFetchError(err, SESSIONS_REFRESH_SCOPE)));
     }
   }, []);
 
