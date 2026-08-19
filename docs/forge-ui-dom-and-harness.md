@@ -117,7 +117,10 @@ inventory rather than one shared page-level contract:
   reach their seeding + cleanup sessions). The project editor's Save
   carries `kb` ONLY when the operator changed the binding in that session
   (`lib/project-save-payload.ts`) — the roster's derived `kb` is never
-  echoed back into project.json.
+  echoed back into project.json. A STORED `kb` outranks the derivation in
+  both directions: a string is an explicit rebind, an explicit `null` is an
+  explicit unbind (the roster serves no `kb`), and only an absent key
+  leaves the derivation live.
 
   Initiative titles (W7-A4 / W7-FIX-A4): every surface reads
   `initiativeTitle()` (`orchestrator/manifest.ts`) — the frontmatter
