@@ -70,16 +70,36 @@ test('architect plan: the URL mode is ignored — gate iff the session awaits a 
 import { isRunNotFound } from './artifact-mode.ts';
 
 test('isRunNotFound: unknown run + nothing on disk → not found (crosscut-08 keeps its NotFound)', () => {
-  expect(isRunNotFound({ runFound: false, artifactPresent: false, reflectionPresent: false })).toBe(true);
+  expect(isRunNotFound({ runFound: false, runOnDisk: false })).toBe(true);
 });
 
-test('isRunNotFound: unknown run but an artifact (or reflection) exists on disk → NOT not-found (orphan log dir renders its artifact)', () => {
-  expect(isRunNotFound({ runFound: false, artifactPresent: true, reflectionPresent: false })).toBe(false);
-  expect(isRunNotFound({ runFound: false, artifactPresent: false, reflectionPresent: true })).toBe(false);
+test('isRunNotFound: unknown run but SOMETHING exists on disk for the id → NOT not-found (orphan log dir renders its artifact)', () => {
+  expect(isRunNotFound({ runFound: false, runOnDisk: true })).toBe(false);
 });
 
 test('isRunNotFound: a known run is never not-found, whatever is on disk', () => {
-  expect(isRunNotFound({ runFound: true, artifactPresent: false, reflectionPresent: false })).toBe(false);
+  expect(isRunNotFound({ runFound: true, runOnDisk: false })).toBe(false);
+});
+
+// W7-FIX-A3 (round-2 finding 2): the decision is a PER-RUN existence fact
+// (`GET /api/runs/<id>`'s 404 `onDisk` — the guarded existence of
+// `_logs/<id>`), never "did THIS artifact type resolve". The old inputs made
+// the answer type-dependent: `fetchArtifactDoc('workitems', …)` returns
+// `{type:'empty'}` without touching disk whenever `run` is null (it reads
+// `run.workItems`), so the SAME orphan log dir rendered its plan and 404'd its
+// work-items tab — two contradictory pages for one id, both linked from the
+// same ArtifactTrail.
+test('the orphan log dir renders EVERY type the same: workitems (always doc-empty for a null run) is not NotFound while plan renders', () => {
+  const orphan = { runFound: false, runOnDisk: true };
+  // plan resolved a doc, workitems could not — the verdict is identical.
+  expect(isRunNotFound(orphan)).toBe(false);
+  const decisions = (['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'] as const).map(() => isRunNotFound(orphan));
+  expect(new Set(decisions).size).toBe(1);
+  expect(decisions.every((d) => d === false)).toBe(true);
+});
+
+test('?run=nope stays NotFound for every type (an unknown id with nothing on disk is a real negative)', () => {
+  expect(isRunNotFound({ runFound: false, runOnDisk: false })).toBe(true);
 });
 
 // ---------------------------------------------------------------------------

@@ -285,6 +285,38 @@ test('POST /api/flows/:id/run: an initiative in _queue/done → 409 already-done
 });
 
 // ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 2): the run 404 carries the PER-RUN existence
+// fact. The artifact page's not-found rule ("unknown run AND nothing on disk")
+// was being decided from whichever artifact THIS `?type=` happened to read —
+// so an orphan `_logs/<id>/` rendered its plan but 404'd its work-items tab,
+// two contradictory pages for one id. The existence fact belongs to the RUN,
+// so the route that answers "no such run" answers it: `onDisk` is the guarded
+// existence of `_logs/<id>` (never a per-type inference, never an oracle for
+// anything outside the logs root).
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<id>: the 404 body reports onDisk — true for an orphan log dir, false for an id with nothing anywhere', async () => {
+  const ORPHAN = '2026-05-30T09-00-00_INIT-2026-05-30-orphan-logs';
+  mkdirSync(join(forgeRoot, '_logs', ORPHAN, 'artifacts'), { recursive: true });
+  writeFileSync(join(forgeRoot, '_logs', ORPHAN, 'artifacts', 'plan.json'), JSON.stringify({ title: 'orphan' }));
+
+  const orphan = await fetch(`${url}/api/runs/${encodeURIComponent(ORPHAN)}`);
+  assert.equal(orphan.status, 404, 'no queue manifest — the run itself is genuinely unknown');
+  const orphanBody = (await orphan.json()) as { error: string; onDisk?: boolean };
+  assert.equal(orphanBody.onDisk, true, 'but SOMETHING exists on disk for the id');
+
+  const nothing = await fetch(`${url}/api/runs/${encodeURIComponent('2026-05-30T09-00-00_INIT-2026-05-30-nowhere')}`);
+  assert.equal(nothing.status, 404);
+  assert.equal(((await nothing.json()) as { onDisk?: boolean }).onDisk, false, 'nothing on disk for an id that never existed');
+});
+
+test('GET /api/runs/<id>: onDisk is false for a traversal-shaped id (the probe is guarded, never an existence oracle outside _logs)', async () => {
+  const res = await fetch(`${url}/api/runs/${encodeURIComponent('../../etc')}`);
+  assert.equal(res.status, 404);
+  assert.equal(((await res.json()) as { onDisk?: boolean }).onDisk, false);
+});
+
+// ---------------------------------------------------------------------------
 // W7-FIX-A3 (round-2 finding 6): the SIBLING operator route is closed by the
 // same rule. A3-01 put the done/ refusal on `POST /api/flows/:id/run` as a
 // route pre-check, which left `POST /api/develop/start` (enqueueDevelopRun →

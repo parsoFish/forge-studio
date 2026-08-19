@@ -24,6 +24,7 @@ import {
   readBridgeJson,
   unwrapBridgeRead,
   unwrapBridgeReadOr404,
+  BridgeReadError,
   type BridgeReadResult,
 } from './bridge-result';
 // R6-01 WI-4: the standing-trigger wire type + its boundary validation live
@@ -877,13 +878,33 @@ export async function fetchPlannedInitiatives(): Promise<PlannedInitiative[]> {
   return body.planned ?? [];
 }
 
+/**
+ * W7-FIX-A3 (round-2 finding 2) — a run lookup with the bridge's PER-RUN
+ * existence fact attached. `run: null` says the queue knows no such run;
+ * `onDisk` says whether anything exists on disk for the id (the 404 body's
+ * guarded `_logs/<id>` probe). The artifact page's not-found rule needs both,
+ * and neither may be inferred from whichever artifact a given `?type=` read.
+ * A 404 is a real answer here; every other failure still throws (an outage
+ * must never read as "no such run").
+ */
+export type RunLookup = { run: Run | null; onDisk: boolean };
+
+export async function fetchRunLookup(id: string): Promise<RunLookup> {
+  const path = `/api/runs/${encodeURIComponent(id)}`;
+  const r = await studioGet<{ run?: unknown }>(path);
+  if (r.ok) {
+    return r.data?.run ? { run: parseRun(r.data.run), onDisk: true } : { run: null, onDisk: false };
+  }
+  if (r.status === 404) {
+    const body = r.body as { onDisk?: unknown } | undefined;
+    return { run: null, onDisk: body?.onDisk === true };
+  }
+  throw new BridgeReadError(path, r);
+}
+
 /** Fetch a single run by id. 404 → null; any other failure throws. */
 export async function fetchRun(id: string): Promise<Run | null> {
-  const body = await studioReadOr404<{ run?: unknown }>(
-    `/api/runs/${encodeURIComponent(id)}`,
-  );
-  if (!body?.run) return null;
-  return parseRun(body.run);
+  return (await fetchRunLookup(id)).run;
 }
 
 /** Fetch phase log lines for a run's node. */

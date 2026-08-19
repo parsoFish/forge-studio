@@ -686,7 +686,18 @@ export async function handleStudioRoutes(
     try {
       const run = findRun(ctx.forgeRoot, runId);
       if (!run) {
-        sendJson(res, 404, { error: 'run not found' }, origin);
+        // W7-FIX-A3 (round-2 finding 2): the 404 carries the PER-RUN existence
+        // fact. "This run is unknown" and "nothing exists on disk for this id"
+        // are different statements, and the artifact page needs the second one
+        // to decide not-found (an orphan `_logs/<id>/` — queue manifest gone,
+        // artifacts still there — renders its artifact instead of the shared
+        // NotFound). Deriving it from whichever artifact the page's `?type=`
+        // happened to read made one id render two contradictory pages.
+        // The probe goes through the guard family (the request-derived id as
+        // its OWN segment under the trusted logs root), so a traversal-shaped
+        // id is `false` rather than an existence oracle outside `_logs`.
+        const logDir = resolveGuardedPath(ctx.logsRoot, [runId]);
+        sendJson(res, 404, { error: 'run not found', onDisk: logDir.ok && logDir.exists }, origin);
         return true;
       }
       sendJson(res, 200, { run }, origin);

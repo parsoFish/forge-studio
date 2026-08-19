@@ -94,7 +94,10 @@ inventory rather than one shared page-level contract:
   nothing exists on disk for it — W7-FIX-A3: an orphan `_logs/<id>/`
   whose queue manifest is gone still renders its artifact, with
   `[data-run-record="absent"]` in the run-context row; `lib/artifact-mode.ts`
-  `isRunNotFound`) or
+  `isRunNotFound`, whose existence half is the RUN's own fact — the 404
+  body's `onDisk` (the bridge's guarded `_logs/<id>` probe, carried on that
+  same lookup) — never whether this `?type=`'s artifact resolved, so every
+  type of one id agrees) or
   `artifact type` (an unrecognised `?type=`, naming the valid set) → `/flows`;
   and `app/not-found.tsx` → `page` (the pathname) → `/` for any unmatched
   path. Pinned: `forge-ui/lib/not-found-render.test.ts` (render contract) +

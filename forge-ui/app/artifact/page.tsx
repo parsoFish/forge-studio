@@ -55,7 +55,7 @@ import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
-import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
+import { fetchRunLookup, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 import { resolveArtifactMode, isRunNotFound } from '@/lib/artifact-mode';
@@ -511,8 +511,13 @@ function ArtifactPageInner() {
         return;
       }
 
-      const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
+      // W7-FIX-A3 (round-2 finding 2): ONE lookup carries both per-run facts —
+      // the run (or a real "no such run") and `onDisk`, the bridge's guarded
+      // `_logs/<id>` existence probe. No extra request: it rides the same
+      // `GET /api/runs/<id>` call `fetchRun` already made.
+      const [lookup, flows] = await Promise.all([fetchRunLookup(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
+      const fetchedRun = lookup.run;
       setRun(fetchedRun);
       setRunRecordAbsent(fetchedRun === null);
       setLiveFlowIds(new Set(flows.map((f) => f.id)));
@@ -553,11 +558,14 @@ function ArtifactPageInner() {
       // nothing exists on disk for the id (lib/artifact-mode.ts
       // `isRunNotFound`) — an orphan `_logs/<id>/` (queue manifest gone,
       // artifacts still there) renders its artifact with an honest "no queue
-      // record" note; `?run=nope` still renders the shared NotFound.
+      // record" note; `?run=nope` still renders the shared NotFound. Round-2
+      // finding 2: the existence half is the RUN's own fact (`lookup.onDisk`),
+      // never this `?type=`'s doc — `workitems` resolves to `empty` without
+      // touching disk whenever the run is null, which made one orphan id
+      // render its plan and NotFound its work-items tab.
       setRunNotFound(isRunNotFound({
         runFound: fetchedRun !== null,
-        artifactPresent: artifactDoc.type !== 'empty',
-        reflectionPresent: refl !== null,
+        runOnDisk: lookup.onDisk,
       }));
 
       // Also fetch verdict doc for view-mode stamp (when type != verdict)
