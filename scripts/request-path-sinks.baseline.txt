@@ -44,8 +44,9 @@ cli/bridge-studio-kbs.ts readFileSync 2
 cli/bridge-studio-kbs.ts rmSync 1
 cli/bridge-studio-kbs.ts spawn 1
 cli/bridge-studio-kbs.ts writeFileSync 2
+cli/bridge-studio-lifecycle.ts openSync 1
 cli/bridge-studio-lifecycle.ts readFileSync 1
-cli/bridge-studio-lifecycle.ts statSync 1
+cli/bridge-studio-lifecycle.ts statSync 2
 cli/bridge-studio-runs.ts existsSync 10
 cli/bridge-studio-runs.ts mkdirSync 1
 cli/bridge-studio-runs.ts openSync 1
@@ -158,6 +159,7 @@ orchestrator/architect-runner.ts readFileSync 8
 orchestrator/architect-runner.ts rmSync 1
 orchestrator/architect-runner.ts sessionPaths@caller 1
 orchestrator/architect-runner.ts writeFileSync 6
+orchestrator/bash-fence.ts realpathSync 1
 orchestrator/brain-fix-runner.ts mkdirSync 1
 orchestrator/brain-fix-runner.ts readFileSync 1
 orchestrator/brain-fix-runner.ts writeFileSync 1

@@ -1422,3 +1422,31 @@ retrofit):
 `cli/bridge-studio-kbs.ts` `mkdirSync` count only — the `cli/ui-bridge.ts`
 addition introduces a new *route*, not a new raw sink (both its fs calls go
 through the guard).
+
+### W7-FIX-A2 — sticky cancel + the Bash fence (three new `[read]`-class sinks, all guarded)
+
+Post-land sweep fixes to W7-A2 (findings W7A2-01/03/08 in
+`_wave7/lanes/review-sweep-A2.json`). `check-request-path-sinks.mjs` delta
+(3 rows, all guarded):
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/bridge-studio-lifecycle.ts` (`guardedReadFileTail`) | `openSync` + `readSync` (+ a second `statSync`) | none — `guarded.realPath`, where `guarded = resolveGuardedPath(logsRoot, ['_<kind>-<sid>', 'stderr.log'])`; the request-derived `kind`/`sessionId` are their OWN `segments[]` elements exactly as the sibling `guardedReadFile` call this replaces (W7A2-08: only the LAST `STDERR_TAIL_BYTES` are read, per index row per poll, instead of the whole file) | guarded `[read]` | The `openSync`/`statSync`/`readSync` trio operates on the guard's OWN output (`realPath` — nothing but a `PathGuardOk` carries that field); a rejected or absent path returns `null` before any fd is opened; the fd is closed in `finally`. Same containment as the `guardedMtime` row above (W7-A2). Verified `[exec]` by `cli/bridge-studio-lifecycle.test.ts` (the operator's crashed fixtures still surface the runner's last non-stack line; the AT-47 symlinked-session-dir shape still 404s). |
+| `orchestrator/bash-fence.ts` (`realish`) | `realpathSync` | the resolved candidate of a `Bash` tool call's OWN command text — a redirection target / write-utility operand / `dd of=` / `cd` operand (model-derived, request-shaped), resolved for IDENTITY only: walked up to its deepest EXISTING ancestor's realpath + the literal remainder, then COMPARED against the turn's already-realpath'd `writeRoots`; never opened, never written through | guarded `[read]` | This IS the Bash half of the write-root containment check (bead forge-w08 — the sibling of `isUnderWriteRoot`'s row above): a `realpathSync` that fails all the way to the filesystem root yields `null` → DENY. Only reachable when a fenced kind opts into `turnSpec.bashFence: inspect` (`authoring` today); every other fenced kind denies Bash outright and never reaches this sink. Verified `[exec]` by `orchestrator/bash-fence.test.ts` (an in-root symlink to an outside dir cannot be written through; relative escapes and normalised traversal are denied; the REAL `authoring` descriptor through `runInteractiveTurn` denies an out-of-root `printf > file`). |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records
+`cli/bridge-studio-lifecycle.ts` `openSync` at 1 and `statSync` at 2, and
+`orchestrator/bash-fence.ts` `realpathSync` at 1.
+
+Also in this lane, not a sink change: `guardedWriteSessionStatus`
+(`orchestrator/interactive-session.ts`) — the ONE session-status write seam
+— now refuses (returns `null`, file byte-unchanged) any write that would
+move an on-disk `cancelled` phase to a different phase (`cancelledPhaseWins`,
+W7A2-01); `cli/agent-run.ts`'s `writeSessionTerminalPhase` rides that seam
+instead of `guardedWriteFile` (same guard, plus the sticky rule); and
+`spawnAgentDispatch` (`cli/ui-bridge.ts`) writes the dispatch child's pid to
+`_logs/_<kind>-<sid>/turn.pid` through `guardedWriteFile(join(forgeRoot,
+'_logs'), [sessionLogDirName(kind, sid), 'turn.pid'])`, with `kind`/`sid`
+derived from the route's ALREADY-validated `sessionDir` (never request text)
+and `sid` re-checked by `isSafeRunId`.
