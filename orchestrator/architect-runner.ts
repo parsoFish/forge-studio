@@ -1290,7 +1290,10 @@ export function buildManifest(
   // the ONE display derivation and this is its producer; without it every
   // architect-originated initiative rendered as its raw INIT id. A blank
   // draft title is absent (never `title: "  "`); the fallback chain applies.
-  const title = d.title.trim();
+  // `DraftInitiative` is the shape the skill is ASKED for, not one the runner
+  // enforces (`runStructured` casts raw model output), so a missing/non-string
+  // title degrades to the fallback chain rather than throwing out of drafting.
+  const title = (typeof d.title === 'string' ? d.title : '').trim();
   return {
     initiative_id: `INIT-${datePart}-${slug}`,
     ...(title ? { title } : {}),

@@ -182,3 +182,32 @@ test('run-model: run.initiative is the SAME derivation — id when no title, tit
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('W7A4-01 (FIX): a structured-output draft with a missing or non-string title does not crash drafting — the manifest carries no title and the documented fallback chain applies', () => {
+  // `DraftInitiative` is the SHAPE the architect skill is asked for, not a
+  // shape the runner enforces: `runStructured` casts raw model output. A draft
+  // that omits `title` (or sends null) must degrade to the fallback chain, not
+  // throw a TypeError out of the `.map` and fail the whole draft step.
+  const untitled = {
+    slug: 'add-version-flag',
+    iteration_budget: 5,
+    cost_budget_usd: 5,
+    body: '# Add a --version flag\n\nPrint the version.\n',
+  } as unknown as DraftInitiative;
+  const missing = buildManifest(untitled, ARCHITECT_STATUS, '2026-08-19', '2026-08-19T00:00:00.000Z');
+  assert.equal(missing.title, undefined, 'no title key when the draft has none');
+  assert.equal(missing.initiative_id, 'INIT-2026-08-19-add-version-flag');
+  assert.equal(initiativeTitle(missing), 'Add a --version flag', 'the H1 fallback names it');
+  assert.doesNotMatch(serializeManifest(missing), /^title:/m, 'never serialize an empty title:');
+
+  for (const bad of [null, 42, { en: 'x' }, ['x']]) {
+    const m = buildManifest(
+      { ...untitled, title: bad } as unknown as DraftInitiative,
+      ARCHITECT_STATUS,
+      '2026-08-19',
+      '2026-08-19T00:00:00.000Z',
+    );
+    assert.equal(m.title, undefined, `a non-string title (${JSON.stringify(bad)}) is absent, not a crash`);
+    assert.equal(initiativeTitle(m), 'Add a --version flag');
+  }
+});
