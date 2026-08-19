@@ -913,7 +913,20 @@ export function cleanShowcaseCycleTwo() {
  * `_logs/` dir needed: scanCycles() surfaces an in-flight manifest with no
  * log dir yet via its own "just-claimed, pre-first-event" fallback.
  */
+/**
+ * The empty-showcase project is a clip-only, REGISTERED project: since W7-A4
+ * (projects-23) the showcase renders the shared NotFound for an id the roster
+ * does not list, so a zero-cycle showcase can only be reached for a project
+ * that exists — a bare dir under projects/ is discovered by `discoverProjects`
+ * (orchestrator/studio/registry.ts; no `.forge/project.json` needed to be
+ * LISTED — the same half-onboarded shape J4's own cleanup removes). Both the
+ * dir and the in-flight manifest are removed in the beat tail (state ownership,
+ * journey-sync rule 3).
+ */
+export const SHOWCASE_EMPTY_PROJECT_DIR = join(FORGE_ROOT, 'projects', SHOWCASE_EMPTY_PROJECT);
+
 export function writeShowcaseEmptyFixture() {
+  mkdirSync(SHOWCASE_EMPTY_PROJECT_DIR, { recursive: true });
   mkdirSync(QDIR('in-flight'), { recursive: true });
   writeFileSync(
     join(QDIR('in-flight'), `${SHOWCASE_EMPTY_INIT}.md`),
@@ -923,6 +936,7 @@ export function writeShowcaseEmptyFixture() {
 
 export function cleanShowcaseEmptyFixture() {
   try { rmSync(join(QDIR('in-flight'), `${SHOWCASE_EMPTY_INIT}.md`), { force: true }); } catch { /* */ }
+  try { rmSync(SHOWCASE_EMPTY_PROJECT_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
 
 /**

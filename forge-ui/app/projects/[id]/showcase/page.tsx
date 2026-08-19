@@ -35,7 +35,8 @@
  *
  * data-* contract:
  *   root: data-page="project-showcase" data-page-ready data-project-id
- *         (+ data-fetch-status="error" data-load-error="true" on the ERROR state)
+ *         data-fetch-status="loading"|"ok" (the ERROR state renders the shared
+ *         PageLoadError root: data-fetch-status="error" data-load-error="true")
  *   data-section="showcase-stats" | "showcase-evidence" | "showcase-empty"
  * (mirrors the client-fetch + settled-`data-page-ready` idiom established by
  * app/projects/[id]/page.tsx and app/artifact/page.tsx).
@@ -136,6 +137,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
     <main
       data-page="project-showcase"
       data-page-ready={ready ? 'true' : 'false'}
+      data-fetch-status={ready ? 'ok' : 'loading'}
       data-project-id={id}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >

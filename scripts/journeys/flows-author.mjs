@@ -5,7 +5,7 @@ import {
   J4_PROJECT, J5_CYCLE_ID, j5Event, SEED_FLOW_PATH,
   SCRATCH_FLOW_DIR, SCRATCH_FLOW, FORGE_ROOT, caption, ACT, READ, cleanScratchFlow,
 } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -190,6 +190,8 @@ export const journey = defineJourney({
                 () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
+              // W7-A1 / FIX-A1 (A1-11): the flows pillar's read is honest.
+              await checkHonestPillarRead(page, check, 'flows-index', 'J3');
               const newFlowCta = await page.evaluate(() => {
                 const el = document.querySelector('[data-action="new-flow"]');
                 return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
