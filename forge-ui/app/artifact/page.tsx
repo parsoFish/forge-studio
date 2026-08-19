@@ -439,6 +439,10 @@ function ArtifactPageInner() {
   // produced" (the EmptyState). Never set for `_architect-<sid>` ids, which
   // resolve through the architect session, not /api/runs.
   const [runNotFound, setRunNotFound] = useState(false);
+  // W7-FIX-A3: the bridge ANSWERED 404 for the run (a real negative fact) —
+  // distinct from a thrown read (bridge unreachable), which leaves this false
+  // so the "no queue record" note never renders off an outage.
+  const [runRecordAbsent, setRunRecordAbsent] = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
   // For plan gate-mode: track whether all decisions are resolved
   const [decisionsResolved, setDecisionsResolved] = useState(false);
@@ -503,6 +507,7 @@ function ArtifactPageInner() {
       const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
       setRun(fetchedRun);
+      setRunRecordAbsent(fetchedRun === null);
       setLiveFlowIds(new Set(flows.map((f) => f.id)));
 
       // W7-FIX-A3 (A3-03): every artifact read below is keyed on the RESOLVED
@@ -572,6 +577,7 @@ function ArtifactPageInner() {
     const signal = { cancelled: false };
     setReady(false);
     setArtifact(null);
+    setRunRecordAbsent(false);
     setArchSessionResolved(false);
     void load(signal);
     return () => { signal.cancelled = true; };
@@ -771,7 +777,7 @@ function ArtifactPageInner() {
                 queue manifest names the run any more (or never did). Say so
                 instead of a blank context row (never NotFound: the artifact is
                 real, only the queue record is gone). */}
-            {ready && !isArchitect && run === null && (
+            {ready && !isArchitect && runRecordAbsent && (
               <span data-run-record="absent" style={{ color: 'var(--faint)', fontStyle: 'italic' }}>
                 no queue record for this run — showing the artifacts on disk
               </span>
