@@ -295,7 +295,7 @@ export default function AgentBuilderPage() {
   // — neither "found" nor "not found". It renders the shared PageLoadError
   // (never a blank builder for a real agent, never NotFound); `loadKey`
   // re-runs the load on Retry + bridge recovery.
-  const [loadError, setLoadError] = useState<{ message: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
@@ -647,7 +647,7 @@ export default function AgentBuilderPage() {
         page="agents"
         rootAttrs={{ 'data-agent-id': isNew ? '' : slugParam }}
         what={isNew ? 'the agent builder catalog' : `agent "${slugParam}"`}
-        error={loadError.message}
+        error={loadError.error}
         status={loadError.status}
         onRetry={reload}
         backHref="/agents"

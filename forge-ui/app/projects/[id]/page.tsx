@@ -88,8 +88,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // recovery. `panelError` is the softer sibling for the preflight/roadmap
   // reads: the project itself loaded, one side panel's read did not — shown
   // inline (never an unhandled rejection, never a silently-absent panel).
-  const [loadError, setLoadError] = useState<{ message: string; status?: number } | null>(null);
-  const [panelError, setPanelError] = useState<{ what: string; message: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [panelError, setPanelError] = useState<{ what: string; error: string; status?: number } | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
@@ -300,7 +300,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         page="projects"
         rootAttrs={{ 'data-project-id': id }}
         what={`project "${id}"`}
-        error={loadError.message}
+        error={loadError.error}
         status={loadError.status}
         onRetry={reload}
         backHref="/projects"
@@ -403,7 +403,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           the project itself loaded — shown inline, never silently absent. */}
       {panelError ? (
         <div data-section="project-panel-error" style={{ padding: '10px 28px 0' }}>
-          <FetchErrorState what={panelError.what} error={panelError.message} status={panelError.status} onRetry={reload} compact />
+          <FetchErrorState what={panelError.what} error={panelError.error} status={panelError.status} onRetry={reload} compact />
         </div>
       ) : null}
 

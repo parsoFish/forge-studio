@@ -101,7 +101,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // PageLoadError with Retry) — never NotFound "No flow <id>" for a flow that
   // may well exist. `loadKey` re-runs the load on Retry + bridge recovery
   // (the WS subscription below is re-opened with it — same effect).
-  const [loadError,   setLoadError]   = useState<{ message: string; status?: number } | null>(null);
+  const [loadError,   setLoadError]   = useState<{ error: string; status?: number } | null>(null);
   const [loadKey,     setLoadKey]     = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
@@ -452,7 +452,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         page="flow-monitor"
         rootAttrs={{ 'data-flow-id': id }}
         what={`flow "${id}"`}
-        error={loadError.message}
+        error={loadError.error}
         status={loadError.status}
         onRetry={reload}
         backHref="/flows"

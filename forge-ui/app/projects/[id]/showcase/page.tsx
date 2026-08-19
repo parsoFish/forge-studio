@@ -69,7 +69,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // PageLoadError with Retry — never the honest empty state (that is for a
   // SUCCESSFUL read that found nothing). `loadKey` re-runs the load on Retry
   // + bridge recovery.
-  const [loadError, setLoadError] = useState<{ message: string; status?: number } | null>(null);
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
@@ -121,7 +121,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
         page="project-showcase"
         rootAttrs={{ 'data-project-id': id }}
         what={`the demo showcase for project "${id}"`}
-        error={loadError.message}
+        error={loadError.error}
         status={loadError.status}
         onRetry={reload}
         backHref={`/projects/${encodeURIComponent(id)}`}

@@ -54,6 +54,14 @@ function expectFailClosedPrimitives(src: string, page: string): void {
   expect(src).toMatch(new RegExp(`<PageLoadError[\\s\\S]{0,200}page="${page}"`));
   // 5. a manual Retry re-runs the load (the shared component wires onRetry)
   expect(src).toMatch(/<PageLoadError[\s\S]{0,600}onRetry=\{reload\}/);
+  // 6. the captured failure reaches the error state under the SAME field
+  //    name `fetchErrorPropsFrom` returns (`{error, status}`) — a
+  //    `{message}`-shaped state fed by `{error}` renders an empty error text
+  //    (successor-resume finding: caught by tsc, pinned here so a vitest-only
+  //    run also fails)
+  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,600}error=\{loadError\.error\}/);
+  expect(src).not.toMatch(/loadError\.message/);
 }
 
 describe('/agents/[id] (A1-01)', () => {
