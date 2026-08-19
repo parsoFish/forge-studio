@@ -176,7 +176,20 @@ function KnowledgePageInner() {
       pendingIsThemeRef.current = !nodeParam && !!themeParam;
       setIdConfirmed(true);
       if (idParam) {
-        // Both ?id= and ?node=/?theme= given: trust the id, just queue the node selection.
+        // Both ?id= and ?node=/?theme= given: the id still goes through the
+        // roster check (W7-FIX-A4 / W7A4-07 — the not-found path applies
+        // whether or not a node is queued); a validated id just queues the
+        // node selection.
+        const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
+        if (resolution.source === 'fallback') {
+          pendingNodeRef.current = null;
+          pendingIsThemeRef.current = false;
+          setNotFound({ kind: 'knowledge base', id: idParam });
+          setReady(true);
+          return;
+        }
+        setNotFound(null);
+        setIdConfirmed(resolution.source !== 'url-optimistic');
         setCurrentId(idParam);
         return;
       }

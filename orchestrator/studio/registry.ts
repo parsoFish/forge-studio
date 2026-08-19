@@ -955,8 +955,10 @@ export type DiscoveredProject = ProjectRef & {
  * published an id no `:id` route could resolve back to the directory. A name
  * that fails the rule (whitespace, `.`, `/`) is not a project — discovery
  * skips it; this still returns a rule-shaped best effort (case preserved,
- * illegal characters folded to `-`) so scope comparisons stay total, but such
- * an id can never match a discovered project.
+ * illegal characters folded to `-`) so scope comparisons stay total. Note the
+ * best-effort form MAY collide with a differently-named real project (`my
+ * proj` → `my-proj`); callers comparing scopes must treat it as a hint, never
+ * as proof of identity (W7-FIX-A4 / W7A4-08).
  */
 export function normalizeProjectId(name: string): string {
   if (PROJECT_ID_RE.test(name)) return name;

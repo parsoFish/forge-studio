@@ -106,7 +106,26 @@ inventory rather than one shared page-level contract:
   reachable everywhere the roster lists it, and `trafficgame` is a genuine
   not-found. The literal id `new` (any case) is reserved on every create
   route because `/x/new` is each builder's static segment
-  (`isReservedId`); `/projects/new` fires no per-project fetch.
+  (`isReservedId`); `/projects/new` fires no per-project fetch. A kb.yaml
+  whose `id` is not its directory name (or fails the rule) is unroutable
+  and is dropped from the KB roster and from the derived project↔KB
+  binding — never silently (W7-FIX-A4): `GET /api/studio/kbs` carries
+  `unroutable: [{dir,id,path,reason}]` and `forge studio lint` reports the
+  same predicate (`unroutableKbReason`, `cli/kb-sites.ts`) as an error
+  finding `kb:<id>` / `dir-name`. The `.kb-<id>` session anchor is
+  validated with the SAME `KB_ID_RE` (mixed-case / digit-leading KB ids
+  reach their seeding + cleanup sessions). The project editor's Save
+  carries `kb` ONLY when the operator changed the binding in that session
+  (`lib/project-save-payload.ts`) — the roster's derived `kb` is never
+  echoed back into project.json.
+
+  Initiative titles (W7-A4 / W7-FIX-A4): every surface reads
+  `initiativeTitle()` (`orchestrator/manifest.ts`) — the frontmatter
+  `title:` every manifest producer writes (`buildManifest` from the
+  architect draft's title; `mintTriggeredInitiative` from flow + trigger);
+  only a manifest with no frontmatter title falls back to its body's first
+  level-1 `# ` heading (never a `##` section heading), then to the
+  `initiative_id`.
 - **Global — bridge status banner (`[data-component="bridge-status"]`,
   `components/BridgeStatus.tsx`, mounted ONCE in `app/layout.tsx`, W7-A1).**
   Every route carries the app-shell bridge-liveness element:
@@ -1588,9 +1607,10 @@ inventory rather than one shared page-level contract:
   literal `default`) for a null tier. **Deep links:** the page fetches the
   shell WITHOUT `?project=` when neither the per-kind summary nor the URL
   knows it — the bridge resolves the anchor project server-side — so a bare
-  `/sessions/<kind>/<sid>` is a working address for every kind; "Session
-  not found" (`[data-section="session-not-found"]`) is ONLY the shell
-  route's own 404. **Back link:** `a[data-action="back-to-project"]`
+  `/sessions/<kind>/<sid>` is a working address for every kind; an unknown
+  id renders the shared not-found page
+  (`main[data-page="not-found"][data-not-found-kind="<kind> session"]`,
+  W7-A4) — ONLY the shell route's own 404. **Back link:** `a[data-action="back-to-project"]`
   renders in EVERY phase (not only terminal); a `.kb-<id>` anchor resolves to
   `/knowledge?id=<id>` ("Back to Knowledge base <id>"), `.community-registry`
   to `/community`, a real project to `/projects/<id>`.
