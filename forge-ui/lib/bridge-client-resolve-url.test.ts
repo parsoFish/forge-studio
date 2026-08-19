@@ -167,3 +167,74 @@ test('one-shot correction: a SECOND failure does not re-trigger /api/forge-confi
 
   expect(forgeConfigCalls).toBe(1); // the one-shot gate held across both calls
 });
+
+// ---- W7-FIX-A1 A1-06: only a SUCCESSFUL non-null authoritative answer is final ---
+
+test('A1-06: a transient blip + /api/forge-config answering {bridgePort:null} must NOT wedge the tab — the default port is retried once the bridge is back', async () => {
+  stubWindow({ bridgePort: 4123, hostname: 'my-wsl-host' });
+  let bridgeUp = false;
+  let forgeConfigCalls = 0;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === '/api/forge-config') {
+      forgeConfigCalls += 1;
+      // The Next process was started without FORGE_BRIDGE_URL — its route
+      // durably answers null. Not an authoritative "there is no bridge".
+      return { ok: true, json: async () => ({ bridgePort: null }) } as Response;
+    }
+    if (url.startsWith('http://my-wsl-host:4123')) {
+      if (!bridgeUp) throw new TypeError('Failed to fetch'); // one transient blip
+      return { ok: true, json: async () => ({ live: [], recent: [] }) } as Response;
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+  const { fetchCycles, resolveBridgeUrl } = await import('./bridge-client.ts');
+
+  await expect(fetchCycles()).rejects.toThrow('Failed to fetch'); // blip: guess fails, forge-config gives nothing better
+  expect(forgeConfigCalls).toBe(1);
+
+  bridgeUp = true;
+  // Pre-fix: cachedBridgeUrl is a resolved '' forever → every later call throws
+  // 'no bridge configured' before any fetch, and Retry/probe can never recover.
+  await expect(fetchCycles()).resolves.toEqual({ live: [], recent: [] });
+  await expect(resolveBridgeUrl()).resolves.toBe('http://my-wsl-host:4123');
+});
+
+test('A1-06: /api/forge-config failing outright (non-2xx) after a blip likewise falls back to the default port instead of an empty base', async () => {
+  stubWindow({ hostname: 'my-wsl-host' }); // no global → DEFAULT_BRIDGE_PORT
+  const { DEFAULT_BRIDGE_PORT } = await import('./bridge-port.ts');
+  let bridgeUp = false;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === '/api/forge-config') return { ok: false, status: 500, json: async () => ({}) } as Response;
+    if (url.startsWith(`http://my-wsl-host:${DEFAULT_BRIDGE_PORT}`)) {
+      if (!bridgeUp) throw new TypeError('Failed to fetch');
+      return { ok: true, json: async () => ({ live: [], recent: [] }) } as Response;
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+  const { fetchCycles, resolveBridgeUrl } = await import('./bridge-client.ts');
+  await expect(fetchCycles()).rejects.toThrow('Failed to fetch');
+  bridgeUp = true;
+  await expect(fetchCycles()).resolves.toEqual({ live: [], recent: [] });
+  await expect(resolveBridgeUrl()).resolves.toBe(`http://my-wsl-host:${DEFAULT_BRIDGE_PORT}`);
+});
+
+test('A1-06 (positive control kept): a REAL corrected port from /api/forge-config still wins over the default guess', async () => {
+  stubWindow({ bridgePort: 4123, hostname: 'my-wsl-host' });
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('http://my-wsl-host:4123')) throw new TypeError('Failed to fetch');
+    if (url === '/api/forge-config') return { ok: true, json: async () => ({ bridgePort: 5555 }) } as Response;
+    if (url.startsWith('http://my-wsl-host:5555')) return { ok: true, json: async () => ({ live: [], recent: [] }) } as Response;
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  globalThis.fetch = fetchSpy as unknown as typeof fetch;
+  const { fetchCycles, resolveBridgeUrl } = await import('./bridge-client.ts');
+  await expect(fetchCycles()).resolves.toEqual({ live: [], recent: [] });
+  await expect(resolveBridgeUrl()).resolves.toBe('http://my-wsl-host:5555');
+});

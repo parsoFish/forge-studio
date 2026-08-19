@@ -28,6 +28,8 @@
  * RUN: cd forge-ui && npx vitest run lib/studio-client-fail-closed.test.ts
  */
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // Mock ONLY the transport. `bridgeFetch` is what studio-client must call;
 // each test replaces `mockBridgeFetch`'s implementation. Global fetch is
@@ -109,10 +111,106 @@ const ROWS: Row[] = [
   { name: 'fetchActiveOnboarding', call: () => sc.fetchActiveOnboarding('p'), path: '/api/studio/projects/p/onboarding/active', okBody: { ok: true, sessionId: 's', runId: 'r', phase: 'running' }, positive: (v) => expect((v as { sessionId: string }).sessionId).toBe('s'), mode: 'status-shaped', on404: 'status-shaped' },
 ];
 
-test('table covers every studioGet-backed read exported by studio-client (a new read must be added here)', () => {
-  const names = ROWS.map((r) => r.name).sort();
+// ---- drift guard (W7-FIX-A1 A1-04) ------------------------------------------
+// The pre-fix guard asserted a COUNT over ROWS itself — a tautology w.r.t.
+// additions: a new `studioGet`-backed export (or one that reintroduced the
+// `studioGet(path, fallback)` empty-fallback shape) left it green. This
+// enumerates studio-client.ts's REAL export surface and diffs it against the
+// table, so a new bridge read with no row FAILS here.
+
+const READ_HELPER_RE = /\b(studioGet|studioRead|studioReadOr404)\s*</;
+
+/**
+ * Every `export (async) function NAME` in `source` whose body performs a
+ * bridge GET: through the typed helpers (`studioGet`/`studioRead`/
+ * `studioReadOr404`) or a bare `bridgeFetch(path)` with no `method:` (a raw
+ * GET). Writes (`studioSend`/`bridgeFetch(path, {method: …})`) and pure
+ * exports are excluded. Top-level exports start at column 0, so the source
+ * is chunked at every `\nexport ` boundary.
+ */
+export function enumerateBridgeReadExports(source: string): string[] {
+  // Comments are stripped first: a chunk runs to the NEXT `export`, so it
+  // would otherwise carry the next function's doc comment (which may name a
+  // read) — matching must see code only.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const fns: Array<{ name: string; body: string }> = [];
+  for (const chunk of code.split(/\n(?=export )/)) {
+    const m = /^export (?:async )?function (\w+)/.exec(chunk);
+    if (m) fns.push({ name: m[1], body: chunk });
+  }
+  const isRawGet = (body: string): boolean => {
+    let idx = body.indexOf('bridgeFetch(');
+    while (idx !== -1) {
+      const end = body.indexOf(');', idx);
+      const call = body.slice(idx, end === -1 ? undefined : end);
+      if (!/\bmethod\s*:/.test(call)) return true;
+      idx = body.indexOf('bridgeFetch(', idx + 1);
+    }
+    return false;
+  };
+  const reads = new Set<string>(fns.filter((f) => READ_HELPER_RE.test(f.body) || isRawGet(f.body)).map((f) => f.name));
+  // transitive: an export that delegates to a read (`fetchStudioAgents` →
+  // `fetchStudioAgentsWithMeta`) is a read too — iterate to a fixpoint.
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of fns) {
+      if (reads.has(f.name)) continue;
+      for (const r of reads) {
+        if (new RegExp(`\\b${r}\\(`).test(f.body)) { reads.add(f.name); grew = true; break; }
+      }
+    }
+  }
+  return fns.map((f) => f.name).filter((n) => reads.has(n));
+}
+
+test('enumerateBridgeReadExports (positive control): finds helper-backed AND raw-GET exports, skips writes and pure exports', () => {
+  const synthetic = [
+    'export async function fetchThings(): Promise<T[]> {',
+    "  const body = await studioRead<{ things?: unknown[] }>('/api/things');",
+    '  return body.things ?? [];',
+    '}',
+    'export async function pollThing(id: string): Promise<S> {',
+    '  const res = await bridgeFetch(`/api/things/${id}`);',
+    '  return res.json();',
+    '}',
+    'export async function saveThing(id: string, body: unknown) {',
+    "  return studioSend('PUT', `/api/things/${id}`, body);",
+    '}',
+    'export async function postThing(id: string) {',
+    "  const res = await bridgeFetch(`/api/things/${id}`, { method: 'POST', headers: { 'x-forge-csrf': '1' } });",
+    '  return res.ok;',
+    '}',
+    'export async function fetchThingIds(): Promise<string[]> {',
+    '  return (await fetchThings()).map((t) => t.id);',
+    '}',
+    'export function pureThing(x: number): number { return x + 1; }',
+    'export type Thing = { id: string };',
+  ].join('\n');
+  expect(enumerateBridgeReadExports(synthetic)).toEqual(['fetchThings', 'pollThing', 'fetchThingIds']);
+});
+
+/**
+ * Deliberately-green gap pin (expiry: A1-10). These three status polls ride
+ * `bridgeFetch` directly and still map a transport failure to a fabricated
+ * `state:'running'`/`'unknown'` (review-sweep A1-10, low). Converting them
+ * changes the poll-state vocabulary in `agent-dispatch.ts` + three panels,
+ * so they are tracked here explicitly rather than silently absent: when
+ * A1-10 lands they gain ROWS and this list becomes empty — a fourth raw
+ * poll cannot be added without appearing in this diff.
+ */
+const RAW_GET_POLLS_PENDING_A1_10 = ['getAgentFixStatus', 'getAgentRunStatus', 'preflightFixStatus'] as const;
+
+test('table covers EVERY bridge read exported by studio-client (a new studioGet/studioRead/studioReadOr404/raw-GET export with no row fails here)', () => {
+  const source = readFileSync(resolve(__dirname, './studio-client.ts'), 'utf8');
+  const enumerated = enumerateBridgeReadExports(source).filter((n) => !(RAW_GET_POLLS_PENDING_A1_10 as readonly string[]).includes(n));
+  const names = ROWS.map((r) => r.name);
   expect(names).toEqual([...new Set(names)]);
-  expect(names.length).toBeGreaterThanOrEqual(29);
+  const missingRows = enumerated.filter((n) => !names.includes(n));
+  const staleRows = names.filter((n) => !enumerated.includes(n));
+  expect({ missingRows, staleRows }).toEqual({ missingRows: [], staleRows: [] });
+  // and every function the table names really is exported (a renamed export leaves a stale row)
+  for (const n of names) expect(typeof (sc as Record<string, unknown>)[n]).toBe('function');
 });
 
 for (const row of ROWS) {

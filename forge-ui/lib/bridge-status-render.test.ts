@@ -119,3 +119,26 @@ test('fetchErrorPropsFrom: BridgeReadError with status → {error,status}; witho
     .toEqual({ error: 'bridge unreachable (Failed to fetch)' });
   expect(fetchErrorPropsFrom(new TypeError('Failed to fetch'))).toEqual({ error: 'Failed to fetch' });
 });
+
+// ---- W7-FIX-A1 A1-08: Retry shows PENDING while a probe is in flight --------
+
+test('A1-08: down + probing → the Retry button is disabled + aria-busy and reads "Checking…" (a click during an in-flight probe is visibly acknowledged)', () => {
+  const html = renderToStaticMarkup(React.createElement(BridgeStatusView, {
+    snapshot: snap({ status: 'down', lastError: 'bridge unreachable (Failed to fetch)', probing: true }),
+  }));
+  expect(html).toContain('data-bridge-probing="true"');
+  expect(html).toMatch(/<button[^>]*data-action="bridge-retry"[^>]*aria-busy="true"/);
+  expect(html).toMatch(/<button[^>]*data-action="bridge-retry"[^>]*disabled/);
+  expect(html).toContain('Checking…');
+  expect(html).not.toContain('Retry now');
+});
+
+test('A1-08: down + NOT probing → an enabled "Retry now" button (aria-busy false), data-bridge-probing="false"', () => {
+  const html = renderToStaticMarkup(React.createElement(BridgeStatusView, {
+    snapshot: snap({ status: 'down', lastError: 'bridge unreachable (Failed to fetch)', probing: false }),
+  }));
+  expect(html).toContain('data-bridge-probing="false"');
+  expect(html).toMatch(/<button[^>]*data-action="bridge-retry"[^>]*aria-busy="false"/);
+  expect(html).not.toMatch(/<button[^>]*data-action="bridge-retry"[^>]*disabled/);
+  expect(html).toContain('Retry now');
+});
