@@ -1682,7 +1682,8 @@ inventory rather than one shared page-level contract:
   ADR-031) and `…&mode=view` otherwise ("View the plan →"); the committed
   phase renders the shared **ArchitectCommittedView** inside
   `[data-section="architect-status"]`: `[data-section="architect-committed"]
-  [data-commit-tone="building|claimed-stopped|queued-running|queued-stopped|
+  [data-commit-tone="building|claimed-stopped|claimed-stopping|claimed-unknown|
+  queued-running|queued-stopped|queued-stopping|queued-unknown|
   gated|done|failed|unknown"][data-needs-scheduler-start]` whose headline is
   derived (`lib/architect-plan-view.ts`'s `describePostCommit`) from the
   session's `initiativeIds` (bridge-derived from its manifests dir, never

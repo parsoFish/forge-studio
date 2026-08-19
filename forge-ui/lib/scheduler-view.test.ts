@@ -142,3 +142,34 @@ test('the retired unifier phase is never named (projects-17)', () => {
   const src = readFileSync(join(HERE, 'scheduler-view.ts'), 'utf8');
   expect(src.toLowerCase()).not.toContain('unifier');
 });
+
+// W7-FIX-A3 (round-2 finding 3): the DRAIN window is not "running" for the
+// purposes of an enqueue claim. `stopping` rides on `running: true` (the pid
+// is alive while in-flight cycles settle), so the running branch below used to
+// promise "the scheduler will pick it up" for a run the daemon will never
+// claim — it exits as soon as the drain finishes. Same dishonest-copy class
+// A3-04 removed for the unreadable status.
+test('enqueue while the scheduler is STOPPING → honest drain copy, never "will pick it up"', () => {
+  const o = describeEnqueueOutcome('flow', { running: true, stopping: true }, enq);
+  expect(o.claim).toBe('Enqueued — the scheduler is stopping, so nothing will be claimed until you start it again.');
+  expect(o.claim).not.toMatch(/will pick it up|will decompose|will open a PR/);
+  expect(o.needsSchedulerStart).toBe(true);
+  expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
+});
+
+test('stopping wins over paused in the enqueue claim (a draining daemon cannot be resumed into claiming)', () => {
+  const o = describeEnqueueOutcome('plan', { running: true, paused: true, stopping: true }, enq);
+  expect(o.claim).toBe('Enqueued — the scheduler is stopping, so nothing will be claimed until you start it again.');
+  expect(o.claim).not.toMatch(/resume it/);
+  expect(o.needsSchedulerStart).toBe(true);
+});
+
+test('stopping and stopped/unknown keep DISTINCT copy (no state collapses into another)', () => {
+  const claims = [
+    describeEnqueueOutcome('flow', { running: true, stopping: true }, enq).claim,
+    describeEnqueueOutcome('flow', { running: false }, enq).claim,
+    describeEnqueueOutcome('flow', null, enq).claim,
+    describeEnqueueOutcome('flow', { running: true }, enq).claim,
+  ];
+  expect(new Set(claims).size).toBe(4);
+});

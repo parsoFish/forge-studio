@@ -122,6 +122,19 @@ export function describeEnqueueOutcome(
       runHref,
     };
   }
+  // W7-FIX-A3 (round-2 finding 3): the DRAIN window. `stopping` rides on
+  // `running: true` (the signalled pid stays alive while in-flight cycles
+  // settle), so without this branch a draining daemon claimed "the scheduler
+  // will pick it up" for a run it will never claim — it exits at the end of
+  // the drain. Checked BEFORE `paused`: Resume is not even offered while
+  // stopping (deriveSchedulerView gives that state no actions).
+  if (scheduler.stopping) {
+    return {
+      claim: 'Enqueued — the scheduler is stopping, so nothing will be claimed until you start it again.',
+      needsSchedulerStart: true,
+      runHref,
+    };
+  }
   if (scheduler.paused) {
     return {
       claim: `${KIND_CLAIM[kind]} The scheduler is paused — resume it to let this run start.`,

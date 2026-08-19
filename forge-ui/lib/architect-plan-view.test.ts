@@ -198,3 +198,29 @@ test('multiple initiatives → the headline names every matching id', () => {
   const rows = [{ ...link('queued'), initiativeId: 'INIT-2026-01-01-a' }, { ...link('queued'), initiativeId: 'INIT-2026-01-01-b' }];
   expect(describePostCommit(rows, { running: false }).headline).toBe('INIT-2026-01-01-a, INIT-2026-01-01-b is queued — the scheduler is stopped. Start it to build.');
 });
+
+// W7-FIX-A3 (round-2 finding 4): the same drain window, on the architect's
+// committed view. `stopping` rides on `running: true`, so a commit landing
+// inside a Stop's drain used to promise "the scheduler will pick it up" for
+// an initiative that will sit in pending/ once the daemon exits.
+test('queued/claimed while the scheduler is STOPPING → drain-honest headlines, never "will pick it up"', () => {
+  const queued = describePostCommit([link('queued')], { running: true, stopping: true });
+  expect(queued).toEqual({
+    tone: 'queued-stopping',
+    headline: `${ID} is queued — the scheduler is stopping; start it again to build.`,
+    needsSchedulerStart: true,
+  });
+  const claimed = describePostCommit([link('building')], { running: true, stopping: true });
+  expect(claimed).toEqual({
+    tone: 'claimed-stopping',
+    headline: `${ID} is claimed but the scheduler is stopping — it will not progress until you start it again.`,
+    needsSchedulerStart: true,
+  });
+  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/will pick it up|building it now/);
+});
+
+test('stopping wins over paused on the committed view (a draining daemon cannot be resumed into claiming)', () => {
+  const v = describePostCommit([link('queued')], { running: true, paused: true, stopping: true });
+  expect(v.tone).toBe('queued-stopping');
+  expect(v.headline).not.toMatch(/resume it/);
+});
