@@ -82,12 +82,16 @@ jobs:
         run: npm ci
 
       # Cheap and independent of the crawl — runs FIRST so a PR that grows the
-      # baseline is caught even if the boot/crawl below fails.
+      # baseline is caught even if the boot/crawl below fails. github.base_ref
+      # goes through the environment, never interpolated into the shell
+      # (W7-A0-8: expression-in-run is the script-injection pattern).
       - name: Baseline may only shrink
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/${{ github.base_ref }}"
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF"
 
       - name: Install Playwright chromium
         run: npx playwright-core install --with-deps chromium
@@ -97,6 +101,16 @@ jobs:
         env:
           FORGE_ARCHITECT_NO_SPAWN: "1"
           FORGE_DRY_BRIDGE: "1"
+
+      # W7-A0-4: a removed baseline entry whose route this crawl never visited is
+      # UNPROVEN (CI's clean Studio cannot reach the host-only run/session pages)
+      # — printed as a workflow warning, not a failure; the operator-host wave
+      # gate runs the same check with --fail-unproven.
+      - name: Baseline removals were re-crawled
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF" --crawled _walkthrough/ci/crawl.json
 
       - name: Upload crawl output
         if: always()

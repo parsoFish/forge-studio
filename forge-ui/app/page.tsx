@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStudioHomeData } from '@/lib/use-studio-home-data';
-import { fetchRecentAgentRuns } from '@/lib/agents-index';
+import { fetchRecentAgentRunsWithMeta } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -74,24 +75,32 @@ export default function HomePage() {
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
   const [recentAgentRuns, setRecentAgentRuns] = useState<LedgerRow[]>([]);
   const [recentAgentRunsReady, setRecentAgentRunsReady] = useState(false);
+  // W7-FIX-A1 (A1-09): per-agent history reads that came back 'unresolved'
+  // — surfaced above the ledger, never discarded (a total outage is not "no
+  // activity"). Retry re-runs the fan-out only (the rest of Home is unchanged).
+  const [recentAgentRunsMeta, setRecentAgentRunsMeta] = useState<{ unresolved: number; total: number }>({ unresolved: 0, total: 0 });
+  const [recentAgentRunsKey, setRecentAgentRunsKey] = useState(0);
+  const retryRecentAgentRuns = useCallback(() => setRecentAgentRunsKey((k) => k + 1), []);
 
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
     async function loadRecentAgentRuns(): Promise<void> {
-      const rows = await fetchRecentAgentRuns(agents);
+      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents);
       if (cancelled) return;
       setRecentAgentRuns(rows);
+      setRecentAgentRunsMeta({ unresolved, total });
       setRecentAgentRunsReady(true);
     }
     void loadRecentAgentRuns();
     return () => { cancelled = true; };
-    // `agents` intentionally omitted: this effect should fire ONCE the
-    // shared roster first becomes ready, not re-fire on every roster
-    // identity change (useStudioHomeData's own load effect only ever runs
-    // once, on mount) — mirrors app/agents/page.tsx's own precedent exactly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+    // `agents` is set ONLY by useStudioHomeData's full load (mount / Retry /
+    // bridge recovery — the runs+sessions live refresh never touches it), so
+    // depending on it re-runs the fan-out exactly when the roster was
+    // re-read: after an outage the agent rows refill with the roster instead
+    // of freezing at the outage result (W7-FIX-A1 review) — mirrors
+    // app/agents/page.tsx. `recentAgentRunsKey`: the notice's Retry alone.
+  }, [ready, agents, recentAgentRunsKey]);
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention });
@@ -335,10 +344,17 @@ export default function HomePage() {
           buildHomeLedgerRows, which reuses mergeRecentAgentRuns unchanged)
           into ONE newest-first list — each row carrying a "flow"/"agent"
           kind chip (HistoryLedger's own showKindChip, additive). */}
-      <section data-section="activity" aria-label="Recent activity">
+      <section
+        data-section="activity"
+        aria-label="Recent activity"
+        data-recent-runs-unresolved={recentAgentRunsReady ? recentAgentRunsMeta.unresolved : 0}
+      >
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
           Recent activity
         </h2>
+        {recentAgentRunsReady ? (
+          <UnresolvedHistoriesNotice unresolved={recentAgentRunsMeta.unresolved} total={recentAgentRunsMeta.total} onRetry={retryRecentAgentRuns} />
+        ) : null}
         <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
       </section>
       </>

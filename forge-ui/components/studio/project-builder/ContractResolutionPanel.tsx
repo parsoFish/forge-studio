@@ -51,7 +51,7 @@ import { pollPreflightFix, pollDisplayState, type PolledPreflightFixStatus } fro
  * "active run" index) — a reload genuinely starts fresh, same as before.
  */
 
-type AgentState = 'running' | 'cleared' | 'not-cleared' | 'failed' | 'timed-out';
+type AgentState = 'running' | 'cleared' | 'not-cleared' | 'failed' | 'unknown' | 'timed-out';
 
 const btn: React.CSSProperties = {
   fontSize: 11.5, padding: '5px 11px', background: 'var(--panel-2)', color: 'var(--text)',
@@ -97,7 +97,9 @@ export function ContractResolutionPanel({
       onUpdate: (s) => {
         setRunStatus((m) => ({ ...m, [clauseId]: s }));
         if (s.state === 'cleared') onChanged?.();
-        else if (s.state !== 'running' && s.state !== 'timed-out') {
+        // W7-FIX-A1 A1-10: a FAILED read (ok:false 'unknown') is still being
+        // watched — never reported as "agent could not clear".
+        else if (pollDisplayState(s) === 'terminal') {
           setMsg(`agent could not clear ${clauseId} (${s.state}) — refine your decision and retry`);
         }
       },
@@ -286,7 +288,7 @@ function Stage({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-const STATE_GLYPH: Record<AgentState, string> = { running: '⏳', cleared: '✓', 'not-cleared': '⚠', failed: '✗', 'timed-out': '⏸' };
+const STATE_GLYPH: Record<AgentState, string> = { running: '⏳', cleared: '✓', 'not-cleared': '⚠', failed: '✗', unknown: '?', 'timed-out': '⏸' };
 
 function ClauseRow({ c, status }: { c: PreflightClause; status?: PolledPreflightFixStatus }) {
   const state = status?.state as AgentState | undefined;
@@ -297,6 +299,7 @@ function ClauseRow({ c, status }: { c: PreflightClause; status?: PolledPreflight
       data-clause-resolution={c.resolution ?? ''}
       data-clause-route={c.route ?? ''}
       data-agent-run-state={state ?? ''}
+      {...(status?.ok === false && status.error ? { 'data-agent-run-read-error': status.error, title: `status read failed: ${status.error}` } : {})}
       style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', fontSize: 11.5, color: c.hard ? 'var(--red)' : 'var(--amber)' }}
     >
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)' }}>{state ? STATE_GLYPH[state] : c.id}</span>

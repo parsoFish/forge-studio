@@ -57,7 +57,7 @@ import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGat
 
 import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
-import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
+import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, bridgeFetch, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 import { resolveArtifactMode } from '@/lib/artifact-mode';
 import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
@@ -168,11 +168,8 @@ async function fetchArtifactDoc(
       // SECONDARY (optional): pr-description.md as hero header text.
       let prDoc: PrDoc | null = null;
       try {
-        const base = await resolveBridgeUrl();
-        if (base) {
-          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
-          if (res.ok) prDoc = parsePrDescription(await res.text());
-        }
+        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
+        if (res.ok) prDoc = parsePrDescription(await res.text());
       } catch { /* best-effort */ }
 
       if (!demoModel && !prDoc) return { type: 'empty' };
@@ -188,19 +185,22 @@ async function fetchArtifactDoc(
       // Fetch the raw markdown and surface it as a minimal PlanDoc so the
       // chip is selectable and the content is readable without the PLAN.html viewer.
       try {
-        const base = await resolveBridgeUrl();
-        if (base) {
-          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
-          if (res.ok) {
-            const text = await res.text();
-            if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
-          }
-          // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
-          // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
-          // iframe so the plan is actually viewable post-cycle, not "not produced".
-          const htmlUrl = `${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
-          const htmlRes = await fetch(htmlUrl);
-          if (htmlRes.ok) return { type: 'plan-html', url: htmlUrl };
+        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
+        }
+        // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
+        // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
+        // iframe so the plan is actually viewable post-cycle, not "not produced".
+        // The probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's
+        // own `src` needs the absolute base — the ONE non-fetch use of
+        // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
+        const htmlPath = `/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
+        const htmlRes = await bridgeFetch(htmlPath);
+        if (htmlRes.ok) {
+          const base = await resolveBridgeUrl();
+          if (base) return { type: 'plan-html', url: `${base}${htmlPath}` };
         }
       } catch { /* best-effort */ }
       return { type: 'empty' };
@@ -224,9 +224,7 @@ async function fetchArtifactDoc(
 
 async function fetchJsonArtifact<T>(runId: string, filename: string): Promise<T | null> {
   try {
-    const base = await resolveBridgeUrl();
-    if (!base) return null;
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

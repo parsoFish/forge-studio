@@ -6,8 +6,9 @@ import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
 import { SchedulerCard } from '@/components/SchedulerCard';
-import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from '@/lib/fetch-error-scope';
 import {
   fetchStudioFlows,
   fetchRuns,
@@ -49,7 +50,10 @@ export default function FlowsIndexPage() {
   // W7-A1 (crosscut-01/-22): a failed read is an ERROR state, never "No flows
   // registered at all". `loadKey` re-runs the load on Retry + bridge recovery
   // (the WS subscription below stays mount-only — it is not re-opened).
-  const [error, setError] = useState<{ message: string; status?: number } | null>(null);
+  // W7-FIX-A1 (A1-03): the error carries the SCOPE of the read set that
+  // failed — a successful runs-only refresh may clear only a runs-only
+  // failure, never the full load's (see lib/fetch-error-scope.ts).
+  const [error, setError] = useState<ScopedFetchError | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
@@ -64,23 +68,22 @@ export default function FlowsIndexPage() {
       setError(null);
     } catch (err) {
       if (signal.cancelled) return;
-      const { error: message, status } = fetchErrorPropsFrom(err);
-      setError(status !== undefined ? { message, status } : { message });
+      setError(scopedFetchError(err, FULL_LOAD_SCOPE));
     } finally {
       if (!signal.cancelled) setReady(true);
     }
   }
 
+  const RUNS_SCOPE = 'runs';
   async function refreshRuns(signal: { cancelled: boolean }): Promise<void> {
     try {
       const r = await fetchRuns();
       if (signal.cancelled) return;
       setRuns(r);
-      setError(null);
+      setError((prev) => afterRefreshSuccess(prev, RUNS_SCOPE));
     } catch (err) {
       if (signal.cancelled) return;
-      const { error: message, status } = fetchErrorPropsFrom(err);
-      setError(status !== undefined ? { message, status } : { message });
+      setError((prev) => afterRefreshFailure(prev, scopedFetchError(err, RUNS_SCOPE)));
     }
   }
 

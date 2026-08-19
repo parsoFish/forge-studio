@@ -23,8 +23,20 @@
  * its demo.json never landed) — that is rendered as the SAME honest empty
  * state as `kind: 'empty'`, never a fabricated gallery.
  *
+ * Three settled states, kept distinct (W7-FIX-A1, demo-showcase gate):
+ *   - EMPTY  — the reads succeeded; no merged|done cycle / no captured demo
+ *              (`fetchDemoModel` maps a 404 to null: the ABSENCE of an
+ *              optional artifact is a real answer) → `showcase-empty`;
+ *   - ERROR  — a bridge read THREW (unreachable / 5xx) → the shared
+ *              `PageLoadError` with Retry (never the empty state, never
+ *              NotFound: nothing is known);
+ *   - NOT FOUND — the roster loaded and does not list this project id →
+ *              the shared NotFound (W7-A4, projects-23).
+ *
  * data-* contract:
  *   root: data-page="project-showcase" data-page-ready data-project-id
+ *         data-fetch-status="loading"|"ok" (the ERROR state renders the shared
+ *         PageLoadError root: data-fetch-status="error" data-load-error="true")
  *   data-section="showcase-stats" | "showcase-evidence" | "showcase-empty"
  * (mirrors the client-fetch + settled-`data-page-ready` idiom established by
  * app/projects/[id]/page.tsx and app/artifact/page.tsx).
@@ -35,6 +47,9 @@ import Link from 'next/link';
 
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
@@ -50,23 +65,42 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // does not know renders the shared NotFound, not a plausible "No showcase
   // yet" for a project that does not exist. `null` = roster not consulted yet.
   const [projectKnown, setProjectKnown] = useState<boolean | null>(null);
+  // W7-FIX-A1: a bridge read that THREW is an ERROR state — the shared
+  // PageLoadError with Retry — never the honest empty state (that is for a
+  // SUCCESSFUL read that found nothing). `loadKey` re-runs the load on Retry
+  // + bridge recovery.
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  // Detail-page rule (W7-FIX-A1 review): recovery refills ONLY a failed load.
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     try {
       const roster = await fetchStudioProjects();
       if (signal.cancelled) return;
-      // An empty roster (bridge unreachable — the fetch fails open to [] today)
-      // is not evidence the project is unknown; only a NON-empty roster that
-      // lacks the id is.
-      setProjectKnown(roster.length === 0 ? null : roster.some((p) => p.id === id));
+      // The roster read fails CLOSED (W7-A1): a roster that came back is a
+      // real answer, empty or not — the project is listed or it is not.
+      const known = roster.some((p) => p.id === id);
+      setProjectKnown(known);
+      // A definitive NOT-FOUND is settled here: no cycles/demo read for an
+      // id the roster ruled out (a later read failure must not turn a
+      // not-found into a retryable error state — review round 2).
+      if (!known) {
+        setLoadError(null);
+        return;
+      }
       const snapshot = await fetchCycles();
       const cycles = [...(snapshot?.live ?? []), ...(snapshot?.recent ?? [])];
       const loaded = await loadShowcase({ cycles, projectId: id, fetchDemo: fetchDemoModel });
-      if (!signal.cancelled) setResult(loaded);
-    } catch {
-      // Bridge offline / unreachable — degrade to the honest empty state
-      // rather than leaving the page stuck on "Loading…" forever.
-      if (!signal.cancelled) setResult({ kind: 'empty' });
+      if (signal.cancelled) return;
+      setResult(loaded);
+      setLoadError(null);
+    } catch (err) {
+      // A bridge read threw (unreachable / 5xx / malformed). NOT an empty
+      // showcase — nothing is known. Rendered as PageLoadError below.
+      if (signal.cancelled) return;
+      setLoadError(fetchErrorPropsFrom(err));
     } finally {
       if (!signal.cancelled) setReady(true);
     }
@@ -76,7 +110,8 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
     const signal = { cancelled: false };
     void load(signal);
     return () => { signal.cancelled = true; };
-  }, [load]);
+    // loadKey: Retry / bridge recovery re-run the load (W7-FIX-A1)
+  }, [load, loadKey]);
 
   const model: DemoModel | null = result?.kind === 'loaded' ? result.model : null;
   const cycleId: string | undefined = result?.kind === 'loaded' ? result.cycleId : undefined;
@@ -89,7 +124,21 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // demo.json was never captured (both render empty, but honestly differently).
   const emptyReason: 'no-cycle' | 'no-demo' = result?.kind === 'loaded' ? 'no-demo' : 'no-cycle';
 
-  if (ready && projectKnown === false) {
+  if (ready && loadError) {
+    return (
+      <PageLoadError
+        page="project-showcase"
+        rootAttrs={{ 'data-project-id': id }}
+        what={`the demo showcase for project "${id}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
+        backHref={`/projects/${encodeURIComponent(id)}`}
+        backLabel="Back to project"
+      />
+    );
+  }
+  if (ready && !loadError && projectKnown === false) {
     return <NotFound kind="project" id={id} backHref="/projects" backLabel="Projects" />;
   }
 
@@ -97,6 +146,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
     <main
       data-page="project-showcase"
       data-page-ready={ready ? 'true' : 'false'}
+      data-fetch-status={ready ? 'ok' : 'loading'}
       data-project-id={id}
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >

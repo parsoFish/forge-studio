@@ -45,3 +45,14 @@ describe('consolidateResultLabel', () => {
     expect(label).not.toBe(consolidateResultLabel(status({ state: 'running' })));
   });
 });
+
+it('W7-FIX-A1 A1-10: consolidateResultLabel — a failed read (ok:false, state "unknown") names the read failure, never "running…"; an answered "unknown" is an honest unknown', () => {
+  expect(consolidateResultLabel({ ok: false, state: 'unknown', cleared: false, error: 'bridge unreachable (Failed to fetch)' })).toBe('consolidate: status could not be read — bridge unreachable (Failed to fetch)');
+  expect(consolidateResultLabel({ ok: true, state: 'unknown', cleared: false })).toBe('consolidate: status unknown');
+});
+
+it('W7-FIX-A1 review: a timed-out watch whose reads all FAILED (ok:false + error) names the read failure — never asserts "still running" for a run it never observed', () => {
+  expect(consolidateResultLabel({ ok: false, state: 'timed-out', cleared: false, error: 'bridge unreachable (Failed to fetch)' })).toBe('consolidate: no status could be read (bridge unreachable (Failed to fetch)) — re-check in a moment');
+  // a timed-out watch that DID observe running (last real status ok:true) keeps the running framing
+  expect(consolidateResultLabel({ ok: true, state: 'timed-out', cleared: false })).toBe('consolidate: still running — re-check in a moment');
+});

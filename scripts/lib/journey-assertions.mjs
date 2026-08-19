@@ -27,6 +27,33 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const PHASE_COST_SEL = '[data-mon-node][data-phase-cost-usd]';
 
 /**
+ * W7-A1 / W7-FIX-A1 (A1-11): the honest-read assertion EVERY pillar landing
+ * carries — the six pillar roots (`home`, `sessions-index`, `projects-index`,
+ * `flows-index`, `agents-index`, `knowledge`) report
+ * `data-fetch-status="ok"` once their read settled on a healthy bridge, and
+ * the app shell's `[data-component="bridge-status"]` is mounted on every
+ * route (docs/forge-ui-dom-and-harness.md → "Shared — failed-read state" /
+ * "Global — bridge status banner"). One helper, called from each pillar
+ * journey's landing beat, so the contract shipped on six roots is asserted on
+ * six roots (the sweep found it asserted on Home alone).
+ *
+ * @param {import('playwright').Page} page
+ * @param {(cond: boolean, msg: string) => void} check  the beat's soft asserter
+ * @param {string} pageId  the root's `data-page` value
+ * @param {string} label   the beat's check-label prefix (e.g. 'SESSIONS-IDX.2')
+ */
+export async function checkHonestPillarRead(page, check, pageId, label) {
+  const r = await page.evaluate((id) => ({
+    fetch: document.querySelector(`[data-page="${id}"]`)?.getAttribute('data-fetch-status') ?? '(absent)',
+    bridge: document.querySelector('[data-component="bridge-status"]')?.getAttribute('data-bridge-status') ?? null,
+    errors: document.querySelectorAll('[data-component="fetch-error"]').length,
+  }), pageId);
+  check(r.fetch === 'ok', `${label}: [data-page="${pageId}"][data-fetch-status="ok"] — the read settled without a bridge failure (got "${r.fetch}")`);
+  check(r.bridge !== null, `${label}: [data-component="bridge-status"] is mounted in the app shell (got ${r.bridge === null ? 'absent' : `"${r.bridge}"`})`);
+  check(r.errors === 0, `${label}: no [data-component="fetch-error"] on a healthy bridge (got ${r.errors})`);
+}
+
+/**
  * @param {object}   [opts]
  * @param {function} [opts.frame]    async (page, name, caption) — capture helper for held-open frames.
  * @param {number}   [opts.dwellMs]  how long to hold an opened drawer before the frame (default 4200).

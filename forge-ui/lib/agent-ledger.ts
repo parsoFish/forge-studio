@@ -42,7 +42,7 @@
  * See `./agent-ledger.test.ts` for the full acceptance contract.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 import {
   renderNarrative,
   sortLedgerRowsNewestFirst,
@@ -385,10 +385,8 @@ export function resolveAgentHistoryFromResponse(status: number, body: unknown): 
  * contained locally instead of being allowed to erase `res.status`.
  */
 export async function fetchAgentHistory(slug: string): Promise<AgentHistoryResolution> {
-  const base = await resolveBridgeUrl();
-  if (!base) return resolveAgentHistoryFromResponse(0, null);
   try {
-    const res = await fetch(`${base}/api/agents/${encodeURIComponent(slug)}/history`);
+    const res = await bridgeFetch(`/api/agents/${encodeURIComponent(slug)}/history`);
     let body: unknown = null;
     try {
       body = await res.json();
