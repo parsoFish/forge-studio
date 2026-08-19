@@ -211,3 +211,19 @@ test('W7A4-01 (FIX): a structured-output draft with a missing or non-string titl
     assert.equal(initiativeTitle(m), 'Add a --version flag');
   }
 });
+
+test('W7A4-01 (FIX): the H1 fallback only strips a closing ATX `#` run that is separated by whitespace — `# Migrate to C#` keeps its hash', () => {
+  const h1 = (body: string) => initiativeTitle(parseManifest(manifestText({ body })));
+
+  // A `#` glued to the last word is part of the NAME (C#, F#, a `#tag`), not
+  // markdown's optional closing sequence — CommonMark requires whitespace
+  // before the closing run.
+  assert.equal(h1('# Migrate to C#\n\nBody.\n'), 'Migrate to C#');
+  assert.equal(h1('# F# interop\n\nBody.\n'), 'F# interop');
+  assert.equal(h1('# Support C## and beyond\n\nBody.\n'), 'Support C## and beyond');
+
+  // A whitespace-separated closing run IS markdown syntax and is stripped.
+  assert.equal(h1('# Title ##\n\nBody.\n'), 'Title');
+  assert.equal(h1('# Title #\n\nBody.\n'), 'Title');
+  assert.equal(h1('# Title   ###   \n\nBody.\n'), 'Title');
+});

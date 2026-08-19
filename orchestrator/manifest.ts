@@ -259,7 +259,10 @@ function firstLevelOneHeading(body: string | undefined): string | null {
     const line = raw.trimEnd();
     if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
     if (inFence) continue;
-    const m = /^# (.+?)\s*#*\s*$/.exec(line);
+    // The optional closing `#` run is markdown syntax ONLY when whitespace
+    // separates it from the text (CommonMark) — a hash glued to the last word
+    // belongs to the NAME (`# Migrate to C#`, `# F# interop`).
+    const m = /^# (.+?)(?:\s+#+)?\s*$/.exec(line);
     if (m && m[1].trim().length > 0) return m[1].trim();
   }
   return null;
