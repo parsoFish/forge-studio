@@ -93,6 +93,8 @@ import {
   runAgentTurn,
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
+  cancelledPhaseWins,
+  CANCELLED_PHASE,
   makeHeartbeatWriter,
   makeReasoningSink,
   makeThinkingSink,
@@ -612,10 +614,26 @@ function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnS
 /** SEC-04 leaf: guarded status.json write. Routes the WHOLE
  *  `<projectRoot>/<dirSegments...>/status.json` path (leaf included) through
  *  the containment guard and THROWS (fail closed) if the leaf escapes —
- *  never a silent skip. */
+ *  never a silent skip.
+ *
+ *  W7-FIX-A2 (W7A2-01): the seam ALSO refuses when the on-disk phase is the
+ *  reserved terminal `cancelled` and this write would move off it — the
+ *  operator cancelled while the (possibly long) agent turn ran, and this
+ *  runner's `{ ...status, phase: next }` is a STALE pre-turn object. The two
+ *  refusals are told apart by re-reading the on-disk status: a sticky-cancel
+ *  refusal throws a NAMED `InteractiveRunnerError` (so stderr.log records
+ *  that a turn finished after the cancel and its advance was discarded —
+ *  the lifecycle derivation still reads `terminal`, never `crashed`, because
+ *  terminal wins), a containment refusal keeps its own message. */
 function writeStatus(projectRoot: string, dirSegments: readonly string[], status: InteractiveTurnStatus): void {
   const p = guardedWriteSessionStatus(projectRoot, dirSegments, status);
   if (p === null) {
+    const onDisk = guardedReadSessionStatus<{ phase?: unknown }>(projectRoot, dirSegments);
+    if (onDisk !== null && cancelledPhaseWins(onDisk.phase, status.phase)) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: the session was cancelled (phase "${CANCELLED_PHASE}") while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
+      );
+    }
     throw new Error(
       'runInteractiveTurn: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
     );

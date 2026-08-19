@@ -672,10 +672,49 @@ export function guardedReadSessionStatus<S>(
   }
 }
 
+/** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
+ *  terminal phase every session kind shares: written by the generic
+ *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
+ *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
+ *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
+ *  the per-kind tables are consulted. Deliberately NOT a per-kind
+ *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
+ *  is the same fact for all kinds, and N copies of one fact in N tables is
+ *  exactly the drift shape ADR-043's "derived, not authored" discipline
+ *  exists to prevent.
+ *
+ *  W7-FIX-A2 (W7A2-01): defined HERE, at the status-write seam, because the
+ *  seam enforces it (`cancelledPhaseWins` below) — cli/bridge-studio.ts
+ *  re-exports this same binding so every bridge module keeps its import. */
+export const CANCELLED_PHASE = 'cancelled';
+
+/**
+ * W7-FIX-A2 (W7A2-01, HIGH) — the sticky-cancel rule, as ONE pure predicate:
+ * an on-disk `cancelled` phase WINS over any later write that would move the
+ * session to a different phase (or to no phase at all). A late turn
+ * completion — onboarding's untracked dispatch child, or a tracked runner
+ * already past its SIGTERM — used to spread its STALE pre-turn status object
+ * over the terminal phase and resurrect the session into `complete`/`failed`/
+ * `awaiting-…`. Re-stamping `cancelled` over `cancelled` is not a
+ * resurrection (idempotent), and cancelling a live phase is the normal
+ * transition, so both stay allowed. A missing on-disk phase (first write) is
+ * never sticky.
+ */
+export function cancelledPhaseWins(existingPhase: unknown, incomingPhase: unknown): boolean {
+  return existingPhase === CANCELLED_PHASE && incomingPhase !== CANCELLED_PHASE;
+}
+
 /** Guarded write of `<projectsRoot>/<dirSegments...>/<leaf>` as pretty JSON,
  *  stamping a fresh `updated_at` and creating the session dir if needed.
  *  Returns the written path, or `null` if the guard rejected the path (the
- *  write never happens — fail closed). */
+ *  write never happens — fail closed) — OR if the on-disk phase is the
+ *  reserved terminal `cancelled` and `status.phase` is anything else
+ *  (`cancelledPhaseWins`: the sticky-cancel rule, enforced at THIS seam so
+ *  every writer — the affordance routes, the generic runner, the four legacy
+ *  runners, `forge agent dispatch --session-dir` — inherits it without a
+ *  per-caller check). The status file is byte-unchanged on refusal. Callers
+ *  that need to tell the two refusals apart re-read the on-disk status
+ *  (`guardedReadSessionStatus`) and test `cancelledPhaseWins` themselves. */
 export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
   projectsRoot: string,
   dirSegments: readonly string[],
@@ -684,6 +723,8 @@ export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
 ): string | null {
   const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
   if (p === null) return null;
+  const existing = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegments, leaf);
+  if (existing !== null && cancelledPhaseWins(existing.phase, status.phase)) return null;
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
   return p;

@@ -36,7 +36,7 @@ import {
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve, sep, basename, dirname } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
@@ -82,7 +82,7 @@ import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
-import { deriveSessionLifecycleFor, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
+import { deriveSessionLifecycleFor, sessionLogDirName, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -2911,6 +2911,25 @@ function spawnAgentDispatch(
     const proc = spawn(process.execPath, args, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
     closeSync(stderrFd);
     proc.unref();
+    // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
+    // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
+    // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/
+    // turn.pid` (`sessionLogDirName`, cli/bridge-studio-lifecycle.ts — the
+    // SAME template `spawnAgentTurn` uses). Before this, onboarding was the
+    // one kind `killTrackedTurn` could never find, so cancel returned
+    // `killed:false` and left the agent running. `isTurnAlive` proves
+    // ownership through the `--session-dir` value's basename (the sid) in
+    // the child's own argv. kind/sid are derived from the ALREADY-validated
+    // sessionDir the route built (never request text); the guarded write
+    // refuses anything that does not resolve under `_logs`. Best-effort like
+    // stderr.log — never bubbles into the request.
+    if (sessionDir !== undefined && typeof proc.pid === 'number') {
+      const sid = basename(sessionDir);
+      const kind = basename(dirname(sessionDir)).replace(/^_/, '');
+      if (kind.length > 0 && isSafeRunId(sid)) {
+        guardedWriteFile(join(forgeRoot, '_logs'), [sessionLogDirName(kind, sid), 'turn.pid'], `${proc.pid}\n`);
+      }
+    }
   } catch { /* best-effort */ }
 }
 

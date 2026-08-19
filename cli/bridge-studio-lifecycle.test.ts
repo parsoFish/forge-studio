@@ -222,7 +222,7 @@ test('lifecycle unit (W7-FIX-A2): isTurnAlive recognises the dispatch runner\'s 
   const sid = '2026-08-19T09-00-00';
   const child = spawn(
     process.execPath,
-    ['-e', 'setTimeout(() => {}, 120000)', '--session-dir', `/tmp/whatever/projects/p/_onboarding/${sid}`],
+    ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', `/tmp/whatever/projects/p/_onboarding/${sid}`],
     { detached: true, stdio: 'ignore' },
   );
   child.unref();
@@ -390,7 +390,7 @@ before(async () => {
   // must kill it.
   const onbSessionDir = join(projectsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID);
   writeStatus(onbSessionDir, { phase: 'running', project: 'projb', runId: '_agent-onboarding-agent-2026-08-12T08-00-00-000', startedAt: '2026-08-12T08:00:00.000Z' }, T.stale);
-  const onbChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--session-dir', onbSessionDir], { detached: true, stdio: 'ignore' });
+  const onbChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', onbSessionDir], { detached: true, stdio: 'ignore' });
   onbChild.unref();
   onboardingChildPid = onbChild.pid ?? null;
   writeLog('onboarding', ONBOARDING_KILL_SID, { 'turn.pid': `${onboardingChildPid}\n` }, T.stale);
