@@ -392,6 +392,9 @@ export function RunPanel({
           <div>
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+            {status?.ok === false && status.error ? (
+              <span data-run-read-error className="muted" style={{ marginLeft: 6 }}>· status read failed: {status.error}</span>
+            ) : null}
             {pollState === 'timed-out' && (
               <button
                 type="button"

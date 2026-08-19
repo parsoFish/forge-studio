@@ -45,3 +45,8 @@ describe('consolidateResultLabel', () => {
     expect(label).not.toBe(consolidateResultLabel(status({ state: 'running' })));
   });
 });
+
+it('W7-FIX-A1 A1-10: consolidateResultLabel — a failed read (ok:false, state "unknown") names the read failure, never "running…"; an answered "unknown" is an honest unknown', () => {
+  expect(consolidateResultLabel({ ok: false, state: 'unknown', cleared: false, error: 'bridge unreachable (Failed to fetch)' })).toBe('consolidate: status could not be read — bridge unreachable (Failed to fetch)');
+  expect(consolidateResultLabel({ ok: true, state: 'unknown', cleared: false })).toBe('consolidate: status unknown');
+});

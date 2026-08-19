@@ -381,3 +381,95 @@ test('pollDisplayState: every other real state (done/cleared/not-cleared/failed/
     expect(pollDisplayState({ state: s })).toBe('terminal');
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A1 (A1-10): a FAILED read (`{ok:false, state:'unknown', error}`,
+// the fail-closed shape studio-client's three polls now return) is neither
+// a terminal fact about the run nor a fabricated 'running' — the wrapper
+// keeps watching (bounded by maxAttempts), reports the failure via onUpdate
+// so the panel can show the bridge's text, and stops the moment a REAL
+// terminal status arrives. A `state:'unknown'` that the bridge itself
+// answered (`ok:true`) is still terminal ("no state recorded").
+// ---------------------------------------------------------------------------
+
+test('pollAgentRun: a failed read {ok:false,state:"unknown",error} is reported via onUpdate AND keeps polling; a later real "done" stops it', async () => {
+  const failed: AgentRunStatus = { ok: false, state: 'unknown', costUsd: 0, events: 0, error: 'bridge unreachable (Failed to fetch)' };
+  const fetchStatus = vi.fn<() => Promise<AgentRunStatus>>()
+    .mockResolvedValueOnce(failed)
+    .mockResolvedValueOnce(failed)
+    .mockResolvedValue(status({ state: 'done', costUsd: 2, events: 9 }));
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 100, maxAttempts: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, state: 'unknown', error: 'bridge unreachable (Failed to fetch)' }));
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(fetchStatus).toHaveBeenCalledTimes(3);
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: true, state: 'done', costUsd: 2 }));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(fetchStatus).toHaveBeenCalledTimes(3);
+  stop();
+});
+
+test('pollAgentRun: a bridge-answered {ok:true,state:"unknown"} (no state recorded) is STILL terminal — no further polling', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(status({ state: 'unknown' }));
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 100 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetchStatus).toHaveBeenCalledTimes(1);
+  stop();
+});
+
+test('pollAgentRun: reads that fail every time still give up at maxAttempts with an explicit "timed-out" carrying the last failed read (never a silent freeze, never a phantom "running")', async () => {
+  const failed: AgentRunStatus = { ok: false, state: 'unknown', costUsd: 0, events: 0, error: 'boom' };
+  const fetchStatus = vi.fn().mockResolvedValue(failed);
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 100, maxAttempts: 3 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(fetchStatus).toHaveBeenCalledTimes(3);
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, state: 'timed-out', error: 'boom' }));
+  stop();
+});
+
+test('pollAgentFix: a failed read {ok:false,state:"unknown"} keeps polling; a later real "cleared" stops it', async () => {
+  const failed: AgentFixStatus = { ok: false, state: 'unknown', cleared: false, error: 'boom' };
+  const fetchStatus = vi.fn<() => Promise<AgentFixStatus>>()
+    .mockResolvedValueOnce(failed)
+    .mockResolvedValue({ ok: true, state: 'cleared', cleared: true });
+  const onUpdate = vi.fn();
+  const stop = pollAgentFix('kb-1', 'run-1', { fetchStatus, onUpdate, intervalMs: 100, maxAttempts: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, state: 'unknown', error: 'boom' }));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(fetchStatus).toHaveBeenCalledTimes(2);
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'cleared', cleared: true }));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(fetchStatus).toHaveBeenCalledTimes(2);
+  stop();
+});
+
+test('pollPreflightFix: a failed read {ok:false,state:"unknown"} keeps polling; a later real "not-cleared" stops it', async () => {
+  const fetchStatus = vi.fn<() => Promise<AgentFixStatus>>()
+    .mockResolvedValueOnce({ ok: false, state: 'unknown', cleared: false, error: 'boom' })
+    .mockResolvedValue({ ok: true, state: 'not-cleared', cleared: false });
+  const onUpdate = vi.fn();
+  const stop = pollPreflightFix('proj', 'run-1', { fetchStatus, onUpdate, intervalMs: 100, maxAttempts: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, state: 'unknown' }));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(fetchStatus).toHaveBeenCalledTimes(2);
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'not-cleared' }));
+  await vi.advanceTimersByTimeAsync(500);
+  expect(fetchStatus).toHaveBeenCalledTimes(2);
+  stop();
+});
+
+test('pollDisplayState: a FAILED read ({ok:false, state:"unknown"}) -> "watching" (the poll is still going — the panel shows the read failure, not a stopped run); an answered {ok:true, state:"unknown"} stays "terminal"', () => {
+  expect(pollDisplayState({ ok: false, state: 'unknown' })).toBe('watching');
+  expect(pollDisplayState({ ok: true, state: 'unknown' })).toBe('terminal');
+  expect(pollDisplayState({ ok: false, state: 'timed-out' })).toBe('timed-out');
+  expect(pollDisplayState({ ok: false, state: 'failed' })).toBe('terminal');
+});

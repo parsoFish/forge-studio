@@ -24,7 +24,7 @@ import type { PolledAgentFixStatus } from './agent-dispatch';
 
 /** Short, honest label for the current consolidate poll status (the KB
  *  maintenance result pill). Pure — no DOM — matches the poll's OWN state
- *  vocabulary (`running` | `cleared` | `not-cleared` | `failed` |
+ *  vocabulary (`running` | `cleared` | `not-cleared` | `failed` | `unknown` |
  *  `timed-out`), never re-deriving or guessing a different one. `null` (no
  *  run dispatched/attached yet) renders no label at all — the caller omits
  *  the pill rather than show a stale default. */
@@ -39,6 +39,12 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
       return 'consolidate: failed';
     case 'timed-out':
       return 'consolidate: still running — re-check in a moment';
+    case 'unknown':
+      // W7-FIX-A1 A1-10: a FAILED read names the failure (the bridge's own
+      // text); a bridge-answered "no state recorded" is an honest unknown.
+      return status.ok === false
+        ? `consolidate: status could not be read — ${status.error ?? 'read failed'}`
+        : 'consolidate: status unknown';
     default:
       return 'consolidate: running…';
   }

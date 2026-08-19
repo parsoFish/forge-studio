@@ -109,6 +109,15 @@ const ROWS: Row[] = [
   { name: 'fetchActiveOrLatestKbDrain', call: () => sc.fetchActiveOrLatestKbDrain('k'), path: '/api/studio/kbs/k/drain', okBody: { ok: true, runId: null }, positive: (v) => expect((v as { ok: boolean }).ok).toBe(true), mode: 'status-shaped', on404: 'status-shaped' },
   { name: 'fetchActiveOrLatestConsolidate', call: () => sc.fetchActiveOrLatestConsolidate('k'), path: '/api/studio/kbs/k/consolidate/active', okBody: { ok: true, runId: 'c1', state: 'running', cleared: false }, positive: (v) => expect((v as { runId: string }).runId).toBe('c1'), mode: 'status-shaped', on404: 'status-shaped' },
   { name: 'fetchActiveOnboarding', call: () => sc.fetchActiveOnboarding('p'), path: '/api/studio/projects/p/onboarding/active', okBody: { ok: true, sessionId: 's', runId: 'r', phase: 'running' }, positive: (v) => expect((v as { sessionId: string }).sessionId).toBe('s'), mode: 'status-shaped', on404: 'status-shaped' },
+  // ---- W7-FIX-A1 A1-10: the three dispatch-status polls. A failed READ is
+  // `{ok:false, state:'unknown', error}` — never a fabricated 'running' (fix
+  // polls) or an `'unknown'` indistinguishable from the bridge's own honest
+  // "no state recorded" (run poll); the poll wrappers in agent-dispatch.ts
+  // keep watching on `ok:false` (bounded), so a blip is a visible read
+  // failure, not a stopped run and not a phantom still-running.
+  { name: 'getAgentFixStatus', call: () => sc.getAgentFixStatus('k', 'r'), path: '/api/studio/kbs/k/fix-agent/r', okBody: { ok: true, state: 'cleared', cleared: true }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'cleared', cleared: true }), mode: 'status-shaped', on404: 'status-shaped' },
+  { name: 'getAgentRunStatus', call: () => sc.getAgentRunStatus('r'), path: '/api/agents/runs/r', okBody: { ok: true, state: 'done', costUsd: 0.25, events: 12 }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'done', costUsd: 0.25, events: 12 }), mode: 'status-shaped', on404: 'status-shaped' },
+  { name: 'preflightFixStatus', call: () => sc.preflightFixStatus('p', 'r'), path: '/api/studio/projects/p/preflight/fix-agent/r', okBody: { ok: true, state: 'not-cleared', cleared: false }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'not-cleared', cleared: false }), mode: 'status-shaped', on404: 'status-shaped' },
 ];
 
 // ---- drift guard (W7-FIX-A1 A1-04) ------------------------------------------
@@ -190,20 +199,9 @@ test('enumerateBridgeReadExports (positive control): finds helper-backed AND raw
   expect(enumerateBridgeReadExports(synthetic)).toEqual(['fetchThings', 'pollThing', 'fetchThingIds']);
 });
 
-/**
- * Deliberately-green gap pin (expiry: A1-10). These three status polls ride
- * `bridgeFetch` directly and still map a transport failure to a fabricated
- * `state:'running'`/`'unknown'` (review-sweep A1-10, low). Converting them
- * changes the poll-state vocabulary in `agent-dispatch.ts` + three panels,
- * so they are tracked here explicitly rather than silently absent: when
- * A1-10 lands they gain ROWS and this list becomes empty — a fourth raw
- * poll cannot be added without appearing in this diff.
- */
-const RAW_GET_POLLS_PENDING_A1_10 = ['getAgentFixStatus', 'getAgentRunStatus', 'preflightFixStatus'] as const;
-
 test('table covers EVERY bridge read exported by studio-client (a new studioGet/studioRead/studioReadOr404/raw-GET export with no row fails here)', () => {
   const source = readFileSync(resolve(__dirname, './studio-client.ts'), 'utf8');
-  const enumerated = enumerateBridgeReadExports(source).filter((n) => !(RAW_GET_POLLS_PENDING_A1_10 as readonly string[]).includes(n));
+  const enumerated = enumerateBridgeReadExports(source);
   const names = ROWS.map((r) => r.name);
   expect(names).toEqual([...new Set(names)]);
   const missingRows = enumerated.filter((n) => !names.includes(n));
@@ -309,3 +307,32 @@ test('studioPost-backed write: a non-2xx with a NON-JSON body still reports {ok:
   const r = await sc.dispatchKbDrain('k');
   expect(r).toMatchObject({ ok: false, error: 'HTTP 502' });
 });
+
+// ---- W7-FIX-A1 A1-10: the three polls' FAILED-read shape is `state:'unknown'` ----
+// (the per-row loop above pins ok:false + the bridge's text; this pins the
+// state token itself — the poll wrappers key on `ok:false`, the panels render
+// `state`, so a failed read must never masquerade as 'running').
+const POLLS: Array<{ name: string; call: () => Promise<{ ok: boolean; state: string; error?: string }> }> = [
+  { name: 'getAgentFixStatus', call: () => sc.getAgentFixStatus('k', 'r') },
+  { name: 'getAgentRunStatus', call: () => sc.getAgentRunStatus('r') },
+  { name: 'preflightFixStatus', call: () => sc.preflightFixStatus('p', 'r') },
+];
+for (const poll of POLLS) {
+  test(`${poll.name}: transport throw → {ok:false, state:'unknown', error} — never a fabricated 'running'`, async () => {
+    mockBridgeFetch.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'bridge unreachable (Failed to fetch)' });
+  });
+  test(`${poll.name}: 500 → {ok:false, state:'unknown', error:<bridge text>}`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(500, { error: 'log dir vanished' }));
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'log dir vanished' });
+  });
+  test(`${poll.name}: a 200 whose body has no state → {ok:true, state:'unknown'} with NO error (the bridge's own honest "no state recorded" stays distinguishable from a failed read)`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(200, { ok: true }));
+    const v = await poll.call();
+    expect(v.ok).toBe(true);
+    expect(v.state).toBe('unknown');
+    expect(v.error).toBeUndefined();
+  });
+}
