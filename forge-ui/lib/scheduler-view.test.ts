@@ -86,14 +86,46 @@ test('enqueue while the scheduler runs → the kind-specific claim, no start nee
   expect(flow.runHref).toBe('/flows/my-flow');
 });
 
-test('enqueue while the scheduler is stopped (or unknown) → honest "nothing will run" claim + needsSchedulerStart', () => {
-  for (const scheduler of [{ running: false }, null]) {
-    const o = describeEnqueueOutcome('develop', scheduler, enq);
-    expect(o.claim).toBe('Enqueued — the scheduler is stopped, so nothing will run until you start it.');
-    expect(o.needsSchedulerStart).toBe(true);
-    // The link to the run the enqueue returned is kept even when nothing runs yet.
-    expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
-  }
+test('enqueue while the scheduler is stopped → honest "nothing will run" claim + needsSchedulerStart', () => {
+  const o = describeEnqueueOutcome('develop', { running: false }, enq);
+  expect(o.claim).toBe('Enqueued — the scheduler is stopped, so nothing will run until you start it.');
+  expect(o.needsSchedulerStart).toBe(true);
+  // The link to the run the enqueue returned is kept even when nothing runs yet.
+  expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
+});
+
+// W7-FIX-A3 (A3-04): an UNREADABLE status is not "stopped". A failed read
+// (bridge restart, transient 5xx — `useSchedulerStatus` hands the caller
+// `status: null` with ready=true) must never assert the daemon is stopped —
+// the SchedulerCardView strip mounted right beneath renders "unknown" with
+// NO Start button, so a "stopped… start it" claim would contradict its own
+// controls. Distinct copy, still mounts the strip (needsSchedulerStart).
+test('enqueue while the scheduler status is UNKNOWN (null) → "could not confirm" claim, never "stopped"', () => {
+  const o = describeEnqueueOutcome('develop', null, enq);
+  expect(o.claim).toBe('Enqueued — could not confirm the scheduler is running; check its status below.');
+  expect(o.claim).not.toMatch(/stopped/);
+  expect(o.needsSchedulerStart).toBe(true);
+  expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
+  // Stopped and unknown must NOT collapse into the same copy.
+  expect(o.claim).not.toBe(describeEnqueueOutcome('develop', { running: false }, enq).claim);
+});
+
+// W7-FIX-A3 (A3-07): Stop is not a silent control. While the daemon drains
+// (SIGTERM sent, pid still alive) the bridge reports `stopping: true`; the
+// card renders that transitional state — the running hint ("Claiming queued
+// work…") is FALSE during the drain, and no action is offered until the poll
+// reports running:false.
+test('running + stopping → "stopping" state, drain hint, NO actions (neither Pause nor a second Stop)', () => {
+  const v = deriveSchedulerView({ running: true, pid: 4917, paused: false, stopping: true }, { queuedCount: 2 });
+  expect(v.state).toBe('stopping');
+  expect(v.label).toBe('Scheduler stopping');
+  expect(v.hint).toBe('Draining in-flight runs, then exiting — nothing new is claimed.');
+  expect(v.actions).toEqual([]);
+});
+
+test('stopping wins over paused while the pid is alive; a stopped daemon is never "stopping"', () => {
+  expect(deriveSchedulerView({ running: true, paused: true, stopping: true }).state).toBe('stopping');
+  expect(deriveSchedulerView({ running: false, stopping: true }).state).toBe('stopped');
 });
 
 test('enqueue while paused → kind claim + paused rider, no start needed', () => {
@@ -109,4 +141,35 @@ test('no flow/cycle in the result → runHref null (never a fabricated link)', (
 test('the retired unifier phase is never named (projects-17)', () => {
   const src = readFileSync(join(HERE, 'scheduler-view.ts'), 'utf8');
   expect(src.toLowerCase()).not.toContain('unifier');
+});
+
+// W7-FIX-A3 (round-2 finding 3): the DRAIN window is not "running" for the
+// purposes of an enqueue claim. `stopping` rides on `running: true` (the pid
+// is alive while in-flight cycles settle), so the running branch below used to
+// promise "the scheduler will pick it up" for a run the daemon will never
+// claim — it exits as soon as the drain finishes. Same dishonest-copy class
+// A3-04 removed for the unreadable status.
+test('enqueue while the scheduler is STOPPING → honest drain copy, never "will pick it up"', () => {
+  const o = describeEnqueueOutcome('flow', { running: true, stopping: true }, enq);
+  expect(o.claim).toBe('Enqueued — the scheduler is stopping, so nothing will be claimed until you start it again.');
+  expect(o.claim).not.toMatch(/will pick it up|will decompose|will open a PR/);
+  expect(o.needsSchedulerStart).toBe(true);
+  expect(o.runHref).toBe('/flows/forge-develop/run/INIT-2026-08-18-add-version-flag');
+});
+
+test('stopping wins over paused in the enqueue claim (a draining daemon cannot be resumed into claiming)', () => {
+  const o = describeEnqueueOutcome('plan', { running: true, paused: true, stopping: true }, enq);
+  expect(o.claim).toBe('Enqueued — the scheduler is stopping, so nothing will be claimed until you start it again.');
+  expect(o.claim).not.toMatch(/resume it/);
+  expect(o.needsSchedulerStart).toBe(true);
+});
+
+test('stopping and stopped/unknown keep DISTINCT copy (no state collapses into another)', () => {
+  const claims = [
+    describeEnqueueOutcome('flow', { running: true, stopping: true }, enq).claim,
+    describeEnqueueOutcome('flow', { running: false }, enq).claim,
+    describeEnqueueOutcome('flow', null, enq).claim,
+    describeEnqueueOutcome('flow', { running: true }, enq).claim,
+  ];
+  expect(new Set(claims).size).toBe(4);
 });

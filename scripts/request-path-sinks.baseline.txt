@@ -68,7 +68,7 @@ cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts writeFileSync 6
-cli/bridge-studio.ts existsSync 9
+cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
 cli/contract-stages.ts realpathSync 2
@@ -190,14 +190,14 @@ orchestrator/cycle.ts existsSync 8
 orchestrator/cycle.ts mkdirSync 3
 orchestrator/cycle.ts readdirSync 1
 orchestrator/cycle.ts readFileSync 2
-orchestrator/daemon.ts existsSync 6
-orchestrator/daemon.ts mkdirSync 3
+orchestrator/daemon.ts existsSync 7
+orchestrator/daemon.ts mkdirSync 4
 orchestrator/daemon.ts openSync 1
 orchestrator/daemon.ts readFileSync 1
-orchestrator/daemon.ts rmSync 3
+orchestrator/daemon.ts rmSync 4
 orchestrator/daemon.ts spawn 1
 orchestrator/daemon.ts statSync 1
-orchestrator/daemon.ts writeFileSync 2
+orchestrator/daemon.ts writeFileSync 3
 orchestrator/demo-builder-runner.ts existsSync 6
 orchestrator/demo-builder-runner.ts mkdirSync 5
 orchestrator/demo-builder-runner.ts readFileSync 6

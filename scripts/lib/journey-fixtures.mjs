@@ -1827,6 +1827,32 @@ export function cleanAuthoringHookArtifacts(sid) {
 // Referenced from inside beat drive() bodies; takes `page` explicitly (no
 // runner-scope closure), so it moves cleanly alongside the other helpers.
 
+/** Select a run in the flow monitor's RAIL. W7-FIX-A3 (the flows-run reflect
+ *  regression): the selector is scoped to the rail card
+ *  (`[data-run-group] [data-run-id=…]`), NEVER a bare `[data-run-id]` — the
+ *  HistoryLedger row carries the same attribute on an `<a>`, and once the
+ *  COMPLETE group collapsed (>10 archived runs) that row was the first match:
+ *  the "select" click NAVIGATED to the run-detail page. A collapsed group is
+ *  expanded first when the card is not rendered (the rail keeps only the
+ *  SELECTED run visible inside a collapsed group). Returns true when the card
+ *  was clicked. */
+export async function selectRailRun(page, runId) {
+  const card = () => page.locator(`[data-run-group] [data-run-id="${runId}"]`).first();
+  if ((await card().count()) === 0) {
+    const collapsed = page.locator('[data-run-group][data-group-collapsed="true"] [data-action="toggle-run-group"]');
+    for (let guard = 0; guard < 6 && (await collapsed.count()) > 0; guard++) {
+      await collapsed.first().click().catch(() => {});
+      await sleep(150);
+    }
+  }
+  if ((await card().count()) > 0) {
+    await card().click().catch(() => {});
+    await sleep(ACT);
+    return true;
+  }
+  return false;
+}
+
 /** Navigate to a Studio flow monitor and wait until it is ready with the cycle's
  *  run selected. The monitor refetches the run model from the bridge on load. */
 export async function openStudioMonitor(page, watch, flowId = 'forge-develop', runId = CYCLE_ID) {
@@ -1835,9 +1861,5 @@ export async function openStudioMonitor(page, watch, flowId = 'forge-develop', r
     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
     null, { timeout: 20000 },
   ).catch(() => {});
-  const card = page.locator(`[data-run-id="${runId}"]`).first();
-  if ((await card.count()) > 0) {
-    await card.click().catch(() => {});
-    await sleep(ACT);
-  }
+  await selectRailRun(page, runId);
 }

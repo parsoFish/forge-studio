@@ -62,6 +62,8 @@ export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
 
   return (
     <div
+      data-component="event-tail"
+      data-tail-state={tailState}
       style={{
         height: 160,
         flexShrink: 0,
@@ -85,7 +87,6 @@ export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
         {activeRunId && (
           <span
             data-tail-count={events.length}
-        data-tail-state={tailState}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,

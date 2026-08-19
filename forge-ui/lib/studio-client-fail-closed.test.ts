@@ -70,7 +70,7 @@ type Row = {
   /** how the function propagates a failure */
   mode: 'throws' | 'status-shaped';
   /** what a 404 means for this read */
-  on404: 'null' | 'empty-array' | 'throws' | 'status-shaped';
+  on404: 'null' | 'empty-array' | 'throws' | 'status-shaped' | 'run-lookup-absent';
 };
 
 const RUN = { id: 'run-1', flowId: 'forge-develop', status: 'active', phases: [] };
@@ -96,6 +96,11 @@ const ROWS: Row[] = [
   { name: 'fetchProjectStarters', call: () => sc.fetchProjectStarters(), path: '/api/studio/projects/starters', okBody: { appTypes: ['next'] }, positive: (v) => expect(v).toEqual(['next']), mode: 'throws', on404: 'throws' },
   // ---- "no such object" reads: 404 → null, everything else THROWS ----
   { name: 'fetchRun', call: () => sc.fetchRun('run-1'), path: '/api/runs/run-1', okBody: { run: RUN }, positive: (v) => expect((v as { id: string }).id).toBe('run-1'), mode: 'throws', on404: 'null' },
+  // W7-FIX-A3 (round-2 finding 2): the same read, with the bridge's per-run
+  // existence fact attached. A 404 is a real answer ({run:null} + the body's
+  // `onDisk`); every other failure still throws, so an outage can never read
+  // as "no such run" (the class this whole table exists to prevent).
+  { name: 'fetchRunLookup', call: () => sc.fetchRunLookup('run-1'), path: '/api/runs/run-1', okBody: { run: RUN }, positive: (v) => expect(v).toMatchObject({ run: { id: 'run-1' }, onDisk: true }), mode: 'throws', on404: 'run-lookup-absent' },
   { name: 'fetchAgentCapability', call: () => sc.fetchAgentCapability('a'), path: '/api/studio/agents/a/capability', okBody: { capability: { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true, modelTierStrategy: 'fixed' } }, positive: (v) => expect(v).not.toBeNull(), mode: 'throws', on404: 'null' },
   { name: 'fetchKb', call: () => sc.fetchKb('k'), path: '/api/studio/kbs/k', okBody: { kb: { id: 'k', name: 'K' }, graph: { nodes: [], edges: [] }, health: { ok: true } }, positive: (v) => expect((v as { kb: { id: string } }).kb.id).toBe('k'), mode: 'throws', on404: 'null' },
   { name: 'fetchKbNode', call: () => sc.fetchKbNode('k', 'n'), path: '/api/studio/kbs/k/nodes/n', okBody: { node: { id: 'n' } }, positive: (v) => expect((v as { id: string }).id).toBe('n'), mode: 'throws', on404: 'null' },
@@ -287,6 +292,11 @@ for (const row of ROWS) {
         expect(v.error).toBe('unknown');
         break;
       }
+      case 'run-lookup-absent':
+        // A 404 WITHOUT `onDisk` (any older/other 404 on this route) is the
+        // conservative answer: nothing is known to exist for the id.
+        await expect(row.call()).resolves.toEqual({ run: null, onDisk: false });
+        break;
     }
   });
 }
@@ -306,6 +316,33 @@ test('studioPost-backed write: a non-2xx with a NON-JSON body still reports {ok:
   mockBridgeFetch.mockImplementation(async () => jsonRes(502, null, true));
   const r = await sc.dispatchKbDrain('k');
   expect(r).toMatchObject({ ok: false, error: 'HTTP 502' });
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 2): `onDisk` is the BRIDGE's fact, read verbatim
+// off the 404 body — the artifact page's not-found rule keys on it, so a
+// fabricated or inferred value would put the shared NotFound over an orphan
+// log dir's artifacts (or hide a genuinely unknown id behind an artifact page).
+// ---------------------------------------------------------------------------
+
+test('fetchRunLookup: a 404 carrying onDisk:true → {run:null,onDisk:true} (the orphan `_logs/<id>/` case)', async () => {
+  mockBridgeFetch.mockImplementation(async () => jsonRes(404, { error: 'run not found', onDisk: true }));
+  await expect(sc.fetchRunLookup('orphan-1')).resolves.toEqual({ run: null, onDisk: true });
+});
+
+test('fetchRunLookup: a 404 carrying onDisk:false → {run:null,onDisk:false} (`?run=nope` stays NotFound)', async () => {
+  mockBridgeFetch.mockImplementation(async () => jsonRes(404, { error: 'run not found', onDisk: false }));
+  await expect(sc.fetchRunLookup('nope')).resolves.toEqual({ run: null, onDisk: false });
+});
+
+test('fetchRunLookup: a non-boolean onDisk is NOT trusted (only a literal true means "something is there")', async () => {
+  mockBridgeFetch.mockImplementation(async () => jsonRes(404, { error: 'run not found', onDisk: 'yes' }));
+  await expect(sc.fetchRunLookup('weird')).resolves.toEqual({ run: null, onDisk: false });
+});
+
+test('fetchRunLookup: a 500 REJECTS — an outage is never "no such run, nothing on disk"', async () => {
+  mockBridgeFetch.mockImplementation(async () => jsonRes(500, { error: 'boom' }));
+  await expect(sc.fetchRunLookup('run-1')).rejects.toMatchObject({ name: 'BridgeReadError', status: 500 });
 });
 
 // ---- W7-FIX-A1 A1-10: the three polls' FAILED-read shape is `state:'unknown'` ----

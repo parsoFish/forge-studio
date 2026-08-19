@@ -8,10 +8,9 @@ import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { startFlowRun } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
+import type { KickoffCandidate } from '@/lib/kickoff-candidates';
 
-/** An initiative the generic kickoff can enqueue onto this flow — derived
- *  from the runs list (one run per queued manifest), never invented. */
-export type KickoffCandidate = { initiativeId: string; project: string | null };
+export type { KickoffCandidate } from '@/lib/kickoff-candidates';
 
 /**
  * Stage C — per-flow kickoff surface. Renders the launch UI that matches the

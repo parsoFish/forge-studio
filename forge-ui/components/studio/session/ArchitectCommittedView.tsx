@@ -38,6 +38,12 @@ const TONE_COLOR: Record<string, string> = {
   gated: 'var(--amber)',
   'queued-stopped': 'var(--ember)',
   'claimed-stopped': 'var(--ember)',
+  'queued-unknown': 'var(--dim)',
+  'claimed-unknown': 'var(--dim)',
+  // W7-FIX-A3 (round-2 finding 4): the drain window reads like the stopped
+  // pair — nothing is being claimed — not like the running green.
+  'queued-stopping': 'var(--ember)',
+  'claimed-stopping': 'var(--ember)',
   failed: 'var(--red)',
   unknown: 'var(--dim)',
 };

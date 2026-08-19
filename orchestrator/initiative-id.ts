@@ -54,6 +54,17 @@ export type RegistryOpts = {
 
 /** Canonical id pattern for initiative IDs. */
 const CANONICAL_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * The ONE test for "is this a canonical initiative id" (W7-FIX-A3, round-2
+ * finding 6). Every enqueue/route guard that folds a caller-supplied id into a
+ * queue path shares this predicate instead of copying the regex — a copy that
+ * drifts is a fail-open guard (an id one site accepts and another refuses).
+ * Pure, total, and safe on any input; also the path-traversal guard on the id.
+ */
+export function isCanonicalInitiativeId(id: string): boolean {
+  return typeof id === 'string' && CANONICAL_PATTERN.test(id);
+}
 /** Handle format `<proj4>#<seq>`. */
 const HANDLE_PATTERN = /^[a-z0-9]{3,5}#\d+$/;
 

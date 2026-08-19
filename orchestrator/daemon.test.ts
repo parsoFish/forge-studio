@@ -24,6 +24,7 @@ import {
   setPaused,
   pausedFlagPath,
   spawnServeDetached,
+  markStopping,
 } from './daemon.ts';
 
 function tmpForge(): string {
@@ -137,3 +138,83 @@ function reapStaleAndAssertClear(root: string, pidFile: string): void {
   // The exported helper exists and is callable with this signature.
   assert.equal(typeof spawnServeDetached, 'function');
 }
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (A3-07): the drain window is a REAL state. `POST /api/scheduler/
+// stop` SIGTERMs the daemon, which keeps its pid alive until in-flight cycles
+// settle — a plain pid probe reads "running" for the whole drain, so Stop
+// looked like a silent no-op. The stop marker (`_logs/daemon/stopping`, the
+// pid being stopped) folds into daemonState as `stopping` while THAT pid is
+// alive; a different (fresh) daemon pid never inherits it, and a dead pid is
+// simply "not running" (never "stopping").
+// ---------------------------------------------------------------------------
+
+test('daemonState.stopping: only while the MARKED pid is alive; a stale marker never sticks to a new pid or a stopped daemon', () => {
+  const root = tmpForge();
+  const queueRoot = join(root, '_queue');
+  writePidFile(root, process.pid);
+  assert.equal(daemonState(root, queueRoot).stopping, false, 'no marker → not stopping');
+
+  markStopping(root, process.pid);
+  const draining = daemonState(root, queueRoot);
+  assert.equal(draining.running, true);
+  assert.equal(draining.stopping, true, 'marker for the live pid → stopping');
+
+  // A marker for a DIFFERENT pid (a previous daemon) does not stick to this one.
+  markStopping(root, 2_147_483_640);
+  assert.equal(daemonState(root, queueRoot).stopping, false, 'stale marker → not stopping');
+
+  // Marked, then the process is gone → plainly stopped, never "stopping".
+  markStopping(root, process.pid);
+  clearPidFile(root);
+  const stopped = daemonState(root, queueRoot);
+  assert.equal(stopped.running, false);
+  assert.equal(stopped.stopping, false);
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 9): the marker is a TRANSITION record, not a
+// permanent file. `daemonState` only compares pids, so a marker left on disk
+// after the drain finished relies entirely on pid INEQUALITY — and pids are
+// reused (a long-lived WSL/container session wraps). A fresh daemon that
+// happens to draw the marked pid would report `stopping: true` forever, and
+// `deriveSchedulerView` gives that state NO actions: no Start, no Pause, no
+// Stop until someone deletes the file by hand. Both pid-file writes clear it.
+// ---------------------------------------------------------------------------
+
+test('the stop marker is cleared when a pid file is written (a fresh daemon never inherits a drain)', () => {
+  const root = tmpForge();
+  const queueRoot = join(root, '_queue');
+  const { stoppingFile } = daemonPaths(root);
+
+  writePidFile(root, process.pid);
+  markStopping(root, process.pid);
+  assert.equal(daemonState(root, queueRoot).stopping, true, 'precondition: draining');
+
+  // A fresh daemon takes the SAME pid (pid reuse) — the marker must be gone,
+  // so the new daemon reports a plain running state with real actions.
+  writePidFile(root, process.pid);
+  assert.equal(existsSync(stoppingFile), false, 'writePidFile clears the stop marker');
+  assert.equal(daemonState(root, queueRoot).stopping, false, 'a fresh pid file is never "stopping"');
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('the stop marker is cleared when the pid file is cleared (the drain that finished leaves nothing behind)', () => {
+  const root = tmpForge();
+  const { stoppingFile } = daemonPaths(root);
+  writePidFile(root, process.pid);
+  markStopping(root, process.pid);
+
+  clearPidFile(root);
+  assert.equal(existsSync(stoppingFile), false, 'clearPidFile clears the stop marker');
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('clearing an ABSENT marker is a no-op (both writes are safe on a never-stopped root)', () => {
+  const root = tmpForge();
+  assert.doesNotThrow(() => { writePidFile(root, process.pid); });
+  assert.doesNotThrow(() => { clearPidFile(root); });
+  assert.equal(existsSync(daemonPaths(root).stoppingFile), false);
+  rmSync(root, { recursive: true, force: true });
+});

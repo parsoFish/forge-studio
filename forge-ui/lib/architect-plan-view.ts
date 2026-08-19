@@ -128,8 +128,12 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[]): I
 export type PostCommitTone =
   | 'building'
   | 'claimed-stopped'
+  | 'claimed-stopping'
+  | 'claimed-unknown'
   | 'queued-running'
   | 'queued-stopped'
+  | 'queued-stopping'
+  | 'queued-unknown'
   | 'gated'
   | 'done'
   | 'failed'
@@ -145,19 +149,35 @@ function idsIn(linkage: InitiativeLinkage[], state: InitiativeQueueState): strin
  *  failed > done > unknown; the scheduler state decides whether "queued" /
  *  "claimed" can progress. */
 export function describePostCommit(linkage: InitiativeLinkage[], scheduler: SchedulerStatus | null): PostCommitView {
+  // W7-FIX-A3 (A3-04): `null` = the status could not be READ — a third state,
+  // never collapsed into "stopped" (the strip beneath renders "unknown" with
+  // no Start button, so a "start it" headline would contradict its controls).
+  const unknown = scheduler === null;
   const running = !!scheduler?.running;
-  const paused = running && !!scheduler?.paused;
+  // W7-FIX-A3 (round-2 finding 4): the DRAIN window is a FOURTH state, not a
+  // flavour of running. `stopping` rides on `running: true` (the signalled pid
+  // is alive until the in-flight cycles settle), so a commit landing inside a
+  // Stop used to promise pickup from a daemon that exits at the end of the
+  // drain. It outranks `paused` — a draining daemon cannot be resumed into
+  // claiming (deriveSchedulerView offers no action at all in this state).
+  const stopping = running && !!scheduler?.stopping;
+  const paused = running && !stopping && !!scheduler?.paused;
   const has = (s: InitiativeQueueState) => linkage.some((l) => l.queueState === s);
+  const unconfirmed = 'could not confirm the scheduler is running; check its status below.';
 
   if (has('gated')) return { tone: 'gated', headline: `${idsIn(linkage, 'gated')} is waiting on your verdict.`, needsSchedulerStart: false };
   if (has('building')) {
     const ids = idsIn(linkage, 'building');
+    if (unknown) return { tone: 'claimed-unknown', headline: `${ids} is claimed — ${unconfirmed}`, needsSchedulerStart: true };
+    if (stopping) return { tone: 'claimed-stopping', headline: `${ids} is claimed but the scheduler is stopping — it will not progress until you start it again.`, needsSchedulerStart: true };
     return running
       ? { tone: 'building', headline: `The autonomous loop is building ${ids} now.`, needsSchedulerStart: false }
       : { tone: 'claimed-stopped', headline: `${ids} is claimed but the scheduler is stopped — it will not progress until you start it.`, needsSchedulerStart: true };
   }
   if (has('queued')) {
     const ids = idsIn(linkage, 'queued');
+    if (unknown) return { tone: 'queued-unknown', headline: `${ids} is queued — ${unconfirmed}`, needsSchedulerStart: true };
+    if (stopping) return { tone: 'queued-stopping', headline: `${ids} is queued — the scheduler is stopping; start it again to build.`, needsSchedulerStart: true };
     if (running && !paused) return { tone: 'queued-running', headline: `${ids} is queued — the scheduler will pick it up.`, needsSchedulerStart: false };
     if (paused) return { tone: 'queued-running', headline: `${ids} is queued — the scheduler is paused; resume it to start.`, needsSchedulerStart: false };
     return { tone: 'queued-stopped', headline: `${ids} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true };

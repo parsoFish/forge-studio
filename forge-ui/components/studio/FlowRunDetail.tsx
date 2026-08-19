@@ -125,9 +125,12 @@ export function FlowRunDetail({
         <span style={{ color: 'var(--line-2)' }}>/</span>
         <span>run</span>
         <span style={{ flex: 1 }} />
+        {/* W7-FIX-A3 (A3-03): keyed on the RESOLVED run id (`run.id`, the
+            cycle id once claimed) — the URL segment is the initiative id since
+            W7-A3, and /artifact keys its reads on the id it is given. */}
         {found && (
           <Link
-            href={`/artifact?run=${encodeURIComponent(runId)}&type=plan&mode=view`}
+            href={`/artifact?run=${encodeURIComponent(run?.id ?? runId)}&type=plan&mode=view`}
             data-action="open-artifacts"
             style={{ color: 'var(--c-artifact, var(--amber))', textDecoration: 'none' }}
           >
@@ -143,7 +146,7 @@ export function FlowRunDetail({
       <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <h2 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h2>
         <div style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-          {runId} · flow {flowId || '—'}
+          {run?.id ?? runId} · flow {flowId || '—'}
         </div>
       </header>
 

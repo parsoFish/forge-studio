@@ -10,7 +10,7 @@ import {
   DAG_SESSION_INITIATIVES, DAG_SESSION_UNRESOLVED_DEP, writeRoadmapDagSession, cleanRoadmapDagSession,
   cycleEvent, unifierEvent, demoAgentEvent, adversarialReviewEvent, writePrDescription, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
   writeAutomatedReflection, writeReflectionArtifacts, writeReleaseArtifact,
-  openStudioMonitor,
+  openStudioMonitor, selectRailRun,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 import { mkdirSync, writeFileSync, readFileSync, appendFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
@@ -941,8 +941,7 @@ export const journey = defineJourney({
                   () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                const runCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
-                if (await runCard.count() > 0) { await runCard.click().catch(() => {}); await sleep(ACT); }
+                await selectRailRun(p, CYCLE_ID);
                 await caption(p, 'Watch it build — the WI hexes fan out, the demo node authors on its own hex, cost accrues live.');
                 await sleep(WORK);
                 await p.locator('[data-mon-node][data-hex-kind="wi"]').first().scrollIntoViewIfNeeded().catch(() => {});
@@ -1287,8 +1286,7 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-action="open-reflect"]', { timeout: 15000 }).catch(() => {});
               await sleep(ACT);
               await frame(page, 'r4-4b-reflect-link', 'R4 — merged; "Reflect on this cycle →" surfaces the final human moment');
-              await openStudioMonitor(page, watch);
-              await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
+              await openStudioMonitor(page, watch); // selects CYCLE_ID's rail card (selectRailRun)
               // Grounded truth: at merge time the run is NOT complete yet — reflection is
               // still in flight (reflection.start emitted, no end), and the run model
               // truthfully reconciles done/-with-unfinished-reflect back to 'active'.
@@ -1407,9 +1405,19 @@ export const journey = defineJourney({
               await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain', { key: true });
               // Model B: the reflect node lives on the forge-reflect flow; the threaded run
               // surfaces there via flowLineage (it ran a reflection phase).
+              // W7-FIX-A3: openStudioMonitor selects the RAIL card (never the
+              // ledger row — that click navigated to the run-detail page once
+              // COMPLETE collapsed, which is exactly how the reflect hex + the
+              // history ledger came to read "absent" at the wave-A gate).
               await openStudioMonitor(page, watch, 'forge-reflect');
-              await page.locator(`[data-run-id="${CYCLE_ID}"]`).first().click().catch(() => {});
-              await sleep(ACT);
+              check(
+                await page.locator(`[data-run-group] [data-run-id="${CYCLE_ID}"]`).count() > 0,
+                'W7-FIX-A3: the selected cycle\'s card is rendered in the reflect monitor\'s RAIL (a collapsed COMPLETE group keeps the selection visible)',
+              );
+              check(
+                await page.locator('[data-page="flow-monitor"][data-flow-id="forge-reflect"]').count() > 0,
+                'W7-FIX-A3: selecting the run in the rail stays on the forge-reflect monitor (never navigates to the run-detail page)',
+              );
               await caption(page, 'And on the Forge Reflect flow — the reflect step that fired automatically on merge.');
               await frame(page, 'r5-1-reflect-flow', 'The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge', { key: true });
               try {
@@ -1521,8 +1529,7 @@ export const journey = defineJourney({
                     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                     null, { timeout: 15000 },
                   ).catch(() => {});
-                  const entryRunCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
-                  if (await entryRunCard.count() > 0) { await entryRunCard.click().catch(() => {}); await sleep(ACT); }
+                  await selectRailRun(p, CYCLE_ID);
                   await caption(p, "Forge improves — you're the teacher, and the review link is right there on the completed run.");
                   const reviewReflectionLink = p.locator('[data-banner="reflection-ready"] [data-action="review-reflection"]').first();
                   if (await reviewReflectionLink.count() > 0) {
@@ -1541,8 +1548,7 @@ export const journey = defineJourney({
                     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                     null, { timeout: 15000 },
                   ).catch(() => {});
-                  const reflectRunCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
-                  if (await reflectRunCard.count() > 0) { await reflectRunCard.click().catch(() => {}); await sleep(ACT); }
+                  await selectRailRun(p, CYCLE_ID);
                   await caption(p, 'The reflect hex greens on its own flow — and the run rail finally reads complete.');
                   await sleep(WORK);
                   await sleep(READ);
@@ -1585,6 +1591,14 @@ export const journey = defineJourney({
               check(
                 await page.locator('[data-action="submit-reflection"]').count() === 0,
                 'no submit button — automated mode is read-only (nothing for the operator to answer)',
+              );
+              // W7-FIX-A3: this fixture is a `_logs/<id>`-only cycle (no queue
+              // manifest — the orphan-log shape real roots carry too). The page
+              // renders the artifact, not the shared NotFound, and says the
+              // queue record is absent instead of inventing run context.
+              check(
+                await page.locator('[data-page="artifact"] [data-run-record="absent"]').count() > 0,
+                'W7-FIX-A3: an orphan log dir renders its reflection with the honest "no queue record" note (never NotFound)',
               );
               await frame(page, 'r5-2-automated-reflection', 'R5 — automated reflection: inferred answers rendered read-only with provenance badges', { key: true });
         },

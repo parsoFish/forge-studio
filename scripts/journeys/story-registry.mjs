@@ -416,47 +416,48 @@ const DECISION_RUN_AGENT_ADV_FICTIONAL_SCENARIO =
 // 'trigger-only') — no project-target-picker kind. onboard-project
 // deliberately declares no `kickoff:` block at all (studio/flows/
 // onboard-project/flow.yaml's own comment: "the generic Start-Run affordance
-// handles it"), so FlowKickoff.tsx falls through to GenericKickoff
-// (~:110-119) — a bare button, no field of any kind. The real onboarding
-// entry point stays the PROJECT page's own "Run onboarding agent" action
-// (R4-02/R4-17, ported at stand-up-onboard's su-onboard-project beat), never
-// a flow-kickoff project selector.
+// handles it"), so FlowKickoff.tsx falls through to GenericKickoff — since
+// W7-A3 (flows-02) an INITIATIVE picker (`select[data-field="kickoff-
+// initiative"]`, queued initiatives only per W7-FIX-A3 A3-01) + Start Run;
+// still no project field of any kind. The real onboarding entry point stays
+// the PROJECT page's own "Run onboarding agent" action (R4-02/R4-17, ported
+// at stand-up-onboard's su-onboard-project beat), never a flow-kickoff
+// project selector.
 const DECISION_R4_18_NO_PROJECT_KICKOFF_KIND =
   'orchestrator/studio/types.ts:256 (`FLOW_KICKOFF_KINDS = ' +
   "['idea', 'initiative-select', 'trigger-only']` — no project-select kind) " +
-  '+ forge-ui/components/studio/FlowKickoff.tsx GenericKickoff (~:110-119, ' +
-  'the undeclared-kickoff fallback: a bare button, no project field) + ' +
-  'studio/flows/onboard-project/flow.yaml\'s own comment ("Deliberately NO ' +
-  'kickoff: block — the generic Start-Run affordance handles it") — there is ' +
-  'no 4th kickoff kind and no project-target field anywhere on the real ' +
-  'kickoff surface';
+  '+ forge-ui/components/studio/FlowKickoff.tsx GenericKickoff (the ' +
+  'undeclared-kickoff fallback: an initiative picker (W7-A3) + Start Run, no ' +
+  'project field) + studio/flows/onboard-project/flow.yaml\'s own comment ' +
+  '("Deliberately NO kickoff: block — the generic Start-Run affordance handles ' +
+  'it") — there is no 4th kickoff kind and no project-target field anywhere ' +
+  'on the real kickoff surface';
 
 // Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 4
-// exclusion below. Measured, not assumed: handleStartRun
-// (forge-ui/app/flows/[id]/page.tsx) calls `startRun(flow?.project ?? id)`;
-// onboard-project declares `project: null`, so the real click would POST
-// `{initiativeId:'onboard-project'}` to `/api/runs`
-// (forge-ui/lib/bridge-client.ts). cli/bridge-studio-runs.ts's own
-// INIT_ID_RE (`/^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/`,
-// ~:749) rejects that id outright (400) — and even a conforming id must
-// already sit in `_queue/{ready-for-review,failed}/` (the route only RESUMES
-// an already-planned initiative by moving its manifest to `pending/`, ~:774-
-// 843; it never mints a fresh one). No real product path ever queues an
-// onboard-project-shaped manifest, so this click is a genuine dead end today
-// — the real load-bearing proof (a run actually reaching the gate) is driven
+// exclusion below. Re-measured for W7-FIX-A3 (A3-08): since W7-A3 (flows-02)
+// the generic Start Run is a picker over QUEUED initiatives (planned runs,
+// `lib/kickoff-candidates.ts`) that POSTs the picked initiative to
+// `/api/flows/:id/run` (`enqueueFlowRun(initiativeId, flowId)` — repoints an
+// existing manifest at THIS flow; a shipped `_queue/done` initiative is
+// refused 409 `already-done`). It never mints a fresh initiative and it
+// needs a real queued INIT-… manifest to point at; the mockup's "Start."
+// beat imagines a project-targeted launch that mints an onboard-project run
+// from nothing. No real product path queues an onboard-project-shaped
+// manifest for the picker to offer, so the mockup's click stays excluded —
+// the real load-bearing proof (a run actually reaching the gate) is driven
 // directly through the flow-runner instead, at flows-onboard-gate in this
-// same port.
+// same port; the picker surface itself is asserted at flows-onboard-kickoff
+// (FOB.2).
 const DECISION_R4_18_GENERIC_KICKOFF_NO_DISPATCH =
-  'forge-ui/app/flows/[id]/page.tsx handleStartRun (`startRun(flow?.project ' +
-  '?? id)`) + forge-ui/lib/bridge-client.ts startRun (`POST /api/runs ' +
-  '{initiativeId}`) + cli/bridge-studio-runs.ts INIT_ID_RE (~:749, ' +
-  '`/^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/`) and its ' +
-  'POST /api/runs handler (~:774-843, 400 on a non-matching id; even a ' +
-  'matching id must already sit in _queue/ready-for-review or _queue/failed ' +
-  '— the route only RESUMES an already-planned initiative, never mints a ' +
-  'fresh one) — onboard-project declares project:null, so a real click 400s; ' +
-  'flows-onboard-gate drives the real proof directly through the ' +
-  'flow-runner instead';
+  'forge-ui/components/studio/FlowKickoff.tsx GenericKickoff (W7-A3: ' +
+  '`select[data-field="kickoff-initiative"]` over queued initiatives, ' +
+  '`startFlowRun(flowId, initiativeId)` → `POST /api/flows/:id/run`) + ' +
+  'cli/ui-bridge.ts (INIT rule + `enqueueFlowRun`, 409 already-done for a ' +
+  'done/ manifest, 404 for an unqueued id — it repoints an EXISTING queued ' +
+  'manifest, never mints a fresh one) — nothing queues an onboard-project-' +
+  'shaped initiative for the picker to offer, so the mockup\'s project-' +
+  'targeted "Start." is not a real launch here; flows-onboard-gate drives the ' +
+  'real proof directly through the flow-runner instead';
 
 // Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 5
 // exclusion below.
@@ -1644,8 +1645,8 @@ export const STORY_REGISTRY = [
       beats: [
         'flows-onboard-monitor',
         'flows-onboard-kickoff',
-        { excluded: "select [data-j=kick-project] (\"Target the repo; materials welcome.\") — no project-target field exists anywhere on the real kickoff surface: FLOW_KICKOFF_KINDS declares only idea/initiative-select/trigger-only, onboard-project deliberately declares no kickoff: block (the generic fallback, a bare Start-Run button), and the real onboarding entry point is the PROJECT page's own \"Run onboarding agent\" action (R4-02/R4-17), never a flow-kickoff project picker", decision: DECISION_R4_18_NO_PROJECT_KICKOFF_KIND },
-        { excluded: "click [data-j=start-run] (\"Start.\") — the real [data-action=\"start-run\"] click POSTs initiativeId:'onboard-project' to /api/runs, which 400s (INIT_ID_RE requires an INIT-YYYY-MM-DD-slug id) and, even with a matching id, only RESUMES an already-queued initiative — no product path ever queues one for onboard-project; the real load-bearing proof (a run actually reaching the gate) is driven directly through the flow-runner instead, at flows-onboard-gate", decision: DECISION_R4_18_GENERIC_KICKOFF_NO_DISPATCH },
+        { excluded: "select [data-j=kick-project] (\"Target the repo; materials welcome.\") — no project-target field exists anywhere on the real kickoff surface: FLOW_KICKOFF_KINDS declares only idea/initiative-select/trigger-only, onboard-project deliberately declares no kickoff: block (the generic fallback: an initiative picker + Start Run since W7-A3, no project field), and the real onboarding entry point is the PROJECT page's own \"Run onboarding agent\" action (R4-02/R4-17), never a flow-kickoff project picker", decision: DECISION_R4_18_NO_PROJECT_KICKOFF_KIND },
+        { excluded: "click [data-j=start-run] (\"Start.\") — the real [data-action=\"start-run\"] is a picker over QUEUED initiatives that POSTs the picked INIT-… id to /api/flows/onboard-project/run (enqueueFlowRun repoints an existing queued manifest; it never mints one, and a done/ initiative is refused 409) — no product path queues an onboard-project-shaped initiative for the picker to offer, so the mockup's project-targeted launch is not a real click here; the real load-bearing proof (a run actually reaching the gate) is driven directly through the flow-runner instead, at flows-onboard-gate", decision: DECISION_R4_18_GENERIC_KICKOFF_NO_DISPATCH },
         { excluded: '"Interview: the north star lands first." — the onboard node dispatches onboarding-agent, whose own declared interactivity is fully autonomous once triggered: it asks no questions and never blocks mid-run (skills/onboarding-agent/SKILL.md) — there is no interview turn on this flow\'s real path', decision: DECISION_R4_18_NO_INTERVIEW },
         { excluded: '"Contract author: AGENTS.md, secrets, demo skill, gates." — real, and already ported: stand-up-onboard.mjs\'s su-onboard-session beat drives the SAME real contract build-out (contract, instructions, secrets, demo, roadmap, stage by stage), cross-journey; R4-18 itself scopes onboarding content out (R4-02/R4-17)', decision: DECISION_R4_18_CONTRACT_AUTHOR_CROSS_JOURNEY },
         'flows-onboard-gate',

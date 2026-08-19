@@ -42,3 +42,16 @@ export function initialCollapsed(stored: string | null, counts: Partial<Record<R
 export function serializeCollapsed(c: RailCollapsed): string {
   return JSON.stringify(c);
 }
+
+/**
+ * W7-FIX-A3: which of a group's runs the rail renders. An expanded group
+ * renders every run; a collapsed group renders ONLY the currently selected
+ * run (when it belongs to the group) — collapse hides the pile, never the
+ * selection. Without this, the just-completed, selected run vanished from
+ * the rail the moment COMPLETE crossed the threshold, and the only
+ * `[data-run-id]` left for it was the HistoryLedger row (a link).
+ */
+export function visibleGroupRuns<T extends { id: string }>(group: T[], isCollapsed: boolean, activeRunId: string | null): T[] {
+  if (!isCollapsed) return group;
+  return group.filter((r) => r.id === activeRunId);
+}
