@@ -304,7 +304,14 @@ inventory rather than one shared page-level contract:
     `button[data-action="cancel-session"]` for every non-terminal card (the
     SAME two-step `CancelSessionButton` the `/sessions` row mounts; on
     success Home refetches the sessions index via `useStudioHomeData`'s
-    `refreshSessions`); a needs-you card additionally renders a `.status-dot
+    `refreshSessions` — a FAILED refetch routes into Home's own
+    `data-fetch-status="error"` failure state, W7A2-06 — and renders
+    `div[data-cancel-outcome="killed"|"unconfirmed"]` inside the strip
+    (W7-FIX-A2, `CancelOutcomeNotice`, `describeCancelOutcome`): the
+    bridge's real `killed` answer as DISTINCT sentences — "Cancelled at
+    phase <p> — the agent turn was stopped." vs "Marked cancelled at phase
+    <p> — no live agent turn was found to stop…"; held in page state so it
+    survives the refetch that drops the card); a needs-you card additionally renders a `.status-dot
     [data-status="retrying"]` visual indicator (styling only — the DOM
     contract attribute is `data-needs-you`, never the dot's own frame value).
   Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
@@ -343,7 +350,15 @@ inventory rather than one shared page-level contract:
   cancel", a `[data-action="cancel-session-abort"]` "keep" link beside it —
   the second POSTs `POST /api/studio/sessions/:kind/:sid/cancel`; the
   server's error text renders verbatim in `[data-cancel-error]`; on success
-  the page refetches and the now-terminal row leaves the active list).
+  the page refetches — a failed refetch routes into `data-fetch-status=
+  "error"`, W7A2-06 — the now-terminal row leaves the active list, and
+  the page renders `div[data-cancel-outcome="killed"|"unconfirmed"]` above
+  the table (W7-FIX-A2 W7A2-02: the bridge's own `killed` — true only when a
+  tracked, provably-ours turn process was signalled — as DISTINCT sentences,
+  `describeCancelOutcome`; the SAME `CancelOutcomeNotice` Home's strip and
+  the session page's lifecycle bar render). The lifecycle chip's `terminal`
+  sentence is phase-aware (`describeLifecycle(state, error, idleMs, phase)`,
+  W7A2-10 — the ONE copy helper the session page bar uses too).
   Rows: `needsYou` is TRUTHFUL in both directions (W7-A2 — the bridge's
   `deriveSessionLifecycle(...).needsYou`: an open operator gate or a
   crashed/stalled runner, never a merely-working agent) and `state` is
@@ -1577,7 +1592,20 @@ inventory rather than one shared page-level contract:
   `button[data-action="cancel"]` (the shared two-step `CancelSessionButton`;
   `[data-action="cancel-abort"]` "keep" link while armed; server error
   verbatim in `[data-cancel-error]`) POSTs the generic cancel route; on
-  success the page refetches the shell (phase → `cancelled`, terminal). The
+  success the page refetches the shell (phase → `cancelled`, terminal) and
+  the bar keeps rendering `div[data-cancel-outcome="killed"|"unconfirmed"]`
+  (W7-FIX-A2 W7A2-02 — the cancel's real outcome, held in page state; the
+  `terminal` headline is `describeLifecycle('terminal', …, phase)`, the
+  same sentence the `/sessions` chip renders, W7A2-10). The shell payload
+  carries a REQUIRED bridge-derived `transcript` boolean (W7A2-04: a
+  `turnSpec` kind rides the generic spine, which never writes transcript
+  turns → `false`; a legacy-runner kind → `true`) and the transcript
+  pane's empty-stage copy is keyed on it: transcript-less kind → "No
+  transcript for stage <s> — this session records its work in the artifact
+  pane" (every state); transcript-bearing + `working` → "No turns recorded
+  yet for stage <s>"; transcript-bearing at an operator gate / crashed /
+  stalled / terminal (the instructions/demo `briefing` shape) → the neutral
+  "No transcript for stage <s> — nothing was recorded for this stage". The
   generic `SessionInteractivePanel`'s zero-affordance branch is
   lifecycle-aware too — `[data-section="session-no-affordances"]
   [data-no-affordance-reason="working"|"stopped"|"terminal"]` ("Agent is
