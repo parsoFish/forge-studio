@@ -85,8 +85,10 @@ export default function AgentRunPage() {
       <nav data-section="run-breadcrumb" aria-label="Run breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px 0', fontSize: 12, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
         <Link href="/agents" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Agents</Link>
         <span style={{ color: 'var(--line-2)' }}>/</span>
+        {/* W7-FIX-A3 (A3-10): exactly ONE `[data-agent-slug]` per page — the
+            shell root above carries it; the link's visible text is the slug. */}
         <Link href={`/agents/${encodeURIComponent(agentSlug)}`} data-action="back-to-agent" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
-          <span data-agent-slug={agentSlug}>{agentSlug || 'agent'}</span>
+          {agentSlug || 'agent'}
         </Link>
         <span style={{ color: 'var(--line-2)' }}>/</span>
         <span>run {runId}</span>

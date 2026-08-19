@@ -274,8 +274,8 @@ export const journey = defineJourney({
     },
     {
       id: 'flows-onboard-kickoff',
-      title: 'The generic Start-Run affordance — no project-target picker exists',
-      narration: 'onboard-project declares no kickoff: block, so it renders the platform\'s generic Start-Run fallback — the same one every authored flow with no declared kickoff.kind gets. There is no project-target field: onboarding a real project still launches from the project page (R4-17), not from here.',
+      title: 'The generic Start-Run affordance — an initiative picker, no project-target picker',
+      narration: 'onboard-project declares no kickoff: block, so it renders the platform\'s generic Start-Run fallback — the same one every authored flow with no declared kickoff.kind gets: a picker over the QUEUED initiatives (W7-A3) and a Start Run that enqueues the picked one onto this flow. There is no project-target field: onboarding a real project still launches from the project page (R4-17), not from here.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.2] The generic Start-Run affordance');
@@ -285,23 +285,30 @@ export const journey = defineJourney({
           null, { timeout: 20000 },
         ).catch(() => {});
         await page.waitForSelector('[data-section="flow-kickoff"]', { timeout: 10000 }).catch(() => {});
-        await caption(page, 'No kickoff: block declared — the generic Start-Run fallback, and nothing else.');
+        await caption(page, 'No kickoff: block declared — the generic Start-Run fallback: pick a queued initiative, nothing else.');
+        // W7-FIX-A3 (A3-06): assert the SPECIFIC fields, not "no <select>" — the
+        // generic kickoff's only picker is the initiative picker (W7-A3), and it
+        // must never grow a project-target field.
         const kickoff = await page.evaluate(() => {
           const el = document.querySelector('[data-section="flow-kickoff"]');
           if (!el) return null;
+          const selects = [...el.querySelectorAll('select')].map((sel) => sel.getAttribute('data-field'));
           return {
             kind: el.getAttribute('data-kickoff-kind'),
             hasStart: el.querySelector('[data-action="start-run"]') !== null,
-            hasProjectSelect: el.querySelector('select') !== null,
+            hasInitiativePicker: el.querySelector('select[data-field="kickoff-initiative"]') !== null,
+            selects,
           };
         });
         check(kickoff !== null && kickoff.kind === 'generic',
           `FOB.2: onboard-project's kickoff bar is the generic fallback (data-kickoff-kind="generic", got ${JSON.stringify(kickoff)}) — FLOW_KICKOFF_KINDS declares only idea/initiative-select/trigger-only`);
         check(kickoff !== null && kickoff.hasStart,
           'FOB.2: the generic kickoff renders [data-action="start-run"]');
-        check(kickoff !== null && !kickoff.hasProjectSelect,
-          'FOB.2: no project-target <select> exists on the generic kickoff — onboarding a real project launches from the project page instead (R4-17)');
-        await frame(page, 'fob-2-generic-kickoff', 'FOB — the generic Start-Run affordance: no project picker, no live dispatch driven here');
+        check(kickoff !== null && kickoff.hasInitiativePicker,
+          'FOB.2: the generic kickoff\'s picker is the INITIATIVE picker (select[data-field="kickoff-initiative"], W7-A3 flows-02)');
+        check(kickoff !== null && kickoff.selects.every((f) => f === 'kickoff-initiative'),
+          `FOB.2: the initiative picker is the ONLY select — no project-target field on the generic kickoff (got ${JSON.stringify(kickoff?.selects)}); onboarding a real project launches from the project page instead (R4-17)`);
+        await frame(page, 'fob-2-generic-kickoff', 'FOB — the generic Start-Run affordance: an initiative picker + Start Run, no project picker, no live dispatch driven here');
       },
     },
     {
