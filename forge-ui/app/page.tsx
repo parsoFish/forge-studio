@@ -24,6 +24,8 @@ import {
   type HomeStatus,
 } from '@/lib/home-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
+import type { SessionIndexRow } from '@/lib/studio-client';
+import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 
 // ---------------------------------------------------------------------------
 // Home — the operator dashboard at `/` (R6-07).
@@ -102,6 +104,9 @@ export default function HomePage() {
   // fetched `sessions` array already arrives needs-you-first-then-newest,
   // straight off the bridge's own sort — see buildHomeSessionsStrip's header).
   const sessionsStrip = buildHomeSessionsStrip(sessions);
+  // W7A2-02 — the last cancel from the strip: held here so the outcome
+  // notice survives the refetch that drops the card.
+  const [lastCancel, setLastCancel] = useState<{ row: SessionIndexRow; outcome: CancelOutcome } | null>(null);
   const flowLedgerRows = deriveFlowLedgerRows(runs);
   // W6-IA-4: the flow-run rows render immediately (they come from `ready`,
   // the same gate the rest of the page uses); the agent rows fold in once
@@ -169,7 +174,11 @@ export default function HomePage() {
           (review fix) so its data-* contract gets a renderToStaticMarkup
           pin — see components/studio/HomeSessionsStrip.tsx for the full
           contract description. ===== */}
-      <HomeSessionsStrip strip={sessionsStrip} onCancelled={() => { void refreshSessions(); }} />
+      <HomeSessionsStrip
+        strip={sessionsStrip}
+        lastCancel={lastCancel}
+        onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refreshSessions(); }}
+      />
 
       {/* ===== SCHEDULER — the daemon that turns queued work into runs (W7-A3,
           flows-01/23; ADR-031 wave-7 amendment). Its own component owns its

@@ -609,19 +609,19 @@ test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves 
   expect(pseudoProjectAnchorDestination('.some-future-anchor')).toBeNull();
 });
 
-test('AT-106: backToProjectLink — null when not terminal, null when project is null, the real /projects/<id> for an honest project, the pseudo-anchor\'s own destination for a pseudo-anchor, and null (not a dead-ended link) for an unrecognised pseudo-anchor', () => {
-  // W7-A2 (sessions-kinds-35): the link renders in EVERY phase now (the
+test('AT-106: backToProjectLink — null when project is null, the real /projects/<id> for an honest project, the pseudo-anchor\'s own destination for a pseudo-anchor, and null (not a dead-ended link) for an unrecognised pseudo-anchor', () => {
+  // W7-A2 (sessions-kinds-35): the link renders in EVERY phase (the
   // operator most needs a way out mid-flight), and a KB anchor resolves to
   // that KB's own page rather than the bare index — see
-  // lib/session-lifecycle-render.test.ts for the full W7-A2 pin.
-  expect(backToProjectLink('mdtoc', false)).toEqual({ label: 'project', href: '/projects/mdtoc' });
-  expect(backToProjectLink(null, true)).toBeNull();
-  expect(backToProjectLink('mdtoc', true)).toEqual({ label: 'project', href: '/projects/mdtoc' });
-  expect(backToProjectLink('.kb-forge-dev', true)).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
-  expect(backToProjectLink('.community-registry', true)).toEqual({ label: 'Community', href: '/community' });
-  expect(backToProjectLink('.some-future-anchor', true)).toBeNull();
+  // lib/session-lifecycle-render.test.ts for the full W7-A2 pin. W7A2-07:
+  // the dead `_terminal` parameter is gone — one argument.
+  expect(backToProjectLink('mdtoc')).toEqual({ label: 'project', href: '/projects/mdtoc' });
+  expect(backToProjectLink(null)).toBeNull();
+  expect(backToProjectLink('.kb-forge-dev')).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
+  expect(backToProjectLink('.community-registry')).toEqual({ label: 'Community', href: '/community' });
+  expect(backToProjectLink('.some-future-anchor')).toBeNull();
 });
 
 test('AT-107: backToProjectLink — a project id needing URL-encoding is encoded in the href', () => {
-  expect(backToProjectLink('my project/weird', true)).toEqual({ label: 'project', href: '/projects/my%20project%2Fweird' });
+  expect(backToProjectLink('my project/weird')).toEqual({ label: 'project', href: '/projects/my%20project%2Fweird' });
 });

@@ -215,8 +215,17 @@ export function useStudioHomeData(): StudioHomeData {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // W7A2-06 — the post-cancel refetch: a failure routes into the SAME
+  // `error` state Home already renders (never an escaped rejection that
+  // leaves the cancelled card showing as in-flight with no explanation).
   const refreshSessions = useCallback(async (): Promise<void> => {
-    setSessions(await fetchStudioSessions());
+    try {
+      setSessions(await fetchStudioSessions());
+      setError(null);
+    } catch (err) {
+      const d = describeBridgeError(err);
+      setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
+    }
   }, []);
 
   return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions };

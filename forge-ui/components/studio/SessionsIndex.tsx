@@ -4,7 +4,8 @@ import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import { StudioPage } from '@/components/StudioPage';
-import { describeLifecycle } from '@/lib/session-lifecycle-client';
+import { describeLifecycle, type CancelOutcome } from '@/lib/session-lifecycle-client';
+import { CancelOutcomeNotice } from '@/components/studio/session/CancelOutcomeNotice';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
 import { FetchErrorState } from '@/components/FetchErrorState';
 
@@ -70,10 +71,16 @@ function stateTone(state: SessionIndexRow['state']): string {
 
 export type SessionsIndexFetchError = { message: string; status?: number };
 
+/** W7A2-02 — the last successful cancel on this page: the row it was for
+ *  and what the bridge said it did. Held by the owning page (survives the
+ *  refetch that drops the row from the active set). */
+export type SessionsLastCancel = { row: SessionIndexRow; outcome: CancelOutcome };
+
 export function SessionsIndexBody({
   sessions,
   ready,
   onCancelled,
+  lastCancel = null,
   error = null,
   onRetry,
 }: {
@@ -81,8 +88,9 @@ export function SessionsIndexBody({
   ready: boolean;
   /** W7-A2 — fired after a row's cancel POST succeeds so the owning page
    *  refetches; this component stays props-driven and never re-derives a
-   *  row's state itself. */
-  onCancelled?: (row: SessionIndexRow) => void;
+   *  row's state itself. W7A2-02: carries the cancel's real outcome. */
+  onCancelled?: (row: SessionIndexRow, outcome: CancelOutcome) => void;
+  lastCancel?: SessionsLastCancel | null;
   /** W7-A1 (home-sessions-29): the last fetch's failure — renders the shared
    *  failure state INSTEAD of the "No sessions in flight" zero-state. */
   error?: SessionsIndexFetchError | null;
@@ -111,6 +119,14 @@ export function SessionsIndexBody({
           <FetchErrorState what="sessions" error={error.message} status={error.status} onRetry={onRetry} />
         </div>
       ) : null}
+      {/* W7A2-02 — what the last cancel on this page actually did; the row
+          itself has (rightly) dropped out of the active set, so the notice
+          is the only trace the operator gets. */}
+      {lastCancel !== null && (
+        <div style={{ marginBottom: 14 }}>
+          <CancelOutcomeNotice outcome={lastCancel.outcome} subject={`${lastCancel.row.kind} · ${lastCancel.row.sessionId}`} />
+        </div>
+      )}
       {error && sessions.length === 0 ? null : isEmpty ? (
         <section
           data-section="sessions-empty"
@@ -196,7 +212,7 @@ export function SessionsIndexBody({
                         fontSize: 11.5, color: stateTone(s.state), fontFamily: 'var(--font-mono)', verticalAlign: 'middle',
                       }}
                     >
-                      {describeLifecycle(s.state, s.error, s.idleMs)}
+                      {describeLifecycle(s.state, s.error, s.idleMs, s.phase)}
                     </span>
                   </td>
                   <td style={cellStyle}>
@@ -219,7 +235,7 @@ export function SessionsIndexBody({
                         confirm inside the button); a terminal row has nothing
                         to cancel. */}
                     {s.state !== 'terminal' && (
-                      <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={() => onCancelled?.(s)} />
+                      <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={(outcome) => onCancelled?.(s, outcome)} />
                     )}
                   </td>
                 </tr>

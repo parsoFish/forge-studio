@@ -473,8 +473,10 @@ test('index: every row carries the three new fields (state/error/idleMs) — no 
 // ---- shell payload: lifecycle + deep links without ?project= ---------------
 
 test('W7-FIX-A2 shell (W7A2-04): the payload carries `transcript` — DERIVED from the descriptor (a turnSpec kind rides the generic spine, which never writes transcript turns → false; a legacy-runner kind → true), never a UI-side kind list', async () => {
-  const kb = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${STALLED_KB_SID}?project=projc`), 200);
-  assert.equal(kb.transcript, false, 'kb-cleanup (turnSpec) records its work in the artifact pane, never as transcript turns');
+  // community-refresh is a turnSpec kind whose shell resolves without a live
+  // KB (kb-cleanup's shell 409s on an unresolvable kb_id by design — R4-19-F2).
+  const cr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`), 200);
+  assert.equal(cr.transcript, false, 'community-refresh (turnSpec) records its work in the artifact pane, never as transcript turns');
   const instr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_VERDICT_SID}?project=proja`), 200);
   assert.equal(instr.transcript, true, 'instructions (legacy runner) writes prompt/questions/answers/feedback → transcript-bearing');
   const arch = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}?project=proja`), 200);
