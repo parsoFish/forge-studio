@@ -585,9 +585,20 @@ a green terminal conclusion for the exact head SHA. Standing authority:
   authoring entry point); the Knowledge-bases card leaves the Library page.
 - **The Reflect flow is retired**; the reflector runs as an agent run
   triggered post-merge (and on demand from the agent page).
+- **The project page's kick-off control moves above the fold** (operator
+  note 11, added 2026-08-19 mid-Wave-A): the "run a flow / start work"
+  control currently sits at the very bottom of a long page and is inert;
+  W7-B6 promotes a Start-work action group (plan · start development · run
+  flow · architect) into the project header / top of the Roadmap tab, wired
+  to real starts, with a journey assertion that it is inside the first
+  viewport.
 - **Real tokens are authorised** for the walkthrough gate and for
   validating fixed loops on the cheap test vehicles (`demo-project`'s
   `INIT-2026-08-18-add-version-flag`, `gitpulse`).
+- **Autonomous execution** (operator, 2026-08-19): all waves run without
+  further operator input; T1 decides park-points itself and records the
+  rationale in the campaign ledger + these docs; stops only for genuinely
+  destructive or irreversible actions outside the plan.
 
 #### Waves and streams (parallel lanes = file-disjoint route families)
 
