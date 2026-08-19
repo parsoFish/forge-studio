@@ -90,7 +90,7 @@
 
 import { test, expect } from 'vitest';
 
-import { resolveFlowRunDetailFromResponse, shouldFetchReviewFindings, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
+import { resolveFlowRunDetailFromResponse, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
 import { parseRun, type Run } from './studio-client.ts';
 
 const REAL_RUN_BODY = {
@@ -285,4 +285,33 @@ test('shouldFetchReviewFindings: derived from the flow\'s review-findings produc
   // on e.g. an architect-only run), even if a phase happens to be complete.
   const noReview = { ...flow, nodes: [{ id: 'build', agent: 'developer-ralph' }], edges: [] };
   expect(shouldFetchReviewFindings({ ...base, phases: { build: 'complete', 'adversarial-review': 'complete' } }, noReview)).toBe(false);
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (walkthrough gate: the run page under a RETIRED flow id). The
+// flow definition comes from the flows LIST — never `GET /api/studio/flows/
+// <id>` — and "unregistered" is a fact derived ONLY from an ANSWERED list. A
+// failed list read downgrades a found run to `unresolved` (retryable), never
+// to a banner claiming the flow id is unregistered.
+// ---------------------------------------------------------------------------
+
+test('resolveRunPageState: an ANSWERED list without the id → found run + flow null (the honest "unregistered" shape for a retired id)', () => {
+  const found: FlowRunDetailResolution = { kind: 'found', run: parseRun(REAL_RUN_BODY.run) };
+  const flows = [{ id: 'forge-develop', name: 'Develop', goal: '', triggers: [], nodes: [], edges: [] }];
+  const out = resolveRunPageState(found, 'release-refine', { ok: true, flows });
+  expect(out.resolution).toEqual(found);
+  expect(out.flow).toBeNull();
+  const live = resolveRunPageState(found, 'forge-develop', { ok: true, flows });
+  expect(live.flow?.id).toBe('forge-develop');
+});
+
+test('resolveRunPageState: a FAILED list read never yields "unregistered" — a found run downgrades to unresolved; not-found / unresolved pass through', () => {
+  const found: FlowRunDetailResolution = { kind: 'found', run: parseRun(REAL_RUN_BODY.run) };
+  const failed = resolveRunPageState(found, 'forge-develop', { ok: false });
+  expect(failed.resolution).toEqual({ kind: 'unresolved' });
+  expect(failed.flow).toBeNull();
+  const notFound: FlowRunDetailResolution = { kind: 'not-found' };
+  expect(resolveRunPageState(notFound, 'forge-develop', { ok: false }).resolution).toEqual(notFound);
+  const unresolved: FlowRunDetailResolution = { kind: 'unresolved' };
+  expect(resolveRunPageState(unresolved, 'forge-develop', { ok: false }).resolution).toEqual(unresolved);
 });

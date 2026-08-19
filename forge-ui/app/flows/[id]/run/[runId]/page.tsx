@@ -45,7 +45,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
-import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
+import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchStudioFlows, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
@@ -81,15 +81,19 @@ export default function FlowRunPage() {
     // flows/<id>` — a RETIRED flow id (`release-refine`, the pre-flow_id
     // `unknown` sentinel) is a legitimate route here (the run's own recorded
     // phases render under the "unregistered" banner) and must not fire a
-    // guaranteed-404 request on every visit. A failed list read (throws) is a
-    // transient — the flow stays null for this render, the run resolution
-    // still decides the page's state.
-    const [res, flows] = await Promise.all([
+    // guaranteed-404 request on every visit. A failed list read (throws) is
+    // NOT "unregistered": `resolveRunPageState` downgrades a found run to
+    // `unresolved` (retryable) — a fact about the flow is only ever derived
+    // from an ANSWERED list.
+    const [rawRes, flowsRead] = await Promise.all([
       fetchFlowRunDetail(runId),
-      fetchStudioFlows().catch((): Flow[] => []),
+      fetchStudioFlows().then(
+        (flows): FlowsListRead => ({ ok: true, flows }),
+        (): FlowsListRead => ({ ok: false }),
+      ),
     ]);
     if (signal.cancelled) return;
-    const flowDef = flows.find((f) => f.id === flowId) ?? null;
+    const { resolution: res, flow: flowDef } = resolveRunPageState(rawRes, flowId, flowsRead);
     // W7-A3 (flows-07 / home-sessions-17): findings are produced by the flow's
     // review node — only fetch once it completed (no 404 spam). W7-FIX-A3
     // (A3-11): the producer is derived from the flow definition, not a

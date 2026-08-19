@@ -1204,7 +1204,10 @@ inventory rather than one shared page-level contract:
   `_logs/<id>/events.jsonl`) — never the raw segment. The flow DEFINITION is
   taken from the flows LIST (`fetchStudioFlows()`), never `GET /api/studio/
   flows/<id>`, so a retired flow id renders its "unregistered" banner without
-  a guaranteed-404 request. The optional `review-findings.json` fetch is gated
+  a guaranteed-404 request — and "unregistered" is derived ONLY from an
+  ANSWERED list: a failed list read downgrades a found run to the retryable
+  `unresolved` body (`lib/flow-run-detail-client.ts` `resolveRunPageState`),
+  never to a banner asserting the flow id is unregistered. The optional `review-findings.json` fetch is gated
   on `shouldFetchReviewFindings(run, flow)`: the producer node(s) are DERIVED
   from the flow definition (edges carrying `artifact: review-findings`), the
   literal `adversarial-review` id is consulted only when there is no

@@ -121,3 +121,32 @@ export function reviewFindingsProducers(flow: Pick<Flow, 'edges'> | null): strin
 export function shouldFetchReviewFindings(run: Run, flow: Pick<Flow, 'edges'> | null): boolean {
   return reviewFindingsProducers(flow).some((nodeId) => run.phases[nodeId] === 'complete');
 }
+
+/**
+ * W7-FIX-A3 (the walkthrough gate's retired-flow-id run page): the flow
+ * DEFINITION comes from the flows LIST, never a per-id GET (a retired id such
+ * as `release-refine` is a legitimate route here and must not fire a
+ * guaranteed-404 request per visit). The list read is itself a bridge read
+ * with two honest outcomes:
+ *   - it ANSWERED (`{ ok: true, flows }`) — an id absent from the list is a
+ *     real fact: `flow: null` → the page renders the run's own recorded
+ *     phases under the "unregistered" banner;
+ *   - it FAILED (`{ ok: false }`, threw / no bridge) — nothing is known about
+ *     the flow, so a FOUND run is downgraded to `unresolved` (the page renders
+ *     its retryable body) rather than declaring "unregistered" off a failed
+ *     read. `not-found` / `unresolved` runs pass through unchanged (a 404 for
+ *     the run is authoritative on its own; unresolved is already the honest
+ *     floor).
+ */
+export type FlowsListRead = { ok: true; flows: Flow[] } | { ok: false };
+
+export function resolveRunPageState(
+  res: FlowRunDetailResolution,
+  flowId: string,
+  flowsRead: FlowsListRead,
+): { resolution: FlowRunDetailResolution; flow: Flow | null } {
+  if (!flowsRead.ok) {
+    return { resolution: res.kind === 'found' ? { kind: 'unresolved' } : res, flow: null };
+  }
+  return { resolution: res, flow: flowsRead.flows.find((f) => f.id === flowId) ?? null };
+}
