@@ -2981,11 +2981,22 @@ crawl's assertion mode**: `npm run ui:walkthrough:gate` (`crawl.mjs --assert
 `data-page-ready="true"` — the same attribute the journeys wait on),
 `first-party-4xx` (any bridge/UI-host request ≥400; a 404-only allowlist
 `known-optional-404s.txt` covers artifacts that legitimately may not exist),
-`page-error`, `console-error` or `nav-error`, versus a committed baseline of
-wave-7 known defects that lanes **shrink and never grow**
-(`check-baseline-shrinks.mjs`, enforced in CI). The `ui-walkthrough` CI job
+`transport-failure` (a first-party request that never got a response),
+`page-error`, `console-error`, `eval-error` or `nav-error`, versus a committed
+baseline of wave-7 known defects that lanes **shrink and never grow**
+(`check-baseline-shrinks.mjs`, enforced in CI; the one accepted growth is a
+stamped `main@<sha>` regeneration). The `ui-walkthrough` CI job
 boots Studio (`--boot`: production build, dry-bridge + no-spawn seams; refuses
 to boot over a healthy bridge) and runs it on every PR; `--only <route-prefix>`
 narrows a local run, `--from <crawl.json>` re-asserts an existing crawl without
-a browser. Contract: `scripts/ui-walkthrough/crawl.test.ts` over
+a browser. **W7-FIX-A0 (2026-08-19)** tied the verdict to what the crawl
+actually observed: first-party is decided by *origin* (not loopback hostnames),
+`requestfailed` is captured and the bridge re-probed on a first-party transport
+failure, `baseline.json` records `expectedRoutes.{ci,host}` and a full crawl
+must visit ≥ 90% of it (an unvisited `--max` remainder is a harness error too),
+baseline removals are cross-checked against the crawled routes (`--crawled`,
+`UNPROVEN` when the route was never visited), and readiness is read strictly
+from the `[data-page]` root (a ready descendant never masks an unready root —
+the same rule the journeys' `data-page-ready` waits assume). Contract:
+`scripts/ui-walkthrough/crawl.test.ts` + `capture.test.ts` over
 `fixtures/crawl.sample.json` (a slice of the real wave-7 crawl).
