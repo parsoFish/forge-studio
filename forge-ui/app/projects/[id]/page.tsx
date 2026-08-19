@@ -38,6 +38,7 @@ import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWit
 import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
+import { buildProjectSavePayload } from '@/lib/project-save-payload';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
@@ -84,6 +85,11 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [instructionsSource, setInstructionsSource] = useState<'AGENTS.md' | 'CLAUDE.md' | 'project.json' | undefined>(undefined);
   const [skills, setSkills] = useState<string[]>([]);
   const [kb, setKb] = useState<string | null>(null);
+  // W7-FIX-A4 (W7A4-03): `kb` above is hydrated from the roster, which serves
+  // the DERIVED project↔KB binding (kb.yaml binding.ref — never stored) when
+  // project.json has none. Only an operator change via KbBind flips this, and
+  // only then does Save carry `kb` — see lib/project-save-payload.ts.
+  const [kbTouched, setKbTouched] = useState(false);
   const [name, setName] = useState('');
 
   const loadData = useCallback(async (signal: { cancelled: boolean }) => {
@@ -110,6 +116,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         }
         setSkills(p.skills ?? []);
         setKb(p.kb ?? null);
+        setKbTouched(false);
       }
     } finally {
       if (!signal.cancelled) setReady(true);
@@ -196,16 +203,18 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // Unified save feedback (X1). The hook owns saving/saved/error state.
   const { saving, error: saveError, save: handleSave, ...saveFb } = useSaveState(async () => {
     if (!project) return { ok: false, error: 'project not loaded' };
-    const result = await saveProject(id, {
-      name: name.trim(),
-      northStar: northStar.trim(),
-      instructions: instructions.trim(),
+    const result = await saveProject(id, buildProjectSavePayload({
+      name,
+      northStar,
+      instructions,
       demoProcess: demoSteps,
       skills,
       kb,
-    });
+      kbTouched,
+    }));
     if (result.ok) {
       setDirty(false);
+      setKbTouched(false);
       void loadPreflight({ cancelled: false });
       // F5: surface demo-design trigger when demoProcess was in the save.
       if (result.demoDesignNeeded) setDemoDesignNeeded(true);
@@ -434,7 +443,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
               </div>
             )}
 
-            <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); markDirty(); }} />
+            <KbBind kb={kb} kbs={kbs} projectId={id} onChange={(v) => { setKb(v); setKbTouched(true); markDirty(); }} />
 
             <ContractReadiness
               northStar={northStar}

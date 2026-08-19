@@ -26,7 +26,7 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -35,6 +35,7 @@ import { discoverProjects, normalizeProjectId } from '../orchestrator/studio/reg
 import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { deriveContractStages } from './contract-stages.ts';
+import { buildProjectSavePayload } from '../forge-ui/lib/project-save-payload.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -198,6 +199,40 @@ test('roster: GET /api/studio/projects lists "trafficGame" verbatim and auto-bin
   assert.equal(tg.kb, 'trafficGame', 'project.json has no kb — the KB bound to this project must be DERIVED from kb.yaml binding.ref');
   const gp = r.body.projects.find((p: any) => p.id === 'gitpulse');
   assert.equal(gp.kb, undefined, 'a project no KB binds to has no kb (derive, never invent)');
+});
+
+test('W7A4-03 (RED on main): the editor\'s Save of an UNTOUCHED derived binding never writes `kb` into project.json — the derivation stays live', async () => {
+  const projectJsonPath = join(forgeRoot, 'projects', 'trafficGame', '.forge', 'project.json');
+  assert.ok(!('kb' in JSON.parse(readFileSync(projectJsonPath, 'utf8'))), 'precondition: no stored kb');
+
+  // The roster hands the editor the DERIVED kb; the operator edits only the north
+  // star and presses Save. This is exactly the payload page.tsx sends.
+  const roster = await get('/api/studio/projects');
+  const tg = roster.body.projects.find((p: any) => p.id === 'trafficGame');
+  assert.equal(tg.kb, 'trafficGame', 'precondition: the roster serves the derived binding');
+  const untouched = buildProjectSavePayload({
+    name: tg.name, northStar: 'A traffic game, now with a north star edit.', instructions: '',
+    demoProcess: [], skills: [], kb: tg.kb ?? null, kbTouched: false,
+  });
+  const r1 = await send('PUT', '/api/studio/projects/trafficGame', untouched);
+  assert.equal(r1.status, 200, `PUT → ${r1.status} ${JSON.stringify(r1.body)}`);
+  const afterUntouched = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.equal(afterUntouched.northStar, 'A traffic game, now with a north star edit.');
+  assert.ok(!('kb' in afterUntouched), `an untouched binding must NOT be stored — project.json now carries kb=${JSON.stringify(afterUntouched.kb)}`);
+  const roster2 = await get('/api/studio/projects');
+  assert.equal(roster2.body.projects.find((p: any) => p.id === 'trafficGame').kb, 'trafficGame', 'still derived after the save');
+
+  // An EXPLICIT rebind by the operator IS stored (that is the one legitimate write).
+  const touched = buildProjectSavePayload({
+    name: tg.name, northStar: 'A traffic game.', instructions: '', demoProcess: [], skills: [],
+    kb: 'trafficGame', kbTouched: true,
+  });
+  const r2 = await send('PUT', '/api/studio/projects/trafficGame', touched);
+  assert.equal(r2.status, 200, `PUT(touched) → ${r2.status} ${JSON.stringify(r2.body)}`);
+  const afterTouched = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.equal(afterTouched.kb, 'trafficGame', 'an explicit operator rebind is written');
+  // Restore the fixture for the tests below (no stored kb).
+  writeFileSync(projectJsonPath, PROJECT_JSON);
 });
 
 test('per-project routes: every :id route the walkthrough saw 404/400 now resolves "trafficGame" (projects-02)', async () => {
