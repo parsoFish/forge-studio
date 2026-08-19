@@ -771,6 +771,22 @@ export function cancelledPhaseWins(existingPhase: unknown, incomingPhase: unknow
   return existingPhase === CANCELLED_PHASE && incomingPhase !== CANCELLED_PHASE;
 }
 
+/** W7-FIX-A2 (W7A2-01) — tell the two `guardedWriteSessionStatus` → `null`
+ *  causes apart, for the writer's own error message: `'cancelled'` when the
+ *  on-disk phase is the reserved terminal and the incoming phase would move
+ *  off it (the sticky-cancel refusal — a turn finished after the operator
+ *  cancelled; the write is discarded by design), else `'containment'` (the
+ *  guard rejected the path). ONE helper for every runner, so no runner
+ *  reports a sticky-cancel refusal as a containment failure. */
+export function statusWriteRefusalReason(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  incomingPhase: unknown,
+): 'cancelled' | 'containment' {
+  const onDisk = guardedReadSessionStatus<{ phase?: unknown }>(projectsRoot, dirSegments);
+  return onDisk !== null && cancelledPhaseWins(onDisk.phase, incomingPhase) ? 'cancelled' : 'containment';
+}
+
 /** Guarded write of `<projectsRoot>/<dirSegments...>/<leaf>` as pretty JSON,
  *  stamping a fresh `updated_at` and creating the session dir if needed.
  *  Returns the written path, or `null` if the guard rejected the path (the

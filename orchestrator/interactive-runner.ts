@@ -93,7 +93,7 @@ import {
   runAgentTurn,
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
-  cancelledPhaseWins,
+  statusWriteRefusalReason,
   CANCELLED_PHASE,
   makeHeartbeatWriter,
   makeReasoningSink,
@@ -648,8 +648,7 @@ function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnS
 function writeStatus(projectRoot: string, dirSegments: readonly string[], status: InteractiveTurnStatus): void {
   const p = guardedWriteSessionStatus(projectRoot, dirSegments, status);
   if (p === null) {
-    const onDisk = guardedReadSessionStatus<{ phase?: unknown }>(projectRoot, dirSegments);
-    if (onDisk !== null && cancelledPhaseWins(onDisk.phase, status.phase)) {
+    if (statusWriteRefusalReason(projectRoot, dirSegments, status.phase) === 'cancelled') {
       throw new InteractiveRunnerError(
         `runInteractiveTurn: the session was cancelled (phase "${CANCELLED_PHASE}") while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
       );
