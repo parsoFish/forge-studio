@@ -124,7 +124,7 @@ inventory rather than one shared page-level contract:
   `title:` every manifest producer writes (`buildManifest` from the
   architect draft's title; `mintTriggeredInitiative` from flow + trigger);
   only a manifest with no frontmatter title falls back to its body's first
-  level-1 `# ` heading (never a `##` section heading), then to the
+  level-1 (single-hash) heading (never a `##` section heading), then to the
   `initiative_id`.
 - **Global — bridge status banner (`[data-component="bridge-status"]`,
   `components/BridgeStatus.tsx`, mounted ONCE in `app/layout.tsx`, W7-A1).**
