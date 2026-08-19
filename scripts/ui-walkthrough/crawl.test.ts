@@ -44,6 +44,11 @@ import {
   toBaseline,
   baselineGrowth,
   formatReport,
+  canonicalUrl,
+  coverageVerdict,
+  isRegeneration,
+  unprovenShrinks,
+  COVERAGE_TOLERANCE,
 } from './assert.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -61,8 +66,8 @@ const crawlOf = (...results: unknown[]) => ({ ui: 'http://localhost:4124', at: '
 
 // ── group 0: primitives ──────────────────────────────────────────────────────
 
-test('FAILURE_KINDS names the five classes the gate reports', () => {
-  assert.deepEqual([...FAILURE_KINDS].sort(), ['console-error', 'first-party-4xx', 'nav-error', 'never-ready', 'page-error'].sort());
+test('FAILURE_KINDS names the seven classes the gate reports (W7-FIX-A0 added transport-failure + eval-error)', () => {
+  assert.deepEqual([...FAILURE_KINDS].sort(), ['console-error', 'eval-error', 'first-party-4xx', 'nav-error', 'never-ready', 'page-error', 'transport-failure'].sort());
 });
 
 test('normalizeVolatile collapses run/cycle/session/initiative ids and leaves stable ids alone', () => {
@@ -202,7 +207,7 @@ test('known-optional-404s allowlist moves ONLY matching 404s into `allowed`; oth
 test('every pageerror is a page-error failure; console `error` entries are console-error failures except the resource-load duplicates of 4xx', () => {
   const crawl = crawlOf(
     row({ route: '/p', pageErrors: ['TypeError: Cannot read properties of undefined (reading toFixed)'] }),
-    row({ route: '/q', consoleErrors: [
+    row({ route: '/q', failed: [{ url: 'https://cdn.example/x.png', status: 404 }], consoleErrors: [
       { type: 'error', text: 'Failed to load resource: the server responded with a status of 404 (Not Found)' },
       { type: 'error', text: 'Warning: Each child in a list should have a unique "key" prop.' },
       { type: 'warning', text: 'something warned' },
@@ -214,7 +219,7 @@ test('every pageerror is a page-error failure; console `error` entries are conso
   assert.equal(p[0].kind, 'page-error');
   assert.match(p[0].detail, /toFixed/);
   const q = failures.filter((f) => f.route === '/q');
-  assert.equal(q.length, 1, 'resource-load console lines duplicate the 4xx class; warnings are not errors');
+  assert.equal(q.length, 1, 'a resource-load console line EXPLAINED by a recorded request on the same row is a duplicate; warnings are not errors');
   assert.equal(q[0].kind, 'console-error');
   assert.match(q[0].detail, /unique "key"/);
 });
@@ -380,7 +385,8 @@ test('check-baseline-shrinks.mjs: exit 0 when next ⊆ prev (or prev absent), ex
     assert.equal(bad.status, 1);
     assert.match(bad.stdout + bad.stderr, /\/z/);
     const first = runNode([SHRINK, '--prev', join(tmp, 'missing.json'), '--next', next], HERE);
-    assert.equal(first.status, 0, 'no previous baseline = first introduction, allowed');
+    assert.equal(first.status, 2, 'W7-A0-7: an explicitly passed --prev that does not exist is a USAGE error, not a first introduction (only the --against path may report "not at that ref")');
+    assert.match(first.stderr, /--prev/);
     // Removing the baseline file outright is NOT a shrink.
     const gone = runNode([SHRINK, '--prev', prev, '--next', join(tmp, 'gone.json')], HERE);
     assert.equal(gone.status, 1, 'a missing next while prev had entries must fail');
@@ -407,4 +413,307 @@ test('the committed baseline.json + list files parse, and the baseline carries o
   assert.ok(!optional.some((p) => /review-findings/.test(p)), 'review-findings.json 404s are DEFECTS (A3) — never allowlisted');
   assert.ok(!optional.some((p) => /\/api\/events/.test(p)), 'events 404s are DEFECTS (A2/B5) — never allowlisted');
   parseListFile(readFileSync(join(HERE, 'live-only-routes.txt'), 'utf8'));
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// W7-FIX-A0 (2026-08-19) — the review sweep's five confirmed findings + lows.
+// Each group below was RED on main ac7e71e0 before the fix landed.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── group 9: W7-A0-1 origin-based first-party detection ──────────────────────
+
+test('W7-A0-1: first-party detection is ORIGIN-based — a non-loopback FORGE_UI_URL/FORGE_BRIDGE_URL (LAN ip, container name) still yields `[bridge]`/relative failures', () => {
+  // The inverse of the host-alias test: same-port-different-host was correctly
+  // excluded, but a request whose scheme+host+port EQUALS crawl.bridge/crawl.ui
+  // on a non-loopback host was dropped too (loopback-only heuristic) → every
+  // first-party 4xx vanished and the run read PASS.
+  const crawl = {
+    ui: 'http://192.168.1.5:4124', bridge: 'http://192.168.1.5:4123', at: 'now', visited: 3, unvisited: [],
+    results: [
+      row({ route: '/agents/architect', failed: [{ url: 'http://192.168.1.5:4123/api/events/', status: 404 }] }),
+      row({ route: '/x', failed: [{ url: 'http://192.168.1.5:4124/_next/static/chunk.js', status: 404 }, { url: 'http://192.168.1.5:4123/api/y', status: 500 }] }),
+      row({ route: '/t', failed: [
+        { url: 'https://fonts.gstatic.com/x.woff2', status: 404 },
+        { url: 'http://example.com:4123/api/z', status: 404 },      // same port, other host → NOT first-party
+        { url: 'https://192.168.1.5:4123/api/tls', status: 404 },   // same host+port, other scheme → other origin → NOT first-party
+        { url: 'http://192.168.1.5:9999/api/other', status: 404 },  // same host, other port → NOT first-party (non-loopback)
+      ] }),
+    ],
+  };
+  const { failures } = collectFailures(crawl, {});
+  const details = failures.map((f) => `${f.route} ${f.detail}`).sort();
+  assert.deepEqual(details, [
+    '/agents/architect 404 [bridge]/api/events/',
+    '/x 404 /_next/static/chunk.js',
+    '/x 500 [bridge]/api/y',
+  ]);
+  const rep = assertCrawl(crawl, { baseline: { entries: [{ kind: 'first-party-4xx', route: '/agents/architect', detail: '404 [bridge]/api/events/' }] } });
+  assert.equal(rep.known.length, 1, 'the baseline matches through the same origin canonicalization');
+  assert.equal(rep.stale.length, 0);
+  // canonicalUrl itself: origin match first, loopback-port alias as the fallback.
+  const o = { ui: 'http://192.168.1.5:4124', bridge: 'http://192.168.1.5:4123' };
+  assert.equal(canonicalUrl('http://192.168.1.5:4123/api/a?b=1', o), '[bridge]/api/a?b=1');
+  assert.equal(canonicalUrl('http://192.168.1.5:4124/p', o), '/p');
+  assert.equal(canonicalUrl('http://192.168.1.5:9999/p', o), 'http://192.168.1.5:9999/p');
+  const l = { ui: 'http://localhost:4124', bridge: 'http://127.0.0.1:4123' };
+  assert.equal(canonicalUrl('http://localhost:4123/api/a', l), '[bridge]/api/a', 'loopback alias still canonicalizes by port');
+  assert.equal(canonicalUrl('http://[::1]:4124/p', l), '/p');
+  assert.equal(canonicalUrl('http://localhost:9999/p', l), 'http://localhost:9999/p');
+});
+
+// ── group 10: W7-A0-2 transport-level failures ───────────────────────────────
+
+test('W7-A0-2: a first-party request that never got a response (requestfailed) is a `transport-failure`; client aborts and third-party failures are not', () => {
+  const crawl = {
+    ui: 'http://localhost:4124', bridge: 'http://127.0.0.1:4123', at: 'now', visited: 2, unvisited: [],
+    results: [
+      row({ route: '/projects', transportFailed: [
+        { url: 'http://localhost:4123/api/studio/projects', error: 'net::ERR_CONNECTION_REFUSED', resourceType: 'fetch' },
+        { url: '/_next/data/x.json', error: 'net::ERR_ABORTED', resourceType: 'fetch' },
+        { url: 'https://fonts.gstatic.com/x.woff2', error: 'net::ERR_NAME_NOT_RESOLVED', resourceType: 'font' },
+      ] }),
+      row({ route: '/flows', transportFailed: [{ url: '[bridge]/api/studio/flows', error: 'net::ERR_EMPTY_RESPONSE', resourceType: 'fetch' }] }),
+    ],
+  };
+  const { failures } = collectFailures(crawl, {});
+  const tf = failures.filter((f) => f.kind === 'transport-failure');
+  assert.deepEqual(tf.map((f) => `${f.route} ${f.detail}`).sort(), [
+    '/flows net::ERR_EMPTY_RESPONSE [bridge]/api/studio/flows',
+    '/projects net::ERR_CONNECTION_REFUSED [bridge]/api/studio/projects',
+  ]);
+  assert.equal(failures.length, 2, 'no other kind is raised for the aborted / third-party entries');
+  const rep = assertCrawl(crawl, { baseline: { entries: [{ kind: 'transport-failure', route: '/flows', detail: 'net::ERR_EMPTY_RESPONSE [bridge]/api/studio/flows' }] } });
+  assert.equal(rep.known.length, 1);
+  assert.equal(rep.failures.length, 1);
+  assert.equal(rep.counts.byKind['transport-failure'], 1);
+});
+
+test('W7-A0-2: the browser\'s "Failed to load resource" console line is dropped ONLY when a recorded request on the same row explains it — a net::ERR_* line with nothing behind it surfaces as console-error', () => {
+  const crawl = crawlOf(
+    // explained by a recorded 4xx (any host) → duplicate, dropped
+    row({ route: '/a', failed: [{ url: 'https://cdn.example/x', status: 404 }], consoleErrors: [{ type: 'error', text: 'Failed to load resource: the server responded with a status of 404 (Not Found)' }] }),
+    // explained by a recorded transport failure → dropped (the transport-failure kind carries it)
+    row({ route: '/b', transportFailed: [{ url: '[bridge]/api/x', error: 'net::ERR_CONNECTION_REFUSED', resourceType: 'fetch' }], consoleErrors: [{ type: 'error', text: 'Failed to load resource: net::ERR_CONNECTION_REFUSED' }] }),
+    // NOT explained by anything recorded → console-error (the old unconditional drop hid exactly this)
+    row({ route: '/c', consoleErrors: [{ type: 'error', text: 'Failed to load resource: net::ERR_CONNECTION_REFUSED' }] }),
+    row({ route: '/d', consoleErrors: [{ type: 'error', text: 'Failed to load resource: the server responded with a status of 500 (Internal Server Error)' }] }),
+    // status form recorded with a DIFFERENT status → not explained
+    row({ route: '/e', failed: [{ url: '[bridge]/api/y', status: 404 }], consoleErrors: [{ type: 'error', text: 'Failed to load resource: the server responded with a status of 500 (Internal Server Error)' }] }),
+  );
+  const { failures } = collectFailures(crawl, {});
+  const ce = failures.filter((f) => f.kind === 'console-error').map((f) => f.route).sort();
+  assert.deepEqual(ce, ['/c', '/d', '/e']);
+  assert.deepEqual(failures.filter((f) => f.route === '/b').map((f) => f.kind), ['transport-failure']);
+  assert.equal(failures.filter((f) => f.route === '/a').length, 0);
+});
+
+// ── group 11: W7-A0-9 evaluate failures are their own kind ───────────────────
+
+test('W7-A0-9: a row whose page.evaluate failed is an `eval-error` (harness could not read the page), never misreported as never-ready', () => {
+  const crawl = crawlOf(row({ route: '/z', dataPage: undefined, pageReady: undefined, evalError: 'Error: Execution context was destroyed, most likely because of a navigation' }));
+  const { failures } = collectFailures(crawl, {});
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].kind, 'eval-error');
+  assert.match(failures[0].detail, /Execution context was destroyed/);
+  assert.ok(!failures.some((f) => f.kind === 'never-ready'));
+});
+
+// ── group 12: W7-A0-3 coverage tracks the baseline ───────────────────────────
+
+test('W7-A0-3: coverageVerdict — routes below 90% of the baseline\'s expectedRoutes for this environment is a harness error; a missing expectation is too; --only skips the floor', () => {
+  assert.equal(COVERAGE_TOLERANCE, 0.9);
+  const baseline = { entries: [], expectedRoutes: { ci: 136, host: 245 } };
+  const ok = coverageVerdict({ routes: 130, unvisited: 0, key: 'ci', baseline, only: [], minRoutes: 40, maxExplicit: false, allowDrop: false });
+  assert.equal(ok.harnessError, null);
+  assert.equal(ok.expected, 136);
+  assert.equal(ok.floor, Math.ceil(136 * 0.9));
+  const low = coverageVerdict({ routes: 100, unvisited: 0, key: 'ci', baseline, only: [], minRoutes: 40, maxExplicit: false, allowDrop: false });
+  assert.match(low.harnessError, /coverage/i);
+  assert.match(low.harnessError, /100/);
+  assert.match(low.harnessError, /136/);
+  const hostLow = coverageVerdict({ routes: 130, unvisited: 0, key: 'host', baseline, only: [], minRoutes: 40, maxExplicit: false, allowDrop: false });
+  assert.match(hostLow.harnessError, /245/, 'the floor is per environment key — 130 routes is fine for CI, a collapse for the host');
+  const missing = coverageVerdict({ routes: 130, unvisited: 0, key: 'ci', baseline: { entries: [] }, only: [], minRoutes: 40, maxExplicit: false, allowDrop: false });
+  assert.match(missing.harnessError, /expectedRoutes/, 'a baseline without an expectation for this environment fails closed');
+  const noBaseline = coverageVerdict({ routes: 130, unvisited: 0, key: 'ci', baseline: null, only: [], minRoutes: 40, maxExplicit: false, allowDrop: false });
+  assert.equal(noBaseline.harnessError, null, 'no baseline at all (ad-hoc --assert) → only --min-routes applies');
+  const only = coverageVerdict({ routes: 3, unvisited: 0, key: 'ci', baseline, only: ['/flows'], minRoutes: 1, maxExplicit: false, allowDrop: false });
+  assert.equal(only.harnessError, null, '--only crawls a subset by design');
+  const drop = coverageVerdict({ routes: 100, unvisited: 0, key: 'ci', baseline, only: [], minRoutes: 40, maxExplicit: false, allowDrop: true });
+  assert.equal(drop.harnessError, null, '--allow-coverage-drop is the explicit operator override for a legitimately smaller Studio');
+  assert.equal(drop.expected, 136);
+  // --min-routes stays the absolute floor and wins first.
+  const starved = coverageVerdict({ routes: 9, unvisited: 0, key: 'ci', baseline, only: [], minRoutes: 40, maxExplicit: false, allowDrop: true });
+  assert.match(starved.harnessError, /min-routes/);
+});
+
+test('W7-A0-3: an unvisited BFS remainder means the crawl was truncated by --max — a harness error unless --max was passed explicitly (then it is reported, by design)', () => {
+  const baseline = { entries: [], expectedRoutes: { host: 10 } };
+  const truncated = coverageVerdict({ routes: 12, unvisited: 5, key: 'host', baseline, only: [], minRoutes: 1, maxExplicit: false, allowDrop: false });
+  assert.match(truncated.harnessError, /unvisited|truncat/i);
+  assert.match(truncated.harnessError, /5/);
+  const explicit = coverageVerdict({ routes: 12, unvisited: 5, key: 'host', baseline, only: [], minRoutes: 1, maxExplicit: true, allowDrop: false });
+  assert.equal(explicit.harnessError, null);
+  assert.equal(explicit.unvisited, 5);
+  const noBaseline = coverageVerdict({ routes: 12, unvisited: 5, key: 'host', baseline: null, only: [], minRoutes: 1, maxExplicit: false, allowDrop: false });
+  assert.match(noBaseline.harnessError, /unvisited|truncat/i, 'truncation is a coverage fact independent of any baseline');
+});
+
+test('W7-A0-3: assertCrawl reports `unvisited`, formatReport prints it, toBaseline records expectedRoutes per environment and carries the other environments forward', () => {
+  const crawl = { ...loadFixture(), unvisited: ['/never', '/seen'] };
+  const rep = assertCrawl(crawl, {});
+  assert.equal(rep.unvisited, 2);
+  assert.match(formatReport(rep), /2 unvisited/);
+  const b = toBaseline(rep, { source: 'main@abc1234', coverage: { key: 'host', routes: rep.routes, unvisited: 2, source: 'operator host' }, previous: { expectedRoutes: { ci: 136, host: 1 }, expectedRoutesSource: { ci: 'CI run 1', host: 'old' } } });
+  assert.deepEqual(b.expectedRoutes, { ci: 136, host: rep.routes });
+  assert.equal(b.expectedRoutesSource.ci, 'CI run 1', 'the other environment\'s expectation + provenance survive a regeneration');
+  assert.match(b.expectedRoutesSource.host, /operator host/);
+  const fresh = toBaseline(rep, { source: 'main@abc1234', coverage: { key: 'ci', routes: 136, unvisited: 0 } });
+  assert.deepEqual(fresh.expectedRoutes, { ci: 136 });
+});
+
+test('W7-A0-3 + W7-A0-6 (CLI): coverage collapse and truncation are exit 2, and assert.json is still written — stamped ok:false + harnessError, never a green report as the CI artifact', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0c-'));
+  try {
+    const none = join(tmp, 'none.txt');
+    const common = ['--known-optional-404s', none, '--live-only-routes', none];
+    // 9-route fixture vs an expectation of 20 for BOTH keys (deterministic whatever CI=… is in the env).
+    const bl = join(tmp, 'bl.json');
+    writeFileSync(bl, JSON.stringify({ entries: [], expectedRoutes: { host: 20, ci: 20 } }));
+    const r1 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o1'), '--baseline', bl, ...common], HERE);
+    assert.equal(r1.status, 2, `coverage collapse must be a harness error\n${r1.stdout}\n${r1.stderr}`);
+    assert.match(r1.stderr, /HARNESS ERROR/);
+    assert.match(r1.stderr, /coverage/i);
+    assert.doesNotMatch(r1.stdout + r1.stderr, /\bPASS\b/);
+    const a1 = JSON.parse(readFileSync(join(tmp, 'o1', 'assert.json'), 'utf8'));
+    assert.equal(a1.ok, false, 'assert.json never says ok on a harness error');
+    assert.match(a1.harnessError, /coverage/i);
+    assert.equal(a1.coverage.expected, 20);
+    // --allow-coverage-drop: the explicit override → normal verdict path (fixture has real failures → exit 1).
+    const r2 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o2'), '--baseline', bl, '--allow-coverage-drop', ...common], HERE);
+    assert.equal(r2.status, 1, `with the override the run reaches a verdict\n${r2.stdout}\n${r2.stderr}`);
+    // --min-routes starvation ALSO stamps assert.json (W7-A0-6).
+    const r3 = runNode([CRAWL, '--from', FIXTURE, '--assert', '--out', join(tmp, 'o3'), '--min-routes', '10', ...common], HERE);
+    assert.equal(r3.status, 2);
+    const a3 = JSON.parse(readFileSync(join(tmp, 'o3', 'assert.json'), 'utf8'));
+    assert.equal(a3.ok, false);
+    assert.match(a3.harnessError, /min-routes/);
+    // A capture with an unvisited remainder and no explicit --max is a truncated crawl → harness error.
+    const trunc = join(tmp, 'trunc.json');
+    writeFileSync(trunc, JSON.stringify({ ...loadFixture(), unvisited: ['/never-visited'] }));
+    const r4 = runNode([CRAWL, '--from', trunc, '--assert', '--out', join(tmp, 'o4'), ...common], HERE);
+    assert.equal(r4.status, 2, `truncated capture must be a harness error\n${r4.stdout}\n${r4.stderr}`);
+    assert.match(r4.stderr, /unvisited|truncat/i);
+    // …but a capture that says the cap was explicit reports it and reaches a verdict.
+    writeFileSync(trunc, JSON.stringify({ ...loadFixture(), unvisited: ['/never-visited'], maxExplicit: true }));
+    const r5 = runNode([CRAWL, '--from', trunc, '--assert', '--out', join(tmp, 'o5'), ...common], HERE);
+    assert.equal(r5.status, 1, `explicit --max truncation reaches a verdict\n${r5.stdout}\n${r5.stderr}`);
+    assert.match(r5.stdout, /1 unvisited/);
+    // --write-baseline records the expectation for the capture's environment key (default host).
+    const out = join(tmp, 'wb.json');
+    const r6 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o6'), '--write-baseline', out, ...common], HERE);
+    assert.equal(r6.status, 0, r6.stdout + r6.stderr);
+    const wb = JSON.parse(readFileSync(out, 'utf8'));
+    assert.equal(wb.expectedRoutes.host, 9);
+    assert.match(wb.expectedRoutesSource.host, /9 routes/);
+    // …and a --write-baseline that would collapse coverage vs the PREVIOUS file is refused without the override.
+    writeFileSync(out, JSON.stringify({ ...wb, expectedRoutes: { host: 20 } }));
+    const r7 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o7'), '--write-baseline', out, ...common], HERE);
+    assert.equal(r7.status, 2, `a regeneration that drops coverage below the previous expectation is refused\n${r7.stdout}\n${r7.stderr}`);
+    assert.equal(JSON.parse(readFileSync(out, 'utf8')).expectedRoutes.host, 20, 'the file was not overwritten');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ── group 13: W7-A0-4 shrink cross-check + stamped regeneration ──────────────
+
+test('W7-A0-4: unprovenShrinks — a removed entry whose (normalized) route was not crawled is unproven', () => {
+  const shrank = [
+    { kind: 'never-ready', route: '/flows/forge-develop/run/<id>', detail: 'x' },
+    { kind: 'first-party-4xx', route: '/projects/new', detail: '404 [bridge]/api/studio/projects/new/preflight' },
+    { kind: 'first-party-4xx', route: '/knowledge?id=trafficGame', detail: '400 y' },
+  ];
+  const crawled = ['/', '/projects/new', '/flows/forge-develop/run/2026-08-03T01-16-00_INIT-2026-08-03-init-x'];
+  const un = unprovenShrinks(shrank, crawled);
+  assert.deepEqual(un.map((e) => e.route), ['/knowledge?id=trafficGame']);
+  assert.deepEqual(unprovenShrinks(shrank, []).length, 3);
+  assert.deepEqual(unprovenShrinks([], crawled), []);
+});
+
+test('W7-A0-4: isRegeneration — growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, expectedRoutes present', () => {
+  const prev = { source: 'main@aaaaaaa — host', generatedAt: '2026-08-18T21:38:20.187Z', entries: [] };
+  const good = { source: 'main@bbbbbbb — host', generatedAt: '2026-08-19T10:00:00.000Z', expectedRoutes: { host: 700 }, entries: [] };
+  assert.equal(isRegeneration(prev, good), true);
+  assert.equal(isRegeneration(prev, { ...good, source: prev.source }), false, 'same source stamp = a hand edit, not a regeneration');
+  assert.equal(isRegeneration(prev, { ...good, generatedAt: '2026-08-01T00:00:00.000Z' }), false, 'older generatedAt');
+  assert.equal(isRegeneration(prev, { ...good, expectedRoutes: undefined }), false, 'a regeneration always records coverage');
+  assert.equal(isRegeneration(prev, { ...good, source: 'operator laptop' }), false, 'unstamped source');
+  assert.equal(isRegeneration(prev, { ...good, source: 'main@zzz' }), false, 'not a sha');
+  assert.equal(isRegeneration(null, good), false, 'first introduction is handled separately');
+  assert.equal(isRegeneration({ ...prev, generatedAt: undefined }, good), true, 'a previous file without a stamp can be regenerated over');
+});
+
+test('W7-A0-4 (CLI): check-baseline-shrinks --crawled flags removals whose route the crawl never visited (UNPROVEN, exit 0; exit 1 with --fail-unproven); a stamped regeneration may grow', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0x-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    const crawlFile = join(tmp, 'crawl.json');
+    const A = { kind: 'never-ready', route: '/flows/forge-develop/run/<id>', detail: 'data-page=flow-run data-page-ready=null' };
+    const B = { kind: 'first-party-4xx', route: '/projects/new', detail: '404 [bridge]/api/studio/projects/new/preflight' };
+    writeFileSync(prev, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', entries: [A, B] }));
+    // Remove A; the crawl only visited /projects/new → A's removal is unproven.
+    writeFileSync(next, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', entries: [B] }));
+    writeFileSync(crawlFile, JSON.stringify({ results: [{ route: '/' }, { route: '/projects/new' }] }));
+    const warn = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', crawlFile], HERE);
+    assert.equal(warn.status, 0, warn.stdout + warn.stderr);
+    assert.match(warn.stdout + warn.stderr, /UNPROVEN/);
+    assert.match(warn.stdout + warn.stderr, /\/flows\/forge-develop\/run\/<id>/);
+    const strict = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', crawlFile, '--fail-unproven'], HERE);
+    assert.equal(strict.status, 1, `--fail-unproven turns an unproven removal into a failure\n${strict.stdout}\n${strict.stderr}`);
+    // The crawl DID visit the route (raw id) → the removal is proven by the crawl gate itself; nothing flagged.
+    writeFileSync(crawlFile, JSON.stringify({ results: [{ route: '/flows/forge-develop/run/2026-08-03T01-16-00_INIT-2026-08-03-x' }, { route: '/projects/new' }] }));
+    const proven = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', crawlFile, '--fail-unproven'], HERE);
+    assert.equal(proven.status, 0, proven.stdout + proven.stderr);
+    assert.doesNotMatch(proven.stdout + proven.stderr, /UNPROVEN/);
+    // A missing --crawled file is a usage error, never "nothing to check".
+    const missing = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', join(tmp, 'nope.json')], HERE);
+    assert.equal(missing.status, 2);
+    // Growth via a stamped regeneration from main is accepted (and says so); the same growth unstamped is not.
+    const C = { kind: 'first-party-4xx', route: '/artifact?cycle=<id>', detail: '404 [bridge]/api/artifact/<id>/plan.json' };
+    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb — regenerated', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B, C] }));
+    const regen = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    assert.equal(regen.status, 0, `stamped regeneration may grow\n${regen.stdout}\n${regen.stderr}`);
+    assert.match(regen.stdout + regen.stderr, /REGENERAT/i);
+    writeFileSync(next, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', entries: [A, B, C] }));
+    const grow = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    assert.equal(grow.status, 1, 'unstamped growth still fails');
+    // A regeneration whose expectedRoutes DROPPED for a key vs prev is called out loudly (coverage regressions must be justified).
+    writeFileSync(prev, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { host: 900 }, entries: [A, B] }));
+    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B] }));
+    const dropped = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    assert.equal(dropped.status, 0);
+    assert.match(dropped.stdout + dropped.stderr, /expectedRoutes\.host.*900.*700/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ── group 14: the committed files carry the new contract ─────────────────────
+
+test('the committed baseline.json is a stamped regeneration from main with a coverage expectation for BOTH environments (ci + host)', () => {
+  const b = JSON.parse(readFileSync(join(HERE, 'baseline.json'), 'utf8'));
+  assert.match(b.source, /^main@[0-9a-f]{7,40}\b/, 'source is stamped main@<sha> so regenerations are distinguishable from hand edits');
+  assert.ok(Number.isInteger(b.expectedRoutes?.ci) && b.expectedRoutes.ci > 40, `expectedRoutes.ci must be a measured CI count (got ${b.expectedRoutes?.ci})`);
+  assert.ok(Number.isInteger(b.expectedRoutes?.host) && b.expectedRoutes.host > b.expectedRoutes.ci, `expectedRoutes.host must be the (larger) operator-host count (got ${b.expectedRoutes?.host})`);
+  assert.ok(typeof b.expectedRoutesSource?.ci === 'string' && typeof b.expectedRoutesSource?.host === 'string', 'each expectation names where it was measured');
+});
+
+test('W7-A0-8: ci.yml passes github.base_ref through the environment (no expression interpolated into a run: block) and cross-checks baseline removals against the crawl', () => {
+  const yml = readFileSync(join(HERE, '..', '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+  assert.doesNotMatch(yml, /origin\/\$\{\{/, 'github.base_ref must not be interpolated into a shell command');
+  assert.match(yml, /BASE_REF:\s*\$\{\{\s*github\.base_ref\s*\}\}/);
+  assert.match(yml, /--against "origin\/\$BASE_REF"/);
+  assert.match(yml, /check-baseline-shrinks\.mjs[^\n]*--crawled _walkthrough\/ci\/crawl\.json/, 'the post-crawl cross-check (W7-A0-4) runs with the CI crawl');
 });
