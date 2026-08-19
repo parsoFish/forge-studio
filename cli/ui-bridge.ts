@@ -1786,22 +1786,33 @@ async function handleHttp(
       return;
     }
     try {
-      // W7-FIX-A3 (A3-05): Start keeps the card's promise ("queued work will
-      // run once you start it"). `.paused` is a queue flag independent of
-      // process liveness, so pause → stop → Start used to bring the daemon back
-      // with the stale flag armed and every claim refused. Cleared BEFORE the
-      // spawn attempt so both branches below report `paused:false`.
-      setPaused(false, ctx.queueRoot);
       // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
       // the shared helper — the bridge no longer shells out to a `forge start`
       // CLI command (it's been deleted). Behaviour is identical: detached
       // child, stdout/stderr → _logs/daemon/serve.log, pid → forge.pid.
+      // `spawnServeDetached` is the ONE liveness authority (null = a live
+      // daemon already owns the pid file); the route never re-derives it.
       const result = spawnServeDetached(ctx.forgeRoot);
       if (result === null) {
+        // W7-FIX-A3 (round-2 finding 4): Start is NOT Resume. A daemon that is
+        // already running was not started by this click, and its `.paused`
+        // flag is a deliberate, queue-wide decision another tab may have just
+        // made — clearing it here (as this route used to, before the check)
+        // meant a stale tab's Start silently resumed claiming with no operator
+        // intent. The real state is reported instead; Resume is the control
+        // that clears the flag.
         const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
         sendJson(res, 200, { ok: true, alreadyRunning: true, state }, origin);
         return;
       }
+      // W7-FIX-A3 (A3-05): a FRESH start keeps the card's promise ("queued
+      // work will run once you start it"). `.paused` is a queue flag
+      // independent of process liveness, so pause → stop → Start used to bring
+      // the daemon back with the stale flag armed and every claim refused. The
+      // scheduler re-reads the flag on every poll, so clearing it here — after
+      // the spawn, inside the branch that actually started something — is
+      // honest for the daemon we just launched and leaves a running one alone.
+      setPaused(false, ctx.queueRoot);
       // Best-effort wait for the daemon to come up before reporting state.
       await sleep(800);
       const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
@@ -1835,10 +1846,23 @@ async function handleHttp(
       return;
     }
     try {
-      const pid = readPid(daemonPaths(ctx.forgeRoot).pidFile);
+      const { pidFile, stoppingFile } = daemonPaths(ctx.forgeRoot);
+      const pid = readPid(pidFile);
       if (pid === null || !isAlive(pid)) {
         clearPidFile(ctx.forgeRoot);
         sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
+        return;
+      }
+      // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while THIS pid
+      // drains. `orchestrator/scheduler.ts`'s signal handler treats a SECOND
+      // SIGTERM as force-quit (`signalCount === 2` → exit), so re-signalling a
+      // pid that is already draining hard-kills the in-flight cycles the first
+      // Stop was politely waiting on — from nothing more than a second tab, or
+      // one whose 10s poll had not yet flipped to `stopping`. The marker this
+      // route writes is exactly the fact needed to make the repeat a no-op; a
+      // marker naming any OTHER pid is stale and never suppresses a real Stop.
+      if (readPid(stoppingFile) === pid) {
+        sendJson(res, 200, { ok: true, alreadyStopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
         return;
       }
       process.kill(pid, 'SIGTERM');

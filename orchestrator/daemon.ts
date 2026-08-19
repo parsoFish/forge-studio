@@ -114,6 +114,25 @@ export function markStopping(forgeRoot: string, pid: number): void {
   writeFileSync(stoppingFile, String(pid));
 }
 
+/**
+ * W7-FIX-A3 (round-2 finding 9): drop the stop marker. It records a
+ * TRANSITION (this pid was signalled and is draining), so it must not outlive
+ * the pid file it describes — `daemonState` distinguishes daemons by pid
+ * alone, and pids are reused, so a leftover marker would make a brand-new
+ * daemon report `stopping: true` with NO actions offered (deriveSchedulerView
+ * gives that state an empty action set) until someone deleted the file by
+ * hand. Both pid-file writes below clear it; absent is a no-op.
+ */
+function clearStoppingMarker(forgeRoot: string): void {
+  const { stoppingFile } = daemonPaths(forgeRoot);
+  if (!existsSync(stoppingFile)) return;
+  try {
+    rmSync(stoppingFile);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Stale pid file (no live process) → clean it so `start` can proceed. */
 export function reapStalePidFile(forgeRoot: string): void {
   const { pidFile } = daemonPaths(forgeRoot);
@@ -131,6 +150,9 @@ export function writePidFile(forgeRoot: string, pid: number): void {
   const { dir, pidFile } = daemonPaths(forgeRoot);
   mkdirSync(dir, { recursive: true });
   writeFileSync(pidFile, String(pid));
+  // A pid file is written by a daemon that is STARTING (spawnServeDetached
+  // records its child here) — never one that is draining.
+  clearStoppingMarker(forgeRoot);
 }
 
 export function clearPidFile(forgeRoot: string): void {
@@ -142,6 +164,8 @@ export function clearPidFile(forgeRoot: string): void {
       /* best-effort */
     }
   }
+  // The daemon this marker described is gone — the drain it recorded ended.
+  clearStoppingMarker(forgeRoot);
 }
 
 // ---------- detached daemon spawn ----------

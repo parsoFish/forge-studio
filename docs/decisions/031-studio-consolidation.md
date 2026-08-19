@@ -128,7 +128,9 @@ deprecated alias for one milestone.
 > stopped / unknown, Start / Pause / Resume / Stop, honest copy derived by
 > `lib/scheduler-view.ts`; W7-FIX-A3: `stopping` is the drain window after Stop
 > — the bridge marks the signalled pid and `daemonState` reports it while that
-> pid is alive; Start clears the queue's `.paused` flag so its promise holds;
+> pid is alive, and a repeat Stop never re-signals it; Start clears the queue's
+> `.paused` flag on a fresh spawn so its promise holds, and leaves a running
+> daemon's deliberate pause alone;
 > an unreadable status is never rendered as "stopped") mounted on Home, `/flows` (index + monitor), the
 > project roadmap tab, and inline wherever an enqueue outcome needs "start
 > it?" (the architect committed panel, the roadmap success lines, the flow

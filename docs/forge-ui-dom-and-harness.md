@@ -209,11 +209,15 @@ inventory rather than one shared page-level contract:
   marks the signalled pid (`_logs/daemon/stopping`) and `daemonState` folds it
   into `GET /api/scheduler/status` as `stopping:true` for as long as THAT pid
   is alive (every poller and every tab sees it; a dead pid is plainly
-  `stopped`, never `stopping`); `POST /api/scheduler/start` clears the
-  `.paused` flag before spawning, so "Start it" always unblocks claiming; and
-  a NULL status (the read failed) is a third branch in the enqueue /
-  post-commit copy ("could not confirm the scheduler is running") — never
-  reported as "stopped". The same component is mounted on `/flows` (index + monitor), the
+  `stopped`, never `stopping`); a repeat Stop on an already-marked live pid is
+  a no-op (`{alreadyStopping:true}`, no second SIGTERM — the scheduler treats
+  that as force-quit); `POST /api/scheduler/start` clears the `.paused` flag
+  on a FRESH spawn only, so "Start it" always unblocks claiming while an
+  already-running daemon's deliberate pause survives (Start is not Resume);
+  and a NULL status (the read failed) is a third branch in the enqueue /
+  post-commit copy ("could not confirm the scheduler is running") — as is
+  `stopping` ("the scheduler is stopping, so nothing will be claimed until you
+  start it again") — never reported as "stopped". The same component is mounted on `/flows` (index + monitor), the
   project roadmap tab, and inline as a `strip` wherever an enqueue outcome
   needs "start it?". Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when

@@ -22,9 +22,10 @@ import { mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 
 import { startBridge } from './ui-bridge.ts';
-import { writePidFile, daemonPaths, isPaused, pausedFlagPath } from '../orchestrator/daemon.ts';
+import { writePidFile, clearPidFile, daemonPaths, isPaused, setPaused, pausedFlagPath, markStopping } from '../orchestrator/daemon.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -98,21 +99,51 @@ test('the daemon pid-file lives at _logs/daemon/forge.pid under forgeRoot', () =
 // fresh-spawn and the alreadyRunning branch report `paused:false`.
 // ---------------------------------------------------------------------------
 
-test('POST /api/scheduler/start clears a stale .paused flag (pause → stop → start must actually claim work)', async () => {
+test('POST /api/scheduler/start clears a stale .paused flag on a FRESH spawn (pause → stop → start must actually claim work)', async () => {
   const queueRoot = join(forgeRoot, '_queue');
-  // Our own live pid stands in for the daemon (no real spawn); the flag was
-  // left armed by an earlier pause.
+  // No live daemon (the pid file is reaped/absent), so the route takes its
+  // fresh-spawn branch. `spawnServeDetached` launches `node
+  // --experimental-strip-types <forgeRoot>/orchestrator/cli.ts serve`, which
+  // does not exist under this temp root — the child exits immediately, which
+  // is exactly what we want: the SPAWN BRANCH runs (that's what's under test)
+  // without a real scheduler ever claiming from the live queue.
+  clearPidFile(forgeRoot);
+  setPaused(true, queueRoot, 'stale flag from an earlier pause');
+  assert.equal(isPaused(queueRoot), true, 'precondition: paused');
+
+  const res = await fetch(`${url}/api/scheduler/start`, { method: 'POST', headers: CSRF });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; started?: boolean; alreadyRunning?: boolean; state: { paused: boolean } };
+  assert.equal(body.ok, true);
+  assert.equal(body.started, true, 'precondition: this is the fresh-spawn branch');
+  assert.equal(body.state.paused, false, 'the returned state reports the flag cleared');
+  assert.equal(isPaused(queueRoot), false, 'the artifact: .paused is gone from disk');
+  assert.equal(existsSync(pausedFlagPath(queueRoot)), false);
+  clearPidFile(forgeRoot);
+});
+
+// W7-FIX-A3 (round-2 finding 4): Start is not Resume. Clearing `.paused`
+// BEFORE the already-running check meant a Start clicked from a stale tab (one
+// whose 10s poll still showed "stopped") silently un-paused a daemon another
+// tab had deliberately paused — a queue-wide state change from a button whose
+// only claimed effect is "start the process that is not running".
+test('POST /api/scheduler/start on an ALREADY-RUNNING daemon leaves .paused armed (Start is not Resume)', async () => {
+  const queueRoot = join(forgeRoot, '_queue');
+  // Our own live pid stands in for the daemon (no spawn — the route reports
+  // alreadyRunning), paused on purpose by another tab.
   writePidFile(forgeRoot, process.pid);
   await fetch(`${url}/api/scheduler/pause`, { method: 'POST', headers: CSRF });
   assert.equal(isPaused(queueRoot), true, 'precondition: paused');
 
   const res = await fetch(`${url}/api/scheduler/start`, { method: 'POST', headers: CSRF });
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { ok: boolean; state: { running: boolean; paused: boolean } };
-  assert.equal(body.ok, true);
-  assert.equal(body.state.paused, false, 'the returned state reports the flag cleared');
-  assert.equal(isPaused(queueRoot), false, 'the artifact: .paused is gone from disk');
-  assert.equal(existsSync(pausedFlagPath(queueRoot)), false);
+  const body = (await res.json()) as { ok: boolean; alreadyRunning?: boolean; state: { running: boolean; paused: boolean } };
+  assert.equal(body.alreadyRunning, true, 'precondition: this is the already-running branch');
+  assert.equal(isPaused(queueRoot), true, 'the deliberate pause survives — Resume is the control that clears it');
+  assert.equal(body.state.paused, true, 'the reported state is the REAL one');
+
+  // Leave the queue unpaused for the tests below.
+  await fetch(`${url}/api/scheduler/resume`, { method: 'POST', headers: CSRF });
 });
 
 // ---------------------------------------------------------------------------
@@ -124,16 +155,50 @@ test('POST /api/scheduler/start clears a stale .paused flag (pause → stop → 
 // transitional state, not just the tab that clicked.
 // ---------------------------------------------------------------------------
 
-test('POST /api/scheduler/stop → stopping:true, and GET /status keeps reporting stopping while the signalled pid drains', async () => {
-  // A stand-in daemon that TRAPS SIGTERM and stays alive (the drain window),
-  // so the route's SIGTERM does not kill it and the pid stays alive.
-  const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: 'ignore' });
+/**
+ * A stand-in daemon that TRAPS SIGTERM and stays alive (the drain window), so
+ * the route's SIGTERM does not kill it and the pid stays alive.
+ *
+ * W7-FIX-A3 (round-2 finding 10): READINESS AND EXIT ARE SIGNALLED, never
+ * slept on. The child prints `ready` only AFTER its SIGTERM trap is installed
+ * (a fixed 300ms sleep raced a loaded runner: a slow boot meant the route's
+ * SIGTERM hit the default handler and killed it, failing `running:true`), and
+ * teardown awaits the real `exit` event (a fixed 200ms sleep raced libuv's
+ * reap: `process.kill(pid, 0)` still succeeded, failing `running:false`).
+ */
+async function startTrappedChild(): Promise<{ pid: number; kill: () => Promise<void> }> {
+  const child = spawn(
+    process.execPath,
+    ['-e', "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000);"],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  );
   assert.ok(typeof child.pid === 'number');
-  const childPid = child.pid as number;
+  const pid = child.pid as number;
+  const exited = once(child, 'exit');
+  await new Promise<void>((resolve, reject) => {
+    const onData = (chunk: Buffer) => {
+      if (chunk.toString().includes('ready')) {
+        child.stdout?.off('data', onData);
+        resolve();
+      }
+    };
+    child.stdout?.on('data', onData);
+    child.once('error', reject);
+    child.once('exit', () => reject(new Error('stand-in daemon exited before signalling ready')));
+  });
+  return {
+    pid,
+    kill: async () => {
+      child.kill('SIGKILL');
+      await exited;
+    },
+  };
+}
+
+test('POST /api/scheduler/stop → stopping:true, and GET /status keeps reporting stopping while the signalled pid drains', async () => {
+  const child = await startTrappedChild();
   try {
-    writePidFile(forgeRoot, childPid);
-    // Give the child a beat to install its SIGTERM handler.
-    await new Promise((r) => setTimeout(r, 300));
+    writePidFile(forgeRoot, child.pid);
 
     const res = await fetch(`${url}/api/scheduler/stop`, { method: 'POST', headers: CSRF });
     assert.equal(res.status, 200);
@@ -148,13 +213,66 @@ test('POST /api/scheduler/stop → stopping:true, and GET /status keeps reportin
     assert.equal(status.running, true);
     assert.equal(status.stopping, true);
   } finally {
-    child.kill('SIGKILL');
-    await new Promise((r) => setTimeout(r, 200));
+    await child.kill();
   }
   // Once the pid is gone the daemon is plainly stopped — never "stopping".
   const after = (await (await fetch(`${url}/api/scheduler/status`)).json()) as { running: boolean; stopping?: boolean };
   assert.equal(after.running, false);
   assert.equal(after.stopping, false);
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while a pid drains. The
+// scheduler's own signal handler treats a SECOND SIGTERM as force-quit
+// (`orchestrator/scheduler.ts` onSignal: signalCount === 2 → process.exit),
+// so a second Stop — from another tab, or from one whose 10s poll had not yet
+// flipped to `stopping` — hard-killed the in-flight cycles the first Stop was
+// politely draining. The marker the route already writes is the fact that
+// makes the second click a no-op.
+// ---------------------------------------------------------------------------
+
+test('POST /api/scheduler/stop on an already-stopping pid does NOT re-signal (a second SIGTERM force-quits in-flight cycles)', async () => {
+  const child = await startTrappedChild();
+  try {
+    writePidFile(forgeRoot, child.pid);
+    const first = (await (await fetch(`${url}/api/scheduler/stop`, { method: 'POST', headers: CSRF })).json()) as {
+      ok: boolean; stopping?: boolean; alreadyStopping?: boolean;
+    };
+    assert.equal(first.stopping, true, 'precondition: the first Stop signalled the pid');
+    assert.notEqual(first.alreadyStopping, true);
+
+    // The second click: same live, already-marked pid.
+    const res = await fetch(`${url}/api/scheduler/stop`, { method: 'POST', headers: CSRF });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean; alreadyStopping?: boolean; state: { running: boolean; stopping?: boolean } };
+    assert.equal(body.ok, true);
+    assert.equal(body.alreadyStopping, true, 'the second Stop reports the drain already under way');
+    assert.equal(body.state.running, true, 'the drain was NOT force-quit — the pid is still alive');
+    assert.equal(body.state.stopping, true);
+    // The stand-in traps SIGTERM but NOT a second one specially; the real
+    // proof the route did not re-signal is that the pid survives the call.
+    assert.equal(process.kill(child.pid, 0), true);
+  } finally {
+    await child.kill();
+  }
+});
+
+// A marker naming a DIFFERENT (older) pid must not suppress a real Stop — the
+// suppression is keyed on "this live pid is the one already draining".
+test('POST /api/scheduler/stop still signals when the marker names another pid (a stale marker never swallows a Stop)', async () => {
+  const child = await startTrappedChild();
+  try {
+    writePidFile(forgeRoot, child.pid);
+    markStopping(forgeRoot, 2_147_483_640); // an unrelated, dead pid
+    const body = (await (await fetch(`${url}/api/scheduler/stop`, { method: 'POST', headers: CSRF })).json()) as {
+      ok: boolean; stopping?: boolean; alreadyStopping?: boolean; state: { stopping?: boolean };
+    };
+    assert.equal(body.stopping, true, 'the live pid is signalled + marked');
+    assert.notEqual(body.alreadyStopping, true);
+    assert.equal(body.state.stopping, true, 'the marker now names THIS pid');
+  } finally {
+    await child.kill();
+  }
 });
 
 test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses scheduler start/stop with the typed 409', async () => {
