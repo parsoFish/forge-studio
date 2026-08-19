@@ -454,6 +454,13 @@ function ArtifactPageInner() {
   // the run's OWN cycle id once claimed, the URL handle otherwise.
   const artifactRunId = run?.id ?? runId;
 
+  // W7-FIX-A3 (round-2 finding 1): the id every GATE post is keyed on — the
+  // run's INITIATIVE id. `POST /api/runs/<id>/gates/<gateId>` validates
+  // against INIT_ID_RE for both `plan` and `verdict`, so the raw `?run=`
+  // handle (a CYCLE id since A3-03 re-keyed the run page's artifacts link)
+  // 400s. Same resolution ReviewVerdictForm below already uses.
+  const gateInitiativeId = run?.initiativeId ?? runId;
+
   // Derive mode (lib/artifact-mode.ts): `?mode=gate` is honoured only when the
   // run is actually gated for this artifact; an architect plan is armed by the
   // session phase alone.
@@ -1057,7 +1064,7 @@ function ArtifactPageInner() {
           missing at a demo gate). */}
       {showGateBar && ready && (
         <GateBar
-          runId={runId}
+          runId={gateInitiativeId}
           gateId={gateId}
           decisionsResolved={decisionsResolved}
           label={gateLabel}
