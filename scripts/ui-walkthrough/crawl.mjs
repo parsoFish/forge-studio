@@ -54,7 +54,7 @@ import path from 'node:path';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { assertCrawl, coverageVerdict, formatReport, parseListFile, toBaseline } from './assert.mjs';
+import { COVERAGE_KEYS, assertCrawl, coverageVerdict, formatReport, parseListFile, toBaseline } from './assert.mjs';
 import { attachCapture, readPageInfo } from './capture.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -174,6 +174,16 @@ function sourceStamp() {
   } catch { return 'unknown'; }
 }
 
+// The crawl.json shape (also built for a PARTIAL crawl when a harness error
+// stops it mid-way — the trace must survive, see crawl()).
+function crawlJsonOf(results, queue, visited) {
+  // The BFS remainder: discovered, in scope, never visited (only ever non-empty
+  // when the crawl hit --max, or when it was stopped early). Deduped and minus
+  // anything visited on the way.
+  const unvisited = [...new Set(queue.map((r) => r.split('#')[0]))].filter((k) => !visited.has(k));
+  return { ui: UI, bridge: BRIDGE, at: new Date().toISOString(), env: COVERAGE_KEY, max: MAX, maxExplicit: MAX_EXPLICIT, visited: results.length, unvisited, results };
+}
+
 async function crawl() {
   const { chromium } = await import('playwright-core');
   await requireHealthyBridge();
@@ -184,49 +194,55 @@ async function crawl() {
   const queue = (await seeds()).filter(inScope);
   const visited = new Set();
   let n = 0;
-  while (queue.length && n < MAX) {
-    const route = queue.shift();
-    const key = route.split('#')[0];
-    if (visited.has(key)) continue;
-    visited.add(key); n++;
-    const page = await ctx.newPage();
-    // Listeners + canonicalization live in capture.mjs (pinned without a browser).
-    const cap = attachCapture(page, { ui: UI, bridge: BRIDGE });
-    const { consoleErrors, pageErrors, failed, transportFailed } = cap;
-    const t0 = Date.now();
-    let status = 'ok', err = null;
-    try {
-      const resp = await page.goto(UI + route, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      if (resp && resp.status() >= 400) status = `http-${resp.status()}`;
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(800);
-    } catch (e) { status = 'nav-error'; err = String(e).slice(0, 200); }
-    // The in-page read is capture.mjs's readPageInfo (root-anchored readiness,
-    // W7-A0-5); an evaluate failure is recorded as its own signal (W7-A0-9).
-    const info = await page.evaluate(readPageInfo).catch((e) => ({ evalError: String(e).slice(0, 200) }));
-    const shot = path.join(OUT, 'shots', route.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'root') + '.png';
-    await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
-    results.push({ route, status, err, ms: Date.now() - t0, consoleErrors, pageErrors, failed, transportFailed, shot, ...info });
-    // W7-A0-2: a first-party request that never got a response — is the bridge
-    // still there? A bridge that died mid-crawl is a harness error (exit 2), not
-    // N pages of honest error states reading green. If it IS healthy, the
-    // transport failure stands and is asserted as its own kind.
-    if (cap.hasFirstPartyTransportFailure()) await requireHealthyBridge(`re-probed after a first-party transport failure on ${route}`);
-    // BFS internal links
-    for (const l of info.links ?? []) {
-      if (!l.href || !l.href.startsWith('/') || l.href.startsWith('//')) continue;
-      const k = l.href.split('#')[0];
-      if (!inScope(k)) continue;
-      if (!visited.has(k) && !queue.includes(k)) queue.push(k);
+  try {
+    while (queue.length && n < MAX) {
+      const route = queue.shift();
+      const key = route.split('#')[0];
+      if (visited.has(key)) continue;
+      visited.add(key); n++;
+      const page = await ctx.newPage();
+      // Listeners + canonicalization live in capture.mjs (pinned without a browser).
+      const cap = attachCapture(page, { ui: UI, bridge: BRIDGE });
+      const { consoleErrors, pageErrors, failed, transportFailed } = cap;
+      const t0 = Date.now();
+      let status = 'ok', err = null;
+      try {
+        const resp = await page.goto(UI + route, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        if (resp && resp.status() >= 400) status = `http-${resp.status()}`;
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(800);
+      } catch (e) { status = 'nav-error'; err = String(e).slice(0, 200); }
+      // The in-page read is capture.mjs's readPageInfo (root-anchored readiness,
+      // W7-A0-5); an evaluate failure is recorded as its own signal (W7-A0-9).
+      const info = await page.evaluate(readPageInfo).catch((e) => ({ evalError: String(e).slice(0, 200) }));
+      const shot = path.join(OUT, 'shots', route.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'root') + '.png';
+      await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
+      results.push({ route, status, err, ms: Date.now() - t0, consoleErrors, pageErrors, failed, transportFailed, shot, ...info });
+      // W7-A0-2: a first-party request that never got a response — is the bridge
+      // still there? A bridge that died mid-crawl is a harness error (exit 2), not
+      // N pages of honest error states reading green. If it IS healthy, the
+      // transport failure stands and is asserted as its own kind.
+      if (cap.hasFirstPartyTransportFailure()) await requireHealthyBridge(`re-probed after a first-party transport failure on ${route}`);
+      // BFS internal links
+      for (const l of info.links ?? []) {
+        if (!l.href || !l.href.startsWith('/') || l.href.startsWith('//')) continue;
+        const k = l.href.split('#')[0];
+        if (!inScope(k)) continue;
+        if (!visited.has(k) && !queue.includes(k)) queue.push(k);
+      }
+      await page.close();
+      process.stderr.write(`[${n}] ${status} ${route} (${Date.now() - t0}ms) btn=${info.buttons?.length ?? '?'} err=${consoleErrors.length}/${pageErrors.length}/${failed.length}/${transportFailed.length}\n`);
     }
-    await page.close();
-    process.stderr.write(`[${n}] ${status} ${route} (${Date.now() - t0}ms) btn=${info.buttons?.length ?? '?'} err=${consoleErrors.length}/${pageErrors.length}/${failed.length}/${transportFailed.length}\n`);
+  } catch (e) {
+    // A harness error mid-crawl (the bridge died: W7-A0-2 re-probe) must not
+    // erase the trace it stopped on — main() writes the PARTIAL crawl.json +
+    // an assert.json stamped ok:false/harnessError, then exits 2 (review R5).
+    if (e instanceof HarnessError) e.partial = crawlJsonOf(results, queue, visited);
+    throw e;
+  } finally {
+    await browser.close().catch(() => {});
   }
-  await browser.close();
-  // The BFS remainder: discovered, in scope, never visited (only ever non-empty
-  // when the crawl hit --max). Deduped and minus anything visited on the way.
-  const unvisited = [...new Set(queue.map((r) => r.split('#')[0]))].filter((k) => !visited.has(k));
-  return { ui: UI, bridge: BRIDGE, at: new Date().toISOString(), env: COVERAGE_KEY, max: MAX, maxExplicit: MAX_EXPLICIT, visited: results.length, unvisited, results };
+  return crawlJsonOf(results, queue, visited);
 }
 
 function writeCrawlOutputs(crawlJson) {
@@ -236,6 +252,13 @@ function writeCrawlOutputs(crawlJson) {
   fs.writeFileSync(path.join(OUT, 'crawl-summary.txt'), lines.join('\n') + `\n\nunvisited(${crawlJson.unvisited.length}): ${crawlJson.unvisited.join(' ')}\n`);
   console.log(lines.join('\n'));
   console.log(`\nvisited ${crawlJson.results.length}, unvisited ${crawlJson.unvisited.length}`);
+}
+
+// assert.json for a crawl that never reached a verdict (stopped mid-way):
+// ok:false + the harness error + how far it got — never an absent artifact.
+function writeHarnessAssert(crawlJson, message) {
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(path.join(OUT, 'assert.json'), JSON.stringify({ at: new Date().toISOString(), ui: crawlJson.ui, baseline: BASELINE_FILE, only: ONLY, ok: false, partial: true, routes: crawlJson.results.length, unvisited: crawlJson.unvisited.length, harnessError: message }, null, 1));
 }
 
 function runAssertion(crawlJson) {
@@ -250,8 +273,17 @@ function runAssertion(crawlJson) {
   // the baseline being asserted AND (for --write-baseline) the file about to be
   // replaced — a starved or collapsed crawl must never overwrite baseline.json
   // with a handful of entries or a shrunken expectation.
-  const key = crawlJson.env ?? 'host';
-  const covArgs = { routes: report.routes, unvisited: report.unvisited, key, only: ONLY, minRoutes: MIN_ROUTES, maxExplicit: Boolean(crawlJson.maxExplicit), allowDrop: ALLOW_COVERAGE_DROP };
+  // The capture names its own environment (a replayed capture is judged where
+  // it was taken, not where it is replayed); a capture without one (pre-W7-A0-3)
+  // is refused — never silently judged or recorded as `host`.
+  const key = crawlJson.env;
+  if (!COVERAGE_KEYS.includes(key)) throw new HarnessError(`crawl.json records no coverage environment (env=${JSON.stringify(key ?? null)}; expected one of ${COVERAGE_KEYS.join('|')}) — a pre-W7-A0-3 capture cannot be judged against a per-environment expectation; re-crawl with this harness`);
+  // `writing`: a --write-baseline run judged against the file it replaces — an
+  // absent expectation for this environment is its first introduction, not a
+  // fail-closed error (which would force --allow-coverage-drop, the override
+  // that disables the very floor being introduced). An existing key still floors.
+  const writing = Boolean(WRITE_BASELINE);
+  const covArgs = { routes: report.routes, unvisited: report.unvisited, key, only: ONLY, minRoutes: MIN_ROUTES, maxExplicit: Boolean(crawlJson.maxExplicit), allowDrop: ALLOW_COVERAGE_DROP, writing };
   const coverage = coverageVerdict({ ...covArgs, baseline });
   let harnessError = coverage.harnessError;
   const previous = WRITE_BASELINE && fs.existsSync(WRITE_BASELINE) ? readJson(WRITE_BASELINE) : null;
@@ -268,7 +300,10 @@ function runAssertion(crawlJson) {
     const source = FROM
       ? (SOURCE ? `${SOURCE} — ${crawlJson.ui} at ${crawlJson.at} (replayed from ${FROM})` : `crawl.json ${FROM}`)
       : `${sourceStamp()} — ${crawlJson.ui} at ${crawlJson.at}`;
-    const written = toBaseline(report, { source, coverage: { key, routes: report.routes, unvisited: report.unvisited, source }, previous });
+    // Entries of the previous file on routes this crawl never visited are
+    // carried forward (a regeneration proves only what it saw — see toBaseline).
+    const crawledRoutes = (crawlJson.results ?? []).map((r) => String(r.route));
+    const written = toBaseline(report, { source, coverage: { key, routes: report.routes, unvisited: report.unvisited, source }, previous, crawledRoutes });
     fs.writeFileSync(WRITE_BASELINE, JSON.stringify(written, null, 1) + '\n');
     console.log(`[walkthrough --assert] baseline written: ${WRITE_BASELINE} (${report.failures.length + report.known.length} entries; expectedRoutes.${key} = ${report.routes})`);
   }
@@ -295,6 +330,12 @@ async function main() {
     }
     try {
       crawlJson = await crawl();
+    } catch (e) {
+      if (e instanceof HarnessError && e.partial) {
+        writeCrawlOutputs(e.partial);
+        writeHarnessAssert(e.partial, e.message);
+      }
+      throw e;
     } finally {
       if (studio) await studio.stop();
     }

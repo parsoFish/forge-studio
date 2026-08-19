@@ -95,6 +95,14 @@ if (regenerated) {
   for (const k of COVERAGE_KEYS) {
     const before = prev.expectedRoutes?.[k];
     const after = next.expectedRoutes?.[k];
+    // A key the previous file had that the regeneration LOST is not a lower
+    // floor, it is no floor: the next crawl in that environment fails closed.
+    // Fail here, at PR time (carry the other environment's expectation forward —
+    // --write-baseline over the existing file does that; a fresh file does not).
+    if (Number.isInteger(before) && !Number.isInteger(after)) {
+      console.error(`[baseline-shrinks] FAIL — expectedRoutes.${k} was ${before} in the previous baseline and is missing from the regenerated one; regenerate over the existing file (--write-baseline scripts/ui-walkthrough/baseline.json) so the other environment's expectation is carried forward`);
+      process.exit(1);
+    }
     if (Number.isInteger(before) && Number.isInteger(after) && after < before) {
       console.log(`[baseline-shrinks] WARNING expectedRoutes.${k} dropped ${before} → ${after} — the coverage floor for ${k} just got lower; the PR must say why (routes retired?)`);
       if (process.env.GITHUB_ACTIONS) console.log(`::warning title=walkthrough coverage floor lowered::expectedRoutes.${k} ${before} → ${after}`);

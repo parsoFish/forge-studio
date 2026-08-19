@@ -203,6 +203,9 @@ export function collectFailures(crawl, opts = {}) {
       const url = canonicalUrl(t.url, crawl);
       const error = String(t.error ?? 'unknown');
       if (!isFirstPartyUrl(url) || error === CLIENT_ABORT_ERROR) continue;
+      // The main document's own transport failure is already the row's
+      // nav-error (same rule as the 4xx branch — one key per defect).
+      if (r.status !== 'ok' && url === route) continue;
       push(failures, makeFailure('transport-failure', route, `${error} ${url}`, `first-party request got no response (${error})`));
     }
 
@@ -267,11 +270,14 @@ export function assertCrawl(crawl, opts = {}) {
  * a harness error unless the operator passed --max explicitly, in which case the
  * truncation is by design and merely reported), then the baseline's per-
  * environment expectation (routes >= 90% of `expectedRoutes[key]`; a baseline
- * WITHOUT one for this environment fails closed; `--only` skips it — a subset
- * by design; `allowDrop` is the explicit override for a legitimately smaller
- * Studio, e.g. a regeneration after routes were retired).
+ * WITHOUT one for this environment fails closed on the ASSERT path; on the WRITE
+ * path (`writing`: --write-baseline judging the file it is about to replace) an
+ * absent key is the environment's first introduction — recorded, not refused —
+ * while an existing key still floors the regeneration; `--only` skips it — a
+ * subset by design; `allowDrop` is the explicit override for a legitimately
+ * smaller Studio, e.g. a regeneration after routes were retired).
  */
-export function coverageVerdict({ routes, unvisited, key, baseline, only, minRoutes, maxExplicit, allowDrop }) {
+export function coverageVerdict({ routes, unvisited, key, baseline, only, minRoutes, maxExplicit, allowDrop, writing = false }) {
   const onlyMode = Array.isArray(only) && only.length > 0;
   const expected = !onlyMode && baseline ? baseline.expectedRoutes?.[key] : null;
   const floor = Number.isInteger(expected) ? Math.ceil(expected * COVERAGE_TOLERANCE) : null;
@@ -286,6 +292,7 @@ export function coverageVerdict({ routes, unvisited, key, baseline, only, minRou
   }
   if (onlyMode || !baseline || allowDrop) return out;
   if (!Number.isInteger(expected)) {
+    if (writing) return out; // first introduction of this environment's expectation
     out.harnessError = `baseline has no expectedRoutes.${key} — a full crawl cannot be judged without knowing how many routes it should have seen; regenerate the baseline (--write-baseline) in this environment`;
     return out;
   }
@@ -299,10 +306,20 @@ export function coverageVerdict({ routes, unvisited, key, baseline, only, minRou
  *  normalized, sorted, unique — never the allowlisted ones. `meta.coverage`
  *  = `{ key, routes, unvisited, source? }` records this environment's route
  *  expectation; `meta.previous` (the file being replaced) carries the OTHER
- *  environments' expectations forward. */
+ *  environments' expectations forward AND — given `meta.crawledRoutes` (the
+ *  routes this crawl visited) — its entries on routes the crawl did NOT visit:
+ *  a regeneration proves only what it saw (the same rule as `unprovenShrinks`),
+ *  so a CI-environment regeneration (a strict subset of the host) cannot
+ *  silently discard host-only known defects. Entries on visited routes are
+ *  the crawl's to keep or drop. */
 export function toBaseline(report, meta = {}) {
   const entries = [...report.failures, ...report.known]
     .map((f) => ({ kind: f.kind, route: f.route, detail: f.detail, message: f.message }));
+  if (meta.previous && Array.isArray(meta.crawledRoutes)) {
+    const carried = unprovenShrinks(meta.previous.entries ?? [], meta.crawledRoutes)
+      .map((e) => ({ kind: e.kind, route: normalizeVolatile(e.route), detail: normalizeVolatile(e.detail), message: e.message }));
+    entries.push(...carried);
+  }
   const uniq = new Map(entries.map((e) => [failureKey(e), e]));
   const expectedRoutes = { ...(meta.previous?.expectedRoutes ?? {}) };
   const expectedRoutesSource = { ...(meta.previous?.expectedRoutesSource ?? {}) };
@@ -342,9 +359,9 @@ export function baselineGrowth(prev, next) {
 const SOURCE_STAMP_RE = /^main@([0-9a-f]{7,40})\b/;
 /**
  * W7-A0-4 — the ONE way a baseline may grow: a stamped regeneration from main
- * (`source: "main@<sha> …"` with a NEW sha, a NEWER generatedAt, and
- * expectedRoutes recorded — i.e. it came out of `--write-baseline`, not a hand
- * edit). This is a deliberate-and-visible protocol, not a cryptographic one:
+ * (`source: "main@<sha> …"` with a NEW sha, a NEWER generatedAt, and a
+ * non-empty expectedRoutes recorded — i.e. it came out of `--write-baseline`,
+ * not a hand edit). This is a deliberate-and-visible protocol, not a cryptographic one:
  * the stamp is in the PR diff, and the host wave gate re-verifies (an entry
  * that should not be there reads as stale; one that was wrongly dropped reads
  * as NEW). Ancestry of the sha is deliberately not checked — CI checkouts are
@@ -356,7 +373,7 @@ export function isRegeneration(prev, next) {
   if (!stamp) return false;
   const prevStamp = SOURCE_STAMP_RE.exec(String(prev.source ?? ''));
   if (prevStamp && prevStamp[1] === stamp[1]) return false;
-  if (!next.expectedRoutes || typeof next.expectedRoutes !== 'object') return false;
+  if (!next.expectedRoutes || typeof next.expectedRoutes !== 'object' || Object.keys(next.expectedRoutes).length === 0) return false;
   const nextAt = Date.parse(next.generatedAt ?? '');
   if (Number.isNaN(nextAt)) return false;
   const prevAt = Date.parse(prev.generatedAt ?? '');

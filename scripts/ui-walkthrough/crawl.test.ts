@@ -654,6 +654,94 @@ test('--write-baseline provenance (CLI): --source is honoured under --from (a re
   }
 });
 
+// ── group 12b: review-round fixes (FIX-A0 code review) ───────────────────────
+
+test('review R1: coverageVerdict — on the WRITE path an absent expectedRoutes[<env>] is a first introduction (record it), never a fail-closed error that forces --allow-coverage-drop; the floor still applies when a key exists', () => {
+  const base = { routes: 200, unvisited: 0, key: 'host', only: [], minRoutes: 40, maxExplicit: false, allowDrop: false };
+  // assert path (gate): absent key fails closed
+  assert.match(coverageVerdict({ ...base, baseline: { expectedRoutes: { ci: 136 } } }).harnessError ?? '', /no expectedRoutes\.host/);
+  // write path: absent key = first introduction → no error
+  assert.equal(coverageVerdict({ ...base, baseline: { expectedRoutes: { ci: 136 } }, writing: true }).harnessError, null);
+  // write path with an existing key: the floor still guards a starved regeneration
+  assert.match(coverageVerdict({ ...base, routes: 100, baseline: { expectedRoutes: { host: 924 } }, writing: true }).harnessError ?? '', /coverage collapsed/);
+});
+
+test('review R1 (CLI): a --write-baseline that introduces a NEW environment key over a previous file lacking it succeeds without --allow-coverage-drop, and carries the other key forward', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0r1-'));
+  try {
+    const none = join(tmp, 'none.txt');
+    const common = ['--known-optional-404s', none, '--live-only-routes', none];
+    const out = join(tmp, 'bl.json');
+    writeFileSync(out, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { ci: 136 }, expectedRoutesSource: { ci: 'CI run 1' }, entries: [] }));
+    const cap = join(tmp, 'cap.json');
+    writeFileSync(cap, JSON.stringify({ ...loadFixture(), env: 'host' }));
+    const r = runNode([CRAWL, '--from', cap, '--assert', '--baseline', out, '--write-baseline', out, '--source', 'main@bbbbbbb', ...common], HERE);
+    assert.equal(r.status, 1, `verdict path reached (fixture has real failures) — no harness error for the missing host key\n${r.stdout}\n${r.stderr}`);
+    const wb = JSON.parse(readFileSync(out, 'utf8'));
+    assert.deepEqual(wb.expectedRoutes, { ci: 136, host: 9 });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('review R2: toBaseline carries forward previous entries whose route the regeneration crawl did NOT visit — a regeneration proves only what it saw (a CI-env regeneration must not discard host-only known defects)', () => {
+  const rep = assertCrawl({ ...crawlOf(row({ route: '/agents/x', failed: [{ url: 'http://localhost:4123/api/events/', status: 404 }] })), bridge: 'http://localhost:4123' }, {});
+  const previous = {
+    expectedRoutes: { host: 900 },
+    entries: [
+      { kind: 'first-party-4xx', route: '/agents/x', detail: '404 [bridge]/api/old-thing', message: 'm' }, // route visited → NOT carried (proven gone)
+      { kind: 'never-ready', route: '/flows/forge-develop/run/2026-08-03T01-16-00_INIT-x', detail: 'data-page=flow-run data-page-ready=null', message: 'm' }, // route not visited → carried
+    ],
+  };
+  const b = toBaseline(rep, { source: 'main@abc1234', coverage: { key: 'ci', routes: 1, unvisited: 0 }, previous, crawledRoutes: ['/agents/x'] });
+  const keys = b.entries.map((e) => failureKey(e));
+  assert.ok(keys.includes('first-party-4xx|/agents/x|404 [bridge]/api/events/'), 'the crawl\'s own failure is written');
+  assert.ok(!keys.some((k) => k.includes('/api/old-thing')), 'a previous entry on a VISITED route that no longer fails is dropped (proven fixed)');
+  assert.ok(keys.includes('never-ready|/flows/forge-develop/run/<id>|data-page=flow-run data-page-ready=null'), 'a previous entry on an UNVISITED route is carried forward (normalized)');
+  // Without crawledRoutes (or previous) nothing is carried — the caller must say what it saw.
+  const b2 = toBaseline(rep, { source: 'main@abc1234', coverage: { key: 'ci', routes: 1, unvisited: 0 }, previous });
+  assert.equal(b2.entries.length, 1);
+});
+
+test('review R4 (CLI): a --from capture that records no `env` is a harness error (pre-W7-A0-3 crawl.json) — never silently judged/recorded as host', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0r4-'));
+  try {
+    const none = join(tmp, 'none.txt');
+    const common = ['--known-optional-404s', none, '--live-only-routes', none];
+    const cap = join(tmp, 'noenv.json');
+    const { env: _drop, ...noEnv } = loadFixture() as Record<string, unknown> & { env?: string };
+    writeFileSync(cap, JSON.stringify(noEnv));
+    const r = runNode([CRAWL, '--from', cap, '--assert', '--out', join(tmp, 'o'), ...common], HERE);
+    assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /env/);
+    assert.match(readFileSync(FIXTURE, 'utf8'), /"env": "host"/, 'the committed fixture records its environment');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('review R6: a transport failure on the main document itself is already the row\'s nav-error — not double-counted as transport-failure', () => {
+  const c = { ...crawlOf(row({ route: '/flows/x', status: 'nav-error', err: 'net::ERR_CONNECTION_REFUSED', pageReady: null, transportFailed: [{ url: 'http://localhost:4124/flows/x', error: 'net::ERR_CONNECTION_REFUSED', resourceType: 'document' }, { url: 'http://localhost:4123/api/studio/flows', error: 'net::ERR_CONNECTION_REFUSED', resourceType: 'fetch' }] })), bridge: 'http://localhost:4123' };
+  const kinds = collectFailures(c, {}).failures.map((f) => `${f.kind} ${f.detail}`);
+  assert.deepEqual(kinds, ['nav-error nav-error net::ERR_CONNECTION_REFUSED', 'transport-failure net::ERR_CONNECTION_REFUSED [bridge]/api/studio/flows']);
+});
+
+test('review R7: a regeneration that LOSES an environment key the previous baseline had is not accepted (isRegeneration requires a non-empty expectedRoutes; check-baseline-shrinks fails a dropped key)', () => {
+  const prev = { source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { ci: 136, host: 900 }, entries: [] };
+  assert.equal(isRegeneration(prev, { source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: {}, entries: [] }), false, 'empty expectedRoutes is not "recorded"');
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0r7-'));
+  try {
+    const p = join(tmp, 'prev.json'), n = join(tmp, 'next.json');
+    writeFileSync(p, JSON.stringify(prev));
+    writeFileSync(n, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 924 }, entries: [] }));
+    const r = runNode([SHRINK, '--prev', p, '--next', n], HERE);
+    assert.equal(r.status, 1, `a regeneration that drops expectedRoutes.ci must fail\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /expectedRoutes\.ci/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // ── group 13: W7-A0-4 shrink cross-check + stamped regeneration ──────────────
 
 test('W7-A0-4: unprovenShrinks — a removed entry whose (normalized) route was not crawled is unproven', () => {
