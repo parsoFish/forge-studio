@@ -111,6 +111,10 @@ function buildBridgeUrl(loc: Pick<Location, 'protocol' | 'hostname'>, port: numb
   return `${loc.protocol}//${loc.hostname}:${port}`;
 }
 
+/** The authoritative, env-derived answer — or `''` when the route failed or
+ *  answered `bridgePort: null` (a Next process started without
+ *  `FORGE_BRIDGE_URL`). `''` is NOT "there is no bridge": the caller falls
+ *  back to the fixed-port default (W7-FIX-A1, A1-06). */
 async function fetchAuthoritativeBridgeUrl(loc: Pick<Location, 'protocol' | 'hostname'>): Promise<string> {
   try {
     const res = await fetch('/api/forge-config', { cache: 'no-store' });
@@ -121,6 +125,12 @@ async function fetchAuthoritativeBridgeUrl(loc: Pick<Location, 'protocol' | 'hos
   } catch {
     return '';
   }
+}
+
+/** The fixed-port convention's default URL — the FIRST guess, and the last
+ *  resort whenever the authoritative route has nothing better to offer. */
+function defaultBridgeUrl(loc: Pick<Location, 'protocol' | 'hostname'>): string {
+  return buildBridgeUrl(loc, window.__FORGE_BRIDGE_PORT__ ?? DEFAULT_BRIDGE_PORT);
 }
 
 /**
@@ -134,7 +144,12 @@ async function fetchAuthoritativeBridgeUrl(loc: Pick<Location, 'protocol' | 'hos
  *      call fails outright.
  *   2. Any resolution AFTER `clearBridgeCache()`: the authoritative,
  *      env-derived `/api/forge-config` route — correct even under a
- *      `--bridge-port` override, at the cost of one round trip.
+ *      `--bridge-port` override, at the cost of one round trip. ONLY a
+ *      successful, non-null answer is authoritative (W7-FIX-A1, A1-06): a
+ *      failed route / `bridgePort: null` falls back to the fixed-port
+ *      default again — never to an empty base that would make every later
+ *      `bridgeFetch` throw 'no bridge configured' before any fetch, wedging
+ *      the tab past what the banner's Retry or the health probe can undo.
  */
 export function resolveBridgeUrl(): Promise<string> {
   if (cachedBridgeUrl) return cachedBridgeUrl;
@@ -143,11 +158,9 @@ export function resolveBridgeUrl(): Promise<string> {
   cachedBridgeUrl = (async () => {
     const loc = typeof window !== 'undefined' ? window.location : null;
     if (!loc) return ''; // SSR — client-only code path
-    if (useOptimisticDefault) {
-      const port = window.__FORGE_BRIDGE_PORT__ ?? DEFAULT_BRIDGE_PORT;
-      return buildBridgeUrl(loc, port);
-    }
-    return fetchAuthoritativeBridgeUrl(loc);
+    if (useOptimisticDefault) return defaultBridgeUrl(loc);
+    const authoritative = await fetchAuthoritativeBridgeUrl(loc);
+    return authoritative || defaultBridgeUrl(loc);
   })();
   return cachedBridgeUrl;
 }
@@ -270,8 +283,16 @@ async function bridgeReadOr404<T>(path: string): Promise<T | null> {
  * CLAUDE.md "Studio session workflow"). A foreign process on the port, a
  * non-2xx, or a transport throw are all `ok:false` with the reason.
  */
+/** W7-FIX-A1 (A1-08): the probe is BOUNDED — a port that accepts the TCP
+ *  connection but never answers must not hold the banner's Retry in
+ *  "Checking…" for the raw socket timeout. */
+export const BRIDGE_HEALTH_PROBE_TIMEOUT_MS = 4000;
+
 export async function probeBridgeHealth(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const r = await bridgeRead<{ service?: unknown }>('/api/health');
+  const init: RequestInit = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? { signal: AbortSignal.timeout(BRIDGE_HEALTH_PROBE_TIMEOUT_MS) }
+    : {};
+  const r = await readBridgeJson<{ service?: unknown }>(() => bridgeFetch('/api/health', init));
   if (!r.ok) return { ok: false, error: r.error };
   if (r.data?.service !== 'forge-bridge') return { ok: false, error: 'port answered, but not by the forge bridge' };
   return { ok: true };
@@ -606,10 +627,8 @@ export type PlanInitiativeResult = {
  * reads the JSON body directly instead of going through that envelope.
  */
 export async function planInitiative(initiativeId: string): Promise<PlanInitiativeResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { status: 'error', initiativeId, detail: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
+    const res = await bridgeFetch(`/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
       method: 'POST',
       headers: { 'x-forge-csrf': '1' },
     });
@@ -647,10 +666,8 @@ export type StartFlowRunResult = {
  * outcome — the generic envelope would drop `status`/`detail`).
  */
 export async function startFlowRun(flowId: string, initiativeId: string): Promise<StartFlowRunResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, status: 'error', error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/flows/${encodeURIComponent(flowId)}/run`, {
+    const res = await bridgeFetch(`/api/flows/${encodeURIComponent(flowId)}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify({ initiativeId }),

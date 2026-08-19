@@ -40,6 +40,10 @@ export type BridgeStatusSnapshot = {
   lastError: string | null;
   /** Count of recoveries fired (see the header's recovery rule). */
   recoveries: number;
+  /** W7-FIX-A1 (A1-08): true exactly while a health probe is in flight — the
+   *  banner's Retry renders pending (`aria-busy`, "Checking…") instead of a
+   *  silent no-op click. */
+  probing: boolean;
 };
 
 export type BridgeStatusDeps = {
@@ -73,6 +77,7 @@ export const INITIAL_BRIDGE_STATUS: BridgeStatusSnapshot = Object.freeze({
   everUp: false,
   lastError: null,
   recoveries: 0,
+  probing: false,
 }) as BridgeStatusSnapshot;
 
 export function createBridgeStatusStore(deps: BridgeStatusDeps): BridgeStatusStore {
@@ -95,7 +100,8 @@ export function createBridgeStatusStore(deps: BridgeStatusDeps): BridgeStatusSto
       next.status === snapshot.status &&
       next.everUp === snapshot.everUp &&
       next.lastError === snapshot.lastError &&
-      next.recoveries === snapshot.recoveries
+      next.recoveries === snapshot.recoveries &&
+      next.probing === snapshot.probing
     ) return;
     snapshot = next;
     for (const l of listeners) {
@@ -133,6 +139,7 @@ export function createBridgeStatusStore(deps: BridgeStatusDeps): BridgeStatusSto
   const runProbe = async (): Promise<void> => {
     if (probeInFlight || !started) return;
     probeInFlight = true;
+    set({ probing: true });
     let result: { ok: true } | { ok: false; error: string };
     try {
       result = await deps.probeHealth();
@@ -141,12 +148,13 @@ export function createBridgeStatusStore(deps: BridgeStatusDeps): BridgeStatusSto
     } finally {
       probeInFlight = false;
     }
-    if (!started) return;
+    if (!started) { set({ probing: false }); return; }
     if (result.ok) {
+      set({ probing: false });
       transitionUp();
       return;
     }
-    set({ status: 'down', lastError: result.error });
+    set({ status: 'down', lastError: result.error, probing: false });
     scheduleProbe(BRIDGE_HEALTH_POLL_MS);
   };
 
