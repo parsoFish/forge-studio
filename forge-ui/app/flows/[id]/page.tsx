@@ -10,6 +10,9 @@ import { resolveFlowViewState } from '@/lib/flow-view-state';
 import { runsForFlow } from '@/lib/home-view';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
 import { FlowTopology } from '@/components/studio/FlowTopology';
@@ -94,6 +97,14 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const [kickoffOpen, setKickoffOpen] = useState<boolean | null>(null);
   const [activeRun,   setActiveRun]   = useState<Run | null>(null);
   const [ready,       setReady]       = useState(false);
+  // W7-FIX-A1 (A1-02): a FAILED flows/runs read is an ERROR state (the shared
+  // PageLoadError with Retry) — never NotFound "No flow <id>" for a flow that
+  // may well exist. `loadKey` re-runs the load on Retry + bridge recovery
+  // (the WS subscription below is re-opened with it — same effect).
+  const [loadError,   setLoadError]   = useState<{ message: string; status?: number } | null>(null);
+  const [loadKey,     setLoadKey]     = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
   const [tailEvents,  setTailEvents]  = useState<EventLogEntry[]>([]);
   // W6-SW-3 (sweep C3#6): subscribe()'s ConnectionState used to be discarded
   // — on a dropped socket the tail kept showing stale events with zero
@@ -164,6 +175,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           pickDefaultRun(allRuns);
         setActiveRun(next);
         setKickoffOpen((prev) => (prev === null ? allRuns.length === 0 : prev));
+        setLoadError(null);
+      } catch (err) {
+        // W7-FIX-A1 (A1-02): the flows/runs read threw — an ERROR state;
+        // `flow` stays whatever it was, so `flowNotFound` (gated on
+        // `!loadError` below) cannot fire off this failure.
+        if (signal.cancelled) return;
+        setLoadError(fetchErrorPropsFrom(err));
       } finally {
         if (!signal.cancelled) setReady(true);
       }
@@ -240,32 +258,41 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       signal.cancelled = true;
       sub.close();
     };
+    // loadKey: Retry / bridge recovery re-run the load (W7-FIX-A1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, loadKey]);
 
   // ---- BUILD tab data loading ----
 
   const loadBuildData = useCallback(async (signal: { cancelled: boolean }) => {
-    const [flowDef, flows, ags] = await Promise.all([
-      // A new flow seeds its canvas from the basic starter (plan → dev → review).
-      isNew ? fetchStarterFlow() : fetchFlow(id),
-      fetchStudioFlows(),
-      fetchStudioAgents(),
-    ]);
-    if (signal.cancelled) return;
-    setBuildFlow(flowDef);
-    setAllFlows(flows);
-    setAgents(ags);
-    if (flowDef) {
-      setHeaderState({
-        // The operator names their own flow; the starter only seeds the canvas
-        // + goal so a basic flow is creatable with near-zero input.
-        name: isNew ? '' : flowDef.name,
-        goal: flowDef.goal ?? '',
-        project: flowDef.project ?? '',
-        kb: flowDef.kb ?? '',
-        triggers: isNew ? [] : (flowDef.triggers ?? []),
-      });
+    try {
+      const [flowDef, flows, ags] = await Promise.all([
+        // A new flow seeds its canvas from the basic starter (plan → dev → review).
+        isNew ? fetchStarterFlow() : fetchFlow(id),
+        fetchStudioFlows(),
+        fetchStudioAgents(),
+      ]);
+      if (signal.cancelled) return;
+      setBuildFlow(flowDef);
+      setAllFlows(flows);
+      setAgents(ags);
+      if (flowDef) {
+        setHeaderState({
+          // The operator names their own flow; the starter only seeds the canvas
+          // + goal so a basic flow is creatable with near-zero input.
+          name: isNew ? '' : flowDef.name,
+          goal: flowDef.goal ?? '',
+          project: flowDef.project ?? '',
+          kb: flowDef.kb ?? '',
+          triggers: isNew ? [] : (flowDef.triggers ?? []),
+        });
+      }
+    } catch (err) {
+      // W7-FIX-A1 (A1-02): the builder's definition/palette read threw — the
+      // same page-level ERROR state (a blank canvas + empty palette is not a
+      // flow), never an unhandled rejection.
+      if (signal.cancelled) return;
+      setLoadError(fetchErrorPropsFrom(err));
     }
   }, [id, isNew]);
 
@@ -275,7 +302,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       void loadBuildData(signal);
       return () => { signal.cancelled = true; };
     }
-  }, [tab, loadBuildData]);
+    // loadKey: Retry / bridge recovery re-run the builder read too (W7-FIX-A1)
+  }, [tab, loadBuildData, loadKey]);
 
   // ---- BUILD tab save ----
 
@@ -416,7 +444,23 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // `release-refine`, or the pre-flow_id `unknown` sentinel — is a RETIRED
   // flow: its runs remain openable from any flow HISTORY ledger
   // (`/flows/<id>/run/<runId>` renders the run's own recorded phases).
-  if (flowNotFound && !isNew) {
+  // W7-FIX-A1 (A1-02): the read FAILED — the flow may well exist. The shared
+  // page-level error with Retry, never NotFound.
+  if (view.ready && loadError) {
+    return (
+      <PageLoadError
+        page="flow-monitor"
+        rootAttrs={{ 'data-flow-id': id }}
+        what={`flow "${id}"`}
+        error={loadError.message}
+        status={loadError.status}
+        onRetry={reload}
+        backHref="/flows"
+        backLabel="Flows"
+      />
+    );
+  }
+  if (flowNotFound && !isNew && !loadError) {
     const retired = view.runs.length > 0;
     return (
       <NotFound

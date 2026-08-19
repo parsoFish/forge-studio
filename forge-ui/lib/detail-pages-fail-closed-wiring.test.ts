@@ -49,7 +49,7 @@ function expectFailClosedPrimitives(src: string, page: string): void {
   // 2. subscribes to bridge recovery with its own reload (never a page poll)
   expect(src).toMatch(/useBridgeRecovery\(reload\)/);
   // 3. the load has a real catch that captures the failure via the shared classifier
-  expect(src).toMatch(/catch \(err\) \{[\s\S]{0,400}fetchErrorPropsFrom\(err\)[\s\S]{0,200}setLoadError\(/);
+  expect(src).toMatch(/catch \(err\) \{[\s\S]{0,400}setLoadError\(fetchErrorPropsFrom\(err\)\)/);
   // 4. renders the shared error state under the route's OWN data-page
   expect(src).toMatch(new RegExp(`<PageLoadError[\\s\\S]{0,200}page="${page}"`));
   // 5. a manual Retry re-runs the load (the shared component wires onRetry)
@@ -82,8 +82,8 @@ describe('/projects/[id] (A1-02)', () => {
     expect(PROJECT).toMatch(/if \(ready && !loadError && !project\)[\s\S]{0,80}<NotFound kind="project"/);
   });
   test('loadPreflight / loadRoadmap no longer escape as unhandled rejections — each has a catch that surfaces a panel-scoped error', () => {
-    expect(PROJECT).toMatch(/const loadPreflight = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(/);
-    expect(PROJECT).toMatch(/const loadRoadmap = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(/);
+    expect(PROJECT).toMatch(/const loadPreflight = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(\{ what: [^}]*fetchErrorPropsFrom\(err\)/);
+    expect(PROJECT).toMatch(/const loadRoadmap = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(\{ what: [^}]*fetchErrorPropsFrom\(err\)/);
     // …and that panel error is RENDERED (the shared inline failure state), not just stored
     expect(PROJECT).toMatch(/panelError \? \([\s\S]{0,200}<FetchErrorState/);
   });

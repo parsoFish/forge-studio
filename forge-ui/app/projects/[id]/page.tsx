@@ -24,6 +24,9 @@ import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { PageHeader } from '@/components/StudioPage';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -79,6 +82,18 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // the same `fetchCycles()` call that backs `cycleGroups`.
   const [projectCycles, setProjectCycles] = useState<Cycle[]>([]);
 
+  // W7-FIX-A1 (A1-02): a FAILED roster read is an ERROR state (PageLoadError
+  // with Retry) — never the shared NotFound ("No project <id>" for a project
+  // that may well exist). `loadKey` re-runs every load on Retry + bridge
+  // recovery. `panelError` is the softer sibling for the preflight/roadmap
+  // reads: the project itself loaded, one side panel's read did not — shown
+  // inline (never an unhandled rejection, never a silently-absent panel).
+  const [loadError, setLoadError] = useState<{ message: string; status?: number } | null>(null);
+  const [panelError, setPanelError] = useState<{ what: string; message: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  useBridgeRecovery(reload);
+
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
   const [instructionsSource, setInstructionsSource] = useState<'AGENTS.md' | 'CLAUDE.md' | 'project.json' | undefined>(undefined);
@@ -111,19 +126,36 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         setSkills(p.skills ?? []);
         setKb(p.kb ?? null);
       }
+      setLoadError(null);
+    } catch (err) {
+      // W7-FIX-A1 (A1-02): the roster/kbs/flows/catalog read threw — an
+      // ERROR state; `project` stays whatever it was, so NotFound (gated on
+      // `!loadError` below) cannot fire off this failure.
+      if (signal.cancelled) return;
+      setLoadError(fetchErrorPropsFrom(err));
     } finally {
       if (!signal.cancelled) setReady(true);
     }
   }, [id]);
 
   const loadPreflight = useCallback(async (signal: { cancelled: boolean }) => {
-    const result = await fetchPreflight(id);
-    if (!signal.cancelled) setPreflight(result);
+    try {
+      const result = await fetchPreflight(id);
+      if (!signal.cancelled) setPreflight(result);
+    } catch (err) {
+      if (signal.cancelled) return;
+      setPanelError({ what: 'the preflight verdict', ...fetchErrorPropsFrom(err) });
+    }
   }, [id]);
 
   const loadRoadmap = useCallback(async (signal: { cancelled: boolean }) => {
-    const result = await fetchRoadmap(id);
-    if (!signal.cancelled) setRoadmap(result);
+    try {
+      const result = await fetchRoadmap(id);
+      if (!signal.cancelled) setRoadmap(result);
+    } catch (err) {
+      if (signal.cancelled) return;
+      setPanelError({ what: 'the roadmap', ...fetchErrorPropsFrom(err) });
+    }
   }, [id]);
 
   // R4-11-T3: recovery affordances need this project's initiatives grouped
@@ -166,12 +198,14 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     // roadmap / cycles routes 404'd on every visit to /projects/new).
     if (isNew) return;
     const signal = { cancelled: false };
+    setPanelError(null);
     void loadData(signal);
     void loadPreflight(signal);
     void loadRoadmap(signal);
     void loadCycleGroups(signal);
     return () => { signal.cancelled = true; };
-  }, [isNew, loadData, loadPreflight, loadRoadmap, loadCycleGroups]);
+    // loadKey: Retry / bridge recovery re-run every read (W7-FIX-A1)
+  }, [isNew, loadData, loadPreflight, loadRoadmap, loadCycleGroups, loadKey]);
 
   // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
   // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
@@ -258,7 +292,23 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // this branch the return below rendered the full editable editor with a
   // blank name/northStar/etc, no honest "not found" state. W7-A4
   // (crosscut-27): that state is the ONE shared NotFound.
-  if (ready && !project) {
+  // W7-FIX-A1 (A1-02): the read FAILED — the project may well exist. The
+  // shared page-level error with Retry, never NotFound.
+  if (ready && loadError) {
+    return (
+      <PageLoadError
+        page="projects"
+        rootAttrs={{ 'data-project-id': id }}
+        what={`project "${id}"`}
+        error={loadError.message}
+        status={loadError.status}
+        onRetry={reload}
+        backHref="/projects"
+        backLabel="Projects"
+      />
+    );
+  }
+  if (ready && !loadError && !project) {
     return <NotFound kind="project" id={id} backHref="/projects" backLabel="Projects" />;
   }
 
@@ -348,6 +398,14 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           </button>
         ))}
       </div>
+
+      {/* W7-FIX-A1 (A1-02): a side-panel read (preflight / roadmap) failed while
+          the project itself loaded — shown inline, never silently absent. */}
+      {panelError ? (
+        <div data-section="project-panel-error" style={{ padding: '10px 28px 0' }}>
+          <FetchErrorState what={panelError.what} error={panelError.message} status={panelError.status} onRetry={reload} compact />
+        </div>
+      ) : null}
 
       {tab === 'editor' && (
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
