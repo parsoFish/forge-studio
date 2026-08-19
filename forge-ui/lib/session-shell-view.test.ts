@@ -133,6 +133,8 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
+  // W7-FIX-A2 (W7A2-04) — architect is a legacy-runner, transcript-bearing kind.
+  transcript: true,
   // W7-A2 — awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator' as const, needsYou: true, error: null, idleMs: null, cancellable: true },
 };
@@ -166,6 +168,8 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
+  // W7-FIX-A2 (W7A2-04) — a synthetic transcript-bearing kind.
+  transcript: true,
   // W7-A2 — a synthetic working phase.
   lifecycle: { state: 'working' as const, needsYou: false, error: null, idleMs: null, cancellable: true },
 };
@@ -249,6 +253,45 @@ test('AT-50: sessionShellState: a stage with ZERO turns (secrets) is still selec
 test('AT-51: sessionShellState: a stage WITH turns has a null emptyStageMessage — the honest-empty message never appears alongside real turns', () => {
   const state = sessionShellState(MULTI_STAGE_PAYLOAD); // defaultStage 'instructions' has 2 turns
   expect(state.emptyStageMessage).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A2 (W7A2-04) — the empty-transcript copy is keyed on the payload's
+// DESCRIPTOR-DERIVED `transcript` flag (bridge: a turnSpec kind rides the
+// generic spine, which never writes transcript turns → false), never on the
+// lifecycle state alone. The sweep's repro: an instructions/demo session at
+// its `briefing` phase (awaiting-operator, zero turns, empty artifact) used to
+// read "this session records its work in the artifact pane" — false on both
+// counts.
+// ---------------------------------------------------------------------------
+
+function emptyMessageFor(over: Partial<SessionShellPayload>): string | null {
+  const payload: SessionShellPayload = { ...SINGLE_STAGE_PAYLOAD, turns: [], ...over } as SessionShellPayload;
+  return sessionShellState(payload).emptyStageMessage;
+}
+
+test('W7A2-04: transcript-bearing kind + working + zero turns → "No turns recorded yet" (an honest not-YET)', () => {
+  const msg = emptyMessageFor({ kind: 'instructions', transcript: true, lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true } });
+  expect(msg).toMatch(/No turns recorded yet/);
+  expect(msg).not.toMatch(/artifact pane/);
+});
+
+test('W7A2-04: transcript-bearing kind at an operator gate / crashed / stalled / terminal with zero turns → a NEUTRAL "no transcript" line that neither promises a turn nor claims the artifact pane (the instructions/demo `briefing` shape)', () => {
+  for (const state of ['awaiting-operator', 'crashed', 'stalled', 'terminal'] as const) {
+    const msg = emptyMessageFor({ kind: 'instructions', transcript: true, phase: 'briefing', lifecycle: { state, needsYou: state !== 'terminal', error: state === 'crashed' ? 'boom' : null, idleMs: null, cancellable: state !== 'terminal' } });
+    expect(msg, state).toMatch(/No transcript/);
+    expect(msg, state).toContain('roadmap');
+    expect(msg, state).not.toMatch(/artifact pane/);
+    expect(msg, state).not.toMatch(/yet/);
+  }
+});
+
+test('W7A2-04: a transcript-LESS kind (kb-cleanup / authoring / community-refresh — turnSpec spine) says it records its work in the artifact pane in EVERY lifecycle state, including working (never a "not yet" promise of a turn that is not coming)', () => {
+  for (const state of ['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'] as const) {
+    const msg = emptyMessageFor({ kind: 'kb-cleanup', transcript: false, lifecycle: { state, needsYou: false, error: null, idleMs: null, cancellable: state !== 'terminal' } });
+    expect(msg, state).toMatch(/artifact pane/);
+    expect(msg, state).not.toMatch(/No turns recorded yet/);
+  }
 });
 
 test('AT-52: sessionShellState: turn ordering within a stage is preserved EXACTLY as the server sent it — never re-sorted by index, never re-numbered', () => {
