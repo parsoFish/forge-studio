@@ -109,7 +109,7 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
- *  (cli/bridge-studio-lifecycle.ts) and read as terminal by
+ *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
  *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
@@ -117,8 +117,13 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
  *  eight tables is exactly the drift shape ADR-043's "derived, not authored"
  *  discipline exists to prevent. `deriveSessionAffordances` already yields
  *  `[]` for any phase a table does not name, so a cancelled session derives
- *  no affordance without any table change. */
-export const CANCELLED_PHASE = 'cancelled';
+ *  no affordance without any table change.
+ *
+ *  W7-FIX-A2 (W7A2-01): the constant now LIVES at the status-write seam
+ *  (`orchestrator/interactive-session.ts`), which enforces the sticky-cancel
+ *  rule (`cancelledPhaseWins`) for every writer; re-exported here so the
+ *  bridge modules keep their one import. */
+export { CANCELLED_PHASE } from '../orchestrator/interactive-session.ts';
 
 /** W7-A2 — operator-gate phases for the two kinds that carry NEITHER a
  *  `turnSpec` nor a `panel` table (architect — permanently bespoke per

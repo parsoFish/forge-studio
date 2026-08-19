@@ -229,6 +229,55 @@ test('cmdAgentDispatch: R4-17 AT-D7-5 (item 3, ACCEPT control): a --session-dir 
 });
 
 // ---------------------------------------------------------------------------
+// W7-FIX-A2 (W7A2-01, HIGH) — the terminal `cancelled` phase is STICKY: a
+// dispatch that ends AFTER the operator cancelled its session (onboarding's
+// child was never pid-tracked before this fix; and even a tracked child can
+// outlive its SIGTERM long enough to reach this write) must NOT resurrect
+// the session into complete/failed. `writeSessionTerminalPhase` used to spread
+// `{...existing, phase}` unconditionally through guardedWriteFile; it now
+// rides the ONE status-write seam (`guardedWriteSessionStatus`), which
+// refuses to overwrite `cancelled` (orchestrator/interactive-session.ts).
+// Asserted on the FILESYSTEM, on BOTH outcomes.
+// ---------------------------------------------------------------------------
+
+test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a SUCCESSFUL dispatch whose --session-dir status.json was cancelled meanwhile leaves phase:"cancelled" (never "complete")', async () => {
+  const prior = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const runId = '_agent-cli-sticky-cancel-complete-test';
+  const sessionDir = makeSessionDirFixture('sticky-cancel-complete');
+  // The operator cancelled while the run was in flight (the generic cancel
+  // route's exact write shape).
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'cancelled', cancelled_from: 'running', cancelled_at: '2026-08-19T10:00:00.000Z' }), 'utf8');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir]);
+    assert.equal(r.exitCode, null, 'the dispatch outcome itself is unchanged (a suppressed dispatch still "ends")');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string; cancelled_from?: string };
+    assert.equal(status.phase, 'cancelled', `a late completion must NOT resurrect a cancelled session — got status.json: ${JSON.stringify(status)}`);
+    assert.equal(status.cancelled_from, 'running', 'the cancel transition facts must survive');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown slug) whose --session-dir status.json was cancelled meanwhile leaves phase:"cancelled" (never "failed")', async () => {
+  const runId = '_agent-cli-sticky-cancel-failed-test';
+  const sessionDir = makeSessionDirFixture('sticky-cancel-failed');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'cancelled', cancelled_from: 'running' }), 'utf8');
+  try {
+    const r = await run(['no-such-agent-slug-xyz', '--run-id', runId, '--session-dir', sessionDir]);
+    assert.equal(r.exitCode, 1, 'the dispatch still fails as before');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'cancelled', `a late failure must NOT resurrect a cancelled session — got status.json: ${JSON.stringify(status)}`);
+  } finally {
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // R4-17 pin 4, item 1 (BLOCKER, round-2 adversarial review): `writeSessionTerminalPhase`
 // (agent-run.ts:194, exercised here via `cmdAgentDispatch`) resolves
 // `projectsRoot` via `resolveProjectsDir(resolve(forgeRoot), loadConfig())`

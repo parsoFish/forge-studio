@@ -197,6 +197,9 @@ const WELL_FORMED_PAYLOAD = {
   // W6-B8 — REQUIRED on every wire payload (never omitted): architect's
   // fixture session sits at 'awaiting-verdict', a non-terminal phase.
   terminal: false,
+  // W7-FIX-A2 (W7A2-04) — REQUIRED on every wire payload: architect is a
+  // legacy-runner (transcript-bearing) kind.
+  transcript: true,
   // W7-A2 — REQUIRED on every wire payload (never omitted): the bridge's
   // derived lifecycle; awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true },
@@ -468,6 +471,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
     modelTier: 'sonnet',
     terminal: false,
+    transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
@@ -486,6 +490,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [],
     modelTier: null,
     terminal: false,
+    transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
@@ -508,6 +513,27 @@ test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS
   expect(() => parseSessionShellPayload(missing)).toThrow(/terminal/);
   expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: 'true' })).toThrow(/terminal/);
   expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: null })).toThrow(/terminal/);
+});
+
+// ===========================================================================
+// W7-FIX-A2 (W7A2-04) — parseSessionShellPayload gains "transcript" (boolean,
+// REQUIRED, never omitted or defaulted): whether this KIND records turns as a
+// transcript at all (bridge-derived: a turnSpec kind rides the generic spine,
+// which never writes transcript files → false). Same hard-required treatment
+// as "terminal"/"affordances" — a missing flag must never quietly read as
+// "transcript-bearing" (or as "artifact-pane only").
+// ===========================================================================
+
+test('W7A2-04: parseSessionShellPayload: "transcript" round-trips true/false verbatim', () => {
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: true }).transcript).toBe(true);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: false }).transcript).toBe(false);
+});
+
+test('W7A2-04: parseSessionShellPayload: "transcript" missing or non-boolean THROWS naming the field — never defaulted', () => {
+  const { transcript: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/transcript/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: 'yes' })).toThrow(/transcript/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: null })).toThrow(/transcript/);
 });
 
 // ===========================================================================

@@ -48,6 +48,7 @@ import {
   runAgentTurn,
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
+  statusWriteRefusalReason,
   makeHeartbeatWriter,
   makeReasoningSink,
   makeThinkingSink,
@@ -622,6 +623,15 @@ function guardedGenerationWritePath(projectRoot: string, segs: readonly string[]
 function writeDemoStatus(projectRoot: string, sessionId: string, status: DemoBuilderStatus): void {
   const p = guardedWriteSessionStatus(projectRoot, [DEMO_KIND_DIR, sessionId], status);
   if (p === null) {
+    // W7-FIX-A2 (W7A2-01): the seam ALSO refuses a write that would move an
+    // on-disk `cancelled` phase — a turn that finished after the operator
+    // cancelled. Name that honestly (the advance is discarded by design;
+    // lifecycle reads terminal, never crashed) instead of "containment".
+    if (statusWriteRefusalReason(projectRoot, [DEMO_KIND_DIR, sessionId], status.phase) === 'cancelled') {
+      throw new Error(
+        `demo-builder runner: the session was cancelled while this turn ran — the turn's advance to "${status.phase}" is discarded and status.json stays cancelled (the terminal cancelled phase is sticky).`,
+      );
+    }
     throw new Error(
       'demo-builder runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
     );

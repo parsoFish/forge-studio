@@ -751,6 +751,15 @@ export type SessionShellPayload = {
    */
   terminal: boolean;
   /**
+   * W7-FIX-A2 (W7A2-04) — whether this KIND records turns as a transcript
+   * at all (bridge-derived: a `turnSpec` kind rides the generic spine, which
+   * never writes transcript turns → `false`; a legacy-runner kind → `true`).
+   * Keys the empty-transcript copy (`session-shell-view.ts`) so a
+   * transcript-bearing kind at an operator gate is never told its work is
+   * "in the artifact pane". REQUIRED and hard-parsed like `terminal`.
+   */
+  transcript: boolean;
+  /**
    * W7-A2 — the bridge's DERIVED lifecycle (`cli/bridge-studio-lifecycle.ts`):
    * `state` (working | awaiting-operator | crashed | stalled | terminal), a
    * truthful `needsYou`, the runner's crash `error` text, `idleMs`, and
@@ -828,6 +837,15 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const terminal = terminalRaw;
 
+  // W7-FIX-A2 (W7A2-04) — REQUIRED like "terminal": a missing or non-boolean
+  // "transcript" throws, never defaulted (either default would be a lie for
+  // half the kinds).
+  const transcriptRaw = raw['transcript'];
+  if (typeof transcriptRaw !== 'boolean') {
+    throw new Error(`missing or invalid "transcript": expected a boolean, got ${JSON.stringify(transcriptRaw)}`);
+  }
+  const transcript = transcriptRaw;
+
   // W7-A2 — REQUIRED like "terminal" above; every malformed shape throws.
   const lifecycle = parseSessionLifecycle(raw['lifecycle']);
 
@@ -836,6 +854,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     affordances,
     modelTier,
     terminal,
+    transcript,
     lifecycle,
   };
 }

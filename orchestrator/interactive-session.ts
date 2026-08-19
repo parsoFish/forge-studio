@@ -40,6 +40,7 @@ import { join, dirname, basename, sep } from 'node:path';
 
 import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
+import { inspectBashCommand } from './bash-fence.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
 import type { EventLogger, Phase } from './logging.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
@@ -368,8 +369,34 @@ export async function runStructuredTurn<T>(args: {
  *  `loops/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS` (kept as an
  *  independent literal here, not imported, so this spine file's only
  *  cross-subsystem edge stays the pre-existing type-only one). Every OTHER
- *  tool call passes through this fence unmodified — it never gates reads. */
+ *  tool call passes through this fence unmodified — it never gates reads.
+ *
+ *  W7-FIX-A2 (W7A2-03, bead forge-w08): `Bash` is gated too — it is a
+ *  write-capable tool with no single path, so it is not in THIS set (which
+ *  drives the one-path check) but in `FENCE_STRIPPED_TOOLS` below, and gets
+ *  its own policy (`BashFenceMode`): denied outright unless the kind opts
+ *  into static inspection (`inspectBashCommand`, orchestrator/bash-fence.ts). */
 const FENCE_GATED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/** Every tool a fenced turn must NOT pre-approve via `allowedTools` (so the
+ *  SDK routes each call through `canUseTool`): the one-path tools above plus
+ *  Bash. Never pushed into `disallowedTools` — they stay callable, gated. */
+const FENCE_STRIPPED_TOOLS = new Set([...FENCE_GATED_TOOLS, 'Bash']);
+
+/** W7-FIX-A2 (W7A2-03) — the Bash policy of a fenced turn. `deny` (the
+ *  default: a fenced kind that does not opt in has NO ungated write-capable
+ *  tool at all) or `inspect` (the ONE authored opt-in, `turnSpec.bashFence`
+ *  in studio/session-kinds.yaml, validated against BASH_FENCE_MODES): every
+ *  Bash command is statically inspected and every write-shaped operation
+ *  must target a path inside the write roots. Kept as a string-literal
+ *  union here (not imported from studio/session-kinds.ts) so this spine
+ *  file's dependency edges stay as they are; session-kinds' frozen
+ *  BASH_FENCE_MODES is the vocabulary the yaml is validated against, and
+ *  the runner threads the validated value through. */
+export type BashFenceMode = 'deny' | 'inspect';
+export type BashFenceOptions =
+  | { readonly bash?: 'deny' }
+  | { readonly bash: 'inspect'; /** the turn's cwd — relative paths resolve against it */ readonly cwd: string };
 
 /** Extract the target file path from a gated tool's input — mirrors
  *  `loops/ralph/claude-agent.ts`'s own `extractPath` (`file_path` for
@@ -431,7 +458,7 @@ export type WriteRootCanUseTool = (
 // integration shape (a fake `queryFn` capturing `options.canUseTool`) is
 // ALSO covered, but a direct export lets the deny/allow/symlink-escape
 // matrix be pinned without threading every case through a full turn.
-export function makeWriteRootCanUseTool(writeRoots: readonly string[]): WriteRootCanUseTool {
+export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence: BashFenceOptions = {}): WriteRootCanUseTool {
   // Resolved ONCE, at turn start, not per tool call — every root was already
   // provisioned by the caller (see this section's own header), so a root
   // that still fails to realpath here is a caller bug: fail THAT ONE root
@@ -449,6 +476,35 @@ export function makeWriteRootCanUseTool(writeRoots: readonly string[]): WriteRoo
     .filter((root): root is string => root !== null);
 
   return async (toolName, input, _options) => {
+    if (toolName === 'Bash') {
+      // W7-FIX-A2 (W7A2-03): Bash on a fenced turn — deny by default; a kind
+      // that opted in gets the static inspector (fail closed on anything it
+      // cannot reason about, `null`/non-string command included).
+      if (bashFence.bash !== 'inspect') {
+        return {
+          behavior: 'deny',
+          message:
+            'Bash is not available on this write-root-fenced turn (this session kind did not opt into Bash inspection) ' +
+            '— use Read/Grep/Glob to inspect and Write/Edit to change files inside the writable root(s) ' +
+            `(${writeRoots.join(', ')}). Refused by the write-root fence.`,
+        };
+      }
+      const command = input.command;
+      if (typeof command !== 'string') {
+        return { behavior: 'deny', message: 'Bash: no command string in tool input — refused by the write-root fence.' };
+      }
+      const verdict = inspectBashCommand(command, { cwd: bashFence.cwd, realWriteRoots: realRoots });
+      if (!verdict.allow) {
+        return {
+          behavior: 'deny',
+          message:
+            `Bash command refused by the write-root fence: ${verdict.reason}. ` +
+            `Only read-only commands and writes inside this session's writable root(s) (${writeRoots.join(', ')}) are permitted; ` +
+            'use the Write/Edit tools for file changes.',
+        };
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
     if (!FENCE_GATED_TOOLS.has(toolName)) {
       return { behavior: 'allow', updatedInput: input };
     }
@@ -498,6 +554,11 @@ export async function runAgentTurn(args: {
    *  unaffected. See `makeWriteRootCanUseTool`'s own doc comment for the
    *  mechanism and why this does not reopen ADR 020. */
   writeRoots?: readonly string[];
+  /** W7-FIX-A2 (W7A2-03) — Bash policy when `writeRoots` fences the turn:
+   *  absent/`deny` denies every Bash call; `inspect` statically inspects
+   *  each command against the write roots (see `BashFenceOptions`). Ignored
+   *  when the turn is unfenced. */
+  bashFence?: BashFenceMode;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
@@ -526,22 +587,28 @@ export async function runAgentTurn(args: {
   // the fence-gated tool names are STRIPPED from `allowedTools` (they stay
   // callable — never pushed into disallowedTools — the SDK just routes each
   // call through `canUseTool`, which allows in-root writes and denies the
-  // rest). Every non-gated grant (Read/Grep/Glob/WebFetch/…) survives
-  // verbatim. An unfenced turn keeps the exact prior shape (acceptEdits,
-  // allowedTools verbatim, no canUseTool). Pinned by
-  // interactive-session-fence-mode.test.ts; live-proven once by
-  // scripts/probe-write-fence.mjs (recorded in the W7-A2 PR).
+  // rest). W7-FIX-A2 (W7A2-03): `Bash` — the one write-capable tool with
+  // no single path — is stripped too and denied by canUseTool unless the
+  // kind opted into static inspection (`bashFence: 'inspect'`). Every
+  // read-only grant (Read/Grep/Glob/WebFetch/…) survives verbatim. An
+  // unfenced turn keeps the exact prior shape (acceptEdits, allowedTools
+  // verbatim, no canUseTool). Pinned by interactive-session-fence-mode.test.ts
+  // + bash-fence.test.ts; live-proven once by scripts/probe-write-fence.mjs
+  // (recorded in the W7-A2 PR).
   const options: Record<string, unknown> = {
     cwd: args.cwd,
     model: args.model,
     permissionMode: fenced ? 'default' : 'acceptEdits',
-    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_GATED_TOOLS.has(t)) : args.allowedTools,
+    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_STRIPPED_TOOLS.has(t)) : args.allowedTools,
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
   };
   if (fenced) {
-    options.canUseTool = makeWriteRootCanUseTool(args.writeRoots!);
+    options.canUseTool = makeWriteRootCanUseTool(
+      args.writeRoots!,
+      args.bashFence === 'inspect' ? { bash: 'inspect', cwd: args.cwd } : { bash: 'deny' },
+    );
   }
 
   let costUsd = 0;
@@ -672,10 +739,65 @@ export function guardedReadSessionStatus<S>(
   }
 }
 
+/** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
+ *  terminal phase every session kind shares: written by the generic
+ *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
+ *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
+ *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
+ *  the per-kind tables are consulted. Deliberately NOT a per-kind
+ *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
+ *  is the same fact for all kinds, and N copies of one fact in N tables is
+ *  exactly the drift shape ADR-043's "derived, not authored" discipline
+ *  exists to prevent.
+ *
+ *  W7-FIX-A2 (W7A2-01): defined HERE, at the status-write seam, because the
+ *  seam enforces it (`cancelledPhaseWins` below) — cli/bridge-studio.ts
+ *  re-exports this same binding so every bridge module keeps its import. */
+export const CANCELLED_PHASE = 'cancelled';
+
+/**
+ * W7-FIX-A2 (W7A2-01, HIGH) — the sticky-cancel rule, as ONE pure predicate:
+ * an on-disk `cancelled` phase WINS over any later write that would move the
+ * session to a different phase (or to no phase at all). A late turn
+ * completion — onboarding's untracked dispatch child, or a tracked runner
+ * already past its SIGTERM — used to spread its STALE pre-turn status object
+ * over the terminal phase and resurrect the session into `complete`/`failed`/
+ * `awaiting-…`. Re-stamping `cancelled` over `cancelled` is not a
+ * resurrection (idempotent), and cancelling a live phase is the normal
+ * transition, so both stay allowed. A missing on-disk phase (first write) is
+ * never sticky.
+ */
+export function cancelledPhaseWins(existingPhase: unknown, incomingPhase: unknown): boolean {
+  return existingPhase === CANCELLED_PHASE && incomingPhase !== CANCELLED_PHASE;
+}
+
+/** W7-FIX-A2 (W7A2-01) — tell the two `guardedWriteSessionStatus` → `null`
+ *  causes apart, for the writer's own error message: `'cancelled'` when the
+ *  on-disk phase is the reserved terminal and the incoming phase would move
+ *  off it (the sticky-cancel refusal — a turn finished after the operator
+ *  cancelled; the write is discarded by design), else `'containment'` (the
+ *  guard rejected the path). ONE helper for every runner, so no runner
+ *  reports a sticky-cancel refusal as a containment failure. */
+export function statusWriteRefusalReason(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  incomingPhase: unknown,
+): 'cancelled' | 'containment' {
+  const onDisk = guardedReadSessionStatus<{ phase?: unknown }>(projectsRoot, dirSegments);
+  return onDisk !== null && cancelledPhaseWins(onDisk.phase, incomingPhase) ? 'cancelled' : 'containment';
+}
+
 /** Guarded write of `<projectsRoot>/<dirSegments...>/<leaf>` as pretty JSON,
  *  stamping a fresh `updated_at` and creating the session dir if needed.
  *  Returns the written path, or `null` if the guard rejected the path (the
- *  write never happens — fail closed). */
+ *  write never happens — fail closed) — OR if the on-disk phase is the
+ *  reserved terminal `cancelled` and `status.phase` is anything else
+ *  (`cancelledPhaseWins`: the sticky-cancel rule, enforced at THIS seam so
+ *  every writer — the affordance routes, the generic runner, the four legacy
+ *  runners, `forge agent dispatch --session-dir` — inherits it without a
+ *  per-caller check). The status file is byte-unchanged on refusal. Callers
+ *  that need to tell the two refusals apart re-read the on-disk status
+ *  (`guardedReadSessionStatus`) and test `cancelledPhaseWins` themselves. */
 export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
   projectsRoot: string,
   dirSegments: readonly string[],
@@ -684,6 +806,8 @@ export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
 ): string | null {
   const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
   if (p === null) return null;
+  const existing = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegments, leaf);
+  if (existing !== null && cancelledPhaseWins(existing.phase, status.phase)) return null;
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
   return p;

@@ -1,8 +1,9 @@
 'use client';
 
-import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
-import { formatIdle } from '@/lib/session-lifecycle-client';
+import type { SessionLifecycle, CancelOutcome } from '@/lib/session-lifecycle-client';
+import { formatIdle, describeLifecycle } from '@/lib/session-lifecycle-client';
 import { CancelSessionButton } from './CancelSessionButton';
+import { CancelOutcomeNotice } from './CancelOutcomeNotice';
 
 // ---------------------------------------------------------------------------
 // SessionLifecycleBar — W7-A2: the per-session lifecycle banner every kind
@@ -19,22 +20,17 @@ import { CancelSessionButton } from './CancelSessionButton';
 //   - awaiting-operator→ "needs you" + Cancel (the actual control lives in
 //                        the panel below; this bar only states the fact)
 //   - working          → quiet one-liner + Cancel (a live turn is killable)
-//   - terminal         → per-phase honest copy, NO cancel
+//   - terminal         → per-phase honest copy (W7A2-10: the ONE
+//                        `describeLifecycle(…, phase)` sentence the index
+//                        chip renders too), NO cancel
+//   - lastCancel       → W7A2-02: what the cancel actually did
+//                        (`[data-cancel-outcome]`, CancelOutcomeNotice) —
+//                        held by the page so it survives the refetch to
+//                        terminal.
 // DOM: div[data-section="session-lifecycle"][data-lifecycle-state]
-// [data-needs-you][data-cancellable]; button[data-action="cancel"].
+// [data-needs-you][data-cancellable]; button[data-action="cancel"];
+// div[data-cancel-outcome].
 // ---------------------------------------------------------------------------
-
-/** Phases that mean "finished successfully" vs "stopped" — the terminal
- *  copy names which. Anything else terminal (a future kind's own token)
- *  reads as the neutral "Finished — <phase>". */
-const DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applied', 'complete']);
-const STOPPED_PHASES: ReadonlySet<string> = new Set(['rejected', 'abandoned', 'cancelled', 'failed']);
-
-function terminalCopy(phase: string): string {
-  if (DONE_PHASES.has(phase)) return `Done — ${phase}. Nothing further to do here.`;
-  if (STOPPED_PHASES.has(phase)) return `${phase.charAt(0).toUpperCase()}${phase.slice(1)} — nothing further to do here.`;
-  return `Finished — ${phase}.`;
-}
 
 export function SessionLifecycleBar({
   lifecycle,
@@ -43,13 +39,16 @@ export function SessionLifecycleBar({
   sessionId,
   project,
   onCancelled,
+  lastCancel = null,
 }: {
   lifecycle: SessionLifecycle;
   phase: string;
   kind: string;
   sessionId: string;
   project: string | null;
-  onCancelled?: () => void;
+  /** W7A2-02 — receives the cancel's real outcome (`killed`), never discarded. */
+  onCancelled?: (outcome: CancelOutcome) => void;
+  lastCancel?: CancelOutcome | null;
 }): JSX.Element {
   const { state, needsYou, error, idleMs, cancellable } = lifecycle;
   const tone =
@@ -62,7 +61,7 @@ export function SessionLifecycleBar({
   if (state === 'crashed') headline = 'The agent turn crashed';
   else if (state === 'stalled') headline = `No activity for ${idleMs !== null ? formatIdle(idleMs) : 'a while'} — the agent may have stalled`;
   else if (state === 'awaiting-operator') headline = 'Waiting on you';
-  else if (state === 'terminal') headline = terminalCopy(phase);
+  else if (state === 'terminal') headline = describeLifecycle('terminal', null, null, phase);
   else headline = idleMs !== null ? `Agent working — last activity ${formatIdle(idleMs)} ago` : 'Agent working';
 
   return (
@@ -96,9 +95,10 @@ export function SessionLifecycleBar({
             Cancel to clear it from your queue, or start a fresh session of this kind.
           </div>
         )}
+        {lastCancel !== null && <CancelOutcomeNotice outcome={lastCancel} />}
       </div>
       {cancellable && (
-        <CancelSessionButton kind={kind} sessionId={sessionId} project={project} action="cancel" onCancelled={() => onCancelled?.()} />
+        <CancelSessionButton kind={kind} sessionId={sessionId} project={project} action="cancel" onCancelled={(outcome) => onCancelled?.(outcome)} />
       )}
     </div>
   );

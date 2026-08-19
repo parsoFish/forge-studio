@@ -29,7 +29,7 @@ import { SessionInteractivePanel } from '@/components/studio/session/SessionInte
 import { buildHomeSessionsStrip } from './home-view.ts';
 import { backToProjectLink } from './session-shell-view.ts';
 import { parseSessionShellPayload, type SessionLifecycle } from './session-client.ts';
-import { describeLifecycle, SESSION_LIFECYCLE_STATES } from './session-lifecycle-client.ts';
+import { describeLifecycle, describeCancelOutcome, SESSION_LIFECYCLE_STATES, type CancelOutcome } from './session-lifecycle-client.ts';
 import type { SessionIndexRow } from './studio-client.ts';
 
 const CRASH_TEXT = 'InteractiveRunnerError: runInteractiveTurn: session kind "kb-cleanup" phase "drafting" declares writes: [plan], but the turn produced no files there — refusing to advance the session with an empty package rather than persisting a ghost turn to status.json.';
@@ -83,7 +83,7 @@ const BASE_PAYLOAD = {
   ok: true, kind: 'demo', title: 'Demo capability session', sessionId: '2026-08-03T12-00-00', project: 'projb',
   phase: 'generating', stages: ['demo'], defaultStage: 'demo', turns: [],
   artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: [] },
-  affordances: [], modelTier: null, terminal: false,
+  affordances: [], modelTier: null, terminal: false, transcript: true,
 };
 
 test('parseSessionShellPayload: a payload WITHOUT lifecycle throws naming the field (never defaulted to working)', () => {
@@ -234,9 +234,83 @@ test('SessionInteractivePanel: the model chip never says the literal "default" �
 // ---------------------------------------------------------------------------
 
 test('backToProjectLink: renders for a NON-terminal session too (the operator most needs a way out mid-flight), and a .kb-<id> anchor resolves to that KB, not the index', () => {
-  expect(backToProjectLink('mdtoc', false)).toEqual({ label: 'project', href: '/projects/mdtoc' });
-  expect(backToProjectLink('.kb-forge-dev', false)).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
-  expect(backToProjectLink('.community-registry', false)).toEqual({ label: 'Community', href: '/community' });
-  expect(backToProjectLink(null, false)).toBeNull();
-  expect(backToProjectLink('.some-future-anchor', true)).toBeNull();
+  // W7A2-07: the dead `_terminal` parameter is gone — one argument.
+  expect(backToProjectLink('mdtoc')).toEqual({ label: 'project', href: '/projects/mdtoc' });
+  expect(backToProjectLink('.kb-forge-dev')).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
+  expect(backToProjectLink('.community-registry')).toEqual({ label: 'Community', href: '/community' });
+  expect(backToProjectLink(null)).toBeNull();
+  expect(backToProjectLink('.some-future-anchor')).toBeNull();
+  expect(backToProjectLink.length).toBe(1);
+});
+
+// ===========================================================================
+// W7-FIX-A2 — post-land sweep fixes (W7A2-02 killed feedback, W7A2-10 ONE
+// terminal copy). RED at branch base.
+// ===========================================================================
+
+test('W7A2-02 describeCancelOutcome: killed:true and killed:false render DISTINCT sentences; the unconfirmed one says so and never claims the process was stopped', () => {
+  const killed = describeCancelOutcome({ killed: true, previousPhase: 'drafting' });
+  const unconfirmed = describeCancelOutcome({ killed: false, previousPhase: 'drafting' });
+  expect(killed.kind).toBe('killed');
+  expect(unconfirmed.kind).toBe('unconfirmed');
+  expect(killed.text).not.toBe(unconfirmed.text);
+  expect(unconfirmed.text).toMatch(/not confirmed|could not be confirmed|no live agent turn/i);
+  expect(killed.text).toMatch(/stopped/i);
+  expect(unconfirmed.text).not.toMatch(/was stopped/i);
+  // both name the phase the operator gave up at
+  expect(killed.text).toContain('drafting');
+  expect(unconfirmed.text).toContain('drafting');
+});
+
+test('W7A2-02 SessionsIndexBody: a lastCancel outcome renders [data-cancel-outcome] with the shared copy — "unconfirmed" for killed:false, "killed" for killed:true; nothing without one', () => {
+  const row = makeRow({ kind: 'onboarding', sessionId: 'onb-1', state: 'working' });
+  const none = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [row], ready: true }));
+  expect(none).not.toContain('data-cancel-outcome');
+  const unconfirmed = renderToStaticMarkup(React.createElement(SessionsIndexBody, {
+    sessions: [], ready: true, lastCancel: { row, outcome: { killed: false, previousPhase: 'running' } as CancelOutcome },
+  }));
+  expect(unconfirmed).toContain('data-cancel-outcome="unconfirmed"');
+  expect(unconfirmed).toContain(describeCancelOutcome({ killed: false, previousPhase: 'running' }).text);
+  const killed = renderToStaticMarkup(React.createElement(SessionsIndexBody, {
+    sessions: [], ready: true, lastCancel: { row, outcome: { killed: true, previousPhase: 'running' } },
+  }));
+  expect(killed).toContain('data-cancel-outcome="killed"');
+});
+
+test('W7A2-02 HomeSessionsStrip: a lastCancel outcome renders [data-cancel-outcome] inside the strip (survives the post-cancel refetch that drops the card)', () => {
+  const row = makeRow({ kind: 'demo', sessionId: 'd1', state: 'working' });
+  const strip = buildHomeSessionsStrip([makeRow({ kind: 'demo', sessionId: 'd2', state: 'working' })]);
+  const html = renderToStaticMarkup(React.createElement(HomeSessionsStrip, { strip, lastCancel: { row, outcome: { killed: false, previousPhase: 'generating' } } }));
+  expect(html).toContain('data-cancel-outcome="unconfirmed"');
+  expect(html).toContain('generating');
+});
+
+test('W7A2-02 SessionLifecycleBar: a lastCancel outcome renders [data-cancel-outcome] in the bar even once the shell has refetched to terminal (no cancel button, notice still present)', () => {
+  const html = renderToStaticMarkup(React.createElement(SessionLifecycleBar, {
+    lifecycle: lifecycle({ state: 'terminal', cancellable: false, needsYou: false }), phase: 'cancelled', kind: 'onboarding', sessionId: 's', project: 'p',
+    lastCancel: { killed: false, previousPhase: 'running' },
+  }));
+  expect(html).toContain('data-cancel-outcome="unconfirmed"');
+  expect(html).not.toContain('data-action="cancel"');
+  const killedHtml = renderToStaticMarkup(React.createElement(SessionLifecycleBar, {
+    lifecycle: lifecycle({ state: 'terminal', cancellable: false, needsYou: false }), phase: 'cancelled', kind: 'demo', sessionId: 's', project: 'p',
+    lastCancel: { killed: true, previousPhase: 'generating' },
+  }));
+  expect(killedHtml).toContain('data-cancel-outcome="killed"');
+});
+
+test('W7A2-10 ONE terminal copy: describeLifecycle takes the phase for the terminal case and the bar\'s terminal headline IS that sentence; the index chip on a terminal row renders the same phase-aware sentence', () => {
+  const cancelledCopy = describeLifecycle('terminal', null, null, 'cancelled');
+  const doneCopy = describeLifecycle('terminal', null, null, 'committed');
+  expect(cancelledCopy).not.toBe(doneCopy);
+  expect(cancelledCopy).toMatch(/[Cc]ancelled/);
+  expect(doneCopy).toMatch(/Done/);
+  const bar = renderBar(lifecycle({ state: 'terminal', cancellable: false, needsYou: false }), 'cancelled');
+  expect(bar).toContain(cancelledCopy);
+  const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, {
+    sessions: [makeRow({ kind: 'demo', sessionId: 't1', state: 'terminal', terminal: true, phase: 'cancelled' })], ready: true,
+  }));
+  expect(html).toContain(cancelledCopy);
+  // no-phase fallback stays honest (a caller without the phase gets the neutral sentence)
+  expect(describeLifecycle('terminal', null, null)).toMatch(/Finished/);
 });

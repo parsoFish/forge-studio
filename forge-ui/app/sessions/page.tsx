@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
-import { SessionsIndexBody, type SessionsIndexFetchError } from '@/components/studio/SessionsIndex';
+import { SessionsIndexBody, type SessionsIndexFetchError, type SessionsLastCancel } from '@/components/studio/SessionsIndex';
 
 export default function SessionsIndexPage() {
   const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
@@ -25,16 +25,28 @@ export default function SessionsIndexPage() {
   // "No sessions in flight" zero-state. `loadKey` re-runs the load on Retry
   // and on bridge recovery (no page-level poll).
   const [error, setError] = useState<SessionsIndexFetchError | null>(null);
+  // W7A2-02 — the last cancel's real outcome, kept across the refetch that
+  // drops the row so the operator sees whether anything was stopped.
+  const [lastCancel, setLastCancel] = useState<SessionsLastCancel | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
 
   // Default (`?active=1`) — operator-locked: in-flight sessions ONLY, never
   // terminal history. Re-run after a row's cancel succeeds (W7-A2) — the
-  // cancelled session is terminal and drops out of the active set.
+  // cancelled session is terminal and drops out of the active set. W7A2-06:
+  // a FAILED refetch routes into the page's error state (the shared
+  // FetchErrorState) instead of escaping — the cancelled row must never
+  // linger as "in flight" with no explanation.
   const refresh = useCallback(async (): Promise<void> => {
-    const s = await fetchStudioSessions();
-    setSessions(s);
+    try {
+      const s = await fetchStudioSessions();
+      setSessions(s);
+      setError(null);
+    } catch (err) {
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setError(status !== undefined ? { message, status } : { message });
+    }
   }, []);
 
   useEffect(() => {
@@ -62,7 +74,8 @@ export default function SessionsIndexPage() {
       ready={ready}
       error={error}
       onRetry={reload}
-      onCancelled={() => { void refresh(); }}
+      lastCancel={lastCancel}
+      onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refresh(); }}
     />
   );
 }

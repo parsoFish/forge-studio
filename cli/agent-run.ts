@@ -24,7 +24,8 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
-import { guardedReadFile, guardedWriteFile, resolveGuardedPath } from './studio-path-guard.ts';
+import { guardedReadFile, resolveGuardedPath } from './studio-path-guard.ts';
+import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
@@ -224,10 +225,10 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
     // rides as its OWN `segments[]` elements (relative to that root), leaf
     // included — never folded into the root.
     const relFromRoot = relative(realProjectsRoot, realSessionDir);
-    const statusSegments = relFromRoot === '' ? ['status.json'] : [...relFromRoot.split(sep), 'status.json'];
+    const dirSegments = relFromRoot === '' ? [] : relFromRoot.split(sep);
 
     let existing: Record<string, unknown> = {};
-    const rawExisting = guardedReadFile(realProjectsRoot, statusSegments);
+    const rawExisting = guardedReadFile(realProjectsRoot, [...dirSegments, 'status.json']);
     if (rawExisting !== null) {
       try {
         const parsed: unknown = JSON.parse(rawExisting);
@@ -239,9 +240,15 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
         // failing the dispatch outcome over a status-sidecar defect.
       }
     }
-    // A guarded refusal (symlinked/hardlinked leaf) returns null and writes
-    // NOTHING — best-effort, never masks the dispatch outcome/exit code.
-    guardedWriteFile(realProjectsRoot, statusSegments, JSON.stringify({ ...existing, phase }, null, 2));
+    // W7-FIX-A2 (W7A2-01): the write rides the ONE status-write seam
+    // (`guardedWriteSessionStatus`, orchestrator/interactive-session.ts) —
+    // the same guarded leaf semantics as before (a symlinked/hardlinked leaf
+    // returns null and writes NOTHING) PLUS the sticky-cancel rule: if the
+    // operator cancelled this session while the dispatch ran, `existing.phase`
+    // is the reserved terminal `cancelled` and this late `complete`/`failed`
+    // is refused — the session is never resurrected. Best-effort, never masks
+    // the dispatch outcome/exit code.
+    guardedWriteSessionStatus(realProjectsRoot, dirSegments, { ...existing, phase });
   } catch {
     /* best-effort — never masks the dispatch outcome/exit code */
   }
