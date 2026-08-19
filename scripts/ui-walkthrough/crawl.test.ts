@@ -626,6 +626,34 @@ test('W7-A0-3 + W7-A0-6 (CLI): coverage collapse and truncation are exit 2, and 
   }
 });
 
+test('--write-baseline provenance (CLI): --source is honoured under --from (a replayed CI capture can be stamped where it was measured, marked as a replay); without it a replay is stamped with its file, never `main@`; and --write-baseline refuses --only (a baseline is the FULL failure set)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w7a0src-'));
+  try {
+    const none = join(tmp, 'none.txt');
+    const common = ['--known-optional-404s', none, '--live-only-routes', none];
+    const out = join(tmp, 'wb.json');
+    const r1 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o1'), '--write-baseline', out, '--source', 'main@abc1234 CI run 1', ...common], HERE);
+    assert.equal(r1.status, 0, r1.stdout + r1.stderr);
+    const wb1 = JSON.parse(readFileSync(out, 'utf8'));
+    assert.match(wb1.source, /^main@abc1234 CI run 1 — http:\/\/localhost:4124 at .* \(replayed from /);
+    assert.match(wb1.expectedRoutesSource.host, /^main@abc1234 CI run 1 .*\(9 routes, 0 unvisited\)/, 'the per-environment expectation names the same provenance');
+    const out2 = join(tmp, 'wb2.json');
+    const r2 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o2'), '--write-baseline', out2, ...common], HERE);
+    assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+    const wb2 = JSON.parse(readFileSync(out2, 'utf8'));
+    assert.match(wb2.source, /^crawl\.json /);
+    assert.doesNotMatch(wb2.source, /^main@/, 'a replay without --source must not look like a main regeneration');
+    // --only + --write-baseline: usage error, and no file written.
+    const out3 = join(tmp, 'wb3.json');
+    const r3 = runNode([CRAWL, '--from', FIXTURE, '--out', join(tmp, 'o3'), '--only', '/flows', '--write-baseline', out3, ...common], HERE);
+    assert.equal(r3.status, 2, `--write-baseline under --only must be a usage error\n${r3.stdout}\n${r3.stderr}`);
+    assert.match(r3.stderr, /--write-baseline.*--only/);
+    assert.equal(existsSync(out3), false, 'no partial baseline is written');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // ── group 13: W7-A0-4 shrink cross-check + stamped regeneration ──────────────
 
 test('W7-A0-4: unprovenShrinks — a removed entry whose (normalized) route was not crawled is unproven', () => {

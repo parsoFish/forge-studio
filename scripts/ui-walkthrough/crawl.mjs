@@ -40,9 +40,11 @@
 //   --allow-coverage-drop  the explicit override when the Studio legitimately
 //                     has fewer routes than the baseline expects (routes retired)
 //   --source <label>  provenance stamp for --write-baseline (default
-//                     `<branch>@<sha>` of this checkout). Only a `main@<sha>`
-//                     stamp lets a regenerated baseline GROW past the previous
-//                     one in check-baseline-shrinks.mjs (W7-A0-4).
+//                     `<branch>@<sha>` of this checkout; under --from, the
+//                     replayed file's path). Only a `main@<sha>` stamp lets a
+//                     regenerated baseline GROW past the previous one in
+//                     check-baseline-shrinks.mjs (W7-A0-4). --write-baseline
+//                     refuses --only (a baseline is the FULL failure set).
 //
 // Without --boot the crawl targets the ALREADY-RUNNING Studio (bridge :4123,
 // UI :4124 — override with FORGE_BRIDGE_URL / FORGE_UI_URL). It never starts,
@@ -98,6 +100,11 @@ const COVERAGE_KEY = process.env.CI ? 'ci' : 'host';
 // nothing": an empty or truncated crawl.json is never a PASS).
 const MIN_ROUTES = optInt('--min-routes', FROM || ONLY.length ? 1 : 40);
 if (FROM && BOOT) throw new HarnessError('--from replays an existing crawl.json; it cannot be combined with --boot');
+// A baseline is the FULL known-failure set + the full-crawl coverage expectation:
+// written from a prefix-scoped crawl it would drop every entry outside the prefix
+// (the next full crawl reads them all as NEW) and record a partial route count as
+// the floor. Usage error, never a silently partial file.
+if (WRITE_BASELINE && ONLY.length) throw new HarnessError('--write-baseline needs a full crawl; it cannot be combined with --only');
 const KNOWN_404S_FILE = opt('--known-optional-404s', resolve(HERE, 'known-optional-404s.txt'));
 const LIVE_ONLY_FILE = opt('--live-only-routes', resolve(HERE, 'live-only-routes.txt'));
 
@@ -255,7 +262,12 @@ function runAssertion(crawlJson) {
   fs.writeFileSync(path.join(OUT, 'assert.json'), JSON.stringify({ at: new Date().toISOString(), ui: crawlJson.ui, baseline: BASELINE_FILE, only: ONLY, ...report, ok: harnessError ? false : report.ok, coverage, harnessError }, null, 1));
   if (harnessError) throw new HarnessError(harnessError);
   if (WRITE_BASELINE) {
-    const source = FROM ? `crawl.json ${FROM}` : `${sourceStamp()} — ${crawlJson.ui} at ${crawlJson.at}`;
+    // Provenance: `--source` is honoured for a replay too (a CI capture replayed
+    // on the host still names where it was measured); without it a replay is
+    // stamped with the file it came from, never as `main@…`.
+    const source = FROM
+      ? (SOURCE ? `${SOURCE} — ${crawlJson.ui} at ${crawlJson.at} (replayed from ${FROM})` : `crawl.json ${FROM}`)
+      : `${sourceStamp()} — ${crawlJson.ui} at ${crawlJson.at}`;
     const written = toBaseline(report, { source, coverage: { key, routes: report.routes, unvisited: report.unvisited, source }, previous });
     fs.writeFileSync(WRITE_BASELINE, JSON.stringify(written, null, 1) + '\n');
     console.log(`[walkthrough --assert] baseline written: ${WRITE_BASELINE} (${report.failures.length + report.known.length} entries; expectedRoutes.${key} = ${report.routes})`);
