@@ -45,9 +45,12 @@ const SHOWCASE = read('app/projects/[id]/showcase/page.tsx');
 function expectFailClosedPrimitives(src: string, page: string): void {
   // 1. imports the shared page-level error state + the recovery hook
   expect(src).toMatch(/import \{ PageLoadError \} from '@\/components\/PageLoadError'/);
-  expect(src).toMatch(/import \{ useBridgeRecovery \} from '@\/lib\/use-bridge-status'/);
   // 2. subscribes to bridge recovery with its own reload (never a page poll)
-  expect(src).toMatch(/useBridgeRecovery\(reload\)/);
+  //    — the DETAIL-page rule (review): refill ONLY while failed, so a socket
+  //    blip never re-loads over the operator's unsaved edits / open drawer.
+  expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\([^)]*!== null[^)]*, reload\)/);
+  expect(src).not.toMatch(/useBridgeRecovery\(reload\)/);
   // 3. the load has a real catch that captures the failure via the shared classifier
   expect(src).toMatch(/catch \(err\) \{[\s\S]{0,400}setLoadError\(fetchErrorPropsFrom\(err\)\)/);
   // 4. renders the shared error state under the route's OWN data-page
@@ -60,7 +63,7 @@ function expectFailClosedPrimitives(src: string, page: string): void {
   //    (successor-resume finding: caught by tsc, pinned here so a vitest-only
   //    run also fails)
   expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
-  expect(src).toMatch(/<PageLoadError[\s\S]{0,600}error=\{loadError\.error\}/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,600}error=\{(page)?[lL]oadError\.error\}/);
   expect(src).not.toMatch(/loadError\.message/);
 }
 
@@ -89,11 +92,16 @@ describe('/projects/[id] (A1-02)', () => {
   test('the NotFound branch is gated on a SUCCESSFUL roster read — never rendered while loadError is set', () => {
     expect(PROJECT).toMatch(/if \(ready && !loadError && !project\)[\s\S]{0,80}<NotFound kind="project"/);
   });
-  test('loadPreflight / loadRoadmap no longer escape as unhandled rejections — each has a catch that surfaces a panel-scoped error', () => {
-    expect(PROJECT).toMatch(/const loadPreflight = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(\{ what: [^}]*fetchErrorPropsFrom\(err\)/);
-    expect(PROJECT).toMatch(/const loadRoadmap = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\(\{ what: [^}]*fetchErrorPropsFrom\(err\)/);
+  test('loadPreflight / loadRoadmap / loadCycleGroups no longer escape as unhandled rejections or fail open — each has a catch that surfaces its OWN panel-scoped error slot (two failing panels both stay visible), and its success clears only its own slot', () => {
+    expect(PROJECT).toMatch(/const loadPreflight = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\('preflight', \{ what: [^}]*fetchErrorPropsFrom\(err\)/);
+    expect(PROJECT).toMatch(/const loadRoadmap = useCallback\(async[\s\S]{0,400}catch \(err\)[\s\S]{0,300}setPanelError\('roadmap', \{ what: [^}]*fetchErrorPropsFrom\(err\)/);
+    expect(PROJECT).toMatch(/const loadCycleGroups = useCallback\(async[\s\S]{0,900}catch \(err\)[\s\S]{0,300}setPanelError\('cycles', \{ what: [^}]*fetchErrorPropsFrom\(err\)/);
+    // the pre-fix fail-open (`catch { setCycleGroups([]); setProjectCycles([]) }`) is gone
+    expect(PROJECT).not.toMatch(/catch \{[\s\S]{0,120}setCycleGroups\(\[\]\)/);
+    for (const key of ['preflight', 'roadmap', 'cycles']) expect(PROJECT).toContain(`setPanelError('${key}', null)`);
+    expect(PROJECT).toMatch(/panelErrorList\.map\(\(pe\) => \([\s\S]{0,200}<FetchErrorState/);
     // …and that panel error is RENDERED (the shared inline failure state), not just stored
-    expect(PROJECT).toMatch(/panelError \? \([\s\S]{0,200}<FetchErrorState/);
+    expect(PROJECT).toMatch(/panelErrorList\.length > 0 \? \([\s\S]{0,300}<FetchErrorState/);
   });
 });
 
@@ -101,8 +109,14 @@ describe('/flows/[id] (A1-02)', () => {
   test('wires the fail-closed primitives under data-page="flow-monitor"', () => {
     expectFailClosedPrimitives(FLOW, 'flow-monitor');
   });
-  test('the NotFound branch is gated on a SUCCESSFUL flows read — never rendered while loadError is set', () => {
-    expect(FLOW).toMatch(/if \(flowNotFound && !isNew && !loadError\)/);
+  test('the NotFound branch is gated on a SUCCESSFUL flows read — never rendered while a load error is set', () => {
+    expect(FLOW).toMatch(/if \(flowNotFound && !isNew && !pageLoadError\)/);
+  });
+  test('the BUILD tab read has its OWN error slot — the monitor read\'s success cannot clear a builder failure it did not supersede (A1-03 class), and the builder\'s success clears only its own', () => {
+    expect(FLOW).toMatch(/const \[buildLoadError, setBuildLoadError\]/);
+    expect(FLOW).toMatch(/const pageLoadError = loadError \?\? buildLoadError;/);
+    expect(FLOW).toMatch(/const loadBuildData = useCallback\(async[\s\S]{0,1200}setBuildLoadError\(null\);[\s\S]{0,1200}catch \(err\)[\s\S]{0,400}setBuildLoadError\(fetchErrorPropsFrom\(err\)\)/);
+    expect(FLOW).toMatch(/if \(view\.ready && pageLoadError\)/);
   });
 });
 

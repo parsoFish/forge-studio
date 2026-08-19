@@ -76,16 +76,22 @@ export type PollUntilTerminalOptions<S> = {
 
 /**
  * W7-FIX-A1 (A1-10): the ONE "keep watching" rule for the status-shaped
- * polls — still `'running'`, OR the read itself FAILED (`ok:false`, the
- * fail-closed `{ok:false, state:'unknown', error}` shape from studio-client).
- * A failed read is not a terminal fact about the run: the wrapper keeps
- * polling (bounded by `maxAttempts`) and reports it via `onUpdate` so the
- * panel can show the bridge's text — never a fabricated `'running'`, never
- * a run rendered as stopped because ONE read blipped. A bridge-ANSWERED
- * `state:'unknown'` (`ok:true`) is terminal ("no state recorded").
+ * polls — still `'running'`, OR the read itself FAILED TRANSIENTLY (`ok:false`
+ * + `state:'unknown'`, the fail-closed shape from studio-client, with NO
+ * status = transport failure, or a 5xx = the bridge is up but faltered).
+ * Such a read is not a terminal fact about the run: the wrapper keeps polling
+ * (bounded by `maxAttempts`) and reports it via `onUpdate` so the panel can
+ * show the bridge's text — never a fabricated `'running'`, never a run
+ * rendered as stopped because ONE read blipped. Two things ARE terminal: a
+ * bridge-ANSWERED `state:'unknown'` (`ok:true`, "no state recorded"), and a
+ * failed read the bridge answered with a 4xx (`status < 500` — R6-04 D22: a
+ * 404 "no run found" is a definitive "never dispatched", not a blip; polling
+ * it for three minutes would render a not-found as a live run).
  */
-export function isStillWatching(s: { state: string; ok?: boolean }): boolean {
-  return s.state === 'running' || (s.ok === false && s.state === 'unknown');
+export function isStillWatching(s: { state: string; ok?: boolean; status?: number }): boolean {
+  if (s.state === 'running') return true;
+  if (s.ok !== false || s.state !== 'unknown') return false;
+  return s.status === undefined || s.status >= 500;
 }
 
 export function pollUntilTerminal<S>(opts: PollUntilTerminalOptions<S>): () => void {
@@ -289,7 +295,7 @@ export function pollPreflightFix(projectId: string, runId: string, opts: PollPre
 
 export type PollDisplayState = 'watching' | 'timed-out' | 'terminal';
 
-export function pollDisplayState(state: { state: string; ok?: boolean } | null | undefined): PollDisplayState | null {
+export function pollDisplayState(state: { state: string; ok?: boolean; status?: number } | null | undefined): PollDisplayState | null {
   if (!state) return null;
   // W7-FIX-A1 A1-10: a FAILED read (`ok:false` + 'unknown') is still being
   // watched (the poll continues) — the panel renders the read failure text

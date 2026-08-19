@@ -321,10 +321,12 @@ async function bridgePost(
 
 // ---- HTTP API ------------------------------------------------------------
 
+/** W7-FIX-A1 (review): rides the shared classifier so a bridge-ANSWERED
+ *  non-2xx carries its status (`BridgeReadError{status}`) — the showcase /
+ *  project-page error states frame "the bridge refused (HTTP n)" vs "could not
+ *  reach the bridge" honestly (library-13), never a plain Error with no status. */
 export async function fetchCycles(): Promise<CycleListSnapshot> {
-  const res = await bridgeFetch('/api/cycles');
-  if (!res.ok) throw new Error(`bridge /api/cycles → ${res.status}`);
-  return res.json();
+  return bridgeReadOrThrow<CycleListSnapshot>('/api/cycles');
 }
 
 /** W7-A1: a 404 (no event log written yet — home-sessions-11, A2's bridge

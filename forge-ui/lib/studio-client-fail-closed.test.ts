@@ -323,10 +323,18 @@ for (const poll of POLLS) {
     const v = await poll.call();
     expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'bridge unreachable (Failed to fetch)' });
   });
-  test(`${poll.name}: 500 → {ok:false, state:'unknown', error:<bridge text>}`, async () => {
+  test(`${poll.name}: 500 → {ok:false, state:'unknown', error:<bridge text>, status:500}`, async () => {
     mockBridgeFetch.mockImplementation(async () => jsonRes(500, { error: 'log dir vanished' }));
     const v = await poll.call();
-    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'log dir vanished' });
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'log dir vanished', status: 500 });
+  });
+  test(`${poll.name}: 404 → {ok:false, state:'unknown', status:404} (the bridge ANSWERED — a definitive not-found the poll wrappers treat as terminal); a transport failure carries NO status`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(404, { error: 'no run found' }));
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'no run found', status: 404 });
+    mockBridgeFetch.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
+    const t = (await poll.call()) as { status?: number };
+    expect(t.status).toBeUndefined();
   });
   test(`${poll.name}: a 200 whose body has no state → {ok:true, state:'unknown'} with NO error (the bridge's own honest "no state recorded" stays distinguishable from a failed read)`, async () => {
     mockBridgeFetch.mockImplementation(async () => jsonRes(200, { ok: true }));

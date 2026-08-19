@@ -49,7 +49,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { PageLoadError } from '@/components/PageLoadError';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
-import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
@@ -72,7 +72,8 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
-  useBridgeRecovery(reload);
+  // Detail-page rule (W7-FIX-A1 review): recovery refills ONLY a failed load.
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     try {

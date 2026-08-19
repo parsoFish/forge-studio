@@ -296,3 +296,11 @@ test('the ActivityLog drawer mounts once a runId exists, and stays absent before
   const html = render({ displayState: 'running', runId: 'forge-dev-drain-abc123' });
   expect(html).toContain('data-component="activity-drawer"');
 });
+
+test('W7-FIX-A1 review: a failed status read (readError) renders [data-component="drain-read-error"] + root data-drain-read-error while the poll keeps watching — never a bare "running" the panel never observed; absent when reads are healthy', () => {
+  const html = render({ displayState: 'running', readError: 'bridge unreachable (Failed to fetch)' });
+  expect(html).toContain('data-drain-read-error="bridge unreachable (Failed to fetch)"');
+  expect(html).toContain('data-component="drain-read-error"');
+  expect(html).toMatch(/status read failed: bridge unreachable \(Failed to fetch\) — still watching/);
+  expect(render({ displayState: 'running', readError: null })).not.toContain('drain-read-error');
+});

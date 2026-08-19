@@ -90,12 +90,12 @@ export default function AgentsIndexPage() {
     }
     void loadRecentRuns();
     return () => { cancelled = true; };
-    // `agents` intentionally omitted: this effect should fire ONCE the
-    // roster first becomes ready, not re-fire on every roster identity
-    // change (the roster fetch above only ever runs once, on mount).
-    // `recentRunsKey`: the unresolved-notice Retry re-runs the fan-out.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, recentRunsKey]);
+    // `agents` is set ONLY by the roster load (mount / Retry / bridge
+    // recovery), so depending on it re-runs the fan-out exactly when the
+    // roster was re-read — after an outage the histories refill with the
+    // roster instead of freezing at the outage result (W7-FIX-A1 review).
+    // `recentRunsKey`: the unresolved-notice Retry re-runs the fan-out alone.
+  }, [ready, agents, recentRunsKey]);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>

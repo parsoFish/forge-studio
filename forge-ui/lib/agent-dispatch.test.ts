@@ -473,3 +473,23 @@ test('pollDisplayState: a FAILED read ({ok:false, state:"unknown"}) -> "watching
   expect(pollDisplayState({ ok: false, state: 'timed-out' })).toBe('timed-out');
   expect(pollDisplayState({ ok: false, state: 'failed' })).toBe('terminal');
 });
+
+test('pollAgentRun: a failed read the bridge ANSWERED with 404 ({ok:false,state:"unknown",status:404}) is TERMINAL — R6-04 D22 "never dispatched" is a definitive answer, never polled for 3 minutes as a live run', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue({ ok: false, state: 'unknown', costUsd: 0, events: 0, error: 'no run found', status: 404 });
+  const onUpdate = vi.fn();
+  const stop = pollAgentRun('run-gone', { fetchStatus, onUpdate, intervalMs: 100, maxAttempts: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetchStatus).toHaveBeenCalledTimes(1);
+  expect(onUpdate).toHaveBeenCalledTimes(1);
+  expect(pollDisplayState(onUpdate.mock.calls[0][0])).toBe('terminal');
+  stop();
+});
+
+test('isStillWatching / pollDisplayState: transport (no status) and 5xx failed reads keep watching; 4xx failed reads are terminal', () => {
+  expect(pollDisplayState({ ok: false, state: 'unknown' })).toBe('watching');
+  expect(pollDisplayState({ ok: false, state: 'unknown', status: 500 })).toBe('watching');
+  expect(pollDisplayState({ ok: false, state: 'unknown', status: 503 })).toBe('watching');
+  expect(pollDisplayState({ ok: false, state: 'unknown', status: 404 })).toBe('terminal');
+  expect(pollDisplayState({ ok: false, state: 'unknown', status: 400 })).toBe('terminal');
+});

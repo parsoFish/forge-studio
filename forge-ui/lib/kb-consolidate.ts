@@ -38,7 +38,11 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
     case 'failed':
       return 'consolidate: failed';
     case 'timed-out':
-      return 'consolidate: still running — re-check in a moment';
+      // A watch that timed out while its reads were FAILING never observed a
+      // running state — say so (review): the run may or may not be going.
+      return status.ok === false && status.error
+        ? `consolidate: no status could be read (${status.error}) — re-check in a moment`
+        : 'consolidate: still running — re-check in a moment';
     case 'unknown':
       // W7-FIX-A1 A1-10: a FAILED read names the failure (the bridge's own
       // text); a bridge-answered "no state recorded" is an honest unknown.

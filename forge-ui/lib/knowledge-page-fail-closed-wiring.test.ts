@@ -64,3 +64,8 @@ test('IngestActivityPanel: a failed ingest-activity read is an ERROR state (comp
   // the empty copy is gated on NO error
   expect(panel).toMatch(/!loading && !ingestError && events\.length === 0/);
 });
+
+test('W7-FIX-A1 review: switching KB clears the PREVIOUS KB\'s detail error at the top of the detail effect (a stale error is not the new KB\'s state)', () => {
+  const source = readFileSync(resolve(__dirname, '../app/knowledge/page.tsx'), 'utf8');
+  expect(source).toMatch(/if \(!currentId \|\| !idConfirmed\) return;[\s\S]{0,200}setKbDetail\(null\);[\s\S]{0,300}setKbDetailError\(null\);/);
+});

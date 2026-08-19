@@ -92,13 +92,13 @@ export default function HomePage() {
     }
     void loadRecentAgentRuns();
     return () => { cancelled = true; };
-    // `agents` intentionally omitted: this effect should fire ONCE the
-    // shared roster first becomes ready, not re-fire on every roster
-    // identity change (useStudioHomeData's own load effect only ever runs
-    // once, on mount) — mirrors app/agents/page.tsx's own precedent exactly.
-    // `recentAgentRunsKey`: the unresolved-notice Retry re-runs the fan-out.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, recentAgentRunsKey]);
+    // `agents` is set ONLY by useStudioHomeData's full load (mount / Retry /
+    // bridge recovery — the runs+sessions live refresh never touches it), so
+    // depending on it re-runs the fan-out exactly when the roster was
+    // re-read: after an outage the agent rows refill with the roster instead
+    // of freezing at the outage result (W7-FIX-A1 review) — mirrors
+    // app/agents/page.tsx. `recentAgentRunsKey`: the notice's Retry alone.
+  }, [ready, agents, recentAgentRunsKey]);
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention });

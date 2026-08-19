@@ -173,8 +173,12 @@ inventory rather than one shared page-level contract:
   panel shows the read failure beside the state (RunPanel / OnboardWithAgent
   `[data-run-read-error]`, ContractResolutionPanel clause rows
   `[data-agent-run-read-error=<text>]`, the KB maintenance pill "status could
-  not be read — …") — a bridge-ANSWERED `state:'unknown'` (`ok:true`) stays
-  terminal. EVERY bridge call in Studio rides ONE transport (`bridgeFetch`:
+  not be read — …", the drain panel's `[data-component="drain-read-error"]` +
+  root `[data-drain-read-error=<text>]`) — a bridge-ANSWERED `state:'unknown'`
+  (`ok:true`) stays terminal, and so does a failed read the bridge answered
+  with a 4xx (`status` on the failed shape; R6-04 D22: a 404 "no run found"
+  is a definitive never-dispatched, not a blip — only transport failures and
+  5xx keep the poll watching). EVERY bridge call in Studio rides ONE transport (`bridgeFetch`:
   URL resolution + the W6-P4 port correction, re-armed after every successful
   call — crosscut-26; A1-05 routed the remaining `lib/*-client.ts` modules
   onto it, enforced by `lib/bridge-transport-guard.test.ts` — `resolveBridgeUrl`
@@ -208,12 +212,21 @@ inventory rather than one shared page-level contract:
   `data-project-id`), wrapping `[data-component="page-load-error"]` →
   the shared `[data-component="fetch-error"]` body with
   `[data-action="retry-fetch"]` and `a[data-action="load-error-back"]` (a way
-  back). Retry and bridge recovery (`useBridgeRecovery(reload)`) re-run the
-  page's own load; `NotFound` is gated on a SUCCESSFUL roster read that lacks
-  the id (never rendered while the load error is set). The project page's
-  softer siblings — the preflight / roadmap panel reads — surface as
-  `[data-section="project-panel-error"]` (compact `fetch-error` + Retry)
-  without unseating the loaded project.
+  back). Retry re-runs the page's own load; bridge recovery re-runs it ONLY
+  while the page is in a load-error state (`useBridgeRecoveryWhenFailed`,
+  `lib/use-bridge-status.ts` — the DETAIL-page rule: a page that loaded fine
+  and may hold unsaved builder edits / an open drawer / a live tail is never
+  re-loaded by a socket blip; the index pages keep plain
+  `useBridgeRecovery(reload)`). `NotFound` is gated on a SUCCESSFUL roster
+  read that lacks the id (never rendered while the load error is set). The
+  flow page keeps the BUILD tab's definition/palette read in its OWN error
+  slot (the monitor read's success cannot clear a builder failure it did not
+  supersede). The project page's softer siblings — the preflight / roadmap /
+  cycle-history panel reads — surface as
+  `[data-section="project-panel-error"][data-panel-error-count=<n>]`, ONE
+  compact `fetch-error` + Retry per failed panel (each read owns its slot;
+  its success clears only its own; a thrown `fetchCycles` is a panel error,
+  never a silently empty cycle history) without unseating the loaded project.
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +

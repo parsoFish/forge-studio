@@ -287,6 +287,9 @@ function KnowledgePageInner() {
     const signal = { cancelled: false };
     setReady(false);
     setKbDetail(null);
+    // A previous KB's failed detail read is not THIS KB's state (review):
+    // the new read starts clean; its own catch re-sets the error if it fails.
+    setKbDetailError(null);
     setSelectedNode(null);
     setArticle(null);
 

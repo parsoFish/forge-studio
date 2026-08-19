@@ -1432,10 +1432,13 @@ export type AgentFixStatus = {
   cleared: boolean;
   /** Present only on a failed read (`ok:false`). */
   error?: string;
+  /** On a failed read: the HTTP status iff the bridge ANSWERED (a 404 "no
+   *  such run" is a definitive answer, not a blip); absent = transport. */
+  status?: number;
 };
 
 function parseAgentFixStatus(r: BridgeReadResult<{ state?: string; cleared?: boolean }>): AgentFixStatus {
-  if (!r.ok) return { ok: false, state: 'unknown', cleared: false, error: r.error };
+  if (!r.ok) return { ok: false, state: 'unknown', cleared: false, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
   return {
     ok: true,
     state: (r.data.state as AgentFixStatus['state']) ?? 'unknown',
@@ -1599,14 +1602,18 @@ export type AgentRunStatus = {
   events: number;
   /** Present only on a failed read (`ok:false`). */
   error?: string;
+  /** On a failed read: the HTTP status iff the bridge ANSWERED (R6-04 D22: a
+   *  404 = "never dispatched" is a definitive, terminal answer); absent =
+   *  transport failure. */
+  status?: number;
 };
 
 /** Poll a dispatched generic agent run's state (reads its `_logs/<runId>/`
  *  event log server-side). Status-shaped: never throws; a failed read is
- *  `{ok:false, state:'unknown', error}`. */
+ *  `{ok:false, state:'unknown', error, status?}`. */
 export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> {
   const r = await studioGet<{ state?: string; costUsd?: number; events?: number }>(`/api/agents/runs/${encodeURIComponent(runId)}`);
-  if (!r.ok) return { ok: false, state: 'unknown', costUsd: 0, events: 0, error: r.error };
+  if (!r.ok) return { ok: false, state: 'unknown', costUsd: 0, events: 0, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
   return {
     ok: true,
     state: (r.data.state as AgentRunStatus['state']) ?? 'unknown',

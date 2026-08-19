@@ -126,6 +126,10 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
       if (r.runId) {
         setRunId(r.runId);
         setStatus(r);
+      } else if (!r.ok) {
+        // The reattach READ failed (status-shaped `ok:false` + the bridge's
+        // text) — not "no run has ever run": surface it, never silently idle.
+        setDispatchError(`could not read the drain state: ${r.error ?? 'read failed'}`);
       }
     }).catch(() => { if (!cancelled) setAttaching(false); });
     return () => { cancelled = true; };
@@ -239,6 +243,7 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
         dispatching={dispatching}
         attaching={attaching}
         dispatchError={dispatchError}
+        readError={status && !status.ok && status.error ? status.error : null}
         userIdx={userIdx}
         userNote={userNote}
         userBusy={userBusy}
@@ -290,6 +295,10 @@ export type KbDrainPanelViewProps = {
   dispatching: boolean;
   attaching: boolean;
   dispatchError: string | null;
+  /** W7-FIX-A1 (review): the LAST status read failed (`ok:false` — transport
+   *  or bridge error text, `failedKbDrainStatus`); the poll keeps watching,
+   *  but the panel says so instead of a bare "running" it never observed. */
+  readError?: string | null;
   userIdx: number;
   userNote: string;
   userBusy: boolean;
@@ -304,7 +313,7 @@ export type KbDrainPanelViewProps = {
 
 export function KbDrainPanelView({
   displayState, round, runId, costUsd, counts, perFinding, dispatching, attaching,
-  dispatchError, userIdx, userNote, userBusy, userMsg, events,
+  dispatchError, readError = null, userIdx, userNote, userBusy, userMsg, events,
   onDrain, onRecheck, onUserNoteChange, onSubmitUserAnswer, onSkipUser,
 }: KbDrainPanelViewProps) {
   const hasStatus = displayState !== 'idle' && displayState !== 'attaching';
@@ -321,6 +330,7 @@ export function KbDrainPanelView({
       data-drain-state={displayState}
       data-drain-round={round}
       data-drain-run-id={runId ?? ''}
+      {...(readError ? { 'data-drain-read-error': readError } : {})}
       style={{ borderBottom: '1px solid var(--line)', padding: '14px 16px' }}
     >
       <div className="panel-head" style={{ padding: 0, marginBottom: 10 }}>
@@ -352,6 +362,12 @@ export function KbDrainPanelView({
 
         {displayState === 'timed-out' && (
           <button data-action="recheck-drain" style={btn} onClick={onRecheck}>Re-check</button>
+        )}
+
+        {readError && (
+          <span data-component="drain-read-error" role="status" style={{ fontSize: 11.5, color: 'var(--error, #f87171)', fontFamily: 'var(--font-mono)' }}>
+            status read failed: {readError}{displayState === 'running' ? ' — still watching' : ''}
+          </span>
         )}
       </div>
 

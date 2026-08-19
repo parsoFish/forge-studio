@@ -19,7 +19,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { PageLoadError } from '@/components/PageLoadError';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
-import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { CatalogPalette } from '@/components/studio/agent-builder/CatalogPalette';
@@ -298,7 +298,9 @@ export default function AgentBuilderPage() {
   const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
-  useBridgeRecovery(reload);
+  // Recovery refills ONLY a failed load — never re-loads over the operator's
+  // unsaved builder edits (W7-FIX-A1 review: `load()` overwrites the form).
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
   const [toasts,  setToasts]  = useState<Toast[]>([]);
   // R3-04-F3: real probe-derived connections library, fetched independently
   // of the agent load (it's the same catalog regardless of which agent is
