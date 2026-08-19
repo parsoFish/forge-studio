@@ -26,7 +26,7 @@
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -35,6 +35,9 @@ import { discoverProjects, normalizeProjectId } from '../orchestrator/studio/reg
 import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { deriveContractStages } from './contract-stages.ts';
+import { buildProjectSavePayload } from '../forge-ui/lib/project-save-payload.ts';
+import { unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
+import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -61,6 +64,16 @@ before(async () => {
   writeFileSync(join(forgeRoot, 'projects', 'gitpulse', '.forge', 'project.json'), PROJECT_JSON.replace('trafficGame', 'gitpulse'));
   // A dir whose name can never be a routable id — must not surface as a project.
   mkdirSync(join(forgeRoot, 'projects', 'bad name'), { recursive: true });
+
+  // W7-FIX-A4 (W7A4-04): a kb.yaml whose id is NOT its directory name — a
+  // valid id per KB_ID_RE, so validateKb is silent — binding project gitpulse.
+  // No route can resolve it (routes join brain/**/<id>/), so it must not be
+  // listed AND must not derive gitpulse's binding — but it must be DIAGNOSED.
+  mkdirSync(join(forgeRoot, 'brain', 'projects', 'gitpulse'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'brain', 'projects', 'gitpulse', 'kb.yaml'),
+    'id: gitpulse-brain\nname: gitpulse (project)\nbinding:\n  kind: project\n  ref: gitpulse\ndesc: Mismatched id.\nbackend: filesystem\n',
+  );
 
   // The matching central per-project KB (ADR 035): brain/projects/trafficGame/kb.yaml
   mkdirSync(join(forgeRoot, 'brain', 'projects', 'trafficGame', 'themes'), { recursive: true });
@@ -158,6 +171,25 @@ test('invalidProjectReason (session routes, forge-9bd): accepts "trafficGame"; s
   assert.notEqual(invalidProjectReason('.hidden'), null);
 });
 
+test('W7A4-02: invalidProjectReason accepts the `.kb-<id>` seeding anchor for EVERY KB_ID_RE-valid id (mixed case, digit-leading, underscore) — the anchor charset IS the KB id rule', () => {
+  // The create route (POST /api/studio/kbs) validates the id with KB_ID_RE, and
+  // the seeding/cleanup sessions anchor under projects/.kb-<that id>/ — so the
+  // anchor gate must accept exactly what KB_ID_RE accepts, or those sessions
+  // are unreachable via BOTH ?project= and the bare deep link.
+  for (const kbId of ['MyNotes', '2026-notes', 'trafficGame', 'My_KB', 'seedkb']) {
+    assert.ok(KB_ID_RE.test(kbId), `precondition: KB_ID_RE accepts "${kbId}"`);
+    assert.equal(invalidProjectReason(`.kb-${kbId}`), null, `.kb-${kbId} must be a valid seeding anchor`);
+  }
+  // …and rejects exactly what KB_ID_RE rejects — the carve-out widens case,
+  // never path safety (traversal / empty / nested / dot / flag shapes).
+  for (const bad of ['', '../x', 'a/b', 'a\\b', '.hidden', '-flag', 'a b', 'x\u0000y']) {
+    assert.notEqual(invalidProjectReason(`.kb-${bad}`), null, `.kb-${JSON.stringify(bad)} must be rejected`);
+  }
+  // The rejection message names the KB id rule it enforces, not the retired SLUG_RE.
+  const reason = invalidProjectReason('.kb-a/b');
+  assert.ok(reason !== null && reason.includes(String(KB_ID_RE)), `reason must cite KB_ID_RE, got: ${reason}`);
+});
+
 test('deriveContractStages: resolves a mixed-case project id (projects-02)', () => {
   const r = deriveContractStages({ forgeRoot, projectsRoot: join(forgeRoot, 'projects'), projectId: 'trafficGame' });
   assert.equal(r.ok, true, `expected ok, got ${JSON.stringify(r)}`);
@@ -179,6 +211,77 @@ test('roster: GET /api/studio/projects lists "trafficGame" verbatim and auto-bin
   assert.equal(tg.kb, 'trafficGame', 'project.json has no kb — the KB bound to this project must be DERIVED from kb.yaml binding.ref');
   const gp = r.body.projects.find((p: any) => p.id === 'gitpulse');
   assert.equal(gp.kb, undefined, 'a project no KB binds to has no kb (derive, never invent)');
+});
+
+test('W7A4-03 (RED on main): the editor\'s Save of an UNTOUCHED derived binding never writes `kb` into project.json — the derivation stays live', async () => {
+  const projectJsonPath = join(forgeRoot, 'projects', 'trafficGame', '.forge', 'project.json');
+  assert.ok(!('kb' in JSON.parse(readFileSync(projectJsonPath, 'utf8'))), 'precondition: no stored kb');
+
+  // The roster hands the editor the DERIVED kb; the operator edits only the north
+  // star and presses Save. This is exactly the payload page.tsx sends.
+  const roster = await get('/api/studio/projects');
+  const tg = roster.body.projects.find((p: any) => p.id === 'trafficGame');
+  assert.equal(tg.kb, 'trafficGame', 'precondition: the roster serves the derived binding');
+  const untouched = buildProjectSavePayload({
+    name: tg.name, northStar: 'A traffic game, now with a north star edit.', instructions: '',
+    demoProcess: [], skills: [], kb: tg.kb ?? null, kbTouched: false,
+  });
+  const r1 = await send('PUT', '/api/studio/projects/trafficGame', untouched);
+  assert.equal(r1.status, 200, `PUT → ${r1.status} ${JSON.stringify(r1.body)}`);
+  const afterUntouched = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.equal(afterUntouched.northStar, 'A traffic game, now with a north star edit.');
+  assert.ok(!('kb' in afterUntouched), `an untouched binding must NOT be stored — project.json now carries kb=${JSON.stringify(afterUntouched.kb)}`);
+  const roster2 = await get('/api/studio/projects');
+  assert.equal(roster2.body.projects.find((p: any) => p.id === 'trafficGame').kb, 'trafficGame', 'still derived after the save');
+
+  // An EXPLICIT rebind by the operator IS stored (that is the one legitimate write).
+  const touched = buildProjectSavePayload({
+    name: tg.name, northStar: 'A traffic game.', instructions: '', demoProcess: [], skills: [],
+    kb: 'trafficGame', kbTouched: true,
+  });
+  const r2 = await send('PUT', '/api/studio/projects/trafficGame', touched);
+  assert.equal(r2.status, 200, `PUT(touched) → ${r2.status} ${JSON.stringify(r2.body)}`);
+  const afterTouched = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.equal(afterTouched.kb, 'trafficGame', 'an explicit operator rebind is written');
+  // Restore the fixture for the tests below (no stored kb).
+  writeFileSync(projectJsonPath, PROJECT_JSON);
+});
+
+test('W7-FIX-A4 (W7A4-03): a stored `kb: null` is an EXPLICIT UNBIND the roster honours — string wins, null unbinds, absent derives', async () => {
+  const projectJsonPath = join(forgeRoot, 'projects', 'trafficGame', '.forge', 'project.json');
+  const rosterKb = async () =>
+    (await get('/api/studio/projects')).body.projects.find((p: any) => p.id === 'trafficGame').kb;
+
+  // (a) ABSENT key → the derivation is live (the documented default).
+  assert.ok(!('kb' in JSON.parse(readFileSync(projectJsonPath, 'utf8'))), 'precondition: no stored kb');
+  assert.equal(await rosterKb(), 'trafficGame', 'absent → derived from kb.yaml binding.ref');
+
+  // (b) The operator clicks x in KbBind: kbTouched=true with kb=null. The
+  // payload contract calls this "an explicit unbind" — it must survive the
+  // round-trip, or the x can never stick (the derived binding just comes back).
+  const unbind = buildProjectSavePayload({
+    name: 'trafficGame', northStar: 'A traffic game.', instructions: '',
+    demoProcess: [], skills: [], kb: null, kbTouched: true,
+  });
+  assert.equal(unbind.kb, null, 'precondition: the payload carries a null kb');
+  const r1 = await send('PUT', '/api/studio/projects/trafficGame', unbind);
+  assert.equal(r1.status, 200, `PUT(unbind) -> ${r1.status} ${JSON.stringify(r1.body)}`);
+  const stored = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.ok('kb' in stored, 'the PUT must PERSIST the unbind, not drop the null on the floor');
+  assert.equal(stored.kb, null);
+  assert.equal(
+    await rosterKb(),
+    undefined,
+    'a stored `kb: null` outranks the derived binding — otherwise the operator\'s unbind silently reverts on the next read',
+  );
+
+  // (c) A stored STRING still wins over the derivation (an explicit rebind).
+  writeFileSync(projectJsonPath, JSON.stringify({ ...stored, kb: 'some-other-kb' }, null, 2));
+  assert.equal(await rosterKb(), 'some-other-kb', 'an explicit stored rebind outranks the derived binding');
+
+  // Restore the fixture (no stored kb) for the tests below.
+  writeFileSync(projectJsonPath, PROJECT_JSON);
+  assert.equal(await rosterKb(), 'trafficGame', 'removing the stored key restores the derivation');
 });
 
 test('per-project routes: every :id route the walkthrough saw 404/400 now resolves "trafficGame" (projects-02)', async () => {
@@ -204,6 +307,36 @@ test('per-project routes: exact match — the lowercased id is unknown (404), ne
 test('generic session route: project=trafficGame is a valid project (404 unknown session, NOT 400 invalid project) — forge-9bd', async () => {
   const r = await get('/api/studio/sessions/demo/2026-01-01T00-00-00-0000abcd?project=trafficGame');
   assert.notEqual(r.status, 400, `got 400: ${JSON.stringify(r.body)}`);
+});
+
+test('W7A4-04: unroutableKbReason is the ONE predicate — null iff id === dir AND id passes KB_ID_RE', () => {
+  assert.equal(unroutableKbReason('trafficGame', 'trafficGame'), null);
+  assert.equal(unroutableKbReason('gitpulse', 'gitpulse'), null);
+  assert.match(unroutableKbReason('gitpulse-brain', 'gitpulse') ?? '', /gitpulse-brain.*"gitpulse"/);
+  assert.match(unroutableKbReason('trafficgame', 'trafficGame') ?? '', /trafficgame/, 'case matters — exact match');
+  assert.notEqual(unroutableKbReason('bad id', 'bad id'), null, 'an id failing KB_ID_RE is unroutable even when it equals its dir');
+});
+
+test('W7A4-04 (RED on main): the roster DIAGNOSES a dropped descriptor — GET /api/studio/kbs returns `unroutable[]` naming dir + id + reason; the KB is neither listed nor bound', async () => {
+  const local: UnroutableKb[] = [];
+  const listed = loadKbDescriptors(forgeRoot, (u) => local.push(u));
+  assert.ok(!listed.some((k) => k.id === 'gitpulse-brain'), 'the loader drops the mismatched descriptor');
+  assert.equal(local.length, 1, `expected exactly the gitpulse fixture, got ${JSON.stringify(local)}`);
+  assert.equal(local[0].dir, 'gitpulse');
+  assert.equal(local[0].id, 'gitpulse-brain');
+  assert.match(local[0].reason, /gitpulse-brain/);
+
+  const list = await get('/api/studio/kbs');
+  assert.equal(list.status, 200);
+  const ids = list.body.kbs.map((k: any) => k.id);
+  assert.ok(!ids.includes('gitpulse-brain') && !ids.includes('gitpulse'), `a mismatched descriptor is not listed: ${JSON.stringify(ids)}`);
+  assert.ok(Array.isArray(list.body.unroutable), `roster must carry an unroutable[] diagnostic, got keys ${JSON.stringify(Object.keys(list.body))}`);
+  assert.deepEqual(list.body.unroutable.map((u: any) => [u.dir, u.id]), [['gitpulse', 'gitpulse-brain']]);
+  assert.match(String(list.body.unroutable[0].reason), /gitpulse-brain/);
+
+  const roster = await get('/api/studio/projects');
+  const gp = roster.body.projects.find((p: any) => p.id === 'gitpulse');
+  assert.equal(gp.kb, undefined, 'a mismatched (unroutable) KB never derives a project binding');
 });
 
 test('per-KB routes: GET /api/studio/kbs lists "trafficGame" AND every per-KB route accepts it (knowledge-03 / crosscut-11 / home-sessions-16)', async () => {

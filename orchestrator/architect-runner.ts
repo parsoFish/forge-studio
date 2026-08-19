@@ -740,7 +740,7 @@ async function runExploreStep(args: {
 // Draft step (+ council + PLAN)
 // ---------------------------------------------------------------------------
 
-type DraftInitiative = {
+export type DraftInitiative = {
   slug: string;
   title: string;
   iteration_budget: number;
@@ -1267,7 +1267,7 @@ async function runFinalizeStep(args: {
  *  decompose). The develop build is enqueued separately onto forge-develop. */
 const ARCHITECT_FLOW_ID = 'forge-architect';
 
-function buildManifest(
+export function buildManifest(
   d: DraftInitiative,
   status: ArchitectStatus,
   datePart: string,
@@ -1285,8 +1285,18 @@ function buildManifest(
         .map((dep) => `INIT-${datePart}-${dep}`),
     ),
   );
+  // W7-FIX-A4 (W7A4-01): the human title the architect skill emits IS the
+  // manifest's frontmatter `title:` — `initiativeTitle()` (manifest.ts) is
+  // the ONE display derivation and this is its producer; without it every
+  // architect-originated initiative rendered as its raw INIT id. A blank
+  // draft title is absent (never `title: "  "`); the fallback chain applies.
+  // `DraftInitiative` is the shape the skill is ASKED for, not one the runner
+  // enforces (`runStructured` casts raw model output), so a missing/non-string
+  // title degrades to the fallback chain rather than throwing out of drafting.
+  const title = (typeof d.title === 'string' ? d.title : '').trim();
   return {
     initiative_id: `INIT-${datePart}-${slug}`,
+    ...(title ? { title } : {}),
     project: status.project,
     project_repo_path: status.project_repo_path,
     created_at,

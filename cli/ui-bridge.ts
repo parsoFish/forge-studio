@@ -2734,7 +2734,7 @@ const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
 const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 
 /** R4-16 pin 2 (Finding A, BLOCKER) — `project`/`sessionId` on the
- *  generation-serve route below are validated with the EXACT SLUG_RE/
+ *  generation-serve route below are validated with the EXACT PROJECT_ID_RE/
  *  SAFE_ID_RE + length-cap contract `cli/bridge-studio-sessions.ts` already
  *  applies to its own session routes (imported, not re-declared): length cap
  *  THEN charset, BEFORE any fs call. Without this, `demoSessionDir(join(
@@ -2796,7 +2796,7 @@ function invalidGenerationSessionIdReason(id: string): string | null {
  *
  * Two escapes closed in one pass:
  *   - Finding A: `project`/`sessionId` are validated (length cap THEN
- *     charset, BEFORE any fs call) with the exact SLUG_RE/SAFE_ID_RE
+ *     charset, BEFORE any fs call) with the exact PROJECT_ID_RE/SAFE_ID_RE
  *     contract `cli/bridge-studio-sessions.ts` applies to its own session
  *     routes — reused via `invalidGenerationProjectReason`/
  *     `invalidGenerationSessionIdReason` above (round 1 already imported the
@@ -4587,7 +4587,7 @@ async function handleDemoBuilder(
   // else) in the raw body is simply never read, so it is provably inert, not
   // merely undocumented (AT-3, cli/ui-bridge-onboarding-start.test.ts).
   //
-  // `project` is validated (SLUG_RE + length cap, via the same
+  // `project` is validated (PROJECT_ID_RE + length cap, via the same
   // `invalidGenerationProjectReason` the demo-generation routes already use)
   // BEFORE any fs call, then resolved through the SAME
   // `resolveContainedProjectDir` (`cli/contract-stages.ts`) the sibling
@@ -4777,7 +4777,7 @@ async function handleDemoBuilder(
 
   // POST /api/studio/authoring/start {project, prompt} — R4-21, the
   // authoring session's kickoff route. Mirrors `POST /api/studio/onboarding/
-  // start` EXACTLY: SLUG_RE + length-cap project validation via
+  // start` EXACTLY: PROJECT_ID_RE + length-cap project validation via
   // `invalidGenerationProjectReason`, resolved through the SAME
   // `resolveContainedProjectDir`, a server-generated `sessionId` (never
   // request-derived), and the identical
@@ -4869,7 +4869,7 @@ async function handleDemoBuilder(
   // POST /api/studio/kbs/:id/cleanup/start — R4-19-F2, the kb-cleanup
   // session's kickoff route (ADR-043 §1/§3, brain-maintenance /
   // cleanup-plan). Mirrors `POST /api/studio/authoring/start` immediately
-  // above where the shapes match: the KB id is validated with SLUG_RE
+  // above where the shapes match: the KB id is validated with KB_ID_RE
   // BEFORE any fs call, a server-generated `sessionId` (never
   // request-derived), and `spawnAgentTurn` rides the SAME generic
   // `runInteractiveTurn` spine via the `kb-cleanup` SPAWN_AGENT_SPECS row

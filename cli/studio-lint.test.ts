@@ -342,6 +342,51 @@ desc: Has an invalid id.
 });
 
 // ---------------------------------------------------------------------------
+// W7-FIX-A4 (W7A4-04): a kb.yaml whose `id` is not its directory name is
+// silently dropped by the roster (`loadKbDescriptors`) AND loses its derived
+// project↔KB binding (`projectKbBindings`) — `forge studio lint` must say so,
+// mirroring the flow `dir-name` check, for BOTH kb.yaml roots (ADR 035).
+// ---------------------------------------------------------------------------
+
+test('W7A4-04 (RED on main): brain/<dir>/kb.yaml whose id ≠ <dir> → error finding check=dir-name naming both', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'gitpulse');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(join(kbDir, 'kb.yaml'), validKbYaml('gitpulse-brain'));
+
+  const result = runStudioLint(root);
+  const finding = result.findings.find((f) => f.check === 'dir-name' && f.object === 'kb:gitpulse-brain');
+  assert.ok(finding !== undefined, `expected a kb dir-name error, got: ${JSON.stringify(result.findings.map((f) => `${f.object}/${f.check}`))}`);
+  assert.equal(finding.level, 'error');
+  assert.match(finding.message, /gitpulse-brain/);
+  assert.match(finding.message, /"gitpulse"/, 'the message names the directory the id must equal');
+  cleanup(root);
+});
+
+test('W7A4-04 (RED on main): brain/projects/<dir>/kb.yaml (the ADR-035 root) whose id ≠ <dir> → the SAME dir-name error', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'projects', 'my-project');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(join(kbDir, 'kb.yaml'), validKbYaml('My-Project', 'binding: { kind: project, ref: my-project }'));
+
+  const result = runStudioLint(root);
+  const finding = result.findings.find((f) => f.check === 'dir-name' && f.object === 'kb:My-Project');
+  assert.ok(finding !== undefined, `expected a kb dir-name error under brain/projects, got: ${JSON.stringify(result.findings.map((f) => `${f.object}/${f.check}`))}`);
+  assert.equal(finding.level, 'error');
+  cleanup(root);
+});
+
+test('W7A4-04: a kb.yaml whose id EQUALS its directory name (case-preserving) raises no dir-name finding', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'projects', 'trafficGame');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(join(kbDir, 'kb.yaml'), validKbYaml('trafficGame', 'binding: { kind: project, ref: my-project }'));
+  const result = runStudioLint(root);
+  assert.deepEqual(result.findings.filter((f) => f.check === 'dir-name' && f.object.startsWith('kb:')), []);
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
 // Test 5: No brain/*/kb.yaml present → NOT an error
 // ---------------------------------------------------------------------------
 
