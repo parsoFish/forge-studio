@@ -32,7 +32,7 @@ import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects,
 import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
-import { kbSites } from './kb-sites.ts';
+import { kbSites, unroutableKbReason, unroutableKbs } from './kb-sites.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
@@ -821,7 +821,7 @@ const GUIDANCE_MAX_BYTES = 8 * 1024; // 8 KiB
  *
  * Every "path traversal detected" check this file used to carry was
  * `resolve(base, id).startsWith(base + sep)` on an UNRESOLVED path — VACUOUS,
- * structurally incapable of failing for a `SLUG_RE`-valid id, because
+ * structurally incapable of failing for a `KB_ID_RE`-valid id, because
  * `resolve()` normalizes `..` before the comparison and a symlink's own
  * location is lexically inside the root even when it points elsewhere. A
  * guard that cannot fail is not a guard; they are replaced, not supplemented.
@@ -884,8 +884,12 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
       // W7-A4 (knowledge-03): a listed id MUST be routable. Every per-KB route
       // resolves `kbId` → `brain/**/<kbId>/`, so a descriptor whose id is not
       // its directory name, or fails the id rule, is skipped here rather than
-      // listed as a KB no route will ever accept.
-      if (kb.id !== name || !KB_ID_RE.test(kb.id)) return;
+      // listed as a KB no route will ever accept. ONE predicate
+      // (`unroutableKbReason`, cli/kb-sites.ts) shared with the derived
+      // project↔KB binding, the roster's `unroutable[]` diagnostic and
+      // `forge studio lint`'s kb `dir-name` check (W7-FIX-A4 / W7A4-04) — the
+      // drop is never silent.
+      if (unroutableKbReason(kb.id, name) !== null) return;
       // Each layer path is independently guarded — a real kb.yaml is no
       // warrant for a symlinked `themes/` or `_raw/` beside it.
       const layer = (tail: string): string | null => {
@@ -973,7 +977,11 @@ export async function handleStudioKbRoutes(
       // — attached inside loadKbDescriptors itself (forge-3oq review), so
       // this route no longer needs its own copy.
       const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot));
-      sendJson(res, 200, { kbs }, origin);
+      // W7-FIX-A4 (W7A4-04): a descriptor the roster DROPS (id ≠ dir / fails
+      // the id rule) is diagnosed here — `unroutable: [{dir,id,path,reason}]`
+      // — never silently invisible; `forge studio lint` reports the same
+      // predicate as an error finding (`kb:<id>` / `dir-name`).
+      sendJson(res, 200, { kbs, unroutable: unroutableKbs(ctx.forgeRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1024,7 +1032,7 @@ export async function handleStudioKbRoutes(
       const kbId = decodeURIComponent(kbNodeMatch[1]);
       const nodeId = decodeURIComponent(kbNodeMatch[2]);
 
-      // Slug-guard both ids (SLUG_RE covers typical slugs; nodeIds may have
+      // Guard both ids (KB_ID_RE for the kb id; nodeIds may have
       // 'raw:' prefix — use a slightly broader guard for nodeId).
       if (!KB_ID_RE.test(kbId)) {
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
@@ -1041,7 +1049,7 @@ export async function handleStudioKbRoutes(
       // through — `resolveKbBrainDir` (per-segment realpath identity walk) via
       // getKbBackend/kb-graph. The block that stood here built a `kbDir` it
       // then never used and compared it against its own prefix: vacuous,
-      // structurally incapable of failing for a SLUG_RE-valid id. Removed
+      // structurally incapable of failing for a KB_ID_RE-valid id. Removed
       // rather than left as false assurance (bd `forge-wze`).
 
       let article;
@@ -1085,7 +1093,7 @@ export async function handleStudioKbRoutes(
       // through — `resolveKbBrainDir` (per-segment realpath identity walk) via
       // getKbBackend/kb-graph. The block that stood here built a `kbDir` it
       // then never used and compared it against its own prefix: vacuous,
-      // structurally incapable of failing for a SLUG_RE-valid id. Removed
+      // structurally incapable of failing for a KB_ID_RE-valid id. Removed
       // rather than left as false assurance (bd `forge-wze`).
 
       // Resolve the kb descriptor (finds by walking brain/ for kb.yaml)
@@ -1405,7 +1413,7 @@ export async function handleStudioKbRoutes(
         return true;
       }
 
-      // 6. Validate targetNode if present (SLUG_RE + path guard)
+      // 6. Validate targetNode if present (charset + path guard)
       const targetNodeRaw = b['targetNode'];
       let targetNode: string | undefined;
       if (targetNodeRaw !== undefined && targetNodeRaw !== null && targetNodeRaw !== '') {
@@ -1681,7 +1689,7 @@ export async function handleStudioKbRoutes(
         // SEC-04 — route through the shared guard (`resolveGuardedPath`,
         // same primitive the fix-agent GET above relies on via
         // `readBrainFixState`'s own log dir): `runId` embeds `kbId`
-        // (SLUG_RE-validated above, so it cannot itself carry a `/`), but
+        // (KB_ID_RE-validated above, so it cannot itself carry a `/`), but
         // the whole compound directory name is still built from
         // request-derived text, so this creates it through the guard rather
         // than a raw `mkdirSync` on a hand-joined path.

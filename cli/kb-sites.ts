@@ -56,13 +56,59 @@ export function kbSites(forgeRoot: string): KbSite[] {
 }
 
 /**
+ * W7-A4 (knowledge-03) / W7-FIX-A4 (W7A4-04) — the ONE routability predicate
+ * for a KB descriptor: every per-KB route resolves `kbId` → `brain/**\/<kbId>/`,
+ * so a descriptor is routable iff its `id` IS its directory name (exact,
+ * case-preserving) AND satisfies the id rule (`KB_ID_RE`). Returns null when
+ * routable, else the human reason. Shared by the roster (`loadKbDescriptors`,
+ * cli/bridge-studio-kbs.ts), the derived project↔KB binding
+ * (`projectKbBindings` below), `unroutableKbs` (the roster's diagnostic) and
+ * `forge studio lint`'s kb `dir-name` check — so the roster can never silently
+ * drop what lint accepts, or vice-versa.
+ */
+export function unroutableKbReason(kbId: string, dirName: string): string | null {
+  if (!KB_ID_RE.test(kbId)) {
+    return `KB id ${JSON.stringify(kbId)} does not match ${KB_ID_RE} (one path segment, case-preserving) — no route can resolve it`;
+  }
+  if (kbId !== dirName) {
+    return `KB id "${kbId}" must equal its directory name "${dirName}" — every per-KB route resolves the id to brain/**/<id>/, so a mismatched descriptor is unreachable and is dropped from the roster`;
+  }
+  return null;
+}
+
+/** One dropped descriptor, for the roster diagnostic + lint. */
+export type UnroutableKb = { dir: string; id: string; path: string; reason: string };
+
+/**
+ * W7-FIX-A4 (W7A4-04) — every kb.yaml under either root that the roster
+ * DROPS (per `unroutableKbReason`), so the drop is diagnosed rather than
+ * silent: `GET /api/studio/kbs` carries it as `unroutable[]`. Unreadable
+ * kb.yaml files are out of scope here (they are `load` errors in lint).
+ */
+export function unroutableKbs(forgeRoot: string): UnroutableKb[] {
+  const out: UnroutableKb[] = [];
+  for (const { base, name } of kbSites(forgeRoot)) {
+    const guard = resolveGuardedPath(base, [name, 'kb.yaml']);
+    if (!guard.ok || !guard.exists) continue;
+    try {
+      const kb = loadKbDescriptor(guard.realPath);
+      const reason = unroutableKbReason(kb.id, name);
+      if (reason !== null) out.push({ dir: name, id: kb.id, path: guard.realPath, reason });
+    } catch {
+      // unreadable kb.yaml — a `load` finding in `forge studio lint`, not a routability verdict
+    }
+  }
+  return out;
+}
+
+/**
  * W7-A4 (projects-34) — project id → the KB id whose
  * `binding: { kind: project, ref: <project id> }` names it, DERIVED from the
  * descriptors on disk (never stored). Exact, case-preserving match on the ONE
  * id rule (`KB_ID_RE`/`PROJECT_ID_RE`): `trafficGame` ↔ `trafficGame`. A KB
- * whose id fails the rule, or whose id is not its directory name, is not
- * routable and is not offered as a binding (a listed id must be routable).
- * First declaration wins on a (lint-flagged) duplicate.
+ * that is not routable (`unroutableKbReason`) is not offered as a binding (a
+ * listed id must be routable). First declaration wins on a (lint-flagged)
+ * duplicate.
  */
 export function projectKbBindings(forgeRoot: string): Map<string, string> {
   const bindings = new Map<string, string>();
@@ -71,7 +117,7 @@ export function projectKbBindings(forgeRoot: string): Map<string, string> {
     if (!guard.ok || !guard.exists) continue;
     try {
       const kb = loadKbDescriptor(guard.realPath);
-      if (kb.id !== name || !KB_ID_RE.test(kb.id)) continue;
+      if (unroutableKbReason(kb.id, name) !== null) continue;
       if (kb.binding.kind === 'project' && !bindings.has(kb.binding.ref)) bindings.set(kb.binding.ref, kb.id);
     } catch {
       // unreadable kb.yaml — the KB roster reports it; no binding to derive

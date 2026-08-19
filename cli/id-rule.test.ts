@@ -36,6 +36,7 @@ import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/va
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { buildProjectSavePayload } from '../forge-ui/lib/project-save-payload.ts';
+import { unroutableKbReason, unroutableKbs } from './kb-sites.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -62,6 +63,16 @@ before(async () => {
   writeFileSync(join(forgeRoot, 'projects', 'gitpulse', '.forge', 'project.json'), PROJECT_JSON.replace('trafficGame', 'gitpulse'));
   // A dir whose name can never be a routable id — must not surface as a project.
   mkdirSync(join(forgeRoot, 'projects', 'bad name'), { recursive: true });
+
+  // W7-FIX-A4 (W7A4-04): a kb.yaml whose id is NOT its directory name — a
+  // valid id per KB_ID_RE, so validateKb is silent — binding project gitpulse.
+  // No route can resolve it (routes join brain/**/<id>/), so it must not be
+  // listed AND must not derive gitpulse's binding — but it must be DIAGNOSED.
+  mkdirSync(join(forgeRoot, 'brain', 'projects', 'gitpulse'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'brain', 'projects', 'gitpulse', 'kb.yaml'),
+    'id: gitpulse-brain\nname: gitpulse (project)\nbinding:\n  kind: project\n  ref: gitpulse\ndesc: Mismatched id.\nbackend: filesystem\n',
+  );
 
   // The matching central per-project KB (ADR 035): brain/projects/trafficGame/kb.yaml
   mkdirSync(join(forgeRoot, 'brain', 'projects', 'trafficGame', 'themes'), { recursive: true });
@@ -258,6 +269,34 @@ test('per-project routes: exact match — the lowercased id is unknown (404), ne
 test('generic session route: project=trafficGame is a valid project (404 unknown session, NOT 400 invalid project) — forge-9bd', async () => {
   const r = await get('/api/studio/sessions/demo/2026-01-01T00-00-00-0000abcd?project=trafficGame');
   assert.notEqual(r.status, 400, `got 400: ${JSON.stringify(r.body)}`);
+});
+
+test('W7A4-04: unroutableKbReason is the ONE predicate — null iff id === dir AND id passes KB_ID_RE', () => {
+  assert.equal(unroutableKbReason('trafficGame', 'trafficGame'), null);
+  assert.equal(unroutableKbReason('gitpulse', 'gitpulse'), null);
+  assert.match(unroutableKbReason('gitpulse-brain', 'gitpulse') ?? '', /gitpulse-brain.*"gitpulse"/);
+  assert.match(unroutableKbReason('trafficgame', 'trafficGame') ?? '', /trafficgame/, 'case matters — exact match');
+  assert.notEqual(unroutableKbReason('bad id', 'bad id'), null, 'an id failing KB_ID_RE is unroutable even when it equals its dir');
+});
+
+test('W7A4-04 (RED on main): the roster DIAGNOSES a dropped descriptor — GET /api/studio/kbs returns `unroutable[]` naming dir + id + reason; the KB is neither listed nor bound', async () => {
+  const local = unroutableKbs(forgeRoot);
+  assert.equal(local.length, 1, `expected exactly the gitpulse fixture, got ${JSON.stringify(local)}`);
+  assert.equal(local[0].dir, 'gitpulse');
+  assert.equal(local[0].id, 'gitpulse-brain');
+  assert.match(local[0].reason, /gitpulse-brain/);
+
+  const list = await get('/api/studio/kbs');
+  assert.equal(list.status, 200);
+  const ids = list.body.kbs.map((k: any) => k.id);
+  assert.ok(!ids.includes('gitpulse-brain') && !ids.includes('gitpulse'), `a mismatched descriptor is not listed: ${JSON.stringify(ids)}`);
+  assert.ok(Array.isArray(list.body.unroutable), `roster must carry an unroutable[] diagnostic, got keys ${JSON.stringify(Object.keys(list.body))}`);
+  assert.deepEqual(list.body.unroutable.map((u: any) => [u.dir, u.id]), [['gitpulse', 'gitpulse-brain']]);
+  assert.match(String(list.body.unroutable[0].reason), /gitpulse-brain/);
+
+  const roster = await get('/api/studio/projects');
+  const gp = roster.body.projects.find((p: any) => p.id === 'gitpulse');
+  assert.equal(gp.kb, undefined, 'a mismatched (unroutable) KB never derives a project binding');
 });
 
 test('per-KB routes: GET /api/studio/kbs lists "trafficGame" AND every per-KB route accepts it (knowledge-03 / crosscut-11 / home-sessions-16)', async () => {

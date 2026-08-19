@@ -31,7 +31,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
 import {
@@ -71,6 +71,7 @@ import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-libr
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
 import { kbReadPolicyViolation } from './kb-read-policy.ts';
+import { unroutableKbReason } from './kb-sites.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -83,6 +84,20 @@ export type StudioLintResult = {
   errorCount: number;
   flagCount: number;
 };
+
+/**
+ * W7-FIX-A4 (W7A4-04): a kb.yaml whose `id` is not its directory name (or
+ * fails the id rule) is dropped by the roster AND loses its derived
+ * project↔KB binding with no diagnostic — this is the lint backstop for the
+ * SAME predicate (`unroutableKbReason`, cli/kb-sites.ts), mirroring the flow
+ * `dir-name` check above.
+ */
+function kbDirNameFindings(kbId: string, kbPath: string): Finding[] {
+  const dir = basename(dirname(kbPath));
+  const reason = unroutableKbReason(kbId, dir);
+  if (reason === null) return [];
+  return [{ level: 'error', object: `kb:${kbId}`, check: 'dir-name', message: reason }];
+}
 
 export function runStudioLint(root: string): StudioLintResult {
   const findings: Finding[] = [];
@@ -517,6 +532,7 @@ export function runStudioLint(root: string): StudioLintResult {
       const kb = loadKbDescriptor(kbPath);
       loadedKbs.push(kb);
       findings.push(...validateKb(kb));
+      findings.push(...kbDirNameFindings(kb.id, kbPath));
 
       if (seenKbIds.has(kb.id)) {
         findings.push({
@@ -609,7 +625,12 @@ export function runStudioLint(root: string): StudioLintResult {
   const readPolicyKbs: KbDescriptor[] = [...loadedKbs];
   for (const p of projectKbPaths) {
     try {
-      readPolicyKbs.push(loadKbDescriptor(p));
+      const kb = loadKbDescriptor(p);
+      readPolicyKbs.push(kb);
+      // W7-FIX-A4 (W7A4-04): the ADR-035 root gets the SAME dir-name check —
+      // a mismatched per-project brain silently loses its derived project↔KB
+      // binding, which is exactly the case this backstops.
+      findings.push(...kbDirNameFindings(kb.id, p));
     } catch {
       // A project kb.yaml that will not load is out of read-policy scope (a
       // project binding is exempt anyway) — no double-report of a load error.
