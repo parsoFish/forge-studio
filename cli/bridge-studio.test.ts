@@ -425,9 +425,12 @@ test('GET /api/runs/<id> returns the seeded run', async () => {
   const body = (await res.json()) as { run: { id: string; status: string; initiative: string; costUsd: number } };
   assert.equal(body.run.id, CYCLE_ID);
   assert.equal(body.run.status, 'complete');
-  // W7-A4: the run title is manifest METADATA (frontmatter title: / the
-  // initiative id) — never the body's "# Test initiative title" heading.
-  assert.equal(body.run.initiative, 'INIT-TEST-001');
+  // W7-A4 / W7-FIX-A4 (W7A4-01): the run title is the frontmatter `title:`
+  // when the producer wrote one; this seeded manifest has none, so the ONE
+  // derivation (initiativeTitle) falls back to the body's first level-1
+  // "# Test initiative title" heading — never a "##" section heading, and
+  // only then the initiative id.
+  assert.equal(body.run.initiative, 'Test initiative title');
   assert.ok(typeof body.run.costUsd === 'number');
 });
 
