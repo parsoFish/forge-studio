@@ -247,6 +247,43 @@ test('W7A4-03 (RED on main): the editor\'s Save of an UNTOUCHED derived binding 
   writeFileSync(projectJsonPath, PROJECT_JSON);
 });
 
+test('W7-FIX-A4 (W7A4-03): a stored `kb: null` is an EXPLICIT UNBIND the roster honours — string wins, null unbinds, absent derives', async () => {
+  const projectJsonPath = join(forgeRoot, 'projects', 'trafficGame', '.forge', 'project.json');
+  const rosterKb = async () =>
+    (await get('/api/studio/projects')).body.projects.find((p: any) => p.id === 'trafficGame').kb;
+
+  // (a) ABSENT key → the derivation is live (the documented default).
+  assert.ok(!('kb' in JSON.parse(readFileSync(projectJsonPath, 'utf8'))), 'precondition: no stored kb');
+  assert.equal(await rosterKb(), 'trafficGame', 'absent → derived from kb.yaml binding.ref');
+
+  // (b) The operator clicks x in KbBind: kbTouched=true with kb=null. The
+  // payload contract calls this "an explicit unbind" — it must survive the
+  // round-trip, or the x can never stick (the derived binding just comes back).
+  const unbind = buildProjectSavePayload({
+    name: 'trafficGame', northStar: 'A traffic game.', instructions: '',
+    demoProcess: [], skills: [], kb: null, kbTouched: true,
+  });
+  assert.equal(unbind.kb, null, 'precondition: the payload carries a null kb');
+  const r1 = await send('PUT', '/api/studio/projects/trafficGame', unbind);
+  assert.equal(r1.status, 200, `PUT(unbind) -> ${r1.status} ${JSON.stringify(r1.body)}`);
+  const stored = JSON.parse(readFileSync(projectJsonPath, 'utf8'));
+  assert.ok('kb' in stored, 'the PUT must PERSIST the unbind, not drop the null on the floor');
+  assert.equal(stored.kb, null);
+  assert.equal(
+    await rosterKb(),
+    undefined,
+    'a stored `kb: null` outranks the derived binding — otherwise the operator\'s unbind silently reverts on the next read',
+  );
+
+  // (c) A stored STRING still wins over the derivation (an explicit rebind).
+  writeFileSync(projectJsonPath, JSON.stringify({ ...stored, kb: 'some-other-kb' }, null, 2));
+  assert.equal(await rosterKb(), 'some-other-kb', 'an explicit stored rebind outranks the derived binding');
+
+  // Restore the fixture (no stored kb) for the tests below.
+  writeFileSync(projectJsonPath, PROJECT_JSON);
+  assert.equal(await rosterKb(), 'trafficGame', 'removing the stored key restores the derivation');
+});
+
 test('per-project routes: every :id route the walkthrough saw 404/400 now resolves "trafficGame" (projects-02)', async () => {
   const preflight = await get('/api/studio/projects/trafficGame/preflight');
   assert.equal(preflight.status, 200, `preflight → ${preflight.status} ${JSON.stringify(preflight.body)}`);

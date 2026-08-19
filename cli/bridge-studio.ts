@@ -420,7 +420,15 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
-      if (typeof raw.kb === 'string') result.kb = raw.kb; // explicit rebind wins over the derived binding
+      // W7-FIX-A4: the STORED `kb` outranks the derived binding in BOTH
+      // directions — a string is an explicit rebind, an explicit `null` is an
+      // explicit UNBIND (the operator cleared the binding in KbBind; see
+      // `forge-ui/lib/project-save-payload.ts`). Honouring only the string
+      // made the unbind un-stickable: the PUT wrote `kb: null` and the very
+      // next roster read handed the derived binding straight back. An ABSENT
+      // key (and only an absent key) leaves the derivation live.
+      if (typeof raw.kb === 'string') result.kb = raw.kb;
+      else if (raw.kb === null) delete result.kb;
       // Only fall back to the legacy project.json `instructions` field when no
       // agent-instruction file exists (the agent file always wins — single source).
       if (!agentFile && typeof raw.instructions === 'string') {

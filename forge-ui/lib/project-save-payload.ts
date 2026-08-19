@@ -7,11 +7,14 @@
  * project; "never stored"). The roster serves that derived value as
  * `project.kb`, the editor hydrates its `kb` state from it, and the bridge's
  * `PUT /api/studio/projects/:id` treats ANY present `kb` key (string or
- * null) as an explicit rebind and writes it into project.json — where it
- * then permanently shadows the derivation (`bridge-studio.ts`: "explicit
- * rebind wins"). So the payload carries `kb` ONLY when the operator actually
- * changed the binding in this editing session (`kbTouched`); an untouched
- * binding — derived or not — is not echoed back.
+ * null) as the operator's explicit answer and writes it into project.json —
+ * where it then shadows the derivation in BOTH directions: the roster reads
+ * a stored string as a rebind and a stored `null` as an UNBIND (serving no
+ * kb at all), and only an ABSENT key leaves the derivation live
+ * (`bridge-studio.ts` `loadProjectsWithMeta`). So the payload carries `kb`
+ * ONLY when the operator actually changed the binding in this editing
+ * session (`kbTouched`); an untouched binding — derived or not — is not
+ * echoed back, because echoing it would freeze a live derivation.
  */
 export type ProjectSaveFields = {
   name: string;
