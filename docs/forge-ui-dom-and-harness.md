@@ -90,7 +90,11 @@ inventory rather than one shared page-level contract:
   404) or `<kind> session` → `/sessions`; `/knowledge?id=` → `knowledge
   base`, `/knowledge?node=|?theme=` → `theme` → `/knowledge`; `/artifact` →
   `run` (`unselected` when neither `?run=` nor its `?cycle=` alias is given;
-  `unknown` when `/api/runs/:id` 404s for a non-`_architect-` id) or
+  `unknown` when `/api/runs/:id` 404s for a non-`_architect-` id AND
+  nothing exists on disk for it — W7-FIX-A3: an orphan `_logs/<id>/`
+  whose queue manifest is gone still renders its artifact, with
+  `[data-run-record="absent"]` in the run-context row; `lib/artifact-mode.ts`
+  `isRunNotFound`) or
   `artifact type` (an unrecognised `?type=`, naming the valid set) → `/flows`;
   and `app/not-found.tsx` → `page` (the pathname) → `/` for any unmatched
   path. Pinned: `forge-ui/lib/not-found-render.test.ts` (render contract) +
@@ -192,15 +196,24 @@ inventory rather than one shared page-level contract:
   (`components/SchedulerCard.tsx`, its own `useSchedulerStatus()` read on a
   slow visible-only poll — Home itself adds no fetch/interval/endpoint):
   `[data-component="scheduler-card"][data-scheduler-status="running|paused|
-  stopped|unknown"][data-scheduler-variant="card|strip"][data-scheduler-ready]
+  stopping|stopped|unknown"][data-scheduler-variant="card|strip"][data-scheduler-ready]
   [data-scheduler-queued]` (+ `[data-scheduler-pid]` only while running,
   `[data-scheduler-busy="true"]` while an action POST is in flight,
   `[data-scheduler-error]` carrying the bridge error verbatim); its buttons
   are exactly the actions the state admits —
   `button[data-action="scheduler-start"|"scheduler-pause"|"scheduler-resume"|
   "scheduler-stop"]` (running → pause+stop, paused → resume+stop, stopped →
-  start, unknown/unread → none) — derived by `lib/scheduler-view.ts`, never a
-  fixed row. The same component is mounted on `/flows` (index + monitor), the
+  start, stopping/unknown/unread → none) — derived by `lib/scheduler-view.ts`,
+  never a fixed row. **W7-FIX-A3 (A3-04/05/07):** `stopping` = a Stop was
+  signalled and the daemon pid is still draining in-flight runs — the bridge
+  marks the signalled pid (`_logs/daemon/stopping`) and `daemonState` folds it
+  into `GET /api/scheduler/status` as `stopping:true` for as long as THAT pid
+  is alive (every poller and every tab sees it; a dead pid is plainly
+  `stopped`, never `stopping`); `POST /api/scheduler/start` clears the
+  `.paused` flag before spawning, so "Start it" always unblocks claiming; and
+  a NULL status (the read failed) is a third branch in the enqueue /
+  post-commit copy ("could not confirm the scheduler is running") — never
+  reported as "stopped". The same component is mounted on `/flows` (index + monitor), the
   project roadmap tab, and inline as a `strip` wherever an enqueue outcome
   needs "start it?". Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when
@@ -471,10 +484,13 @@ inventory rather than one shared page-level contract:
   only while the flow has no runs). The generic kickoff
   (`[data-kickoff-kind="generic"]`) is now an initiative picker —
   `select[data-field="kickoff-initiative"]` (candidates derived from the runs
-  list: queued/finished/failed manifests) + `button[data-action="start-run"]`
+  list — **W7-FIX-A3 (A3-01): ONLY `planned` (queued) initiatives**, never a
+  finished/failed/active one; `lib/kickoff-candidates.ts`) + `button[data-action="start-run"]`
   (always enabled outside submission) → `POST /api/flows/:id/run
   {initiativeId}` (`enqueueFlowRun` onto THIS flow; it used to post the flow
-  id as an initiativeId — 400, silently); the outcome renders
+  id as an initiativeId — 400, silently; W7-FIX-A3: an initiative whose
+  manifest sits in `_queue/done` is refused 409 `already-done` — a shipped
+  initiative is never yanked out and re-run from the picker); the outcome renders
   `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
   through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
   [data-needs-scheduler-start]` line (`a[data-action="open-kickoff-run"]` to
@@ -486,9 +502,15 @@ inventory rather than one shared page-level contract:
   (`[data-elapsed-final="true"]`, `lib/run-elapsed.ts`); the event tail's
   empty copy is keyed on the run's STATUS via `[data-tail-state="live|
   finished|failed|queued|none"]` (a finished run is never "Waiting for
-  events…"); the run rail persists group collapse per flow
+  events…"; W7-FIX-A3 A3-09: the attribute lives on the tail CONTAINER
+  `[data-component="event-tail"]`, so `none` — no run selected — is
+  reachable); the run rail persists group collapse per flow
   (`sessionStorage forge-run-groups:<flowId>`, `lib/run-rail-collapse.ts`;
-  COMPLETE starts collapsed above 10 rows) and the phase drawer skips the log
+  COMPLETE starts collapsed above 10 rows — W7-FIX-A3: a collapsed group still
+  renders the SELECTED run's card, `[data-run-group] [data-run-id]
+  [data-pinned-selection="true"]`, so collapse hides the pile, never the
+  selection; the HistoryLedger row carries the same `data-run-id` on a LINK,
+  so journeys select via the rail-scoped selector) and the phase drawer skips the log
   fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
@@ -584,6 +606,10 @@ inventory rather than one shared page-level contract:
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
   root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state][data-run-kind="cycle"|"architect-session"]`
+  (W7-FIX-A3 A3-03: `?run=` may be the INITIATIVE id — every artifact read
+  and every artifact-keyed child (demo media, review comments, reflection
+  answers) is keyed on the RESOLVED run id from `/api/runs/<id>`, the run's
+  own cycle id once claimed, never the raw query param)
   (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
   mismatch, not a deliberate shared-surface value; every gate/artifact moment
   is still folded into this one route). **W7-A3 (artifact-plan-01…33,
@@ -1076,7 +1102,8 @@ inventory rather than one shared page-level contract:
   `data-page-ready="true"` (the earlier as-built departure is closed), and the
   page shell renders `nav[data-section="run-breadcrumb"]` with
   `a[data-action="back-to-agent"]` → `/agents/<slug>` showing the slug from the
-  URL (`[data-agent-slug]`; the shell root mirrors it as `data-agent-slug`).
+  URL (exactly ONE `[data-agent-slug]` per page — the shell root carries it;
+  the link shows the slug as text, W7-FIX-A3 A3-10).
   `found:false` (no `_logs/<runId>` directory exists — never dispatched, the
   R6-04 D22 404 case) — the ROUTE renders the shared not-found page instead
   (`main[data-page="not-found"][data-not-found-kind="run"]`, W7-A4;
@@ -1167,11 +1194,21 @@ inventory rather than one shared page-level contract:
   DOM-as-metrics readiness contract like every other. The resolved page opens
   with `nav[data-section="run-breadcrumb"]`: `a[data-action="back-to-monitor"]`
   → `/flows/<flowId>`, and for a found run `a[data-action="open-artifacts"]`
-  → `/artifact?run=<id>&type=plan&mode=view` plus `a[data-action="open-project"]`
+  → `/artifact?run=<run.id>&type=plan&mode=view` plus `a[data-action="open-project"]`
   → `/projects/<project>` when the run carries a project (never fabricated).
-  The optional `review-findings.json` fetch is gated on
-  `shouldFetchReviewFindings(run)` (`run.phases['adversarial-review'] ===
-  'complete'`) — no guaranteed-404 request per visit.
+  **W7-FIX-A3 (A3-02/03/11 + the walkthrough gate):** the URL segment is the
+  INITIATIVE id (the stable handle since W7-A3), so every id-keyed call is made
+  with the RESOLVED run id — the breadcrumb href, the header's id line, and the
+  per-node log fetch (`/api/runs/<id>/phases/<node>/log`, whose bridge route
+  now resolves through the same `findRun` as `/api/runs/<id>` before building
+  `_logs/<id>/events.jsonl`) — never the raw segment. The flow DEFINITION is
+  taken from the flows LIST (`fetchStudioFlows()`), never `GET /api/studio/
+  flows/<id>`, so a retired flow id renders its "unregistered" banner without
+  a guaranteed-404 request. The optional `review-findings.json` fetch is gated
+  on `shouldFetchReviewFindings(run, flow)`: the producer node(s) are DERIVED
+  from the flow definition (edges carrying `artifact: review-findings`), the
+  literal `adversarial-review` id is consulted only when there is no
+  definition to derive from — no guaranteed-404 request per visit.
 
   A found run renders: `[data-section="run-trigger"]` with the reserved
   provenance vocabulary above (omitted entirely when the run has no trigger);
