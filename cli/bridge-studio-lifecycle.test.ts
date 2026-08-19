@@ -78,6 +78,7 @@ function inputs(over: Partial<SessionLifecycleInputs> = {}): SessionLifecycleInp
     stderr: null,
     lastActivityMs: NOW - 5_000,
     turnAlive: false,
+    hasChannel: true,
     nowMs: NOW,
     stallCeilingMs: DEFAULT_STALL_CEILING_MS,
     ...over,
@@ -193,6 +194,49 @@ test('lifecycle unit: stallCeilingForKind — architect matches the UI\'s 120s S
   assert.equal(stallCeilingForKind('never-heard-of-it'), DEFAULT_STALL_CEILING_MS);
 });
 
+// ---- W7-FIX-A2 (W7A2-01): pid tracking for the dispatch-spawned kinds ------
+// Onboarding's turn is spawned by `spawnAgentDispatch` (not `spawnAgentTurn`)
+// and used to leave NO turn.pid, so `killTrackedTurn` returned false
+// unconditionally and cancel never killed anything. The fix records the pid
+// under the SAME `_logs/_<kind>-<sid>/turn.pid` the lifecycle reads, and
+// `isTurnAlive` recognises the dispatch's own ownership mark — its
+// `--session-dir <…/_<kind>/<sid>>` argv element (basename === sid) — with
+// the same whole-element, fail-closed posture. A tracked-but-channel-less
+// live turn (turn.pid only, no heartbeat/events file — the dispatch writes
+// its events under `_logs/<runId>/`) is `working`, never `stalled`: there
+// is no liveness channel to be silent on. A DEAD pid silent past the
+// ceiling still reads stalled (unchanged).
+
+test('lifecycle unit (W7-FIX-A2): a LIVE tracked turn with NO liveness channel (turn.pid only) is working even past the ceiling; the same silence with a channel present IS stalled; a dead pid silent past the ceiling is stalled', () => {
+  const silent = NOW - DEFAULT_STALL_CEILING_MS - 60_000;
+  const livePidNoChannel = deriveSessionLifecycle(inputs({ lastActivityMs: silent, turnAlive: true, hasChannel: false }));
+  assert.equal(livePidNoChannel.state, 'working', 'a live pid with nothing to be silent on is not stalled');
+  assert.equal(livePidNoChannel.needsYou, false);
+  const livePidWithChannel = deriveSessionLifecycle(inputs({ lastActivityMs: silent, turnAlive: true, hasChannel: true }));
+  assert.equal(livePidWithChannel.state, 'stalled', 'a live turn whose heartbeat/events channel went silent past the ceiling IS stalled (the hung-SDK shape)');
+  const deadPid = deriveSessionLifecycle(inputs({ lastActivityMs: silent, turnAlive: false, hasChannel: false }));
+  assert.equal(deadPid.state, 'stalled', 'a dead/absent pid silent past the ceiling is stalled — unchanged');
+});
+
+test('lifecycle unit (W7-FIX-A2): isTurnAlive recognises the dispatch runner\'s `--session-dir <…/_<kind>/<sid>>` argv element (basename === sid) — and STILL fails closed on a substring-only or wrong-basename path', async () => {
+  const sid = '2026-08-19T09-00-00';
+  const child = spawn(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', `/tmp/whatever/projects/p/_onboarding/${sid}`],
+    { detached: true, stdio: 'ignore' },
+  );
+  child.unref();
+  try {
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(isTurnAlive(child.pid!, sid), true, 'the --session-dir basename IS this session\'s ownership mark');
+    assert.equal(isTurnAlive(child.pid!, '2026-08-19T09-00'), false, 'a prefix of the basename must not match');
+    assert.equal(isTurnAlive(child.pid!, '_onboarding'), false, 'an intermediate path segment is not the session id');
+    assert.equal(isTurnAlive(child.pid!, 'p'), false, 'nor is the project segment');
+  } finally {
+    try { process.kill(child.pid!, 'SIGKILL'); } catch { /* ignore */ }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Acceptance — real bridge + fetch over the operator's on-disk shapes
 // ---------------------------------------------------------------------------
@@ -216,6 +260,7 @@ const RERUN_KB_SID = '2026-08-05T14-30-00';
 const AMBIGUOUS_SID = '2026-08-09T09-00-00';
 const KILL_SID = '2026-08-10T10-00-00';
 const CANCEL_TERMINAL_SID = '2026-08-11T11-00-00';
+const ONBOARDING_KILL_SID = '2026-08-12T08-00-00';
 
 function writeStatus(dir: string, status: Record<string, unknown>, mtimeMs?: number): void {
   mkdirSync(dir, { recursive: true });
@@ -256,6 +301,7 @@ function row(rows: SessionIndexRow[], kind: string, sid: string): SessionIndexRo
 }
 
 let killChildPid: number | null = null;
+let onboardingChildPid: number | null = null;
 
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-lifecycle-'));
@@ -335,6 +381,20 @@ before(async () => {
   killChildPid = child.pid ?? null;
   writeLog('demo', KILL_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': '', 'turn.pid': `${killChildPid}\n` });
 
+  // --- W7-FIX-A2: an ONBOARDING session at `running` (step: agent) with a
+  // live DISPATCH-shaped child (argv carries `--session-dir <…/_onboarding/
+  // <sid>>`, exactly what spawnAgentDispatch passes), tracked ONLY by
+  // turn.pid (the dispatch's events/stderr live under `_logs/<runId>/`, so
+  // this session log dir has no heartbeat/events channel), status.json OLD
+  // (30 min > the 180 s ceiling): must read working, not stalled — and cancel
+  // must kill it.
+  const onbSessionDir = join(projectsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID);
+  writeStatus(onbSessionDir, { phase: 'running', project: 'projb', runId: '_agent-onboarding-agent-2026-08-12T08-00-00-000', startedAt: '2026-08-12T08:00:00.000Z' }, T.stale);
+  const onbChild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', '--', '--session-dir', onbSessionDir], { detached: true, stdio: 'ignore' });
+  onbChild.unref();
+  onboardingChildPid = onbChild.pid ?? null;
+  writeLog('onboarding', ONBOARDING_KILL_SID, { 'turn.pid': `${onboardingChildPid}\n` }, T.stale);
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -344,6 +404,7 @@ before(async () => {
 after(async () => {
   await closeBridge();
   if (killChildPid !== null) { try { process.kill(killChildPid, 'SIGKILL'); } catch { /* already dead */ } }
+  if (onboardingChildPid !== null) { try { process.kill(onboardingChildPid, 'SIGKILL'); } catch { /* already dead */ } }
   rmSync(forgeRoot, { recursive: true, force: true });
 });
 
@@ -410,6 +471,17 @@ test('index: every row carries the three new fields (state/error/idleMs) — no 
 });
 
 // ---- shell payload: lifecycle + deep links without ?project= ---------------
+
+test('W7-FIX-A2 shell (W7A2-04): the payload carries `transcript` — DERIVED from the descriptor (a turnSpec kind rides the generic spine, which never writes transcript turns → false; a legacy-runner kind → true), never a UI-side kind list', async () => {
+  // community-refresh is a turnSpec kind whose shell resolves without a live
+  // KB (kb-cleanup's shell 409s on an unresolvable kb_id by design — R4-19-F2).
+  const cr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`), 200);
+  assert.equal(cr.transcript, false, 'community-refresh (turnSpec) records its work in the artifact pane, never as transcript turns');
+  const instr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_VERDICT_SID}?project=proja`), 200);
+  assert.equal(instr.transcript, true, 'instructions (legacy runner) writes prompt/questions/answers/feedback → transcript-bearing');
+  const arch = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}?project=proja`), 200);
+  assert.equal(arch.transcript, true);
+});
 
 test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the anchor project (a dot-anchor too) and carries lifecycle', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_CRASHED_SID}`);
@@ -556,6 +628,30 @@ test('cancel: a session with a LIVE tracked turn (turn.pid alive, argv carries t
     await new Promise((r) => setTimeout(r, 100));
   }
   assert.equal(alive, false, 'the tracked turn process must be dead after cancel');
+});
+
+test('W7-FIX-A2 index: an ONBOARDING session tracked only by turn.pid (live dispatch child, no heartbeat/events channel, status.json 30 min old) reads working — never stalled on a silence it has no channel for', async () => {
+  assert.ok(onboardingChildPid !== null, 'precondition: the onboarding child was spawned');
+  const r = row(await indexRows(), 'onboarding', ONBOARDING_KILL_SID);
+  assert.equal(r.state, 'working', `a live tracked turn with no liveness channel is working; got ${r.state} (idleMs=${r.idleMs})`);
+  assert.equal(r.needsYou, false);
+});
+
+test('W7-FIX-A2 cancel: an ONBOARDING session (spawnAgentDispatch child, `--session-dir` ownership mark) → killed=true and the dispatch child is dead — cancel is no longer a no-op for onboarding', async () => {
+  assert.ok(onboardingChildPid !== null, 'precondition: the onboarding child was spawned');
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_KILL_SID}/cancel`, { method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'projb' }) });
+  const body = await expectJson<{ killed: boolean; phase: string; previousPhase: string }>(res, 200);
+  assert.equal(body.killed, true, 'the onboarding dispatch child must be signalled (was: killTrackedTurn found no turn.pid, unconditionally false)');
+  assert.equal(body.previousPhase, 'running');
+  const deadline = Date.now() + 5_000;
+  let alive = true;
+  while (Date.now() < deadline) {
+    try { process.kill(onboardingChildPid!, 0); } catch { alive = false; break; }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(alive, false, 'the onboarding dispatch child must be dead after cancel');
+  const status = JSON.parse(readFileSync(join(projectsRoot, 'projb', '_onboarding', ONBOARDING_KILL_SID, 'status.json'), 'utf8')) as { phase: string };
+  assert.equal(status.phase, CANCELLED_PHASE);
 });
 
 test('cancel: turn.pid pointing at a pid whose argv does NOT carry the session id is never signalled (ownership check fails closed) — killed=false', async () => {

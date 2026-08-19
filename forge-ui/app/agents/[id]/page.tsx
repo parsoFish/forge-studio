@@ -13,10 +13,13 @@
  *   On save: flat → PUT {composition:{...}, process, name, purpose, interactivity, brainAccess, runtime}
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { CatalogPalette } from '@/components/studio/agent-builder/CatalogPalette';
@@ -283,11 +286,21 @@ export default function AgentBuilderPage() {
   const [dirty,   setDirty]   = useState(false);
   const [ready,   setReady]   = useState(false);
   // W7-A4 (crosscut-02 / agents-10): an unknown slug is a NOT-FOUND state, never
-  // a silent redirect into the blank /agents/new builder. `'empty-roster'`
-  // keeps the two operator facts apart: the roster loaded and lacks the slug
-  // (a real not-found) vs. the roster came back empty (an unreachable bridge —
-  // the fetch fails open to [] today; the honest-reads lane owns that).
-  const [slugResolution, setSlugResolution] = useState<'pending' | 'found' | 'not-found' | 'empty-roster'>('pending');
+  // a silent redirect into the blank /agents/new builder. Since W7-A1 the
+  // roster read fails CLOSED (`fetchStudioAgentsWithMeta` throws), so a
+  // roster that came back — even empty — is a real answer: the slug is
+  // either in it (`found`) or not (`not-found`).
+  const [slugResolution, setSlugResolution] = useState<'pending' | 'found' | 'not-found'>('pending');
+  // W7-FIX-A1 (A1-01): a FAILED roster/catalog read is a third operator fact
+  // — neither "found" nor "not found". It renders the shared PageLoadError
+  // (never a blank builder for a real agent, never NotFound); `loadKey`
+  // re-runs the load on Retry + bridge recovery.
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  // Recovery refills ONLY a failed load — never re-loads over the operator's
+  // unsaved builder edits (W7-FIX-A1 review: `load()` overwrites the form).
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
   const [toasts,  setToasts]  = useState<Toast[]>([]);
   // R3-04-F3: real probe-derived connections library, fetched independently
   // of the agent load (it's the same catalog regardless of which agent is
@@ -450,7 +463,7 @@ export default function AgentBuilderPage() {
             // W7-A4: unknown slug → the shared NotFound (rendered below), never
             // a redirect into the blank builder — the builder is reserved for
             // the literal `new` slug.
-            setSlugResolution(a.length === 0 ? 'empty-roster' : 'not-found');
+            setSlugResolution('not-found');
           }
         } else {
           setSlugResolution('found');
@@ -460,15 +473,23 @@ export default function AgentBuilderPage() {
           loadedSlug.current = 'new';
         }
         setDirty(false);
+        setLoadError(null);
+      } catch (err) {
+        // W7-FIX-A1 (A1-01): the roster/catalog read threw (fail-closed reads)
+        // — an ERROR state, rendered as PageLoadError below. `slugResolution`
+        // stays 'pending' (nothing was resolved), so neither the builder nor
+        // NotFound can render off this failure.
+        if (signal.cancelled) return;
+        setLoadError(fetchErrorPropsFrom(err));
       } finally {
         if (!signal.cancelled) setReady(true);
       }
     }
     void load();
     return () => { signal.cancelled = true; };
-    // slugParam drives reload, router is stable
+    // slugParam drives reload (loadKey = Retry / bridge recovery), router is stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slugParam]);
+  }, [slugParam, loadKey]);
 
   // R3-04-F3: independent connections fetch (see state declaration above) —
   // the connections library doesn't depend on which agent is open, so this
@@ -619,19 +640,25 @@ export default function AgentBuilderPage() {
   // ---- render ----
   // W7-A4 (crosscut-02 / agents-10 / crosscut-27): unknown slug → the ONE
   // shared not-found treatment with a way back to the roster.
-  if (ready && !isNew && slugResolution === 'not-found') {
-    return <NotFound kind="agent" id={slugParam} backHref="/agents" backLabel="Agents" />;
-  }
-  if (ready && !isNew && slugResolution === 'empty-roster') {
+  // W7-FIX-A1 (A1-01): the read FAILED — the agent may well exist. Neither
+  // the builder (blank) nor NotFound; the shared page-level error with Retry.
+  // Applies to `new` too: the builder's palette is the catalog read.
+  if (ready && loadError) {
     return (
-      <NotFound
-        kind="agent"
-        id={slugParam}
+      <PageLoadError
+        page="agents"
+        rootAttrs={{ 'data-agent-id': isNew ? '' : slugParam }}
+        what={isNew ? 'the agent builder catalog' : `agent "${slugParam}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
         backHref="/agents"
         backLabel="Agents"
-        detail="The agent roster came back empty — if the forge bridge is unreachable this agent may still exist; retry once it is back."
       />
     );
+  }
+  if (ready && !isNew && slugResolution === 'not-found') {
+    return <NotFound kind="agent" id={slugParam} backHref="/agents" backLabel="Agents" />;
   }
 
   return (

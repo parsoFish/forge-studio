@@ -158,6 +158,20 @@ export const TURN_STYLES: readonly TurnStyleRow[] = Object.freeze([
 ]);
 export type TurnStyle = (typeof TURN_STYLES)[number]['id'];
 
+export type BashFenceModeRow = { readonly id: string };
+/** W7-FIX-A2 (W7A2-03, bead forge-w08) — `turnSpec.bashFence`, the ONE
+ *  authored switch for how a write-root-fenced turn treats the `Bash` tool:
+ *  `deny` (the default when absent — Bash is refused outright, a fenced kind
+ *  has no ungated write-capable tool) or `inspect` (every Bash command is
+ *  statically inspected against the write roots — orchestrator/bash-fence.ts).
+ *  Validated by validateSessionKinds; consumed by orchestrator/interactive-
+ *  runner.ts → runAgentTurn's `bashFence`. Typed `readonly`, as TURN_STYLES. */
+export const BASH_FENCE_MODES: readonly BashFenceModeRow[] = Object.freeze([
+  Object.freeze({ id: 'deny' }),
+  Object.freeze({ id: 'inspect' }),
+]);
+export type BashFenceModeId = (typeof BASH_FENCE_MODES)[number]['id'];
+
 /** Exactly the four step kinds the ADR's own worked example exercises
  *  (agent/noop/finalize/terminal) — nothing speculative added beyond it.
  *  Typed `readonly`, as TURN_STYLES. */
@@ -261,6 +275,9 @@ export type AwaitsKind = (typeof AWAITS_KINDS)[number]['id'];
  *  sessionArtifactKindState's exact shape. */
 export function turnStyleState(id: string): string | undefined {
   return TURN_STYLES.find((s) => s.id === id)?.id;
+}
+export function bashFenceModeState(id: string): string | undefined {
+  return BASH_FENCE_MODES.find((s) => s.id === id)?.id;
 }
 export function turnStepState(id: string): string | undefined {
   return TURN_STEPS.find((s) => s.id === id)?.id;
@@ -389,6 +406,10 @@ export type TurnSpec = {
   /** Top-level, not per-phase (a structured-style session carries one
    *  schema) — SCHEMA_IDS ships empty for R4-22 WI-1, see its own doc. */
   readonly schema?: string;
+  /** W7-FIX-A2 (W7A2-03) — Bash policy on a fenced `agent` step (see
+   *  BASH_FENCE_MODES). Absent ⇒ `deny`. Validated ONLY by
+   *  validateSessionKinds; the loader carries any value through. */
+  readonly bashFence?: string;
   readonly phases: readonly TurnSpecPhase[];
 };
 
@@ -502,6 +523,7 @@ function parseTurnSpec(raw: Record<string, unknown>, file: string, descIndex: nu
   const kindDir = reqString(raw, 'kindDir', file);
   const style = reqString(raw, 'style', file);
   const schema = optString(raw, 'schema');
+  const bashFence = optString(raw, 'bashFence');
   const phasesRaw = raw.phases;
   if (!Array.isArray(phasesRaw)) {
     throw new Error(`${file}: descriptor[${descIndex}].turnSpec.phases must be an array`);
@@ -511,6 +533,7 @@ function parseTurnSpec(raw: Record<string, unknown>, file: string, descIndex: nu
     kindDir,
     style,
     ...(schema !== undefined ? { schema } : {}),
+    ...(bashFence !== undefined ? { bashFence } : {}),
     phases,
   };
 }
@@ -626,6 +649,7 @@ const CHECK_TURNSPEC_UNKNOWN_STYLE = 'session-kinds/turnspec-unknown-style';
 const CHECK_TURNSPEC_UNKNOWN_STEP = 'session-kinds/turnspec-unknown-step';
 const CHECK_TURNSPEC_UNKNOWN_FINALIZER = 'session-kinds/turnspec-unknown-finalizer';
 const CHECK_TURNSPEC_UNKNOWN_SCHEMA = 'session-kinds/turnspec-unknown-schema';
+const CHECK_TURNSPEC_UNKNOWN_BASH_FENCE = 'session-kinds/turnspec-unknown-bash-fence';
 // R4-22 WI-1 adversarial-review round (AT-R422-11..18): turnSpec.phases is a
 // STATE MACHINE, and its graph coherence was validated nowhere — every check
 // below was confirmed by execution to load clean, zero findings, before this
@@ -1179,6 +1203,19 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
               obj,
               CHECK_TURNSPEC_UNKNOWN_SCHEMA,
               `Session kind "${d.id}" declares turnSpec.schema "${ts.schema}" — must be one of ${allowedIdsSummary(SCHEMA_IDS)}`,
+            ),
+          );
+        }
+
+        // W7-FIX-A2 (W7A2-03): bashFence is a closed vocabulary — an
+        // unknown value is an ERROR (the runner refuses to start a turn on
+        // it), never silently read as `deny` or `inspect`.
+        if (ts.bashFence !== undefined && bashFenceModeState(ts.bashFence) === undefined) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_UNKNOWN_BASH_FENCE,
+              `Session kind "${d.id}" declares turnSpec.bashFence "${ts.bashFence}" — must be one of ${allowedIdsSummary(BASH_FENCE_MODES)}`,
             ),
           );
         }

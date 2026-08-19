@@ -24,7 +24,7 @@
  */
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { caption, ACT, READ } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 import { writeInstrStatus, writeCrashedInstrSession, cleanInstructionsSession } from '../lib/journey-fixtures.mjs';
 
 // Disjoint from home.mjs's HOME_* fixtures and every other journey's own
@@ -157,6 +157,9 @@ export const journey = defineJourney({
           });
           check(pageAttrs !== null, 'SESSIONS-IDX.2: [data-page="sessions-index"] renders at /sessions');
           check(pageAttrs?.ready === 'true', `SESSIONS-IDX.2: [data-page-ready="true"] once the fetch settles (got "${pageAttrs?.ready}")`);
+          // W7-A1 / FIX-A1 (A1-11): the sessions pillar's read is honest —
+          // data-fetch-status="ok" + the app-shell bridge banner mounted.
+          await checkHonestPillarRead(page, check, 'sessions-index', 'SESSIONS-IDX.2');
           check(parseInt(pageAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.2: data-session-count >= 1 — the seeded session is present (got "${pageAttrs?.count}")`);
 
           const rowOf = (sid) => page.evaluate((id) => {

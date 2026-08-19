@@ -35,7 +35,7 @@
  * that takes a plain description of what happened over the wire
  * (`{kind:'network-error'|'non-json'|'json', ...}`) and returns the typed
  * `SessionShellFetchResult`. `fetchSessionShell` is a thin, untested-here
- * wrapper — it resolves the bridge URL, calls `fetch()`, catches network/
+ * wrapper — it calls `bridgeFetch()` (the ONE Studio transport), catches network/
  * parse failures into that same outcome shape, and delegates. This is what
  * makes every dispatch rule (400/404/409/500/network-error/non-JSON/
  * 200-but-malformed) testable without `vi.stubGlobal('fetch', ...)`, matching
@@ -44,7 +44,7 @@
  * file set.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 
 export type { SessionLifecycle } from './session-lifecycle-client';
@@ -751,6 +751,15 @@ export type SessionShellPayload = {
    */
   terminal: boolean;
   /**
+   * W7-FIX-A2 (W7A2-04) — whether this KIND records turns as a transcript
+   * at all (bridge-derived: a `turnSpec` kind rides the generic spine, which
+   * never writes transcript turns → `false`; a legacy-runner kind → `true`).
+   * Keys the empty-transcript copy (`session-shell-view.ts`) so a
+   * transcript-bearing kind at an operator gate is never told its work is
+   * "in the artifact pane". REQUIRED and hard-parsed like `terminal`.
+   */
+  transcript: boolean;
+  /**
    * W7-A2 — the bridge's DERIVED lifecycle (`cli/bridge-studio-lifecycle.ts`):
    * `state` (working | awaiting-operator | crashed | stalled | terminal), a
    * truthful `needsYou`, the runner's crash `error` text, `idleMs`, and
@@ -828,6 +837,15 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const terminal = terminalRaw;
 
+  // W7-FIX-A2 (W7A2-04) — REQUIRED like "terminal": a missing or non-boolean
+  // "transcript" throws, never defaulted (either default would be a lie for
+  // half the kinds).
+  const transcriptRaw = raw['transcript'];
+  if (typeof transcriptRaw !== 'boolean') {
+    throw new Error(`missing or invalid "transcript": expected a boolean, got ${JSON.stringify(transcriptRaw)}`);
+  }
+  const transcript = transcriptRaw;
+
   // W7-A2 — REQUIRED like "terminal" above; every malformed shape throws.
   const lifecycle = parseSessionLifecycle(raw['lifecycle']);
 
@@ -836,6 +854,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     affordances,
     modelTier,
     terminal,
+    transcript,
     lifecycle,
   };
 }
@@ -849,9 +868,10 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
  *  typed result. `not-found` is the ONLY kind a view maps to a first-class
  *  "no session" state (session-shell-view.ts); every other kind is fail-
  *  closed "error", the 409 stage-conflict message reaching the operator
- *  verbatim. `no-bridge` is produced only by `fetchSessionShell` itself (no
- *  bridge URL resolved) — `interpretSessionShellOutcome` never returns it,
- *  but it is a real member of the result union every caller must handle. */
+ *  verbatim. `no-bridge` is retained as a member of the union every caller
+ *  must handle; since W7-FIX-A1 `fetchSessionShell` rides `bridgeFetch`,
+ *  whose "no bridge configured" throw (SSR only — in a browser the transport
+ *  always resolves a base) surfaces as `network-error`. */
 export type SessionShellErrorKind =
   | 'bad-request'
   | 'not-found'
@@ -942,12 +962,9 @@ function sessionShellPath(kind: string, sessionId: string, project: string | nul
  *  header); the over-the-wire behaviour is pinned by cli/bridge-studio-
  *  sessions.test.ts. */
 export async function fetchSessionShell(kind: string, sessionId: string, project: string | null): Promise<SessionShellFetchResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, errorKind: 'no-bridge', error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}${sessionShellPath(kind, sessionId, project)}`);
+    res = await bridgeFetch(sessionShellPath(kind, sessionId, project));
   } catch (err) {
     return interpretSessionShellOutcome({ kind: 'network-error', message: String(err) });
   }
@@ -1007,12 +1024,9 @@ export async function postSessionAffordance(
   affordanceId: string,
   body: Record<string, unknown>,
 ): Promise<PostSessionAffordanceResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}${sessionAffordancePath(kind, sessionId, affordanceId)}`, {
+    res = await bridgeFetch(sessionAffordancePath(kind, sessionId, affordanceId), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),

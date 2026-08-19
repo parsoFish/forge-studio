@@ -633,6 +633,16 @@ export async function handleStudioSessionsRoutes(
         // `SessionInteractivePanel` can gate its ActivityLog drawer without a
         // second, hand-kept terminal-phase table client-side.
         terminal: isTerminalPhase(descriptor, phase),
+        // W7-FIX-A2 (W7A2-04) — whether this KIND records turns as a
+        // transcript at all, DERIVED from the descriptor: a `turnSpec` kind
+        // rides the generic spine (orchestrator/interactive-runner.ts), which
+        // never writes the transcript files `deriveSessionTranscript` reads
+        // (idea/prompt/questions/answers/feedback) — its work lives in the
+        // artifact pane; a legacy-runner kind writes them. ALWAYS present,
+        // mirroring `terminal`/`affordances`, so the shell's empty-transcript
+        // copy is keyed on the kind's real shape, never on a UI-side kind
+        // list or on lifecycle state alone.
+        transcript: descriptor.turnSpec === undefined,
         // W7-A2 — the DERIVED lifecycle view (cli/bridge-studio-lifecycle.ts):
         // state (working | awaiting-operator | crashed | stalled | terminal),
         // a truthful `needsYou`, the runner's crash text read live off

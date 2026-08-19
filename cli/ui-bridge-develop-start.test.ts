@@ -161,7 +161,10 @@ test('POST /api/develop/start: a write failure surfaces as a per-item error resu
     mkdirSync(join(brokenRoot, '_queue', state), { recursive: true });
   }
   mkdirSync(join(brokenRoot, '_logs'), { recursive: true });
-  writeFileSync(join(brokenRoot, '_queue', 'done', 'INIT-2026-06-13-zeta.md'), pendingManifest('INIT-2026-06-13-zeta'));
+  // Sourced from `failed/`, not `done/`: since W7-FIX-A3 (round-2 finding 6) a
+  // shipped (done-only) manifest is refused with `already-done` BEFORE any
+  // write, so it can no longer exercise the write-failure path under test.
+  writeFileSync(join(brokenRoot, '_queue', 'failed', 'INIT-2026-06-13-zeta.md'), pendingManifest('INIT-2026-06-13-zeta'));
   writeFileSync(join(brokenRoot, '_queue', 'pending'), 'not a directory');
 
   const broken = await startBridge({ forgeRoot: brokenRoot, port: 0 });

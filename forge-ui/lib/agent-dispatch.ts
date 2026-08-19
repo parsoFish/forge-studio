@@ -74,6 +74,26 @@ export type PollUntilTerminalOptions<S> = {
   onTimeout: (lastStatus: S | null) => void;
 };
 
+/**
+ * W7-FIX-A1 (A1-10): the ONE "keep watching" rule for the status-shaped
+ * polls — still `'running'`, OR the read itself FAILED TRANSIENTLY (`ok:false`
+ * + `state:'unknown'`, the fail-closed shape from studio-client, with NO
+ * status = transport failure, or a 5xx = the bridge is up but faltered).
+ * Such a read is not a terminal fact about the run: the wrapper keeps polling
+ * (bounded by `maxAttempts`) and reports it via `onUpdate` so the panel can
+ * show the bridge's text — never a fabricated `'running'`, never a run
+ * rendered as stopped because ONE read blipped. Two things ARE terminal: a
+ * bridge-ANSWERED `state:'unknown'` (`ok:true`, "no state recorded"), and a
+ * failed read the bridge answered with a 4xx (`status < 500` — R6-04 D22: a
+ * 404 "no run found" is a definitive "never dispatched", not a blip; polling
+ * it for three minutes would render a not-found as a live run).
+ */
+export function isStillWatching(s: { state: string; ok?: boolean; status?: number }): boolean {
+  if (s.state === 'running') return true;
+  if (s.ok !== false || s.state !== 'unknown') return false;
+  return s.status === undefined || s.status >= 500;
+}
+
 export function pollUntilTerminal<S>(opts: PollUntilTerminalOptions<S>): () => void {
   const intervalMs = opts.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const maxAttempts = opts.maxAttempts ?? DEFAULT_POLL_MAX_ATTEMPTS;
@@ -145,7 +165,7 @@ export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => vo
   const fetchStatus = opts.fetchStatus ?? getAgentRunStatus;
   return pollUntilTerminal<AgentRunStatus>({
     fetchStatus: () => fetchStatus(runId),
-    isRunning: (s) => s.state === 'running',
+    isRunning: isStillWatching,
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
     onUpdate: (s) => opts.onUpdate(s),
@@ -218,7 +238,7 @@ export function pollAgentFix(kbId: string, runId: string, opts: PollAgentFixOpti
   const fetchStatus = opts.fetchStatus ?? getAgentFixStatus;
   return pollUntilTerminal<AgentFixStatus>({
     fetchStatus: () => fetchStatus(kbId, runId),
-    isRunning: (s) => s.state === 'running',
+    isRunning: isStillWatching,
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
     onUpdate: (s) => opts.onUpdate(s),
@@ -233,17 +253,17 @@ export function pollAgentFix(kbId: string, runId: string, opts: PollAgentFixOpti
 // result, was simply discarded if the operator navigated away before it
 // settled — the THIRD independent instance of the exact bug class
 // `pollAgentRun`/`pollKbDrain`/`pollAgentFix` above already fixed (W6-B13).
-// `preflightFixStatus` (./studio-client.ts) returns the byte-identical shape
-// `AgentFixStatus` does (`{ok, state: 'running'|'cleared'|'not-cleared'|
-// 'failed', cleared}`) — this wrapper is `pollAgentFix`'s twin, over the
-// preflight-fix run shape instead of the brain-fix one.
+// `preflightFixStatus` (./studio-client.ts) returns `AgentFixStatus` itself
+// (`{ok, state: 'running'|'cleared'|'not-cleared'|'failed'|'unknown', cleared,
+// error?}`) — this wrapper is `pollAgentFix`'s twin, over the preflight-fix
+// run shape instead of the brain-fix one.
 // ---------------------------------------------------------------------------
 
-export type PolledPreflightFixState = 'running' | 'cleared' | 'not-cleared' | 'failed' | 'timed-out';
-export type PolledPreflightFixStatus = { ok: boolean; state: PolledPreflightFixState; cleared: boolean };
+export type PolledPreflightFixState = PolledAgentFixState;
+export type PolledPreflightFixStatus = PolledAgentFixStatus;
 
 export type PollPreflightFixOptions = {
-  fetchStatus?: (projectId: string, runId: string) => Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }>;
+  fetchStatus?: (projectId: string, runId: string) => Promise<AgentFixStatus>;
   intervalMs?: number;
   maxAttempts?: number;
   onUpdate: (status: PolledPreflightFixStatus) => void;
@@ -251,13 +271,13 @@ export type PollPreflightFixOptions = {
 
 export function pollPreflightFix(projectId: string, runId: string, opts: PollPreflightFixOptions): () => void {
   const fetchStatus = opts.fetchStatus ?? preflightFixStatus;
-  return pollUntilTerminal<PolledPreflightFixStatus>({
+  return pollUntilTerminal<AgentFixStatus>({
     fetchStatus: () => fetchStatus(projectId, runId),
-    isRunning: (s) => s.state === 'running',
+    isRunning: isStillWatching,
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
     onUpdate: (s) => opts.onUpdate(s),
-    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false, state: 'running' }), state: 'timed-out' }),
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, cleared: false }), state: 'timed-out' }),
   });
 }
 
@@ -275,9 +295,12 @@ export function pollPreflightFix(projectId: string, runId: string, opts: PollPre
 
 export type PollDisplayState = 'watching' | 'timed-out' | 'terminal';
 
-export function pollDisplayState(state: { state: string } | null | undefined): PollDisplayState | null {
+export function pollDisplayState(state: { state: string; ok?: boolean; status?: number } | null | undefined): PollDisplayState | null {
   if (!state) return null;
-  if (state.state === 'running') return 'watching';
+  // W7-FIX-A1 A1-10: a FAILED read (`ok:false` + 'unknown') is still being
+  // watched (the poll continues) — the panel renders the read failure text
+  // beside it, never a stopped run.
+  if (isStillWatching(state)) return 'watching';
   if (state.state === 'timed-out') return 'timed-out';
   return 'terminal';
 }

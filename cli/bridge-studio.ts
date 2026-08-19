@@ -109,7 +109,7 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
  *  terminal phase every session kind shares: written by the generic
  *  `POST /api/studio/sessions/:kind/:sessionId/cancel` route
- *  (cli/bridge-studio-lifecycle.ts) and read as terminal by
+ *  (cli/bridge-studio-session-cancel.ts) and read as terminal by
  *  `isTerminalPhase` (cli/bridge-studio-sessions.ts) for EVERY kind BEFORE
  *  the per-kind tables are consulted. Deliberately NOT a per-kind
  *  `{ phase: cancelled, step: terminal }` yaml row: "the operator gave up"
@@ -117,8 +117,13 @@ export const LEGACY_SESSION_TERMINAL_PHASES: Readonly<Record<string, ReadonlySet
  *  eight tables is exactly the drift shape ADR-043's "derived, not authored"
  *  discipline exists to prevent. `deriveSessionAffordances` already yields
  *  `[]` for any phase a table does not name, so a cancelled session derives
- *  no affordance without any table change. */
-export const CANCELLED_PHASE = 'cancelled';
+ *  no affordance without any table change.
+ *
+ *  W7-FIX-A2 (W7A2-01): the constant now LIVES at the status-write seam
+ *  (`orchestrator/interactive-session.ts`), which enforces the sticky-cancel
+ *  rule (`cancelledPhaseWins`) for every writer; re-exported here so the
+ *  bridge modules keep their one import. */
+export { CANCELLED_PHASE } from '../orchestrator/interactive-session.ts';
 
 /** W7-A2 — operator-gate phases for the two kinds that carry NEITHER a
  *  `turnSpec` nor a `panel` table (architect — permanently bespoke per
@@ -464,16 +469,19 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 
 function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string[]; provenance: Provenance }> {
   const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
+  // ABSENT is a real, honest answer: nothing is registered yet.
   if (!existsSync(flowsDir)) return [];
 
-  let entries: string[];
-  try {
-    entries = readdirSync(flowsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
+  // W7-FIX-A3 (round-2 finding 5): a THROWN read is NOT an empty list. This
+  // catch turned an unreadable `studio/flows` (EACCES, ENOTDIR, a transient FS
+  // failure) into `200 {flows: []}`, and the run page derives `unregistered`
+  // — a real fact about a flow id — from exactly that answered list, so a
+  // failed read declared every flow unregistered instead of leaving the page
+  // on its retryable unresolved body. Let it throw: the route's own catch
+  // sends the 500 the client's fail-closed vocabulary already handles.
+  const entries = readdirSync(flowsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
 
   const flows: Array<FlowDefinition & { bands: string[]; provenance: Provenance }> = [];
   for (const entry of entries) {
@@ -612,7 +620,28 @@ export async function handleStudioRoutes(
 
       // Guard against path traversal via a crafted runId.
       const safeLogsBase = resolve(ctx.logsRoot);
-      const eventsPath = resolve(safeLogsBase, runId, 'events.jsonl');
+
+      // W7-FIX-A3 (A3-02): an id whose log dir does NOT exist literally is
+      // resolved the SAME way `GET /api/runs/<id>` resolves it (findRun: cycle
+      // id, then the stable INITIATIVE id) — since W7-A3 every run link is
+      // minted by initiative id, and `_logs/<initiativeId>` does not exist once
+      // the scheduler claims (the run's own id flips to the cycle id). An id
+      // findRun does not know (an orphan log dir, or a planned run whose id IS
+      // the initiative id) falls through as itself: honest 404 below.
+      //
+      // ROUND-2 (finding 11): the LITERAL path is probed FIRST, and findRun
+      // only runs when it is absent. `findRun` walks the whole queue and
+      // rebuilds the run/node/agent maps, re-aggregating the active run's
+      // events.jsonl — and PhaseDrawer refetches this route on EVERY WebSocket
+      // event for the active run, whose id it already passes as the cycle id.
+      // That made a live cycle parse its own event log twice per event. The
+      // literal probe is one existsSync; the resolution semantics are
+      // unchanged for every id that does not have its own log dir.
+      const literalPath = resolve(safeLogsBase, runId, 'events.jsonl');
+      const literalHit = literalPath.startsWith(safeLogsBase + sep) && existsSync(literalPath);
+      const resolvedRunId = literalHit ? runId : (findRun(ctx.forgeRoot, runId)?.id ?? runId);
+
+      const eventsPath = literalHit ? literalPath : resolve(safeLogsBase, resolvedRunId, 'events.jsonl');
       if (!eventsPath.startsWith(safeLogsBase + sep)) {
         sendJson(res, 400, { error: 'invalid run id' }, origin);
         return true;
@@ -685,7 +714,18 @@ export async function handleStudioRoutes(
     try {
       const run = findRun(ctx.forgeRoot, runId);
       if (!run) {
-        sendJson(res, 404, { error: 'run not found' }, origin);
+        // W7-FIX-A3 (round-2 finding 2): the 404 carries the PER-RUN existence
+        // fact. "This run is unknown" and "nothing exists on disk for this id"
+        // are different statements, and the artifact page needs the second one
+        // to decide not-found (an orphan `_logs/<id>/` — queue manifest gone,
+        // artifacts still there — renders its artifact instead of the shared
+        // NotFound). Deriving it from whichever artifact the page's `?type=`
+        // happened to read made one id render two contradictory pages.
+        // The probe goes through the guard family (the request-derived id as
+        // its OWN segment under the trusted logs root), so a traversal-shaped
+        // id is `false` rather than an existence oracle outside `_logs`.
+        const logDir = resolveGuardedPath(ctx.logsRoot, [runId]);
+        sendJson(res, 404, { error: 'run not found', onDisk: logDir.ok && logDir.exists }, origin);
         return true;
       }
       sendJson(res, 200, { run }, origin);

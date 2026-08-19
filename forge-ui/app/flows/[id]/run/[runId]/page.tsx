@@ -10,8 +10,9 @@
  *
  * A thin client shell: fetches the run (`lib/flow-run-detail-client.ts`'s
  * `fetchFlowRunDetail`, a THREE-state resolver — found / not-found /
- * unresolved, D9), the flow definition (`lib/studio-client.ts`'s
- * `fetchFlow`) and, once a run is actually found, its review findings
+ * unresolved, D9), the flow definition (found in `lib/studio-client.ts`'s
+ * `fetchStudioFlows()` list — W7-FIX-A3: never a per-id GET, so a retired
+ * flow id fires no 404) and, once a run is actually found, its review findings
  * (`fetchReviewFindings`) — then derives the timeline
  * (`lib/flow-run-timeline.ts`'s `deriveFlowRunTimeline`) and hands
  * everything to the pure, props-driven `FlowRunDetail`.
@@ -44,9 +45,9 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
-import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
+import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
-import { fetchFlow, type Flow, type Run } from '@/lib/studio-client';
+import { fetchStudioFlows, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { RunLogLine } from '@/lib/run-log-line';
 
@@ -75,11 +76,29 @@ export default function FlowRunPage() {
   // browser reload the operator previously had to know to do manually.
   const load = useCallback(async (signal: { cancelled: boolean }) => {
     setLoaded(false);
-    const [res, flowDef] = await Promise.all([fetchFlowRunDetail(runId), fetchFlow(flowId)]);
+    // W7-FIX-A3 (walkthrough gate): the flow DEFINITION is resolved from the
+    // flows LIST (same descriptor the monitor uses), never `GET /api/studio/
+    // flows/<id>` — a RETIRED flow id (`release-refine`, the pre-flow_id
+    // `unknown` sentinel) is a legitimate route here (the run's own recorded
+    // phases render under the "unregistered" banner) and must not fire a
+    // guaranteed-404 request on every visit. A failed list read (throws) is
+    // NOT "unregistered": `resolveRunPageState` downgrades a found run to
+    // `unresolved` (retryable) — a fact about the flow is only ever derived
+    // from an ANSWERED list.
+    const [rawRes, flowsRead] = await Promise.all([
+      fetchFlowRunDetail(runId),
+      fetchStudioFlows().then(
+        (flows): FlowsListRead => ({ ok: true, flows }),
+        (): FlowsListRead => ({ ok: false }),
+      ),
+    ]);
     if (signal.cancelled) return;
-    // W7-A3 (flows-07 / home-sessions-17): findings are produced by the
-    // adversarial-review node — only fetch once it completed (no 404 spam).
-    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run) ? await fetchReviewFindings(res.run.id) : null;
+    const { resolution: res, flow: flowDef } = resolveRunPageState(rawRes, flowId, flowsRead);
+    // W7-A3 (flows-07 / home-sessions-17): findings are produced by the flow's
+    // review node — only fetch once it completed (no 404 spam). W7-FIX-A3
+    // (A3-11): the producer is derived from the flow definition, not a
+    // literal node id.
+    const findingsDoc = res.kind === 'found' && shouldFetchReviewFindings(res.run, flowDef) ? await fetchReviewFindings(res.run.id) : null;
     if (signal.cancelled) return;
     setResolution(res);
     setFlow(flowDef);
@@ -96,6 +115,11 @@ export default function FlowRunPage() {
   // Toggle a row's expand state; fetch that node's own raw log on first
   // expand only — a node already cached in `nodeLogLines` is never
   // re-fetched, and re-clicking the SAME row collapses it back.
+  // W7-FIX-A3 (A3-02): the log is keyed on the RESOLVED run id (the run's own
+  // cycle id once claimed), never the raw URL segment — since W7-A3 every run
+  // link is minted by INITIATIVE id, and `_logs/<initiativeId>` does not
+  // exist. (The bridge route resolves the same way now; the client sends the
+  // id it actually resolved so the two never disagree.)
   function handleNodeClick(nodeId: string) {
     if (expandedNodeId === nodeId) {
       setExpandedNodeId(null);
@@ -103,7 +127,8 @@ export default function FlowRunPage() {
     }
     setExpandedNodeId(nodeId);
     if (nodeLogLines[nodeId] === undefined) {
-      void fetchNodeLog(runId, nodeId).then((lines) => {
+      const resolvedRunId = resolution?.kind === 'found' ? resolution.run.id : runId;
+      void fetchNodeLog(resolvedRunId, nodeId).then((lines) => {
         setNodeLogLines((prev) => ({ ...prev, [nodeId]: lines }));
       });
     }

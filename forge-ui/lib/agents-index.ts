@@ -24,7 +24,10 @@
  * `not-found`/`unresolved` per-agent resolutions contribute nothing to the
  * merge (honest omission, never a fabricated row) — a transient failure
  * fetching ONE agent's history must not blank the whole section, and an
- * agent that has simply never run must not render a phantom entry.
+ * agent that has simply never run must not render a phantom entry. The
+ * `unresolved` COUNT is surfaced beside the rows (`fetchRecentAgentRunsWithMeta`,
+ * W7-FIX-A1 A1-09) so a section whose reads all failed is never mistaken for
+ * a fleet that has never run.
  */
 import { sortLedgerRowsNewestFirst, type LedgerRow } from './history-ledger';
 import { fetchAgentHistory } from './agent-ledger';
@@ -110,6 +113,30 @@ export async function fetchRecentAgentRuns(
   agents: Agent[],
   limit: number = RECENT_AGENT_RUNS_LIMIT,
 ): Promise<LedgerRow[]> {
+  return (await fetchRecentAgentRunsWithMeta(agents, limit)).rows;
+}
+
+/**
+ * W7-FIX-A1 (A1-09): the merged rows PLUS how many per-agent history reads
+ * came back `'unresolved'` (a failed/unreachable read — neither "ran" nor
+ * "never ran"). Before this, that count was parsed and DISCARDED: a total
+ * outage rendered the same empty ledger as a fleet that has never run. The
+ * section renders an honest "N of M histories could not be read" notice off
+ * `unresolved` (components/studio/UnresolvedHistoriesNotice.tsx) — the rows
+ * are still whatever WAS read, never fabricated.
+ */
+export type RecentAgentRunsResult = {
+  rows: LedgerRow[];
+  /** Per-agent reads that resolved `'unresolved'` (failed / unreachable). */
+  unresolved: number;
+  /** Agents fanned out to (`agents.length`). */
+  total: number;
+};
+
+export async function fetchRecentAgentRunsWithMeta(
+  agents: Agent[],
+  limit: number = RECENT_AGENT_RUNS_LIMIT,
+): Promise<RecentAgentRunsResult> {
   const resolutions: Awaited<ReturnType<typeof fetchAgentHistory>>[] = [];
   for (let i = 0; i < agents.length; i += AGENT_HISTORY_FAN_OUT_BATCH_SIZE) {
     const batch = agents.slice(i, i + AGENT_HISTORY_FAN_OUT_BATCH_SIZE);
@@ -117,5 +144,6 @@ export async function fetchRecentAgentRuns(
     resolutions.push(...batchResolutions);
   }
   const perAgentRows = resolutions.map((r) => (r.kind === 'found' ? r.rows : []));
-  return mergeRecentAgentRuns(perAgentRows, limit);
+  const unresolved = resolutions.filter((r) => r.kind === 'unresolved').length;
+  return { rows: mergeRecentAgentRuns(perAgentRows, limit), unresolved, total: agents.length };
 }

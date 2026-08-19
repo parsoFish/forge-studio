@@ -6,7 +6,7 @@
  * sections; the bridge derives approve / send-back over the set and returns it
  * with every read/mutate (so the UI never re-derives out of sync).
  */
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 export type ReviewCommentAc = { given: string; when: string; then: string };
 
@@ -37,10 +37,8 @@ const EMPTY = (cycleId: string): ReviewCommentsResponse => ({
 });
 
 export async function fetchReviewComments(cycleId: string): Promise<ReviewCommentsResponse> {
-  const base = await resolveBridgeUrl();
-  if (!base) return EMPTY(cycleId);
   try {
-    const res = await fetch(`${base}/api/review-comments/${encodeURIComponent(cycleId)}`);
+    const res = await bridgeFetch(`/api/review-comments/${encodeURIComponent(cycleId)}`);
     if (!res.ok) return EMPTY(cycleId);
     return normalize(cycleId, await res.json());
   } catch {
@@ -64,10 +62,8 @@ export async function resolveReviewComment(
 
 /** Fetch the F4 single DEMO.md (raw markdown) for a cycle, or '' if absent. */
 export async function fetchDemoMarkdown(cycleId: string): Promise<string> {
-  const base = await resolveBridgeUrl();
-  if (!base) return '';
   try {
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(cycleId)}/DEMO.md`);
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(cycleId)}/DEMO.md`);
     if (!res.ok) return '';
     return await res.text();
   } catch {
@@ -76,10 +72,8 @@ export async function fetchDemoMarkdown(cycleId: string): Promise<string> {
 }
 
 async function post(path: string, body: unknown, cycleId: string): Promise<ReviewCommentsResponse | { error: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}${path}`, {
+    const res = await bridgeFetch(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),

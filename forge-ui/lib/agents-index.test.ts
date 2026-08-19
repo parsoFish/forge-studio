@@ -21,7 +21,7 @@ vi.mock('./agent-ledger.ts', () => ({
   fetchAgentHistory: vi.fn(),
 }));
 
-import { mergeRecentAgentRuns, fetchRecentAgentRuns, RECENT_AGENT_RUNS_LIMIT, AGENT_HISTORY_FAN_OUT_BATCH_SIZE } from './agents-index';
+import { mergeRecentAgentRuns, fetchRecentAgentRuns, fetchRecentAgentRunsWithMeta, RECENT_AGENT_RUNS_LIMIT, AGENT_HISTORY_FAN_OUT_BATCH_SIZE } from './agents-index';
 import { fetchAgentHistory } from './agent-ledger';
 
 // ---------------------------------------------------------------------------
@@ -260,4 +260,49 @@ test('fetchRecentAgentRuns: a roster that is an exact multiple of the batch size
   await fetchRecentAgentRuns(roster);
 
   expect(mocked).toHaveBeenCalledTimes(AGENT_HISTORY_FAN_OUT_BATCH_SIZE * 2);
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A1 (A1-09): the `unresolved` count is surfaced, not discarded.
+// Before this, a total outage (every per-agent history read `'unresolved'`)
+// rendered the SAME empty ledger as a fleet that has never run.
+// ---------------------------------------------------------------------------
+
+test("fetchRecentAgentRunsWithMeta: returns the merged rows PLUS how many per-agent reads were 'unresolved' and the roster total — 'not-found' (never ran) is NOT counted as unresolved", async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockImplementation(async (slug: string) => {
+    if (slug === 'ok-agent') return { kind: 'found', rows: [row({ id: 'ok-1' })] };
+    if (slug === 'never-run') return { kind: 'not-found' };
+    return { kind: 'unresolved' };
+  });
+
+  const result = await fetchRecentAgentRunsWithMeta([agent('ok-agent'), agent('never-run'), agent('flaky-a'), agent('flaky-b')]);
+  expect(result.rows.map((r) => r.id)).toEqual(['ok-1']);
+  expect(result.unresolved).toBe(2);
+  expect(result.total).toBe(4);
+});
+
+test('fetchRecentAgentRunsWithMeta: a TOTAL outage is `unresolved === total` with zero rows — distinguishable from an empty-but-healthy fleet (`unresolved === 0`)', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockImplementation(async () => ({ kind: 'unresolved' }));
+  const outage = await fetchRecentAgentRunsWithMeta([agent('a'), agent('b')]);
+  expect(outage).toEqual({ rows: [], unresolved: 2, total: 2 });
+
+  mocked.mockImplementation(async () => ({ kind: 'not-found' }));
+  const neverRan = await fetchRecentAgentRunsWithMeta([agent('a'), agent('b')]);
+  expect(neverRan).toEqual({ rows: [], unresolved: 0, total: 2 });
+});
+
+test('fetchRecentAgentRunsWithMeta: an empty roster resolves {rows:[], unresolved:0, total:0} without calling fetchAgentHistory', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockClear();
+  expect(await fetchRecentAgentRunsWithMeta([])).toEqual({ rows: [], unresolved: 0, total: 0 });
+  expect(mocked).not.toHaveBeenCalled();
+});
+
+test('fetchRecentAgentRuns: still resolves the plain merged rows (the meta variant is additive — one fan-out, two views)', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockImplementation(async (slug: string) => (slug === 'a' ? { kind: 'found', rows: [row({ id: 'a-1' })] } : { kind: 'unresolved' }));
+  const rows = await fetchRecentAgentRuns([agent('a'), agent('b')]);
+  expect(rows.map((r) => r.id)).toEqual(['a-1']);
 });

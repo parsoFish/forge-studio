@@ -160,11 +160,29 @@ test('queued: running scheduler → will pick it up; paused → resume it; stopp
   expect(describePostCommit([link('queued')], { running: true, paused: true })).toEqual({
     tone: 'queued-running', headline: `${ID} is queued — the scheduler is paused; resume it to start.`, needsSchedulerStart: false,
   });
-  for (const s of [{ running: false }, null]) {
-    expect(describePostCommit([link('queued')], s)).toEqual({
-      tone: 'queued-stopped', headline: `${ID} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true,
-    });
-  }
+  expect(describePostCommit([link('queued')], { running: false })).toEqual({
+    tone: 'queued-stopped', headline: `${ID} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true,
+  });
+});
+
+// W7-FIX-A3 (A3-04): a null (unreadable) scheduler status is NOT "stopped" —
+// the headline must not assert a state that was never read (the strip
+// beneath renders "unknown" with no Start button, so "start it" would
+// contradict its own controls). Distinct tones, still mounts the strip.
+test('queued/claimed with an UNKNOWN scheduler (null) → "could not confirm" headlines, never "stopped"', () => {
+  const queued = describePostCommit([link('queued')], null);
+  expect(queued).toEqual({
+    tone: 'queued-unknown',
+    headline: `${ID} is queued — could not confirm the scheduler is running; check its status below.`,
+    needsSchedulerStart: true,
+  });
+  const claimed = describePostCommit([link('building')], null);
+  expect(claimed).toEqual({
+    tone: 'claimed-unknown',
+    headline: `${ID} is claimed — could not confirm the scheduler is running; check its status below.`,
+    needsSchedulerStart: true,
+  });
+  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/stopped|building it now/);
 });
 
 test('gated wins over everything; failed / done / unknown are their own honest tones', () => {
@@ -179,4 +197,30 @@ test('gated wins over everything; failed / done / unknown are their own honest t
 test('multiple initiatives → the headline names every matching id', () => {
   const rows = [{ ...link('queued'), initiativeId: 'INIT-2026-01-01-a' }, { ...link('queued'), initiativeId: 'INIT-2026-01-01-b' }];
   expect(describePostCommit(rows, { running: false }).headline).toBe('INIT-2026-01-01-a, INIT-2026-01-01-b is queued — the scheduler is stopped. Start it to build.');
+});
+
+// W7-FIX-A3 (round-2 finding 4): the same drain window, on the architect's
+// committed view. `stopping` rides on `running: true`, so a commit landing
+// inside a Stop's drain used to promise "the scheduler will pick it up" for
+// an initiative that will sit in pending/ once the daemon exits.
+test('queued/claimed while the scheduler is STOPPING → drain-honest headlines, never "will pick it up"', () => {
+  const queued = describePostCommit([link('queued')], { running: true, stopping: true });
+  expect(queued).toEqual({
+    tone: 'queued-stopping',
+    headline: `${ID} is queued — the scheduler is stopping; start it again to build.`,
+    needsSchedulerStart: true,
+  });
+  const claimed = describePostCommit([link('building')], { running: true, stopping: true });
+  expect(claimed).toEqual({
+    tone: 'claimed-stopping',
+    headline: `${ID} is claimed but the scheduler is stopping — it will not progress until you start it again.`,
+    needsSchedulerStart: true,
+  });
+  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/will pick it up|building it now/);
+});
+
+test('stopping wins over paused on the committed view (a draining daemon cannot be resumed into claiming)', () => {
+  const v = describePostCommit([link('queued')], { running: true, paused: true, stopping: true });
+  expect(v.tone).toBe('queued-stopping');
+  expect(v.headline).not.toMatch(/resume it/);
 });

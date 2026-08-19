@@ -38,3 +38,27 @@ export function resolveArtifactMode(
   if (modeParam === 'gate') return inferred === 'gate' ? 'gate' : 'view';
   return inferred;
 }
+
+/**
+ * W7-FIX-A3 — the artifact page's not-found rule. W7-A4 (crosscut-08 /
+ * artifact-plan-08) rendered the shared NotFound whenever `/api/runs/<id>`
+ * was unknown, which also fired for a run whose queue manifest is gone but
+ * whose `_logs/<id>/` artifacts still exist (an orphan log dir — real roots
+ * carry them; the journey's automated-reflection fixture is that shape).
+ * Not-found is asserted ONLY when the run is unknown AND nothing exists on
+ * disk for the id: `?run=nope` stays NotFound; an orphan log dir renders its
+ * artifact (the page says the run has no queue record).
+ *
+ * ROUND-2 (finding 2): both inputs are PER-RUN facts. `runOnDisk` is the
+ * bridge's own existence answer — the guarded existence of `_logs/<id>`,
+ * carried on `GET /api/runs/<id>`'s 404 body — NOT "did this `?type=`'s
+ * artifact resolve". The type-derived version made one id render two
+ * contradictory pages: `fetchArtifactDoc('workitems', …)` returns `empty`
+ * without touching disk whenever the run is null (it reads `run.workItems`),
+ * so an orphan log dir rendered its plan and NotFound'd its work-items tab,
+ * both linked from the same ArtifactTrail.
+ */
+export function isRunNotFound(input: { runFound: boolean; runOnDisk: boolean }): boolean {
+  if (input.runFound) return false;
+  return !input.runOnDisk;
+}

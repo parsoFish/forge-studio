@@ -24,6 +24,7 @@ import {
   readBridgeJson,
   unwrapBridgeRead,
   unwrapBridgeReadOr404,
+  BridgeReadError,
   type BridgeReadResult,
 } from './bridge-result';
 // R6-01 WI-4: the standing-trigger wire type + its boundary validation live
@@ -877,13 +878,33 @@ export async function fetchPlannedInitiatives(): Promise<PlannedInitiative[]> {
   return body.planned ?? [];
 }
 
+/**
+ * W7-FIX-A3 (round-2 finding 2) — a run lookup with the bridge's PER-RUN
+ * existence fact attached. `run: null` says the queue knows no such run;
+ * `onDisk` says whether anything exists on disk for the id (the 404 body's
+ * guarded `_logs/<id>` probe). The artifact page's not-found rule needs both,
+ * and neither may be inferred from whichever artifact a given `?type=` read.
+ * A 404 is a real answer here; every other failure still throws (an outage
+ * must never read as "no such run").
+ */
+export type RunLookup = { run: Run | null; onDisk: boolean };
+
+export async function fetchRunLookup(id: string): Promise<RunLookup> {
+  const path = `/api/runs/${encodeURIComponent(id)}`;
+  const r = await studioGet<{ run?: unknown }>(path);
+  if (r.ok) {
+    return r.data?.run ? { run: parseRun(r.data.run), onDisk: true } : { run: null, onDisk: false };
+  }
+  if (r.status === 404) {
+    const body = r.body as { onDisk?: unknown } | undefined;
+    return { run: null, onDisk: body?.onDisk === true };
+  }
+  throw new BridgeReadError(path, r);
+}
+
 /** Fetch a single run by id. 404 → null; any other failure throws. */
 export async function fetchRun(id: string): Promise<Run | null> {
-  const body = await studioReadOr404<{ run?: unknown }>(
-    `/api/runs/${encodeURIComponent(id)}`,
-  );
-  if (!body?.run) return null;
-  return parseRun(body.run);
+  return (await fetchRunLookup(id)).run;
 }
 
 /** Fetch phase log lines for a run's node. */
@@ -1421,21 +1442,37 @@ export async function dispatchAgentFix(
   return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
-export type AgentFixStatus = { ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean };
+/** W7-FIX-A1 (A1-10): `'unknown'` is BOTH the bridge's own honest "no state
+ *  recorded" (`ok:true`) AND the failed-read shape (`ok:false` + `error`, the
+ *  bridge's text verbatim / "bridge unreachable (…)") — never a fabricated
+ *  `'running'`. `agent-dispatch.ts`'s poll wrappers keep watching on `ok:false`
+ *  (bounded), so a blip is a visible read failure, not a stopped run. */
+export type AgentFixStatus = {
+  ok: boolean;
+  state: 'running' | 'cleared' | 'not-cleared' | 'failed' | 'unknown';
+  cleared: boolean;
+  /** Present only on a failed read (`ok:false`). */
+  error?: string;
+  /** On a failed read: the HTTP status iff the bridge ANSWERED (a 404 "no
+   *  such run" is a definitive answer, not a blip); absent = transport. */
+  status?: number;
+};
 
-/** Poll a dispatched agent-fix run's state. */
+function parseAgentFixStatus(r: BridgeReadResult<{ state?: string; cleared?: boolean }>): AgentFixStatus {
+  if (!r.ok) return { ok: false, state: 'unknown', cleared: false, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
+  return {
+    ok: true,
+    state: (r.data.state as AgentFixStatus['state']) ?? 'unknown',
+    cleared: r.data.cleared === true,
+  };
+}
+
+/** Poll a dispatched agent-fix run's state (status-shaped: never throws;
+ *  a failed read is `{ok:false, state:'unknown', error}`). */
 export async function getAgentFixStatus(id: string, runId: string): Promise<AgentFixStatus> {
-  try {
-    const res = await bridgeFetch(`/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`);
-    const data = (await res.json()) as { state?: string; cleared?: boolean };
-    return {
-      ok: res.ok,
-      state: (data.state as AgentFixStatus['state']) ?? 'running',
-      cleared: data.cleared === true,
-    };
-  } catch {
-    return { ok: false, state: 'running', cleared: false };
-  }
+  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean }>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`,
+  ));
 }
 
 // --- KB drain-to-green (W6-B13) ---------------------------------------------
@@ -1578,26 +1615,32 @@ export async function dispatchAgentRun(
 
 export type AgentRunStatus = {
   ok: boolean;
+  /** `'unknown'` with `ok:true` = the bridge answered with no state recorded;
+   *  with `ok:false` = the READ failed (`error` carries the bridge's text /
+   *  "bridge unreachable (…)") — W7-FIX-A1 A1-10 keeps the two distinct. */
   state: 'running' | 'done' | 'suppressed' | 'failed' | 'unknown';
   costUsd: number;
   events: number;
+  /** Present only on a failed read (`ok:false`). */
+  error?: string;
+  /** On a failed read: the HTTP status iff the bridge ANSWERED (R6-04 D22: a
+   *  404 = "never dispatched" is a definitive, terminal answer); absent =
+   *  transport failure. */
+  status?: number;
 };
 
 /** Poll a dispatched generic agent run's state (reads its `_logs/<runId>/`
- *  event log server-side). */
+ *  event log server-side). Status-shaped: never throws; a failed read is
+ *  `{ok:false, state:'unknown', error, status?}`. */
 export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> {
-  try {
-    const res = await bridgeFetch(`/api/agents/runs/${encodeURIComponent(runId)}`);
-    const data = (await res.json()) as { state?: string; costUsd?: number; events?: number };
-    return {
-      ok: res.ok,
-      state: (data.state as AgentRunStatus['state']) ?? 'unknown',
-      costUsd: typeof data.costUsd === 'number' ? data.costUsd : 0,
-      events: typeof data.events === 'number' ? data.events : 0,
-    };
-  } catch {
-    return { ok: false, state: 'unknown', costUsd: 0, events: 0 };
-  }
+  const r = await studioGet<{ state?: string; costUsd?: number; events?: number }>(`/api/agents/runs/${encodeURIComponent(runId)}`);
+  if (!r.ok) return { ok: false, state: 'unknown', costUsd: 0, events: 0, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
+  return {
+    ok: true,
+    state: (r.data.state as AgentRunStatus['state']) ?? 'unknown',
+    costUsd: typeof r.data.costUsd === 'number' ? r.data.costUsd : 0,
+    events: typeof r.data.events === 'number' ? r.data.events : 0,
+  };
 }
 
 /** One row of `GET /api/agents/:slug/history`'s standalone-dispatch shape —
@@ -1866,22 +1909,13 @@ export async function preflightFixAgent(
   };
 }
 
-/** Poll a dispatched preflight-fix (user-tier) run's state. */
-export async function preflightFixStatus(
-  projectId: string,
-  runId: string,
-): Promise<{ ok: boolean; state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean }> {
-  try {
-    const res = await bridgeFetch(`/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`);
-    const data = (await res.json()) as { state?: string; cleared?: boolean };
-    return {
-      ok: res.ok,
-      state: (data.state as 'running' | 'cleared' | 'not-cleared' | 'failed') ?? 'running',
-      cleared: data.cleared === true,
-    };
-  } catch {
-    return { ok: false, state: 'running', cleared: false };
-  }
+/** Poll a dispatched preflight-fix (user-tier) run's state — the same
+ *  `AgentFixStatus` shape as `getAgentFixStatus` (status-shaped: never
+ *  throws; a failed read is `{ok:false, state:'unknown', error}`). */
+export async function preflightFixStatus(projectId: string, runId: string): Promise<AgentFixStatus> {
+  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean }>(
+    `/api/studio/projects/${encodeURIComponent(projectId)}/preflight/fix-agent/${encodeURIComponent(runId)}`,
+  ));
 }
 
 /**

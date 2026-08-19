@@ -179,7 +179,10 @@ test('enqueueDevelopRun: preserved worktree WI files count as decomposition evid
 
 test('enqueueDevelopRun: a write failure is contained → status error, never throws (contract)', () => {
   withTmp((queueRoot) => {
-    seed(queueRoot, 'done', manifest());
+    // Sourced from `failed/`, not `done/`: since W7-FIX-A3 (round-2 finding 6)
+    // a done-only manifest is refused (`already-done`) BEFORE any write, so it
+    // can no longer exercise the write-failure path this test is about.
+    seed(queueRoot, 'failed', manifest());
     // Sabotage: `pending` exists as a FILE, so the enqueue's mkdirSync /
     // writeFileSync must fail. The doc contract says the function never
     // throws — the failure must come back as an error-shaped result.
@@ -192,5 +195,27 @@ test('enqueueDevelopRun: a write failure is contained → status error, never th
     assert.equal(result?.status, 'error');
     assert.equal(result?.initiativeId, 'INIT-2026-06-21-toc');
     assert.ok(result?.detail, 'the underlying filesystem error is surfaced in detail');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 6): `POST /api/develop/start` is an OPERATOR
+// action, and it flows through this delegate — so a shipped initiative is
+// refused here exactly as it is on `POST /api/flows/:id/run`. Before this, the
+// A3-01 guard lived only on the flows route and this sibling still pulled a
+// merged manifest out of `done/` and re-ran it.
+// ---------------------------------------------------------------------------
+
+test('enqueueDevelopRun: a shipped initiative (done/) is refused with already-done, manifest untouched', () => {
+  withTmp((queueRoot) => {
+    const donePath = seed(queueRoot, 'done', manifest({ phase: 'done' }));
+    const before = readFileSync(donePath, 'utf8');
+
+    const result = enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
+
+    assert.equal(result.status, 'already-done');
+    assert.match(result.detail ?? '', /shipped/i);
+    assert.equal(readFileSync(donePath, 'utf8'), before, 'the done manifest is byte-unchanged');
+    assert.equal(existsSync(join(queueRoot, 'pending', 'INIT-2026-06-21-toc.md')), false, 'nothing enqueued');
   });
 });

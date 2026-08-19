@@ -35,13 +35,13 @@
  *
  * `fetchReviewFindings(runId)` reuses the SAME artifact-fetch shape
  * `app/artifact/page.tsx`'s own (unexported) `fetchJsonArtifact` already
- * established — `GET /api/artifact/:runId/:filename`, `resolveBridgeUrl` +
- * `fetch` + degrade-to-null on any failure — rather than inventing a second
- * one, per this task's brief.
+ * established — `GET /api/artifact/:runId/:filename` over `bridgeFetch` (the
+ * ONE Studio transport, W7-FIX-A1) + degrade-to-null on any failure — rather
+ * than inventing a second one, per this task's brief.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
-import { parseRun, type Run } from './studio-client';
+import { bridgeFetch } from './bridge-client';
+import { parseRun, type Flow, type Run } from './studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 
 export type FlowRunDetailResolution =
@@ -69,10 +69,8 @@ export function resolveFlowRunDetailFromResponse(status: number, body: unknown):
 
 /** Fetch + resolve one runId's flow run-detail. See header for the sentinel-0 convention. */
 export async function fetchFlowRunDetail(id: string): Promise<FlowRunDetailResolution> {
-  const base = await resolveBridgeUrl();
-  if (!base) return resolveFlowRunDetailFromResponse(0, null);
   try {
-    const res = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
+    const res = await bridgeFetch(`/api/runs/${encodeURIComponent(id)}`);
     const body = await res.json();
     return resolveFlowRunDetailFromResponse(res.status, body);
   } catch {
@@ -88,9 +86,7 @@ export async function fetchFlowRunDetail(id: string): Promise<FlowRunDetailResol
  */
 export async function fetchReviewFindings(runId: string): Promise<ReviewFindingsDoc | null> {
   try {
-    const base = await resolveBridgeUrl();
-    if (!base) return null;
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);
     if (!res.ok) return null;
     return (await res.json()) as ReviewFindingsDoc;
   } catch {
@@ -100,10 +96,58 @@ export async function fetchReviewFindings(runId: string): Promise<ReviewFindings
 
 /**
  * W7-A3 (flows-07 / home-sessions-17): `review-findings.json` is produced by
- * the develop flow's `adversarial-review` node — fetch it ONLY once that node
- * completed, so a run page never fires a guaranteed-404 request (a console
- * error on every visit, on every Home ledger row).
+ * the review node — fetch it ONLY once that node completed, so a run page
+ * never fires a guaranteed-404 request (a console error on every visit, on
+ * every Home ledger row).
+ *
+ * W7-FIX-A3 (A3-11): the producer is DERIVED from the flow definition — the
+ * node(s) whose outgoing edge carries `artifact: review-findings` — not a
+ * literal node id, so an operator flow that names its review node
+ * differently still shows its findings. A flow that declares no such
+ * producer never fetches. The literal `adversarial-review` key is consulted
+ * ONLY when there is no flow definition to derive from (a retired flow id).
  */
-export function shouldFetchReviewFindings(run: Run): boolean {
-  return run.phases['adversarial-review'] === 'complete';
+export const REVIEW_FINDINGS_ARTIFACT = 'review-findings';
+
+export function reviewFindingsProducers(flow: Pick<Flow, 'edges'> | null): string[] {
+  if (!flow) return ['adversarial-review'];
+  return [...new Set(flow.edges.filter((e) => e.artifact === REVIEW_FINDINGS_ARTIFACT).map((e) => e.from))];
+}
+
+export function shouldFetchReviewFindings(run: Run, flow: Pick<Flow, 'edges'> | null): boolean {
+  return reviewFindingsProducers(flow).some((nodeId) => run.phases[nodeId] === 'complete');
+}
+
+/**
+ * W7-FIX-A3 (the walkthrough gate's retired-flow-id run page): the flow
+ * DEFINITION comes from the flows LIST, never a per-id GET (a retired id such
+ * as `release-refine` is a legitimate route here and must not fire a
+ * guaranteed-404 request per visit). The list read is itself a bridge read
+ * with two honest outcomes:
+ *   - it ANSWERED (`{ ok: true, flows }`) — an id absent from the list is a
+ *     real fact: `flow: null` → the page renders the run's own recorded
+ *     phases under the "unregistered" banner;
+ *   - it FAILED (`{ ok: false }`, threw / no bridge) — nothing is known about
+ *     the flow, so a FOUND run is downgraded to `unresolved` (the page renders
+ *     its retryable body) rather than declaring "unregistered" off a failed
+ *     read. Round-2 finding 5 closed the other half of this invariant: the
+ *     bridge's `GET /api/studio/flows` used to swallow a thrown `readdirSync`
+ *     into `200 {flows: []}`, so an unreadable `studio/flows` reached this
+ *     function as an ANSWERED empty list and every id read as "unregistered".
+ *     A thrown read is a 500 there now, which `fetchStudioFlows` rejects on and
+ *     the page maps to `{ ok: false }` — so the rule below holds end to end. `not-found` / `unresolved` runs pass through unchanged (a 404 for
+ *     the run is authoritative on its own; unresolved is already the honest
+ *     floor).
+ */
+export type FlowsListRead = { ok: true; flows: Flow[] } | { ok: false };
+
+export function resolveRunPageState(
+  res: FlowRunDetailResolution,
+  flowId: string,
+  flowsRead: FlowsListRead,
+): { resolution: FlowRunDetailResolution; flow: Flow | null } {
+  if (!flowsRead.ok) {
+    return { resolution: res.kind === 'found' ? { kind: 'unresolved' } : res, flow: null };
+  }
+  return { resolution: res, flow: flowsRead.flows.find((f) => f.id === flowId) ?? null };
 }

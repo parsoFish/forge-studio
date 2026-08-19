@@ -29,6 +29,7 @@ import { SessionArchitectPanel } from '@/components/studio/session/SessionArchit
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
 import { SessionLifecycleBar } from '@/components/studio/session/SessionLifecycleBar';
+import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
  *  added `kb-cleanup`/`authoring`; W6-B9 adds `instructions`, deleting its
@@ -173,6 +174,9 @@ export default function SessionShellPage({
   // pseudo-project no operator would guess). "Session not found" is now
   // ONLY the shell route's own 404, never a missing query param.
   const [shellResult, setShellResult] = useState<SessionShellFetchResult | null>(null);
+  // W7A2-02 — the last cancel's real outcome; the bar keeps showing it once
+  // the shell has refetched to terminal (the cancel button is gone by then).
+  const [lastCancel, setLastCancel] = useState<CancelOutcome | null>(null);
   const shellProject = shellResult?.ok ? shellResult.payload.project : null;
   const project = summary?.data.project ?? queryProject ?? shellProject;
   const projectHint = summary?.data.project ?? queryProject ?? null;
@@ -211,7 +215,7 @@ export default function SessionShellPage({
   // no longer gates on `terminal`) — the operator most needs a way out of a
   // session they are actively working on; a `.kb-<id>` anchor resolves to
   // that KB's own page, the community anchor to /community.
-  const backTo = viewState.status === 'ready' ? backToProjectLink(project, viewState.terminal) : null;
+  const backTo = viewState.status === 'ready' ? backToProjectLink(project) : null;
 
   // W7-A4 (sessions-kinds-18 / crosscut-27): the two "nothing here" facts are
   // two honest answers through the ONE shared NotFound — and the page's DOM
@@ -295,7 +299,8 @@ export default function SessionShellPage({
             kind={kind}
             sessionId={sessionId}
             project={project}
-            onCancelled={() => { refreshShell(); refreshSummary(); }}
+            lastCancel={lastCancel}
+            onCancelled={(outcome) => { setLastCancel(outcome); refreshShell(); refreshSummary(); }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
             <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>

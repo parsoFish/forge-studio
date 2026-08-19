@@ -441,12 +441,27 @@ export const journey = defineJourney({
           });
           check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `HOME.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
           check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `HOME.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+          // W7-A2 made the card a DIV (`[data-session-card][data-session-id]`)
+          // wrapping the open link + the cancel control (a button inside an
+          // <a> is nested-interactive) — select by the session id attribute,
+          // then assert the INNER link's href and that the cancel control
+          // renders (W7-FIX-A2 journey-sync).
           const seededCard = await page.evaluate((sid) => {
-            const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
-            return el ? { kind: el.getAttribute('data-session-kind'), needsYou: el.getAttribute('data-needs-you') } : null;
+            const el = document.querySelector(`[data-session-card][data-session-id="${sid}"]`);
+            if (!el) return null;
+            const link = el.querySelector('a[data-action="open-session"]');
+            const cancel = el.querySelector('button[data-action="cancel-session"]');
+            return {
+              kind: el.getAttribute('data-session-kind'),
+              needsYou: el.getAttribute('data-needs-you'),
+              href: link ? link.getAttribute('href') : null,
+              hasCancel: cancel !== null,
+            };
           }, HOME_SESSION_SID);
           check(seededCard?.kind === 'instructions', `HOME.1: the seeded session's own card renders with the real kind (got "${seededCard?.kind}")`);
           check(seededCard?.needsYou === 'true', `HOME.1: the seeded card is flagged needs-you (got "${seededCard?.needsYou}")`);
+          check(typeof seededCard?.href === 'string' && seededCard.href.includes(HOME_SESSION_SID), `HOME.1: the card's inner open-session link targets the seeded session (got "${seededCard?.href}")`);
+          check(seededCard?.hasCancel === true, `HOME.1 (W7-A2): the card renders the cancel control (button[data-action="cancel-session"], outside the link) for an in-flight session (got ${seededCard?.hasCancel})`);
           const overflowHref = await page.evaluate(() => document.querySelector('[data-action="view-all-sessions"]')?.getAttribute('href') ?? null);
           check(overflowHref === '/sessions', `HOME.1: the strip's overflow link targets the real /sessions index (got "${overflowHref}")`);
 

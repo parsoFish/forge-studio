@@ -17,7 +17,7 @@
  * naming the phase, 404, 400).
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 export const SESSION_LIFECYCLE_STATES = ['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'] as const;
 export type SessionLifecycleState = (typeof SESSION_LIFECYCLE_STATES)[number];
@@ -65,11 +65,26 @@ export function formatIdle(idleMs: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** W7A2-10 — terminal phases that mean "finished successfully" vs
+ *  "stopped"; the terminal sentence names which. Anything else terminal (a
+ *  future kind's own token) reads as the neutral "Finished — <phase>". */
+const DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applied', 'complete']);
+const STOPPED_PHASES: ReadonlySet<string> = new Set(['rejected', 'abandoned', 'cancelled', 'failed']);
+
+function terminalCopy(phase: string): string {
+  if (DONE_PHASES.has(phase)) return `Done — ${phase}. Nothing further to do here.`;
+  if (STOPPED_PHASES.has(phase)) return `${phase.charAt(0).toUpperCase()}${phase.slice(1)} — nothing further to do here.`;
+  return `Finished — ${phase}.`;
+}
+
 /** The ONE operator-facing sentence per lifecycle state — shared by the
  *  index chip, the Home card and the session page banner. `error` is the
  *  runner's own message for `crashed`; `idleMs` names the silence for
- *  `stalled`. Distinct copy per state (pinned). */
-export function describeLifecycle(state: SessionLifecycleState, error: string | null, idleMs: number | null): string {
+ *  `stalled`; `phase` (W7A2-10) makes the `terminal` sentence phase-aware
+ *  ("Done — committed" vs "Cancelled — …") — the SAME sentence on every
+ *  surface; a caller without the phase gets the neutral one. Distinct copy
+ *  per state (pinned). */
+export function describeLifecycle(state: SessionLifecycleState, error: string | null, idleMs: number | null, phase?: string): string {
   switch (state) {
     case 'crashed':
       return `Crashed — ${error ?? 'the agent turn threw (see stderr.log)'}`;
@@ -80,8 +95,33 @@ export function describeLifecycle(state: SessionLifecycleState, error: string | 
     case 'working':
       return 'Agent working — no operator action needed right now';
     case 'terminal':
-      return 'Finished — nothing further to do';
+      return phase !== undefined && phase.length > 0 ? terminalCopy(phase) : 'Finished — nothing further to do';
   }
+}
+
+/** W7-FIX-A2 (W7A2-02) — what a successful cancel POST actually did:
+ *  `killed` is the bridge's own answer (cli/bridge-studio-session-cancel.ts
+ *  → `killTrackedTurn`) — true only when a tracked, provably-ours turn
+ *  process was signalled. */
+export type CancelOutcome = { killed: boolean; previousPhase: string };
+
+/** The ONE copy helper for a cancel result — DISTINCT sentences for a
+ *  confirmed kill and an unconfirmed one (no tracked live turn was found:
+ *  the session is marked cancelled and — the terminal phase being sticky —
+ *  can never be resurrected by a late completion, but the operator is told
+ *  no process was confirmed stopped). Shared by the index, the Home strip
+ *  and the session page bar. */
+export function describeCancelOutcome(outcome: CancelOutcome): { kind: 'killed' | 'unconfirmed'; text: string } {
+  // No quote characters in this copy: it is asserted verbatim against
+  // rendered HTML (where `"` would be entity-escaped).
+  const at = outcome.previousPhase.length > 0 ? ` at phase ${outcome.previousPhase}` : '';
+  if (outcome.killed) {
+    return { kind: 'killed', text: `Cancelled${at} — the agent turn was stopped.` };
+  }
+  return {
+    kind: 'unconfirmed',
+    text: `Marked cancelled${at} — no live agent turn was found to stop, so no process was confirmed stopped; the session stays cancelled regardless (a late turn completion cannot resurrect it).`,
+  };
 }
 
 export type CancelStudioSessionResult =
@@ -89,11 +129,9 @@ export type CancelStudioSessionResult =
   | { ok: false; error: string };
 
 export async function cancelStudioSession(kind: string, sessionId: string, project: string | null): Promise<CancelStudioSessionResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/cancel`, {
+    res = await bridgeFetch(`/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/cancel`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(project !== null ? { project } : {}),

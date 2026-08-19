@@ -9,6 +9,7 @@ import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring,
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
+import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -175,22 +176,49 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const selectedKb = spec?.selector === 'kb' ? kbs.find((k) => k.id === kbId.trim()) ?? null : null;
   const targetAnchor =
     spec?.selector === 'kb'
-      ? (selectedKb === null ? null : selectedKb.binding.kind === 'project' ? selectedKb.binding.ref : `.kb-${selectedKb.id}`)
-    : spec?.selector === 'none' ? '.community-registry'
+      ? (selectedKb === null ? null : selectedKb.binding.kind === 'project' ? selectedKb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${selectedKb.id}`)
+    : spec?.selector === 'none' ? COMMUNITY_REGISTRY_ANCHOR
     : project.trim() || null;
   const existingSessions = targetAnchor !== null ? activeSessions.filter((r) => r.kind === kind && r.project === targetAnchor && !r.terminal) : [];
   const hasExisting = existingSessions.length > 0;
-  // A changed target disarms a pending "start another" confirm.
-  useEffect(() => { setConfirmingAnother(false); }, [targetAnchor]);
+  // A changed target disarms a pending "start another" confirm — and
+  // (W7A2-05) refreshes the in-flight snapshot the guard reads, so it is
+  // never a mount-time picture of a target the operator only chose later.
+  // A failed refresh keeps the last snapshot (the guard is advisory; the
+  // submit path below re-reads live and surfaces its own failure).
+  useEffect(() => {
+    setConfirmingAnother(false);
+    if (!ready || targetAnchor === null) return;
+    let cancelled = false;
+    fetchStudioSessions()
+      .then((s) => { if (!cancelled) setActiveSessions(s); })
+      .catch(() => { /* advisory guard: keep the last snapshot */ });
+    return () => { cancelled = true; };
+    // `ready` gates the first pass (the mount load already fetched sessions).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetAnchor]);
 
   async function onSubmit(): Promise<void> {
     if (!spec || !canSubmit) return;
     // W7-A2 — duplicate guard: with a session of this kind already open on
     // this target, the FIRST click only arms the button ("Yes, start
     // another"); the second click really starts one. Never silent.
-    if (hasExisting && !confirmingAnother) {
-      setConfirmingAnother(true);
-      return;
+    // W7A2-05: the guard decides on a LIVE read, not the mount-time
+    // snapshot — a session started in another tab since load still arms it.
+    if (!confirmingAnother) {
+      let live = activeSessions;
+      try {
+        live = await fetchStudioSessions();
+        setActiveSessions(live);
+      } catch (err) {
+        setError(`failed to check for existing sessions: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      const liveExisting = targetAnchor !== null && live.some((r) => r.kind === kind && r.project === targetAnchor && !r.terminal);
+      if (liveExisting) {
+        setConfirmingAnother(true);
+        return;
+      }
     }
     setSubmitting(true);
     setError(null);

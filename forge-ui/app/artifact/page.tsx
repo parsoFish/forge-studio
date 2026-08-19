@@ -55,10 +55,10 @@ import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
-import { fetchRun, fetchStudioFlows, type Run } from '@/lib/studio-client';
+import { fetchRunLookup, fetchStudioFlows, type Run } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
-import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
-import { resolveArtifactMode } from '@/lib/artifact-mode';
+import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, bridgeFetch, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
+import { resolveArtifactMode, isRunNotFound } from '@/lib/artifact-mode';
 import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
@@ -168,11 +168,8 @@ async function fetchArtifactDoc(
       // SECONDARY (optional): pr-description.md as hero header text.
       let prDoc: PrDoc | null = null;
       try {
-        const base = await resolveBridgeUrl();
-        if (base) {
-          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
-          if (res.ok) prDoc = parsePrDescription(await res.text());
-        }
+        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
+        if (res.ok) prDoc = parsePrDescription(await res.text());
       } catch { /* best-effort */ }
 
       if (!demoModel && !prDoc) return { type: 'empty' };
@@ -188,19 +185,22 @@ async function fetchArtifactDoc(
       // Fetch the raw markdown and surface it as a minimal PlanDoc so the
       // chip is selectable and the content is readable without the PLAN.html viewer.
       try {
-        const base = await resolveBridgeUrl();
-        if (base) {
-          const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
-          if (res.ok) {
-            const text = await res.text();
-            if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
-          }
-          // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
-          // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
-          // iframe so the plan is actually viewable post-cycle, not "not produced".
-          const htmlUrl = `${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
-          const htmlRes = await fetch(htmlUrl);
-          if (htmlRes.ok) return { type: 'plan-html', url: htmlUrl };
+        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
+        if (res.ok) {
+          const text = await res.text();
+          if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
+        }
+        // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
+        // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
+        // iframe so the plan is actually viewable post-cycle, not "not produced".
+        // The probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's
+        // own `src` needs the absolute base — the ONE non-fetch use of
+        // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
+        const htmlPath = `/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
+        const htmlRes = await bridgeFetch(htmlPath);
+        if (htmlRes.ok) {
+          const base = await resolveBridgeUrl();
+          if (base) return { type: 'plan-html', url: `${base}${htmlPath}` };
         }
       } catch { /* best-effort */ }
       return { type: 'empty' };
@@ -224,9 +224,7 @@ async function fetchArtifactDoc(
 
 async function fetchJsonArtifact<T>(runId: string, filename: string): Promise<T | null> {
   try {
-    const base = await resolveBridgeUrl();
-    if (!base) return null;
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -439,11 +437,27 @@ function ArtifactPageInner() {
   // produced" (the EmptyState). Never set for `_architect-<sid>` ids, which
   // resolve through the architect session, not /api/runs.
   const [runNotFound, setRunNotFound] = useState(false);
+  // W7-FIX-A3: the bridge ANSWERED 404 for the run (a real negative fact) —
+  // distinct from a thrown read (bridge unreachable), which leaves this false
+  // so the "no queue record" note never renders off an outage.
+  const [runRecordAbsent, setRunRecordAbsent] = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
   // For plan gate-mode: track whether all decisions are resolved
   const [decisionsResolved, setDecisionsResolved] = useState(false);
 
   const meta = TYPE_META[type];
+
+  // W7-FIX-A3 (A3-03): the id every artifact-keyed child (demo media, the
+  // review surface's comment sidecar, the reflection answers write) uses —
+  // the run's OWN cycle id once claimed, the URL handle otherwise.
+  const artifactRunId = run?.id ?? runId;
+
+  // W7-FIX-A3 (round-2 finding 1): the id every GATE post is keyed on — the
+  // run's INITIATIVE id. `POST /api/runs/<id>/gates/<gateId>` validates
+  // against INIT_ID_RE for both `plan` and `verdict`, so the raw `?run=`
+  // handle (a CYCLE id since A3-03 re-keyed the run page's artifacts link)
+  // 400s. Same resolution ReviewVerdictForm below already uses.
+  const gateInitiativeId = run?.initiativeId ?? runId;
 
   // Derive mode (lib/artifact-mode.ts): `?mode=gate` is honoured only when the
   // run is actually gated for this artifact; an architect plan is armed by the
@@ -495,39 +509,66 @@ function ArtifactPageInner() {
         return;
       }
 
-      const [fetchedRun, flows] = await Promise.all([fetchRun(runId), fetchStudioFlows()]);
+      // W7-FIX-A3 (round-2 finding 2): ONE lookup carries both per-run facts —
+      // the run (or a real "no such run") and `onDisk`, the bridge's guarded
+      // `_logs/<id>` existence probe. No extra request: it rides the same
+      // `GET /api/runs/<id>` call `fetchRun` already made.
+      const [lookup, flows] = await Promise.all([fetchRunLookup(runId), fetchStudioFlows()]);
       if (signal.cancelled) return;
+      const fetchedRun = lookup.run;
       setRun(fetchedRun);
-      setRunNotFound(fetchedRun === null && !runId.startsWith('_architect-'));
+      setRunRecordAbsent(fetchedRun === null);
       setLiveFlowIds(new Set(flows.map((f) => f.id)));
+
+      // W7-FIX-A3 (A3-03): every artifact read below is keyed on the RESOLVED
+      // run id — the run's own cycle id once claimed — never the raw query
+      // param. Since W7-A3 every run link is minted by INITIATIVE id (the
+      // stable handle findRun resolves), but `/api/artifact/<id>/…` reads
+      // `_logs/<id>` literally, and `_logs/<initiativeId>` does not exist.
+      const artifactId = fetchedRun?.id ?? runId;
 
       // Resolve the effective mode from the explicit param + the freshly
       // fetched run (NOT the derived `mode` render value, which is stale on the
       // initial cold-navigate render where `run` is still null).
       const effectiveMode = resolveArtifactMode(modeParam, type, fetchedRun, { architect: false, architectArmed: false });
 
-      const artifactDoc = await fetchArtifactDoc(runId, type, fetchedRun);
+      const artifactDoc = await fetchArtifactDoc(artifactId, type, fetchedRun);
       if (signal.cancelled) return;
       setArtifact(artifactDoc);
 
       // For verdict gate-mode: also fetch the demo evidence to show above the form.
       // (DemoComparison handles missing demo gracefully.)
       if (type === 'verdict' && effectiveMode === 'gate') {
-        const dm = await fetchDemoModel(runId);
+        const dm = await fetchDemoModel(artifactId);
         if (!signal.cancelled) setDemoModel(dm);
       }
 
       // For reflection: fetch the live Stage-2 questions (user-questions.json)
       // so the operator can answer them in-place. The read-only reflection.json
       // artifact is fetched separately above for the renderer.
+      let refl: ReflectionData | null = null;
       if (type === 'reflection') {
-        const refl = await fetchReflection(runId).catch(() => null);
+        refl = await fetchReflection(artifactId).catch(() => null);
         if (!signal.cancelled) setReflectionData(refl);
       }
 
+      // W7-FIX-A3: not-found is asserted ONLY when the run is unknown AND
+      // nothing exists on disk for the id (lib/artifact-mode.ts
+      // `isRunNotFound`) — an orphan `_logs/<id>/` (queue manifest gone,
+      // artifacts still there) renders its artifact with an honest "no queue
+      // record" note; `?run=nope` still renders the shared NotFound. Round-2
+      // finding 2: the existence half is the RUN's own fact (`lookup.onDisk`),
+      // never this `?type=`'s doc — `workitems` resolves to `empty` without
+      // touching disk whenever the run is null, which made one orphan id
+      // render its plan and NotFound its work-items tab.
+      setRunNotFound(isRunNotFound({
+        runFound: fetchedRun !== null,
+        runOnDisk: lookup.onDisk,
+      }));
+
       // Also fetch verdict doc for view-mode stamp (when type != verdict)
       if (type !== 'verdict' && effectiveMode !== 'gate') {
-        const vd = verdictRecordToDoc(await fetchJsonArtifact<unknown>(runId, 'verdict.json'));
+        const vd = verdictRecordToDoc(await fetchJsonArtifact<unknown>(artifactId, 'verdict.json'));
         if (!signal.cancelled) setVerdictDoc(vd);
       }
 
@@ -535,7 +576,7 @@ function ArtifactPageInner() {
       // evidence in BOTH verdict modes. Absent artifact (pre-R4-10 cycles)
       // ⇒ null ⇒ the panel renders nothing.
       if (type === 'verdict') {
-        const rf = await fetchJsonArtifact<ReviewFindingsDoc>(runId, 'review-findings.json');
+        const rf = await fetchJsonArtifact<ReviewFindingsDoc>(artifactId, 'review-findings.json');
         if (!signal.cancelled) setReviewFindings(rf);
       }
     } catch {
@@ -549,6 +590,7 @@ function ArtifactPageInner() {
     const signal = { cancelled: false };
     setReady(false);
     setArtifact(null);
+    setRunRecordAbsent(false);
     setArchSessionResolved(false);
     void load(signal);
     return () => { signal.cancelled = true; };
@@ -744,6 +786,15 @@ function ArtifactPageInner() {
 
           {/* Run context */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12.5, color: 'var(--dim)', flexWrap: 'wrap' }}>
+            {/* W7-FIX-A3: an orphan `_logs/<id>/` — the artifact exists but no
+                queue manifest names the run any more (or never did). Say so
+                instead of a blank context row (never NotFound: the artifact is
+                real, only the queue record is gone). */}
+            {ready && !isArchitect && runRecordAbsent && (
+              <span data-run-record="absent" style={{ color: 'var(--faint)', fontStyle: 'italic' }}>
+                no queue record for this run — showing the artifacts on disk
+              </span>
+            )}
             {run?.initiative && <span>{run.initiative}</span>}
             {run && run.costUsd > 0 && (
               <span style={{ color: 'var(--amber)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
@@ -803,14 +854,14 @@ function ArtifactPageInner() {
                   {demoModel ? (
                     <>
                       {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
-                      <DemoComparison model={demoModel} cycleId={runId} />
+                      <DemoComparison model={demoModel} cycleId={artifactRunId} />
                       {/* DEC-5: the comment-on-page visual review IS the verdict — markdown
                           narrative + per-region slider/JSON-diff + anchored comments derive
                           approve/send-back. Replaces the textarea form; still emits the
                           verdict-form data-* contract. */}
                       <DemoReviewSurface
                         model={demoModel}
-                        cycleId={runId}
+                        cycleId={artifactRunId}
                         initiativeId={run?.initiativeId ?? runId}
                         onSubmitted={(kind) => {
                           setGateState(kind === 'approve' ? 'approved' : 'sent-back');
@@ -982,7 +1033,7 @@ function ArtifactPageInner() {
 
               {artifact && artifact.type === 'demo' && (
                 <div data-section="demo-evaluation">
-                  <DemoComparison model={artifact.doc} cycleId={runId} />
+                  <DemoComparison model={artifact.doc} cycleId={artifactRunId} />
                 </div>
               )}
 
@@ -1001,7 +1052,7 @@ function ArtifactPageInner() {
                   data-reflect-automated + per-question data-question-inferred. */}
               {type === 'reflection' && (
                 <div style={{ marginBottom: 24 }}>
-                  <ReflectionGate cycleId={runId} data={reflectionData} />
+                  <ReflectionGate cycleId={artifactRunId} data={reflectionData} />
                 </div>
               )}
 
@@ -1019,7 +1070,7 @@ function ArtifactPageInner() {
           missing at a demo gate). */}
       {showGateBar && ready && (
         <GateBar
-          runId={runId}
+          runId={gateInitiativeId}
           gateId={gateId}
           decisionsResolved={decisionsResolved}
           label={gateLabel}

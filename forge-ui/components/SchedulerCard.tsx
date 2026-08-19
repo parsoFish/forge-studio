@@ -19,14 +19,15 @@
  * InitiativeDetail, the flow kickoff).
  *
  * DOM contract:
- *   [data-component="scheduler-card"][data-scheduler-status="running|paused|stopped|unknown"]
+ *   [data-component="scheduler-card"][data-scheduler-status="running|paused|stopping|stopped|unknown"]
+ *     (`stopping` = W7-FIX-A3: SIGTERM sent, pid alive, draining — no actions)
  *     [data-scheduler-variant="card|strip"][data-scheduler-ready][data-scheduler-queued]
  *     [data-scheduler-pid]  (running only)   [data-scheduler-busy="true"] (while acting)
  *   button[data-action="scheduler-start|scheduler-pause|scheduler-resume|scheduler-stop"]
  *   [data-scheduler-error]  (last action error, verbatim)
  */
 
-import { deriveSchedulerView, type SchedulerAction } from '@/lib/scheduler-view';
+import { deriveSchedulerView, type SchedulerAction, type SchedulerViewState } from '@/lib/scheduler-view';
 import { useSchedulerStatus } from '@/lib/use-scheduler-status';
 import type { SchedulerStatus } from '@/lib/bridge-client';
 
@@ -37,11 +38,21 @@ const ACTION_LABEL: Record<SchedulerAction, string> = {
   stop: 'Stop',
 };
 
-const STATE_COLOR: Record<'running' | 'paused' | 'stopped' | 'unknown', string> = {
+const STATE_COLOR: Record<SchedulerViewState, string> = {
   running: 'var(--green)',
   paused: 'var(--amber)',
+  stopping: 'var(--amber)',
   stopped: 'var(--ember)',
   unknown: 'var(--faint)',
+};
+
+/** Shared status-dot vocabulary (globals.css: pending/active/complete/retrying/failed). */
+const STATE_DOT: Record<SchedulerViewState, 'pending' | 'active' | 'retrying' | 'failed'> = {
+  running: 'active',
+  paused: 'retrying',
+  stopping: 'retrying',
+  stopped: 'failed',
+  unknown: 'pending',
 };
 
 export type SchedulerCardViewProps = {
@@ -93,7 +104,7 @@ export function SchedulerCardView({
     >
       <span
         className="status-dot"
-        data-status={state === 'running' ? 'active' : state === 'paused' ? 'retrying' : state === 'stopped' ? 'failed' : 'pending'}
+        data-status={STATE_DOT[state]}
         aria-hidden
       />
       <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>

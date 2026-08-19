@@ -11,6 +11,10 @@
  * State lives on disk (consistent with the file-based queue, ADR 011):
  *   _logs/daemon/forge.pid   — pid of the detached `forge serve`
  *   _logs/daemon/serve.log   — its stdout/stderr
+ *   _logs/daemon/stopping    — the pid a stop was SIGNALLED to (W7-FIX-A3):
+ *                              `stopping` while THAT pid is still alive
+ *                              (draining in-flight cycles); a different or
+ *                              dead pid never inherits it
  *   <queueRoot>/.paused      — presence = scheduler won't claim new work
  *
  * This module is pure helpers + flag I/O only. It must NOT import the
@@ -34,6 +38,8 @@ export type DaemonPaths = {
   dir: string;
   pidFile: string;
   logFile: string;
+  /** W7-FIX-A3: the stop marker — the pid a SIGTERM was sent to. */
+  stoppingFile: string;
 };
 
 /** Resolve the daemon's runtime files under the forge install root. */
@@ -43,6 +49,7 @@ export function daemonPaths(forgeRoot: string): DaemonPaths {
     dir,
     pidFile: join(dir, 'forge.pid'),
     logFile: join(dir, 'serve.log'),
+    stoppingFile: join(dir, 'stopping'),
   };
 }
 
@@ -71,10 +78,17 @@ export type DaemonState = {
   /** Wall-clock ISO the pid file was written (≈ daemon start), if running. */
   startedAt: string | null;
   paused: boolean;
+  /**
+   * W7-FIX-A3 (A3-07): a stop was signalled to THIS live pid and it is still
+   * draining in-flight cycles (the SIGTERM handler sets `stop=true` and the
+   * loop exits only after `Promise.allSettled(inFlight)`). Always false when
+   * not running — a dead pid is plainly stopped, never "stopping".
+   */
+  stopping: boolean;
 };
 
 export function daemonState(forgeRoot: string, queueRoot: string): DaemonState {
-  const { pidFile } = daemonPaths(forgeRoot);
+  const { pidFile, stoppingFile } = daemonPaths(forgeRoot);
   const pid = readPid(pidFile);
   const running = pid !== null && isAlive(pid);
   let startedAt: string | null = null;
@@ -85,7 +99,38 @@ export function daemonState(forgeRoot: string, queueRoot: string): DaemonState {
       /* best-effort */
     }
   }
-  return { running, pid: running ? pid : null, startedAt, paused: isPaused(queueRoot) };
+  const stopping = running && readPid(stoppingFile) === pid;
+  return { running, pid: running ? pid : null, startedAt, paused: isPaused(queueRoot), stopping };
+}
+
+/**
+ * W7-FIX-A3: record the pid a stop was signalled to. Presence alone means
+ * nothing — `daemonState` reports `stopping` only while THAT pid is alive, so
+ * a marker left behind by a finished drain never sticks to the next daemon.
+ */
+export function markStopping(forgeRoot: string, pid: number): void {
+  const { dir, stoppingFile } = daemonPaths(forgeRoot);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(stoppingFile, String(pid));
+}
+
+/**
+ * W7-FIX-A3 (round-2 finding 9): drop the stop marker. It records a
+ * TRANSITION (this pid was signalled and is draining), so it must not outlive
+ * the pid file it describes — `daemonState` distinguishes daemons by pid
+ * alone, and pids are reused, so a leftover marker would make a brand-new
+ * daemon report `stopping: true` with NO actions offered (deriveSchedulerView
+ * gives that state an empty action set) until someone deleted the file by
+ * hand. Both pid-file writes below clear it; absent is a no-op.
+ */
+function clearStoppingMarker(forgeRoot: string): void {
+  const { stoppingFile } = daemonPaths(forgeRoot);
+  if (!existsSync(stoppingFile)) return;
+  try {
+    rmSync(stoppingFile);
+  } catch {
+    /* best-effort */
+  }
 }
 
 /** Stale pid file (no live process) → clean it so `start` can proceed. */
@@ -105,6 +150,9 @@ export function writePidFile(forgeRoot: string, pid: number): void {
   const { dir, pidFile } = daemonPaths(forgeRoot);
   mkdirSync(dir, { recursive: true });
   writeFileSync(pidFile, String(pid));
+  // A pid file is written by a daemon that is STARTING (spawnServeDetached
+  // records its child here) — never one that is draining.
+  clearStoppingMarker(forgeRoot);
 }
 
 export function clearPidFile(forgeRoot: string): void {
@@ -116,6 +164,8 @@ export function clearPidFile(forgeRoot: string): void {
       /* best-effort */
     }
   }
+  // The daemon this marker described is gone — the drain it recorded ended.
+  clearStoppingMarker(forgeRoot);
 }
 
 // ---------- detached daemon spawn ----------

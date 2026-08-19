@@ -40,6 +40,7 @@ import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { FetchErrorState } from '@/components/FetchErrorState';
+import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import type { Agent } from '@/lib/studio-client';
 import type { LedgerRow } from '@/lib/history-ledger';
 
@@ -57,9 +58,18 @@ export type AgentsIndexViewProps = {
    *  failure state INSTEAD of "No agents yet — create your first one." */
   error?: { message: string; status?: number } | null;
   onRetry?: () => void;
+  /** W7-FIX-A1 (A1-09): how many per-agent history reads came back
+   *  `'unresolved'` (of `recentRunsTotal` fanned out) — rendered as an honest
+   *  notice ABOVE the rows that WERE read; 0/omitted = every read settled. */
+  recentRunsUnresolved?: number;
+  recentRunsTotal?: number;
+  onRetryRecentRuns?: () => void;
 };
 
-export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry }: AgentsIndexViewProps) {
+export function AgentsIndexView({
+  ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry,
+  recentRunsUnresolved = 0, recentRunsTotal = 0, onRetryRecentRuns,
+}: AgentsIndexViewProps) {
   return (
     <main
       data-page="agents-index"
@@ -138,7 +148,12 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
         <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '44px 0 40px' }} />
 
         {/* ===== RECENT AGENT RUNS ===== */}
-        <section className="lib-section" data-section="recent-agent-runs" style={{ marginBottom: 40 }}>
+        <section
+          className="lib-section"
+          data-section="recent-agent-runs"
+          data-recent-runs-unresolved={recentRunsReady ? recentRunsUnresolved : 0}
+          style={{ marginBottom: 40 }}
+        >
           <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
               Recent agent runs
@@ -154,7 +169,10 @@ export function AgentsIndexView({ ready, agents, recentRunsReady, recentRuns, no
               Loading recent runs…
             </div>
           ) : (
-            <HistoryLedger rows={recentRuns} nowMs={nowMs} />
+            <>
+              <UnresolvedHistoriesNotice unresolved={recentRunsUnresolved} total={recentRunsTotal} onRetry={onRetryRecentRuns} />
+              <HistoryLedger rows={recentRuns} nowMs={nowMs} />
+            </>
           )}
         </section>
 
