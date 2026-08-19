@@ -245,7 +245,9 @@ function splitSegments(tokens: Token[]): Segment[] {
     if (CONTROL_OPS.has(t.op)) { flush(t.op); i += 1; continue; }
     // A redirection operator: needs a target word (dup ops may target a fd number or '-').
     const target = tokens[i + 1];
-    if (target === undefined || target.kind !== 'word') deny(`redirection "${t.op}" without a target`);
+    if (target === undefined || target.kind !== 'word') {
+      return deny(`redirection "${t.op}" without a target`);
+    }
     redirects.push({ op: t.op, fd: t.fd, target });
     i += 2;
   }
