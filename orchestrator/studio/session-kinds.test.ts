@@ -1015,6 +1015,10 @@ function wellFormedTurnSpec(): Record<string, unknown> {
   return {
     kindDir: '_authoring',
     style: 'agent',
+    // W7-FIX-A2 (W7A2-03, bead forge-w08): the live authoring row opts into
+    // Bash inspection — kept in lockstep here (the deep-equal below is the
+    // drift guard for this literal against the real yaml).
+    bashFence: 'inspect',
     phases: [
       { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
       // verdicts (W6-B6 post-merge review): the real, live authoring row

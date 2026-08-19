@@ -270,6 +270,14 @@
   turnSpec:
     kindDir: _authoring
     style: agent
+    # W7-FIX-A2 (W7A2-03, bead forge-w08): creation-agent's SKILL.md grants
+    # Bash (scaffolding scripts, chmod +x, quick listings). On a fenced turn
+    # Bash is denied by default; this ONE opt-in switches it to static
+    # inspection (orchestrator/bash-fence.ts): read-only commands pass,
+    # every write-shaped operation must target a path inside `staging/`,
+    # anything the inspector cannot reason about is refused. kb-cleanup and
+    # community-refresh do NOT opt in — Bash is refused outright there.
+    bashFence: inspect
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
       # verdicts (W6-B6 post-merge review): approve-only — there is no

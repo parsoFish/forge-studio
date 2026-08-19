@@ -331,8 +331,11 @@ test('bash-fence vocab: BASH_FENCE_MODES is exactly {deny, inspect} (frozen); a 
 `);
   const descriptors = loadSessionKinds(root);
   assert.equal(descriptors[0]?.turnSpec?.bashFence, 'yolo', 'loadSessionKinds is structural — carries the value through');
-  const findings = validateSessionKinds(descriptors, { forgeRoot: REPO_ROOT });
-  const hit = findings.find((f) => f.severity === 'error' && /bashFence/.test(f.message) && /yolo/.test(f.message) && /deny/.test(f.message) && /inspect/.test(f.message));
+  // validateSessionKinds loads from `<forgeRoot>/studio/session-kinds.yaml`
+  // itself — the temp root IS the forge root here (its agent roster is empty,
+  // so an unknown-agent finding rides along; only the bashFence one is asserted).
+  const findings = validateSessionKinds(root);
+  const hit = findings.find((f) => f.level === 'error' && /bashFence/.test(f.message) && /yolo/.test(f.message) && /deny/.test(f.message) && /inspect/.test(f.message));
   assert.ok(hit, `expected an error finding naming "yolo" and the allowed set; got: ${JSON.stringify(findings.map((f) => f.message))}`);
 });
 

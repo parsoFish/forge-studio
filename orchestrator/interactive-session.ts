@@ -40,6 +40,7 @@ import { join, dirname, basename, sep } from 'node:path';
 
 import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
+import { inspectBashCommand } from './bash-fence.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
 import type { EventLogger, Phase } from './logging.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
@@ -368,8 +369,34 @@ export async function runStructuredTurn<T>(args: {
  *  `loops/ralph/claude-agent.ts`'s own `FILE_MODIFYING_TOOLS` (kept as an
  *  independent literal here, not imported, so this spine file's only
  *  cross-subsystem edge stays the pre-existing type-only one). Every OTHER
- *  tool call passes through this fence unmodified — it never gates reads. */
+ *  tool call passes through this fence unmodified — it never gates reads.
+ *
+ *  W7-FIX-A2 (W7A2-03, bead forge-w08): `Bash` is gated too — it is a
+ *  write-capable tool with no single path, so it is not in THIS set (which
+ *  drives the one-path check) but in `FENCE_STRIPPED_TOOLS` below, and gets
+ *  its own policy (`BashFenceMode`): denied outright unless the kind opts
+ *  into static inspection (`inspectBashCommand`, orchestrator/bash-fence.ts). */
 const FENCE_GATED_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/** Every tool a fenced turn must NOT pre-approve via `allowedTools` (so the
+ *  SDK routes each call through `canUseTool`): the one-path tools above plus
+ *  Bash. Never pushed into `disallowedTools` — they stay callable, gated. */
+const FENCE_STRIPPED_TOOLS = new Set([...FENCE_GATED_TOOLS, 'Bash']);
+
+/** W7-FIX-A2 (W7A2-03) — the Bash policy of a fenced turn. `deny` (the
+ *  default: a fenced kind that does not opt in has NO ungated write-capable
+ *  tool at all) or `inspect` (the ONE authored opt-in, `turnSpec.bashFence`
+ *  in studio/session-kinds.yaml, validated against BASH_FENCE_MODES): every
+ *  Bash command is statically inspected and every write-shaped operation
+ *  must target a path inside the write roots. Kept as a string-literal
+ *  union here (not imported from studio/session-kinds.ts) so this spine
+ *  file's dependency edges stay as they are; session-kinds' frozen
+ *  BASH_FENCE_MODES is the vocabulary the yaml is validated against, and
+ *  the runner threads the validated value through. */
+export type BashFenceMode = 'deny' | 'inspect';
+export type BashFenceOptions =
+  | { readonly bash?: 'deny' }
+  | { readonly bash: 'inspect'; /** the turn's cwd — relative paths resolve against it */ readonly cwd: string };
 
 /** Extract the target file path from a gated tool's input — mirrors
  *  `loops/ralph/claude-agent.ts`'s own `extractPath` (`file_path` for
@@ -431,7 +458,7 @@ export type WriteRootCanUseTool = (
 // integration shape (a fake `queryFn` capturing `options.canUseTool`) is
 // ALSO covered, but a direct export lets the deny/allow/symlink-escape
 // matrix be pinned without threading every case through a full turn.
-export function makeWriteRootCanUseTool(writeRoots: readonly string[]): WriteRootCanUseTool {
+export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence: BashFenceOptions = {}): WriteRootCanUseTool {
   // Resolved ONCE, at turn start, not per tool call — every root was already
   // provisioned by the caller (see this section's own header), so a root
   // that still fails to realpath here is a caller bug: fail THAT ONE root
@@ -449,6 +476,35 @@ export function makeWriteRootCanUseTool(writeRoots: readonly string[]): WriteRoo
     .filter((root): root is string => root !== null);
 
   return async (toolName, input, _options) => {
+    if (toolName === 'Bash') {
+      // W7-FIX-A2 (W7A2-03): Bash on a fenced turn — deny by default; a kind
+      // that opted in gets the static inspector (fail closed on anything it
+      // cannot reason about, `null`/non-string command included).
+      if (bashFence.bash !== 'inspect') {
+        return {
+          behavior: 'deny',
+          message:
+            'Bash is not available on this write-root-fenced turn (this session kind did not opt into Bash inspection) ' +
+            '— use Read/Grep/Glob to inspect and Write/Edit to change files inside the writable root(s) ' +
+            `(${writeRoots.join(', ')}). Refused by the write-root fence.`,
+        };
+      }
+      const command = input.command;
+      if (typeof command !== 'string') {
+        return { behavior: 'deny', message: 'Bash: no command string in tool input — refused by the write-root fence.' };
+      }
+      const verdict = inspectBashCommand(command, { cwd: bashFence.cwd, realWriteRoots: realRoots });
+      if (!verdict.allow) {
+        return {
+          behavior: 'deny',
+          message:
+            `Bash command refused by the write-root fence: ${verdict.reason}. ` +
+            `Only read-only commands and writes inside this session's writable root(s) (${writeRoots.join(', ')}) are permitted; ` +
+            'use the Write/Edit tools for file changes.',
+        };
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
     if (!FENCE_GATED_TOOLS.has(toolName)) {
       return { behavior: 'allow', updatedInput: input };
     }
@@ -498,6 +554,11 @@ export async function runAgentTurn(args: {
    *  unaffected. See `makeWriteRootCanUseTool`'s own doc comment for the
    *  mechanism and why this does not reopen ADR 020. */
   writeRoots?: readonly string[];
+  /** W7-FIX-A2 (W7A2-03) — Bash policy when `writeRoots` fences the turn:
+   *  absent/`deny` denies every Bash call; `inspect` statically inspects
+   *  each command against the write roots (see `BashFenceOptions`). Ignored
+   *  when the turn is unfenced. */
+  bashFence?: BashFenceMode;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
@@ -526,22 +587,28 @@ export async function runAgentTurn(args: {
   // the fence-gated tool names are STRIPPED from `allowedTools` (they stay
   // callable — never pushed into disallowedTools — the SDK just routes each
   // call through `canUseTool`, which allows in-root writes and denies the
-  // rest). Every non-gated grant (Read/Grep/Glob/WebFetch/…) survives
-  // verbatim. An unfenced turn keeps the exact prior shape (acceptEdits,
-  // allowedTools verbatim, no canUseTool). Pinned by
-  // interactive-session-fence-mode.test.ts; live-proven once by
-  // scripts/probe-write-fence.mjs (recorded in the W7-A2 PR).
+  // rest). W7-FIX-A2 (W7A2-03): `Bash` — the one write-capable tool with
+  // no single path — is stripped too and denied by canUseTool unless the
+  // kind opted into static inspection (`bashFence: 'inspect'`). Every
+  // read-only grant (Read/Grep/Glob/WebFetch/…) survives verbatim. An
+  // unfenced turn keeps the exact prior shape (acceptEdits, allowedTools
+  // verbatim, no canUseTool). Pinned by interactive-session-fence-mode.test.ts
+  // + bash-fence.test.ts; live-proven once by scripts/probe-write-fence.mjs
+  // (recorded in the W7-A2 PR).
   const options: Record<string, unknown> = {
     cwd: args.cwd,
     model: args.model,
     permissionMode: fenced ? 'default' : 'acceptEdits',
-    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_GATED_TOOLS.has(t)) : args.allowedTools,
+    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_STRIPPED_TOOLS.has(t)) : args.allowedTools,
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
   };
   if (fenced) {
-    options.canUseTool = makeWriteRootCanUseTool(args.writeRoots!);
+    options.canUseTool = makeWriteRootCanUseTool(
+      args.writeRoots!,
+      args.bashFence === 'inspect' ? { bash: 'inspect', cwd: args.cwd } : { bash: 'deny' },
+    );
   }
 
   let costUsd = 0;
