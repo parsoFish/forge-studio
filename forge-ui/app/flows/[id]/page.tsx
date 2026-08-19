@@ -11,7 +11,7 @@ import { runsForFlow } from '@/lib/home-view';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { PageLoadError } from '@/components/PageLoadError';
-import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
@@ -107,6 +107,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // class — else /flows/new fell through to a blank canvas + empty palette).
   const [buildLoadError, setBuildLoadError] = useState<{ error: string; status?: number } | null>(null);
   const pageLoadError = loadError ?? buildLoadError;
+  // A FAILED live refresh (WS-triggered `fetchRuns`/`fetchRun` — fail-closed
+  // reads THROW) is a monitor-scoped error: last-known runs stay, the failure
+  // is shown beside the connection dot with Retry — never an unhandled
+  // rejection, never unseating the loaded page (review round 2).
+  const [refreshError, setRefreshError] = useState<{ error: string; status?: number } | null>(null);
   const [loadKey,     setLoadKey]     = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   // Recovery refills ONLY a failed load — never re-loads over the operator's
@@ -198,11 +203,17 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   const refreshActiveRun = useCallback(
     async (signal: { cancelled: boolean }, runId: string) => {
-      const run = await fetchRun(runId);
-      if (signal.cancelled) return;
-      if (run) {
-        setActiveRun(run);
-        setRuns((prev) => prev.map((r) => (r.id === run.id ? run : r)));
+      try {
+        const run = await fetchRun(runId);
+        if (signal.cancelled) return;
+        if (run) {
+          setActiveRun(run);
+          setRuns((prev) => prev.map((r) => (r.id === run.id ? run : r)));
+        }
+        setRefreshError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        setRefreshError(fetchErrorPropsFrom(err));
       }
     },
     [],
@@ -210,16 +221,31 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   const refreshRuns = useCallback(
     async (signal: { cancelled: boolean }, currentRunId: string | null) => {
-      const allRuns = await fetchRuns(id);
-      if (signal.cancelled) return;
-      setRuns(allRuns);
-      if (currentRunId) {
-        const updated = allRuns.find((r) => r.id === currentRunId);
-        if (updated) setActiveRun(updated);
+      try {
+        const allRuns = await fetchRuns(id);
+        if (signal.cancelled) return;
+        setRuns(allRuns);
+        if (currentRunId) {
+          const updated = allRuns.find((r) => r.id === currentRunId);
+          if (updated) setActiveRun(updated);
+        }
+        setRefreshError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        setRefreshError(fetchErrorPropsFrom(err));
       }
     },
     [id],
   );
+
+  /** Retry for a failed live refresh: re-run the runs refresh alone (never a
+   *  full reload — that is the page-load Retry's job). */
+  const retryRefresh = useCallback(() => {
+    setActiveRun((currentRun) => {
+      void refreshRuns({ cancelled: false }, currentRun?.id ?? null);
+      return currentRun;
+    });
+  }, [refreshRuns]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -611,6 +637,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 <span className="status-dot" data-status={CONNECTION_DOT_STATUS[connState]} />
                 {CONNECTION_LABEL[connState]}
               </span>
+              {refreshError ? (
+                <span data-section="monitor-refresh-error" style={{ display: 'inline-flex' }}>
+                  <FetchErrorState what="the live run list" error={refreshError.error} status={refreshError.status} onRetry={retryRefresh} compact />
+                </span>
+              ) : null}
             </div>
 
             {/* Tabs bar — MONITOR active */}

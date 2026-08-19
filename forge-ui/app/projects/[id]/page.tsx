@@ -105,9 +105,18 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const panelErrorList = Object.values(panelErrors);
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  // The side panels (preflight / roadmap / cycles) re-run on their OWN key:
+  // a panel Retry, or recovery while only a panel failed, never re-runs
+  // `loadData` (which would overwrite the operator's unsaved builder edits).
+  const [panelKey, setPanelKey] = useState(0);
+  const retryPanels = useCallback(() => setPanelKey((k) => k + 1), []);
   // Recovery refills ONLY a failed page/panel — never re-loads over the
-  // operator's unsaved builder edits (W7-FIX-A1 review).
-  useBridgeRecoveryWhenFailed(loadError !== null || panelErrorList.length > 0, reload);
+  // operator's unsaved builder edits (W7-FIX-A1 review): a failed PAGE load
+  // re-runs everything; failed panels alone re-run only the panels.
+  useBridgeRecoveryWhenFailed(
+    loadError !== null || panelErrorList.length > 0,
+    loadError !== null ? reload : retryPanels,
+  );
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -196,6 +205,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       setPanelError('cycles', null);
     } catch (err) {
       if (signal.cancelled) return;
+      // Never keep a PREVIOUS project's cycles under this project's error
+      // (the route param can change on the same page instance).
+      setCycleGroups([]);
+      setProjectCycles([]);
       setPanelError('cycles', { what: 'the cycle history', ...fetchErrorPropsFrom(err) });
     }
   }, [id, setPanelError]);
@@ -215,14 +228,21 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     // roadmap / cycles routes 404'd on every visit to /projects/new).
     if (isNew) return;
     const signal = { cancelled: false };
-    setPanelErrors({});
     void loadData(signal);
+    return () => { signal.cancelled = true; };
+    // loadKey: the page-load Retry / recovery-while-failed re-run the project read (W7-FIX-A1)
+  }, [isNew, loadData, loadKey]);
+
+  useEffect(() => {
+    if (isNew) return;
+    const signal = { cancelled: false };
+    setPanelErrors({});
     void loadPreflight(signal);
     void loadRoadmap(signal);
     void loadCycleGroups(signal);
     return () => { signal.cancelled = true; };
-    // loadKey: Retry / bridge recovery re-run every read (W7-FIX-A1)
-  }, [isNew, loadData, loadPreflight, loadRoadmap, loadCycleGroups, loadKey]);
+    // loadKey (page Retry) AND panelKey (panel Retry / panels-only recovery) re-run the panel reads
+  }, [isNew, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey]);
 
   // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
   // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
@@ -421,7 +441,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       {panelErrorList.length > 0 ? (
         <div data-section="project-panel-error" data-panel-error-count={panelErrorList.length} style={{ padding: '10px 28px 0' }}>
           {panelErrorList.map((pe) => (
-            <FetchErrorState key={pe.what} what={pe.what} error={pe.error} status={pe.status} onRetry={reload} compact />
+            <FetchErrorState key={pe.what} what={pe.what} error={pe.error} status={pe.status} onRetry={retryPanels} compact />
           ))}
         </div>
       ) : null}

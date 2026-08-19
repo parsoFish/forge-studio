@@ -238,3 +238,25 @@ test('A1-06 (positive control kept): a REAL corrected port from /api/forge-confi
   await expect(fetchCycles()).resolves.toEqual({ live: [], recent: [] });
   await expect(resolveBridgeUrl()).resolves.toBe('http://my-wsl-host:5555');
 });
+
+test('review round 2: an AbortError/TimeoutError (a caller-bounded fetch — the health probe, an unmounting page) is NOT a wrong-port signal — no /api/forge-config round trip, no cache clear, the correction stays armed', async () => {
+  stubWindow({ bridgePort: 4123, hostname: 'my-wsl-host' });
+  let forgeConfigCalls = 0;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === '/api/forge-config') { forgeConfigCalls += 1; return { ok: true, json: async () => ({ bridgePort: 5555 }) } as Response; }
+    if (url.startsWith('http://my-wsl-host:4123/api/health')) {
+      const e = new Error('The operation was aborted due to timeout'); e.name = 'TimeoutError'; throw e;
+    }
+    if (url.startsWith('http://my-wsl-host:4123')) throw new TypeError('Failed to fetch');
+    return { ok: true, json: async () => ({ live: [], recent: [] }) } as Response;
+  });
+  globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+  const { bridgeFetch, fetchCycles } = await import('./bridge-client.ts');
+  await expect(bridgeFetch('/api/health')).rejects.toMatchObject({ name: 'TimeoutError' });
+  expect(forgeConfigCalls).toBe(0); // a timeout spent NO correction
+  // the correction is still armed: a REAL transport failure right after still corrects once
+  await expect(fetchCycles()).resolves.toEqual({ live: [], recent: [] });
+  expect(forgeConfigCalls).toBe(1);
+});

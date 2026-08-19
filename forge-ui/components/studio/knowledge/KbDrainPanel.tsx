@@ -51,7 +51,7 @@ import {
   dispatchKbDrain, fetchActiveOrLatestKbDrain, dispatchAgentFix,
   type KbDrainPerFinding,
 } from '@/lib/studio-client';
-import { pollKbDrain, pollAgentFix, type PolledKbDrainStatus } from '@/lib/agent-dispatch';
+import { pollKbDrain, pollAgentFix, pollDisplayState, type PolledKbDrainStatus } from '@/lib/agent-dispatch';
 import {
   drainStateCopy, findingsByTier, resolveUserTierStep, isKbDrainTerminal,
   KB_DRAIN_MAX_ROUNDS_DISPLAY, type KbDrainDisplayState,
@@ -120,6 +120,7 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     setUserIdx(0);
     setUserNote('');
     setUserMsg(null);
+    setDispatchError(null); // a previous KB's read failure is not this KB's state
     fetchActiveOrLatestKbDrain(kbId).then((r) => {
       if (cancelled) return;
       setAttaching(false);
@@ -205,7 +206,10 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     }
     userPollStopRef.current = pollAgentFix(kbId, d.runId, {
       onUpdate: (s) => {
-        if (!mountedRef.current || s.state === 'running') return;
+        // A transiently FAILED status read (ok:false 'unknown', W7-FIX-A1
+        // A1-10) is still being watched — not a verdict; only a settled poll
+        // (terminal / timed-out) reports here.
+        if (!mountedRef.current || pollDisplayState(s) === 'watching') return;
         setUserBusy(false);
         if (s.state === 'cleared') {
           setUserNote('');

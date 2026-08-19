@@ -229,6 +229,13 @@ function notifyTransportFailure(err: unknown): void {
  * rides the SAME transport — one URL resolution + correction policy for
  * every bridge call in Studio, not two.
  */
+/** `AbortError` (caller abort) / `TimeoutError` (`AbortSignal.timeout`) —
+ *  the fetch was cut short by the CALLER, not refused by the network. */
+function isAbortLike(err: unknown): boolean {
+  const name = (err as { name?: unknown } | null)?.name;
+  return name === 'AbortError' || name === 'TimeoutError';
+}
+
 export async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
   const base = await resolveBridgeUrl();
   if (!base) throw new Error('no bridge configured');
@@ -237,6 +244,12 @@ export async function bridgeFetch(path: string, init?: RequestInit): Promise<Res
     correctionAttempted = false; // reached the bridge — re-arm for a future move
     return res;
   } catch (err) {
+    // A caller-imposed timeout / abort (the bounded health probe, an
+    // unmounting page) is NOT evidence of a wrong port: never spend the
+    // one-shot correction or clear the app-wide URL cache on it (review
+    // round 2 — a slow-but-up bridge would otherwise thrash the cache and
+    // pay an extra /api/forge-config round trip on every probe).
+    if (isAbortLike(err)) { notifyTransportFailure(err); throw err; }
     if (correctionAttempted) { notifyTransportFailure(err); throw err; }
     correctionAttempted = true;
     clearBridgeCache();

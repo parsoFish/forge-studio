@@ -221,12 +221,20 @@ inventory rather than one shared page-level contract:
   read that lacks the id (never rendered while the load error is set). The
   flow page keeps the BUILD tab's definition/palette read in its OWN error
   slot (the monitor read's success cannot clear a builder failure it did not
-  supersede). The project page's softer siblings — the preflight / roadmap /
+  supersede); a FAILED live refresh on the monitor (WS-triggered `fetchRuns`/
+  `fetchRun`) keeps the last-known runs and renders
+  `[data-section="monitor-refresh-error"]` (compact `fetch-error` + Retry that
+  re-runs the refresh alone) beside the connection dot — never an unhandled
+  rejection. The project page's softer siblings — the preflight / roadmap /
   cycle-history panel reads — surface as
   `[data-section="project-panel-error"][data-panel-error-count=<n>]`, ONE
   compact `fetch-error` + Retry per failed panel (each read owns its slot;
   its success clears only its own; a thrown `fetchCycles` is a panel error,
-  never a silently empty cycle history) without unseating the loaded project.
+  never a silently empty cycle history); the panel Retry — and recovery while
+  ONLY a panel failed — re-runs the panel reads alone, never the project read
+  (unsaved builder edits survive). The showcase settles NOT FOUND from the
+  roster BEFORE its cycles/demo reads (a later read failure cannot turn a
+  not-found into a retryable error).
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +

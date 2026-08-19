@@ -49,7 +49,7 @@ function expectFailClosedPrimitives(src: string, page: string): void {
   //    — the DETAIL-page rule (review): refill ONLY while failed, so a socket
   //    blip never re-loads over the operator's unsaved edits / open drawer.
   expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
-  expect(src).toMatch(/useBridgeRecoveryWhenFailed\([^)]*!== null[^)]*, reload\)/);
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\(\s*[^;]*!== null[^;]*,\s*(reload|loadError !== null \? reload : retryPanels),?\s*\)/);
   expect(src).not.toMatch(/useBridgeRecovery\(reload\)/);
   // 3. the load has a real catch that captures the failure via the shared classifier
   expect(src).toMatch(/catch \(err\) \{[\s\S]{0,400}setLoadError\(fetchErrorPropsFrom\(err\)\)/);
@@ -99,7 +99,13 @@ describe('/projects/[id] (A1-02)', () => {
     // the pre-fix fail-open (`catch { setCycleGroups([]); setProjectCycles([]) }`) is gone
     expect(PROJECT).not.toMatch(/catch \{[\s\S]{0,120}setCycleGroups\(\[\]\)/);
     for (const key of ['preflight', 'roadmap', 'cycles']) expect(PROJECT).toContain(`setPanelError('${key}', null)`);
-    expect(PROJECT).toMatch(/panelErrorList\.map\(\(pe\) => \([\s\S]{0,200}<FetchErrorState/);
+    expect(PROJECT).toMatch(/panelErrorList\.map\(\(pe\) => \([\s\S]{0,200}<FetchErrorState[^>]{0,200}onRetry=\{retryPanels\}/);
+    // panels re-run on their OWN key: a panel Retry / panels-only recovery never re-runs loadData (form clobber)
+    expect(PROJECT).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null \|\| panelErrorList\.length > 0,\s*loadError !== null \? reload : retryPanels,\s*\)/);
+    expect(PROJECT).toMatch(/\}, \[isNew, loadData, loadKey\]\);/);
+    expect(PROJECT).toMatch(/\}, \[isNew, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey\]\);/);
+    // a failed cycles read never keeps a PREVIOUS project's cycles under this project's error
+    expect(PROJECT).toMatch(/catch \(err\) \{[\s\S]{0,300}setCycleGroups\(\[\]\);\s*setProjectCycles\(\[\]\);\s*setPanelError\('cycles'/);
     // …and that panel error is RENDERED (the shared inline failure state), not just stored
     expect(PROJECT).toMatch(/panelErrorList\.length > 0 \? \([\s\S]{0,300}<FetchErrorState/);
   });
@@ -118,6 +124,11 @@ describe('/flows/[id] (A1-02)', () => {
     expect(FLOW).toMatch(/const loadBuildData = useCallback\(async[\s\S]{0,1200}setBuildLoadError\(null\);[\s\S]{0,1200}catch \(err\)[\s\S]{0,400}setBuildLoadError\(fetchErrorPropsFrom\(err\)\)/);
     expect(FLOW).toMatch(/if \(view\.ready && pageLoadError\)/);
   });
+  test('a FAILED live refresh (WS-triggered fetchRuns / fetchRun) is caught into a monitor-scoped refreshError with Retry — never an unhandled rejection, never unseating the loaded page', () => {
+    expect(FLOW).toMatch(/const refreshActiveRun = useCallback\([\s\S]{0,600}catch \(err\) \{[\s\S]{0,120}setRefreshError\(fetchErrorPropsFrom\(err\)\)/);
+    expect(FLOW).toMatch(/const refreshRuns = useCallback\([\s\S]{0,700}catch \(err\) \{[\s\S]{0,120}setRefreshError\(fetchErrorPropsFrom\(err\)\)/);
+    expect(FLOW).toMatch(/data-section="monitor-refresh-error"[\s\S]{0,200}<FetchErrorState[^>]{0,200}onRetry=\{retryRefresh\}[^>]{0,40}compact/);
+  });
 });
 
 describe('/projects/[id]/showcase (demo-showcase gate regression)', () => {
@@ -130,9 +141,10 @@ describe('/projects/[id]/showcase (demo-showcase gate regression)', () => {
   });
   test('project-known is derived from the (fail-closed) roster exactly — no "empty roster = bridge unreachable" fail-open', () => {
     expect(SHOWCASE).not.toMatch(/roster\.length === 0 \? null/);
-    expect(SHOWCASE).toMatch(/setProjectKnown\(roster\.some\(\(p\) => p\.id === id\)\)/);
+    expect(SHOWCASE).toMatch(/const known = roster\.some\(\(p\) => p\.id === id\);\s*setProjectKnown\(known\);/);
   });
-  test('the NotFound branch is gated on a SUCCESSFUL roster read', () => {
+  test('the NotFound branch is gated on a SUCCESSFUL roster read — and a definitive not-found short-circuits BEFORE the cycles/demo reads (a later read failure never turns a not-found into a retryable error)', () => {
     expect(SHOWCASE).toMatch(/if \(ready && !loadError && projectKnown === false\)/);
+    expect(SHOWCASE).toMatch(/const known = roster\.some\(\(p\) => p\.id === id\);[\s\S]{0,500}if \(!known\) \{[\s\S]{0,120}return;\s*\}\s*const snapshot = await fetchCycles\(\);/);
   });
 });

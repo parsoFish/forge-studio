@@ -81,7 +81,15 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
       if (signal.cancelled) return;
       // The roster read fails CLOSED (W7-A1): a roster that came back is a
       // real answer, empty or not — the project is listed or it is not.
-      setProjectKnown(roster.some((p) => p.id === id));
+      const known = roster.some((p) => p.id === id);
+      setProjectKnown(known);
+      // A definitive NOT-FOUND is settled here: no cycles/demo read for an
+      // id the roster ruled out (a later read failure must not turn a
+      // not-found into a retryable error state — review round 2).
+      if (!known) {
+        setLoadError(null);
+        return;
+      }
       const snapshot = await fetchCycles();
       const cycles = [...(snapshot?.live ?? []), ...(snapshot?.recent ?? [])];
       const loaded = await loadShowcase({ cycles, projectId: id, fetchDemo: fetchDemoModel });
