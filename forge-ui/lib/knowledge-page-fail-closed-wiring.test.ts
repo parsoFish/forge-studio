@@ -29,7 +29,7 @@ test('the KB-detail effect\'s catch captures the failure (fetchErrorPropsFrom �
   const start = source.indexOf('getOrStartKbFetch(currentId).then((detail) =>');
   expect(start).toBeGreaterThan(0);
   const effect = source.slice(start, source.indexOf('return () => { signal.cancelled = true; };', start));
-  expect(effect).toMatch(/\.catch\(\(err\) => \{[\s\S]{0,300}fetchErrorPropsFrom\(err\)[\s\S]{0,200}setKbDetailError\(/);
+  expect(effect).toMatch(/\.catch\(\(err\) => \{[\s\S]{0,600}fetchErrorPropsFrom\(err\)[\s\S]{0,200}setKbDetailError\(/);
   expect(effect).toMatch(/setReady\(true\)/); // still settles — into an honest failure
   // a successful detail read clears any prior detail error
   expect(effect).toMatch(/setKbDetailError\(null\)/);
@@ -49,9 +49,9 @@ test('Retry for the detail read DROPS the cached (rejected) fetchKb promise befo
   expect(source).toMatch(/\}, \[currentId, idConfirmed, getOrStartKbFetch, detailKey\]\);/);
 });
 
-test('bridge recovery re-runs BOTH the roster and the detail read (a pinned KB tab refills itself — crosscut-22)', () => {
+test('bridge recovery re-runs the roster AND a FAILED detail read (a pinned KB tab refills itself — crosscut-22; a healthy graph keeps its selection)', () => {
   expect(source).toMatch(/useBridgeRecovery\(reloadAll\)/);
-  expect(source).toMatch(/const reloadAll = useCallback\(\(\) => \{[\s\S]{0,120}reloadKbs\(\);[\s\S]{0,60}retryKbDetail\(\);/);
+  expect(source).toMatch(/const reloadAll = useCallback\(\(\) => \{[\s\S]{0,120}reloadKbs\(\);[\s\S]{0,300}if \(kbDetailError\) retryKbDetail\(\);/);
 });
 
 test('IngestActivityPanel: a failed ingest-activity read is an ERROR state (compact FetchErrorState + Retry, data-fetch-status="error"), distinguishable from an empty feed', () => {

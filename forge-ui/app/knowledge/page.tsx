@@ -98,7 +98,14 @@ function KnowledgePageInner() {
   const [kbsError,     setKbsError]     = useState<{ message: string; status?: number } | null>(null);
   const [loadKey,      setLoadKey]      = useState(0);
   const reloadKbs = useCallback(() => setLoadKey((k) => k + 1), []);
-  useBridgeRecovery(reloadKbs);
+  // W7-FIX-A1 (A1-07): the KB-DETAIL read is a second, independent read —
+  // its failure is an ERROR state of its own (`kbDetailError`), folded into
+  // the root `data-fetch-status` and rendered as the shared FetchErrorState
+  // in the graph area (never the bare "No KB data available."). Retry drops
+  // the cached (rejected) fetchKb promise and re-runs the detail effect via
+  // `detailKey`; bridge recovery re-runs BOTH reads.
+  const [kbDetailError, setKbDetailError] = useState<{ message: string; status?: number } | null>(null);
+  const [detailKey,    setDetailKey]    = useState(0);
   const [currentId,    setCurrentId]    = useState<string>('');
   // W7-A4 (crosscut-03 / knowledge-04 / knowledge-30): a `?id=` the settled
   // roster does not contain, or a `?node=`/`?theme=` no KB owns, is a
@@ -135,6 +142,19 @@ function KnowledgePageInner() {
     }
     return kbFetchCacheRef.current.promise;
   }, []);
+  const retryKbDetail = useCallback(() => {
+    // The cache holds the REJECTED promise for this id — a retry that
+    // re-awaited it would be a no-op. Drop it, then re-run the detail effect.
+    kbFetchCacheRef.current = null;
+    setDetailKey((k) => k + 1);
+  }, []);
+  const reloadAll = useCallback(() => {
+    reloadKbs();
+    // Only a FAILED detail read is re-run on recovery — a healthy graph keeps
+    // its selection (the detail effect resets selectedNode/article on re-run).
+    if (kbDetailError) retryKbDetail();
+  }, [reloadKbs, retryKbDetail, kbDetailError]);
+  useBridgeRecovery(reloadAll);
 
   // track mounted signal to avoid setState on unmounted
   const mountedRef = useRef(true);
@@ -276,6 +296,7 @@ function KnowledgePageInner() {
     getOrStartKbFetch(currentId).then((detail) => {
       if (signal.cancelled) return;
       setKbDetail(detail);
+      setKbDetailError(null);
       setReady(true);
       // If a node was requested via ?node= (or its ?theme= alias), select it
       // now that the graph is loaded.
@@ -298,13 +319,19 @@ function KnowledgePageInner() {
           }).catch(() => {/* non-fatal */});
         }
       }
-    }).catch(() => {
+    }).catch((err) => {
+      // W7-FIX-A1 (A1-07): `fetchKb` throws on any non-404 failure — an
+      // ERROR state (kbDetail stays null; the graph area renders the shared
+      // FetchErrorState with Retry). Still settles: page-ready is reached.
       if (signal.cancelled) return;
-      setReady(true);  // reach page-ready even on error
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setKbDetailError(status !== undefined ? { message, status } : { message });
+      setReady(true);
     });
 
     return () => { signal.cancelled = true; };
-  }, [currentId, idConfirmed, getOrStartKbFetch]);
+    // detailKey: Retry / bridge recovery re-run the detail read (W7-FIX-A1)
+  }, [currentId, idConfirmed, getOrStartKbFetch, detailKey]);
 
   // ── Node selection: fetch article ─────────────────────────────────────────
   const handleSelectNode = useCallback((nodeId: string) => {
@@ -351,7 +378,7 @@ function KnowledgePageInner() {
     <main
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
-      data-fetch-status={kbsError ? 'error' : kbListReady ? 'ok' : 'loading'}
+      data-fetch-status={kbsError || kbDetailError ? 'error' : kbListReady ? 'ok' : 'loading'}
       {...(selectedNode ? { 'data-selected-node': selectedNode } : {})}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
     >
@@ -477,6 +504,12 @@ function KnowledgePageInner() {
                 selectedNodeId={selectedNode}
                 onSelectNode={handleSelectNode}
               />
+            ) : kbDetailError ? (
+              <div data-section="kb-detail-error" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+                <div style={{ width: '100%', maxWidth: 640 }}>
+                  <FetchErrorState what={`knowledge base "${currentId}"`} error={kbDetailError.message} status={kbDetailError.status} onRetry={retryKbDetail} />
+                </div>
+              </div>
             ) : (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 14 }}>
                 {ready ? 'No KB data available.' : 'Loading…'}
@@ -539,28 +572,43 @@ function KnowledgePageInner() {
 function IngestActivityPanel({ kbId }: { kbId: string }) {
   const [events, setEvents] = useState<KbIngestEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  // W7-FIX-A1 (A1-07): a failed feed read is an ERROR state, distinguishable
+  // from a genuinely empty feed (`data-fetch-status` + compact FetchErrorState
+  // with Retry) — never "No ingest activity recorded yet." on an outage.
+  const [ingestError, setIngestError] = useState<{ message: string; status?: number } | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    if (!kbId) { setEvents([]); return; }
+    if (!kbId) { setEvents([]); setIngestError(null); return; }
     setLoading(true);
     const signal = { cancelled: false };
     fetchKbIngestActivity(kbId).then((evs) => {
       if (signal.cancelled) return;
       setEvents(evs);
+      setIngestError(null);
       setLoading(false);
-    }).catch(() => { if (!signal.cancelled) setLoading(false); });
+    }).catch((err) => {
+      if (signal.cancelled) return;
+      const { error: message, status } = fetchErrorPropsFrom(err);
+      setIngestError(status !== undefined ? { message, status } : { message });
+      setLoading(false);
+    });
     return () => { signal.cancelled = true; };
-  }, [kbId]);
+  }, [kbId, retryKey]);
 
   return (
     <div
       data-component="ingest-activity"
       data-ingest-event-count={events.length}
+      data-fetch-status={ingestError ? 'error' : loading ? 'loading' : 'ok'}
       style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20 }}
     >
       <div className="panel-head">INGEST ACTIVITY</div>
       {loading && <div style={{ color: 'var(--dim)', fontSize: 12.5, marginTop: 8 }}>Loading…</div>}
-      {!loading && events.length === 0 && (
+      {ingestError ? (
+        <FetchErrorState what="ingest activity" error={ingestError.message} status={ingestError.status} onRetry={() => setRetryKey((k) => k + 1)} compact />
+      ) : null}
+      {!loading && !ingestError && events.length === 0 && (
         <div style={{ color: 'var(--faint)', fontSize: 12.5, marginTop: 8 }}>No ingest activity recorded yet.</div>
       )}
       {events.map((e, i) => (
