@@ -38,6 +38,8 @@ const TONE_COLOR: Record<string, string> = {
   gated: 'var(--amber)',
   'queued-stopped': 'var(--ember)',
   'claimed-stopped': 'var(--ember)',
+  'queued-unknown': 'var(--dim)',
+  'claimed-unknown': 'var(--dim)',
   failed: 'var(--red)',
   unknown: 'var(--dim)',
 };

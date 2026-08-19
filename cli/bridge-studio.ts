@@ -602,9 +602,18 @@ export async function handleStudioRoutes(
       // classified path below is untouched when raw=1 is absent.
       const rawMode = qs.get('raw') === '1';
 
+      // W7-FIX-A3 (A3-02): resolve the run the SAME way `GET /api/runs/<id>`
+      // does (findRun: cycle id, then the stable INITIATIVE id) BEFORE building
+      // the log path — since W7-A3 every run link is minted by initiative id,
+      // and `_logs/<initiativeId>` does not exist once the scheduler claims
+      // (the run's own id flips to the cycle id). An id findRun does not know
+      // (an orphan log dir, or a planned run whose id IS the initiative id)
+      // falls through as itself: same containment guard, honest 404 below.
+      const resolvedRunId = findRun(ctx.forgeRoot, runId)?.id ?? runId;
+
       // Guard against path traversal via a crafted runId.
       const safeLogsBase = resolve(ctx.logsRoot);
-      const eventsPath = resolve(safeLogsBase, runId, 'events.jsonl');
+      const eventsPath = resolve(safeLogsBase, resolvedRunId, 'events.jsonl');
       if (!eventsPath.startsWith(safeLogsBase + sep)) {
         sendJson(res, 400, { error: 'invalid run id' }, origin);
         return true;

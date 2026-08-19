@@ -99,7 +99,7 @@ import {
 import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached } from '../orchestrator/daemon.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '../orchestrator/finalize-merged.ts';
@@ -1786,6 +1786,12 @@ async function handleHttp(
       return;
     }
     try {
+      // W7-FIX-A3 (A3-05): Start keeps the card's promise ("queued work will
+      // run once you start it"). `.paused` is a queue flag independent of
+      // process liveness, so pause → stop → Start used to bring the daemon back
+      // with the stale flag armed and every claim refused. Cleared BEFORE the
+      // spawn attempt so both branches below report `paused:false`.
+      setPaused(false, ctx.queueRoot);
       // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
       // the shared helper — the bridge no longer shells out to a `forge start`
       // CLI command (it's been deleted). Behaviour is identical: detached
@@ -1819,7 +1825,10 @@ async function handleHttp(
   }
   // Stop — SIGTERM the daemon; it drains in-flight cycles then exits. We
   // don't block the request on the drain — the status poll reflects
-  // `running:false` once it's down.
+  // `running:false` once it's down. W7-FIX-A3 (A3-07): the signalled pid is
+  // MARKED (`_logs/daemon/stopping`) so `daemonState` reports `stopping:true`
+  // to every poller for as long as that pid drains — Stop is not a silent
+  // control, and a second tab / a reload sees the same transitional state.
   if (method === 'POST' && url === '/api/scheduler/stop') {
     if (isDryBridge()) {
       refuseDryBridge(res, origin, { route: '/api/scheduler/stop', method, action: 'daemon', logsRoot: ctx.logsRoot });
@@ -1833,6 +1842,7 @@ async function handleHttp(
         return;
       }
       process.kill(pid, 'SIGTERM');
+      markStopping(ctx.forgeRoot, pid);
       sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -2307,6 +2317,23 @@ async function handleHttp(
       : '';
     if (!initiativeId) {
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
+      return;
+    }
+    // W7-FIX-A3 (A3-01): the OPERATOR route refuses a shipped initiative.
+    // `enqueueFlowRun` sources from `done/` on purpose (the trigger drain's
+    // flow-complete chaining), so the guard lives here: a manifest in
+    // `_queue/done` is 409 `already-done` — never yanked out and re-run from
+    // a picker click. Existence through the guard family (the id is validated
+    // by the INIT rule before any fs probe; the same rule enqueueFlowRun
+    // applies, so a malformed id still lands on its `not-found`).
+    if (/^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(initiativeId)
+      && guardedFile(ctx.queueRoot, ['done', `${initiativeId}.md`], 'read') !== null) {
+      sendJson(res, 409, {
+        ok: false,
+        status: 'already-done',
+        initiativeId,
+        detail: `${initiativeId} is already shipped (queue: done) — a merged initiative is not re-run from the kickoff; plan a new initiative instead.`,
+      }, origin);
       return;
     }
     try {

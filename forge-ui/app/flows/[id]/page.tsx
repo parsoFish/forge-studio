@@ -19,6 +19,7 @@ import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
 import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
+import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -324,19 +325,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     void loadData(signal, initiativeId);
   }, [loadData]);
 
-  // Candidates for the generic kickoff: every initiative that can be
-  // (re)enqueued — queued / finished / failed manifests — deduped by id.
-  const kickoffCandidates: KickoffCandidate[] = (() => {
-    const seen = new Set<string>();
-    const out: KickoffCandidate[] = [];
-    for (const r of allQueueRuns) {
-      if (!(r.status === 'planned' || r.status === 'complete' || r.status === 'failed')) continue;
-      if (!r.initiativeId || seen.has(r.initiativeId)) continue;
-      seen.add(r.initiativeId);
-      out.push({ initiativeId: r.initiativeId, project: r.project ?? null });
-    }
-    return out;
-  })();
+  // Candidates for the generic kickoff — W7-FIX-A3 (A3-01): ONLY queued
+  // (planned) initiatives; a finished or failed one is never offered (the
+  // picker used to list merged initiatives, and Start Run silently yanked
+  // them out of _queue/done — see lib/kickoff-candidates.ts).
+  const kickoffCandidates: KickoffCandidate[] = deriveKickoffCandidates(allQueueRuns);
 
   const handleResumeRun = useCallback(async () => {
     if (!activeRun) return;

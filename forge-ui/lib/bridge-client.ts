@@ -507,6 +507,9 @@ export type SchedulerStatus = {
   paused?: boolean;
   /** W7-A3: pid-file mtime while running (daemonState), else null. */
   startedAt?: string | null;
+  /** W7-FIX-A3 (A3-07): SIGTERM sent, pid still alive — draining in-flight
+   *  runs (daemonState folds the stop marker in while THAT pid is alive). */
+  stopping?: boolean;
 };
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus | null> {

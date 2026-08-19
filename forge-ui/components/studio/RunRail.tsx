@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import type { Run } from '@/lib/studio-client';
-import { initialCollapsed, railStorageKey, serializeCollapsed, type RailCollapsed } from '@/lib/run-rail-collapse';
+import { initialCollapsed, railStorageKey, serializeCollapsed, visibleGroupRuns, type RailCollapsed } from '@/lib/run-rail-collapse';
 
 // ---------------------------------------------------------------------------
 // RunRail — left panel listing runs grouped by status. Each group is a
@@ -159,11 +159,15 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
                 {group.length}
               </span>
             </button>
-            {!isCollapsed && group.map((run) => (
+            {/* W7-FIX-A3: a collapsed group still renders the SELECTED run's
+                card (`data-pinned-selection="true"`) — collapse hides the
+                pile, never the selection. */}
+            {visibleGroupRuns(group, isCollapsed, activeRunId).map((run) => (
               <RunCard
                 key={run.id}
                 run={run}
                 isSelected={run.id === activeRunId}
+                pinned={isCollapsed}
                 onSelect={onSelect}
               />
             ))}
@@ -181,10 +185,13 @@ export function RunRail({ runs, activeRunId, onSelect, flowId = '' }: RunRailPro
 function RunCard({
   run,
   isSelected,
+  pinned = false,
   onSelect,
 }: {
   run: Run;
   isSelected: boolean;
+  /** Rendered inside a COLLAPSED group because it is the selection. */
+  pinned?: boolean;
   onSelect: (id: string) => void;
 }) {
   const isGated   = run.status === 'gated';
@@ -208,6 +215,7 @@ function RunCard({
       data-run-id={run.id}
       data-run-status={run.status}
       data-reflection-lost={run.reflectionLost}
+      {...(pinned ? { 'data-pinned-selection': 'true' } : {})}
       onClick={() => onSelect(run.id)}
       style={{
         display: 'flex',

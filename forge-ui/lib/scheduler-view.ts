@@ -12,7 +12,7 @@
  */
 import type { SchedulerStatus } from './bridge-client';
 
-export type SchedulerViewState = 'running' | 'paused' | 'stopped' | 'unknown';
+export type SchedulerViewState = 'running' | 'paused' | 'stopping' | 'stopped' | 'unknown';
 export type SchedulerAction = 'start' | 'pause' | 'resume' | 'stop';
 
 export type SchedulerView = {
@@ -42,6 +42,18 @@ export function deriveSchedulerView(status: SchedulerStatus | null, opts: { queu
       label: 'Scheduler stopped',
       hint: queued > 0 ? `${runs(queued)} will not start until the scheduler runs.` : 'Queued work will not run until you start it.',
       actions: ['start'],
+    };
+  }
+  // W7-FIX-A3 (A3-07): the drain window after Stop — SIGTERM sent, pid still
+  // alive while in-flight cycles settle. The bridge marks the pid it
+  // signalled (`daemonState.stopping`); nothing new is claimed and no action
+  // is honest until the poll reports running:false.
+  if (status.stopping) {
+    return {
+      state: 'stopping',
+      label: 'Scheduler stopping',
+      hint: 'Draining in-flight runs, then exiting — nothing new is claimed.',
+      actions: [],
     };
   }
   if (status.paused) {
@@ -92,7 +104,18 @@ export function describeEnqueueOutcome(
   enqueued: { runId?: string; flowId?: string },
 ): EnqueueOutcome {
   const runHref = enqueuedRunHref(enqueued);
-  if (!scheduler || !scheduler.running) {
+  // W7-FIX-A3 (A3-04): an UNREADABLE status (null — the bridge read failed)
+  // is not "stopped". The strip mounted beneath (needsSchedulerStart) renders
+  // its own honest "unknown" with no controls; the claim must not assert a
+  // state that was never read.
+  if (!scheduler) {
+    return {
+      claim: 'Enqueued — could not confirm the scheduler is running; check its status below.',
+      needsSchedulerStart: true,
+      runHref,
+    };
+  }
+  if (!scheduler.running) {
     return {
       claim: 'Enqueued — the scheduler is stopped, so nothing will run until you start it.',
       needsSchedulerStart: true,

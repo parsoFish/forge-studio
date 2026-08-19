@@ -41,7 +41,7 @@
  */
 
 import { resolveBridgeUrl } from './bridge-client';
-import { parseRun, type Run } from './studio-client';
+import { parseRun, type Flow, type Run } from './studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 
 export type FlowRunDetailResolution =
@@ -100,10 +100,24 @@ export async function fetchReviewFindings(runId: string): Promise<ReviewFindings
 
 /**
  * W7-A3 (flows-07 / home-sessions-17): `review-findings.json` is produced by
- * the develop flow's `adversarial-review` node — fetch it ONLY once that node
- * completed, so a run page never fires a guaranteed-404 request (a console
- * error on every visit, on every Home ledger row).
+ * the review node — fetch it ONLY once that node completed, so a run page
+ * never fires a guaranteed-404 request (a console error on every visit, on
+ * every Home ledger row).
+ *
+ * W7-FIX-A3 (A3-11): the producer is DERIVED from the flow definition — the
+ * node(s) whose outgoing edge carries `artifact: review-findings` — not a
+ * literal node id, so an operator flow that names its review node
+ * differently still shows its findings. A flow that declares no such
+ * producer never fetches. The literal `adversarial-review` key is consulted
+ * ONLY when there is no flow definition to derive from (a retired flow id).
  */
-export function shouldFetchReviewFindings(run: Run): boolean {
-  return run.phases['adversarial-review'] === 'complete';
+export const REVIEW_FINDINGS_ARTIFACT = 'review-findings';
+
+export function reviewFindingsProducers(flow: Pick<Flow, 'edges'> | null): string[] {
+  if (!flow) return ['adversarial-review'];
+  return [...new Set(flow.edges.filter((e) => e.artifact === REVIEW_FINDINGS_ARTIFACT).map((e) => e.from))];
+}
+
+export function shouldFetchReviewFindings(run: Run, flow: Pick<Flow, 'edges'> | null): boolean {
+  return reviewFindingsProducers(flow).some((nodeId) => run.phases[nodeId] === 'complete');
 }
