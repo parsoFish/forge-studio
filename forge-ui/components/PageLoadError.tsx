@@ -25,8 +25,10 @@
  *         [data-fetch-reachable][data-fetch-http-status?] + [data-action="retry-fetch"]
  *       a[data-action="load-error-back"][href=backHref] always a way back
  *
- * Pages ALSO subscribe to bridge recovery (`useBridgeRecovery(reload)`) so a
- * blip self-heals without the operator pressing Retry (crosscut-22).
+ * Pages ALSO subscribe to bridge recovery — `useBridgeRecoveryWhenFailed(
+ * loadError !== null, reload)`: refill ONLY while in this failed state, never
+ * re-load over a healthy page's unsaved edits — so a blip self-heals without
+ * the operator pressing Retry (crosscut-22).
  */
 import Link from 'next/link';
 
