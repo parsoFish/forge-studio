@@ -24,6 +24,7 @@ import {
   setPaused,
   pausedFlagPath,
   spawnServeDetached,
+  markStopping,
 } from './daemon.ts';
 
 function tmpForge(): string {
@@ -137,3 +138,37 @@ function reapStaleAndAssertClear(root: string, pidFile: string): void {
   // The exported helper exists and is callable with this signature.
   assert.equal(typeof spawnServeDetached, 'function');
 }
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (A3-07): the drain window is a REAL state. `POST /api/scheduler/
+// stop` SIGTERMs the daemon, which keeps its pid alive until in-flight cycles
+// settle — a plain pid probe reads "running" for the whole drain, so Stop
+// looked like a silent no-op. The stop marker (`_logs/daemon/stopping`, the
+// pid being stopped) folds into daemonState as `stopping` while THAT pid is
+// alive; a different (fresh) daemon pid never inherits it, and a dead pid is
+// simply "not running" (never "stopping").
+// ---------------------------------------------------------------------------
+
+test('daemonState.stopping: only while the MARKED pid is alive; a stale marker never sticks to a new pid or a stopped daemon', () => {
+  const root = tmpForge();
+  const queueRoot = join(root, '_queue');
+  writePidFile(root, process.pid);
+  assert.equal(daemonState(root, queueRoot).stopping, false, 'no marker → not stopping');
+
+  markStopping(root, process.pid);
+  const draining = daemonState(root, queueRoot);
+  assert.equal(draining.running, true);
+  assert.equal(draining.stopping, true, 'marker for the live pid → stopping');
+
+  // A marker for a DIFFERENT pid (a previous daemon) does not stick to this one.
+  markStopping(root, 2_147_483_640);
+  assert.equal(daemonState(root, queueRoot).stopping, false, 'stale marker → not stopping');
+
+  // Marked, then the process is gone → plainly stopped, never "stopping".
+  markStopping(root, process.pid);
+  clearPidFile(root);
+  const stopped = daemonState(root, queueRoot);
+  assert.equal(stopped.running, false);
+  assert.equal(stopped.stopping, false);
+  rmSync(root, { recursive: true, force: true });
+});

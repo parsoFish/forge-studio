@@ -258,8 +258,31 @@ void _typeCheck;
 
 test('shouldFetchReviewFindings: only when the adversarial-review node completed', () => {
   const base = parseRun(REAL_RUN_BODY.run);
-  expect(shouldFetchReviewFindings({ ...base, phases: {} })).toBe(false);
-  expect(shouldFetchReviewFindings({ ...base, phases: { dev: 'complete', demo: 'complete' } })).toBe(false);
-  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'active' } })).toBe(false);
-  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'complete' } })).toBe(true);
+  expect(shouldFetchReviewFindings({ ...base, phases: {} }, null)).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { dev: 'complete', demo: 'complete' } }, null)).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'active' } }, null)).toBe(false);
+  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'complete' } }, null)).toBe(true);
+});
+
+// W7-FIX-A3 (A3-11): the gate is DERIVED from the artifact's producer — the
+// flow node whose outgoing edge carries `artifact: review-findings` — not a
+// literal node id, so an operator flow that names its review node
+// differently still gets its findings shown once that node completed. The
+// literal `adversarial-review` key survives ONLY as the flow-less fallback
+// (a retired flow id: no definition to derive from).
+test('shouldFetchReviewFindings: derived from the flow\'s review-findings producer node, not the literal id', () => {
+  const base = parseRun(REAL_RUN_BODY.run);
+  const flow = {
+    id: 'my-review-flow', name: 'My review flow', goal: '', triggers: [],
+    nodes: [{ id: 'build', agent: 'developer-ralph' }, { id: 'critique', agent: 'adversarial-review' }, { id: 'verdict', gate: 'verdict' }],
+    edges: [{ from: 'build', to: 'critique', artifact: 'pr' }, { from: 'critique', to: 'verdict', artifact: 'review-findings' }],
+  };
+  expect(shouldFetchReviewFindings({ ...base, phases: { critique: 'complete' } }, flow)).toBe(true);
+  expect(shouldFetchReviewFindings({ ...base, phases: { critique: 'active', build: 'complete' } }, flow)).toBe(false);
+  // The literal id is NOT consulted when the flow declares a different producer.
+  expect(shouldFetchReviewFindings({ ...base, phases: { 'adversarial-review': 'complete' } }, flow)).toBe(false);
+  // A flow that declares NO review-findings producer never fetches (no 404 spam
+  // on e.g. an architect-only run), even if a phase happens to be complete.
+  const noReview = { ...flow, nodes: [{ id: 'build', agent: 'developer-ralph' }], edges: [] };
+  expect(shouldFetchReviewFindings({ ...base, phases: { build: 'complete', 'adversarial-review': 'complete' } }, noReview)).toBe(false);
 });

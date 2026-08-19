@@ -250,3 +250,81 @@ test('GET /api/runs/<initiativeId>: a CLAIMED manifest (run id = cycle id) still
   const unknown = await fetch(`${url}/api/runs/INIT-2026-01-01-never-existed`);
   assert.equal(unknown.status, 404, 'unknown ids still 404 — the fallback is not an oracle for anything');
 });
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (A3-01): the operator's generic Start-Run route REFUSES a shipped
+// initiative. `enqueueFlowRun` sources from `_queue/done` on purpose (the
+// trigger drain's flow-complete chaining), so the guard lives at the operator
+// route: an initiative whose manifest sits in `done/` is 409 `already-done`,
+// its manifest stays exactly where it was, and nothing lands in `pending/`.
+// ---------------------------------------------------------------------------
+
+test('POST /api/flows/:id/run: an initiative in _queue/done → 409 already-done; the done manifest is untouched, nothing enqueued', async () => {
+  const INIT_DONE = 'INIT-2026-08-01-shipped-already';
+  const doneDir = join(forgeRoot, '_queue', 'done');
+  mkdirSync(doneDir, { recursive: true });
+  const body = manifestBody(INIT_DONE, 'forge-develop').replace('phase: pending', 'phase: done\ncycle_id: 2026-08-01T00-00-00_INIT-2026-08-01-shipped-already');
+  writeFileSync(join(doneDir, `${INIT_DONE}.md`), body);
+
+  const res = await fetch(`${url}/api/flows/forge-develop/run`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ initiativeId: INIT_DONE }),
+  });
+  assert.equal(res.status, 409, 'a shipped initiative is refused, never yanked out of done/');
+  const json = (await res.json()) as { ok: boolean; status: string; initiativeId: string; detail?: string };
+  assert.equal(json.ok, false);
+  assert.equal(json.status, 'already-done');
+  assert.equal(json.initiativeId, INIT_DONE);
+  assert.match(json.detail ?? '', /done/i);
+
+  // The artifact, not the status code: the manifest is byte-identical in done/,
+  // and no pending copy was written.
+  assert.equal(readFileSync(join(doneDir, `${INIT_DONE}.md`), 'utf8'), body, 'done manifest byte-unchanged');
+  assert.equal(existsSync(join(forgeRoot, '_queue', 'pending', `${INIT_DONE}.md`)), false, 'no pending copy');
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (A3-02): the phase-log route resolves the run the SAME way
+// `GET /api/runs/<id>` does (findRun: cycle id, then initiative id) before
+// building `_logs/<id>/events.jsonl`. Since W7-A3 every run link is minted by
+// INITIATIVE id, so a phase-log keyed on the raw URL segment 404'd for every
+// claimed run — the run page's node logs read as honestly empty.
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<initiativeId>/phases/<node>/log resolves the CLAIMED run\'s events (same lines as by cycle id)', async () => {
+  // INIT_B was claimed in the previous test (in-flight manifest, cycle log dir).
+  const cycleId = `2026-08-19T00-00-00_${INIT_B}`;
+  const logDir = join(forgeRoot, '_logs', cycleId);
+  mkdirSync(logDir, { recursive: true });
+  // An architect-phase event resolves to the `architect` node
+  // (orchestrator/run-model.ts FALLBACK_PHASE_TO_NODE).
+  writeFileSync(join(logDir, 'events.jsonl'), [
+    JSON.stringify({ event_id: 'EV_a3_1', cycle_id: cycleId, initiative_id: INIT_B, phase: 'orchestrator', skill: 'scheduler', event_type: 'start', started_at: '2026-08-19T00:00:00.000Z', message: 'cycle.start', input_refs: [], output_refs: [] }),
+    JSON.stringify({ event_id: 'EV_a3_2', cycle_id: cycleId, initiative_id: INIT_B, phase: 'architect', skill: 'architect', event_type: 'start', started_at: '2026-08-19T00:00:01.000Z', message: 'ARCHITECT-STABLE-HANDLE-MARKER', input_refs: [], output_refs: [] }),
+    JSON.stringify({ event_id: 'EV_a3_3', cycle_id: cycleId, initiative_id: INIT_B, phase: 'architect', skill: 'architect', event_type: 'end', started_at: '2026-08-19T00:00:02.000Z', cost_usd: 0.1, input_refs: [], output_refs: [] }),
+  ].join('\n') + '\n');
+
+  const byCycle = await fetch(`${url}/api/runs/${encodeURIComponent(cycleId)}/phases/architect/log?raw=1`);
+  assert.equal(byCycle.status, 200);
+  const cycleLines = ((await byCycle.json()) as { lines: Array<{ event_id: string }> }).lines;
+  assert.equal(cycleLines.length, 2, 'the architect node has two raw events by cycle id');
+
+  const byInit = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_B)}/phases/architect/log?raw=1`);
+  assert.equal(byInit.status, 200, 'the initiative id resolves the same events.jsonl through findRun');
+  const initLines = ((await byInit.json()) as { lines: Array<{ event_id: string }> }).lines;
+  assert.deepEqual(initLines.map((l) => l.event_id), cycleLines.map((l) => l.event_id), 'identical lines via either handle');
+
+  // The classified (non-raw) path resolves the same way.
+  const classified = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_B)}/phases/architect/log`);
+  assert.equal(classified.status, 200);
+  assert.equal(((await classified.json()) as { lines: unknown[] }).lines.length, 2);
+
+  // A PLANNED run (its id IS the initiative id, no log dir yet) is still an
+  // honest 404 — resolution never fabricates a log for a run that has none.
+  const planned = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_PENDING)}/phases/architect/log`);
+  assert.equal(planned.status, 404);
+  // Unknown ids still 404 (no oracle, no traversal).
+  const unknownLog = await fetch(`${url}/api/runs/INIT-2026-01-01-never-existed/phases/architect/log`);
+  assert.equal(unknownLog.status, 404);
+});

@@ -515,3 +515,24 @@ test('W7-A3: no project on the run → no project link fabricated; not-found sti
   expect(nf).toMatch(/<a[^>]*data-action="back-to-monitor"[^>]*href="\/flows\/forge-develop"/);
   expect(nf).not.toContain('data-action="open-artifacts"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (A3-03): the breadcrumb's artifacts link is keyed on the RESOLVED
+// run id, never the raw URL segment. Since W7-A3 every run link is minted by
+// INITIATIVE id (`/flows/<flow>/run/INIT-…`, the stable handle across the
+// scheduler's claim); the run page resolves it through findRun to a run whose
+// own `id` is the CYCLE id once claimed. `/artifact?run=<initiativeId>` has no
+// such fallback on its artifact reads (`_logs/<initiativeId>` does not exist)
+// — a breadcrumb keyed on the URL id sent the operator to "not produced yet"
+// for a run whose PLAN.html/verdict.json genuinely exist.
+// ---------------------------------------------------------------------------
+
+test('W7-FIX-A3: reached by INITIATIVE id, the artifacts link carries the run\'s OWN (cycle) id, not the URL segment', () => {
+  const html = render({ runId: 'INIT-done-2', run: archivedRun({ id: '2026-01-01T00-00-00_INIT-done-2', initiativeId: 'INIT-done-2' }) });
+  expect(html).toMatch(/<a[^>]*data-action="open-artifacts"[^>]*href="\/artifact\?run=2026-01-01T00-00-00_INIT-done-2&(amp;)?type=plan&(amp;)?mode=view"/);
+  expect(html).not.toMatch(/href="\/artifact\?run=INIT-done-2&/);
+  // The page root still mirrors the URL handle it was reached by (the
+  // journey/DOM contract selects on it), and the header shows the resolved id.
+  expect(html).toMatch(/<main[^>]*data-run-id="INIT-done-2"/);
+  expect(html).toContain('2026-01-01T00-00-00_INIT-done-2 · flow forge-develop');
+});

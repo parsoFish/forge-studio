@@ -160,11 +160,29 @@ test('queued: running scheduler → will pick it up; paused → resume it; stopp
   expect(describePostCommit([link('queued')], { running: true, paused: true })).toEqual({
     tone: 'queued-running', headline: `${ID} is queued — the scheduler is paused; resume it to start.`, needsSchedulerStart: false,
   });
-  for (const s of [{ running: false }, null]) {
-    expect(describePostCommit([link('queued')], s)).toEqual({
-      tone: 'queued-stopped', headline: `${ID} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true,
-    });
-  }
+  expect(describePostCommit([link('queued')], { running: false })).toEqual({
+    tone: 'queued-stopped', headline: `${ID} is queued — the scheduler is stopped. Start it to build.`, needsSchedulerStart: true,
+  });
+});
+
+// W7-FIX-A3 (A3-04): a null (unreadable) scheduler status is NOT "stopped" —
+// the headline must not assert a state that was never read (the strip
+// beneath renders "unknown" with no Start button, so "start it" would
+// contradict its own controls). Distinct tones, still mounts the strip.
+test('queued/claimed with an UNKNOWN scheduler (null) → "could not confirm" headlines, never "stopped"', () => {
+  const queued = describePostCommit([link('queued')], null);
+  expect(queued).toEqual({
+    tone: 'queued-unknown',
+    headline: `${ID} is queued — could not confirm the scheduler is running; check its status below.`,
+    needsSchedulerStart: true,
+  });
+  const claimed = describePostCommit([link('building')], null);
+  expect(claimed).toEqual({
+    tone: 'claimed-unknown',
+    headline: `${ID} is claimed — could not confirm the scheduler is running; check its status below.`,
+    needsSchedulerStart: true,
+  });
+  for (const v of [queued, claimed]) expect(v.headline).not.toMatch(/stopped|building it now/);
 });
 
 test('gated wins over everything; failed / done / unknown are their own honest tones', () => {

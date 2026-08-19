@@ -34,3 +34,24 @@ test('serialize round-trips through initialCollapsed', () => {
   const s = serializeCollapsed({ planned: true });
   expect(initialCollapsed(s, { complete: 100 })).toEqual({ planned: true });
 });
+
+// ---- W7-FIX-A3: a collapsed group never hides the SELECTED run --------------
+// The flows-run journey regression: once COMPLETE collapsed (>10 archived
+// runs), the just-completed, selected run's card vanished from the rail; the
+// only `[data-run-id]` left for it was the HistoryLedger row (a link), so a
+// rail click navigated away. The selected run's card stays rendered inside a
+// collapsed group — collapse hides the pile, never the selection.
+import { visibleGroupRuns } from './run-rail-collapse.ts';
+
+test('an expanded group renders every run in order', () => {
+  const group = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  expect(visibleGroupRuns(group, false, 'b')).toEqual(group);
+  expect(visibleGroupRuns(group, false, null)).toEqual(group);
+});
+
+test('a collapsed group renders ONLY the selected run (and nothing when the selection is elsewhere)', () => {
+  const group = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  expect(visibleGroupRuns(group, true, 'b')).toEqual([{ id: 'b' }]);
+  expect(visibleGroupRuns(group, true, 'zzz')).toEqual([]);
+  expect(visibleGroupRuns(group, true, null)).toEqual([]);
+});
