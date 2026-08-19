@@ -35,12 +35,12 @@
  *
  * `fetchReviewFindings(runId)` reuses the SAME artifact-fetch shape
  * `app/artifact/page.tsx`'s own (unexported) `fetchJsonArtifact` already
- * established — `GET /api/artifact/:runId/:filename`, `resolveBridgeUrl` +
- * `fetch` + degrade-to-null on any failure — rather than inventing a second
- * one, per this task's brief.
+ * established — `GET /api/artifact/:runId/:filename` over `bridgeFetch` (the
+ * ONE Studio transport, W7-FIX-A1) + degrade-to-null on any failure — rather
+ * than inventing a second one, per this task's brief.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 import { parseRun, type Run } from './studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 
@@ -69,10 +69,8 @@ export function resolveFlowRunDetailFromResponse(status: number, body: unknown):
 
 /** Fetch + resolve one runId's flow run-detail. See header for the sentinel-0 convention. */
 export async function fetchFlowRunDetail(id: string): Promise<FlowRunDetailResolution> {
-  const base = await resolveBridgeUrl();
-  if (!base) return resolveFlowRunDetailFromResponse(0, null);
   try {
-    const res = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
+    const res = await bridgeFetch(`/api/runs/${encodeURIComponent(id)}`);
     const body = await res.json();
     return resolveFlowRunDetailFromResponse(res.status, body);
   } catch {
@@ -88,9 +86,7 @@ export async function fetchFlowRunDetail(id: string): Promise<FlowRunDetailResol
  */
 export async function fetchReviewFindings(runId: string): Promise<ReviewFindingsDoc | null> {
   try {
-    const base = await resolveBridgeUrl();
-    if (!base) return null;
-    const res = await fetch(`${base}/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/review-findings.json`);
     if (!res.ok) return null;
     return (await res.json()) as ReviewFindingsDoc;
   } catch {

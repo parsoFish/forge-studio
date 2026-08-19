@@ -13,7 +13,7 @@
  * re-export shim back into the file it was extracted from.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes
@@ -104,10 +104,8 @@ function parseSkillLibraryEntry(raw: unknown): SkillLibraryEntry {
  *  carrying an entry with an unrecognised `trust` token is treated the same
  *  way — `ok: false` — rather than silently coercing it. */
 export async function fetchSkillLibrary(): Promise<{ ok: boolean; skills: SkillLibraryEntry[]; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, skills: [], error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/skills`);
+    const res = await bridgeFetch(`/api/studio/skills`);
     const data = (await res.json().catch(() => ({}))) as { skills?: unknown[]; error?: string };
     if (!res.ok) return { ok: false, skills: [], error: data.error ?? `HTTP ${res.status}` };
     const skills = Array.isArray(data.skills) ? data.skills.map(parseSkillLibraryEntry) : [];
@@ -191,10 +189,8 @@ function parseSkillDetail(raw: unknown): SkillDetail {
 export async function fetchSkill(
   id: string,
 ): Promise<{ ok: boolean; status?: number; detail?: SkillDetail; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/skills/${encodeURIComponent(id)}`);
+    const res = await bridgeFetch(`/api/studio/skills/${encodeURIComponent(id)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = (data as { error?: string })?.error;
@@ -210,10 +206,8 @@ async function skillClientPost(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}${path}`, {
+    const res = await bridgeFetch(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),

@@ -30,7 +30,7 @@
  * (the `fetch()` call itself throwing) — a page can tell the two apart.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (orchestrator/studio/template-library.ts)
@@ -179,12 +179,9 @@ function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
  *  empty library (`{templates: []}`) is the one legitimate empty and still
  *  returns `ok: true, templates: []`. */
 export async function fetchTemplateLibrary(): Promise<{ ok: boolean; templates: TemplateLibraryEntry[]; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, templates: [], error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/templates`);
+    res = await bridgeFetch(`/api/studio/templates`);
   } catch (err) {
     return { ok: false, templates: [], error: `bridge unreachable: ${String(err)}` };
   }
@@ -257,12 +254,9 @@ function parseTemplateDetail(raw: unknown): TemplateDetail {
 export async function fetchTemplate(
   id: string,
 ): Promise<{ ok: boolean; status?: number; detail?: TemplateDetail; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/templates/${encodeURIComponent(id)}`);
+    res = await bridgeFetch(`/api/studio/templates/${encodeURIComponent(id)}`);
   } catch (err) {
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
   }

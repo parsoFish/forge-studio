@@ -17,7 +17,7 @@
  * naming the phase, 404, 400).
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 export const SESSION_LIFECYCLE_STATES = ['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'] as const;
 export type SessionLifecycleState = (typeof SESSION_LIFECYCLE_STATES)[number];
@@ -89,11 +89,9 @@ export type CancelStudioSessionResult =
   | { ok: false; error: string };
 
 export async function cancelStudioSession(kind: string, sessionId: string, project: string | null): Promise<CancelStudioSessionResult> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/cancel`, {
+    res = await bridgeFetch(`/api/studio/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}/cancel`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(project !== null ? { project } : {}),

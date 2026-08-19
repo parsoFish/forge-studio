@@ -14,12 +14,12 @@
  *
  * Tested ONLY via the pure parse functions (community-client.test.ts) — no
  * fetch, no window, no jsdom (this repo's forge-ui vitest config is
- * `environment: 'node'`, a standing decision; `resolveBridgeUrl()` requires
- * `window`). The over-the-wire behaviour is pinned by
+ * `environment: 'node'`, a standing decision; the transport, `bridgeFetch`,
+ * requires `window`). The over-the-wire behaviour is pinned by
  * cli/bridge-studio-community.test.ts instead.
  */
 
-import { resolveBridgeUrl } from './bridge-client.ts';
+import { bridgeFetch } from './bridge-client.ts';
 import { parseProbeResult, type ConnectionProbeResult } from './connection-client.ts';
 
 // ---------------------------------------------------------------------------
@@ -391,12 +391,9 @@ export async function fetchCommunityIndex(): Promise<{
   items: CommunityItem[];
   error?: string;
 }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, hubs: [], items: [], error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/community`);
+    res = await bridgeFetch(`/api/studio/community`);
   } catch (err) {
     return { ok: false, hubs: [], items: [], error: `bridge unreachable: ${String(err)}` };
   }
@@ -424,12 +421,9 @@ export async function fetchCommunityItemDetail(
   kind: CommunityKind,
   id: string,
 ): Promise<{ ok: boolean; status?: number; item?: CommunityItemDetail; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/community/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`);
+    res = await bridgeFetch(`/api/studio/community/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`);
   } catch (err) {
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
   }
@@ -465,12 +459,9 @@ export async function installCommunityItem(
   kind: CommunityKind,
   id: string,
 ): Promise<{ ok: boolean; result?: CommunityInstallOutcome; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/community/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/install`, {
+    res = await bridgeFetch(`/api/studio/community/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/install`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify({}),

@@ -42,7 +42,7 @@
  * wiring a real source is future work once one exists.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 import type { EventLogEntry } from './bridge-client';
 import { deriveLogLine, type RunLogLine } from './run-log-line';
 import type { RunMaterialRef, RunOutput } from '@/components/studio/agent-builder/RunView';
@@ -173,10 +173,8 @@ export function resolveRunDetailFromResponse(status: number, body: unknown): Run
 
 /** Fetch + derive everything `RunView` needs for one runId. */
 export async function fetchRunDetail(runId: string): Promise<RunDetail> {
-  const base = await resolveBridgeUrl();
-  if (!base) return NOT_FOUND_DETAIL;
   try {
-    const res = await fetch(`${base}/api/agents/runs/${encodeURIComponent(runId)}`);
+    const res = await bridgeFetch(`/api/agents/runs/${encodeURIComponent(runId)}`);
     const body = await res.json().catch(() => null);
     return resolveRunDetailFromResponse(res.status, body);
   } catch {
