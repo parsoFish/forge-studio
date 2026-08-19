@@ -32,7 +32,7 @@ import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects,
 import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { KB_ID_RE, isReservedId } from '../orchestrator/studio/validate.ts';
-import { kbSites, unroutableKbReason, unroutableKbs } from './kb-sites.ts';
+import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
@@ -865,7 +865,14 @@ function newProjectBrainSessionId(): string {
  * else (a `function` declaration hoists, so this relocation changes nothing
  * about when or how it runs).
  */
-export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
+export function loadKbDescriptors(
+  forgeRoot: string,
+  // W7-FIX-A4 (W7A4-04): every descriptor this walk DROPS as unroutable is
+  // reported here (dir + id + reason) in the SAME pass — the list route folds
+  // it into `unroutable[]` so the drop is never silent, without a second walk
+  // / re-parse of every kb.yaml per poll.
+  onUnroutable?: (u: UnroutableKb) => void,
+): KbWithCounts[] {
   const result: KbWithCounts[] = [];
 
   // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
@@ -889,7 +896,11 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
       // project↔KB binding, the roster's `unroutable[]` diagnostic and
       // `forge studio lint`'s kb `dir-name` check (W7-FIX-A4 / W7A4-04) — the
       // drop is never silent.
-      if (unroutableKbReason(kb.id, name) !== null) return;
+      const unroutable = unroutableKbReason(kb.id, name);
+      if (unroutable !== null) {
+        onUnroutable?.({ dir: name, id: kb.id, path: yamlGuard.realPath, reason: unroutable });
+        return;
+      }
       // Each layer path is independently guarded — a real kb.yaml is no
       // warrant for a symlinked `themes/` or `_raw/` beside it.
       const layer = (tail: string): string | null => {
@@ -976,12 +987,14 @@ export async function handleStudioKbRoutes(
       // real (optional) origin: stamp on kb.yaml via the ONE shared mapping
       // — attached inside loadKbDescriptors itself (forge-3oq review), so
       // this route no longer needs its own copy.
-      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot));
       // W7-FIX-A4 (W7A4-04): a descriptor the roster DROPS (id ≠ dir / fails
-      // the id rule) is diagnosed here — `unroutable: [{dir,id,path,reason}]`
-      // — never silently invisible; `forge studio lint` reports the same
-      // predicate as an error finding (`kb:<id>` / `dir-name`).
-      sendJson(res, 200, { kbs, unroutable: unroutableKbs(ctx.forgeRoot) }, origin);
+      // the id rule) is diagnosed here — `unroutable: [{dir,id,path,reason}]`,
+      // collected in the loader's own walk — never silently invisible;
+      // `forge studio lint` reports the same predicate as an error finding
+      // (`kb:<id>` / `dir-name`).
+      const unroutable: UnroutableKb[] = [];
+      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot, (u) => unroutable.push(u)));
+      sendJson(res, 200, { kbs, unroutable }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

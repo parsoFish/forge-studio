@@ -36,7 +36,8 @@ import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '../orchestrator/studio/va
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { buildProjectSavePayload } from '../forge-ui/lib/project-save-payload.ts';
-import { unroutableKbReason, unroutableKbs } from './kb-sites.ts';
+import { unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
+import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -280,7 +281,9 @@ test('W7A4-04: unroutableKbReason is the ONE predicate — null iff id === dir A
 });
 
 test('W7A4-04 (RED on main): the roster DIAGNOSES a dropped descriptor — GET /api/studio/kbs returns `unroutable[]` naming dir + id + reason; the KB is neither listed nor bound', async () => {
-  const local = unroutableKbs(forgeRoot);
+  const local: UnroutableKb[] = [];
+  const listed = loadKbDescriptors(forgeRoot, (u) => local.push(u));
+  assert.ok(!listed.some((k) => k.id === 'gitpulse-brain'), 'the loader drops the mismatched descriptor');
   assert.equal(local.length, 1, `expected exactly the gitpulse fixture, got ${JSON.stringify(local)}`);
   assert.equal(local[0].dir, 'gitpulse');
   assert.equal(local[0].id, 'gitpulse-brain');
