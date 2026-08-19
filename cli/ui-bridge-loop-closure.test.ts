@@ -285,6 +285,48 @@ test('POST /api/flows/:id/run: an initiative in _queue/done → 409 already-done
 });
 
 // ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 5): the flows LIST distinguishes "no flows" from
+// "could not read them". The run page derives `unregistered` (a real fact
+// about a flow id) only from an ANSWERED list — but `loadAllFlows` swallowed a
+// thrown `readdirSync` into `[]`, so an unreadable `studio/flows` answered
+// `200 {flows: []}` and every run page declared its flow unregistered instead
+// of rendering the retryable unresolved body. A failed read is a 500; an
+// ABSENT flows dir stays an honest empty list (nothing is registered yet).
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/flows: a thrown directory read is a 500, never 200 {flows: []}', async () => {
+  const brokenRoot = mkdtempSync(join(tmpdir(), 'forge-flows-unreadable-'));
+  mkdirSync(join(brokenRoot, 'studio'), { recursive: true });
+  // `studio/flows` EXISTS but is not a directory → readdirSync throws ENOTDIR,
+  // standing in for the EACCES / transient FS failure class.
+  writeFileSync(join(brokenRoot, 'studio', 'flows'), 'not a directory');
+  const broken = await startBridge({ forgeRoot: brokenRoot, port: 0 });
+  try {
+    const res = await fetch(`${broken.url}/api/studio/flows`);
+    assert.equal(res.status, 500, 'a failed read must not answer as an empty list');
+    const body = (await res.json()) as { error?: string; flows?: unknown[] };
+    assert.ok(body.error, 'the bridge sends its own error text');
+    assert.equal(body.flows, undefined, 'no fabricated flows array on the failure path');
+  } finally {
+    await broken.close();
+    rmSync(brokenRoot, { recursive: true, force: true });
+  }
+});
+
+test('GET /api/studio/flows: an ABSENT flows dir is still an honest 200 {flows: []} (nothing registered is not a failure)', async () => {
+  const emptyRoot = mkdtempSync(join(tmpdir(), 'forge-flows-absent-'));
+  const empty = await startBridge({ forgeRoot: emptyRoot, port: 0 });
+  try {
+    const res = await fetch(`${empty.url}/api/studio/flows`);
+    assert.equal(res.status, 200);
+    assert.deepEqual((await res.json()) as { flows: unknown[] }, { flows: [] });
+  } finally {
+    await empty.close();
+    rmSync(emptyRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // W7-FIX-A3 (round-2 finding 2): the run 404 carries the PER-RUN existence
 // fact. The artifact page's not-found rule ("unknown run AND nothing on disk")
 // was being decided from whichever artifact THIS `?type=` happened to read —
@@ -398,4 +440,75 @@ test('GET /api/runs/<initiativeId>/phases/<node>/log resolves the CLAIMED run\'s
   // Unknown ids still 404 (no oracle, no traversal).
   const unknownLog = await fetch(`${url}/api/runs/INIT-2026-01-01-never-existed/phases/architect/log`);
   assert.equal(unknownLog.status, 404);
+});
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 11): the phase-log route resolves LITERAL-FIRST.
+// `findRun` walks the queue and rebuilds the run/node/agent maps, re-parsing
+// the active run's events.jsonl — and PhaseDrawer refetches this route on
+// every WebSocket event for that run, passing the CYCLE id it already has, so
+// the live cycle parsed its own log twice per event. An id with its own log
+// dir is served from it directly; findRun runs only when there is no such dir
+// (the initiative-id links W7-A3 mints), which is the A3-02 behaviour pinned
+// above and unchanged.
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<id>/phases/<node>/log: an id with its OWN log dir is served from it directly (findRun is the fallback, not the first step)', async () => {
+  const INIT_LIT = 'INIT-2026-08-03-literal-first';
+  const cycleId = `2026-08-03T00-00-00_${INIT_LIT}`;
+  // A CLAIMED run: findRun resolves INIT_LIT → cycleId (its manifest is in-flight).
+  const inFlight = join(forgeRoot, '_queue', 'in-flight');
+  mkdirSync(inFlight, { recursive: true });
+  writeFileSync(
+    join(inFlight, `${INIT_LIT}.md`),
+    manifestBody(INIT_LIT, 'forge-develop').replace('phase: pending', `phase: developing\ncycle_id: ${cycleId}`),
+  );
+  const ev = (id: string, marker: string) => JSON.stringify({
+    event_id: id, cycle_id: cycleId, initiative_id: INIT_LIT, phase: 'architect', skill: 'architect',
+    event_type: 'start', started_at: '2026-08-03T00:00:01.000Z', message: marker, input_refs: [], output_refs: [],
+  });
+  mkdirSync(join(forgeRoot, '_logs', cycleId), { recursive: true });
+  writeFileSync(join(forgeRoot, '_logs', cycleId, 'events.jsonl'), ev('EV_cycle', 'FROM-THE-CYCLE-DIR') + '\n');
+  // The same id ALSO has a literal log dir of its own.
+  mkdirSync(join(forgeRoot, '_logs', INIT_LIT), { recursive: true });
+  writeFileSync(join(forgeRoot, '_logs', INIT_LIT, 'events.jsonl'), ev('EV_literal', 'FROM-THE-LITERAL-DIR') + '\n');
+
+  const literal = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_LIT)}/phases/architect/log?raw=1`);
+  assert.equal(literal.status, 200);
+  const lines = ((await literal.json()) as { lines: Array<{ event_id: string }> }).lines;
+  assert.deepEqual(lines.map((l) => l.event_id), ['EV_literal'], 'served from the id\'s own log dir — no queue walk needed');
+
+  // And the cycle id (the id PhaseDrawer actually passes) is a literal hit too.
+  const byCycle = await fetch(`${url}/api/runs/${encodeURIComponent(cycleId)}/phases/architect/log?raw=1`);
+  assert.equal(byCycle.status, 200);
+  assert.deepEqual(
+    ((await byCycle.json()) as { lines: Array<{ event_id: string }> }).lines.map((l) => l.event_id),
+    ['EV_cycle'],
+  );
+});
+
+test('GET /api/runs/<id>/phases/<node>/log: an id with NO log dir of its own still resolves through findRun (A3-02 unchanged)', async () => {
+  const INIT_FB = 'INIT-2026-08-04-fallback-only';
+  const cycleId = `2026-08-04T00-00-00_${INIT_FB}`;
+  const inFlight = join(forgeRoot, '_queue', 'in-flight');
+  mkdirSync(inFlight, { recursive: true });
+  writeFileSync(
+    join(inFlight, `${INIT_FB}.md`),
+    manifestBody(INIT_FB, 'forge-develop').replace('phase: pending', `phase: developing\ncycle_id: ${cycleId}`),
+  );
+  mkdirSync(join(forgeRoot, '_logs', cycleId), { recursive: true });
+  writeFileSync(join(forgeRoot, '_logs', cycleId, 'events.jsonl'), JSON.stringify({
+    event_id: 'EV_fb', cycle_id: cycleId, initiative_id: INIT_FB, phase: 'architect', skill: 'architect',
+    event_type: 'start', started_at: '2026-08-04T00:00:01.000Z', message: 'x', input_refs: [], output_refs: [],
+  }) + '\n');
+  assert.equal(existsSync(join(forgeRoot, '_logs', INIT_FB)), false, 'precondition: no literal log dir for the initiative id');
+
+  const res = await fetch(`${url}/api/runs/${encodeURIComponent(INIT_FB)}/phases/architect/log?raw=1`);
+  assert.equal(res.status, 200, 'the initiative id resolves through findRun');
+  assert.deepEqual(((await res.json()) as { lines: Array<{ event_id: string }> }).lines.map((l) => l.event_id), ['EV_fb']);
+});
+
+test('GET /api/runs/<id>/phases/<node>/log: an id known to neither the literal probe nor findRun still 404s', async () => {
+  const res = await fetch(`${url}/api/runs/INIT-2026-01-01-never-existed/phases/architect/log`);
+  assert.equal(res.status, 404);
 });

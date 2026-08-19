@@ -67,7 +67,7 @@ cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts writeFileSync 6
-cli/bridge-studio.ts existsSync 9
+cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
 cli/contract-stages.ts realpathSync 2

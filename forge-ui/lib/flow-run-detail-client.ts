@@ -134,7 +134,12 @@ export function shouldFetchReviewFindings(run: Run, flow: Pick<Flow, 'edges'> | 
  *   - it FAILED (`{ ok: false }`, threw / no bridge) — nothing is known about
  *     the flow, so a FOUND run is downgraded to `unresolved` (the page renders
  *     its retryable body) rather than declaring "unregistered" off a failed
- *     read. `not-found` / `unresolved` runs pass through unchanged (a 404 for
+ *     read. Round-2 finding 5 closed the other half of this invariant: the
+ *     bridge's `GET /api/studio/flows` used to swallow a thrown `readdirSync`
+ *     into `200 {flows: []}`, so an unreadable `studio/flows` reached this
+ *     function as an ANSWERED empty list and every id read as "unregistered".
+ *     A thrown read is a 500 there now, which `fetchStudioFlows` rejects on and
+ *     the page maps to `{ ok: false }` — so the rule below holds end to end. `not-found` / `unresolved` runs pass through unchanged (a 404 for
  *     the run is authoritative on its own; unresolved is already the honest
  *     floor).
  */
