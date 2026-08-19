@@ -16,7 +16,7 @@ import {
   //     already exercises for its own (different) session id.
   archDir, writeStatus, archEvent, PROJECT,
 } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 
 // ── A-scratch: compose a brand-new agent entirely from scratch ─────────────
 const SCRATCH_AGENT_SLUG = 'journey-scratch-agent';
@@ -430,6 +430,8 @@ export const journey = defineJourney({
               const pageReady = await page.evaluate(() =>
                 document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready'));
               check(pageReady === 'true', `W6-IA3: [data-page="agents-index"][data-page-ready="true"] (got "${pageReady}")`);
+              // W7-A1 / FIX-A1 (A1-11): the agents pillar's roster read is honest.
+              await checkHonestPillarRead(page, check, 'agents-index', 'W6-IA3');
 
               const cardCount = await page.evaluate(() =>
                 document.querySelectorAll('[data-section="agent-roster"] [data-card-type="agent"]').length);

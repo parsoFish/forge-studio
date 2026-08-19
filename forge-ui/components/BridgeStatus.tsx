@@ -60,6 +60,7 @@ export function BridgeStatusView({ snapshot, onRetry }: { snapshot: BridgeStatus
     'data-component': 'bridge-status',
     'data-bridge-status': snapshot.status,
     'data-bridge-ever-up': snapshot.everUp ? 'true' : 'false',
+    'data-bridge-probing': snapshot.probing ? 'true' : 'false',
   } as const;
 
   if (!visible) {
@@ -81,8 +82,18 @@ export function BridgeStatusView({ snapshot, onRetry }: { snapshot: BridgeStatus
           </span>
         ) : null}
       </span>
-      <button type="button" data-action="bridge-retry" onClick={onRetry} style={RETRY_STYLE}>
-        Retry now
+      {/* W7-FIX-A1 (A1-08): a click during an in-flight probe is a documented
+          no-op in the store — so the control SHOWS pending instead of
+          swallowing the click silently. */}
+      <button
+        type="button"
+        data-action="bridge-retry"
+        onClick={onRetry}
+        aria-busy={snapshot.probing ? 'true' : 'false'}
+        disabled={snapshot.probing}
+        style={{ ...RETRY_STYLE, opacity: snapshot.probing ? 0.7 : 1, cursor: snapshot.probing ? 'progress' : 'pointer' }}
+      >
+        {snapshot.probing ? 'Checking…' : 'Retry now'}
       </button>
     </div>
   );

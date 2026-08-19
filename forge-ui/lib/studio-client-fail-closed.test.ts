@@ -28,6 +28,8 @@
  * RUN: cd forge-ui && npx vitest run lib/studio-client-fail-closed.test.ts
  */
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // Mock ONLY the transport. `bridgeFetch` is what studio-client must call;
 // each test replaces `mockBridgeFetch`'s implementation. Global fetch is
@@ -107,12 +109,106 @@ const ROWS: Row[] = [
   { name: 'fetchActiveOrLatestKbDrain', call: () => sc.fetchActiveOrLatestKbDrain('k'), path: '/api/studio/kbs/k/drain', okBody: { ok: true, runId: null }, positive: (v) => expect((v as { ok: boolean }).ok).toBe(true), mode: 'status-shaped', on404: 'status-shaped' },
   { name: 'fetchActiveOrLatestConsolidate', call: () => sc.fetchActiveOrLatestConsolidate('k'), path: '/api/studio/kbs/k/consolidate/active', okBody: { ok: true, runId: 'c1', state: 'running', cleared: false }, positive: (v) => expect((v as { runId: string }).runId).toBe('c1'), mode: 'status-shaped', on404: 'status-shaped' },
   { name: 'fetchActiveOnboarding', call: () => sc.fetchActiveOnboarding('p'), path: '/api/studio/projects/p/onboarding/active', okBody: { ok: true, sessionId: 's', runId: 'r', phase: 'running' }, positive: (v) => expect((v as { sessionId: string }).sessionId).toBe('s'), mode: 'status-shaped', on404: 'status-shaped' },
+  // ---- W7-FIX-A1 A1-10: the three dispatch-status polls. A failed READ is
+  // `{ok:false, state:'unknown', error}` — never a fabricated 'running' (fix
+  // polls) or an `'unknown'` indistinguishable from the bridge's own honest
+  // "no state recorded" (run poll); the poll wrappers in agent-dispatch.ts
+  // keep watching on `ok:false` (bounded), so a blip is a visible read
+  // failure, not a stopped run and not a phantom still-running.
+  { name: 'getAgentFixStatus', call: () => sc.getAgentFixStatus('k', 'r'), path: '/api/studio/kbs/k/fix-agent/r', okBody: { ok: true, state: 'cleared', cleared: true }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'cleared', cleared: true }), mode: 'status-shaped', on404: 'status-shaped' },
+  { name: 'getAgentRunStatus', call: () => sc.getAgentRunStatus('r'), path: '/api/agents/runs/r', okBody: { ok: true, state: 'done', costUsd: 0.25, events: 12 }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'done', costUsd: 0.25, events: 12 }), mode: 'status-shaped', on404: 'status-shaped' },
+  { name: 'preflightFixStatus', call: () => sc.preflightFixStatus('p', 'r'), path: '/api/studio/projects/p/preflight/fix-agent/r', okBody: { ok: true, state: 'not-cleared', cleared: false }, positive: (v) => expect(v).toMatchObject({ ok: true, state: 'not-cleared', cleared: false }), mode: 'status-shaped', on404: 'status-shaped' },
 ];
 
-test('table covers every studioGet-backed read exported by studio-client (a new read must be added here)', () => {
-  const names = ROWS.map((r) => r.name).sort();
+// ---- drift guard (W7-FIX-A1 A1-04) ------------------------------------------
+// The pre-fix guard asserted a COUNT over ROWS itself — a tautology w.r.t.
+// additions: a new `studioGet`-backed export (or one that reintroduced the
+// `studioGet(path, fallback)` empty-fallback shape) left it green. This
+// enumerates studio-client.ts's REAL export surface and diffs it against the
+// table, so a new bridge read with no row FAILS here.
+
+const READ_HELPER_RE = /\b(studioGet|studioRead|studioReadOr404)\s*</;
+
+/**
+ * Every `export (async) function NAME` in `source` whose body performs a
+ * bridge GET: through the typed helpers (`studioGet`/`studioRead`/
+ * `studioReadOr404`) or a bare `bridgeFetch(path)` with no `method:` (a raw
+ * GET). Writes (`studioSend`/`bridgeFetch(path, {method: …})`) and pure
+ * exports are excluded. Top-level exports start at column 0, so the source
+ * is chunked at every `\nexport ` boundary.
+ */
+export function enumerateBridgeReadExports(source: string): string[] {
+  // Comments are stripped first: a chunk runs to the NEXT `export`, so it
+  // would otherwise carry the next function's doc comment (which may name a
+  // read) — matching must see code only.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  const fns: Array<{ name: string; body: string }> = [];
+  for (const chunk of code.split(/\n(?=export )/)) {
+    const m = /^export (?:async )?function (\w+)/.exec(chunk);
+    if (m) fns.push({ name: m[1], body: chunk });
+  }
+  const isRawGet = (body: string): boolean => {
+    let idx = body.indexOf('bridgeFetch(');
+    while (idx !== -1) {
+      const end = body.indexOf(');', idx);
+      const call = body.slice(idx, end === -1 ? undefined : end);
+      if (!/\bmethod\s*:/.test(call)) return true;
+      idx = body.indexOf('bridgeFetch(', idx + 1);
+    }
+    return false;
+  };
+  const reads = new Set<string>(fns.filter((f) => READ_HELPER_RE.test(f.body) || isRawGet(f.body)).map((f) => f.name));
+  // transitive: an export that delegates to a read (`fetchStudioAgents` →
+  // `fetchStudioAgentsWithMeta`) is a read too — iterate to a fixpoint.
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of fns) {
+      if (reads.has(f.name)) continue;
+      for (const r of reads) {
+        if (new RegExp(`\\b${r}\\(`).test(f.body)) { reads.add(f.name); grew = true; break; }
+      }
+    }
+  }
+  return fns.map((f) => f.name).filter((n) => reads.has(n));
+}
+
+test('enumerateBridgeReadExports (positive control): finds helper-backed AND raw-GET exports, skips writes and pure exports', () => {
+  const synthetic = [
+    'export async function fetchThings(): Promise<T[]> {',
+    "  const body = await studioRead<{ things?: unknown[] }>('/api/things');",
+    '  return body.things ?? [];',
+    '}',
+    'export async function pollThing(id: string): Promise<S> {',
+    '  const res = await bridgeFetch(`/api/things/${id}`);',
+    '  return res.json();',
+    '}',
+    'export async function saveThing(id: string, body: unknown) {',
+    "  return studioSend('PUT', `/api/things/${id}`, body);",
+    '}',
+    'export async function postThing(id: string) {',
+    "  const res = await bridgeFetch(`/api/things/${id}`, { method: 'POST', headers: { 'x-forge-csrf': '1' } });",
+    '  return res.ok;',
+    '}',
+    'export async function fetchThingIds(): Promise<string[]> {',
+    '  return (await fetchThings()).map((t) => t.id);',
+    '}',
+    'export function pureThing(x: number): number { return x + 1; }',
+    'export type Thing = { id: string };',
+  ].join('\n');
+  expect(enumerateBridgeReadExports(synthetic)).toEqual(['fetchThings', 'pollThing', 'fetchThingIds']);
+});
+
+test('table covers EVERY bridge read exported by studio-client (a new studioGet/studioRead/studioReadOr404/raw-GET export with no row fails here)', () => {
+  const source = readFileSync(resolve(__dirname, './studio-client.ts'), 'utf8');
+  const enumerated = enumerateBridgeReadExports(source);
+  const names = ROWS.map((r) => r.name);
   expect(names).toEqual([...new Set(names)]);
-  expect(names.length).toBeGreaterThanOrEqual(29);
+  const missingRows = enumerated.filter((n) => !names.includes(n));
+  const staleRows = names.filter((n) => !enumerated.includes(n));
+  expect({ missingRows, staleRows }).toEqual({ missingRows: [], staleRows: [] });
+  // and every function the table names really is exported (a renamed export leaves a stale row)
+  for (const n of names) expect(typeof (sc as Record<string, unknown>)[n]).toBe('function');
 });
 
 for (const row of ROWS) {
@@ -211,3 +307,40 @@ test('studioPost-backed write: a non-2xx with a NON-JSON body still reports {ok:
   const r = await sc.dispatchKbDrain('k');
   expect(r).toMatchObject({ ok: false, error: 'HTTP 502' });
 });
+
+// ---- W7-FIX-A1 A1-10: the three polls' FAILED-read shape is `state:'unknown'` ----
+// (the per-row loop above pins ok:false + the bridge's text; this pins the
+// state token itself — the poll wrappers key on `ok:false`, the panels render
+// `state`, so a failed read must never masquerade as 'running').
+const POLLS: Array<{ name: string; call: () => Promise<{ ok: boolean; state: string; error?: string }> }> = [
+  { name: 'getAgentFixStatus', call: () => sc.getAgentFixStatus('k', 'r') },
+  { name: 'getAgentRunStatus', call: () => sc.getAgentRunStatus('r') },
+  { name: 'preflightFixStatus', call: () => sc.preflightFixStatus('p', 'r') },
+];
+for (const poll of POLLS) {
+  test(`${poll.name}: transport throw → {ok:false, state:'unknown', error} — never a fabricated 'running'`, async () => {
+    mockBridgeFetch.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'bridge unreachable (Failed to fetch)' });
+  });
+  test(`${poll.name}: 500 → {ok:false, state:'unknown', error:<bridge text>, status:500}`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(500, { error: 'log dir vanished' }));
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'log dir vanished', status: 500 });
+  });
+  test(`${poll.name}: 404 → {ok:false, state:'unknown', status:404} (the bridge ANSWERED — a definitive not-found the poll wrappers treat as terminal); a transport failure carries NO status`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(404, { error: 'no run found' }));
+    const v = await poll.call();
+    expect(v).toMatchObject({ ok: false, state: 'unknown', error: 'no run found', status: 404 });
+    mockBridgeFetch.mockImplementation(async () => { throw new TypeError('Failed to fetch'); });
+    const t = (await poll.call()) as { status?: number };
+    expect(t.status).toBeUndefined();
+  });
+  test(`${poll.name}: a 200 whose body has no state → {ok:true, state:'unknown'} with NO error (the bridge's own honest "no state recorded" stays distinguishable from a failed read)`, async () => {
+    mockBridgeFetch.mockImplementation(async () => jsonRes(200, { ok: true }));
+    const v = await poll.call();
+    expect(v.ok).toBe(true);
+    expect(v.state).toBe('unknown');
+    expect(v.error).toBeUndefined();
+  });
+}

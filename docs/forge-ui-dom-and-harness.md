@@ -126,8 +126,21 @@ inventory rather than one shared page-level contract:
   recovery (down→up, or a lost socket regained) the store fires
   `onRecovered`; pages subscribe via `useBridgeRecovery(reload)` and re-run
   their own load — the pinned tab refills itself instead of waiting for F5
-  (crosscut-22). Journey coverage: `scripts/journeys/home.mjs` `home-landing`
-  asserts `[data-bridge-status="up"]` + hidden banner on the live bridge.
+  (crosscut-22). The root also carries `data-bridge-probing="true"|"false"`
+  (W7-FIX-A1 A1-08): while a health probe is in flight the banner's Retry is
+  `disabled` + `aria-busy="true"` and reads "Checking…" (a click during an
+  in-flight probe is a store-level no-op, so the control SHOWS pending rather
+  than swallowing the click); the probe itself is bounded (abort timeout).
+  `resolveBridgeUrl` (`lib/bridge-client.ts`, A1-06) treats only a
+  SUCCESSFUL non-null `/api/forge-config` answer as authoritative — a failed
+  or `bridgePort:null` answer falls back to the fixed-port default, never an
+  empty base that wedges the tab past Retry. Journey coverage:
+  `scripts/journeys/home.mjs` `home-landing` asserts
+  `[data-bridge-status="up"]` + hidden banner on the live bridge, and every
+  pillar journey's landing beat runs the shared `checkHonestPillarRead`
+  (`scripts/lib/journey-assertions.mjs`, A1-11): root
+  `data-fetch-status="ok"`, banner mounted, zero
+  `[data-component="fetch-error"]` on a healthy bridge.
 - **Shared — failed-read state (`[data-component="fetch-error"]`,
   `components/FetchErrorState.tsx`, W7-A1).** The ONE failure state every
   pillar page / panel renders when a bridge read fails — INSTEAD of its
@@ -151,9 +164,26 @@ inventory rather than one shared page-level contract:
   map a 404 to `null` where "no such object" is a real answer — `fetchRun`,
   `fetchKb`, `fetchFlow`, `fetchPreflight`, `fetchWorkItem`, `fetchRoadmap`,
   … ; `fetchPhaseLog`/`fetchEvents` map 404 to `[]` = "no log yet"), and
-  status-shaped reads carry `ok:false` + the real `error`. Both clients ride
-  ONE transport (`bridgeFetch`: URL resolution + the W6-P4 port correction,
-  re-armed after every successful call — crosscut-26). Pillar roots
+  status-shaped reads carry `ok:false` + the real `error` — including the
+  three dispatch-status polls (`getAgentFixStatus` / `getAgentRunStatus` /
+  `preflightFixStatus`, W7-FIX-A1 A1-10): a failed READ is
+  `{ok:false, state:'unknown', error}` (never a fabricated `'running'`);
+  `lib/agent-dispatch.ts`'s poll wrappers keep watching on `ok:false`
+  (bounded, `isStillWatching`) so `data-poll-state` stays `watching` and the
+  panel shows the read failure beside the state (RunPanel / OnboardWithAgent
+  `[data-run-read-error]`, ContractResolutionPanel clause rows
+  `[data-agent-run-read-error=<text>]`, the KB maintenance pill "status could
+  not be read — …", the drain panel's `[data-component="drain-read-error"]` +
+  root `[data-drain-read-error=<text>]`) — a bridge-ANSWERED `state:'unknown'`
+  (`ok:true`) stays terminal, and so does a failed read the bridge answered
+  with a 4xx (`status` on the failed shape; R6-04 D22: a 404 "no run found"
+  is a definitive never-dispatched, not a blip — only transport failures and
+  5xx keep the poll watching). EVERY bridge call in Studio rides ONE transport (`bridgeFetch`:
+  URL resolution + the W6-P4 port correction, re-armed after every successful
+  call — crosscut-26; A1-05 routed the remaining `lib/*-client.ts` modules
+  onto it, enforced by `lib/bridge-transport-guard.test.ts` — `resolveBridgeUrl`
+  survives only for the two non-fetch URL uses: demo media and the PLAN.html
+  iframe). Pillar roots
   (`[data-page="home"|"sessions-index"|"projects-index"|"flows-index"|"agents-index"|"knowledge"]`)
   additionally carry `data-fetch-status="loading"|"ok"|"error"`; on `error`
   the page is still `data-page-ready="true"` (it HAS settled — into an honest
@@ -165,6 +195,46 @@ inventory rather than one shared page-level contract:
   checklist's place — never a `data-checklist-row-count="0"` list on a
   404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
   detail pages render it in their `error` state with the real HTTP status.
+  A partial refresh never clears a failure it did not supersede (A1-03,
+  `lib/fetch-error-scope.ts`): the flows index's runs-only WS refresh and
+  Home's runs+sessions refresh clear only an error of THEIR scope, never the
+  full load's — so a failed full load cannot fall through to the zero-state
+  the moment one narrow refresh succeeds.
+- **Shared — page load error (`[data-component="page-load-error"]`,
+  `components/PageLoadError.tsx`, W7-FIX-A1 A1-01/A1-02).** The ONE settled
+  ERROR state every DETAIL route renders when its own read fails —
+  `/agents/<id>`, `/projects/<id>`, `/flows/<id>`, `/projects/<id>/showcase`.
+  A detail page whose roster read failed knows NEITHER that the object exists
+  NOR that it does not, so it renders neither the object (a blank builder)
+  nor `NotFound` ("No project <id>"): the route's OWN `data-page` root with
+  `data-page-ready="true"` (it HAS settled) + `data-fetch-status="error"` +
+  `data-load-error="true"` (+ the route's usual root attrs, e.g.
+  `data-project-id`), wrapping `[data-component="page-load-error"]` →
+  the shared `[data-component="fetch-error"]` body with
+  `[data-action="retry-fetch"]` and `a[data-action="load-error-back"]` (a way
+  back). Retry re-runs the page's own load; bridge recovery re-runs it ONLY
+  while the page is in a load-error state (`useBridgeRecoveryWhenFailed`,
+  `lib/use-bridge-status.ts` — the DETAIL-page rule: a page that loaded fine
+  and may hold unsaved builder edits / an open drawer / a live tail is never
+  re-loaded by a socket blip; the index pages keep plain
+  `useBridgeRecovery(reload)`). `NotFound` is gated on a SUCCESSFUL roster
+  read that lacks the id (never rendered while the load error is set). The
+  flow page keeps the BUILD tab's definition/palette read in its OWN error
+  slot (the monitor read's success cannot clear a builder failure it did not
+  supersede); a FAILED live refresh on the monitor (WS-triggered `fetchRuns`/
+  `fetchRun`) keeps the last-known runs and renders
+  `[data-section="monitor-refresh-error"]` (compact `fetch-error` + Retry that
+  re-runs the refresh alone) beside the connection dot — never an unhandled
+  rejection. The project page's softer siblings — the preflight / roadmap /
+  cycle-history panel reads — surface as
+  `[data-section="project-panel-error"][data-panel-error-count=<n>]`, ONE
+  compact `fetch-error` + Retry per failed panel (each read owns its slot;
+  its success clears only its own; a thrown `fetchCycles` is a panel error,
+  never a silently empty cycle history); the panel Retry — and recovery while
+  ONLY a panel failed — re-runs the panel reads alone, never the project read
+  (unsaved builder edits survive). The showcase settles NOT FOUND from the
+  roster BEFORE its cycles/demo reads (a later read failure cannot turn a
+  not-found into a retryable error).
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
@@ -258,11 +328,12 @@ inventory rather than one shared page-level contract:
     carries a real `[data-action="constellation-empty-cta"]`
     (`href="/projects/new"`) alongside the "Nothing registered yet." text —
     was terminal, dead-end text with no way forward.
-  - `section[data-section="activity"]` wraps a shared `HistoryLedger`
+  - `section[data-section="activity"][data-recent-runs-unresolved=<n>]` wraps
+    a shared `HistoryLedger`
     (`components/studio/HistoryLedger.tsx`, below) — W6-IA-4: now the MERGED
     everything-ledger, interleaving the flow-run rows (`deriveFlowLedgerRows`,
     unchanged) with recent standalone/flow-node agent runs
-    (`lib/agents-index.ts`'s `fetchRecentAgentRuns`, fetched independently
+    (`lib/agents-index.ts`'s `fetchRecentAgentRunsWithMeta`, fetched independently
     once the roster is ready — mirrors `app/agents/page.tsx`'s own two-effect
     precedent) via `home-view.ts`'s `buildHomeLedgerRows` (which reuses
     `mergeRecentAgentRuns` UNCHANGED — a generic flatten/sort/dedupe-by-id/
@@ -894,8 +965,20 @@ inventory rather than one shared page-level contract:
     UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
     and restated for `/agents/[id]` below is **not restated a third time
     here**). `[data-component="recent-agent-runs-loading"]` before this
-    fetch resolves. **There is no aggregate "all agents" bridge route** —
-    `lib/agents-index.ts`'s `fetchRecentAgentRuns` fans the existing
+    fetch resolves. The section root carries
+    `data-recent-runs-unresolved=<n>` (W7-FIX-A1 A1-09): how many per-agent
+    history reads came back `'unresolved'` (failed / unreachable — neither
+    "ran" nor "never ran"); when `n > 0` the honest
+    `[role="status"][data-component="recent-agent-runs-unresolved"]
+    [data-unresolved-count=<n>][data-unresolved-total=<m>]` notice
+    (`components/studio/UnresolvedHistoriesNotice.tsx` — "n of m agent
+    histories could not be read") renders ABOVE whatever rows WERE read, with
+    `[data-action="retry-recent-runs"]` re-running only the fan-out — never a
+    fabricated row, never a total outage rendered as a fleet that has never
+    run (`'not-found'` = never ran is NOT counted). Home's activity section
+    carries the same root attribute + notice. **There is no aggregate "all
+    agents" bridge route** —
+    `lib/agents-index.ts`'s `fetchRecentAgentRuns(WithMeta)` fans the existing
     per-agent `GET /api/agents/:slug/history` out across the whole roster
     in bounded-concurrency batches of `AGENT_HISTORY_FAN_OUT_BATCH_SIZE` (6,
     plain chunking, no new dependency — a roster of dozens of agents must
@@ -1535,7 +1618,14 @@ inventory rather than one shared page-level contract:
   real to show — either no eligible cycle at all, OR a terminal cycle exists
   but its `demo.json` never landed (`loadShowcase`'s `{kind:'loaded',
   model:null}` path) — both collapse to the SAME empty state, never a
-  fabricated or partially-blank gallery. Because entry is gated, this page's
+  fabricated or partially-blank gallery. Three SETTLED states, kept distinct
+  (W7-FIX-A1): EMPTY — the reads succeeded and found nothing (the ABSENCE of
+  an optional artifact is a real answer; root `data-fetch-status="ok"`);
+  ERROR — a bridge read THREW → the shared page-load-error root
+  (`data-fetch-status="error"` `data-load-error="true"`, Retry + bridge
+  recovery), never the empty state and never NotFound; NOT FOUND — the roster
+  loaded and does not list the id → `NotFound` (W7-A4). Because entry is
+  gated, this page's
   own empty branch is reachable only by a direct/stale URL, never the normal
   click-through — the `demo-showcase` journey's own `demo-showcase-empty` beat
   drives it that way deliberately (`scripts/journeys/demo-showcase.mjs`).
@@ -2345,7 +2435,13 @@ inventory rather than one shared page-level contract:
     `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
     below). Journey: `knowledge-explore-tabs`.
-  - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]`, force-graph
+  - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]
+    [data-fetch-status]` — the root status folds BOTH the roster read AND the
+    selected KB's detail read (W7-FIX-A1 A1-07: `kbsError || kbDetailError`);
+    a failed KB-detail read renders `[data-section="kb-detail-error"]` wrapping
+    the shared `[data-component="fetch-error"]` + Retry (which drops the cached
+    rejected fetch) in the graph's place — never "No KB data available." under
+    a root that advertises `ok`; force-graph
     root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
     per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
     `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
@@ -2641,7 +2737,10 @@ inventory rather than one shared page-level contract:
   - **Ingest Activity panel (R6-08 WI-2) + no ingest affordance (decision 3,
     cross-referenced R1-06-F3 + R6-08-F2):** the Ingest Activity tab hosts a
     real, **read-only** `IngestActivityPanel` —
-    `[data-component="ingest-activity"][data-ingest-event-count]`, one row per
+    `[data-component="ingest-activity"][data-ingest-event-count]
+    [data-fetch-status="loading"|"ok"|"error"]` (W7-FIX-A1 A1-07: a failed
+    read renders the compact `[data-component="fetch-error"]` + Retry, never
+    "No ingest activity recorded yet." with a count of 0), one row per
     real `reflect.kb-ingest` event (`orchestrator/kb-health.ts`'s post-reflect
     `runPostReflectionKbHealth`) found in this KB's own
     `_logs/<cycleId>/events.jsonl` history

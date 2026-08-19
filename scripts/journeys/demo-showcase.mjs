@@ -132,7 +132,7 @@ export const journey = defineJourney({
     {
       id: 'demo-showcase-empty',
       title: 'Honest empty state — no merged|done cycle, no fabricated gallery',
-      narration: 'A project with real cycle activity but nothing merged or done yet renders the honest [data-section="showcase-empty"] state, never a blank or fabricated evidence gallery — the same declared-data-fails-open discipline the load pipeline documents (a terminal cycle whose demo.json never landed degrades to this SAME empty state, not a partial render). Reachable only by direct URL, exactly as the page\'s own header comment says — the gated entry link never offers a project this state.',
+      narration: 'A REGISTERED project with real cycle activity but nothing merged or done yet renders the honest [data-section="showcase-empty"] state, never a blank or fabricated evidence gallery — the same declared-data-fails-open discipline the load pipeline documents (a terminal cycle whose demo.json never landed degrades to this SAME empty state, not a partial render). Three settled states stay distinct (W7-A4 + W7-FIX-A1): EMPTY is a successful read that found nothing; an unlisted project id is the shared NotFound; a bridge failure is the shared page-level error with Retry — never the empty state. Reachable only by direct URL, exactly as the page\'s own header comment says — the gated entry link never offers a project this state.',
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[R4-14] demo showcase — honest empty state');
@@ -144,6 +144,15 @@ export const journey = defineJourney({
             null, { timeout: 20000 },
           ).then(() => true).catch(() => false);
           check(ready, 'demo-showcase-empty: the showcase page settles ([data-page-ready="true"]) even with zero merged|done cycles');
+          // W7-FIX-A1: EMPTY is a SUCCESSFUL read that found nothing — the
+          // root must not be the shared page-level error state (a bridge
+          // failure), nor NotFound (the clip project IS registered).
+          const emptyRoot = await page.evaluate(() => {
+            const el = document.querySelector('[data-page="project-showcase"]');
+            return el ? { fetch: el.getAttribute('data-fetch-status'), loadError: el.getAttribute('data-load-error') } : null;
+          });
+          check(emptyRoot !== null && emptyRoot.loadError !== 'true' && emptyRoot.fetch === 'ok', `demo-showcase-empty: the empty state is a settled SUCCESSFUL read (data-fetch-status="ok"), not the page-level error state (got data-fetch-status="${emptyRoot?.fetch}", data-load-error="${emptyRoot?.loadError}")`);
+          check(await page.locator('[data-page="not-found"]').count() === 0, 'demo-showcase-empty: the registered clip project is NOT rendered as NotFound');
 
           check(await page.locator('[data-section="showcase-empty"]').count() > 0, 'demo-showcase-empty: [data-section="showcase-empty"] renders — a project with only an in-flight cycle gets the honest empty state');
           check(await page.locator('[data-section="showcase-stats"]').count() === 0, 'demo-showcase-empty: no stats strip is fabricated');

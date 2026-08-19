@@ -79,8 +79,12 @@ export function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string;
     return pollAgentFix(kbId, consolidateRunId, {
       onUpdate: (s) => {
         setConsolidateStatus(s);
-        if (s.state !== 'running') showResult(consolidateResultLabel(s) ?? '');
-        if (s.state !== 'running' && s.state !== 'timed-out') onMaintained?.();
+        // W7-FIX-A1 A1-10: a FAILED read (ok:false 'unknown') is still
+        // 'watching' — no result pill, no onMaintained; only a settled poll
+        // (terminal / timed-out) reports.
+        const display = pollDisplayState(s);
+        if (display !== 'watching') showResult(consolidateResultLabel(s) ?? '');
+        if (display === 'terminal') onMaintained?.();
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

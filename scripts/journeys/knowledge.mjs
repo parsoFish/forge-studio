@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { caption, ACT, THINK, WORK, READ, FORGE_ROOT, waitForFile } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 // R4-19 WI-1/WI-2 (journey-sync F1) — direct in-process imports of the real
 // orchestrator/CLI functions, mirroring the established precedent
 // (scripts/lib/journey-daemon-guard.mjs importing orchestrator/daemon.ts
@@ -637,6 +637,9 @@ export const journey = defineJourney({
                 );
                 kbPageReady = true;
                 check(true, 'kb-seam: [data-page="knowledge"][data-page-ready="true"]');
+                // W7-A1 / FIX-A1 (A1-11 + A1-07): the roster AND the KB-detail
+                // read both settled honestly (data-fetch-status folds both in).
+                await checkHonestPillarRead(page, check, 'knowledge', 'kb-seam');
               } catch {
                 const pr = await page.evaluate(() =>
                   document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') ?? '(no data-page=knowledge)');

@@ -22,7 +22,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (cli/bridge-studio-hooks.ts)
@@ -263,10 +263,8 @@ export function parseHookDetail(raw: unknown): HookDetail {
  *  an unreachable bridge or a malformed payload (`ok: false` for both) — the
  *  caller must never render the two the same way. */
 export async function fetchHookLibrary(): Promise<{ ok: boolean; hooks: HookLibraryEntry[]; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, hooks: [], error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/hooks`);
+    const res = await bridgeFetch(`/api/studio/hooks`);
     const data = (await res.json().catch(() => ({}))) as { hooks?: unknown[]; error?: string };
     if (!res.ok) return { ok: false, hooks: [], error: data.error ?? `HTTP ${res.status}` };
     if (!Array.isArray(data.hooks)) return { ok: false, hooks: [], error: 'malformed response: "hooks" is not an array' };
@@ -286,10 +284,8 @@ export async function fetchHookLibrary(): Promise<{ ok: boolean; hooks: HookLibr
 export async function fetchHook(
   id: string,
 ): Promise<{ ok: boolean; status?: number; detail?: HookDetail; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}/api/studio/hooks/${encodeURIComponent(id)}`);
+    const res = await bridgeFetch(`/api/studio/hooks/${encodeURIComponent(id)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = (data as { error?: string })?.error;
@@ -309,10 +305,8 @@ async function hookClientPost(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
   try {
-    const res = await fetch(`${base}${path}`, {
+    const res = await bridgeFetch(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify(body),

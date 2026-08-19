@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { cleanFirstProject, FORGE_ROOT, J4_PROJECT, waitForFile, caption, ONB_EXISTING_SLUG, WORK, cleanOnboardedProject, fillWhenLive } from '../lib/journey-fixtures.mjs';
-import { sleep } from '../lib/journey-assertions.mjs';
+import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
 
 // The agent-resolvable C8 clause (AGENTS.md or CLAUDE.md at project root) is
 // classified 'agent'-tier and routes to the instructions builder; the spawn is
@@ -57,6 +57,8 @@ export const journey = defineJourney({
               // vary by checkout (this de-betterado'd worktree ships only the mdtoc reference
               // project + scratch dirs), so the assertion is RELATIVE: onboarding must add
               // exactly one project. Stronger than an absolute floor, and checkout-agnostic.
+              // W7-A1 / FIX-A1 (A1-11): the projects pillar's read is honest.
+              await checkHonestPillarRead(page, check, 'projects-index', 'J4');
               const projCountBefore = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-section="projects-grid"]')?.getAttribute('data-count') ?? '0', 10));
               const newProjCta = await page.evaluate(() => {

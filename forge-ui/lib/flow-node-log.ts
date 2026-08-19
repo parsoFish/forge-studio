@@ -17,14 +17,14 @@
  * throwing.
  *
  * KNOWN GAP (documented, not closed here — same class as `run-view-
- * client.ts`'s own header): `fetchNodeLog`'s real `fetch()` +
- * `resolveBridgeUrl()` wiring has no jsdom/mocked-fetch harness in this
+ * client.ts`'s own header): `fetchNodeLog`'s real `bridgeFetch()` wiring
+ * has no jsdom/mocked-fetch harness in this
  * repo, so it is verified by `tsc` + the `flows-run-detail-reachable`
  * journey beat only. `resolveNodeLogFromResponse` — the pure function that
  * wrapper calls — is what `./flow-node-log.test.ts` pins.
  */
 
-import { resolveBridgeUrl } from './bridge-client';
+import { bridgeFetch } from './bridge-client';
 import type { EventLogEntry } from './bridge-client';
 import { deriveLogLine, type RunLogLine } from './run-log-line';
 
@@ -66,12 +66,8 @@ export function resolveNodeLogFromResponse(status: number, body: unknown): RunLo
 
 /** Fetch + derive one flow node's own raw log lines for a given run. */
 export async function fetchNodeLog(runId: string, nodeId: string): Promise<RunLogLine[]> {
-  const base = await resolveBridgeUrl();
-  if (!base) return [];
   try {
-    const res = await fetch(
-      `${base}/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(nodeId)}/log?raw=1`,
-    );
+    const res = await bridgeFetch(`/api/runs/${encodeURIComponent(runId)}/phases/${encodeURIComponent(nodeId)}/log?raw=1`);
     const body = await res.json().catch(() => null);
     return resolveNodeLogFromResponse(res.status, body);
   } catch {
