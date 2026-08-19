@@ -1,6 +1,7 @@
 {
  "ui": "http://localhost:4124",
  "at": "2026-08-18T13:19:27.640Z",
+ "env": "host",
  "visited": 9,
  "unvisited": [],
  "results": [
