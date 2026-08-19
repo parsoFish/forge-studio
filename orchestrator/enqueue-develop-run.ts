@@ -20,6 +20,9 @@ export type EnqueueDevelopStatus =
   | 'enqueued'
   | 'not-found'
   | 'already-developing'
+  /** W7-FIX-A3 (round-2 finding 6): the manifest is in `_queue/done` — a
+   *  shipped initiative is never re-run from an operator action. */
+  | 'already-done'
   | 'not-planned'
   | 'error';
 
@@ -37,7 +40,7 @@ export type EnqueueDevelopResult = {
  *  historical `already-developing` status name preserved. Never throws. */
 export function enqueueDevelopRun(
   initiativeId: string,
-  opts: { queueRoot?: string } = {},
+  opts: { queueRoot?: string; allowFinishedSource?: boolean } = {},
 ): EnqueueDevelopResult {
   const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, opts);
   return { ...r, status: r.status === 'already-running' ? 'already-developing' : r.status };

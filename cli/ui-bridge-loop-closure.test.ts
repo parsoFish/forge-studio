@@ -285,6 +285,45 @@ test('POST /api/flows/:id/run: an initiative in _queue/done → 409 already-done
 });
 
 // ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 6): the SIBLING operator route is closed by the
+// same rule. A3-01 put the done/ refusal on `POST /api/flows/:id/run` as a
+// route pre-check, which left `POST /api/develop/start` (enqueueDevelopRun →
+// enqueueFlowRun) pulling a shipped manifest back out of `done/` and re-running
+// it — the same defect, one route over. The guard lives on the enqueue now
+// (`allowFinishedSource`, on ONLY for the trigger drain), so both routes report
+// the same `already-done` outcome with the same fields.
+// ---------------------------------------------------------------------------
+
+test('POST /api/develop/start: an initiative in _queue/done is refused with the same already-done shape; the done manifest is untouched', async () => {
+  const INIT_SHIPPED = 'INIT-2026-08-02-shipped-develop';
+  const doneDir = join(forgeRoot, '_queue', 'done');
+  mkdirSync(doneDir, { recursive: true });
+  const body = manifestBody(INIT_SHIPPED, 'forge-develop').replace('phase: pending', 'phase: done');
+  writeFileSync(join(doneDir, `${INIT_SHIPPED}.md`), body);
+
+  const res = await fetch(`${url}/api/develop/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ initiativeIds: [INIT_SHIPPED] }),
+  });
+  // The batch envelope keeps its per-id contract (one result per id, never one
+  // HTTP status for a mixed batch) — the REFUSAL is the per-item result, and
+  // it carries the same fields the flows route's 409 body does.
+  assert.equal(res.status, 200);
+  const json = (await res.json()) as { ok: boolean; results: Array<{ ok: boolean; status: string; initiativeId: string; detail?: string }> };
+  assert.equal(json.ok, false, 'the batch is not ok — nothing was enqueued');
+  assert.equal(json.results.length, 1);
+  assert.equal(json.results[0].status, 'already-done');
+  assert.equal(json.results[0].ok, false);
+  assert.equal(json.results[0].initiativeId, INIT_SHIPPED);
+  assert.match(json.results[0].detail ?? '', /shipped/i);
+
+  // The artifact: the shipped manifest is byte-identical in done/, nothing pending.
+  assert.equal(readFileSync(join(doneDir, `${INIT_SHIPPED}.md`), 'utf8'), body, 'done manifest byte-unchanged');
+  assert.equal(existsSync(join(forgeRoot, '_queue', 'pending', `${INIT_SHIPPED}.md`)), false, 'no pending copy');
+});
+
+// ---------------------------------------------------------------------------
 // W7-FIX-A3 (A3-02): the phase-log route resolves the run the SAME way
 // `GET /api/runs/<id>` does (findRun: cycle id, then initiative id) before
 // building `_logs/<id>/events.jsonl`. Since W7-A3 every run link is minted by

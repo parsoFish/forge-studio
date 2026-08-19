@@ -2343,29 +2343,20 @@ async function handleHttp(
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
       return;
     }
-    // W7-FIX-A3 (A3-01): the OPERATOR route refuses a shipped initiative.
-    // `enqueueFlowRun` sources from `done/` on purpose (the trigger drain's
-    // flow-complete chaining), so the guard lives here: a manifest in
-    // `_queue/done` is 409 `already-done` — never yanked out and re-run from
-    // a picker click. Existence through the guard family (the id is validated
-    // by the INIT rule before any fs probe; the same rule enqueueFlowRun
-    // applies, so a malformed id still lands on its `not-found`).
-    if (/^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(initiativeId)
-      && guardedFile(ctx.queueRoot, ['done', `${initiativeId}.md`], 'read') !== null) {
-      sendJson(res, 409, {
-        ok: false,
-        status: 'already-done',
-        initiativeId,
-        detail: `${initiativeId} is already shipped (queue: done) — a merged initiative is not re-run from the kickoff; plan a new initiative instead.`,
-      }, origin);
-      return;
-    }
     try {
+      // W7-FIX-A3 (A3-01, round-2 finding 6): the OPERATOR route refuses a
+      // shipped initiative — and the rule now lives ON `enqueueFlowRun`
+      // (`allowFinishedSource`, default off) rather than as a pre-check bolted
+      // onto this one route, so the sibling operator route
+      // (`POST /api/develop/start`) is closed by the same guard instead of
+      // still yanking a merged manifest out of `done/`. The route only maps
+      // the status onto its HTTP code; the id rule + the fs probe are the
+      // enqueue's own (one INIT predicate, no third copy of the regex here).
       const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot });
       const httpStatus =
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :
-        result.status === 'already-running' || result.status === 'not-planned' ? 409 :
+        result.status === 'already-running' || result.status === 'already-done' || result.status === 'not-planned' ? 409 :
         500;
       sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {

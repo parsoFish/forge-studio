@@ -550,7 +550,12 @@ export async function submitVerdict(input: VerdictSubmission): Promise<{ ok: boo
 export type DevelopStartItemResult = {
   ok: boolean;
   initiativeId: string;
-  status?: 'enqueued' | 'not-found' | 'already-developing' | 'error';
+  /** W7-FIX-A3 (round-2 findings 6+8): the union carries EVERY status the
+   *  route can send — `already-done` (a shipped manifest is never re-run from
+   *  an operator action) and `not-planned` (the develop decomposition gate)
+   *  were both reachable on the wire while absent from the type, so a
+   *  `never`-checked switch would silently drop them. */
+  status?: 'enqueued' | 'not-found' | 'already-developing' | 'already-done' | 'not-planned' | 'error';
   cycleId?: string;
   flowId?: string;
   detail?: string;
@@ -636,7 +641,12 @@ export async function planInitiative(initiativeId: string): Promise<PlanInitiati
 
 export type StartFlowRunResult = {
   ok: boolean;
-  status?: 'enqueued' | 'not-found' | 'already-running' | 'not-planned' | 'error';
+  /** W7-FIX-A3 (round-2 finding 8): `already-done` is a REAL outcome of
+   *  `POST /api/flows/:id/run` (a `_queue/done` manifest is refused, 409) and
+   *  `startFlowRun` passes `body.status` straight through — the union said it
+   *  was impossible, so any exhaustive switch fell to its default branch and a
+   *  `never` check could not catch the omission. */
+  status?: 'enqueued' | 'not-found' | 'already-running' | 'already-done' | 'not-planned' | 'error';
   cycleId?: string;
   flowId?: string;
   error?: string;

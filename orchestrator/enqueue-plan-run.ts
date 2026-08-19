@@ -28,6 +28,9 @@ import {
 } from './manifest.ts';
 import { getPaths, type QueuePaths } from './queue.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
+// W7-FIX-A3 (round-2 finding 6): the shared id predicate — one rule for every
+// site that folds a caller-supplied initiative id into a queue path.
+import { isCanonicalInitiativeId } from './initiative-id.ts';
 
 /**
  * The decompose flow. Deliberately NOT imported from `architect-runner.ts` —
@@ -38,9 +41,6 @@ import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
  * referencing `forge-develop` by name rather than importing `DEVELOP_FLOW_ID`.
  */
 export const PLAN_FLOW_ID = 'forge-architect';
-
-/** Matches the manifest id convention (INIT-YYYY-MM-DD-slug); also a path-traversal guard. */
-const INIT_ID_RE = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export type EnqueuePlanStatus = 'enqueued' | 'not-found' | 'already-running' | 'error';
 
@@ -81,7 +81,7 @@ export function enqueuePlanRun(
   initiativeId: string,
   opts: { queueRoot?: string } = {},
 ): EnqueuePlanResult {
-  if (!INIT_ID_RE.test(initiativeId)) {
+  if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
   }
 

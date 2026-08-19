@@ -24,11 +24,15 @@ import {
   type InitiativeManifest,
 } from './manifest.ts';
 import { getPaths } from './queue.ts';
+// W7-FIX-A3 (round-2 finding 6): ONE predicate for the manifest id
+// convention. This module, `POST /api/flows/:id/run`'s own pre-check and
+// `enqueue-plan-run.ts` each carried a hand-copied regex for the same rule
+// (already drifting: `\d{4}` here vs `[0-9]{4}` in cli/bridge-studio-runs.ts),
+// so a future tightening in one would leave the others accepting ids the
+// enqueue refuses — the exact fail-open the done/ guard must not have.
+import { isCanonicalInitiativeId } from './initiative-id.ts';
 
 export const DEVELOP_FLOW_ID = 'forge-develop';
-
-/** Matches the manifest id convention (INIT-YYYY-MM-DD-slug); also a path-traversal guard. */
-const INIT_ID_RE = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Matches studio flow-id slugs; a path-traversal guard on the flow ref. */
 const FLOW_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -37,6 +41,7 @@ export type EnqueueFlowRunStatus =
   | 'enqueued'
   | 'not-found'
   | 'already-running'
+  | 'already-done'
   | 'not-planned'
   | 'error';
 
@@ -73,9 +78,9 @@ export type EnqueueFlowRunResult = {
 export function enqueueFlowRun(
   initiativeId: string,
   flowId: string,
-  opts: { queueRoot?: string } = {},
+  opts: { queueRoot?: string; allowFinishedSource?: boolean } = {},
 ): EnqueueFlowRunResult {
-  if (!INIT_ID_RE.test(initiativeId)) {
+  if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
   }
   if (!FLOW_ID_RE.test(flowId)) {
@@ -110,6 +115,22 @@ export function enqueueFlowRun(
   );
   if (!sourcePath) {
     return { status: 'not-found', initiativeId };
+  }
+
+  // W7-FIX-A3 (round-2 finding 6): a SHIPPED manifest is not an operator run
+  // source. `done/` stays a legitimate source for the trigger drain's
+  // flow-complete chaining (`allowFinishedSource: true` — that's how a
+  // finished develop run chains onto reflect), but every operator-initiated
+  // enqueue (`POST /api/flows/:id/run`, `POST /api/develop/start`) must refuse
+  // it rather than yank the merged manifest back out and re-run it. Keyed on
+  // the resolved SOURCE, so a live `pending/` copy still wins over a stale
+  // `done/` one.
+  if (!opts.allowFinishedSource && sourcePath === join(paths.done, file)) {
+    return {
+      status: 'already-done',
+      initiativeId,
+      detail: `${initiativeId} is already shipped (queue: done) — a merged initiative is not re-run from the kickoff; plan a new initiative instead.`,
+    };
   }
 
   let manifest: InitiativeManifest;

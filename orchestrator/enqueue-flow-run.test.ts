@@ -185,3 +185,63 @@ test('enqueueFlowRun: a stale resume_from is cleared when re-enqueueing for a fr
     assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the run starts the flow fresh');
   });
 });
+
+// ---------------------------------------------------------------------------
+// W7-FIX-A3 (round-2 finding 7): "never re-run a SHIPPED manifest from an
+// operator action" is a property of the ENQUEUE, not of one route. A3-01
+// bolted the rule onto `POST /api/flows/:id/run` as a pre-check, which left
+// the sibling operator route (`POST /api/develop/start` → enqueueDevelopRun →
+// here) yanking a `done/` manifest back out and re-running it. The rule lives
+// on this primitive now: `done/` is a source ONLY for a caller that says so
+// (`allowFinishedSource: true` — the trigger drain's flow-complete chaining,
+// which legitimately re-runs a finished initiative on the NEXT flow).
+// ---------------------------------------------------------------------------
+
+test('enqueueFlowRun: a manifest whose ONLY source is done/ → already-done; the done manifest is untouched and nothing is enqueued', () => {
+  withTmp((queueRoot) => {
+    const donePath = seed(queueRoot, 'done', manifest({ phase: 'done' }));
+    const before = readFileSync(donePath, 'utf8');
+
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-develop', { queueRoot });
+
+    assert.equal(result.status, 'already-done');
+    assert.equal(result.initiativeId, 'INIT-2026-06-21-toc');
+    assert.match(result.detail ?? '', /shipped/i);
+    const paths = getPaths(queueRoot);
+    assert.equal(readFileSync(donePath, 'utf8'), before, 'the done manifest is byte-unchanged');
+    assert.equal(existsSync(join(paths.pending, 'INIT-2026-06-21-toc.md')), false, 'nothing enqueued');
+  });
+});
+
+test('enqueueFlowRun: allowFinishedSource re-runs a done manifest (the trigger drain\'s flow-complete chaining is unchanged)', () => {
+  withTmp((queueRoot) => {
+    const donePath = seed(queueRoot, 'done', manifest({ phase: 'done' }));
+
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot, allowFinishedSource: true });
+
+    assert.equal(result.status, 'enqueued');
+    const paths = getPaths(queueRoot);
+    const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
+    assert.equal(onDisk.flow_id, 'forge-reflect');
+    assert.equal(existsSync(donePath), false, 'claimed out of done/ exactly as before');
+  });
+});
+
+test('enqueueFlowRun: only done/ is guarded — failed/ and pending/ stay runnable by default', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'failed', manifest({ phase: 'failed' }));
+    assert.equal(enqueueFlowRun('INIT-2026-06-21-toc', 'forge-develop', { queueRoot }).status, 'enqueued', 'a failed run is re-runnable');
+  });
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest());
+    assert.equal(enqueueFlowRun('INIT-2026-06-21-toc', 'forge-develop', { queueRoot }).status, 'enqueued');
+  });
+});
+
+test('enqueueFlowRun: a pending manifest wins over a stale done/ copy (the guard is about the SOURCE, not id history)', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'done', manifest({ phase: 'done' }));
+    seed(queueRoot, 'pending', manifest());
+    assert.equal(enqueueFlowRun('INIT-2026-06-21-toc', 'forge-develop', { queueRoot }).status, 'enqueued');
+  });
+});

@@ -312,7 +312,12 @@ function defaultStartFlowRun(queueRoot?: string, forgeRoot?: string): (req: Flow
       // outcomes (already-running, not-planned, not-found) are surfaced as
       // dispatch errors so the request is retained + retried/inspected, never
       // silently dropped.
-      const r = enqueueFlowRun(req.sourceInitiativeId, req.target.ref, { queueRoot });
+      // W7-FIX-A3 (round-2 finding 6): `allowFinishedSource` — chaining is the
+      // ONE caller that legitimately re-runs a FINISHED initiative (a merged
+      // develop run chaining onto reflect sources its manifest from `done/`).
+      // Every operator-initiated enqueue leaves this off and gets the
+      // `already-done` refusal instead.
+      const r = enqueueFlowRun(req.sourceInitiativeId, req.target.ref, { queueRoot, allowFinishedSource: true });
       if (r.status !== 'enqueued') {
         throw new Error(`enqueue ${req.target.ref} on ${req.sourceInitiativeId}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`);
       }
