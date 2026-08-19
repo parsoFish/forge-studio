@@ -26,7 +26,8 @@
  * scripts/check-raw-fs-guarded.mjs via the `cli/bridge-studio*.ts` glob.
  */
 
-import { statSync, readFileSync } from 'node:fs';
+import { statSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
+import { basename } from 'node:path';
 
 import { LEGACY_SESSION_AWAITS_PHASES, LEGACY_SESSION_WORKING_PHASES } from './bridge-studio.ts';
 import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
@@ -65,6 +66,13 @@ export type SessionLifecycleInputs = {
   stderr: { text: string; mtimeMs: number } | null;
   lastActivityMs: number | null;
   turnAlive: boolean;
+  /** W7-FIX-A2 (W7A2-01): true iff the session log dir carries a LIVENESS
+   *  CHANNEL — a `.heartbeat` or `events.jsonl` the runner writes to while
+   *  it works. A turn tracked ONLY by `turn.pid` (the `forge agent dispatch
+   *  --session-dir` kinds, whose events/stderr live under `_logs/<runId>/`)
+   *  has nothing to be silent on, so a live pid with no channel is never
+   *  `stalled` — the same honest-unknown rule as "no log dir at all". */
+  hasChannel: boolean;
   nowMs: number;
   stallCeilingMs: number;
 };
@@ -127,7 +135,9 @@ function cap(s: string): string {
  * flight — never `crashed` on the previous attempt's stderr. No log dir at
  * all (`lastActivityMs === null`) can never be `stalled`: there is no
  * liveness signal to be silent on, so the honest answer is "working
- * (unknown)", never a guess.
+ * (unknown)", never a guess. W7-FIX-A2: likewise a LIVE tracked pid whose
+ * log dir has no heartbeat/events channel at all (`turn.pid` only) is
+ * `working`, not `stalled` — see SessionLifecycleInputs.hasChannel.
  */
 export function deriveSessionLifecycle(i: SessionLifecycleInputs): SessionLifecycle {
   const idleMs = i.lastActivityMs !== null ? Math.max(0, i.nowMs - i.lastActivityMs) : null;
@@ -141,7 +151,12 @@ export function deriveSessionLifecycle(i: SessionLifecycleInputs): SessionLifecy
   if (i.awaits !== null) {
     return { state: 'awaiting-operator', needsYou: true, error: null, idleMs, cancellable: true };
   }
-  if (i.working && idleMs !== null && idleMs > i.stallCeilingMs) {
+  // W7-FIX-A2 (W7A2-01): a LIVE tracked pid with NO liveness channel (turn.pid
+  // only — the dispatch-spawned kinds) has nothing to be silent on: working,
+  // never stalled. A live pid WITH a channel that went quiet past the
+  // ceiling (the hung-SDK shape) and a dead pid silent past the ceiling are
+  // both still stalled.
+  if (i.working && idleMs !== null && idleMs > i.stallCeilingMs && !(i.turnAlive && !i.hasChannel)) {
     return { state: 'stalled', needsYou: true, error: null, idleMs, cancellable: true };
   }
   return { state: 'working', needsYou: false, error: null, idleMs, cancellable: true };
@@ -179,6 +194,8 @@ export type SessionLifecycleFacts = {
   turnAlive: boolean;
   /** The tracked turn pid when a `turn.pid` file names one, else null. */
   turnPid: number | null;
+  /** W7-FIX-A2: a `.heartbeat` or `events.jsonl` exists in the log dir. */
+  hasChannel: boolean;
 };
 
 /** `_logs/_<kind>-<sessionId>` — the SAME directory template
@@ -222,10 +239,21 @@ export function isTurnAlive(pid: number, sessionId: string): boolean {
     // guarded file, never a request string; this is a kernel pseudo-file,
     // not a project/request-derived path.
     const argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
-    return argv.includes(sessionId);
+    return argv.some((arg) => isSessionOwnershipMark(arg, sessionId));
   } catch {
     return false;
   }
+}
+
+/** W7-FIX-A2 (W7A2-01): the TWO argv shapes our own spawners stamp a turn
+ *  with — `spawnAgentTurn`'s bare `<sessionId>` element and
+ *  `spawnAgentDispatch`'s `--session-dir <…/_<kind>/<sessionId>>` value
+ *  (whose BASENAME is the session id). Both are whole-element matches: a
+ *  bare prefix of the id, an intermediate path segment (`_onboarding`, the
+ *  project) or the id buried inside some unrelated argument never count. */
+export function isSessionOwnershipMark(argvElement: string, sessionId: string): boolean {
+  if (argvElement === sessionId) return true;
+  return argvElement.includes('/') && basename(argvElement) === sessionId;
 }
 
 export function readSessionLifecycleFacts(args: {
@@ -240,17 +268,22 @@ export function readSessionLifecycleFacts(args: {
   const logDir = sessionLogDirName(kind, sessionId);
   const logDirGuard = resolveGuardedPath(logsRoot, [logDir]);
   if (!logDirGuard.ok || !logDirGuard.exists) {
-    return { statusMtimeMs, stderr: null, lastActivityMs: null, turnAlive: false, turnPid: null };
+    return { statusMtimeMs, stderr: null, lastActivityMs: null, turnAlive: false, turnPid: null, hasChannel: false };
   }
-  const stderrText = guardedReadFile(logsRoot, [logDir, 'stderr.log']);
+  // W7A2-08: only the TAIL of stderr.log is read — `extractErrorMessage`
+  // wants the last non-stack line, never the whole file (a long-running
+  // runner's stderr can be large, and this runs per row per index poll).
+  const stderrText = guardedReadFileTail(logsRoot, [logDir, 'stderr.log'], STDERR_TAIL_BYTES);
   const stderrMtime = guardedMtime(logsRoot, [logDir, 'stderr.log']);
   const stderr = stderrText !== null && stderrText.trim().length > 0 && stderrMtime !== null ? { text: stderrText, mtimeMs: stderrMtime } : null;
 
+  const heartbeatMtime = guardedMtime(logsRoot, [logDir, '.heartbeat']);
+  const eventsMtime = guardedMtime(logsRoot, [logDir, 'events.jsonl']);
   const candidates = [
     statusMtimeMs,
     stderrMtime,
-    guardedMtime(logsRoot, [logDir, '.heartbeat']),
-    guardedMtime(logsRoot, [logDir, 'events.jsonl']),
+    heartbeatMtime,
+    eventsMtime,
     guardedMtime(logsRoot, [logDir, 'turn.pid']),
   ].filter((m): m is number => m !== null);
   const lastActivityMs = candidates.length > 0 ? Math.max(...candidates) : null;
@@ -258,7 +291,37 @@ export function readSessionLifecycleFacts(args: {
   const pidRaw = guardedReadFile(logsRoot, [logDir, 'turn.pid']);
   const turnPid = pidRaw !== null && /^\d+\s*$/.test(pidRaw.trim()) ? Number.parseInt(pidRaw.trim(), 10) : null;
   const turnAlive = turnPid !== null && isTurnAlive(turnPid, sessionId);
-  return { statusMtimeMs, stderr, lastActivityMs, turnAlive, turnPid };
+  return { statusMtimeMs, stderr, lastActivityMs, turnAlive, turnPid, hasChannel: heartbeatMtime !== null || eventsMtime !== null };
+}
+
+/** W7A2-08 — how much of stderr.log's tail the lifecycle reads. Generous
+ *  next to ERROR_MESSAGE_CAP (600 chars): a stack trace's frames follow the
+ *  message line, and `extractErrorMessage` walks back past them. */
+export const STDERR_TAIL_BYTES = 16 * 1024;
+
+/** Guarded read of the LAST `maxBytes` of a file (or the whole file when
+ *  smaller) — the same guard as `guardedReadFile`, then a bounded
+ *  positional read off the guard's own realPath. `null` on rejection/absence. */
+function guardedReadFileTail(root: string, segments: readonly string[], maxBytes: number): string | null {
+  const guarded = resolveGuardedPath(root, segments);
+  if (!guarded.ok || !guarded.exists) return null;
+  let fd: number | null = null;
+  try {
+    // guard-terminal: `guarded.realPath` IS the guard's own output.
+    const size = statSync(guarded.realPath).size;
+    const start = Math.max(0, size - maxBytes);
+    const length = size - start;
+    if (length === 0) return '';
+    // guard-terminal: same realPath, bounded positional read.
+    fd = openSync(guarded.realPath, 'r');
+    const buf = Buffer.alloc(length);
+    readSync(fd, buf, 0, length, start);
+    return buf.toString('utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) { try { closeSync(fd); } catch { /* ignore */ } }
+  }
 }
 
 /** Glue: descriptor + phase + on-disk facts → lifecycle. `terminal` is
@@ -276,6 +339,14 @@ export function deriveSessionLifecycleFor(args: {
   nowMs?: number;
 }): SessionLifecycle {
   const { descriptor, phase, terminal, project, sessionId, projectsRoot, logsRoot } = args;
+  // W7A2-08: a terminal phase's verdict is fixed by rule 1 — no on-disk fact
+  // can change it, so none is read (the index derives one lifecycle per row
+  // on every poll, BEFORE the 200-row cap; terminal history dominates it).
+  // `idleMs` is honestly null: it was not computed, and no surface renders
+  // it for a terminal row.
+  if (terminal) {
+    return { state: 'terminal', needsYou: false, error: null, idleMs: null, cancellable: false };
+  }
   const shape = phaseShapeFor(descriptor, phase);
   const facts = readSessionLifecycleFacts({ projectsRoot, logsRoot, project, kind: descriptor.id, sessionId });
   return deriveSessionLifecycle({
@@ -286,6 +357,7 @@ export function deriveSessionLifecycleFor(args: {
     stderr: facts.stderr,
     lastActivityMs: facts.lastActivityMs,
     turnAlive: facts.turnAlive,
+    hasChannel: facts.hasChannel,
     nowMs: args.nowMs ?? Date.now(),
     stallCeilingMs: stallCeilingForKind(descriptor.id),
   });

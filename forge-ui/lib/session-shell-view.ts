@@ -115,6 +115,11 @@ export type SessionShellReadyState = {
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
   terminal: boolean;
+  /** W7-FIX-A2 (W7A2-04) — the payload's own `transcript` flag (server-
+   *  derived from the descriptor, see session-client.ts): whether this KIND
+   *  records turns as a transcript at all. Session-level, carried through
+   *  UNCHANGED across a `selectStage` switch; keys `emptyStageMessage`. */
+  transcript: boolean;
   /** W7-A2 — the payload's own derived lifecycle (server-derived, see
    *  session-lifecycle-client.ts), carried through UNCHANGED across a
    *  `selectStage` switch — a session-level fact, like `terminal`. */
@@ -136,17 +141,23 @@ function turnsForStage(turns: readonly SessionTurn[], stage: string): SessionTur
   return turns.filter((t) => t.stage === stage);
 }
 
-/** W7-A2 (knowledge-25) — phase-aware: "not YET" is only honest while the
- *  session is still working toward a transcript. A session that has moved
- *  past its working phases (an operator gate open, or terminal) with no
- *  turns for this stage will never grow one — some kinds (kb-cleanup,
- *  authoring, community-refresh) record their work in the artifact pane,
- *  not as transcript turns — so the message says that instead of promising
- *  a turn that is not coming. */
-function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], lifecycle: SessionLifecycle): string | null {
+/** W7-A2 (knowledge-25) + W7-FIX-A2 (W7A2-04) — keyed on the KIND's own
+ *  `transcript` flag (bridge-derived from the descriptor) first, then on
+ *  lifecycle:
+ *    - a transcript-LESS kind (kb-cleanup / authoring / community-refresh —
+ *      the turnSpec spine) records its work in the artifact pane in EVERY
+ *      state, so it says so — never a "not yet" promise of a turn that is
+ *      not coming;
+ *    - a transcript-bearing kind still `working` → an honest "not YET";
+ *    - a transcript-bearing kind at an operator gate / crashed / stalled /
+ *      terminal with no turns for this stage (the instructions/demo
+ *      `briefing` shape) → a NEUTRAL line that neither promises a turn nor
+ *      claims the artifact pane holds anything. */
+function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], lifecycle: SessionLifecycle, transcript: boolean): string | null {
   if (turns.length > 0) return null;
+  if (!transcript) return `No transcript for stage "${stage}" — this session records its work in the artifact pane`;
   if (lifecycle.state === 'working') return `No turns recorded yet for stage "${stage}"`;
-  return `No transcript for stage "${stage}" — this session records its work in the artifact pane`;
+  return `No transcript for stage "${stage}" — nothing was recorded for this stage`;
 }
 
 function readyDataAttrs(input: {
@@ -185,13 +196,14 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     stageSelectorVisible,
     allTurns: [...payload.turns],
     turnsForStage: turns,
-    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.lifecycle),
+    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.lifecycle, payload.transcript),
     artifactKind,
     artifactLabel: payload.artifact.label,
     artifact: payload.artifact,
     affordances: payload.affordances,
     modelTier: payload.modelTier,
     terminal: payload.terminal,
+    transcript: payload.transcript,
     lifecycle: payload.lifecycle,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
@@ -236,7 +248,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
       ...state,
       selectedStage: stage,
       turnsForStage: turns,
-      emptyStageMessage: emptyStageMessageFor(stage, turns, state.lifecycle),
+      emptyStageMessage: emptyStageMessageFor(stage, turns, state.lifecycle, state.transcript),
       dataAttrs: readyDataAttrs({
         kind: state.kind,
         stage,
@@ -309,8 +321,11 @@ export function isPseudoProjectAnchor(project: string): boolean {
 
 export type PseudoProjectDestination = { readonly label: string; readonly href: string };
 
-const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
-const COMMUNITY_REGISTRY_ANCHOR = '.community-registry';
+// W7A2-09: exported so the kickoff page imports the ONE mirror instead of
+// re-spelling the literals (the parity pin in this file's .test.ts sibling
+// keeps them honest against cli/).
+export const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
+export const COMMUNITY_REGISTRY_ANCHOR = '.community-registry';
 
 /** `null` for a project that either isn't a pseudo-anchor at all, or IS one
  *  but of an unrecognised shape (a future anchor this file hasn't been
@@ -336,11 +351,10 @@ export function pseudoProjectAnchorDestination(project: string): PseudoProjectDe
  *  — a real project's own `/projects/<id>` for an honest project id, or the
  *  pseudo-anchor's own destination otherwise. Pure and total: never throws,
  *  never fabricates a destination this file hasn't been told about. */
-export function backToProjectLink(project: string | null, _terminal: boolean): PseudoProjectDestination | null {
+export function backToProjectLink(project: string | null): PseudoProjectDestination | null {
   // W7-A2 (sessions-kinds-35) — rendered in EVERY phase, not only terminal:
   // the operator most needs a way out of a session they are actively
-  // working on. `_terminal` is kept in the signature (call sites and pins
-  // pass it) but no longer gates anything.
+  // working on (W7A2-07: the dead `_terminal` parameter is gone).
   if (project === null) return null;
   if (isPseudoProjectAnchor(project)) return pseudoProjectAnchorDestination(project);
   return { label: 'project', href: `/projects/${encodeURIComponent(project)}` };

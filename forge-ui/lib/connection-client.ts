@@ -16,12 +16,12 @@
  * Tested ONLY via the pure `parseConnection` function
  * (forge-ui/lib/connection-client.test.ts) — no fetch, no window, no jsdom
  * (this repo's forge-ui vitest config is `environment: 'node'`, a standing
- * decision; `resolveBridgeUrl()` requires `window`). The over-the-wire
+ * decision; the transport, `bridgeFetch`, requires `window`). The over-the-wire
  * behaviour (list/detail/probe/install round trips, the security core) is
  * pinned by cli/bridge-studio-connections.test.ts instead.
  */
 
-import { resolveBridgeUrl } from './bridge-client.ts';
+import { bridgeFetch } from './bridge-client.ts';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes (orchestrator/studio/connection-library.ts,
@@ -297,12 +297,9 @@ function errorFrom(data: unknown, fallback: string): string {
  *  from an unreachable bridge or a malformed payload (`ok: false` for both)
  *  — never rendered the same way. */
 export async function fetchConnections(): Promise<{ ok: boolean; connections: ConnectionWire[]; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, connections: [], error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/connections`);
+    res = await bridgeFetch(`/api/studio/connections`);
   } catch (err) {
     return { ok: false, connections: [], error: `bridge unreachable: ${String(err)}` };
   }
@@ -329,12 +326,9 @@ export async function fetchConnections(): Promise<{ ok: boolean; connections: Co
 export async function fetchConnectionDetail(
   id: string,
 ): Promise<{ ok: boolean; status?: number; connection?: ConnectionWire; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/connections/${encodeURIComponent(id)}`);
+    res = await bridgeFetch(`/api/studio/connections/${encodeURIComponent(id)}`);
   } catch (err) {
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
   }
@@ -351,12 +345,9 @@ export async function fetchConnectionDetail(
 /** Re-run the real probe for one connection (explicit user-triggered
  *  re-check, e.g. "I just set the env var, check again"). */
 export async function probeConnection(id: string): Promise<{ ok: boolean; probe?: ConnectionProbeResult; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/connections/${encodeURIComponent(id)}/probe`, {
+    res = await bridgeFetch(`/api/studio/connections/${encodeURIComponent(id)}/probe`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify({}),
@@ -395,12 +386,9 @@ function parseWouldInstall(raw: unknown): { command: string; args: string[] } {
 }
 
 export async function installConnection(id: string): Promise<{ ok: boolean; result?: ConnectionInstallOutcome; error?: string }> {
-  const base = await resolveBridgeUrl();
-  if (!base) return { ok: false, error: 'no bridge configured' };
-
   let res: Response;
   try {
-    res = await fetch(`${base}/api/studio/connections/${encodeURIComponent(id)}/install`, {
+    res = await bridgeFetch(`/api/studio/connections/${encodeURIComponent(id)}/install`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
       body: JSON.stringify({}),

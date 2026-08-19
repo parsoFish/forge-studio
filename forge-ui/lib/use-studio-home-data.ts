@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from './bridge-client';
-import { describeBridgeError } from './bridge-result';
+import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from './fetch-error-scope';
 import { useBridgeRecovery } from './use-bridge-status';
 import {
   fetchRuns,
@@ -73,7 +73,11 @@ import { debounceLeadingTrailing } from './debounce';
  * hook re-runs `loadAll` — no page-level poll, no new transport. `reload`
  * is the same re-run, for the failure state's Retry button.
  */
-export type StudioHomeFetchError = { message: string; status?: number };
+/** W7-FIX-A1 (A1-03): carries the failed read set's `scope` (lib/fetch-error-scope.ts). */
+export type StudioHomeFetchError = ScopedFetchError;
+
+/** Scope tag for {@link useStudioHomeData}'s post-cancel sessions-only refetch (W7A2-06). */
+const SESSIONS_REFRESH_SCOPE = 'sessions';
 
 export type StudioHomeData = {
   agents: Agent[];
@@ -155,8 +159,7 @@ export function useStudioHomeData(): StudioHomeData {
         // derivation below keeps whatever it last knew, and Home renders the
         // shared failure state off `error` (home-sessions-30 / crosscut-01).
         if (signal.cancelled) return;
-        const d = describeBridgeError(err);
-        setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
+        setError(scopedFetchError(err, FULL_LOAD_SCOPE));
       } finally {
         if (!signal.cancelled) setReady(true);
       }
@@ -172,17 +175,21 @@ export function useStudioHomeData(): StudioHomeData {
     // W6-B11: refreshes BOTH runs and the sessions index off the same
     // cycle-list-changed signal — see this file's header for why one shared
     // debounced refetch covers both rather than a second WS handler.
+    // W7-FIX-A1 (A1-03): this refresh reads runs+sessions ONLY — its success
+    // clears only an error of ITS scope, never the seven-read full load's
+    // (else a failed full load would fall through to "Nothing registered
+    // yet" the moment one runs refresh succeeded).
+    const REFRESH_SCOPE = 'runs+sessions';
     async function refreshRunsAndSessions(): Promise<void> {
       try {
         const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
         if (signal.cancelled) return;
         setRuns(r);
         setSessions(s);
-        setError(null);
+        setError((prev) => afterRefreshSuccess(prev, REFRESH_SCOPE));
       } catch (err) {
         if (signal.cancelled) return;
-        const d = describeBridgeError(err);
-        setError(d.status !== undefined ? { message: d.message, status: d.status } : { message: d.message });
+        setError((prev) => afterRefreshFailure(prev, scopedFetchError(err, REFRESH_SCOPE)));
       }
     }
 
@@ -215,8 +222,18 @@ export function useStudioHomeData(): StudioHomeData {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // W7A2-06 — the post-cancel refetch: a failure routes into the SAME
+  // `error` state Home already renders (never an escaped rejection that
+  // leaves the cancelled card showing as in-flight with no explanation).
+  // Scoped per W7-FIX-A1 (A1-03): a failing sessions-only refetch must not
+  // stomp a wider full-load error, and its own success clears only its own scope.
   const refreshSessions = useCallback(async (): Promise<void> => {
-    setSessions(await fetchStudioSessions());
+    try {
+      setSessions(await fetchStudioSessions());
+      setError((prev) => afterRefreshSuccess(prev, SESSIONS_REFRESH_SCOPE));
+    } catch (err) {
+      setError((prev) => afterRefreshFailure(prev, scopedFetchError(err, SESSIONS_REFRESH_SCOPE)));
+    }
   }, []);
 
   return { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions };

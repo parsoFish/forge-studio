@@ -71,3 +71,17 @@ export function useBridgeRecovery(onRecovered: () => void): void {
     return store.onRecovered(() => { cbRef.current(); });
   }, []);
 }
+
+/**
+ * W7-FIX-A1 (review): the DETAIL-page recovery rule. Recovery refills a page
+ * ONLY while it is in a load-error state — a page that loaded fine (and may
+ * hold the operator's unsaved builder edits, an open drawer, a live tail) is
+ * NEVER re-loaded by a socket blip. `failed` is read at recovery time (ref),
+ * so the latest page state decides; `reload` is the page's own load key bump.
+ * The index pages keep plain `useBridgeRecovery(reload)` (no editable state).
+ */
+export function useBridgeRecoveryWhenFailed(failed: boolean, reload: () => void): void {
+  const failedRef = useRef(failed);
+  failedRef.current = failed;
+  useBridgeRecovery(() => { if (failedRef.current) reload(); });
+}

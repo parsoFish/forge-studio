@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import type { HomeSessionsStrip as HomeSessionsStripData } from '@/lib/home-view';
 import type { SessionIndexRow } from '@/lib/studio-client';
-import { describeLifecycle } from '@/lib/session-lifecycle-client';
+import { describeLifecycle, type CancelOutcome } from '@/lib/session-lifecycle-client';
+import { CancelOutcomeNotice } from '@/components/studio/session/CancelOutcomeNotice';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
 
 // ---------------------------------------------------------------------------
@@ -27,12 +28,17 @@ import { CancelSessionButton } from '@/components/studio/session/CancelSessionBu
 export function HomeSessionsStrip({
   strip,
   onCancelled,
+  lastCancel = null,
 }: {
   strip: HomeSessionsStripData;
-  /** W7-A2 — fired after a card's cancel succeeds so Home refetches. */
-  onCancelled?: (row: SessionIndexRow) => void;
+  /** W7-A2 — fired after a card's cancel succeeds so Home refetches;
+   *  W7A2-02: carries the cancel's real outcome. */
+  onCancelled?: (row: SessionIndexRow, outcome: CancelOutcome) => void;
+  /** W7A2-02 — the last cancel from this strip (held by Home so the notice
+   *  survives the refetch that drops the card). */
+  lastCancel?: { row: SessionIndexRow; outcome: CancelOutcome } | null;
 }) {
-  if (strip.totalCount === 0) return null;
+  if (strip.totalCount === 0 && lastCancel === null) return null;
 
   return (
     <section
@@ -70,6 +76,13 @@ export function HomeSessionsStrip({
           all sessions ({strip.totalCount}) →
         </Link>
       </div>
+      {/* W7A2-02 — what the last cancel from this strip actually did (the
+          card itself has dropped out; the notice is the operator's trace). */}
+      {lastCancel !== null && (
+        <div style={{ marginBottom: 10 }}>
+          <CancelOutcomeNotice outcome={lastCancel.outcome} subject={`${lastCancel.row.kind} · ${lastCancel.row.sessionId}`} />
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
         {strip.cards.map((s) => (
           // W7-A2 — the card is a DIV wrapping the link + a cancel control
@@ -120,12 +133,12 @@ export function HomeSessionsStrip({
                   color: s.state === 'crashed' ? 'var(--red, #f87171)' : s.state === 'stalled' ? 'var(--ember)' : 'var(--faint)',
                 }}
               >
-                {describeLifecycle(s.state, s.error, s.idleMs)}
+                {describeLifecycle(s.state, s.error, s.idleMs, s.phase)}
               </span>
             </Link>
             {s.state !== 'terminal' && (
               <div style={{ marginTop: 4 }}>
-                <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={() => onCancelled?.(s)} />
+                <CancelSessionButton kind={s.kind} sessionId={s.sessionId} project={s.project} compact onCancelled={(outcome) => onCancelled?.(s, outcome)} />
               </div>
             )}
           </div>

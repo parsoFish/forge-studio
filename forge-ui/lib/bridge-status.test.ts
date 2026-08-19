@@ -303,3 +303,36 @@ test('a throwing recovery callback or change listener never breaks the store', a
   expect(h.store.getSnapshot()).toMatchObject({ status: 'up', recoveries: 1 });
   expect(h.recovered).toBe(1);
 });
+
+// ---- W7-FIX-A1 A1-08: the in-flight probe is VISIBLE on the snapshot -----------
+
+test('A1-08: `probing` is true exactly while a probe is in flight (a Retry click during it is acknowledged, not silently dropped), and false again after it settles', async () => {
+  const h = harness();
+  expect(h.store.getSnapshot().probing).toBe(false);
+  h.store.start();
+  h.ws.onState?.('reconnecting');
+  // hang the initial probe
+  let resolveProbe: (r: { ok: false; error: string }) => void = () => {};
+  h.probe.mockImplementationOnce(() => new Promise((res) => { resolveProbe = res; }));
+  vi.advanceTimersByTime(BRIDGE_INITIAL_PROBE_DELAY_MS);
+  await flush();
+  expect(h.probe).toHaveBeenCalledTimes(1);
+  const inFlight = h.store.getSnapshot();
+  expect(inFlight.probing).toBe(true);
+  // the pending flag is a real snapshot change (subscribers can render it)
+  expect(h.changes).toBeGreaterThanOrEqual(1);
+  h.store.retryNow(); // in flight → still one probe, and the snapshot still says probing
+  await flush();
+  expect(h.probe).toHaveBeenCalledTimes(1);
+  expect(h.store.getSnapshot().probing).toBe(true);
+  resolveProbe({ ok: false, error: 'bridge unreachable (ECONNREFUSED)' });
+  await flush();
+  const settled = h.store.getSnapshot();
+  expect(settled.probing).toBe(false);
+  expect(settled.status).toBe('down');
+  // Retry now goes through again
+  h.store.retryNow();
+  vi.advanceTimersByTime(0);
+  await flush();
+  expect(h.probe).toHaveBeenCalledTimes(2);
+});
