@@ -490,7 +490,7 @@ test('dispatchAgentRun: ONE-SHOT POSITIVE CONTROL, paired deliberately alongside
   }
 });
 
-test('dispatchAgentRun: NEGATIVE TWIN, load-bearing — no kickoffCeilingUsd at all against the SAME non-one-shot agent behaves EXACTLY as it does today: no refusal, no maxBudgetUsd anywhere in the SDK call. This is the path every ordinary dispatch of the 14 non-one-shot roster agents takes; if the new refusal leaked into this case, most of the roster would break to add a limit feature', async () => {
+test('dispatchAgentRun: NEGATIVE TWIN, amended twice — no kickoffCeilingUsd against the SAME legacy agent still proceeds (no refusal), and ⚑ W7-B5 the agent\'s OWN declared default ceiling (project-scoped-review SKILL budgets.maxBudgetUsd: 5, docs/agent-cost-ceilings.md) now reaches the SDK call — an ordinary dispatch is no longer uncapped', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-negtwin-'));
   try {
@@ -508,9 +508,9 @@ test('dispatchAgentRun: NEGATIVE TWIN, load-bearing — no kickoffCeilingUsd at 
     assert.equal(out.slug, 'project-scoped-review');
     assert.equal(calls.length, 1, 'the legacy path must still genuinely proceed to the real SDK call — this is not a refusal, and the run must actually happen');
     assert.equal(
-      Object.prototype.hasOwnProperty.call(calls[0]?.options ?? {}, 'maxBudgetUsd'),
-      false,
-      'no ceiling given and no budget declared (project-scoped-review declares budgets: {}) — "maxBudgetUsd" must not appear in the SDK call options (W7-B5: a DECLARED budget now would appear — that case is pinned in run-agent-w7b5.test.ts)',
+      calls[0]?.options.maxBudgetUsd,
+      5,
+      'the agent\'s own declared budgets.maxBudgetUsd (SKILL.md, W7-B5 default) must reach the SDK call when no operator ceiling is given — the "no cap declared anywhere ⇒ no key" case is pinned in run-agent-w7b5.test.ts with a budgets:{} clone',
     );
   } finally {
     restoreEnv();

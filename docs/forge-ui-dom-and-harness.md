@@ -1046,30 +1046,25 @@ inventory rather than one shared page-level contract:
     `[data-action="retry-recent-runs"]` re-running only the fan-out — never a
     fabricated row, never a total outage rendered as a fleet that has never
     run (`'not-found'` = never ran is NOT counted). Home's activity section
-    carries the same root attribute + notice. **There is no aggregate "all
-    agents" bridge route** —
-    `lib/agents-index.ts`'s `fetchRecentAgentRuns(WithMeta)` fans the existing
-    per-agent `GET /api/agents/:slug/history` out across the whole roster
-    in bounded-concurrency batches of `AGENT_HISTORY_FAN_OUT_BATCH_SIZE` (6,
-    plain chunking, no new dependency — a roster of dozens of agents must
-    not fire one simultaneous bridge request per agent), merges the "found"
-    rows, **dedupes by `row.id`**, and re-sorts the WHOLE merged set
-    newest-first (`sortLedgerRowsNewestFirst`, reused unchanged) before
-    bounding to `RECENT_AGENT_RUNS_LIMIT` (20). The dedupe step is
-    **required, not cosmetic**: `HistoryLedger.tsx` keys each rendered row
-    on `row.id` (`key={row.id}`) — an implicit contract every consumer of
-    that shared component must uphold. A single flow run with two nodes
-    owned by two different agents resolves to two rows sharing the SAME
-    `row.id` (different `row.href`/node) once both agents' histories are
-    merged here; without the dedupe step in `mergeRecentAgentRuns` (BEFORE
-    the merged rows ever reach `HistoryLedger`), that is a duplicate React
-    key, not merely a double-listing. KNOWN LIMITATION (documented in that
-    module's header, not closed here): which specific node's `href`
-    survives for a deduped id is whichever agent's fetch happened to
-    flatten first — arbitrary from the caller's perspective. A server-side
-    aggregate route could dedupe by (run, node) with real knowledge of the
-    flow topology instead of this incidental ordering; this client-side
-    join cannot. Journey coverage:
+    carries the same root attribute + notice. **⚑ W7-B5 (agents-03/04/39):
+    the aggregate bridge route now exists** — `GET /api/agents/runs/recent
+    [?limit=1..100]` (`cli/ui-bridge.ts`) joins flow runs (ONE row per run,
+    RUN-level status/cost + `agents: [<slugs whose nodes the run reached>]`)
+    and standalone dispatches (each attributed to its own slug off its own
+    events — the D4 exact-match identity) server-side, newest-first, bounded
+    (default `RECENT_AGENT_RUNS_LIMIT` 20). `lib/agents-index.ts`'s
+    `fetchRecentAgentRuns(WithMeta)` makes ONE call to it (the old
+    13-request / 1.33 MB per-agent fan-out and its arbitrary-node dedupe —
+    which published $0.00 "complete" for a $4.79 failed run — are gone; a
+    failed aggregate read reports `unresolved === total`, never an empty
+    ledger). Rows carry the new optional `LedgerRow.agent` attribution
+    (`data-ledger-agent` + a visible chip on the row). The section root also
+    carries `data-count` + `data-limit` (agents-40) and, while truncation is
+    possible, `[data-action="recent-runs-show-all"]` refetches under
+    `RECENT_AGENT_RUNS_EXPANDED_LIMIT` (100 — the route's own hard cap).
+    Sessions are deliberately not joined (they have `/sessions`); the pure
+    `mergeRecentAgentRuns` survives solely as Home's generic
+    flatten+dedupe+bound merge (`buildHomeLedgerRows`). Journey coverage:
     `scripts/journeys/agents.mjs`'s `agents-index-roster` beat (roster +
     CTA + ledger-mount + roster-card-navigates-to-builder only — the ledger
     row contract itself is pinned elsewhere, this beat only proves the
@@ -1115,7 +1110,40 @@ inventory rather than one shared page-level contract:
   enforces server-side (D9.1/D9.2), never the UI's own invention. An
   **interactive** agent instead renders `[data-section="agent-run"]
   [data-run-dispatchable="false"]` with no run button — it keeps its bespoke
-  session page. `/agents/new` shows the curated starter picker first
+  session page. **⚑ W7-B5 additions to the run panel + builder:** the Run
+  button STATES the ceiling that will be in force
+  (`[data-run-ceiling=<usd|"">]`, text "Run agent ($N cap)" / "(no cost
+  cap)"), seeded from the agent's own declared `budgets.maxBudgetUsd`
+  (`Agent.declaredMaxBudgetUsd`) ahead of the run-level policy default —
+  see `docs/agent-cost-ceilings.md`; a ralph-loop agent renders
+  `[data-component="standalone-blocked"]` with the honest refusal (the
+  bridge 400s the dispatch — no run is minted just to fail); the run
+  control stays DISABLED while the dispatched run is itself still running
+  (agents-29) and a live run gets `[data-action="cancel-run"]
+  [data-cancel-armed]` (two-step → `POST /api/agents/runs/:runId/cancel`);
+  the runId renders as a real `[data-action="open-run"]` link to the run
+  page; the reattach-on-mount resumes the latest standalone run of ANY
+  status (a finished run stays visible with its real terminal state, never
+  vanishing on reload — agents-26) and never fires for an empty slug
+  (agents-02 — the history route now 400s an invalid slug); the run's own
+  recorded failure reason renders verbatim in
+  `[data-component="run-error"]` (agents-19); a blocked-connection message
+  additionally renders `[data-component="connection-run-block-links"]` with
+  one `[data-action="fix-connection"][data-connection-id]` link per unready
+  id → `/connections/<id>` (agents-36 — the verbatim message contract is
+  untouched); poll exhaustion renders `[data-component="poll-exhausted-note"]`
+  while `data-run-status` keeps the run's last REAL state
+  (`data-poll-state="timed-out"` is the watcher's own fact — projects-29);
+  the readiness rows each carry `data-ok="true"|"false"` + an `aria-label`
+  naming pass/not-met (agents-13); the RuntimePicker's Fixed/Range segments
+  expose `data-active` like the loop-strategy segments (agents-17) and the
+  SDK cards / model chips / brain options are real
+  radiogroup/radio/checkbox widgets with `aria-checked` (agents-41); and
+  the per-agent HistoryLedger renders paged (`pageSize` 15 →
+  `data-ledger-shown` + `[data-action="ledger-show-more"]`) with a
+  `[data-ledger-filter]` status `<select>` over the DISTINCT statuses
+  actually present, each vocabulary verbatim (agents-32).
+  `/agents/new` shows the curated starter picker first
   (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
   **R2-09 additions.** The agent picker carries `[data-agent-select]` with a
   per-option `[data-agent-option="<slug>"]` (`"new"` for the new-agent
@@ -1263,16 +1291,36 @@ inventory rather than one shared page-level contract:
   `contentBase64` field either); `[data-component="ceiling-provenance"]
   [data-ceiling-set="true"|"false"]` — `data-ceiling-usd` + a formatted `$X.XX`
   when set, `[data-component="ceiling-not-recorded"]` when not; and
-  `[data-section="run-outputs"][data-outputs-count]` (typed outputs as
-  collapsed-by-default `<details data-output-id>` cards) — **honestly always
-  `0`/empty today**, since there is no wired data source yet for a generic
-  dispatched agent's artifact outputs (`forge-ui/lib/run-view-client.ts`'s
-  own header). The ceiling recorded on `data-ceiling-set` reflects the
-  terminal `end` event's `metadata.kickoff_ceiling_usd`
-  (`orchestrator/run-agent.ts`) — written only when the underlying SDK call
-  actually completes; a suppressed spawn (dry-bridge / no-spawn harness seam)
-  never reaches that point, so `data-ceiling-set` correctly reads `false`
-  even for a dispatch that carried a ceiling on the wire.
+  `[data-section="run-outputs"][data-outputs-count]` — **W7-B5 (agents-06 /
+  forge-75j):** the run's REAL output references (the end event's own
+  `output_refs`, served by `GET /api/agents/runs/:runId` as `outputRefs`),
+  one `<li data-output-ref="<path>">` per reference,
+  `[data-component="run-outputs-empty"]` until the run produces any — the
+  old typed-outputs `<details>` cards (hard-wired to `[]`, a data source
+  that could never exist) are gone. **W7-B5 (agents-31):** the ceiling is
+  recorded at DISPATCH time (the t0 `agent-run.dispatched` marker's / the
+  `start` event's `metadata.kickoff_ceiling_usd`) as well as on the terminal
+  `end`, so a failed or still-running run shows the ceiling that was
+  actually accepted — `data-ceiling-set="false"` now genuinely means "no
+  ceiling was ever given". **W7-B5 (agents-07/19/30 + bead forge-irn):** the
+  page POLLS `fetchRunDetail` on the shared bounded cadence while the run is
+  live — `[data-section="run-live-controls"]
+  [data-poll-state="watching"|"timed-out"|"terminal"]` in the breadcrumb row
+  with `[data-action="refresh-run"]` (always) and, on a LIVE run,
+  `[data-action="cancel-run"][data-cancel-armed]` (two-step confirm →
+  `POST /api/agents/runs/:runId/cancel`; a refused cancel's text in
+  `[data-component="cancel-error"]`); poll exhaustion renders
+  `[data-component="poll-exhausted-note"]` + a Re-check control, never a
+  frozen page silently claiming liveness. The fetch resolves THREE ways:
+  404 → the shared NotFound; any OTHER failure → `data-fetch-status="error"`
+  + the shared `[data-component="fetch-error"]` (a read failure is never
+  rendered as "no such run"); found → `RunView`, whose
+  `[data-component="run-error"]` banner renders the run's own recorded
+  failure reason verbatim (`errorText` — the `agent-dispatch.failed`
+  marker's `metadata.error`) whenever the run failed. The run-state
+  vocabulary gains the sticky terminal `cancelled` (the operator-cancel
+  marker; a late `end` event never resurrects a cancelled run) alongside
+  `running|done|failed|suppressed|budget-exceeded`.
 - **`/flows/[id]/run/[runId]` — the flow run-detail page (R6-01-F4/F5,
   2026-08-07).** The dig-in for ONE flow run, live or archived, reached from a
   `RunRail` row's `[data-action="open-run-detail"]` anchor on the flow monitor.
@@ -1597,7 +1645,24 @@ inventory rather than one shared page-level contract:
   the shared session shell at `/sessions/onboarding/<sessionId>?project=<id>`
   — the SAME stage-aware `contract-buildout` artifact pane described below,
   reused verbatim for onboarding (D1: one session-kind descriptor,
-  `onboarding`, for both onboarding AND creation).
+  `onboarding`, for both onboarding AND creation). **⚑ W7-B5
+  (projects-29/31/36):** the panel gains `details[data-section="onboard-brief"]`
+  with three optional `[data-onboard-input="northStar"|"gateCommand"|"constraints"]`
+  fields posted as the `/start` route's `inputs` map (prompt.md is no longer
+  "(no inputs provided)"); the poll ceiling covers a routine run
+  (`ONBOARDING_POLL_MAX_ATTEMPTS` = 300 ≈ 10 min at the shared 2s cadence —
+  a real successful run took 222s while the old 90-attempt ceiling gave up
+  at ~172s) and exhaustion keeps `data-onboard-run-status` on the run's last
+  REAL state (`data-poll-state="timed-out"` + `[data-component=
+  "poll-exhausted-note"]` + Re-check are the watcher's own facts); a LIVE
+  run gets `[data-action="cancel-onboarding"][data-cancel-armed]` (two-step
+  → the A2 session-cancel route, which really kills the tracked dispatch
+  pid); the run id links to its run page via
+  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach renders
+  `[data-section="onboard-last-run"][data-last-run-id][data-last-run-status]`
+  — when it ran, how it ended, its cost/ceiling, its `outputRefs` (what the
+  agent wrote, `[data-component="onboard-last-run-outputs"]`) and links to
+  the run page + session — instead of silently resetting to idle.
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances inside its **drawer**
@@ -1735,6 +1800,17 @@ inventory rather than one shared page-level contract:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
+  **⚑ W7-B5 (sessions-kinds-34) — the stage selector exists:** whenever the
+  session declares more than one stage (`data-session-selector-visible=
+  "true"` — an attribute that used to advertise a control that was never
+  rendered, leaving 4 of onboarding's 5 stages unreachable),
+  `nav[data-component="stage-selector"][role="tablist"]` renders one
+  `button[data-action="select-stage"][data-stage=<id>][role="tab"]
+  [aria-selected]` per declared stage in declared order (the active one also
+  carries `data-active="true"`), wired to the pure `selectStage`
+  (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
+  the transcript pane AND the artifact pane together; a shell refetch keeps
+  the operator's choice.
   **W7-A2 lifecycle bar (every kind — architect/project-brain and the
   panel-less community-refresh included):**
   `div[data-section="session-lifecycle"][data-lifecycle-state="working"|

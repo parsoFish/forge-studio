@@ -325,9 +325,13 @@ test('cancel: a live tracked pid whose argv carries the runId is signalled (kill
     assert.equal(body.killed, true);
 
     // The process must actually die (SIGTERM delivered to it / its group).
-    await new Promise((r) => setTimeout(r, 300));
+    // Bounded retry rather than one fixed sleep — under a loaded parallel
+    // test run the signal delivery + reap can take longer than 300ms.
     let alive = true;
-    try { process.kill(child.pid!, 0); } catch { alive = false; }
+    for (let i = 0; i < 40 && alive; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try { process.kill(child.pid!, 0); } catch { alive = false; }
+    }
     assert.equal(alive, false, 'the tracked child must be dead after cancel');
 
     const detail = await getJson(`/api/agents/runs/${encodeURIComponent(runId)}`);

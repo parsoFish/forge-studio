@@ -2485,6 +2485,41 @@ async function handleHttp(
         return;
       }
       const runId = `_agent-${slug}-${newRunStamp()}`;
+      // Guard symmetry, hoisted (W7-B5): the t0 marker below is now the FIRST
+      // thing that writes under `runId` (`createLogger` does
+      // `resolve(logsRoot, runId)` + `mkdirSync`), so the server-minted-id
+      // safety check this file applies to this SAME value at its other sites
+      // (spawnAgentDispatch, the run-status route, the staging mkdir below)
+      // has to run BEFORE it — otherwise the very first write is the one that
+      // skips the check. A server-minted id failing its own safety check is a
+      // server anomaly, not a client mistake, so it raises to the route's
+      // existing 500 path, never a 400.
+      if (!isSafeRunId(runId)) {
+        throw new MaterialsStagingError('refused to dispatch — unsafe server-minted run id');
+      }
+      // W7-B5 (agents-20 / agents-31 / sessions-kinds-24 sibling): the run's
+      // FIRST event lands the moment the id is minted — so `GET
+      // /api/events/<runId>` is 200 at t0 (no console 404 on the drawer's
+      // first fetch), the history route can attribute the run to its slug
+      // even if the child dies before runAgent's own `start` event, and the
+      // ceiling in force is durable from the moment it was accepted (a
+      // failed/still-running run can still surface it). `skill: slug` is the
+      // D4 identity field. Emitted BEFORE materials staging so the log reads
+      // in real order: dispatched → materials-staged → (child lifecycle).
+      createLogger(runId, ctx.logsRoot).emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: slug,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-run.dispatched',
+        metadata: {
+          agent_slug: slug,
+          ...(project !== undefined ? { project } : {}),
+          ...(costCeilingUsd !== undefined ? { kickoff_ceiling_usd: costCeilingUsd } : {}),
+        },
+      });
       // Staging happens AFTER runId is minted (it needs a run dir to write
       // into) and BEFORE spawnAgentDispatch (so the spawned agent process
       // can see the files). A `MaterialsStagingError` here is a SERVER-side
@@ -2498,19 +2533,14 @@ async function handleHttp(
         // `runId` is server-minted (just above) and `ctx.logsRoot` is
         // config-derived — both trusted, neither built from untrusted
         // input — so realizing the run's own directory here is safe.
-        // Still applying `isSafeRunId` defensively before the mkdir below,
-        // mirroring the SAME check this file already runs on this SAME
-        // value at its other two sites (spawnAgentDispatch ~line 1789,
-        // the run-status route ~line 1118) — guard-symmetry, so a future
-        // change to `newRunStamp()`/the slug regex can't quietly turn this
-        // THIRD site into the one that skips it. A server-minted id
-        // failing its own safety check is a server anomaly, not a client
-        // mistake, so it's raised as MaterialsStagingError -> the route's
-        // existing 500 path, never a 400.
-        if (!isSafeRunId(runId)) {
-          throw new MaterialsStagingError('materials: refused to stage — unsafe run id');
-        }
-        // This is the run's FIRST artifact: under FORGE_DRY_BRIDGE,
+        // `isSafeRunId(runId)` is already enforced immediately after the id
+        // is minted (see the hoisted guard above) — it used to live here,
+        // but W7-B5's t0 marker now writes under `runId` before this block
+        // runs, so the check had to move ahead of the FIRST write rather
+        // than sit in front of the second one. Same guard-symmetry intent
+        // (spawnAgentDispatch, the run-status route, this mkdir), one site
+        // earlier.
+        // This is the run's FIRST staged artifact: under FORGE_DRY_BRIDGE,
         // spawnAgentDispatch below never runs, so nothing else creates
         // `runDir` before `stageMaterials`/`resolveGuardedPath` need it to
         // already exist.
@@ -2543,27 +2573,6 @@ async function handleHttp(
           },
         });
       }
-      // W7-B5 (agents-20 / agents-31 / sessions-kinds-24 sibling): the run's
-      // FIRST event lands BEFORE the response — so `GET /api/events/<runId>`
-      // is 200 at t0 (no console 404 on the drawer's first fetch), the
-      // history route can attribute the run to its slug even if the child
-      // dies before runAgent's own `start` event, and the ceiling in force
-      // is durable from the moment it was accepted (a failed/still-running
-      // run can still surface it). `skill: slug` is the D4 identity field.
-      createLogger(runId, ctx.logsRoot).emit({
-        initiative_id: runId,
-        phase: 'orchestrator',
-        skill: slug,
-        event_type: 'log',
-        input_refs: [],
-        output_refs: [],
-        message: 'agent-run.dispatched',
-        metadata: {
-          agent_slug: slug,
-          ...(project !== undefined ? { project } : {}),
-          ...(costCeilingUsd !== undefined ? { kickoff_ceiling_usd: costCeilingUsd } : {}),
-        },
-      });
       spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd);
       // agents-20: start streaming this run's log to connected WS clients
       // now that events.jsonl exists (ensureTailFor no-ops on a missing

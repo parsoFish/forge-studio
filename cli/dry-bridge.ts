@@ -238,6 +238,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // session's tracked turn pid IF one is alive and provably ours (a
   // journey/dry seed never has one). No spawn, no remote, no daemon.
   { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/cancel', classification: 'exempt-local', reason: 'writes local session status (phase=cancelled) + SIGTERMs an owned live turn pid when one is tracked — no spawn/remote/daemon' },
+  { method: 'POST', route: '/api/agents/runs/:runId/cancel', classification: 'exempt-local', reason: 'W7-B5 (agents-30): appends a local agent-dispatch.cancelled marker event + SIGTERMs an owned live dispatch pid when one is tracked (ownership proven via the runId in its argv) — no spawn/remote/daemon' },
 
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },
