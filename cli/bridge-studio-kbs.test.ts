@@ -443,11 +443,17 @@ function seedProjectBrain(
 }
 
 test('R1-06 WI-3 group A red-pin: POST maintenance op=consolidate is accepted (200 ok:true + runId) — RED today (op not in the allow-list)', async () => {
-  const { status, json } = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+  // W7-B2: its OWN seeded KB — the mutating routes are mutually gated on the
+  // per-KB active job now, and a completed consolidate here would clear
+  // CONSOLIDATE_KB_ID's seeded findings before the ratchet test measures them.
+  seedProjectBrain(forgeRoot, 'r1-06-redpin', ['rp-one']);
+  const { status, json } = await post('/api/studio/kbs/r1-06-redpin/maintenance', { op: 'consolidate' });
   assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(json)}`);
   assert.equal(json['ok'], true, JSON.stringify(json));
   assert.equal(typeof json['runId'], 'string', `expected a string runId, got ${JSON.stringify(json)}`);
   assert.ok((json['runId'] as string).length > 0, 'runId must be non-empty');
+  const settled = await pollTerminalAt(bridgeUrl, 'r1-06-redpin', json['runId'] as string);
+  assert.notEqual(settled.state, 'running', 'red-pin consolidate never reached a terminal state within budget');
 });
 
 test('R1-06 WI-3 group A ratchet: op=consolidate drains the FULL scoped finding set to a terminal state — RED today', async () => {

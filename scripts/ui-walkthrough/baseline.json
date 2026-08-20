@@ -31,30 +31,6 @@
   },
   {
    "kind": "first-party-4xx",
-   "route": "/knowledge?id=cycles&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=forge-dev&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=gitpulse&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=trafficGame&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
    "route": "/projects/gitpulse",
    "detail": "409 [bridge]/api/studio/projects/gitpulse/contract-stages",
    "message": "first-party request answered 409"

@@ -63,6 +63,9 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // never used to look anything up — sessions here are project-scoped).
   const prefillProject = searchParams.get('project') ?? '';
   const prefillInitiative = searchParams.get('initiative');
+  // W7-B2 (knowledge-33): the KB screen's "Cleanup plan" button deep-links
+  // here with its KB pre-selected — ONE kickoff surface, same options.
+  const prefillKb = searchParams.get('kb') ?? '';
 
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
@@ -76,7 +79,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [ready, setReady] = useState(false);
 
   const [project, setProject] = useState(prefillProject);
-  const [kbId, setKbId] = useState('');
+  const [kbId, setKbId] = useState(prefillKb);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -110,6 +113,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
+        // W7-B2 (knowledge-26): pre-select the range's FIRST allowed tier as
+        // the default instead of leaving both radios unchecked (the started
+        // session then records the tier that was actually sent, never a
+        // literal "default" the operator can't interpret).
+        const tiers = allowedTiersFromCapability(cap);
+        if (tiers.length > 0) {
+          setModelTier((prev) => (prev === '' ? tiers[0] : prev));
+        }
       })
       .catch((err) => {
         // W6-B6 post-merge review (LOW): the prior `.catch(() => [])` on

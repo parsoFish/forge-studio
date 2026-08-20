@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode,
-  fetchKbIngestActivity,
+  fetchKbIngestActivity, fetchKbRuns,
 } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
 import { resolveActiveKbId } from '@/lib/knowledge-id-resolution';
@@ -16,7 +16,11 @@ import { ThemeList } from '@/components/studio/knowledge/ThemeList';
 import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
 import { KbDrainPanel } from '@/components/studio/knowledge/KbDrainPanel';
-import { KbMaintenance } from '@/components/studio/knowledge/KbMaintenancePanel';
+import { KbActionGroup } from '@/components/studio/knowledge/KbActionGroup';
+import { RecentRuns } from '@/components/RecentRuns';
+import { toKbRunLedgerRows } from '@/lib/kb-runs';
+import type { LedgerRow } from '@/lib/history-ledger';
+import type { KbDrainDisplayState } from '@/lib/kb-drain-view';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
@@ -70,6 +74,11 @@ function KnowledgePageInner() {
   // RULING 1 — ?theme= is a THIN ALIAS onto the existing ?node= selection
   // machinery below, restricted to theme-layer nodes (see pendingIsThemeRef).
   const themeParam   = searchParams.get('theme') ?? '';
+  // W7-B2 (knowledge-23): the create form lands here with the seeding
+  // session it spawned — a banner tells the operator instead of the session
+  // silently existing.
+  const seedSessionParam = searchParams.get('seedSession') ?? '';
+  const seedProjectParam = searchParams.get('seedProject') ?? '';
 
   // RULING 5 — tab state is URL-synced via ?tab=, deep-linkable like ?node=/?id=.
   const tabParam: TabId =
@@ -160,6 +169,37 @@ function KnowledgePageInner() {
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
+  // ── W7-B2: drain-panel ↔ action-group wiring + KB run history ────────────
+  // The drain panel reports its display state up (gates the action group
+  // instantly); the action group bumps attachNonce after dispatching so the
+  // panel re-attaches to the new run.
+  const [drainState, setDrainState] = useState<KbDrainDisplayState>('idle');
+  const [drainAttachNonce, setDrainAttachNonce] = useState(0);
+  const [kbRunRows, setKbRunRows] = useState<LedgerRow[]>([]);
+  const [kbRunsReady, setKbRunsReady] = useState(false);
+  const [kbRunsError, setKbRunsError] = useState<{ message: string; status?: number } | null>(null);
+  const [kbRunsKey, setKbRunsKey] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const refreshKbRuns = useCallback(() => setKbRunsKey((k) => k + 1), []);
+  useEffect(() => {
+    if (!currentId || tab !== 'health') return;
+    let cancelled = false;
+    setKbRunsReady(false);
+    fetchKbRuns(currentId).then((r) => {
+      if (cancelled) return;
+      setKbRunsReady(true);
+      setNowMs(Date.now());
+      if (r.ok) {
+        setKbRunRows(toKbRunLedgerRows(currentId, r.runs));
+        setKbRunsError(null);
+      } else {
+        setKbRunRows([]);
+        setKbRunsError(r.status !== undefined ? { message: r.error ?? 'read failed', status: r.status } : { message: r.error ?? 'read failed' });
+      }
+    }).catch(() => { if (!cancelled) setKbRunsReady(true); });
+    return () => { cancelled = true; };
+  }, [currentId, tab, kbRunsKey]);
+
   // ── Load KB list (on mount + Retry/bridge recovery via loadKey) ───────────
   useEffect(() => {
     const signal = { cancelled: false };
@@ -178,64 +218,79 @@ function KnowledgePageInner() {
     return () => { signal.cancelled = true; };
   }, [loadKey]);
 
-  // ── Resolve active KB id (from URL params → first KB) ────────────────────
-  // Priority: ?node= (or its ?theme= alias, RULING 1) drives KB resolution
-  //           via resolve-node endpoint.
-  //           ?id= selects a KB directly.
-  //           Falls back to first KB in list.
+  // ── Resolve ?node=/?theme= → owning KB (W7-B2, knowledge-30) ─────────────
+  // Deliberately its OWN effect, keyed on the URL params ALONE: the roster
+  // load (allKbs / kbListReady) used to re-run the ONE combined selection
+  // effect below mid-flight — its cleanup cancelled the first resolve-node
+  // fetch and the re-run issued a second, identical one. The id-less resolve
+  // needs nothing from the roster, so roster churn must never touch it.
+  // ?node= takes priority; ?theme= is a thin alias onto the SAME machinery
+  // when ?node= is absent — no parallel selection effect (RULING 1).
   useEffect(() => {
-    // ?node= takes priority; ?theme= is a thin alias onto the SAME machinery
-    // when ?node= is absent — no parallel selection effect (RULING 1).
     const pendingParam = nodeParam || themeParam;
-    if (pendingParam) {
-      // Resolve which KB owns this node, then set it as active. Store the
-      // slug so the detail-load effect can select it. This path is
-      // pre-existing/unconditionally-trusted (unaffected by W6-P4) — always
-      // confirmed the instant currentId is set here.
-      pendingNodeRef.current = pendingParam;
-      pendingIsThemeRef.current = !nodeParam && !!themeParam;
-      setIdConfirmed(true);
-      if (idParam) {
-        // Both ?id= and ?node=/?theme= given: the id still goes through the
-        // roster check (W7-FIX-A4 / W7A4-07 — the not-found path applies
-        // whether or not a node is queued); a validated id just queues the
-        // node selection.
-        const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
-        if (resolution.source === 'fallback') {
-          pendingNodeRef.current = null;
-          pendingIsThemeRef.current = false;
-          setNotFound({ kind: 'knowledge base', id: idParam });
-          setReady(true);
-          return;
-        }
+    // With ?id= present the roster-keyed effect below owns selection (the id
+    // still goes through the roster check; the node is only QUEUED there).
+    if (!pendingParam || idParam) return;
+    // Store the slug so the detail-load effect can select it. This path is
+    // pre-existing/unconditionally-trusted (unaffected by W6-P4) — always
+    // confirmed the instant currentId is set here.
+    pendingNodeRef.current = pendingParam;
+    pendingIsThemeRef.current = !nodeParam && !!themeParam;
+    setIdConfirmed(true);
+    const signal = { cancelled: false };
+    resolveKbNode(pendingParam).then((result) => {
+      if (signal.cancelled) return;
+      if (result?.kbId) {
         setNotFound(null);
-        setIdConfirmed(resolution.source !== 'url-optimistic');
-        setCurrentId(idParam);
-        return;
-      }
-      // Only ?node=/?theme= given: call resolve-node to find the owning KB.
-      const signal = { cancelled: false };
-      resolveKbNode(pendingParam).then((result) => {
-        if (signal.cancelled) return;
-        if (result?.kbId) {
-          setNotFound(null);
-          setCurrentId(result.kbId);
-        } else {
-          // W7-A4 (knowledge-30): no KB owns this node — say so; never fall
-          // back to the first KB with nothing selected.
-          pendingNodeRef.current = null;
-          pendingIsThemeRef.current = false;
-          setNotFound({ kind: 'theme', id: pendingParam });
-          setReady(true);
-        }
-      }).catch(() => {
-        if (signal.cancelled) return;
+        setCurrentId(result.kbId);
+      } else {
+        // W7-A4 (knowledge-30): no KB owns this node — say so; never fall
+        // back to the first KB with nothing selected.
         pendingNodeRef.current = null;
         pendingIsThemeRef.current = false;
         setNotFound({ kind: 'theme', id: pendingParam });
         setReady(true);
-      });
-      return () => { signal.cancelled = true; };
+      }
+    }).catch(() => {
+      if (signal.cancelled) return;
+      pendingNodeRef.current = null;
+      pendingIsThemeRef.current = false;
+      setNotFound({ kind: 'theme', id: pendingParam });
+      setReady(true);
+    });
+    return () => { signal.cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idParam, nodeParam, themeParam]);
+
+  // ── Resolve active KB id (from URL params → first KB) ────────────────────
+  // Priority: ?node= (or its ?theme= alias) — handled by the effect ABOVE
+  //           when no ?id= accompanies it.
+  //           ?id= selects a KB directly (and queues any ?node= given too).
+  //           Falls back to first KB in list.
+  useEffect(() => {
+    const pendingParam = nodeParam || themeParam;
+    if (pendingParam) {
+      // Node-only deep link: the resolve-node effect above owns this case.
+      if (!idParam) return;
+      // Both ?id= and ?node=/?theme= given: the id still goes through the
+      // roster check (W7-FIX-A4 / W7A4-07 — the not-found path applies
+      // whether or not a node is queued); a validated id just queues the
+      // node selection.
+      pendingNodeRef.current = pendingParam;
+      pendingIsThemeRef.current = !nodeParam && !!themeParam;
+      setIdConfirmed(true);
+      const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
+      if (resolution.source === 'fallback') {
+        pendingNodeRef.current = null;
+        pendingIsThemeRef.current = false;
+        setNotFound({ kind: 'knowledge base', id: idParam });
+        setReady(true);
+        return;
+      }
+      setNotFound(null);
+      setIdConfirmed(resolution.source !== 'url-optimistic');
+      setCurrentId(idParam);
+      return;
     }
     if (idParam) {
       // W6-P4 review fix #4: the DECISION is a pure function
@@ -395,10 +450,26 @@ function KnowledgePageInner() {
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
       data-fetch-status={kbsError || kbDetailError ? 'error' : kbListReady ? 'ok' : 'loading'}
+      {...(kbDetail?.health ? { 'data-health-ready': 'true' } : {})}
       {...(selectedNode ? { 'data-selected-node': selectedNode } : {})}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}
     >
       <StudioNav />
+
+      {/* W7-B2 (knowledge-23): the just-created KB's seeding session, named
+          instead of silently spawned. */}
+      {seedSessionParam && (
+        <div data-component="kb-seed-banner" style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
+          This knowledge base was created and a seeding session is running for it —{' '}
+          <Link
+            data-action="open-seed-session"
+            href={`/sessions/project-brain/${encodeURIComponent(seedSessionParam)}${seedProjectParam ? `?project=${encodeURIComponent(seedProjectParam)}` : ''}`}
+            style={{ color: 'var(--c-kb)', fontWeight: 600 }}
+          >
+            watch the seeding session →
+          </Link>
+        </div>
+      )}
 
       {/* Header bar */}
       <div style={{
@@ -437,18 +508,9 @@ function KnowledgePageInner() {
 
         <div style={{ flexGrow: 1 }} />
 
-        {/* K3: manual brain maintenance */}
-        {currentId && (
-          <KbMaintenance
-            kbId={currentId}
-            onMaintained={handlePinned}
-            onDeleted={() => {
-              setCurrentId('');
-              setKbDetail(null);
-              fetchStudioKbs().then((ks) => setAllKbs(ks)).catch(() => {});
-            }}
-          />
-        )}
+        {/* W7-B2 (knowledge-19/24): the maintenance buttons left this header —
+            they are real agent work, not chrome, and live in the ONE gated
+            action group on the Health tab now (KbActionGroup). */}
 
         {/* "maintained by agents" pill */}
         <div
@@ -558,16 +620,54 @@ function KnowledgePageInner() {
           server-side; the panel is a pure observer of that server state. */}
       {tab === 'health' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* W7-B2: the ONE action group (knowledge-05/32) sits first; the
+              drain panel below it is the pure observer of whatever run is
+              active-or-latest. */}
           {currentId && (
-            <KbDrainPanel kbId={currentId} onChanged={handlePinned} />
+            <KbActionGroup
+              kbId={currentId}
+              drainState={drainState}
+              onDrainDispatched={() => setDrainAttachNonce((n) => n + 1)}
+              onMaintained={() => { handlePinned(); refreshKbRuns(); }}
+              onDeleted={() => {
+                setCurrentId('');
+                setKbDetail(null);
+                fetchStudioKbs().then((ks) => setAllKbs(ks)).catch(() => {});
+              }}
+            />
+          )}
+          {currentId && (
+            <KbDrainPanel
+              kbId={currentId}
+              attachNonce={drainAttachNonce}
+              onDisplayStateChange={setDrainState}
+              onChanged={() => { handlePinned(); refreshKbRuns(); }}
+            />
           )}
           <GuidancePanel
             selectedArticle={article}
             kbId={currentId}
             onPinned={handlePinned}
+            pendingGuidance={kbDetail?.guidance ?? []}
           />
           {kbDetail?.health && (
             <KbHealth health={kbDetail.health} />
+          )}
+          {/* W7-B2 (knowledge-20): every drain / consolidate / cleanup run
+              this KB has ever had — the shared RecentRuns widget over
+              GET /api/studio/kbs/:id/runs. */}
+          {currentId && (
+            <div id="kb-recent-runs">
+              <RecentRuns
+                section="kb-recent-runs"
+                title="Recent runs for this KB"
+                ready={kbRunsReady}
+                rows={kbRunRows}
+                nowMs={nowMs}
+                error={kbRunsError}
+                onRetry={refreshKbRuns}
+              />
+            </div>
           )}
         </div>
       )}
@@ -625,7 +725,18 @@ function IngestActivityPanel({ kbId }: { kbId: string }) {
         <FetchErrorState what="ingest activity" error={ingestError.message} status={ingestError.status} onRetry={() => setRetryKey((k) => k + 1)} compact />
       ) : null}
       {!loading && !ingestError && events.length === 0 && (
-        <div style={{ color: 'var(--faint)', fontSize: 12.5, marginTop: 8 }}>No ingest activity recorded yet.</div>
+        // W7-B2 (knowledge-21): the honest WHY + the action that would
+        // populate this tab, instead of a bare empty line the operator can't
+        // interpret (this feed is structurally empty until a reflection pass
+        // ingests into a KB — ingest stays reflection-only by design).
+        <div data-component="ingest-empty-explainer" style={{ color: 'var(--faint)', fontSize: 12.5, marginTop: 8, maxWidth: 640, lineHeight: 1.6 }}>
+          No ingest activity recorded — ingest events are written only when a <strong>reflection pass</strong>{' '}
+          (the phase that closes a development cycle) distils that cycle&apos;s learnings into this KB, and no
+          retained cycle has run one against it yet. Complete a cycle on{' '}
+          <Link href="/flows" style={{ color: 'var(--dim)' }}>a flow run</Link> and its reflection will appear here;
+          day-to-day maintenance (drain / consolidate / cleanup) is tracked on the{' '}
+          <Link href={`/knowledge?id=${encodeURIComponent(kbId)}&tab=health#kb-recent-runs`} style={{ color: 'var(--dim)' }}>Health tab&apos;s run history</Link> instead.
+        </div>
       )}
       {events.map((e, i) => (
         <div
@@ -645,8 +756,8 @@ function IngestActivityPanel({ kbId }: { kbId: string }) {
   );
 }
 
-// KbMaintenance (K3, manual brain lint/index-refresh/consolidate/cleanup/
-// delete) moved to components/studio/knowledge/KbMaintenancePanel.tsx
-// (W6-B14) — a page-route file can only export the reserved Next.js route
-// symbols, so a component this task needs a standalone render-pin test for
-// has to live outside this file (mirrors RunPanel.tsx's own D12 extraction).
+// KbMaintenance (K3) → KbActionGroup (W7-B2): the maintenance strip became
+// the ONE gated action group on the Health tab
+// (components/studio/knowledge/KbActionGroup.tsx) — Drain to green ·
+// Consolidate · Cleanup plan · Refresh this KB's index · Delete, mutually
+// gated on the server's own per-KB active-job fact.

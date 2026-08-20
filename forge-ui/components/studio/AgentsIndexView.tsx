@@ -17,17 +17,18 @@
  *     UNCHANGED from `LibraryCard.tsx` (D2 — the SAME card `/library`
  *     already renders for its own agents pillar), plus a "+ New agent" CTA
  *     to `/agents/new`.
- *   - `recent-agent-runs` — `HistoryLedger` (`./HistoryLedger.tsx`), reused
- *     UNCHANGED (D2), over the merged, newest-first, bounded ledger
- *     `lib/agents-index.ts` builds by fetching each agent's OWN
- *     already-shipped `GET /api/agents/:slug/history` in parallel — there
- *     is no aggregate "all agents" bridge route yet (out of scope for this
- *     lane; see `lib/agents-index.ts`'s header for the follow-up note).
+ *   - `recent-agent-runs` — the shared `RecentRuns` widget
+ *     (`components/RecentRuns.tsx`, W7-B2's extraction of this very
+ *     section; the KB health tab renders the same one), over the
+ *     newest-first, bounded ledger `lib/agents-index.ts` reads in ONE call
+ *     to `GET /api/agents/runs/recent`. W7-B5 (agents-03/04/39) landed that
+ *     aggregate route: the per-agent fan-out this header used to describe
+ *     is gone, along with the arbitrary-node attribution that published one
+ *     node's $0.00 as a failed run's cost.
  *
  * `ready` / `recentRunsReady` are two INDEPENDENT facts, not one shared
  * "loading" flag — the roster and the runs ledger are two different
- * fetches with different latencies (the runs fetch fans out to N parallel
- * per-agent requests), and collapsing them would either show a stale
+ * fetches with different latencies, and collapsing them would either show a stale
  * "loading" runs ledger after the roster is already interactive, or gate
  * the whole page behind the slower of the two for no reason. Each section
  * renders its own honest loading / empty state independently — never a
@@ -38,9 +39,8 @@
 
 import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
-import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { RecentRuns } from '@/components/RecentRuns';
 import { FetchErrorState } from '@/components/FetchErrorState';
-import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import type { Agent } from '@/lib/studio-client';
 import type { LedgerRow } from '@/lib/history-ledger';
 
@@ -154,50 +154,25 @@ export function AgentsIndexView({
 
         <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '44px 0 40px' }} />
 
-        {/* ===== RECENT AGENT RUNS ===== */}
-        {/* W7-B5 (agents-40): the section publishes its own count + the
-            fetch bound, and offers "view all" while truncation is possible
-            — a silently-capped list is a lie of omission. */}
-        <section
-          className="lib-section"
-          data-section="recent-agent-runs"
-          data-recent-runs-unresolved={recentRunsReady ? recentRunsUnresolved : 0}
-          data-count={recentRunsReady ? recentRuns.length : 0}
-          {...(recentRunsLimit !== undefined ? { 'data-limit': recentRunsLimit } : {})}
-          style={{ marginBottom: 40 }}
-        >
-          <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-              Recent agent runs
-            </span>
-            <span style={{ flex: 1 }} />
-            {recentRunsReady && onShowAllRecentRuns && (
-              <button
-                type="button"
-                className="btn btn-sm"
-                data-action="recent-runs-show-all"
-                onClick={onShowAllRecentRuns}
-              >
-                View all runs
-              </button>
-            )}
-          </div>
-
-          {!recentRunsReady ? (
-            <div
-              data-component="recent-agent-runs-loading"
-              className="muted"
-              style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}
-            >
-              Loading recent runs…
-            </div>
-          ) : (
-            <>
-              <UnresolvedHistoriesNotice unresolved={recentRunsUnresolved} total={recentRunsTotal} onRetry={onRetryRecentRuns} />
-              <HistoryLedger rows={recentRuns} nowMs={nowMs} />
-            </>
-          )}
-        </section>
+        {/* ===== RECENT AGENT RUNS — the shared RecentRuns widget (W7-B2
+            extraction; the KB health tab consumes the same component). The
+            section token stays `recent-agent-runs` (this page's established
+            DOM contract). W7-B5 (agents-40) threads the fetch bound + the
+            "view all" refetch through the SAME component rather than forking
+            a second copy of the section — a silently-capped list is a lie of
+            omission wherever it renders. ===== */}
+        <RecentRuns
+          section="recent-agent-runs"
+          title="Recent agent runs"
+          ready={recentRunsReady}
+          rows={recentRuns}
+          nowMs={nowMs}
+          unresolved={recentRunsUnresolved}
+          total={recentRunsTotal}
+          onRetryUnresolved={onRetryRecentRuns}
+          {...(recentRunsLimit !== undefined ? { limit: recentRunsLimit } : {})}
+          onShowAll={onShowAllRecentRuns}
+        />
 
       </div>
     </main>

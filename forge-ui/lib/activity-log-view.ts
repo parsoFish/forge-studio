@@ -52,7 +52,13 @@ export type ActivityRowKind =
   | 'thinking'
   | 'thinking-redacted'
   | 'reasoning'
-  | 'capped';
+  | 'capped'
+  /** W7-B2 (knowledge-01): a job's own per-transition progress line —
+   *  `event_type:'log'` with `metadata.kind:'progress'` (the kb-drain loop
+   *  emits these: round-start / auto / turn-start / turn-end / gated /
+   *  cancelled). Opt-in per event, so plain operator log lines still render
+   *  nothing. */
+  | 'progress';
 
 export type ActivityRowClamp = {
   /** The first `ACTIVITY_THINKING_CLAMP_CHARS` characters of `text`. */
@@ -110,6 +116,15 @@ function toolRow(ev: EventLogEntry): ActivityRow {
 function logRow(ev: EventLogEntry): ActivityRow | null {
   const meta = ev.metadata ?? {};
   const kind = meta['kind'];
+  if (kind === 'progress') {
+    // Strip a `kb-drain.`-style producer prefix down to the transition name
+    // for the tag chip; the full message stays as the row text.
+    const message = ev.message ?? '';
+    const dot = message.indexOf('.');
+    const paren = message.indexOf(' (');
+    const tag = dot >= 0 ? message.slice(dot + 1, paren > dot ? paren : undefined) : 'progress';
+    return { key: ev.event_id, kind: 'progress', tag: tag || 'progress', text: message, clamp: null };
+  }
   if (kind !== 'thinking' && kind !== 'reasoning') return null;
   const message = ev.message ?? '';
   const tag = kind === 'thinking' ? 'think' : 'reason';

@@ -9,9 +9,12 @@ interface Props {
   kbId: string;
   /** Called on successful pin so the parent can re-fetch the KB graph */
   onPinned?: () => void;
+  /** W7-B2 (knowledge-29): the pinned notes still awaiting an ingest pass
+   *  (from the KB detail response) — the visible queue the pin feeds. */
+  pendingGuidance?: Array<{ file: string; at: string }>;
 }
 
-export function GuidancePanel({ selectedArticle, kbId, onPinned }: Props) {
+export function GuidancePanel({ selectedArticle, kbId, onPinned, pendingGuidance = [] }: Props) {
   const [text, setText] = useState('');
   const [pinning, setPinning] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -83,7 +86,23 @@ export function GuidancePanel({ selectedArticle, kbId, onPinned }: Props) {
         )}
         {pinned && (
           <div style={{ marginTop: 5, fontSize: 12, color: 'var(--c-kb)' }}>
-            Guidance pinned — will appear in graph and be consumed on the next ingest pass.
+            {/* W7-B2 (knowledge-29): honest copy — the note is visible in the
+                graph NOW; consumption happens only if/when a reflection pass
+                ingests into this KB, which this install may never have run. */}
+            Guidance pinned — it appears in the graph now, and is consumed if a reflection
+            pass ingests into this KB (see the queue below until then).
+          </div>
+        )}
+        {pendingGuidance.length > 0 && (
+          <div data-component="guidance-pending" data-guidance-pending-count={pendingGuidance.length} style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>
+              Pinned — awaiting ingest ({pendingGuidance.length})
+            </div>
+            {pendingGuidance.map((g) => (
+              <div key={g.file} data-guidance-note={g.file} style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)', padding: '2px 0' }}>
+                {g.at}
+              </div>
+            ))}
           </div>
         )}
         {/* W6-SW-3 (sweep C4#3): with no kbId (zero-KB roster) the Pin button
@@ -98,6 +117,7 @@ export function GuidancePanel({ selectedArticle, kbId, onPinned }: Props) {
           <button
             className="btn btn-primary"
             id="pin-guidance-btn"
+            data-action="pin-guidance"
             style={{ width: '100%' }}
             onClick={() => { void handlePin(); }}
             disabled={!kbId || !text.trim() || pinning}

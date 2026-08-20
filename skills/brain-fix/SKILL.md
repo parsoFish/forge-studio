@@ -39,6 +39,7 @@ If the fix is genuinely ambiguous (e.g. a broken link with no unambiguous target
 - Do not restructure sections, rewrite prose, or clean up unrelated issues.
 - Do not create new files.
 - After the edit, stop — the caller will re-lint to verify.
+- **Drain-mode gate (W7-B2, orch-01):** when you run inside drain-to-green, the caller enforces a structural-only rule in code — frontmatter, link-target, and index-page edits land directly; any change to body PROSE is reverted and parked as a kb-cleanup draft the operator approves with a diff. Prefer the smallest structural repair; if only a prose rewrite can clear the finding, make your best single proposal knowing it becomes a reviewable draft, never a silent edit.
 
 ## Per-kind guidance
 
