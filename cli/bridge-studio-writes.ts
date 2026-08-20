@@ -17,7 +17,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
 import { classifyClause } from './preflight-resolve.ts';
@@ -197,15 +197,22 @@ function checkContractArtifactContainment(projectRoot: string): void {
 export function scaffoldContractArtifacts(projectRoot: string, name: string): string[] {
   const created: string[] = [];
 
-  // git init if the dir is not already a git work tree.
-  let isGit = false;
+  // git init unless the dir is its OWN git work tree. W7-B6 (projects-11):
+  // the old probe (`rev-parse --is-inside-work-tree`) reports true for ANY
+  // dir inside an enclosing repo — `projects/` lives inside the forge work
+  // tree, so every freshly onboarded project silently inherited FORGE's own
+  // git repo (C2/C6 then evaluated against the wrong repo, and dev-loop
+  // branches/commits would land in forge's history). The honest question is
+  // "is projectRoot ITSELF the work-tree root?" — compare `--show-toplevel`
+  // against realpath(projectRoot).
+  let isOwnRepo = false;
   try {
-    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: projectRoot, stdio: 'ignore' });
-    isGit = true;
+    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+    isOwnRepo = realpathSync(toplevel) === realpathSync(projectRoot);
   } catch {
-    isGit = false;
+    isOwnRepo = false; // not in any repo at all — init below
   }
-  if (!isGit) {
+  if (!isOwnRepo) {
     try {
       execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
       created.push('.git/');
