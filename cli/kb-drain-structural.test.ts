@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { classifyKbEdit, buildUnifiedDiff, snapshotKbFiles, diffKbSnapshot } from './kb-drain-structural.ts';
 import { runKbDrain } from './bridge-studio-kb-drain.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
+import { deriveKbActiveJob } from './kb-job-state.ts';
 import type { Finding } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
@@ -283,7 +284,7 @@ test('runKbDrain — structural edit within the KB dir is applied, drain reaches
 // approveKbCleanup — the draft-apply path
 // ---------------------------------------------------------------------------
 
-function makeDraftSessionRoot(opts: { targetRel: string }): {
+function makeDraftSessionRoot(opts: { targetRel: string; blockWritesAt?: string }): {
   root: string; projectsRoot: string; sid: string; themeFile: string;
 } {
   const root = mkdtempSync(join(tmpdir(), 'kb-draft-apply-'));
@@ -310,6 +311,10 @@ function makeDraftSessionRoot(opts: { targetRel: string }): {
     kb_id: 'dkb',
     draft_apply: [{ file: opts.targetRel, draft: 'drafts/0.md' }],
   }, null, 2));
+  // A REGULAR FILE where the draft target's parent directory should be, so
+  // the apply's own `mkdirSync(dirname(target))` throws ENOTDIR — a real,
+  // un-mocked write failure inside the queued callback.
+  if (opts.blockWritesAt) writeFileSync(join(root, opts.blockWritesAt), 'not a directory\n');
   mkdirSync(join(root, '_logs'), { recursive: true });
   return { root, projectsRoot, sid, themeFile };
 }
@@ -345,6 +350,85 @@ test('approveKbCleanup — a traversal-shaped draft target is refused', async ()
     assert.equal(outcome.ok, false, JSON.stringify(outcome));
     assert.ok(!existsSync(join(root, '..', 'outside.md')), 'nothing may be written outside the root');
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 code-review round — approveKbCleanup's two dispatch paths.
+// ---------------------------------------------------------------------------
+
+test('approveKbCleanup — a draft WRITE failure is never swallowed: ok:false, session not marked applied', async () => {
+  // `enqueueConsolidate` always RESOLVES (its queue continuation swallows the
+  // run's own rejection by contract), so a callback with no internal error
+  // handling made every write failure vanish: the session was stamped
+  // phase:'applied' and ok:true returned while nothing had landed on disk.
+  const { root, projectsRoot, sid } = makeDraftSessionRoot({
+    targetRel: 'brain/dkb/blocked/x.md',
+    blockWritesAt: 'brain/dkb/blocked',
+  });
+  try {
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    assert.equal(outcome.ok, false, JSON.stringify(outcome));
+    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as {
+      phase: string; apply_error?: string;
+    };
+    assert.notEqual(status.phase, 'applied', 'a failed apply must NEVER be recorded as applied');
+    assert.equal(status.phase, 'awaiting-approval', 'the session stays approvable so the operator can retry after the fix');
+    assert.ok(typeof status.apply_error === 'string' && status.apply_error.length > 0, 'the failure must be recorded on the session');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('approveKbCleanup — a draft target that IS the kb brain dir itself is refused', async () => {
+  const { root, projectsRoot, sid } = makeDraftSessionRoot({ targetRel: 'brain/dkb' });
+  try {
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    assert.equal(outcome.ok, false, JSON.stringify(outcome));
+    assert.equal(outcome.ok === false ? outcome.status : 0, 422);
+    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'awaiting-approval', 'a pre-claim refusal leaves the session approvable');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY, so deriveKbActiveJob sees it', async () => {
+  // Without the synchronous stake-out, runBrainConsolidateNow only creates
+  // `_logs/_brainfix-<runId>/` at its own terminal write — minutes of real
+  // agent turns during which the knowledge-05 mutual gate reported NO active
+  // job for this KB, so index/delete/drain were all still dispatchable
+  // against the files this run was editing.
+  const root = mkdtempSync(join(tmpdir(), 'kb-approve-consolidate-'));
+  const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  try {
+    const brainDir = join(root, 'brain', 'ckb');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: ckb\nname: ckb\nbinding: { kind: unique }\ndesc: consolidate fixture.\n');
+    mkdirSync(join(root, '_logs'), { recursive: true });
+
+    const projectsRoot = join(root, 'projects');
+    const sid = '2026-08-21T09-00-00-w7b2rev';
+    const sessionDir = join(projectsRoot, '.kb-ckb', '_kb-cleanup', sid);
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({
+      session_id: sid, project: '.kb-ckb', phase: 'awaiting-approval', kb_id: 'ckb',
+    }, null, 2));
+
+    // NOT awaited: everything up to the first `await` runs in this tick, which
+    // is exactly the window the gate was blind in.
+    const pending = approveKbCleanup(root, projectsRoot, ['.kb-ckb', '_kb-cleanup', sid]);
+    const job = deriveKbActiveJob(root, 'ckb');
+    assert.ok(job, 'the just-dispatched consolidate must be visible to deriveKbActiveJob immediately');
+    assert.equal(job.kind, 'consolidate');
+
+    const outcome = await pending;
+    assert.equal(outcome.ok, true, JSON.stringify(outcome));
+    assert.equal(job.runId, outcome.ok === true ? outcome.runId : '', 'the visible job is THIS dispatch, not some other run');
+  } finally {
+    process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
     rmSync(root, { recursive: true, force: true });
   }
 });
