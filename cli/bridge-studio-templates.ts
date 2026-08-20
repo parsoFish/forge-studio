@@ -205,11 +205,15 @@ export async function handleStudioTemplatesRoutes(
   }
 
   // ---- PUT / DELETE /api/studio/templates/:id (W7-B4) ----------------------
+  // One dispatch line per method (not a combined `||`) so the dry-bridge
+  // coverage scanner (cli/dry-bridge-coverage.test.ts) derives BOTH
+  // candidates — its explicit-method regex reads only the first
+  // `method ===` on an if-line. Same convention as the skills/hooks files.
   const writeMatch = url.match(/^\/api\/studio\/templates\/([^/]+)$/);
-  if (writeMatch && (method === 'PUT' || method === 'DELETE')) {
+  const handleTemplateMutation = async (rawId: string): Promise<boolean> => {
     try {
       let id: string;
-      try { id = decodeIdSegment(writeMatch[1]); } catch { sendJson(res, 400, { error: 'invalid template id — malformed URL encoding' }, origin); return true; }
+      try { id = decodeIdSegment(rawId); } catch { sendJson(res, 400, { error: 'invalid template id — malformed URL encoding' }, origin); return true; }
       const invalidId = invalidTemplateIdReason(id);
       if (invalidId) { sendJson(res, 400, { error: invalidId }, origin); return true; }
 
@@ -258,7 +262,9 @@ export async function handleStudioTemplatesRoutes(
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
-  }
+  };
+  if (writeMatch && method === 'PUT') return handleTemplateMutation(writeMatch[1]);
+  if (writeMatch && method === 'DELETE') return handleTemplateMutation(writeMatch[1]);
 
   if (method !== 'GET') return false;
 
