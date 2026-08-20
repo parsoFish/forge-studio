@@ -101,7 +101,7 @@ import {
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
-import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
+import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
 import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { isDryBridge } from './dry-bridge.ts';
@@ -341,9 +341,10 @@ export type KbRunRow = {
 };
 
 /** One consolidate run's terminal facts, read from its own events.jsonl
- *  (the same file `readBrainFixState` in cli/bridge-studio-kbs.ts reads —
- *  re-parsed locally rather than exported across the module boundary, per
- *  that file's own "never imports ./ui-bridge" convention). */
+ *  through the SHARED readers in cli/kb-job-state.ts (W7-B2 code-review
+ *  round) — the same 'end'=done / 'error'=failed definition the active-job
+ *  gate uses, so the RecentRuns status and the gate can never disagree about
+ *  whether a run has finished. */
 function readConsolidateRunRow(forgeRoot: string, runId: string): { status: string; costUsd: number | null; when: string; detail: string | null } {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
   let raw: string | null = null;
@@ -356,31 +357,19 @@ function readConsolidateRunRow(forgeRoot: string, runId: string): { status: stri
   } catch {
     raw = null;
   }
-  let status = 'running';
+  const events = parseKbRunEvents(raw ?? '');
+  const terminal = terminalKbRunEvent(events);
+  const when = firstKbRunEventTs(events) ?? '';
   let costUsd: number | null = null;
-  let when = '';
   let detail: string | null = null;
-  for (const line of (raw ?? '').split('\n')) {
-    if (!line.trim()) continue;
-    let ev: { event_type?: string; ts?: string; cost_usd?: number; metadata?: Record<string, unknown> };
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!when && typeof ev.ts === 'string') when = ev.ts;
-    if (ev.event_type === 'end') {
-      status = 'done';
-      if (typeof ev.cost_usd === 'number') costUsd = ev.cost_usd;
-      const md = ev.metadata ?? {};
-      if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
-        detail = `cleared ${md['clearedCount']}/${md['total']}`;
-      }
-    } else if (ev.event_type === 'error') {
-      status = 'failed';
+  if (terminal?.status === 'done') {
+    if (typeof terminal.event.cost_usd === 'number') costUsd = terminal.event.cost_usd;
+    const md = terminal.event.metadata ?? {};
+    if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
+      detail = `cleared ${md['clearedCount']}/${md['total']}`;
     }
   }
-  return { status, costUsd, when, detail };
+  return { status: terminal?.status ?? 'running', costUsd, when, detail };
 }
 
 /** Best-effort ISO stamp from a session id shaped `2026-08-18T12-54-32-…`
