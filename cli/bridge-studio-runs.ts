@@ -749,6 +749,24 @@ export async function applyPlanVerdict(
 export const INIT_ID_RE = /^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
+ * W7-B7 (artifact-plan-18): recover the initiative id from a run handle.
+ * Run ids posted to the gate route are routinely CYCLE ids
+ * (`<timestamp>_INIT-…` — the monitor pill and GateBar both post the `?run=`
+ * handle); `applyReviewVerdict` validates INIT_ID_RE, so the embedded id is
+ * recovered by stripping the `<timestamp>_` prefix when the tail matches the
+ * manifest id convention. Anything unrecoverable is returned verbatim — the
+ * downstream 400 is unchanged. Pure; mirrors the client's
+ * `effectiveInitiativeId` (forge-ui/lib/initiative-id.ts) as defence in depth.
+ */
+export function recoverInitiativeId(runId: string): string {
+  if (INIT_ID_RE.test(runId)) return runId;
+  const idx = runId.indexOf('_');
+  if (idx < 0) return runId;
+  const tail = runId.slice(idx + 1);
+  return INIT_ID_RE.test(tail) ? tail : runId;
+}
+
+/**
  * Handle Forge Studio POST write routes (run start, run resume, gate verdicts).
  *
  * Routes:
@@ -889,10 +907,12 @@ export async function handleStudioPostRoutes(
     const verdict = typeof b['verdict'] === 'string' ? b['verdict'] : '';
 
     if (gateId === 'verdict') {
-      // Map to applyReviewVerdict: runId is the initiativeId
+      // Map to applyReviewVerdict. W7-B7 (artifact-plan-18): runId is the
+      // UI's run handle — routinely a CYCLE id — so recover the embedded
+      // initiative id before the INIT_ID_RE check 400s it.
       const kind = verdict === 'approve' || verdict === 'send-back' ? verdict : (b['kind'] as string | undefined);
       await applyReviewVerdict(req, res, ctx, {
-        initiativeId: runId,
+        initiativeId: recoverInitiativeId(runId),
         kind: (kind as 'approve' | 'send-back') ?? 'send-back',
         rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
         acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])

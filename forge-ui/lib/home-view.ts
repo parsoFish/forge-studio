@@ -21,6 +21,8 @@ import type { Run, Flow, Agent, Project, Kb, KbLintSummary, SessionIndexRow } fr
 import type { ProjectAttentionItem } from './bridge-client';
 import type { LedgerRow } from './history-ledger';
 import { mergeRecentAgentRuns } from './agents-index';
+import { sessionKindAgent } from './session-kind-meta';
+import { KB_SEEDING_ANCHOR_PREFIX } from './session-shell-view';
 
 export type HomeStatus = 'active' | 'gated' | 'idle';
 export type HomeHexKind = 'flow' | 'agent' | 'project' | 'kb';
@@ -93,50 +95,119 @@ export function deriveFlowStatus(flowId: string, runs: Run[]): HomeStatus {
   return 'idle';
 }
 
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-14) — interactive sessions are a live-status source.
+//
+// Post-wave-6, sessions are the NORMAL way work happens, yet the
+// constellation was wired exclusively to the flow-run model: 13 in-flight
+// sessions with agents actively running read "0 live / all idle". These
+// helpers fold the already-fetched sessions index (the SAME
+// `fetchStudioSessions()` read Home already makes) into hex derivation —
+// through the session's own bridge-derived `state`/`needsYou`
+// (cli/bridge-studio-lifecycle.ts, never re-derived here) and the
+// yaml-parity-pinned kind→agent mapping (`session-kind-meta.ts`).
+// ---------------------------------------------------------------------------
+
+/** What one session contributes to a hex it anchors on: a `working` runner
+ *  is live activity ('active'); a session waiting on the OPERATOR —
+ *  awaiting-operator, crashed, stalled (`needsYou`, the bridge's truthful
+ *  verdict) — is attention ('gated'); anything else (terminal, unknown)
+ *  contributes NOTHING — fail closed, never a fabricated light. */
+function sessionContribution(s: SessionIndexRow): HomeStatus | null {
+  if (s.terminal || s.state === 'terminal') return null;
+  if (s.state === 'working') return 'active';
+  if (s.needsYou) return 'gated';
+  return null;
+}
+
+/** 'active' beats 'gated' beats 'idle' — the SAME precedence
+ *  `deriveFlowStatus` established (an actively-executing thing is the more
+ *  urgent fact than a parked one). */
+function strongerStatus(a: HomeStatus, b: HomeStatus): HomeStatus {
+  if (a === 'active' || b === 'active') return 'active';
+  if (a === 'gated' || b === 'gated') return 'gated';
+  return 'idle';
+}
+
+/** Fold every matching session's contribution into one status. */
+function sessionsStatus(sessions: readonly SessionIndexRow[], matches: (s: SessionIndexRow) => boolean): HomeStatus {
+  let status: HomeStatus = 'idle';
+  for (const s of sessions) {
+    if (!matches(s)) continue;
+    const contribution = sessionContribution(s);
+    if (contribution !== null) status = strongerStatus(status, contribution);
+    if (status === 'active') break; // nothing can beat it
+  }
+  return status;
+}
+
 /**
  * An agent's live status: 'active' iff some `active` run has an `active`
  * phase on a flow node this agent owns (matched by `node.agent === agent.id`,
- * keyed by that node's own `id` against `run.phases`). An agent that maps to
- * no node in any flow fails CLOSED to 'idle' — it must never default to
+ * keyed by that node's own `id` against `run.phases`) — OR (W7-B1,
+ * home-sessions-14) an in-flight session whose kind this agent drives
+ * (`sessionKindAgent`, the yaml-parity-pinned mapping) is `working`;
+ * a needs-you session marks it 'gated'. An agent that maps to no flow node
+ * AND no session kind fails CLOSED to 'idle' — it must never default to
  * 'active' just because it exists.
  */
-export function deriveAgentStatus(agent: Agent, flows: Flow[], runs: Run[]): HomeStatus {
+export function deriveAgentStatus(agent: Agent, flows: Flow[], runs: Run[], sessions: SessionIndexRow[] = []): HomeStatus {
+  const fromSessions = sessionsStatus(sessions, (s) => sessionKindAgent(s.kind) === agent.id);
+  if (fromSessions === 'active') return 'active';
+
   const ownedNodeIds = new Set<string>();
   for (const flow of flows) {
     for (const node of flow.nodes) {
       if (node.agent === agent.id) ownedNodeIds.add(node.id);
     }
   }
-  if (ownedNodeIds.size === 0) return 'idle';
-
   for (const run of runs) {
     if (run.status !== 'active') continue;
     for (const nodeId of ownedNodeIds) {
       if (run.phases[nodeId] === 'active') return 'active';
     }
   }
-  return 'idle';
+  return fromSessions;
 }
 
 /**
  * A project's live status, read from its row in the attention aggregate
- * (never a fabricated `project.status` — `Project` carries none). A project
- * absent from the attention list — e.g. one with no queue activity yet —
- * fails closed to 'idle', not to a guessed state.
+ * (never a fabricated `project.status` — `Project` carries none) — merged
+ * (W7-B1, home-sessions-14) with the in-flight sessions anchored on this
+ * project: a `working` session is 'active', a needs-you one 'gated',
+ * 'active' winning (deriveFlowStatus's own precedence). A project absent
+ * from the attention list with no sessions fails closed to 'idle', not to a
+ * guessed state.
  */
-export function deriveProjectStatus(projectId: string, attention: ProjectAttentionItem[]): HomeStatus {
+export function deriveProjectStatus(projectId: string, attention: ProjectAttentionItem[], sessions: SessionIndexRow[] = []): HomeStatus {
   const row = attention.find((a) => a.projectId === projectId);
-  if (!row) return 'idle';
-  if (row.gated > 0) return 'gated';
-  if (row.inFlight > 0) return 'active';
-  return 'idle';
+  const fromAttention: HomeStatus = !row ? 'idle' : row.gated > 0 ? 'gated' : row.inFlight > 0 ? 'active' : 'idle';
+  const fromSessions = sessionsStatus(sessions, (s) => s.project === projectId);
+  return strongerStatus(fromAttention, fromSessions);
+}
+
+/**
+ * W7-B1 (home-sessions-14): a KB's live status — the kb-cleanup/seeding
+ * sessions anchored under its own `.kb-<id>` pseudo-project
+ * (KB_SEEDING_ANCHOR_PREFIX, the bridge's own anchor rule) are a REAL
+ * live-status source for the KB hex. A project-BOUND KB's sessions anchor
+ * under the real project instead and light that project's hex — attributing
+ * them to the KB too would need the binding join; fail closed rather than
+ * guess. No matching session = 'idle', never fabricated.
+ */
+export function deriveKbStatus(kbId: string, sessions: SessionIndexRow[] = []): HomeStatus {
+  return sessionsStatus(sessions, (s) => s.project === `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`);
 }
 
 /**
  * Assemble the full hex-constellation: one hex per flow, agent, project, and
  * KB, in that order. Status is ALWAYS derived (never read off a `.status`
- * field the real types don't carry) — KBs have no live-status source at all,
- * so their hex is always 'idle' rather than inventing one.
+ * field the real types don't carry). W7-B1 (home-sessions-14): the
+ * already-fetched in-flight `sessions` index feeds agent/project/KB hexes
+ * alongside the flow-run model — a working session lights its agent, its
+ * anchor project, or (via the `.kb-<id>` anchor) its KB; a needs-you
+ * session marks them 'gated'. Omitted/empty `sessions` keeps the pre-W7
+ * derivation byte-identical — absence of data never fabricates a light.
  */
 export function buildConstellation(input: {
   flows: Flow[];
@@ -145,8 +216,9 @@ export function buildConstellation(input: {
   kbs: Kb[];
   runs: Run[];
   attention: ProjectAttentionItem[];
+  sessions?: SessionIndexRow[];
 }): HomeHex[] {
-  const { flows, agents, projects, kbs, runs, attention } = input;
+  const { flows, agents, projects, kbs, runs, attention, sessions = [] } = input;
   const hexes: HomeHex[] = [];
 
   for (const flow of flows) {
@@ -166,7 +238,7 @@ export function buildConstellation(input: {
       kind: 'agent',
       glyph: '⬢',
       label: agent.name,
-      status: deriveAgentStatus(agent, flows, runs),
+      status: deriveAgentStatus(agent, flows, runs, sessions),
       href: `/agents/${agent.id}`,
     });
   }
@@ -177,7 +249,7 @@ export function buildConstellation(input: {
       kind: 'project',
       glyph: '◆',
       label: project.name,
-      status: deriveProjectStatus(project.id, attention),
+      status: deriveProjectStatus(project.id, attention, sessions),
       href: `/projects/${project.id}`,
     });
   }
@@ -187,9 +259,11 @@ export function buildConstellation(input: {
       id: kb.id,
       kind: 'kb',
       glyph: '◈',
-      // No live-status source exists for KBs — always 'idle', never fabricated.
+      // W7-B1: the `.kb-<id>`-anchored sessions ARE a live-status source
+      // for a KB now (deriveKbStatus) — no matching session stays 'idle',
+      // never fabricated.
       label: kb.name,
-      status: 'idle',
+      status: deriveKbStatus(kb.id, sessions),
       href: `/knowledge?id=${kb.id}`,
     });
   }
@@ -336,6 +410,21 @@ export function deriveWatchLiveRunHref(runs: Run[]): string {
   const gated = runs.find((r) => r.status === 'gated');
   if (gated) return `/flows/${encodeURIComponent(gated.flowId)}`;
   return '/flows';
+}
+
+/**
+ * W7-B1 (home-sessions-15): the CTA's caller must KNOW whether the derived
+ * href points at something actually live — the old string-only shape let
+ * the fallback `/flows` render under a primary "Watch live run" label, a
+ * promise the click could not keep. `live: true` iff a real active/gated
+ * run exists (the same two states `deriveWatchLiveRunHref` already treats
+ * as watchable); the page demotes the button to a plain "Browse flows"
+ * otherwise. Built ON `deriveWatchLiveRunHref` — one derivation, one flag,
+ * never a second predicate that could drift.
+ */
+export function deriveWatchLiveRun(runs: Run[]): { href: string; live: boolean } {
+  const href = deriveWatchLiveRunHref(runs);
+  return { href, live: href !== '/flows' };
 }
 
 // ---------------------------------------------------------------------------

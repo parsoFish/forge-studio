@@ -41,6 +41,7 @@ import {
   findGateNodeId,
   findGateNote,
   findFailure,
+  findPrUrl,
   findReflectionLoss,
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
@@ -145,6 +146,13 @@ export type Run = {
   reflectionLost?: string;
   reflectionLostNote?: string;
   workItems?: { id: string; status: RunPhaseStatus; costUsd: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
+  /**
+   * W7-B7 (artifact-plan-17): the run's pull-request URL, derived from its
+   * own `reviewer.pr-opened` event (see `findPrUrl` in run-model-derive.ts).
+   * Additive-optional (ADR-042 disclose-not-park) and honestly absent when
+   * the cycle never opened a PR — never fabricated.
+   */
+  prUrl?: string;
   /**
    * S9 (DEC-2/DEC-3): the seed flows this run traversed (derived from its phases ∩
    * each flow's nodes). A threaded spine run carries [forge-architect, forge-develop,
@@ -657,6 +665,10 @@ function buildRun(args: {
   // --- Trigger provenance (R2-08-F4) ---
   const trigger = deriveTrigger(manifest, events);
 
+  // --- PR link (W7-B7, artifact-plan-17): from the run's own
+  // `reviewer.pr-opened` event — honestly absent when none exists. ---
+  const prUrl = findPrUrl(events);
+
   return {
     id: cycleId,
     // ADR-028 / J5: associate the run with the flow its manifest names, so a
@@ -684,6 +696,7 @@ function buildRun(args: {
       : {}),
     ...(workItems.length > 0 ? { workItems } : {}),
     ...(trigger !== undefined ? { trigger } : {}),
+    ...(prUrl !== undefined ? { prUrl } : {}),
   };
 }
 
