@@ -320,15 +320,20 @@ test('POST /api/studio/kbs: empty name → 400', async () => {
   assert.ok(typeof json['error'] === 'string');
 });
 
-test('POST /api/studio/kbs: empty desc → 400', async () => {
+test('POST /api/studio/kbs: empty desc is accepted — the form marks it optional (W7-B2, knowledge-22)', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: 'empty-desc-brain',
     name: 'Empty Desc Brain',
     binding: { kind: 'project', ref: 'demo-project' },
     desc: '',
   });
-  assert.equal(status, 400, JSON.stringify(json));
-  assert.ok(typeof json['error'] === 'string');
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.equal(json['id'], 'empty-desc-brain');
+  // knowledge-23: the create response names the seeding session AND its
+  // anchor project so the form can land the operator on it.
+  assert.equal(typeof json['sessionId'], 'string');
+  assert.equal(json['project'], 'demo-project');
 });
 
 test('POST /api/studio/kbs: missing CSRF → 403', async () => {

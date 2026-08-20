@@ -101,6 +101,7 @@ import {
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { snapshotKbMarkdown, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { isDryBridge } from './dry-bridge.ts';
@@ -128,11 +129,10 @@ export const DEFAULT_KB_DRAIN_MAX_COST_USD = 2.0;
  *  without any pid bookkeeping (the drain runs in-process on the bridge). */
 export const KB_DRAIN_HEARTBEAT_MS = 10_000;
 
-/** A 'running' status whose `updatedAt` is older than this is a DEAD run
- *  (the heartbeat above would have refreshed it) — the cancel route may
- *  terminate it directly instead of waiting on a loop that no longer
- *  exists. 45s = 4× the heartbeat + slack. */
-export const KB_DRAIN_STALE_MS = 45_000;
+/** Staleness cutoff for a 'running' status — SINGLE-SOURCED in
+ *  cli/kb-job-state.ts (the active-job derivation shares it); re-exported
+ *  here for this module's own cancel route and its tests. */
+export { KB_DRAIN_STALE_MS };
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1107,6 +1107,25 @@ export async function handleStudioKbDrainRoutes(
     return true;
   }
 
+  // ---- GET /api/studio/kbs/:id/active-job (W7-B2, knowledge-05) -----------
+  // The KB-level "a job is running" fact the action group gates on — the
+  // SAME derivation every mutating route 409s with (kb-job-state.ts).
+  const activeJobMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/active-job$/);
+  if (activeJobMatch && method === 'GET') {
+    try {
+      const kbId = decodeURIComponent(activeJobMatch[1]);
+      if (!KB_ID_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      const job = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      sendJson(res, 200, { ok: true, job, ...(job ? { reason: activeJobReason(job) } : {}) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- GET /api/studio/kbs/:id/runs (W7-B2, knowledge-20) ------------------
   // Every drain / consolidate / kb-cleanup run recorded for this KB — the
   // data source for the KB screen's RecentRuns widget. All names are
@@ -1172,6 +1191,14 @@ export async function handleStudioKbDrainRoutes(
       const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
       if (active) {
         sendJson(res, 409, { error: 'a drain run is already active for this kb', runId: active.runId }, origin);
+        return true;
+      }
+      // W7-B2 (knowledge-05): a live CONSOLIDATE also blocks a new drain —
+      // queueing behind it invisibly is exactly the confusion the action
+      // group exists to end; the 409 carries the same reason the UI shows.
+      const otherJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      if (otherJob && otherJob.kind !== 'drain') {
+        sendJson(res, 409, { error: activeJobReason(otherJob), runId: otherJob.runId }, origin);
         return true;
       }
 

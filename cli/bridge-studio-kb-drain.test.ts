@@ -577,7 +577,12 @@ test('GET /api/studio/kbs/:id/drain — no runs yet returns runId:null, not an e
   }
 });
 
-test('drain and consolidate share the SAME per-kbId queue: both dispatched together against one clean kb both reach a real terminal state', async () => {
+test('drain vs consolidate are mutually GATED per kb (W7-B2, knowledge-05): concurrent dispatch = one 200 + one 409 naming the active job', async () => {
+  // Pre-W7 both dispatches were accepted and silently serialized through the
+  // shared per-kbId queue — a Consolidate clicked during a drain read
+  // "Consolidating…" for however long the drain took, with no signal that it
+  // was queued. The contract now: the SECOND mutating dispatch is refused
+  // with a 409 carrying the activeJobReason text the UI shows.
   const iso = await makeIsolatedBridge();
   const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
@@ -593,23 +598,29 @@ test('drain and consolidate share the SAME per-kbId queue: both dispatched toget
       }).then(async (r) => ({ status: r.status, json: (await r.json()) as Record<string, unknown> })),
     ]);
 
-    assert.equal(drainDispatch.status, 200, JSON.stringify(drainDispatch.json));
-    assert.equal(consolidateDispatch.status, 200, JSON.stringify(consolidateDispatch.json));
+    const statuses = [drainDispatch.status, consolidateDispatch.status].sort((a, b) => a - b);
+    assert.deepEqual(
+      statuses,
+      [200, 409],
+      `expected exactly one accepted dispatch and one 409, got ${JSON.stringify([drainDispatch, consolidateDispatch])}`,
+    );
+    const loser = drainDispatch.status === 409 ? drainDispatch : consolidateDispatch;
+    assert.match(String(loser.json['error']), /active for this kb/, JSON.stringify(loser.json));
 
-    const drainRunId = drainDispatch.json['runId'] as string;
-    const consolidateRunId = consolidateDispatch.json['runId'] as string;
-
-    const drainTerminal = await pollDrainTerminal(iso.url, 'clean-shared', drainRunId);
-    assert.equal(drainTerminal['state'], 'green', JSON.stringify(drainTerminal));
-
-    // Poll the pre-existing fix-agent state shape for consolidate's terminal.
-    let consolidateState = 'running';
-    for (let i = 0; i < 60 && consolidateState === 'running'; i++) {
-      const { json } = await getJson(iso.url, `/api/studio/kbs/clean-shared/fix-agent/${consolidateRunId}`);
-      consolidateState = json['state'] as string;
-      if (consolidateState === 'running') await new Promise((r) => setTimeout(r, 100));
+    // The winner still reaches a real terminal state.
+    if (drainDispatch.status === 200) {
+      const drainTerminal = await pollDrainTerminal(iso.url, 'clean-shared', drainDispatch.json['runId'] as string);
+      assert.equal(drainTerminal['state'], 'green', JSON.stringify(drainTerminal));
+    } else {
+      const consolidateRunId = consolidateDispatch.json['runId'] as string;
+      let consolidateState = 'running';
+      for (let i = 0; i < 60 && consolidateState === 'running'; i++) {
+        const { json } = await getJson(iso.url, `/api/studio/kbs/clean-shared/fix-agent/${consolidateRunId}`);
+        consolidateState = json['state'] as string;
+        if (consolidateState === 'running') await new Promise((r) => setTimeout(r, 100));
+      }
+      assert.notEqual(consolidateState, 'running', 'consolidate run never reached a terminal state within budget');
     }
-    assert.notEqual(consolidateState, 'running', 'consolidate run never reached a terminal state within budget');
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
     await iso.close();
