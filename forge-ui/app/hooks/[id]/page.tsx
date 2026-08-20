@@ -1,13 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { FilePackage } from '@/components/studio/FilePackage';
-import { fetchHook, approveHook, overrideHookBlock, type HookDetail } from '@/lib/hook-client';
+import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
+import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
+import {
+  fetchHook,
+  approveHook,
+  overrideHookBlock,
+  updateHook,
+  deleteHook,
+  revokeHookApproval,
+  HOOK_LIFECYCLE_EVENTS,
+  type HookDetail,
+  type HookLifecycleEvent,
+} from '@/lib/hook-client';
 import { buildHookDetailView, type HookDetailView } from '@/lib/hook-library-view';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +36,7 @@ type PageState = 'loading' | 'ready' | 'not-found' | 'error';
 
 export default function HookDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = (params?.id as string) ?? '';
 
   const [state, setState] = useState<PageState>('loading');
@@ -36,6 +49,17 @@ export default function HookDetailPage() {
   const [approving, setApproving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
+  // W7-B4 (library-08): edit / delete / revoke state.
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editOn, setEditOn] = useState<HookLifecycleEvent>('SessionEnd');
+  const [editMatcher, setEditMatcher] = useState('');
+  const [editScript, setEditScript] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const load = useCallback(async (hookId: string) => {
     setState('loading');
@@ -85,6 +109,64 @@ export default function HookDetailPage() {
     void load(id);
   }
 
+  // ---- W7-B4 (library-08): edit / delete / revoke ------------------------
+
+  function toggleEdit() {
+    if (!editing && detail) {
+      setEditName(detail.name);
+      setEditDescription(detail.description);
+      setEditOn(detail.on);
+      setEditMatcher(detail.matcher ?? '');
+      const script = detail.files.find((f) => f.path !== 'hook.yaml');
+      setEditScript(script?.body ?? '');
+      setActionError(null);
+    }
+    setEditing((v) => !v);
+  }
+
+  async function handleSaveEdit() {
+    setSavingEdit(true);
+    setActionError(null);
+    const r = await updateHook(id, {
+      name: editName,
+      description: editDescription,
+      on: editOn,
+      matcher: editMatcher.trim() ? editMatcher.trim() : null,
+      scriptBody: editScript,
+    });
+    setSavingEdit(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'save failed');
+      return;
+    }
+    setEditing(false);
+    void load(id);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setActionError(null);
+    const r = await deleteHook(id);
+    setDeleting(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'delete failed');
+      return;
+    }
+    router.push('/hooks');
+  }
+
+  async function handleRevoke() {
+    setRevoking(true);
+    setRevokeError(null);
+    const r = await revokeHookApproval(id);
+    setRevoking(false);
+    if (!r.ok) {
+      setRevokeError(r.error ?? 'revoke failed');
+      return;
+    }
+    void load(id);
+  }
+
   const view = state === 'ready' && detail ? buildHookDetailView(detail) : null;
 
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
@@ -115,15 +197,79 @@ export default function HookDetailPage() {
         )}
 
         {state === 'ready' && view && (
-          <HookDetailBody
-            view={view}
-            approving={approving}
-            actionError={actionError}
-            overrideReason={overrideReason}
-            onOverrideReasonChange={setOverrideReason}
-            onApprove={() => void handleApprove()}
-            onOverride={() => void handleOverride()}
-          />
+          <>
+            {/* W7-B4 (library-08): hooks gain the edit/delete half of CRUD. */}
+            <div style={{ marginTop: 16 }}>
+              <LibraryItemActions
+                kind="hook"
+                id={id}
+                editing={editing}
+                onToggleEdit={toggleEdit}
+                onDelete={() => void handleDelete()}
+                deleting={deleting}
+                deleteBlockReason={
+                  view.carriedByCount > 0
+                    ? `still carried by ${view.carriedByCount} agent(s): ${view.carriedBy.join(', ')} — unbind it from their builders first`
+                    : null
+                }
+                error={actionError}
+              />
+            </div>
+            {editing && (
+              <section data-component="hook-edit-form" style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '14px 16px' }}>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  Name
+                  <input data-field="hook-edit-name" type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box' }} />
+                </label>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  Description
+                  <input data-field="hook-edit-description" type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box' }} />
+                </label>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                    Lifecycle event
+                    <select data-field="hook-edit-on" value={editOn} onChange={(e) => setEditOn(e.target.value as HookLifecycleEvent)} style={{ display: 'block', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)' }}>
+                      {HOOK_LIFECYCLE_EVENTS.map((ev) => (
+                        <option key={ev} value={ev}>{ev}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ fontSize: 12, color: 'var(--dim)', flex: 1, minWidth: 180 }}>
+                    Matcher (optional)
+                    <input data-field="hook-edit-matcher" type="text" value={editMatcher} onChange={(e) => setEditMatcher(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box' }} />
+                  </label>
+                </div>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  Script (bash)
+                  <textarea data-field="hook-edit-script" value={editScript} onChange={(e) => setEditScript(e.target.value)} rows={Math.min(20, Math.max(6, editScript.split('\n').length + 2))} spellCheck={false} style={{ display: 'block', width: '100%', marginTop: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 12.5, lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }} />
+                </label>
+                <p style={{ fontSize: 11.5, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
+                  Editing an approved hook drops it back to needs-review — the pinned hashes no
+                  longer match, and that is the honest state.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-primary btn-sm" data-action="save-hook-edit" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editName.trim()}>
+                    {savingEdit ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button type="button" className="btn btn-sm" data-action="cancel-hook-edit" onClick={toggleEdit} disabled={savingEdit}>
+                    Cancel
+                  </button>
+                </div>
+              </section>
+            )}
+            <HookDetailBody
+              view={view}
+              approving={approving}
+              actionError={actionError}
+              overrideReason={overrideReason}
+              onOverrideReasonChange={setOverrideReason}
+              onApprove={() => void handleApprove()}
+              onOverride={() => void handleOverride()}
+              revoking={revoking}
+              revokeError={revokeError}
+              onRevoke={() => void handleRevoke()}
+            />
+          </>
         )}
       </div>
     </main>
@@ -142,6 +288,9 @@ function HookDetailBody({
   onOverrideReasonChange,
   onApprove,
   onOverride,
+  revoking,
+  revokeError,
+  onRevoke,
 }: {
   view: HookDetailView;
   approving: boolean;
@@ -150,6 +299,9 @@ function HookDetailBody({
   onOverrideReasonChange: (v: string) => void;
   onApprove: () => void;
   onOverride: () => void;
+  revoking: boolean;
+  revokeError: string | null;
+  onRevoke: () => void;
 }) {
   const canApprove = view.scanVerdict !== 'blocked' && view.trust === 'needs-review';
   const canOverride = view.scanVerdict === 'blocked' && view.trust === 'needs-review';
@@ -195,6 +347,20 @@ function HookDetailBody({
       </section>
 
       <ScanReportPanel view={view} />
+
+      {/* W7-B4 (library-09): a RESOLVED hook renders its recorded approval
+          (badge + approvedAt + override reason) plus the inverse act —
+          approved and unapproved no longer look identical. */}
+      {resolved && view.approval && (
+        <ApprovalRecordPanel
+          trust={view.trust as 'approved' | 'overridden'}
+          approvedAt={view.approval.approvedAt}
+          reason={view.approval.reason}
+          onRevoke={onRevoke}
+          revoking={revoking}
+          error={revokeError}
+        />
+      )}
 
       {!resolved && (
         <section style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>

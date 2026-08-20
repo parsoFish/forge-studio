@@ -52,7 +52,10 @@ import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/ki
 // `lib/session-kind-meta.ts` (KICKOFF_SPECS + the hasOwn-guarded
 // `kickoffSpecFor` accessor) — ONE module beside the kind titles and the
 // shared kickoff list, parity-pinned against studio/session-kinds.yaml,
-// ending this page's half of the two-list drift.
+// ending this page's half of the two-list drift. (W7-B4's parallel
+// extraction of the same table, lib/kickoff-kinds.ts, was consolidated INTO
+// session-kind-meta at merge time — agents-22's session-entry derivation now
+// reads sessionEntryHrefForAgent from there.)
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);

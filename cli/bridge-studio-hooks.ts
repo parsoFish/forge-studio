@@ -56,7 +56,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import yaml from 'js-yaml';
@@ -87,6 +87,7 @@ import {
   readHookApprovalLedger,
   approveHook,
   overrideHookBlock,
+  revokeHookApproval,
   type HookApprovalLedgerEntry,
   type HookRunState,
 } from '../orchestrator/studio/hook-scan.ts';
@@ -184,6 +185,38 @@ function decodeIdSegment(raw: string): string {
   return decodeURIComponent(raw);
 }
 
+/**
+ * W7-B4 — the shared two-layer prologue every id-bearing WRITE route runs:
+ * shape (assertSkillSlug via hookYamlPath → 400), containment (the realpath
+ * identity guard → 404), and the script-leaf containment oracle-closer
+ * (→ the SAME 404). Returns the verified hook.yaml real path on success.
+ */
+function locateHook(
+  forgeRoot: string,
+  id: string,
+  opts: { requireScript?: boolean } = {},
+): { ok: true; yamlPath: string } | { ok: false; status: number; error: string } {
+  try {
+    hookYamlPath(id, forgeRoot);
+  } catch (err) {
+    return { ok: false, status: 400, error: sanitizeError(err) };
+  }
+  const yamlGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'hook.yaml']);
+  if (!yamlGuard.ok || !yamlGuard.exists) return { ok: false, status: 404, error: `unknown hook "${id}"` };
+  // W7-B4 review finding 4: `hookScriptIsContained` is a SCRIPT-path oracle —
+  // it returns false both for a genuinely escaping script AND for any hook
+  // whose hook.yaml fails to parse or whose declared script leaf is simply
+  // missing. Routes that touch the script path need it; DELETE does NOT (it
+  // removes the guarded directory and never resolves `script:`), and running
+  // it there made every broken hook permanently unremovable from Studio while
+  // the library kept rendering it. `requireScript: false` is that exemption,
+  // never a relaxation for a route that goes on to use the script path.
+  if (opts.requireScript !== false && !hookScriptIsContained(forgeRoot, id)) {
+    return { ok: false, status: 404, error: `unknown hook "${id}"` };
+  }
+  return { ok: true, yamlPath: yamlGuard.realPath };
+}
+
 // ---------------------------------------------------------------------------
 // POST body validation — create route
 // ---------------------------------------------------------------------------
@@ -224,7 +257,8 @@ export async function handleStudioHooksRoutes(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  if (method !== 'GET' && method !== 'POST') return false;
+  // PUT/DELETE joined in W7-B4 (library-08): the edit/delete half of CRUD.
+  if (method !== 'GET' && method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return false;
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
@@ -419,6 +453,152 @@ export async function handleStudioHooksRoutes(
     return true;
   }
 
+  // ---- POST /api/studio/hooks/:id/revoke-approval (W7-B4, library-08) ------
+  // The inverse of approve/override that never existed: drops the LIVE ledger
+  // entry (hookRunState honestly reads needs-review again) and RECORDS the
+  // revocation in the ledger's `revoked` list. 409 when nothing is approved.
+  const revokeMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)\/revoke-approval$/);
+  if (revokeMatch && method === 'POST') {
+    try {
+      let id: string;
+      try { id = decodeIdSegment(revokeMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
+      const located = locateHook(ctx.forgeRoot, id);
+      if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
+
+      if (!readHookApprovalLedger(ctx.forgeRoot).get(id)) {
+        sendJson(res, 409, { error: `hook "${id}" has no approval on record — nothing to revoke` }, origin);
+        return true;
+      }
+      revokeHookApproval({ forgeRoot: ctx.forgeRoot, id });
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- PUT /api/studio/hooks/:id — edit (W7-B4, library-08) ----------------
+  // Edits the definition fields and/or the script. An edit to an APPROVED
+  // hook is legitimate — the pinned hashes no longer match, so hookRunState
+  // honestly reads needs-review again; nothing here launders trust. The same
+  // D-5/D-6 rules as create: no client script path, no binding keys.
+  const putMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)$/);
+  if (putMatch && method === 'PUT') {
+    try {
+      let id: string;
+      try { id = decodeIdSegment(putMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
+      const located = locateHook(ctx.forgeRoot, id);
+      if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
+
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      const b = (body ?? {}) as Record<string, unknown>;
+      if (b === null || typeof b !== 'object' || Array.isArray(b)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
+      }
+      for (const key of FORBIDDEN_HOOK_BINDING_KEYS) {
+        if (key in b) {
+          sendJson(res, 400, {
+            error: `hook edit must not declare a binding field "${key}" — a library hook definition is generic and host-agnostic; binding happens only in the Agent Builder`,
+          }, origin);
+          return true;
+        }
+      }
+
+      // W7-B4 review finding 9: an ABSENT field means "leave it alone"; a
+      // field that is PRESENT but empty is a request the route cannot honour.
+      // Both used to collapse to the same `&& value` falsy test, so clearing
+      // the editor answered ok:true and kept the old bytes — a save the
+      // operator watched succeed and which changed nothing.
+      for (const key of ['name', 'description', 'scriptBody'] as const) {
+        if (key in b && (typeof b[key] !== 'string' || !(b[key] as string).trim())) {
+          sendJson(res, 400, {
+            error: `"${key}" was sent empty — send a non-empty value to change it, or omit the field to leave it unchanged`,
+          }, origin);
+          return true;
+        }
+      }
+
+      const def = loadHookDefinition(id, ctx.forgeRoot);
+
+      const name = typeof b['name'] === 'string' && b['name'].trim() ? b['name'].trim() : def.name;
+      const description = typeof b['description'] === 'string' && b['description'].trim() ? b['description'].trim() : def.description;
+      let on = def.on;
+      if (b['on'] !== undefined) {
+        if (typeof b['on'] !== 'string' || !(HOOK_LIFECYCLE_EVENTS as readonly string[]).includes(b['on'])) {
+          sendJson(res, 400, { error: `"on" must be one of ${HOOK_LIFECYCLE_EVENTS.join(', ')} — got "${String(b['on'])}"` }, origin);
+          return true;
+        }
+        on = b['on'] as HookLifecycleEvent;
+      }
+      let matcher = def.matcher;
+      if ('matcher' in b) {
+        matcher = typeof b['matcher'] === 'string' && b['matcher'].trim() ? b['matcher'].trim() : undefined;
+      }
+      let permissions = def.permissions;
+      if (b['permissions'] !== undefined) {
+        const parsed = parseCreatePermissions(b['permissions']);
+        if ('error' in parsed) { sendJson(res, 400, { error: parsed.error }, origin); return true; }
+        permissions = parsed;
+      }
+      const scriptBody = typeof b['scriptBody'] === 'string' && b['scriptBody'] ? b['scriptBody'] : undefined;
+
+      // Script leaf: the EXISTING declared script path, re-guarded segment by
+      // segment (D-5: a client can never supply a script path).
+      if (scriptBody !== undefined) {
+        const scriptSegments = def.script.split('/').filter((s) => s !== '' && s !== '.');
+        const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, ...scriptSegments]);
+        if (!scriptGuard.ok || !scriptGuard.exists) {
+          sendJson(res, 404, { error: `unknown hook "${id}"` }, origin);
+          return true;
+        }
+        writeFileSync(scriptGuard.realPath, scriptBody, 'utf8');
+      }
+
+      const doc: Record<string, unknown> = {
+        name,
+        description,
+        on,
+        ...(matcher ? { matcher } : {}),
+        script: def.script,
+        permissions,
+      };
+      writeFileSync(located.yamlPath, yaml.dump(doc), 'utf8');
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- DELETE /api/studio/hooks/:id (W7-B4, library-08) --------------------
+  // Refuses (409, naming them) while any agent still carries the hook.
+  if (putMatch && method === 'DELETE') {
+    try {
+      let id: string;
+      try { id = decodeIdSegment(putMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
+      // requireScript:false — removal must stay possible for a hook whose yaml
+      // is malformed or whose script leaf is gone (review finding 4).
+      const located = locateHook(ctx.forgeRoot, id, { requireScript: false });
+      if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
+
+      const entry = listHookLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const carriedBy = entry?.ok === true ? entry.carriedBy : [];
+      if (carriedBy.length > 0) {
+        sendJson(res, 409, {
+          error: `hook "${id}" is still carried by ${carriedBy.length} agent(s): ${carriedBy.join(', ')} — unbind it from their builders first`,
+          carriedBy,
+        }, origin);
+        return true;
+      }
+      rmSync(dirname(located.yamlPath), { recursive: true, force: true });
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- GET /api/studio/hooks/:id — detail (D-4: malformed reads as absent) --
   const detailMatch = url.match(/^\/api\/studio\/hooks\/([^/]+)$/);
   if (detailMatch && method === 'GET') {
@@ -469,6 +649,18 @@ export async function handleStudioHooksRoutes(
         scanVerdict: runState.verdict,
         trust: computeTrust(runState, ledgerEntry),
         runnable: runState.runnable,
+        // W7-B4 (library-09): the approval RECORD the resolved-state panel
+        // renders — approvedAt + the distinct overridden act + its reason.
+        // Present iff a live ledger entry exists; never fabricated.
+        ...(ledgerEntry
+          ? {
+              approval: {
+                approvedAt: ledgerEntry.approvedAt,
+                overridden: ledgerEntry.overridden,
+                ...(ledgerEntry.reason ? { reason: ledgerEntry.reason } : {}),
+              },
+            }
+          : {}),
         files: [
           { path: 'hook.yaml', body: yamlBody },
           { path: entry.script, body: scriptBody },

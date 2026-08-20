@@ -1460,6 +1460,46 @@ instead of `guardedWriteFile` (same guard, plus the sticky rule); and
 derived from the route's ALREADY-validated `sessionDir` (never request text)
 and `sid` re-checked by `isSafeRunId`.
 
+### W7-B4 — library-authoring write surface (skills/hooks/templates edit+delete, agent/flow delete, starter materialise)
+
+The ratchet fired on this lane's own diff (14 grown `(file, sink)` pairs across
+five modules) — every row below was classified before `--write` accepted the
+new baseline.
+
+| Site | Sink | Request-derived input | Class | Rationale |
+|---|---|---|---|---|
+| `cli/bridge-studio-skills.ts` PUT `:id` (read+rewrite `SKILL.md`) | `readFileSync`, `writeFileSync` | URL `:id` | guarded `[read]` | Two-layer: `skillPath(id)` shape assert, then `resolveGuardedPath(skillsDir, [id, 'SKILL.md'])`; both fs calls use only `pathGuard.realPath`. `isStudioAgent` exclusion runs BEFORE the write so the route cannot rewrite an agent. Traversal-shaped ids are 400d — executed by `cli/bridge-studio-authoring.test.ts` ("traversal 400") against the live route `[exec]` for that rejection claim. |
+| `cli/bridge-studio-skills.ts` DELETE `:id` | `rmSync` | URL `:id` | guarded `[read]` | Removes `dirname(pathGuard.realPath)` — the parent of the guard's OWN resolved leaf, never a fresh `join()`; `id` is its own guard segment (no root-folding). 409-refused while `usedBy` is non-empty (derived at request time from the same listing the UI renders). |
+| `cli/bridge-studio-hooks.ts` PUT `:id` | `writeFileSync` ×2 | URL `:id`, body `scriptBody` | guarded `[read]` | `locateHook` = `hookYamlPath(id)` shape assert + `resolveGuardedPath(hooksDir, [id, 'hook.yaml'])` (`ok && exists`) + `hookScriptIsContained`; yaml write targets `located.yamlPath` (the guard's realPath), script write targets a second `resolveGuardedPath(hooksDir, [id, ...scriptSegments]).realPath`. Hash change on rewrite honestly re-enters needs-review (no approval laundering). |
+| `cli/bridge-studio-hooks.ts` DELETE `:id` | `rmSync` | URL `:id` | guarded `[read]` | `rmSync(dirname(located.yamlPath))` — dirname-of-guarded-leaf, same shape as the skills DELETE row. 409 while `carriedBy` is non-empty. |
+| `orchestrator/studio/hook-scan.ts` `revokeHookApproval` (+ its `readHookLedgerRevoked` read) | `existsSync`, `readFileSync` | none in the PATH — `id` is a Map KEY into the ledger, never a path segment | guarded `[read]` | Ledger lives at the fixed `studio/hook-approvals.yaml` under `forgeRoot`; the request-derived `id` selects an entry inside the parsed document. Path is config-derived, byte-identical shape to the approve/override ledger rows above. |
+| `cli/bridge-studio-templates.ts` staging (`invalidTemplateContentReason`) | `mkdirSync`, `writeFileSync`, `rmSync` | body/URL `id` as the staging LEAF (`${id}.md`) | guarded `[read]` | Staging root is the fixed `resolve(forgeRoot, '_template-staging')`; the leaf-append rides an id that has ALREADY passed `invalidTemplateIdReason` (`SLUG_RE` — rejects `/`, `\`, `.`, `..`, uppercase, whitespace, over-length) at every one of the three call sites (create, duplicate-source, PUT), so no separator or dotted segment can reach the `join`. `finally`-block `rmSync` of the whole staging dir mirrors `_skill-staging`'s audited row. Charset-gate-then-join is the `INIT_ID_RE`-family pattern, disclosed as such (not a realpath guard). |
+| `cli/bridge-studio-templates.ts` POST create / PUT `:id` / DELETE `:id` | `writeFileSync` ×2, `rmSync` | body/URL `id` | guarded `[read]` | All three fs calls use only `targetGuard.realPath` from `resolveGuardedPath(resolve(forgeRoot, ...WRITABLE_CATEGORY_DIRS[category]), [leaf])` — fixed root (category is an enum check, `project-scaffold` refused 400), leaf = `${slug-validated id}.md` on create or the on-disk entry's own `definitionRef` basename (server-derived) on PUT/DELETE. DELETE 409-refused while `usedBy` non-empty. |
+| `cli/bridge-studio-writes.ts` `materializeReferencedStarterAgents` | `cpSync` | flow-body node `agent` names — as SELECTORS only | guarded `[read]` | Request-derived names never form a path: they are intersected against `listStarterAgents(forgeRoot)` (a server-side enumeration of `studio/starters/agents/`), and only a matching starter's OWN `slug` reaches the copy — source is the fixed starters dir + that server slug, destination is `resolveGuardedPath(skillsDir, [starter.slug]).realPath`, skipped when it already exists (existing roster agent wins). |
+| `cli/bridge-studio-writes.ts` agents DELETE `:slug` / flows DELETE `:id` | `rmSync` ×2, `readFileSync` (`originalRaw` fast-path read) | URL `:slug` / `:id` | guarded `[read]` | Both deletes remove `dirname(pathGuard.realPath)` where `pathGuard` is the route's existing `resolveGuardedPath` over the slug/id segment; the `originalRaw` read only ever passes `pathGuard.realPath`. Agents DELETE is 409-refused while any flow node or session-kind descriptor references the slug (traversal 400 executed by the pinned wire test); flows DELETE refuses seeds (403) and in-flight runs (423) before any fs mutation. |
+| `cli/bridge-studio-writes.ts` catalog probe (`existsSync(catalogPathEarly)`) | `existsSync` | none | guarded `[read]` | Constant `join(forgeRoot, 'studio', 'catalog.yaml')` — no request data in the path; counted here only because the ratchet keys on per-file sink totals. |
+
+**W7-B4 review round — one new sink.** Review finding 7 (a corrupted authored
+flow.yaml answered 500 and could never be deleted from Studio) adds a single
+`readFileSync` to the flow DELETE arm of `cli/bridge-studio-writes.ts`
+(`readFileSync(flowYamlPath, 'utf8')`, `cli/bridge-studio-writes.ts` sink count
+3 -> 4). Class: **guarded `[read]`**. `flowYamlPath` is `pathGuard.realPath`
+from `resolveGuardedPath(resolve(forgeRoot,'studio','flows'), [id, 'flow.yaml'])`
+— the same realpath-identity guard the rest of that route already runs, with
+the request-derived `id` as its OWN segment and a `SLUG_RE` shape gate ahead of
+it. The read happens only after `pathGuard.exists`, and its result is used for
+a single regex seed-probe (`/^\s*origin:\s*seed\s*$/m`) whose only outcome is
+a 403 — no bytes are returned to the caller.
+
+**Merge reconciliation (W7-B4 x main post-W7-B6 #188).** Merging `parsoFish/main`
+into this lane put BOTH branches' newly-audited sites in the same module:
+`cli/bridge-studio-writes.ts` `existsSync` grew 14 -> 15. The 15th site is not a
+new one — it is the union of this section's rows (`sessionKindAgentRefs`'s
+`existsSync(file)` on `studio/session-kinds.yaml`, the agent/flow DELETE probes)
+with the community-registry rows main landed in the same file. Every site in the
+merged file is classified by one of the two sections; no site arrived
+unclassified, and the ratchet baseline was re-accepted at 15 on that basis.
+
 ### W7-B2 — KB active-job derivation (`cli/kb-job-state.ts`, two new `[read]`-class sinks, both accidentally-safe by construction)
 
 The ONE per-KB "a mutating job is running" derivation (knowledge-05) that

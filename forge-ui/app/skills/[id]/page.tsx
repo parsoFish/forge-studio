@@ -1,19 +1,29 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { FilePackage } from '@/components/studio/FilePackage';
+import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import {
   fetchSkill,
   fetchSkillLibrary,
   approveSkill,
+  updateSkill,
+  deleteSkill,
   type SkillDetail,
   type SkillLibraryEntry,
 } from '@/lib/skill-client';
+
+/** Strip the leading YAML frontmatter block from a SKILL.md's raw bytes —
+ *  the edit form edits the CONTENT; name/description are their own fields
+ *  and the server owns re-assembling the frontmatter. */
+function stripFrontmatter(raw: string): string {
+  return raw.replace(/^---\n[\s\S]*?\n---\n?/, '').replace(/^\n+/, '');
+}
 
 // ---------------------------------------------------------------------------
 // Skill detail — /skills/[id] (R3-01-F3/F4, WI-3)
@@ -37,6 +47,7 @@ type PageState = 'loading' | 'ready' | 'not-installed' | 'not-found' | 'error';
 
 export default function SkillDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = (params?.id as string) ?? '';
 
   const [state, setState] = useState<PageState>('loading');
@@ -49,6 +60,14 @@ export default function SkillDetailPage() {
   const [errorStatus, setErrorStatus] = useState<number | undefined>(undefined);
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
+  // W7-B4 (library-05): edit / delete state.
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async (skillId: string) => {
     setState('loading');
@@ -97,6 +116,44 @@ export default function SkillDetailPage() {
       return;
     }
     void load(id);
+  }
+
+  // ---- W7-B4 (library-05): edit / delete --------------------------------
+
+  function toggleEdit() {
+    if (!editing && detail) {
+      const skillMd = detail.files.find((f) => f.path === 'SKILL.md') ?? detail.files[0];
+      setEditName(detail.name);
+      setEditDescription(detail.description ?? '');
+      setEditBody(skillMd ? stripFrontmatter(skillMd.body) : '');
+      setActionError(null);
+    }
+    setEditing((v) => !v);
+  }
+
+  async function handleSaveEdit() {
+    setSavingEdit(true);
+    setActionError(null);
+    const r = await updateSkill(id, { name: editName, description: editDescription, body: editBody });
+    setSavingEdit(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'save failed');
+      return;
+    }
+    setEditing(false);
+    void load(id);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setActionError(null);
+    const r = await deleteSkill(id);
+    setDeleting(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'delete failed');
+      return;
+    }
+    router.push('/skills');
   }
 
   const trustAttr = state === 'ready' ? detail!.trust : state === 'not-installed' ? libraryEntry?.trust : undefined;
@@ -152,12 +209,81 @@ export default function SkillDetailPage() {
         )}
 
         {state === 'ready' && detail && (
-          <SkillDetailBody
-            detail={detail}
-            approving={approving}
-            approveError={approveError}
-            onApprove={() => void handleApprove()}
-          />
+          <>
+            {/* W7-B4 (library-05): a Studio-authored skill is finally
+                editable, renamable and deletable from Studio. */}
+            <div style={{ marginTop: 16 }}>
+              <LibraryItemActions
+                kind="skill"
+                id={id}
+                editing={editing}
+                onToggleEdit={toggleEdit}
+                onDelete={() => void handleDelete()}
+                deleting={deleting}
+                deleteBlockReason={
+                  detail.usedBy.length > 0
+                    ? `still composed by ${detail.usedBy.length} agent(s): ${detail.usedBy.join(', ')} — unbind it from their builders first`
+                    : null
+                }
+                error={actionError}
+              />
+            </div>
+            {editing && (
+              <section data-component="skill-edit-form" style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '14px 16px' }}>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  Name
+                  <input
+                    data-field="skill-edit-name"
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box' }}
+                  />
+                </label>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  Description
+                  <input
+                    data-field="skill-edit-description"
+                    type="text"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 13, padding: '7px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box' }}
+                  />
+                </label>
+                <label style={{ fontSize: 12, color: 'var(--dim)' }}>
+                  SKILL.md body
+                  <textarea
+                    data-field="skill-edit-body"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={Math.min(24, Math.max(8, editBody.split('\n').length + 2))}
+                    spellCheck={false}
+                    style={{ display: 'block', width: '100%', marginTop: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 12.5, lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </label>
+                {detail.provenance && (
+                  <p style={{ fontSize: 11.5, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
+                    This skill was installed from the community — editing it changes the pinned
+                    content hash, so it will honestly drop to needs-review until re-approved.
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-primary btn-sm" data-action="save-skill-edit" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editName.trim()}>
+                    {savingEdit ? 'Saving…' : 'Save changes'}
+                  </button>
+                  <button type="button" className="btn btn-sm" data-action="cancel-skill-edit" onClick={toggleEdit} disabled={savingEdit}>
+                    Cancel
+                  </button>
+                </div>
+              </section>
+            )}
+            <SkillDetailBody
+              detail={detail}
+              approving={approving}
+              approveError={approveError}
+              onApprove={() => void handleApprove()}
+            />
+          </>
         )}
       </div>
     </main>

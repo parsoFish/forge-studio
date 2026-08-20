@@ -92,9 +92,18 @@ export type HookScanReport = {
 
 export type HookPackageFile = { path: string; body: string };
 
+/** W7-B4 (library-09) — the recorded approval the resolved-state panel
+ *  renders. Present on the detail wire iff a live ledger entry exists. */
+export type HookApprovalRecord = {
+  approvedAt: string;
+  overridden: boolean;
+  reason?: string;
+};
+
 export type HookDetail = HookLibraryEntryOk & {
   files: HookPackageFile[];
   scan: HookScanReport;
+  approval?: HookApprovalRecord;
 };
 
 // ---------------------------------------------------------------------------
@@ -248,10 +257,26 @@ export function parseHookDetail(raw: unknown): HookDetail {
   const r = asRecord(raw);
   const files = r['files'];
   if (!Array.isArray(files)) throw new Error(`expected "files" to be an array, got ${JSON.stringify(files)}`);
+  // `approval` is legitimately absent (nothing approved yet); a PRESENT but
+  // malformed record is a malformed response and throws — never coerced.
+  let approval: HookApprovalRecord | undefined;
+  if (r['approval'] !== undefined) {
+    const a = asRecord(r['approval']);
+    const reasonRaw = a['reason'];
+    if (reasonRaw !== undefined && typeof reasonRaw !== 'string') {
+      throw new Error(`expected "approval.reason" to be a string when present, got ${JSON.stringify(reasonRaw)}`);
+    }
+    approval = {
+      approvedAt: reqString(a, 'approvedAt'),
+      overridden: reqBoolean(a, 'overridden'),
+      ...(reasonRaw !== undefined ? { reason: reasonRaw } : {}),
+    };
+  }
   return {
     ...entry,
     files: files.map(parseHookPackageFile),
     scan: parseHookScanReport(r['scan']),
+    ...(approval !== undefined ? { approval } : {}),
   };
 }
 
@@ -301,15 +326,16 @@ export async function fetchHook(
   }
 }
 
-async function hookClientPost(
+async function hookClientSend(
+  method: 'POST' | 'PUT' | 'DELETE',
   path: string,
-  body: unknown,
+  body?: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   try {
     const res = await bridgeFetch(path, {
-      method: 'POST',
+      method,
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const data = (await res.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
     if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
@@ -317,6 +343,13 @@ async function hookClientPost(
   } catch (err) {
     return { ok: false, error: String(err) };
   }
+}
+
+async function hookClientPost(
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  return hookClientSend('POST', path, body);
 }
 
 /** Author a new library hook (D-5: the route always writes the script to
@@ -343,5 +376,30 @@ export async function approveHook(id: string): Promise<{ ok: boolean; error?: st
  *  launders the scan verdict itself (see hook-scan.ts's own contract). */
 export async function overrideHookBlock(id: string, reason: string): Promise<{ ok: boolean; error?: string }> {
   const r = await hookClientPost(`/api/studio/hooks/${encodeURIComponent(id)}/override`, { reason });
+  return { ok: r.ok, error: r.error };
+}
+
+/** W7-B4 (library-08) — edit a hook's definition fields and/or script. An
+ *  edit to an approved hook honestly drops it back to needs-review (the
+ *  pinned hashes no longer match) — the bridge never launders trust. */
+export async function updateHook(
+  id: string,
+  input: Partial<{ name: string; description: string; on: HookLifecycleEvent; matcher: string | null; scriptBody: string; permissions: HookPermissions }>,
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await hookClientSend('PUT', `/api/studio/hooks/${encodeURIComponent(id)}`, input);
+  return { ok: r.ok, error: r.error };
+}
+
+/** W7-B4 (library-08) — delete a hook package. The bridge refuses (409,
+ *  naming them) while any agent still carries it. */
+export async function deleteHook(id: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await hookClientSend('DELETE', `/api/studio/hooks/${encodeURIComponent(id)}`);
+  return { ok: r.ok, error: r.error };
+}
+
+/** W7-B4 (library-08) — revoke a live approval/override. Recorded in the
+ *  ledger's `revoked` history; 409 when nothing is approved. */
+export async function revokeHookApproval(id: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await hookClientPost(`/api/studio/hooks/${encodeURIComponent(id)}/revoke-approval`, {});
   return { ok: r.ok, error: r.error };
 }

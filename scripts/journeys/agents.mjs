@@ -986,8 +986,18 @@ export const journey = defineJourney({
               const optionCount = await page.evaluate(() => document.querySelectorAll('[data-agent-option]').length);
               check(optionCount >= 5,
                 `agents-edit: the selector offers [data-agent-option] for multiple real agents (got ${optionCount})`);
+              // W7-B4 (agents-09): the builder finally carries the agent's
+              // whole lifecycle — Duplicate always; Delete guarded: developer-
+              // ralph is a node in the shipped forge-develop flow, so Delete
+              // renders DISABLED with the referencing flow named (the same
+              // guard the bridge's DELETE route enforces).
+              check(await page.locator('[data-action="duplicate-agent"]').count() > 0,
+                'agents-edit: Duplicate is offered (W7-B4 agents-09)');
+              check(await page.locator('[data-action="delete-agent"][disabled]').count() > 0
+                 && await page.locator('[data-component="delete-blocked"]').count() > 0,
+                'agents-edit: Delete on a flow-referenced agent is disabled WITH the reason (guarded, never silent)');
               await frame(page, 'ae-0-selector-open',
-                'Edit-agent — the builder opens on a real shipped agent (developer-ralph); the selector offers the whole fleet');
+                'Edit-agent — the builder opens on a real shipped agent (developer-ralph); the selector offers the whole fleet, plus duplicate/delete lifecycle');
         },
       },
       {

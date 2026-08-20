@@ -66,7 +66,10 @@ export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon';
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
 
 export type RouteClassification = {
-  method: 'GET' | 'POST' | 'PUT' | '*';
+  // 'DELETE' added W7-B4: the library-authoring surface is the first to use
+  // true DELETE methods (earlier deletes multiplexed over POST, kept as the
+  // ` (delete)`-suffixed rows the coverage test canonicalizes).
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | '*';
   /** Route path. `:id`-style segments are literal placeholders (documentation,
    *  not a router pattern). A `(op=...)` suffix distinguishes routes that
    *  multiplex behavior over a body field (e.g. KB maintenance). `*` for the
@@ -221,6 +224,21 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/review-comments/:cycleId/delete', classification: 'exempt-local', reason: 'removes one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
+  // W7-B4 — library authoring write surface: every route below edits or
+  // removes an already-materialised LOCAL file package (skills/<id>/,
+  // studio/hooks/<id>/, studio/artifact-templates|demo-elements, flow dirs)
+  // through the same guarded-path helpers its POST siblings above use.
+  // No spawn, no remote, no daemon — exempt-local like those siblings.
+  { method: 'DELETE', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'removes a local skills/<slug>/ package (409 while referenced by a flow node or session kind)' },
+  { method: 'DELETE', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'removes a local flow directory (seed flows 403, active run 423)' },
+  { method: 'PUT', route: '/api/studio/skills/:id', classification: 'exempt-local', reason: 'rewrites a local SKILL.md (name/description/body) — no spawn/remote' },
+  { method: 'DELETE', route: '/api/studio/skills/:id', classification: 'exempt-local', reason: 'removes a local skill package (409 while used by agents)' },
+  { method: 'PUT', route: '/api/studio/hooks/:id', classification: 'exempt-local', reason: 'rewrites a local hook.yaml + scripts/run.sh; hash change honestly re-enters needs-review' },
+  { method: 'DELETE', route: '/api/studio/hooks/:id', classification: 'exempt-local', reason: 'removes a local hook package (409 while carried by agents)' },
+  { method: 'POST', route: '/api/studio/hooks/:id/revoke-approval', classification: 'exempt-local', reason: 'moves the local hook-approvals.yaml ledger entry approved→revoked — no spawn/remote' },
+  { method: 'POST', route: '/api/studio/templates', classification: 'exempt-local', reason: 'writes a local template file under studio/artifact-templates|demo-elements (validated by the category loader)' },
+  { method: 'PUT', route: '/api/studio/templates/:id', classification: 'exempt-local', reason: 'rewrites a local planning|demo-output template file (scaffold category 400)' },
+  { method: 'DELETE', route: '/api/studio/templates/:id', classification: 'exempt-local', reason: 'removes a local template file (409 while used by flows; scaffold 400)' },
   { method: 'POST', route: '/api/studio/skills', classification: 'exempt-local', reason: 'writes a local skill definition' },
   { method: 'POST', route: '/api/studio/skills/install', classification: 'exempt-local', reason: 'installs an already-materialised local skill package (D2: no network call in this initiative)' },
   { method: 'POST', route: '/api/studio/skills/:id/approve', classification: 'exempt-local', reason: 'flips a draft skill\'s frontmatter status locally — no spawn/remote' },

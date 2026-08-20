@@ -45,6 +45,8 @@ import {
   communityRegistryPath,
   loadFlowDefinition,
   loadKbDescriptor,
+  loadStarterFlow,
+  listStarterAgents,
   discoverProjects,
 } from '../orchestrator/studio/registry.ts';
 import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
@@ -731,6 +733,41 @@ export function runStudioLint(root: string): StudioLintResult {
       object: 'studio:session-kinds',
       check: 'load',
       message: `Cannot validate session kinds — ${(err as Error).message}`,
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // 11. Starter flow (W7-B4, flows-09) — the seeded /flows/new canvas must
+  //     be SAVEABLE by construction: every node agent in
+  //     studio/starters/flows/basic.yaml must resolve in skills/ (the live
+  //     roster) or studio/starters/agents/ (the closed set the flow PUT
+  //     materialises on save). An agent in neither place means the very
+  //     first thing a new operator draws can never be saved.
+  // ------------------------------------------------------------------
+
+  try {
+    const starterFlow = loadStarterFlow(root);
+    if (starterFlow) {
+      const starterSlugs = new Set(listStarterAgents(root).map((a) => a.slug));
+      for (const node of starterFlow.nodes) {
+        if (!node.agent) continue;
+        const inRoster = existsSync(join(root, 'skills', node.agent, 'SKILL.md'));
+        if (!inRoster && !starterSlugs.has(node.agent)) {
+          findings.push({
+            level: 'error',
+            object: 'starter-flow:basic',
+            check: 'starter-flow/agent-unresolvable',
+            message: `studio/starters/flows/basic.yaml node "${node.id}" references agent "${node.agent}", which resolves in neither skills/ nor studio/starters/agents/ — the seeded canvas could never be saved (flows-09)`,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'starter-flow:basic',
+      check: 'load',
+      message: `Cannot lint the starter flow — ${(err as Error).message}`,
     });
   }
 

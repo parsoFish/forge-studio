@@ -64,6 +64,20 @@ export function sessionKindAgent(kind: string): string | null {
   return META_BY_ID.get(kind)?.agent ?? null;
 }
 
+/**
+ * Resolve an agent slug to its reachable session ENTRY route, or `null` when
+ * the agent genuinely has none — a fabricated href to a route that doesn't
+ * exist is the dead-path failure mode this replaces (W7-B4, agents-22: the
+ * agent builder's "open a session" affordance derives its href from HERE,
+ * the same parity-pinned table every other kind-level surface reads —
+ * the frozen one-entry SESSION_ENTRY_HREF_BY_SLUG map is deleted).
+ * Architect's bespoke `/architect/new` rides its own row's `kickoffHref`;
+ * onboarding honestly resolves `null` (no direct kickoff surface).
+ */
+export function sessionEntryHrefForAgent(slug: string): string | null {
+  return SESSION_KIND_META.find((m) => m.agent === slug)?.kickoffHref ?? null;
+}
+
 export type KickoffEntry = { kind: string; label: string; href: string };
 
 /**

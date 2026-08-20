@@ -7,6 +7,7 @@ import { fetchSkillLibrary, type SkillLibraryEntry } from '@/lib/skill-client';
 import { groupSkillLibrary, skillBadges, filterSkills } from '@/lib/skill-library-view';
 import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
 import { hubLabel, signalsLabel, communityBadgeForSkill } from '@/lib/community-view';
+import { InstallStateBadge } from '@/components/studio/LibraryHub';
 
 // ---------------------------------------------------------------------------
 // Skills library — /skills (R3-01-F3/F4, WI-3, D8: the ONE place "New skill"
@@ -235,6 +236,9 @@ function SkillCard({ entry, community }: { entry: SkillLibraryEntry; community: 
         {badges.map((b) => (
           <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
         ))}
+        {/* W7-B4 (library-04): the data-skill-installed attribute finally
+            has a human-visible counterpart. */}
+        <InstallStateBadge entry={entry} />
       </div>
       <p className="card-body">{entry.description || 'No description.'}</p>
       {entry.error && (

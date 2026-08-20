@@ -513,12 +513,63 @@ export function readHookApprovalLedger(forgeRoot: string): Map<string, HookAppro
   return new Map(entries.map((e) => [e.id, e]));
 }
 
+/** The ledger's `revoked` list (W7-B4, library-08) — the RECORDED history of
+ *  revocations. Read tolerantly for round-tripping only: `readHookApprovalLedger`
+ *  (the runtime authority) never consults it, so a revoked entry can never be
+ *  mistaken for a live approval. A missing file or absent list is `[]`; an
+ *  unreadable/unparseable EXISTING file fails loud exactly like
+ *  `readHookApprovalLedger` (same file, same contract). */
+function readHookLedgerRevoked(forgeRoot: string): unknown[] {
+  const file = hookApprovalLedgerPath(forgeRoot);
+  if (!existsSync(file)) return [];
+  const parsed = yaml.load(readFileSync(file, 'utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+  const revoked = (parsed as Record<string, unknown>)['revoked'];
+  return Array.isArray(revoked) ? revoked : [];
+}
+
+/** One writer for the whole ledger document — `approved` (sorted) plus the
+ *  carried-through `revoked` history, so no code path can drop one half while
+ *  writing the other. */
+function writeHookLedgerDoc(forgeRoot: string, approvedMap: Map<string, HookApprovalLedgerEntry>, revoked: unknown[]): void {
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  const approved = [...approvedMap.values()].sort((a, b) => a.id.localeCompare(b.id));
+  writeFileSync(
+    hookApprovalLedgerPath(forgeRoot),
+    yaml.dump({ approved, ...(revoked.length > 0 ? { revoked } : {}) }),
+    'utf8',
+  );
+}
+
 export function writeHookApprovalLedgerEntry(forgeRoot: string, entry: HookApprovalLedgerEntry): void {
   const ledger = readHookApprovalLedger(forgeRoot);
+  const revoked = readHookLedgerRevoked(forgeRoot);
   ledger.set(entry.id, entry);
-  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
-  const approved = [...ledger.values()].sort((a, b) => a.id.localeCompare(b.id));
-  writeFileSync(hookApprovalLedgerPath(forgeRoot), yaml.dump({ approved }), 'utf8');
+  writeHookLedgerDoc(forgeRoot, ledger, revoked);
+}
+
+/**
+ * W7-B4 (library-08) — the INVERSE of {@link approveHook} that never existed:
+ * remove the hook's live approval (so {@link hookRunState} honestly reads
+ * needs-review / not-runnable again) and RECORD the revocation — the prior
+ * entry's pinned hashes plus a `revokedAt` stamp appended to the ledger's
+ * `revoked` list. An audit trail, never a silent erase.
+ *
+ * Error contract (ADR-042 pure-function boundary): throws when the hook has
+ * no approval on record — a revocation of nothing is a caller state error the
+ * bridge maps to 409, never a silent no-op.
+ */
+export function revokeHookApproval(input: { forgeRoot: string; id: string }): void {
+  const { forgeRoot, id } = input;
+  const ledger = readHookApprovalLedger(forgeRoot);
+  const entry = ledger.get(id);
+  if (!entry) {
+    throw new Error(`revokeHookApproval: hook "${id}" has no approval on record — nothing to revoke`);
+  }
+  ledger.delete(id);
+  const revoked = readHookLedgerRevoked(forgeRoot);
+  revoked.push({ ...entry, revokedAt: new Date().toISOString() });
+  writeHookLedgerDoc(forgeRoot, ledger, revoked);
 }
 
 // ---------------------------------------------------------------------------

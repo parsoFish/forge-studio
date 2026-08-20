@@ -354,15 +354,18 @@ export const journey = defineJourney({
               // for kinds this checkout may legitimately ship zero of.
               await countAtLeast(page, '[data-section="skills"] [data-card-type="skill"]', 1, 'library: ≥1 skill card in the skills shelf');
               await countAtLeast(page, '[data-section="hooks"] [data-card-type="hook"]', 1, 'library: ≥1 hook card in the hooks shelf');
-              // Create CTAs — Skills/Hooks only (Connections/Templates have no author-here
-              // path; Community gets a browse entry, never a create CTA).
+              // Create CTAs — Skills, Hooks and (W7-B4, library-17) Templates.
+              // Connections stay curation-by-PR; Community gets a browse entry,
+              // never a create CTA.
               check(await page.locator('[data-action="new-skill"]').count() > 0, 'library: skills shelf carries a "+ New skill" create CTA');
               check(await page.locator('[data-action="new-hook"]').count() > 0, 'library: hooks shelf carries a "+ New hook" create CTA');
+              check(await page.locator('[data-action="new-template"]').count() > 0, 'library: templates shelf carries a "+ New template" create CTA (W7-B4 library-17)');
               check(await page.locator('[data-action="browse-community"]').count() > 0, 'library: community shelf carries a "Browse community" entry, not a create CTA');
-              // KB cross-link — Library no longer creates or lists knowledge bases.
-              const kbCrosslink = await page.evaluate(() =>
-                document.querySelector('[data-action="kb-crosslink"]')?.getAttribute('href') ?? '');
-              check(kbCrosslink === '/knowledge', `library: the KB cross-link points at /knowledge (got "${kbCrosslink}")`);
+              // W7-B4 (library-02, operator note 9): the KB cross-link card is
+              // GONE — the pillar nav already carries Knowledge; the card
+              // duplicated it.
+              check(await page.locator('[data-action="kb-crosslink"]').count() === 0,
+                'library: the KB cross-link card is removed (W7-B4 library-02 — the nav owns Knowledge)');
 
               // ── A1.3: cross-project attention strip — now lives on Home (R4-11-F4 + W6-IA-4) ─
               // mdtoc is a standing, always-registered fixture (checked into the repo,

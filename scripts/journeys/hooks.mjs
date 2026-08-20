@@ -192,7 +192,7 @@ export const journey = defineJourney({
       {
         id: 'hooks-detail',
         title: 'A hook\'s detail page — file package + SECURITY SCAN',
-        narration: 'pre-pr-security-review\'s detail page renders its file package (hook.yaml + its script, tabbed, via the SAME shared FilePackage renderer skills use) and the SECURITY SCAN panel: a clean verdict, zero findings — a read-only, unauthored guard nobody has bound to an agent yet.',
+        narration: 'pre-pr-security-review\'s detail page renders its file package (hook.yaml + its script, tabbed, via the SAME shared FilePackage renderer skills use) and the SECURITY SCAN panel: a clean verdict, zero findings — an unauthored guard nobody has bound to an agent yet. Since W7-B4 the page also carries Edit and Delete: hooks are no longer create-only, and an unbound hook is genuinely deletable (a bound one refuses with the carriers named).',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── HK-1: a real hook's detail page (file package + SECURITY SCAN) ────────
@@ -232,6 +232,10 @@ export const journey = defineJourney({
 
               check(await page.locator('[data-section="carried-by"][data-carried-by-count="0"]').count() > 0,
                 'HK-1: unbound — data-carried-by-count="0" (nobody has bound this seed to an agent yet)');
+              // W7-B4 (library-08): hooks carry the edit/delete half of CRUD now.
+              check(await page.locator('[data-component="library-item-actions"][data-kind="hook"]').count() > 0,
+                'HK-1: the Edit/Delete action bar renders (W7-B4 library-08 — hooks are no longer create-only)');
+              check(await page.locator('[data-action="edit-hook"]').count() > 0, 'HK-1: Edit is offered');
               await caption(page, 'A clean SECURITY SCAN — and still unbound; binding happens only in the Agent Builder.');
               await frame(page, 'hk-1-detail', 'Part 2 (hooks) — /hooks/pre-pr-security-review: file package + a clean SECURITY SCAN', { key: true });
 
@@ -307,7 +311,7 @@ export const journey = defineJourney({
       {
         id: 'hooks-security',
         title: 'Declaring the exfiltration is the risk, not the fix — blocked, refused, and a distinct override',
-        narration: '2026-08-04 BLOCKER 2: a hook that DECLARES a secret-shaped env grant plus network egress, then curls the secret out, gets BLOCKED — the env-read finding stays critical even though it is declared, which is the whole lesson: declaring your intent buys you nothing, because only a declared grant reaches the child process in the first place, so declaring is what makes the leak possible, not what excuses it. Approval is structurally refused (no button renders; a direct bridge call 409s); overriding is a DISTINCT act gated on a non-empty reason, and the verdict still reads "blocked" afterwards, on the detail page AND the library shelf. A contrast hook with the identical shape left undeclared ALSO lands "blocked" but is the inert one — the undeclared grant never reaches the child even if it ran.',
+        narration: '2026-08-04 BLOCKER 2: a hook that DECLARES a secret-shaped env grant plus network egress, then curls the secret out, gets BLOCKED — the env-read finding stays critical even though it is declared, which is the whole lesson: declaring your intent buys you nothing, because only a declared grant reaches the child process in the first place, so declaring is what makes the leak possible, not what excuses it. Approval is structurally refused (no button renders; a direct bridge call 409s); overriding is a DISTINCT act gated on a non-empty reason, and the verdict still reads "blocked" afterwards, on the detail page AND the library shelf — where the resolution is now a visible APPROVAL RECORD (trust, timestamp, the recorded reason) with Revoke offered as the inverse act (W7-B4). A contrast hook with the identical shape left undeclared ALSO lands "blocked" but is the inert one — the undeclared grant never reaches the child even if it ran.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── HK-3: the declared exfil hook gets blocked, refused, then overridden ──
@@ -410,8 +414,18 @@ export const journey = defineJourney({
               check(verdict2 === 'blocked', `HK-3: the scan verdict STILL reads "blocked" after override — never laundered (got "${verdict2}")`);
               check(
                 await page.locator('[data-action="approve-hook"]').count() === 0 && await page.locator('[data-action="override-hook-block"]').count() === 0,
-                'HK-3: the Approval section is gone once resolved — nothing left to click',
+                'HK-3: the approve/override controls are gone once resolved — the recorded resolution stands in their place',
               );
+              // W7-B4 (library-09/08): the resolution is VISIBLE — an approval
+              // RECORD (trust + approvedAt + the recorded override reason) with
+              // the inverse act (Revoke) offered. Resolved no longer renders as
+              // nothing.
+              check(await page.locator('[data-section="approval-record"][data-hook-trust="overridden"]').count() > 0,
+                'HK-3: the APPROVAL RECORD panel renders the overridden resolution (W7-B4 library-09)');
+              check(await page.locator('[data-field="override-reason-recorded"]').count() > 0,
+                'HK-3: the recorded override reason is shown verbatim');
+              check(await page.locator('[data-action="revoke-hook-approval"]').count() > 0,
+                'HK-3: the record offers the inverse act — Revoke approval (W7-B4 library-08)');
 
               // Back on the shelf: the card never launders the record either.
               await page.goto(watch.uiUrl + '/hooks', { waitUntil: 'domcontentloaded' });

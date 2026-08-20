@@ -272,3 +272,54 @@ export async function fetchTemplate(
     return { ok: false, status: res.status, error: `malformed bridge response: ${String(err)}` };
   }
 }
+
+// ---------------------------------------------------------------------------
+// W7-B4 (library-17) — the authoring half. Writable categories only
+// (planning / demo-output); the bridge is the enforcement point, these
+// helpers just carry its answer verbatim.
+// ---------------------------------------------------------------------------
+
+async function templateClientSend(
+  method: 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  try {
+    const res = await bridgeFetch(path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string } & Record<string, unknown>;
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/** Create a template (or duplicate an existing one when `duplicateOf` is
+ *  set — the bridge rewrites the frontmatter id). */
+export async function createTemplate(input: {
+  category: 'planning' | 'demo-output';
+  id: string;
+  content?: string;
+  duplicateOf?: string;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const r = await templateClientSend('POST', '/api/studio/templates', input);
+  return { ok: r.ok, id: typeof r.data?.['id'] === 'string' ? (r.data['id'] as string) : undefined, error: r.error };
+}
+
+/** Replace a template's raw content (validated server-side by the REAL
+ *  category loader; an invalid edit leaves the file untouched). */
+export async function updateTemplate(id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await templateClientSend('PUT', `/api/studio/templates/${encodeURIComponent(id)}`, { content });
+  return { ok: r.ok, error: r.error };
+}
+
+/** Delete a template. The bridge refuses (409, naming the users) while any
+ *  flow/project still uses it, and 400s the read-only scaffold category. */
+export async function deleteTemplate(id: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await templateClientSend('DELETE', `/api/studio/templates/${encodeURIComponent(id)}`);
+  return { ok: r.ok, error: r.error };
+}

@@ -143,14 +143,28 @@ export const journey = defineJourney({
               check(domUsedByCount === derivedUsage.length,
                 `SK-0: brain-query's data-skill-used-by-count matches derived usage (dom=${domUsedByCount}, real=${derivedUsage.length})`);
 
-              await frame(page, 'sk-0a-library', 'Part 2 (skills) — the /skills library: local + community sections, derived used-by', { key: true });
+              // W7-B4 (library-04): the data-skill-installed attribute has a
+              // HUMAN-VISIBLE counterpart on every card — the marker count
+              // matches the card count, and both installed states render.
+              const installMarkers = await page.evaluate(() => ({
+                markers: document.querySelectorAll('[data-component="install-state"]').length,
+                cards: document.querySelectorAll('[data-card-type="skill"]').length,
+                installed: document.querySelectorAll('[data-component="install-state"][data-installed="true"]').length,
+                notInstalled: document.querySelectorAll('[data-component="install-state"][data-installed="false"]').length,
+              }));
+              check(installMarkers.markers === installMarkers.cards && installMarkers.cards > 0,
+                `SK-0: every skill card renders a visible install-state marker (${installMarkers.markers}/${installMarkers.cards}; W7-B4 library-04)`);
+              check(installMarkers.installed > 0 && installMarkers.notInstalled > 0,
+                `SK-0: both install states are visibly distinguishable (${installMarkers.installed} installed, ${installMarkers.notInstalled} not)`);
+
+              await frame(page, 'sk-0a-library', 'Part 2 (skills) — the /skills library: local + community sections, derived used-by, visible install state', { key: true });
 
         },
       },
       {
         id: 'skills-detail-package',
         title: 'A real skill\'s detail page — file package + used-by',
-        narration: 'The detail page for a real shipped skill renders its file package (SKILL.md plus every supporting file, tabbed) with a file count that matches the real files on disk, and the SAME derived used-by list the library card showed — the detail route and the library card agree on one real fact, not two independent guesses.',
+        narration: 'The detail page for a real shipped skill renders its file package (SKILL.md plus every supporting file, tabbed) with a file count that matches the real files on disk, and the SAME derived used-by list the library card showed — the detail route and the library card agree on one real fact, not two independent guesses. Since W7-B4 the page also carries the missing half of CRUD: Edit (name, description, body) and Delete — and because this skill is composed by real agents, Delete renders disabled with the reason, the same guard the bridge enforces.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── SK-0b: a real skill's package detail page ──────────────────────────────
@@ -190,7 +204,17 @@ export const journey = defineJourney({
               check(JSON.stringify(usedByAgentsDom) === JSON.stringify(derivedUsage),
                 `SK-0b: the exact used-by agent set matches derivation (dom=[${usedByAgentsDom.join(', ')}], real=[${derivedUsage.join(', ')}])`);
 
-              await frame(page, 'sk-0b-detail', `Part 2 (skills) — /skills/${targetId}: file package tabs + derived used-by`, { key: true });
+              // W7-B4 (library-05): the detail page carries the Edit/Delete pair.
+              // brain-query is composed by real agents, so Delete renders
+              // DISABLED with the reason — an honest guard, not a dead button.
+              check(await page.locator('[data-component="library-item-actions"][data-kind="skill"]').count() > 0,
+                'SK-0b: the Edit/Delete action bar renders (W7-B4 library-05 — skills are no longer create-only)');
+              check(await page.locator('[data-action="edit-skill"]').count() > 0, 'SK-0b: Edit is offered');
+              check(await page.locator('[data-action="delete-skill"][disabled]').count() > 0
+                 && await page.locator('[data-component="delete-blocked"]').count() > 0,
+                'SK-0b: Delete on a composed skill is disabled WITH the visible reason (guarded, never silent)');
+
+              await frame(page, 'sk-0b-detail', `Part 2 (skills) — /skills/${targetId}: file package tabs, derived used-by, edit/delete lifecycle`, { key: true });
 
         },
       },
