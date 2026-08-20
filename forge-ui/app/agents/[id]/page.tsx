@@ -62,6 +62,18 @@ import {
   editInstructionsText,
   addChip,
 } from '@/lib/agent-builder-view';
+// W7-B4: the load/save translation + duplicate prefill live in a pure lib
+// module now (agents-28/09 pins), and the session-entry href derives from
+// the ONE kickoff-kind table (agents-22) instead of a frozen per-slug map.
+import {
+  parseAgentToState,
+  buildAgentPutBody,
+  duplicateAgentState,
+  type AgentBuilderState,
+} from '@/lib/agent-authoring-view';
+import { sessionEntryHrefForAgent } from '@/lib/kickoff-kinds';
+import { deleteAgent } from '@/lib/studio-client';
+import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,42 +81,9 @@ import {
 
 type Kind = 'skill' | 'tool' | 'mcp' | 'guard' | 'hook';
 
-type AgentState = {
-  slug: string;
-  name: string;
-  purpose: string;
-  skills: string[];
-  tools: string[];
-  mcps: string[];
-  guards: string[];
-  // Library hook ids this agent carries (R3-03-F4) — distinct vocabulary
-  // from guards; binding happens ONLY here in the Agent Builder.
-  hooks: string[];
-  process: string;
-  interactivity: string;
-  runtime: AgentRuntime;
-  brainAccess: string;
-  // R2-09 D1/D2/C4 — the closed upload-kind vocabulary this agent accepts
-  // (MATERIAL_KINDS). Surfaced on the agent's kickoff screen; ENFORCEMENT
-  // happens at R6-04-F2's upload seam, not here — this UI only declares.
-  materials: string[];
-  // read-only (SKILL.md-authored, not editable in M2)
-  allowedTools: string[];
-  disallowedTools: string[];
-  phase: string;
-  // R2-02-F4: server-computed F1 capability descriptor, carried through
-  // as-is (never re-derived client-side) — undefined only for a genuinely
-  // blank agent, before the first load/save round-trip. A starter-picked
-  // agent DOES carry a capability (applyStarter → parseAgent(starter),
-  // fed by the /api/studio/starters threading).
-  capability?: AgentCapabilityDescriptor;
-  // R6-04 WI-3: server-computed FACT, threaded through as-is (never
-  // re-derived client-side) — see Agent.costCeilingEnforceable's own doc
-  // comment in studio-client.ts for why it rides as its own top-level field
-  // rather than inside `capability` (parseCapability's return shape is
-  // pinned byte-for-byte by existing studio-client.test.ts assertions).
-  costCeilingEnforceable: boolean;
-};
+// W7-B4: the flat builder state moved to lib/agent-authoring-view.ts (pure,
+// unit-pinned) — this alias keeps the page's own vocabulary unchanged.
+type AgentState = AgentBuilderState;
 
 const DEFAULT_RUNTIME: AgentRuntime = {
   sdk: 'sdk-claude',
@@ -149,105 +128,12 @@ const BLANK_STATE: AgentState = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * R6-04 WI-3 — resolve an interactive agent's real session ENTRY point (a
- * route reachable from THIS page, i.e. one that does not itself require an
- * already-existing sessionId/cycleId — a kickoff has none yet). Measured
- * against the actual forge-ui route tree (2026-08-07), NOT assumed uniform:
- * of every "own session page" surface (`/architect/[sessionId]`,
- * `/instructions/[sessionId]`, `/project-brain/[sessionId]`,
- * `/demo/[sessionId]`, `/reflect/[cycleId]`, `/review/[cycleId]`,
- * `/sessions/[kind]/[sessionId]`), only `architect` also ships a static
- * "start new" page (`/architect/new`) that needs no pre-existing session id.
- * Every other one is reachable only via a session/cycle id minted by SOME
- * OTHER flow (onboarding start, a cycle's own lifecycle) — there is no
- * generic "start a new one from here" page for those today, so this table
- * has exactly one real entry. (`architect` itself is never actually
- * `capability.interactive: true` — R2-01-F2's `executionPathForSurface`
- * resolves it via the flow gate table, not this generic mechanism — so in
- * the CURRENT roster this table is not yet exercised in practice; it is
- * wired for the day a `surface: interactive` agent with `library !== false`
- * and a `runtime` block actually joins the dispatchable roster.)
- *
- * Deliberately NOT a "smart" per-agent-kind heuristic: a wrong guess here
- * would render a fabricated href to a route that doesn't exist (the exact
- * failure mode the task brief calls out, and a dead-paths gate finding).
- * Absent from this table (or any slug not present) ⇒ `null` ⇒ RunPanel
- * renders the explicit `data-component="session-entry-missing"` state.
- */
-const SESSION_ENTRY_HREF_BY_SLUG: Readonly<Record<string, string>> = Object.freeze({
-  architect: '/architect/new',
-});
-
-function sessionEntryHrefForAgent(slug: string): string | null {
-  return SESSION_ENTRY_HREF_BY_SLUG[slug] ?? null;
-}
-
-function parseAgent(raw: Agent): AgentState {
-  // Server uses composition.* + body; the client Agent type already mirrors
-  // the flat shape (the GET /api/studio/agents endpoint denormalises it).
-  const rt = raw.runtime ?? { ...DEFAULT_RUNTIME };
-  return {
-    slug:           raw.id ?? '',
-    name:           raw.name ?? '',
-    purpose:        raw.purpose ?? '',
-    skills:         (raw.skills ?? []).slice(),
-    tools:          (raw.tools ?? []).slice(),
-    mcps:           (raw.mcps ?? []).slice(),
-    guards:         (raw.guards ?? []).slice(),
-    hooks:          (raw.hooks ?? []).slice(),
-    process:        raw.process ?? '',
-    interactivity:  raw.interactivity ?? '',
-    runtime: {
-      sdk:           rt.sdk           ?? 'sdk-claude',
-      strategy:      rt.strategy      ?? 'fixed',
-      model:         rt.model         ?? null,
-      range:         (rt.range        ?? []).slice(),
-      // R4-01-F2: loopStrategy is load-bearing declared dispatch (ADR-039) —
-      // dropping it here made the picker misrender migrated agents and the
-      // PUT round-trip depend on the server's existing-value fallback.
-      loopStrategy:  rt.loopStrategy,
-    },
-    brainAccess:    raw.brainAccess   ?? 'none',
-    // R2-09 C4: absent/malformed on the wire (parseMaterials's own
-    // undefined) degrades to "nothing declared yet" in the EDITABLE state —
-    // the toggle set needs a concrete array to render, and starting from
-    // empty is the honest "no material accepted" starting point, never a
-    // fabricated "accepts everything". Save always sends the concrete
-    // (possibly still-empty) array back — see buildPutBody below.
-    materials:      raw.materials ?? [],
-    allowedTools:   ((raw as Record<string, unknown>).allowedTools  as string[] | undefined) ?? [],
-    disallowedTools:((raw as Record<string, unknown>).disallowedTools as string[] | undefined) ?? [],
-    phase:          raw.phase ?? '',
-    capability:     raw.capability,
-    costCeilingEnforceable: raw.costCeilingEnforceable === true,
-  };
-}
-
-function buildPutBody(state: AgentState): Record<string, unknown> {
-  return {
-    name:         state.name.trim(),
-    purpose:      state.purpose,
-    process:      state.process,       // server maps process → body
-    interactivity: state.interactivity,
-    brainAccess:  state.brainAccess,
-    materials:    state.materials,
-    composition: {
-      skills: state.skills,
-      tools:  state.tools,
-      mcps:   state.mcps,
-      guards: state.guards,
-      hooks:  state.hooks,
-    },
-    runtime: {
-      sdk:          state.runtime.sdk,
-      strategy:     state.runtime.strategy,
-      model:        state.runtime.model ?? undefined,
-      range:        state.runtime.range,
-      loopStrategy: state.runtime.loopStrategy,
-    },
-  };
-}
+// W7-B4 (agents-22): `sessionEntryHrefForAgent` now derives from the shared
+// KICKOFF_KINDS table (lib/kickoff-kinds.ts) — the frozen one-entry
+// SESSION_ENTRY_HREF_BY_SLUG map that told every interactive agent "no
+// reachable session entry point yet" is deleted. parseAgent/buildPutBody
+// live in lib/agent-authoring-view.ts (pure, unit-pinned).
+const parseAgent = parseAgentToState;
 
 // ---------------------------------------------------------------------------
 // Toast state (simple in-component toast list)
@@ -401,7 +287,7 @@ export default function AgentBuilderPage() {
     }
     setDraftPending(true);
     try {
-      const result = await requestInstructionsDraft(state.slug, buildPutBody(state));
+      const result = await requestInstructionsDraft(state.slug, buildAgentPutBody(state, { create: false }));
       if (!result.ok) {
         pushToast(result.error, 'err');
         return;
@@ -467,10 +353,28 @@ export default function AgentBuilderPage() {
           }
         } else {
           setSlugResolution('found');
-          setState({ ...EMPTY_STATE });
-          setStarterChosen(false); // new agent → show the starter picker first
-          setAdvancedOpen(false);
+          // W7-B4 (agents-09): /agents/new?duplicate=<slug> prefills the
+          // builder from the source agent (slug cleared, name marked as a
+          // copy) — read off the location rather than useSearchParams so no
+          // Suspense boundary is forced onto this client page.
+          const dupSlug = typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('duplicate')
+            : null;
+          const dupSource = dupSlug ? a.find((ag) => ag.id === dupSlug) : undefined;
+          if (dupSource) {
+            setState(duplicateAgentState(dupSource));
+            setStarterChosen(true); // the duplicate IS the starting point
+            setAdvancedOpen(false);
+          } else {
+            setState({ ...EMPTY_STATE });
+            setStarterChosen(false); // new agent → show the starter picker first
+            setAdvancedOpen(false);
+          }
           loadedSlug.current = 'new';
+          // A duplicate prefill IS an unsaved edit; a blank builder is not.
+          setDirty(Boolean(dupSource));
+          setLoadError(null);
+          return;
         }
         setDirty(false);
         setLoadError(null);
@@ -543,7 +447,10 @@ export default function AgentBuilderPage() {
     const slug = isNew
       ? state.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
       : state.slug;
-    const result = await saveAgent(slug, buildPutBody(state));
+    // W7-B4 (agents-28): the /agents/new path declares itself a CREATE so a
+    // name normalising to an existing slug 409s instead of silently
+    // overwriting that agent.
+    const result = await saveAgent(slug, buildAgentPutBody(state, { create: isNew }));
     if (!result.ok) {
       // Surface detailed validation findings as toasts; the inline SaveStatus
       // shows the top-level error.
@@ -574,6 +481,31 @@ export default function AgentBuilderPage() {
     // C3/D9: discarding replaces the instructions text with the last-loaded
     // (or blank) value, so any pending draft's provenance no longer applies.
     setInstructionsIsDraft((prev) => clearInstructionsDraftFlag({ instructionsIsDraft: prev }).instructionsIsDraft);
+  }
+
+  // ---- W7-B4 (agents-09): delete / duplicate ----
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // The same real fact the bridge's DELETE guard enforces, derived from the
+  // already-loaded flow roster so the button is honest before the round-trip.
+  const referencingFlows = isNew
+    ? []
+    : flows.filter((f) => (f.nodes ?? []).some((n) => n.agent === state.slug)).map((f) => f.id);
+
+  async function handleDeleteAgent() {
+    setDeleting(true);
+    setDeleteError(null);
+    const r = await deleteAgent(state.slug);
+    setDeleting(false);
+    if (!r.ok) {
+      setDeleteError(r.error ?? 'delete failed');
+      return;
+    }
+    router.push('/agents');
+  }
+
+  function handleDuplicateAgent() {
+    router.push(`/agents/new?duplicate=${encodeURIComponent(state.slug)}`);
   }
 
   // ---- used ids (for palette dimming) ----
@@ -849,6 +781,34 @@ export default function AgentBuilderPage() {
             </button>
             <SaveStatus {...saveFb} saving={saving} />
             <span className="spacer" />
+            {/* W7-B4 (agents-09): duplicate + delete — an agent finally has
+                a full lifecycle in Studio. Hidden while unsaved (nothing on
+                disk to act on). */}
+            {!isNew && state.slug && (
+              <LibraryItemActions
+                kind="agent"
+                id={state.slug}
+                editing={false}
+                onDelete={() => void handleDeleteAgent()}
+                deleting={deleting}
+                deleteBlockReason={
+                  referencingFlows.length > 0
+                    ? `still a node in: ${referencingFlows.join(', ')} — edit those flows first`
+                    : null
+                }
+                error={deleteError}
+                extra={
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    data-action="duplicate-agent"
+                    onClick={handleDuplicateAgent}
+                  >
+                    Duplicate
+                  </button>
+                }
+              />
+            )}
             {dirty
               ? <span className="save-hint save-hint-dirty">Unsaved changes</span>
               : <span className="save-hint muted">All changes saved</span>

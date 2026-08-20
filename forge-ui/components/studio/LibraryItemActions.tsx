@@ -31,7 +31,9 @@ export function LibraryItemActions({
   kind: 'skill' | 'hook' | 'template' | 'agent';
   id: string;
   editing: boolean;
-  onToggleEdit: () => void;
+  /** Omit to render no Edit control (e.g. the agent builder — the whole
+   *  page is already the editor; only Delete/Duplicate belong here). */
+  onToggleEdit?: () => void;
   onDelete: () => void;
   deleting?: boolean;
   /** Set when the delete is known-blocked (e.g. still bound/used) — renders
@@ -52,15 +54,17 @@ export function LibraryItemActions({
       data-item-id={id}
       style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
     >
-      <button
-        type="button"
-        className="btn btn-sm"
-        data-action={`edit-${kind}`}
-        aria-pressed={editing ? 'true' : 'false'}
-        onClick={onToggleEdit}
-      >
-        {editing ? 'Close editor' : 'Edit'}
-      </button>
+      {onToggleEdit && (
+        <button
+          type="button"
+          className="btn btn-sm"
+          data-action={`edit-${kind}`}
+          aria-pressed={editing ? 'true' : 'false'}
+          onClick={onToggleEdit}
+        >
+          {editing ? 'Close editor' : 'Edit'}
+        </button>
+      )}
 
       {extra}
 

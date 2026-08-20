@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { subscribe, type EventLogEntry, type ConnectionState, resumeRun } from '@/lib/bridge-client';
-import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
+import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow, deleteFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
 import { runsForFlow } from '@/lib/home-view';
@@ -40,6 +40,25 @@ import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 //       {type:'event', cycleId} for active run's cycleId → append to tail + refresh run
 //       {type:'cycle-list-changed'} → re-fetch runs
 // ---------------------------------------------------------------------------
+
+/** W7-B4 (flows-27): a stable, key-sorted serialisation of the builder's
+ *  editable state — header fields + canvas nodes/edges — used to detect
+ *  unsaved edits before they are silently discarded on a tab switch. */
+function builderSnapshot(header: FlowHeaderState, nodes: unknown[], edges: unknown[]): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([, v]) => v !== undefined)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => [k, canonical(v)]),
+      );
+    }
+    return value;
+  };
+  return JSON.stringify(canonical({ header, nodes, edges }));
+}
 
 function pickDefaultRun(runs: Run[]): Run | null {
   // Priority: gated → active → first complete → first planned
@@ -147,6 +166,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     triggers: [],
   });
   const canvasRef = useRef<CanvasHandle | null>(null);
+  // W7-B4 (flows-27): the last SAVED builder snapshot — the dirty test's
+  // baseline. Set on load and on every successful save.
+  const savedSnapshotRef = useRef<string | null>(null);
+  // W7-B4 (flows-11): a failed delete's error, shown in the BUILD tab.
+  const [flowActionError, setFlowActionError] = useState<string | null>(null);
 
   // ---- data loading ----
 
@@ -312,7 +336,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       setAgents(ags);
       setBuildLoadError(null);
       if (flowDef) {
-        setHeaderState({
+        const header = {
           // The operator names their own flow; the starter only seeds the canvas
           // + goal so a basic flow is creatable with near-zero input.
           name: isNew ? '' : flowDef.name,
@@ -320,7 +344,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           project: flowDef.project ?? '',
           kb: flowDef.kb ?? '',
           triggers: isNew ? [] : (flowDef.triggers ?? []),
-        });
+        };
+        setHeaderState(header);
+        // W7-B4 (flows-27): the freshly-loaded state is the clean baseline.
+        savedSnapshotRef.current = builderSnapshot(header, flowDef.nodes ?? [], flowDef.edges ?? []);
       }
     } catch (err) {
       // W7-FIX-A1 (A1-02): the builder's definition/palette read threw — the
@@ -357,6 +384,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     const nodes = rfNodesToFlow(rfNodes);
     const edges = rfEdgesToFlow(rfEdges);
     const result = await saveFlow(saveId, {
+      // W7-B4 (flows-13): the new-flow path declares itself a CREATE so a
+      // name colliding with an existing flow 409s instead of overwriting it.
+      ...(isNew ? { create: true } : {}),
       name: headerState.name,
       goal: headerState.goal,
       project: headerState.project || undefined,
@@ -368,12 +398,43 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     if (result.ok && result.version !== undefined) {
       setBuildVersion(result.version);
     }
+    if (result.ok) {
+      // W7-B4 (flows-27): a successful save resets the dirty baseline.
+      savedSnapshotRef.current = builderSnapshot(headerState, nodes, edges);
+    }
     // New flow saved → navigate to its real route so subsequent edits target it.
     if (result.ok && isNew) {
       router.push(`/flows/${encodeURIComponent(saveId)}`);
     }
     return result;
   }, [id, isNew, headerState, router]);
+
+  // W7-B4 (flows-27): unsaved canvas/header edits must not be silently
+  // discarded — the tab switch away from BUILD asks first.
+  const builderHasUnsavedEdits = useCallback((): boolean => {
+    const canvas = canvasRef.current;
+    if (!canvas || savedSnapshotRef.current === null) return false;
+    const current = builderSnapshot(headerState, rfNodesToFlow(canvas.getNodes()), rfEdgesToFlow(canvas.getEdges()));
+    return current !== savedSnapshotRef.current;
+  }, [headerState]);
+
+  const leaveBuildTab = useCallback(() => {
+    if (builderHasUnsavedEdits() && !window.confirm('You have unsaved builder edits — discard them?')) {
+      return;
+    }
+    setTab('monitor');
+  }, [builderHasUnsavedEdits]);
+
+  // W7-B4 (flows-11): delete an authored flow from the BUILD header.
+  const handleDeleteFlow = useCallback(async () => {
+    setFlowActionError(null);
+    const r = await deleteFlow(id);
+    if (!r.ok) {
+      setFlowActionError(r.error ?? 'delete failed');
+      return;
+    }
+    router.push('/flows');
+  }, [id, router]);
 
   // ---- start / resume ----
 
@@ -530,16 +591,24 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
             flows={allFlows}
             onFlowSelect={(newId) => {
               if (newId !== id) {
-                // Navigate to the selected flow
+                // W7-B4 (flows-27): the selector leaves the builder too.
+                if (builderHasUnsavedEdits() && !window.confirm('You have unsaved builder edits — discard them?')) return;
                 router.push(`/flows/${encodeURIComponent(newId)}`);
               }
             }}
+            canDelete={!isNew && buildFlow?.origin === 'studio'}
+            onDelete={() => void handleDeleteFlow()}
           />
+          {flowActionError && (
+            <div data-component="flow-action-error" style={{ background: 'var(--panel)', padding: '6px 24px', fontSize: 12.5, color: '#f87171', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+              {flowActionError}
+            </div>
+          )}
           {/* Tabs bar — BUILD active */}
           <div className="tabs" style={{ background: 'var(--panel)', padding: '0 24px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
             <button
               className="tab"
-              onClick={() => setTab('monitor')}
+              onClick={leaveBuildTab}
               disabled={isNew}
               title={isNew ? 'Save this flow first — there is nothing to monitor yet.' : undefined}
               style={isNew ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}

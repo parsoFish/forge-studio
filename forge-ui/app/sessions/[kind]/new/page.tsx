@@ -43,40 +43,10 @@ import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/sessi
 // kickoff alike).
 // ---------------------------------------------------------------------------
 
-type KickoffKindId = 'instructions' | 'demo' | 'kb-cleanup' | 'authoring' | 'project-brain' | 'community-refresh';
-
-type KickoffKindSpec = {
-  title: string;
-  /** The skill slug this kind's agent runs — resolves the SKILL.md-declared
-   *  model envelope via `fetchAgentCapability()` (the unfiltered per-slug
-   *  route, W6-B6 fix — NOT `fetchStudioAgents()`'s roster, which drops
-   *  every `library:false` kickoff-only agent). */
-  agentSlug: string;
-  artifactLabel: string;
-  /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
-   *  route takes neither, and the context card renders the fixed session
-   *  home directly rather than an operator-filled path. */
-  selector: 'project' | 'kb' | 'none';
-  /** Only 'authoring' takes a free-text prompt — its `/start` body requires
-   *  one (every other kind's `/start` route needs no operator prose at
-   *  kickoff; instructions/demo take their brief on a LATER turn, via their
-   *  own bespoke panel's briefing step). */
-  promptLabel?: string;
-  promptPlaceholder?: string;
-};
-
-const KICKOFF_KINDS: Record<KickoffKindId, KickoffKindSpec> = {
-  instructions: { title: 'Instructions session', agentSlug: 'instructions-creator', artifactLabel: 'AGENTS.md draft', selector: 'project' },
-  demo: { title: 'Demo capability session', agentSlug: 'demo-builder', artifactLabel: 'Demo generations', selector: 'project' },
-  'kb-cleanup': { title: 'KB cleanup session', agentSlug: 'brain-maintenance', artifactLabel: 'Cleanup plan', selector: 'kb' },
-  authoring: { title: 'Authoring session', agentSlug: 'creation-agent', artifactLabel: 'Package', selector: 'project', promptLabel: 'Describe what to build', promptPlaceholder: 'Describe what it should do…' },
-  'project-brain': { title: 'Brain creation session', agentSlug: 'project-brain-builder', artifactLabel: 'Seeded structure', selector: 'project' },
-  'community-refresh': { title: 'Community refresh session', agentSlug: 'community-refresh', artifactLabel: 'Registry draft', selector: 'none' },
-};
-
-function isKickoffKind(kind: string): kind is KickoffKindId {
-  return kind in KICKOFF_KINDS;
-}
+// W7-B4 (agents-22): the kind table moved to lib/kickoff-kinds.ts — the ONE
+// client-side source both this kickoff page AND the agent builder's
+// session-entry derivation read, so they can never drift apart again.
+import { KICKOFF_KINDS, isKickoffKind } from '@/lib/kickoff-kinds';
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);
