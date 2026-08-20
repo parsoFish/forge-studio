@@ -64,6 +64,9 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // never used to look anything up — sessions here are project-scoped).
   const prefillProject = searchParams.get('project') ?? '';
   const prefillInitiative = searchParams.get('initiative');
+  // W7-B2 (knowledge-33): the KB screen's "Cleanup plan" button deep-links
+  // here with its KB pre-selected — ONE kickoff surface, same options.
+  const prefillKb = searchParams.get('kb') ?? '';
 
   const [knownProjects, setKnownProjects] = useState<string[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
@@ -77,7 +80,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [ready, setReady] = useState(false);
 
   const [project, setProject] = useState(prefillProject);
-  const [kbId, setKbId] = useState('');
+  const [kbId, setKbId] = useState(prefillKb);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -115,10 +118,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
-        // W7-B3 (community-12): pre-select the tier the agent will ACTUALLY
-        // run on when nothing is chosen — the cheapest of the SKILL envelope,
-        // the SAME default the server applies. Never overrides a choice the
-        // operator already made.
+        // W7-B3 (community-12) / W7-B2 (knowledge-26): pre-select the tier the
+        // agent will ACTUALLY run on when nothing is chosen — the cheapest of
+        // the SKILL envelope, the SAME default the server applies (both lanes
+        // converged on this; `defaultKickoffTier` is the tested, shared
+        // helper). Never overrides a choice the operator already made.
         setModelTier((prev) => prev || defaultKickoffTier(allowedTiersFromCapability(cap)));
       })
       .catch((err) => {

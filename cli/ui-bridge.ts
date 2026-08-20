@@ -77,6 +77,7 @@ import {
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
+import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
@@ -4946,6 +4947,15 @@ async function handleDemoBuilder(
       const kb = loadKbDescriptors(ctx.forgeRoot).find((k) => k.id === kbId);
       if (!kb) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+        return true;
+      }
+
+      // W7-B2 (knowledge-05): a cleanup plan drafted against a KB a drain/
+      // consolidate is actively mutating is stale on arrival — refuse with
+      // the same reason the action group shows.
+      const kbActiveJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      if (kbActiveJob) {
+        sendJson(res, 409, { error: activeJobReason(kbActiveJob), runId: kbActiveJob.runId }, origin);
         return true;
       }
 

@@ -280,6 +280,8 @@ const TAG_COLOR: Record<ActivityRow['kind'], string> = {
   'thinking-redacted': 'var(--faint, #5b6779)',
   reasoning: STATUS_COLOR.active,
   capped: 'var(--faint, #5b6779)',
+  // W7-B2 (knowledge-01): a job's own per-transition progress line.
+  progress: STATUS_COLOR.active,
 };
 
 /** thinking / reasoning / redacted / capped rows all read as the agent's own

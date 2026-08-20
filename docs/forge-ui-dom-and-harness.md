@@ -1284,7 +1284,7 @@ inventory rather than one shared page-level contract:
     monitor and `/agents/[id]`'s own per-agent ledger use (reused
     UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
     and restated for `/agents/[id]` below is **not restated a third time
-    here**). `[data-component="recent-agent-runs-loading"]` before this
+    here**). `[data-component="recent-runs-loading"]` before this
     fetch resolves. The section root carries
     `data-recent-runs-unresolved=<n>` (W7-FIX-A1 A1-09): how many per-agent
     history reads came back `'unresolved'` (failed / unreachable — neither
@@ -2816,10 +2816,11 @@ inventory rather than one shared page-level contract:
     used to share. Render-tested directly (a pure leaf component, no fetch,
     no `next/navigation` hooks): `lib/knowledge-empty-state-render.test.ts`;
     the page's own wiring is pinned by source-text assertions in
-    `lib/knowledge-page-empty-state-wiring.test.ts` (mirrors
-    `lib/knowledge-page-kb-maintenance.test.ts`'s established
+    `lib/knowledge-page-empty-state-wiring.test.ts` (the established
     brace-matching/source-text technique — `useSearchParams` +
-    effect-gated `currentId` never resolve under `renderToStaticMarkup`).
+    effect-gated `currentId` never resolve under `renderToStaticMarkup` —
+    also used by `lib/knowledge-page-fail-closed-wiring.test.ts` and
+    W7-B2's `lib/knowledge-page-node-resolve-wiring.test.ts`).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
@@ -2836,8 +2837,11 @@ inventory rather than one shared page-level contract:
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
     like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
     the pre-existing graph + reader body, re-anchored under this branch
-    unchanged; **Health** hosts `KbDrainPanel` + `GuidancePanel` +
-    `KbHealth` (moved under this branch, F1 — no longer rendered
+    unchanged; **Health** hosts (in order, W7-B2) `KbActionGroup` (the ONE
+    action group — see "KB action group" below) + `KbDrainPanel` (now a pure
+    observer of the active-or-latest run) + `GuidancePanel` + `KbHealth` +
+    the shared `RecentRuns` widget (`data-section="kb-recent-runs"`) —
+    (moved under this branch, F1 — no longer rendered
     unconditionally; W6-B13 replaced `LintResolutionPanel` with
     `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
@@ -2948,21 +2952,35 @@ inventory rather than one shared page-level contract:
       its own session kind — `kb-cleanup` (see "KB maintenance panel" below
       and "Cleanup plan" above) — never folded into Consolidate itself, which
       stays a direct dispatch-and-poll, not a chat session.
-  - **KB maintenance panel:**
-    `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
-    that same root once a consolidate run reaches a terminal (`'cleared'` |
-    `'not-cleared'` | `'failed'` | `'running'` — absent before the first
-    run, reset to `''` the moment a new one starts). Actions:
-    `[data-action="kb-index"]` (index refresh — **`kb-lint` was REMOVED here
-    W6-B13**: it duplicated the Health tab's `KbDrainPanel`, whose live
-    status IS the scan result now, since every drain round re-lints the KB —
-    sweep finding C4#7),
-    **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
-    `op=consolidate`)**, **`[data-action="start-kb-cleanup"]` (R4-19-F2 — the
-    kb-cleanup LAUNCHER, closing the reachability gap
-    `brain/cycles/themes/new-session-kind-needs-ui-wiring.md` documents)**,
-    `[data-action="kb-delete"]` (guarded: `cycles` and
-    `forge-dev` are server-refused, 403). `start-kb-cleanup` calls
+  - **KB action group (W7-B2 — replaces the old `kb-maintenance` panel):**
+    `[data-component="kb-action-group"][data-active-job="drain"|"consolidate"
+    |"cleanup"|"none"]` — the ONE place every KB-mutating action lives
+    (knowledge-05/32: the old header buttons, the maintenance panel, and the
+    drain panel's own dispatch button all converged here). Mutually gated by
+    the KB-level active-job fact: `GET /api/studio/kbs/:id/active-job`
+    (`cli/kb-job-state.ts`'s `deriveKbActiveJob` — the SAME derivation every
+    mutating bridge route 409s with), any running job disables the rest and
+    `[data-component="kb-action-gate-reason"]` shows the server's own
+    wording. Actions (each with inline explanatory copy, knowledge-32/33):
+    `[data-action="drain-to-green"]` (primary — dispatch moved HERE from
+    `KbDrainPanel`, which is now a pure observer),
+    `[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
+    `op=consolidate`; `[data-action="re-check"]` appears on a timed-out
+    watch), `[data-action="start-kb-cleanup"]` (R4-19-F2 — the kb-cleanup
+    LAUNCHER), `[data-action="kb-index"]` (per-KB index repair + the global
+    meta-index rebuild, knowledge-06 — reports BOTH halves; **`kb-lint` was
+    REMOVED W6-B13**: it duplicated `KbDrainPanel`, whose live status IS the
+    scan result, sweep finding C4#7), and — in
+    `[data-section="kb-danger-zone"]` — `[data-action="kb-delete"]` with a
+    TYPED-ID confirm (knowledge-24: arm → `[data-field="kb-delete-confirm"]`
+    must equal the kb id → `[data-action="kb-delete-confirm"]` /
+    `[data-action="kb-delete-cancel"]`; `cycles` and `forge-dev` stay
+    server-refused, 403). `[data-action="goto-kb-runs"]` cross-links the
+    run-history widget below. Results/errors render persistently in
+    `[data-component="kb-action-result"]` (carrying `[data-consolidate-state]`
+    + `[data-poll-state]` when a consolidate has run; the hidden
+    `[data-component="kb-action-consolidate-state"]` div carries them while
+    no textual result is shown). `start-kb-cleanup` calls
     `startKbCleanup(kbId)` (`POST /api/studio/kbs/:id/cleanup/start`) and, on
     success, navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>`
     using the **`project` the route itself returns**, never one re-derived
@@ -2970,12 +2988,13 @@ inventory rather than one shared page-level contract:
     server-minted `.kb-<id>` scratch project
     (`KB_SEEDING_ANCHOR_PREFIX`, `cli/ui-bridge.ts`), so building the URL
     from `kbId` instead would 404 for every such KB. A failure surfaces
-    verbatim in the SAME `[data-component="kb-maintenance-result"]` span the
-    other three ops already use, never swallowed. Consolidate is genuinely
+    verbatim in the SAME `[data-component="kb-action-result"]` span the
+    other ops already use, never swallowed. Render-tested:
+    `lib/kb-action-group-render.test.ts`. Consolidate is genuinely
     asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
     dispatches, reads the returned `runId`, and polls
     `getAgentFixStatus` (bounded, 40 × 250ms) to a real terminal before the
-    button's own `[data-component="kb-maintenance-result"]` label and
+    group's own `[data-component="kb-action-result"]` label and
     `[data-consolidate-state]` update — never a static "session started"
     message. The terminal state is computed CI-safely: findings scoped to
     the KB (`resolveKbBrainDir`-identity-matched, both `brain/<id>` and the
@@ -2989,23 +3008,40 @@ inventory rather than one shared page-level contract:
     NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
     (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
     computes the real `cleared`/`total` count the terminal event carries.
-  - **KB drain-to-green panel (Health tab, W6-B13).** `KbDrainPanel.tsx`
-    replaces `LintResolutionPanel.tsx` (deleted) — ONE button drives every
-    auto- and agent-tier lint finding to a fixed point, entirely server-side
-    (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`, W6-B12): the component
-    is a pure OBSERVER of `_logs/_kb-drain-<runId>/status.json`, never the
-    owner of the run. Root: `#kb-drain-panel[data-component="kb-drain-panel"]
-    [data-drain-state][data-drain-round][data-drain-run-id]`.
+  - **KB drain-to-green panel (Health tab, W6-B13; reshaped W7-B2).**
+    `KbDrainPanel.tsx` replaces `LintResolutionPanel.tsx` (deleted) — the
+    drain drives every auto- and agent-tier lint finding to a fixed point,
+    entirely server-side (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`,
+    W6-B12): the component is a pure OBSERVER of
+    `_logs/_kb-drain-<runId>/status.json`, never the owner of the run —
+    W7-B2 moved the DISPATCH button into `KbActionGroup` above it. Root:
+    `#kb-drain-panel[data-component="kb-drain-panel"]
+    [data-drain-state][data-drain-round][data-drain-run-id]` (+
+    `data-drain-read-error=<msg>` whenever the latest status read failed).
     `data-drain-state` is one of the server's own `KbDrainState` values
     (`'running'|'green'|'needs-you'|'no-progress'|'round-cap'|'cost-ceiling'
-    |'failed'`) plus three UI-only values: `'idle'` (no run has ever been
-    dispatched for this kb), `'attaching'` (the mount-time reattach GET is
-    still in flight), and `'timed-out'` (this browser's bounded poll gave up
-    watching — the run itself keeps going server-side; see below). Actions:
-    `[data-action="drain-to-green"]` (`POST .../drain`, 409-safe — see
-    below) and `[data-action="recheck-drain"]` (only rendered in
-    `'timed-out'`; restarts the poll for the SAME `runId` without a fresh
-    dispatch).
+    |'cancelled'|'failed'` — `'cancelled'` added W7-B2, knowledge-14) plus
+    four UI-only values: `'idle'` (no run has ever been dispatched for this
+    kb), `'attaching'` (the mount-time reattach GET is still in flight),
+    `'timed-out'` (this browser's bounded poll gave up watching — the run
+    itself keeps going server-side; see below), and `'unreadable'` (W7-B2 —
+    the bridge ANSWERED the status read with a 4xx, e.g. "unknown drain
+    run": the poll STOPS, the chip says "status unreadable" and
+    `[data-component="drain-read-error"]` carries the bridge's own error
+    text — never a fabricated `'running'`; derivation is the pure
+    `deriveDrainDisplayState`, `lib/kb-drain-view.ts`). Actions:
+    `[data-action="cancel-drain"]` (running only — two-step Stop:
+    `data-cancel-armed="true|false"`, with `[data-action="cancel-drain-keep"]`
+    to disarm; `POST .../drain/cancel` answers `mode:'requested'` for a live
+    loop — honored between turns — or `mode:'forced'` for a dead one, and
+    409s when no run is active), `[data-action="recheck-drain"]` (rendered
+    in `'timed-out'` and `'unreadable'`; restarts the poll for the SAME
+    `runId` without a fresh dispatch), and per-finding
+    `[data-action="open-drain-draft"]` links to the kb-cleanup DRAFT
+    sessions the structural-only gate parks prose edits into (orch-01).
+    While running, `[data-component="drain-elapsed"]` ticks a real elapsed
+    label off the status's own `startedAt`, alongside "round N of M" from
+    the run's real `maxRounds` budget (knowledge-14).
     - **Reattach-on-mount, not assume-fresh.** On every mount (including a
       tab round-trip away from and back to Health — `KbDrainPanel` is
       rendered only under `tab === 'health'`, so switching tabs unmounts/
@@ -3017,22 +3053,34 @@ inventory rather than one shared page-level contract:
       back to Health → assert the SAME run id/state).
     - **The poll.** `lib/agent-dispatch.ts`'s `pollKbDrain` (built on the
       SAME generic `pollUntilTerminal` core `pollAgentRun` now also uses) —
-      bounded, immediate-then-interval, with an EXPLICIT `'timed-out'`
-      status once the poll ceiling is hit while still `'running'` — never a
-      silent freeze. A drain run is driven by `enqueueConsolidate`
+      bounded, immediate-then-interval, and PROGRESS-AWARE (W7-B2,
+      knowledge-15): the drain persists per transition and heartbeats
+      `updatedAt` every ~10s while a turn is in flight, and every observed
+      change resets the poll ceiling (`progressKey`), so `'timed-out'` now
+      means "the status file stopped moving for the whole budget," never
+      "the run was merely long" — and never a silent freeze. A failed READ
+      follows the A1-10 line (W7-B2): transport blips / 5xx keep watching
+      (bounded); a bridge-ANSWERED 4xx stops the poll and the panel derives
+      `'unreadable'`. A drain run is driven by `enqueueConsolidate`
       server-side, not by this poll, so `'timed-out'` here means only "this
       browser stopped watching," never "the run stopped" — the re-check
       button restarts watching the SAME run, no new dispatch.
-    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`)
-      posts `{}`; a 409 ("already active") is recovered by immediately
+    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`,
+      invoked from `KbActionGroup` since W7-B2) posts `{}`; a 409 ("already
+      active") is recovered by immediately
       calling `fetchActiveOrLatestKbDrain` rather than trusting anything off
       the 409 response body (the shared `studioPost` helper drops the body
       on any non-2xx across this whole module) — so a double-click race
       attaches to the REAL active run instead of surfacing a dead-end error.
     - **Progress + terminal rendering.** `[data-drain-section="progress"]`
-      lists this round's auto+agent-tier `perFinding` rows —
+      lists the run's accumulated `perFinding` rows GROUPED BY ROUND
+      (W7-B2, knowledge-08/12): one `[data-drain-round-group=<n>]` header
+      per round, each row
       `[data-drain-finding][data-drain-finding-tier="auto"|"agent"|"user"]
-      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]`.
+      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]
+      [data-drain-finding-file=<path>]` naming the file and rule; a row the
+      structural-only gate parked as a prose DRAFT carries its
+      `[data-action="open-drain-draft"]` session link (orch-01).
       Every terminal state gets honest, state-specific copy
       (`lib/kb-drain-view.ts`'s `drainStateCopy` — pure, unit-tested):
       `'green'` shows `[data-component="drain-green"]`; `'no-progress'` /
@@ -3085,10 +3133,10 @@ inventory rather than one shared page-level contract:
       `data-drain-state` vocabulary value, `data-drain-round`,
       `data-drain-run-id`, the per-finding `data-drain-finding-tier`/
       `-outcome` rows, the needs-you `data-user-index`/`-total` block +
-      the C9#3 exhausted-completion state, the `timed-out` re-check
-      affordance, and the full drain-to-green button disabled matrix
-      (dispatching/running/attaching → disabled; every terminal state →
-      enabled). The container's own wiring (`.tsx` only — no jsdom in this
+      the C9#3 exhausted-completion state, and the `timed-out`/`unreadable`
+      re-check affordance (the drain-to-green button and its disabled
+      matrix moved to `KbActionGroup` W7-B2 — pinned in
+      `lib/kb-action-group-render.test.ts` instead). The container's own wiring (`.tsx` only — no jsdom in this
       repo, see `RunPanel.tsx`'s own header) is verified by `tsc`/
       `next build` plus pure-logic unit coverage: `lib/kb-drain-view.test.ts`
       (state copy, tier splitting, the C9#3 walkthrough-completion logic),
@@ -3100,7 +3148,25 @@ inventory rather than one shared page-level contract:
       `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
       `fetchActiveOrLatestKbDrain` wire contracts). Journey:
       `knowledge-lint-index` (renamed in spirit from the old lint/index
-      beat — the file's own `id` is unchanged for RUN_ORDER stability).
+      beat — the file's own `id` is unchanged for RUN_ORDER stability; the
+      W7-B2 beat additionally asserts per-finding rows + round groups, the
+      cancel endpoint's 409-on-terminal honesty, and the RecentRuns ledger).
+  - **KB recent runs (Health tab, W7-B2 — knowledge-20):**
+    `[data-section="kb-recent-runs"]` wraps the SHARED
+    `components/RecentRuns.tsx` widget (extracted from
+    `AgentsIndexView.tsx`'s recent-agent-runs section; `/agents` consumes
+    the same component under its established
+    `data-section="recent-agent-runs"` token) over
+    `GET /api/studio/kbs/:id/runs` (`lib/kb-runs.ts`) — every drain /
+    consolidate / kb-cleanup run this KB has ever had, as the standard
+    `[data-section="history-ledger"][data-ledger-count]` row contract
+    documented under `/flows/[id]`. Loading renders
+    `[data-component="recent-runs-loading"]`; a failed rows read renders
+    the shared failure state (W7-A1 discipline), never an honest-looking
+    empty ledger; the section root carries `data-recent-runs-unresolved`
+    (0 for single-source consumers like this one). Render-tested:
+    `lib/recent-runs-render.test.ts`; rows derivation:
+    `lib/kb-runs.test.ts`.
   - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
     (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
     KB's own dir by the same identity-matched `resolveKbBrainDir` walk
