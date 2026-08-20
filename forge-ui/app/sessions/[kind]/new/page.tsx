@@ -6,10 +6,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
+import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
+import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/kickoff-view';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -57,21 +58,27 @@ type KickoffKindSpec = {
    *  route takes neither, and the context card renders the fixed session
    *  home directly rather than an operator-filled path. */
   selector: 'project' | 'kb' | 'none';
-  /** Only 'authoring' takes a free-text prompt — its `/start` body requires
-   *  one (every other kind's `/start` route needs no operator prose at
-   *  kickoff; instructions/demo take their brief on a LATER turn, via their
-   *  own bespoke panel's briefing step). */
+  /** A free-text prompt field. `authoring`'s `/start` body REQUIRES one
+   *  (`promptRequired`); `community-refresh` takes an OPTIONAL brief (W7-B3,
+   *  community-08 — empty means "full refresh", text means a targeted
+   *  "find me skills for X" pass). Every other kind's `/start` route needs
+   *  no operator prose at kickoff (instructions/demo take their brief on a
+   *  LATER turn, via their own panel's briefing step). */
   promptLabel?: string;
   promptPlaceholder?: string;
+  promptRequired?: boolean;
 };
 
 const KICKOFF_KINDS: Record<KickoffKindId, KickoffKindSpec> = {
   instructions: { title: 'Instructions session', agentSlug: 'instructions-creator', artifactLabel: 'AGENTS.md draft', selector: 'project' },
   demo: { title: 'Demo capability session', agentSlug: 'demo-builder', artifactLabel: 'Demo generations', selector: 'project' },
   'kb-cleanup': { title: 'KB cleanup session', agentSlug: 'brain-maintenance', artifactLabel: 'Cleanup plan', selector: 'kb' },
-  authoring: { title: 'Authoring session', agentSlug: 'creation-agent', artifactLabel: 'Package', selector: 'project', promptLabel: 'Describe what to build', promptPlaceholder: 'Describe what it should do…' },
+  authoring: { title: 'Authoring session', agentSlug: 'creation-agent', artifactLabel: 'Package', selector: 'project', promptLabel: 'Describe what to build', promptPlaceholder: 'Describe what it should do…', promptRequired: true },
   'project-brain': { title: 'Brain creation session', agentSlug: 'project-brain-builder', artifactLabel: 'Seeded structure', selector: 'project' },
-  'community-refresh': { title: 'Community refresh session', agentSlug: 'community-refresh', artifactLabel: 'Registry draft', selector: 'none' },
+  'community-refresh': {
+    title: 'Community refresh session', agentSlug: 'community-refresh', artifactLabel: 'Registry draft', selector: 'none',
+    promptLabel: 'Focus (optional)', promptPlaceholder: 'e.g. find me skills for terraform drift detection — leave empty for a full refresh', promptRequired: false,
+  },
 };
 
 function isKickoffKind(kind: string): kind is KickoffKindId {
@@ -101,6 +108,10 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [confirmingAnother, setConfirmingAnother] = useState(false);
   const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
+  // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
+  // run the bridge actually knows — arbitrary query text was echoed back as
+  // if it were a real object. null = nothing to validate / not resolved.
+  const [initiativeKnown, setInitiativeKnown] = useState<boolean | null>(null);
 
   const [project, setProject] = useState(prefillProject);
   const [kbId, setKbId] = useState('');
@@ -137,6 +148,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
+        // W7-B3 (community-12): pre-select the tier the agent will ACTUALLY
+        // run on when nothing is chosen — the cheapest of the SKILL envelope,
+        // the SAME default the server applies. Never overrides a choice the
+        // operator already made.
+        setModelTier((prev) => prev || defaultKickoffTier(allowedTiersFromCapability(cap)));
       })
       .catch((err) => {
         // W6-B6 post-merge review (LOW): the prior `.catch(() => [])` on
@@ -155,13 +171,38 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 
+  // W7-B3 (community-22): resolve the "?initiative=" ref against the bridge
+  // before rendering it as context — an unknown id is flagged as ignored,
+  // never echoed back as a real object.
+  useEffect(() => {
+    if (!prefillInitiative) {
+      setInitiativeKnown(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRun(prefillInitiative)
+      .then((run) => {
+        if (!cancelled) setInitiativeKnown(run !== null);
+      })
+      .catch(() => {
+        // A failed read is not "unknown initiative" — leave it unresolved
+        // (no card, no ignored-flag) rather than asserting either way.
+        if (!cancelled) setInitiativeKnown(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prefillInitiative]);
+
   // Shared with KickoffModelTierPicker's own internal derivation — ONE rule
   // for "this agent has a real operator-choosable tier range", not two
   // independently-computed copies that could drift.
   const isRangeTier = allowedTiersFromCapability(capability).length > 0;
 
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
-  const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
+  // W7-B3 (community-08): a prompt field is only a Start-gate when the kind
+  // REQUIRES it (authoring) — community-refresh's focus brief is optional.
+  const promptFilled = spec?.promptLabel && spec.promptRequired ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
 
   // W7-A2 — the in-flight sessions of THIS kind on the SAME target. The
@@ -239,7 +280,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           result = await startProjectBrain({ project: project.trim(), modelTier: tier });
           break;
         case 'community-refresh':
-          result = await startCommunityRefresh({ modelTier: tier });
+          result = await startCommunityRefresh({ modelTier: tier, brief: briefFromPrompt(prompt) });
           break;
         case 'kb-cleanup': {
           const r = await startKbCleanup(kbId.trim(), tier);
@@ -298,15 +339,22 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         <div style={rowLabel}>Produces</div>
         <div style={rowValue}>{spec.artifactLabel}</div>
         <div style={rowLabel}>Session directory</div>
-        <div style={{ ...rowValue, ...mono }}>
-          {spec.selector === 'none'
-            ? `projects/<forge-anchor>/_${kind}/<sessionId>`
-            : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`}
-        </div>
-        {prefillInitiative && (
+        <div style={{ ...rowValue, ...mono }}>{sessionDirPreview(kind, spec.selector, project)}</div>
+        {prefillInitiative && initiativeKnown === true && (
           <div data-section="kickoff-initiative-context" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
             Opened from initiative <span style={mono}>{prefillInitiative}</span> — sessions here are
             project-scoped, not tied to it; this is context only.
+          </div>
+        )}
+        {prefillInitiative && initiativeKnown === false && (
+          <div data-section="kickoff-initiative-ignored" style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+            The <span style={mono}>?initiative=</span> reference in this URL matches no known run — ignored.
+          </div>
+        )}
+        {spec.selector === 'none' && prefillProject && (
+          <div data-section="kickoff-project-ignored" style={{ fontSize: 11.5, color: 'var(--faint)' }}>
+            The <span style={mono}>?project=</span> parameter is ignored — this session kind is forge-wide,
+            not project-scoped.
           </div>
         )}
       </div>

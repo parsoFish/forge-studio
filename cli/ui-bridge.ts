@@ -157,6 +157,10 @@ import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, gua
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
+/** W7-B3 (community-08) — bound on the optional community-refresh kickoff
+ *  brief. Generous for a real "find me skills for X" ask, small enough that
+ *  a pasted document never rides into status.json/the turn prompt. */
+const COMMUNITY_REFRESH_BRIEF_MAX_CHARS = 2000;
 // R6-04 WI-4 — GET /api/agents/runs/<runId>'s `lines` field cap. A fixed
 // cap (not a proportion of the log size) so a runaway log is never served
 // whole; the TAIL (most-recently-written lines) is preserved when capping,
@@ -4964,8 +4968,8 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/studio/community-refresh/start {modelTier?} — W6-CR-3, the
-  // community-refresh session's kickoff route. Unlike EVERY other
+  // POST /api/studio/community-refresh/start {modelTier?, brief?} — W6-CR-3,
+  // the community-refresh session's kickoff route. Unlike EVERY other
   // interactive kind's `/start` route, this one takes NO project/prompt at
   // all: the community registry is forge's own single, forge-wide file, not
   // a per-project artifact, so there is nothing for the operator to select.
@@ -4991,7 +4995,7 @@ async function handleDemoBuilder(
   // path against its own session-scoped `cwd`.
   if (method === 'POST' && url === '/api/studio/community-refresh/start') {
     try {
-      const body = (await readJson(req)) as { modelTier?: unknown };
+      const body = (await readJson(req)) as { modelTier?: unknown; brief?: unknown };
 
       // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
       // community-refresh SKILL.md envelope.
@@ -4999,6 +5003,29 @@ async function handleDemoBuilder(
       if (!modelTierResult.ok) {
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
+      }
+
+      // W7-B3 (community-08) — the optional operator brief: a targeted
+      // "find me skills for X" pass instead of a full refresh. Boundary
+      // validation: string only, non-blank after trim, bounded. A blank
+      // brief is a malformed request (never silently a full refresh the
+      // operator did not ask for); absence stores NO key at all.
+      let brief: string | undefined;
+      if (body.brief !== undefined) {
+        if (typeof body.brief !== 'string') {
+          sendJson(res, 400, { error: 'brief must be a string when present' }, origin);
+          return true;
+        }
+        const trimmed = body.brief.trim();
+        if (trimmed.length === 0) {
+          sendJson(res, 400, { error: 'brief must not be blank — omit it entirely for a full refresh' }, origin);
+          return true;
+        }
+        if (trimmed.length > COMMUNITY_REFRESH_BRIEF_MAX_CHARS) {
+          sendJson(res, 400, { error: `brief exceeds the ${COMMUNITY_REFRESH_BRIEF_MAX_CHARS}-character cap (got ${trimmed.length})` }, origin);
+          return true;
+        }
+        brief = trimmed;
       }
 
       const sessionId = newArchitectSessionId();
@@ -5023,6 +5050,7 @@ async function handleDemoBuilder(
           registryPath: communityRegistryPath(ctx.forgeRoot),
           hubsPath: join(ctx.forgeRoot, 'studio', 'community', 'hubs.yaml'),
           ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+          ...(brief !== undefined ? { brief } : {}),
         },
       );
       if (written === null) {
