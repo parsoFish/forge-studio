@@ -1211,7 +1211,11 @@ inventory rather than one shared page-level contract:
     `RECENT_AGENT_RUNS_EXPANDED_LIMIT` (100 — the route's own hard cap).
     Sessions are deliberately not joined (they have `/sessions`); the pure
     `mergeRecentAgentRuns` survives solely as Home's generic
-    flatten+dedupe+bound merge (`buildHomeLedgerRows`). Journey coverage:
+    flatten+dedupe+bound merge (`buildHomeLedgerRows`). The section itself is
+    the SHARED `components/RecentRuns.tsx` (W7-B2's extraction of this very
+    section, also rendered by the KB health tab) — `data-count`/`data-limit`
+    and the show-all control are props on that one component, not a second
+    copy of the markup. Journey coverage:
     `scripts/journeys/agents.mjs`'s `agents-index-roster` beat (roster +
     CTA + ledger-mount + roster-card-navigates-to-builder only — the ledger
     row contract itself is pinned elsewhere, this beat only proves the
@@ -3108,7 +3112,12 @@ inventory rather than one shared page-level contract:
     `[data-component="recent-runs-loading"]`; a failed rows read renders
     the shared failure state (W7-A1 discipline), never an honest-looking
     empty ledger; the section root carries `data-recent-runs-unresolved`
-    (0 for single-source consumers like this one). Render-tested:
+    (0 for single-source consumers like this one) and `data-count`, plus
+    `data-limit` + an optional `[data-action="recent-runs-show-all"]`
+    whenever the caller fetched a bounded window (W7-B5 agents-40 folded
+    those INTO this shared component rather than forking the section — a
+    silently-capped list is a lie of omission on either surface; the KB tab
+    passes no bound today, so it renders neither). Render-tested:
     `lib/recent-runs-render.test.ts`; rows derivation:
     `lib/kb-runs.test.ts`.
   - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
