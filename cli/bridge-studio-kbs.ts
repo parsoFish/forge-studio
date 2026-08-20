@@ -48,6 +48,8 @@ import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import {
   findingUnderDir,
   scopeFindingsToKb,
+  collectKbFindings,
+  ownThemeFindingsLens,
   listOwnThemeFiles,
   unionFindings,
   computeKbLintChecks,
@@ -432,7 +434,10 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
   // end and returns without throwing, so the catch never double-fires.
   try {
     const { findings } = runBrainLintFullMemoized(forgeRoot);
-    const scoped = scopeFindingsToKb(forgeRoot, kbId, findings);
+    // W7-B2 (knowledge-10): the union lens — a project-bound KB's own-theme
+    // agent-tier findings are consolidate's obligation too, and the old
+    // scopeFindingsToKb-alone read was structurally empty for them.
+    const scoped = collectKbFindings(forgeRoot, kbId, findings);
     const agentTier = scoped.filter(
       (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
     );
@@ -481,7 +486,7 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
     try {
       const { findings: after } = runBrainLintFullFresh(forgeRoot);
       const stillPresent = new Set(
-        scopeFindingsToKb(forgeRoot, kbId, after)
+        collectKbFindings(forgeRoot, kbId, after)
           .filter((f) => f.resolution === 'agent')
           .map((f) => `${f.kind}::${f.file}`),
       );
@@ -588,6 +593,50 @@ export async function approveKbCleanup(
     return { ok: false, status: 409, error: `session is not awaiting-approval (current phase: "${status.phase}")` };
   }
   const kbId = status.kb_id;
+
+  // ---- W7-B2 (orch-01): a DRAFT-carrying session (minted by the drain's
+  // structural-only gate — `mintKbCleanupDraftSession`, cli/bridge-studio-
+  // kb-drain.ts) applies EXACTLY the parked draft files on approve, never a
+  // consolidate. Validated fully — every target contained to THIS session's
+  // own KB brain dir, every draft readable — BEFORE the atomic claim below,
+  // so a refused draft leaves the session still approvable after the
+  // problem is fixed (all checks here are synchronous; the SYNC INVARIANT
+  // span is preserved). ------------------------------------------------------
+  const draftApplyRaw = (status as Record<string, unknown>)['draft_apply'];
+  let draftWrites: Array<{ target: string; content: string }> | null = null;
+  if (Array.isArray(draftApplyRaw) && draftApplyRaw.length > 0) {
+    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    if (!brainDir) {
+      return { ok: false, status: 500, error: `kb-cleanup apply: kb id "${kbId}" does not resolve to any brain directory` };
+    }
+    draftWrites = [];
+    for (const raw of draftApplyRaw) {
+      const entry = raw as Record<string, unknown> | null;
+      const file = entry && typeof entry['file'] === 'string' ? entry['file'] : null;
+      const draft = entry && typeof entry['draft'] === 'string' ? entry['draft'] : null;
+      if (!file || !draft) {
+        return { ok: false, status: 422, error: 'kb-cleanup apply: malformed draft_apply entry (need string "file" and "draft")' };
+      }
+      const target = resolve(forgeRoot, file);
+      // Real containment to the session's OWN kb dir — a draft may only ever
+      // replace a file inside the brain dir status.kb_id resolves to (never
+      // a sibling KB, never anything outside brain/). `brainDir` is already
+      // realpath-resolved by resolveKbBrainDir; `resolve` collapses any
+      // lexical `..` in the target before the boundary check.
+      if (target !== brainDir && !target.startsWith(brainDir + sep)) {
+        return { ok: false, status: 422, error: `kb-cleanup apply: draft target escapes kb "${kbId}"'s own brain dir: ${file}` };
+      }
+      // The draft body is read through the SAME guarded read the session
+      // status came through — a draft path escaping the session dir reads
+      // null and refuses.
+      const content = guardedReadFile(projectsRoot, [...dirSegs, ...draft.split('/')]);
+      if (content === null) {
+        return { ok: false, status: 422, error: `kb-cleanup apply: draft file unreadable or escapes the session dir: ${draft}` };
+      }
+      draftWrites.push({ target, content });
+    }
+  }
+
   // THE ATOMIC CLAIM — the write that makes this a claim, not merely a
   // check: any concurrent caller reading status AFTER this line observes
   // 'applying', never 'awaiting-approval', so at most one caller ever passes
@@ -597,6 +646,25 @@ export async function approveKbCleanup(
     return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applying" failed containment' };
   }
   // --- SYNC INVARIANT SPAN END — everything below may safely await. ---
+
+  if (draftWrites !== null) {
+    const writes = draftWrites;
+    const draftRunId = `${kbId}-draftapply-${Date.now().toString(36)}`;
+    // Same per-kbId serialization as the consolidate path below (forge-sqn's
+    // invariant): the draft write may never interleave with a live drain's
+    // own agent turns against the same files.
+    await enqueueConsolidate(kbId, async () => {
+      for (const w of writes) {
+        mkdirSync(dirname(w.target), { recursive: true });
+        writeFileSync(w.target, w.content, 'utf8');
+      }
+    });
+    const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+    if (draftDone === null) {
+      return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
+    }
+    return { ok: true, runId: draftRunId };
+  }
 
   // The drain's SOLE source of truth is `status.kb_id`, never `expectedKbId`
   // — the equality check above makes the two identical by construction from
@@ -1597,7 +1665,10 @@ export async function handleStudioKbRoutes(
 
       if (op === 'lint') {
         const { findings } = runBrainLintFullMemoized(ctx.forgeRoot);
-        const scoped = scopeFindingsToKb(ctx.forgeRoot, kbId, findings);
+        // W7-B2 (knowledge-10): the SAME full-scan ∪ own-theme union the
+        // health readout counts from — never scopeFindingsToKb alone, which
+        // is structurally empty for every project-bound KB.
+        const scoped = collectKbFindings(ctx.forgeRoot, kbId, findings);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.
         sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length, counts: resolutionCounts(scoped) }, origin);
