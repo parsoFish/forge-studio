@@ -79,7 +79,7 @@ test('pollAgentRun: stops polling once a terminal state ("done") is reached — 
   stop();
 });
 
-test('pollAgentRun: reaching maxAttempts while still "running" emits an explicit "timed-out" status — never a silent freeze', async () => {
+test('pollAgentRun: reaching maxAttempts while still "running" emits pollExhausted:true with the run\'s REAL last state preserved — never a silent freeze, never a fabricated run state (⚑ AMENDED W7-B5 projects-29: the old state:"timed-out" overwrite painted a LIVE run as stopped)', async () => {
   const fetchStatus = vi.fn().mockResolvedValue(status({ state: 'running', costUsd: 0.5, events: 7 }));
   const onUpdate = vi.fn();
   const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
@@ -89,9 +89,14 @@ test('pollAgentRun: reaching maxAttempts while still "running" emits an explicit
     await vi.advanceTimersByTimeAsync(10);
   }
   const finalCall = onUpdate.mock.calls.at(-1)?.[0] as PolledAgentRunStatus;
-  expect(finalCall.state).toBe('timed-out');
-  // The last REAL poll's cost/events are preserved on the timed-out status —
-  // a timeout must not also erase what was already known about the run.
+  // W7-B5 (projects-29): the poll's exhaustion is a fact about the WATCHER —
+  // the run's own state stays the last REAL observation ('running'), and
+  // pollDisplayState derives the visible 'timed-out' chip from the flag.
+  expect(finalCall.pollExhausted).toBe(true);
+  expect(finalCall.state).toBe('running');
+  expect(pollDisplayState(finalCall)).toBe('timed-out');
+  // The last REAL poll's cost/events are preserved —
+  // exhaustion must not also erase what was already known about the run.
   expect(finalCall.costUsd).toBe(0.5);
   expect(finalCall.events).toBe(7);
   // No further polling once timed out.
@@ -133,7 +138,7 @@ test('pollAgentRun: a throwing fetchStatus counts as a failed attempt and keeps 
   stop();
 });
 
-test('pollAgentRun: an ALWAYS-throwing fetchStatus still gives up at maxAttempts with an explicit "timed-out" — bounded even with zero real status ever observed', async () => {
+test('pollAgentRun: an ALWAYS-throwing fetchStatus still gives up at maxAttempts with pollExhausted:true (state "unknown" — nothing was ever really observed) — bounded even with zero real status', async () => {
   const fetchStatus = vi.fn().mockRejectedValue(new Error('down'));
   const onUpdate = vi.fn();
   const stop = pollAgentRun('run-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
@@ -141,7 +146,7 @@ test('pollAgentRun: an ALWAYS-throwing fetchStatus still gives up at maxAttempts
   for (let i = 0; i < 5; i++) {
     await vi.advanceTimersByTimeAsync(10);
   }
-  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ state: 'timed-out' }));
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ pollExhausted: true, state: 'unknown' }));
   const callsAtTimeout = fetchStatus.mock.calls.length;
   await vi.advanceTimersByTimeAsync(1000);
   expect(fetchStatus).toHaveBeenCalledTimes(callsAtTimeout); // no further polling
@@ -421,7 +426,7 @@ test('pollAgentRun: a bridge-answered {ok:true,state:"unknown"} (no state record
   stop();
 });
 
-test('pollAgentRun: reads that fail every time still give up at maxAttempts with an explicit "timed-out" carrying the last failed read (never a silent freeze, never a phantom "running")', async () => {
+test('pollAgentRun: reads that fail every time still give up at maxAttempts with pollExhausted:true carrying the last failed read (never a silent freeze, never a phantom "running")', async () => {
   const failed: AgentRunStatus = { ok: false, state: 'unknown', costUsd: 0, events: 0, error: 'boom' };
   const fetchStatus = vi.fn().mockResolvedValue(failed);
   const onUpdate = vi.fn();
@@ -430,7 +435,7 @@ test('pollAgentRun: reads that fail every time still give up at maxAttempts with
   await vi.advanceTimersByTimeAsync(100);
   await vi.advanceTimersByTimeAsync(100);
   expect(fetchStatus).toHaveBeenCalledTimes(3);
-  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, state: 'timed-out', error: 'boom' }));
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, pollExhausted: true, state: 'unknown', error: 'boom' }));
   stop();
 });
 

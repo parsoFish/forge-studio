@@ -42,9 +42,10 @@ import { resolveRunDetailFromResponse, type RunDetail } from './run-view-client.
 test('404 -> found:false, and the rest of the shape is the same honest "not found" default RunView already treats as suppress-everything — kills "reads body.state before checking status, so a 404 with a stray body leaks through as found"', () => {
   const detail = resolveRunDetailFromResponse(404, {});
   expect(detail.found).toBe(false);
+  expect(detail.resolution).toBe('not-found');
   expect(detail.lines).toEqual([]);
   expect(detail.materials).toEqual([]);
-  expect(detail.outputs).toEqual([]);
+  expect(detail.outputRefs).toEqual([]);
 });
 
 test('404 WINS even when the response body carries a plausible-looking run payload — kills "checks body.state === \'running\' as its found signal instead of the HTTP status, so a stray/cached body makes a 404 look like a live run"', () => {
@@ -57,9 +58,11 @@ test('404 WINS even when the response body carries a plausible-looking run paylo
   expect(detail.found).toBe(false);
 });
 
-test('a non-404 non-2xx status (e.g. 500) ALSO maps to found:false — matches fetchRunDetail\'s own already-shipped `!res.ok` convention (this file does not narrow that to "404 only")', () => {
+test('a non-404 non-2xx status (e.g. 500) maps to resolution "unresolved" carrying the bridge\'s own error — a read failure is NEVER rendered as the authoritative "run not found" (⚑ AMENDED W7-B5, bead forge-irn: the old two-state collapse was the filed defect)', () => {
   const detail = resolveRunDetailFromResponse(500, { error: 'internal error' });
   expect(detail.found).toBe(false);
+  expect(detail.resolution).toBe('unresolved');
+  expect(detail.readError).toEqual({ message: 'internal error', status: 500 });
 });
 
 test('200 with a real body -> found:true, state/costUsd passed through — kills "the new found:false path accidentally short-circuits the existing 200 success path"', () => {

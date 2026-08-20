@@ -104,6 +104,10 @@ type AgentState = {
   // rather than inside `capability` (parseCapability's return shape is
   // pinned byte-for-byte by existing studio-client.test.ts assertions).
   costCeilingEnforceable: boolean;
+  /** W7-B5 (agents-21): the agent's own declared default ceiling
+   *  (SKILL budgets.maxBudgetUsd) — seeds the Run panel's field ahead of
+   *  the run-level policy default. */
+  declaredMaxBudgetUsd?: number;
 };
 
 const DEFAULT_RUNTIME: AgentRuntime = {
@@ -221,6 +225,7 @@ function parseAgent(raw: Agent): AgentState {
     phase:          raw.phase ?? '',
     capability:     raw.capability,
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
+    declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
   };
 }
 
@@ -885,8 +890,19 @@ export default function AgentBuilderPage() {
             blockedMessage={runBlockMessage}
             projects={projects}
             declaredMaterialKinds={state.materials}
-            defaultCostCeilingUsd={defaultCostCeilingUsd}
+            // W7-B5 (agents-21): the agent's OWN declared ceiling wins the
+            // seed slot; the run-level policy default is the fallback.
+            defaultCostCeilingUsd={state.declaredMaxBudgetUsd ?? defaultCostCeilingUsd}
             costCeilingEnforceable={state.costCeilingEnforceable}
+            // W7-B5 (agents-21): a ralph-loop agent cannot run standalone at
+            // all (the bridge refuses the dispatch) — say so up front
+            // instead of minting a run that always fails.
+            standaloneBlockedReason={state.runtime.loopStrategy === 'ralph'
+              ? 'This agent is a multi-iteration (ralph) loop — it runs inside the develop flow, never as a standalone dispatch. Start it through its flow instead.'
+              : null}
+            // W7-B5 (agents-36): the unready connection ids, so the block
+            // message can link straight to /connections/<id>.
+            unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
           />

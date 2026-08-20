@@ -64,11 +64,18 @@ export type AgentsIndexViewProps = {
   recentRunsUnresolved?: number;
   recentRunsTotal?: number;
   onRetryRecentRuns?: () => void;
+  /** W7-B5 (agents-40): the bound the current rows were fetched under —
+   *  published as `data-limit` so a truncated list is never silent. */
+  recentRunsLimit?: number;
+  /** W7-B5 (agents-40): "view all" — refetch under the expanded bound.
+   *  Omitted (or already expanded) renders no affordance. */
+  onShowAllRecentRuns?: (() => void) | null;
 };
 
 export function AgentsIndexView({
   ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry,
   recentRunsUnresolved = 0, recentRunsTotal = 0, onRetryRecentRuns,
+  recentRunsLimit, onShowAllRecentRuns = null,
 }: AgentsIndexViewProps) {
   return (
     <main
@@ -148,16 +155,32 @@ export function AgentsIndexView({
         <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '44px 0 40px' }} />
 
         {/* ===== RECENT AGENT RUNS ===== */}
+        {/* W7-B5 (agents-40): the section publishes its own count + the
+            fetch bound, and offers "view all" while truncation is possible
+            — a silently-capped list is a lie of omission. */}
         <section
           className="lib-section"
           data-section="recent-agent-runs"
           data-recent-runs-unresolved={recentRunsReady ? recentRunsUnresolved : 0}
+          data-count={recentRunsReady ? recentRuns.length : 0}
+          {...(recentRunsLimit !== undefined ? { 'data-limit': recentRunsLimit } : {})}
           style={{ marginBottom: 40 }}
         >
           <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
               Recent agent runs
             </span>
+            <span style={{ flex: 1 }} />
+            {recentRunsReady && onShowAllRecentRuns && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                data-action="recent-runs-show-all"
+                onClick={onShowAllRecentRuns}
+              >
+                View all runs
+              </button>
+            )}
           </div>
 
           {!recentRunsReady ? (

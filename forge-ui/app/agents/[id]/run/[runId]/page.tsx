@@ -1,46 +1,36 @@
 'use client';
 
 /**
- * Standalone run view — /agents/[id]/run/[runId] (R6-04 WI-4 item 4).
+ * Standalone run view — /agents/[id]/run/[runId].
  *
- * A thin client shell: fetches this run's detail (`../../../../lib/
- * run-view-client.ts`'s `fetchRunDetail`, which reads `GET
- * /api/agents/runs/:runId`'s `lines` field, WI-4 item 1) and renders the
- * pure, props-driven `RunView` (`../../../../components/studio/
- * agent-builder/RunView.tsx`) with the resolved data. Mirrors
- * `app/agents/[id]/page.tsx`'s own `useParams()` precedent (the sibling
- * dynamic route this task brief calls out) rather than reading `params` as
- * a prop.
- *
- * KNOWN GAP (documented, not closed here): this fetch/render wiring is
- * verified by `tsc` only — no jsdom / `@testing-library/react` in this
- * repo, and `useParams()` needs the Next.js app router context mounted,
- * which bare `react-dom/server` rendering (used by this WI's acceptance
- * tests) cannot provide. See `run-view-client.ts`'s header for the full
- * rationale and for why `found` means "fetch resolved", not "this runId
- * was definitely dispatched" (the underlying API has no way to distinguish
- * those today). A real-browser journey beat (a later work item) closes
- * this gap.
+ * W7-B5 (agents-07 / agents-30 / forge-irn): this page is no longer a
+ * one-shot snapshot —
+ *   - while the run is LIVE it polls `fetchRunDetail` on the shared bounded
+ *     cadence (`pollUntilTerminal`, lib/agent-dispatch.ts) so the log/cost
+ *     move without a browser reload; poll exhaustion surfaces as
+ *     `data-poll-state="timed-out"` + a Re-check control — never a frozen
+ *     page silently claiming liveness;
+ *   - a Refresh control re-fetches on demand in every state;
+ *   - a LIVE run gets a Cancel control (`POST /api/agents/runs/:runId/cancel`
+ *     — the same two-step confirm shape the session surfaces use);
+ *   - the fetch resolves THREE ways (lib/run-view-client.ts): `not-found`
+ *     renders the shared NotFound, `unresolved` renders the shared
+ *     FetchErrorState (a 500/transport failure is a fact about the READ,
+ *     never rendered as "no such run" — bead forge-irn), `found` renders
+ *     RunView.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { FetchErrorState } from '@/components/FetchErrorState';
 import { RunView } from '@/components/studio/agent-builder/RunView';
 import { fetchRunDetail, type RunDetail } from '@/lib/run-view-client';
-
-const EMPTY_DETAIL: RunDetail = {
-  found: false,
-  state: 'unknown',
-  costUsd: 0,
-  lines: [],
-  materials: [],
-  ceilingUsd: undefined,
-  outputs: [],
-};
+import { pollUntilTerminal, pollDisplayState } from '@/lib/agent-dispatch';
+import { cancelAgentRun } from '@/lib/studio-client';
 
 export default function AgentRunPage() {
   const params = useParams();
@@ -49,31 +39,61 @@ export default function AgentRunPage() {
   // to — the run page used to ignore `params.id` entirely.
   const agentSlug = decodeURIComponent((params?.id as string) ?? '');
 
-  const [detail, setDetail] = useState<RunDetail>(EMPTY_DETAIL);
-  // Distinct from `detail.found` — the fetch simply hasn't resolved yet, so
-  // the page must not render RunView's "not found" state (which would read
-  // as a false claim about a run that was never actually checked).
-  const [loaded, setLoaded] = useState(false);
+  const [detail, setDetail] = useState<RunDetail | null>(null);
+  const [pollExhausted, setPollExhausted] = useState(false);
+  const [pollNonce, setPollNonce] = useState(0);
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
+  // Bounded live poll (agents-07): fetch immediately, then every 2s while
+  // the run is live or the read is transiently failing; stop on a terminal
+  // state or a definitive not-found. `pollNonce` restarts it (Refresh /
+  // Re-check / post-cancel).
   useEffect(() => {
-    let cancelled = false;
-    setLoaded(false);
-    async function load() {
-      const d = await fetchRunDetail(runId);
-      if (cancelled) return;
-      setDetail(d);
-      setLoaded(true);
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [runId]);
+    if (!runId) return;
+    setPollExhausted(false);
+    return pollUntilTerminal<RunDetail>({
+      fetchStatus: () => fetchRunDetail(runId),
+      isRunning: (d) =>
+        (d.resolution === 'found' && d.state === 'running')
+        || (d.resolution === 'unresolved' && (d.readError?.status === undefined || d.readError.status >= 500)),
+      onUpdate: (d) => setDetail(d),
+      onTimeout: (last) => {
+        if (last) setDetail(last);
+        setPollExhausted(true);
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, pollNonce]);
 
-  // W7-A4 (crosscut-27): a run id the bridge does not know renders the ONE
-  // shared NotFound (RunView's own found:false body is no longer reached from
-  // this route). `found:false` is also what an unreachable bridge yields
-  // today (fetchRunDetail fails open to NOT_FOUND_DETAIL) — the honest-reads
-  // lane owns splitting those two facts.
-  if (loaded && !detail.found) {
+  const refresh = useCallback(() => {
+    setCancelArmed(false);
+    setPollNonce((n) => n + 1);
+  }, []);
+
+  const onCancel = useCallback(async () => {
+    if (!cancelArmed) {
+      setCancelArmed(true);
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const r = await cancelAgentRun(runId);
+      if (!r.ok) setCancelError(r.error ?? 'cancel failed');
+    } finally {
+      setCancelBusy(false);
+      setCancelArmed(false);
+      setPollNonce((n) => n + 1);
+    }
+  }, [cancelArmed, runId]);
+
+  const loaded = detail !== null;
+  const running = detail?.resolution === 'found' && detail.state === 'running';
+  const pollState = !loaded ? null : pollExhausted ? 'timed-out' : running ? 'watching' : pollDisplayState({ state: detail!.state });
+
+  if (loaded && detail!.resolution === 'not-found') {
     return <NotFound kind="run" id={runId} backHref="/agents" backLabel="Agents" />;
   }
 
@@ -92,22 +112,60 @@ export default function AgentRunPage() {
         </Link>
         <span style={{ color: 'var(--line-2)' }}>/</span>
         <span>run {runId}</span>
+        <span style={{ flex: 1 }} />
+        {loaded && detail!.resolution === 'found' && (
+          <span data-section="run-live-controls" {...(pollState ? { 'data-poll-state': pollState } : {})} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {pollExhausted && (
+              <span className="muted" data-component="poll-exhausted-note">
+                stopped watching — the run may still be going
+              </span>
+            )}
+            <button type="button" className="btn btn-sm" data-action="refresh-run" onClick={refresh}>
+              {pollExhausted ? 'Re-check' : 'Refresh'}
+            </button>
+            {running && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                data-action="cancel-run"
+                data-cancel-armed={cancelArmed ? 'true' : 'false'}
+                disabled={cancelBusy}
+                onClick={() => void onCancel()}
+              >
+                {cancelBusy ? 'Cancelling…' : cancelArmed ? 'Confirm cancel' : 'Cancel run'}
+              </button>
+            )}
+          </span>
+        )}
       </nav>
+      {cancelError && (
+        <p data-component="cancel-error" className="save-hint save-hint-dirty" style={{ margin: '8px 20px 0', fontSize: 12 }}>{cancelError}</p>
+      )}
       {!loaded ? (
         <div data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
           Loading run…
         </div>
+      ) : detail!.resolution === 'unresolved' ? (
+        <div data-page="agent-run" data-run-id={runId} data-page-ready="true" data-fetch-status="error" style={{ padding: 20 }}>
+          <FetchErrorState
+            what="this agent run"
+            error={detail!.readError?.message ?? 'the run could not be read'}
+            status={detail!.readError?.status}
+            onRetry={refresh}
+          />
+        </div>
       ) : (
         <RunView
           runId={runId}
-          found={detail.found}
-          state={detail.state}
-          costUsd={detail.costUsd}
-          lines={detail.lines}
-          materials={detail.materials}
-          ceilingUsd={detail.ceilingUsd}
-          outputs={detail.outputs}
-          trigger={detail.trigger}
+          found={true}
+          state={detail!.state}
+          costUsd={detail!.costUsd}
+          lines={detail!.lines}
+          materials={detail!.materials}
+          ceilingUsd={detail!.ceilingUsd}
+          outputRefs={detail!.outputRefs}
+          errorText={detail!.errorText}
+          trigger={detail!.trigger}
         />
       )}
     </div>

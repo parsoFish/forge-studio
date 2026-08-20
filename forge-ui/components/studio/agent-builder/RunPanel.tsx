@@ -54,6 +54,7 @@ import {
   dispatchAgentRun,
   parseRunInputs,
   fetchLatestStandaloneRun,
+  cancelAgentRun,
   type MaterialUpload,
 } from '@/lib/studio-client';
 import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
@@ -108,6 +109,14 @@ type Props = {
    *  `null`/absent renders the explicit no-entry-point state, never a
    *  fabricated link. */
   sessionEntryHref?: string | null;
+  /** W7-B5 (agents-21): non-null iff this agent can NEVER be dispatched
+   *  standalone (a ralph-loop agent — the bridge refuses the dispatch).
+   *  Rendered verbatim, disables the Run control. */
+  standaloneBlockedReason?: string | null;
+  /** W7-B5 (agents-36): the unready bound-connection ids named inside
+   *  `blockedMessage` — rendered as links to `/connections/<id>` so the
+   *  operator can go fix them, instead of hunting for the route by hand. */
+  unreadyConnectionIds?: string[];
   /** R6-01 WI-4: the FULL unfiltered `GET /api/triggers` roster, fetched by
    *  the parent page and threaded down whole — filtering to this agent
    *  happens in `StandingTriggers` itself, never at a call site.
@@ -130,6 +139,8 @@ export function RunPanel({
   defaultCostCeilingUsd,
   costCeilingEnforceable,
   sessionEntryHref = null,
+  standaloneBlockedReason = null,
+  unreadyConnectionIds = [],
   standingTriggers = [],
 }: Props) {
   const [project, setProject] = useState('');
@@ -166,7 +177,15 @@ export function RunPanel({
   // it — never a guess: an idle mount with nothing active stays idle.
   useEffect(() => {
     if (runId) return;
+    // W7-B5 (agents-02): an EMPTY slug is the not-yet-loaded builder mount —
+    // never fire GET /api/agents//history for it (the bridge now 400s it).
+    if (!slug) return;
     let cancelled = false;
+    // W7-B5 (agents-26): reattaches to the latest standalone run of ANY
+    // status (fetchLatestStandaloneRun no longer filters 'running'), so a
+    // finished/failed run stays visible after a reload — its real terminal
+    // state, cost and link — instead of vanishing. A still-running row
+    // resumes polling exactly as before (the poll observes the live state).
     fetchLatestStandaloneRun(slug).then((row) => {
       if (cancelled || !row) return;
       // Functional update, not a bare setRunId(row.id): a real dispatch
@@ -230,13 +249,17 @@ export function RunPanel({
   }
 
   const runState = status?.state ?? (runId ? 'running' : 'idle');
+  const runningNow = runState === 'running';
   // W6-B14: the shared three-state contract — `watching` before the poll's
   // first real response lands too (a dispatched runId with no status yet is
   // still "being watched", not idle), never fabricated once a real
   // done/failed/timed-out status is in hand.
   const pollState = pollDisplayState(status) ?? (runId ? 'watching' : null);
-  const effectiveCanRun = canRun && !blockedMessage;
-  const controlsDisabled = !effectiveCanRun || dispatching;
+  const effectiveCanRun = canRun && !blockedMessage && !standaloneBlockedReason;
+  // W7-B5 (agents-29): the Run control stays disabled while the DISPATCHED
+  // run itself is still running — not just during the POST — so a double
+  // click can never start two concurrent runs and orphan the first.
+  const controlsDisabled = !effectiveCanRun || dispatching || runningNow;
 
   const onMaterialsChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -260,6 +283,29 @@ export function RunPanel({
       contentBase64: await fileToBase64(f),
     })));
     setMaterials(encoded);
+  };
+
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  // W7-B5 (agents-30): cancel the live dispatched run — two-step confirm,
+  // then POST /api/agents/runs/:runId/cancel and re-poll for the sticky
+  // 'cancelled' terminal.
+  const onCancel = async () => {
+    if (!runId) return;
+    if (!cancelArmed) {
+      setCancelArmed(true);
+      return;
+    }
+    setCancelBusy(true);
+    setError(null);
+    try {
+      const r = await cancelAgentRun(runId);
+      if (!r.ok) setError(r.error ?? 'cancel failed');
+    } finally {
+      setCancelBusy(false);
+      setCancelArmed(false);
+      setPollNonce((n) => n + 1);
+    }
   };
 
   const onRun = async () => {
@@ -370,25 +416,75 @@ export function RunPanel({
         )}
       </section>
 
+      {/* W7-B5 (agents-21): the Run control STATES the ceiling that will be
+          in force — an uncapped dispatch can no longer look identical to a
+          capped one. */}
       <button
         className="btn btn-primary"
         data-action="run-agent"
+        data-run-ceiling={resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable) ?? ''}
         onClick={() => void onRun()}
         disabled={controlsDisabled}
-        title={blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
+        title={standaloneBlockedReason || blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
       >
-        {dispatching ? 'Dispatching…' : 'Run agent'}
+        {dispatching
+          ? 'Dispatching…'
+          : (() => {
+              const ceiling = resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable);
+              return ceiling !== undefined ? `Run agent ($${ceiling} cap)` : 'Run agent (no cost cap)';
+            })()}
       </button>
+      {runningNow && runId && (
+        <button
+          type="button"
+          className="btn"
+          data-action="cancel-run"
+          data-cancel-armed={cancelArmed ? 'true' : 'false'}
+          disabled={cancelBusy}
+          onClick={() => void onCancel()}
+          style={{ marginLeft: 8 }}
+        >
+          {cancelBusy ? 'Cancelling…' : cancelArmed ? 'Confirm cancel' : 'Cancel run'}
+        </button>
+      )}
+      {standaloneBlockedReason && (
+        <p data-component="standalone-blocked" className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+          {standaloneBlockedReason}
+        </p>
+      )}
       {blockedMessage && (
         <p data-component="connection-run-block" className="save-hint save-hint-dirty" style={{ fontSize: 12, margin: '6px 0 0' }}>
           {blockedMessage}
+        </p>
+      )}
+      {/* W7-B5 (agents-36): the named connections, linked — the message
+          above stays verbatim (a pinned contract); these are the way to go
+          FIX what it names. */}
+      {blockedMessage && unreadyConnectionIds.length > 0 && (
+        <p data-component="connection-run-block-links" style={{ fontSize: 12, margin: '4px 0 0' }}>
+          Fix:{' '}
+          {unreadyConnectionIds.map((id, i) => (
+            <span key={id}>
+              {i > 0 ? ' · ' : ''}
+              <Link data-action="fix-connection" data-connection-id={id} href={`/connections/${encodeURIComponent(id)}`}>
+                {id}
+              </Link>
+            </span>
+          ))}
         </p>
       )}
       {!blockedMessage && !canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (
         <div style={{ marginTop: 8, fontSize: 12 }}>
-          <div>run <code>{runId}</code></div>
+          {/* W7-B5 (agents-26): the runId LINKS to its run page — it used to
+              be inert <code> text with no way through. */}
+          <div>
+            run{' '}
+            <Link data-action="open-run" href={`/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(runId)}`}>
+              <code>{runId}</code>
+            </Link>
+          </div>
           <div>
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
@@ -396,17 +492,29 @@ export function RunPanel({
               <span data-run-read-error className="muted" style={{ marginLeft: 6 }}>· status read failed: {status.error}</span>
             ) : null}
             {pollState === 'timed-out' && (
-              <button
-                type="button"
-                data-action="re-check"
-                className="btn btn-sm"
-                style={{ marginLeft: 8 }}
-                onClick={() => setPollNonce((n) => n + 1)}
-              >
-                Re-check
-              </button>
+              <>
+                <span className="muted" data-component="poll-exhausted-note" style={{ marginLeft: 6 }}>
+                  · stopped watching — the run may still be going
+                </span>
+                <button
+                  type="button"
+                  data-action="re-check"
+                  className="btn btn-sm"
+                  style={{ marginLeft: 8 }}
+                  onClick={() => setPollNonce((n) => n + 1)}
+                >
+                  Re-check
+                </button>
+              </>
             )}
           </div>
+          {/* W7-B5 (agents-19): the failure reason, verbatim, right where
+              the failed status is shown — never only the word "failed". */}
+          {status?.errorText && (
+            <p data-component="run-error" className="save-hint save-hint-dirty" style={{ margin: '4px 0 0' }}>
+              {status.errorText}
+            </p>
+          )}
         </div>
       )}
 

@@ -1,67 +1,60 @@
 /**
  * Client-side fetch + pure derivation for the standalone run view
- * (R6-04 WI-4 item 4) — `app/agents/[id]/run/[runId]/page.tsx`'s data
- * source. Kept separate from `studio-client.ts`'s existing
- * `getAgentRunStatus` (which `RunPanel.tsx` polls today — a WI-3 contract
- * this file must not touch) so this new surface's fetch/derivation can
- * evolve without any risk to that earlier, already-pinned behaviour.
+ * (`app/agents/[id]/run/[runId]/page.tsx`'s data source).
  *
- * Reads `GET /api/agents/runs/:runId`'s `lines` field (R6-04 WI-4 item 1) —
- * the run's own parsed event records — and derives:
- *   - `RunLogLine[]` for the shared `RunLog` renderer (`./run-log-line.ts`)
- *   - materials REFERENCES (`{path, kind}`) from the
- *     `agent-run.materials-staged` log event's `metadata.materials`
- *     (`cli/ui-bridge.ts` ~line 1352; `orchestrator/agent-dispatch.ts`'s
- *     `MaterialReference` type)
- *   - the cost ceiling that was actually in force, from the terminal `end`
- *     event's `metadata.kickoff_ceiling_usd` (`orchestrator/run-agent.ts`
- *     ~line 387) — `undefined` when no ceiling was ever recorded, never a
- *     fabricated default
+ * W7-B5 rewrites the resolution onto the THREE-STATE contract
+ * `flow-run-detail-client.ts` established (bead forge-irn, the D9 sibling):
+ *   - 404            → `resolution: 'not-found'` — the bridge ANSWERED "no
+ *                      such run" (a definitive negative fact)
+ *   - 2xx            → `resolution: 'found'` + the run's own facts
+ *   - anything else  → `resolution: 'unresolved'` — a 500/403/transport
+ *                      failure is an ERROR about the READ, never rendered as
+ *                      the authoritative "run not found" it used to collapse
+ *                      into.
  *
- * KNOWN GAP (documented, not closed here — see RunView.tsx's own header and
- * the WI-4 task brief): this fetch is exercised only by `tsc`, not by an
- * acceptance test — no jsdom / `@testing-library/react` is installed in
- * this repo and `useParams()`/`useEffect` need a mounted Next.js router
- * context `renderToStaticMarkup` cannot provide. A real-browser journey
- * beat (a later work item) proves this end to end.
- *
- * `found`: R6-04 D22 follow-up — `GET /api/agents/runs/:runId` now 404s for
- * a runId with no `_logs/<runId>` directory at all (genuinely never
- * dispatched), distinct from "directory exists, no events landed yet"
- * (200, `state: 'running'`, `lines: []` — a real in-flight run). `found`
- * mirrors the HTTP status, not the body: `resolveRunDetailFromResponse`
- * below decides on `status` alone (any non-2xx, matching `fetch`'s own
- * `res.ok` convention, not a 404-only special case) BEFORE it ever reads
- * `body`, so a stray/cached body on an error response can never leak
- * through as a live run.
- *
- * Typed outputs (`RunOutput[]`) — there is no wired data source for a
- * generic dispatched agent's artifact outputs yet (that lives on the
- * cycle-shaped flows, not the standalone-agent-run primitive this route
- * serves). `outputs` is honestly always `[]` here rather than fabricated;
- * wiring a real source is future work once one exists.
+ * Also W7-B5:
+ *   - `outputRefs` (agents-06 / forge-75j): the run's real output references,
+ *     read off the wire (`GET /api/agents/runs/:runId` now serves the end
+ *     event's own `output_refs`) — the old hard-wired `outputs: []` literal
+ *     and its dead `RunOutput[]` shape are gone.
+ *   - `errorText` (agents-19): the dispatch failure's own recorded reason,
+ *     served by the same route.
+ *   - `ceilingUsd` (agents-31): server-derived (`kickoff_ceiling_usd` off ANY
+ *     of the run's events — the t0 dispatched marker, start, or end), with
+ *     the event-scan fallback kept for older runs whose wire payload predates
+ *     the field.
  */
 
 import { bridgeFetch } from './bridge-client';
 import type { EventLogEntry } from './bridge-client';
 import { deriveLogLine, type RunLogLine } from './run-log-line';
-import type { RunMaterialRef, RunOutput } from '@/components/studio/agent-builder/RunView';
+import type { RunMaterialRef } from '@/components/studio/agent-builder/RunView';
+
+export type RunDetailResolution = 'found' | 'not-found' | 'unresolved';
 
 export type RunDetail = {
+  resolution: RunDetailResolution;
+  /** Back-compat convenience: `resolution === 'found'`. */
   found: boolean;
   state: string;
   costUsd: number;
   lines: RunLogLine[];
   materials: RunMaterialRef[];
   ceilingUsd?: number;
-  outputs: RunOutput[];
+  /** W7-B5 (agents-06): the run's real output references (end event
+   *  `output_refs`), served on the wire — `[]` until the run produces any. */
+  outputRefs: string[];
+  /** W7-B5 (agents-19): the dispatch failure's own recorded reason —
+   *  absent when the run never failed. */
+  errorText?: string;
+  /** Set ONLY on `resolution: 'unresolved'` — the read failure's own facts
+   *  (never a fact about the run). `status` absent = transport failure. */
+  readError?: { message: string; status?: number };
   /**
    * R6-01 WI-2-style provenance (debt-T trigger plumbing): what started this
    * run, mirrored from `GET /api/agents/runs/:runId`'s `trigger` field.
    * Absent when the run carries no derivable trigger — NEVER a fabricated
-   * default. Client-side plumbing only (T1 ruling): no corresponding server
-   * field is wired by this change, so this key is honestly absent on every
-   * real response today until a server-side field lands.
+   * default.
    */
   trigger?: {
     kind: string;
@@ -70,15 +63,18 @@ export type RunDetail = {
   };
 };
 
-const NOT_FOUND_DETAIL: RunDetail = {
-  found: false,
-  state: 'unknown',
-  costUsd: 0,
-  lines: [],
-  materials: [],
-  ceilingUsd: undefined,
-  outputs: [],
-};
+function emptyDetail(resolution: RunDetailResolution): RunDetail {
+  return {
+    resolution,
+    found: false,
+    state: 'unknown',
+    costUsd: 0,
+    lines: [],
+    materials: [],
+    ceilingUsd: undefined,
+    outputRefs: [],
+  };
+}
 
 /** Coerce one raw parsed JSONL record (server sends plain `JSON.parse`
  *  output, not a validated `EventLogEntry`) into the client `EventLogEntry`
@@ -116,13 +112,19 @@ export function materialsFromEvents(events: EventLogEntry[]): RunMaterialRef[] {
     .map((m) => ({ path: m.path as string, kind: m.kind as string }));
 }
 
-/** The cost ceiling actually in force for this run, from the terminal
- *  `end` event's `metadata.kickoff_ceiling_usd` — `undefined` (never a
- *  fabricated default) when no ceiling was ever recorded. */
+/** The cost ceiling actually in force for this run — W7-B5 (agents-31): read
+ *  from ANY event carrying `metadata.kickoff_ceiling_usd` (the t0
+ *  `agent-run.dispatched` marker, `start`, or the terminal `end` — latest
+ *  wins), not only the end event, so a failed or still-running run still
+ *  surfaces the ceiling that was submitted. `undefined` (never a fabricated
+ *  default) when no event recorded one. */
 export function ceilingFromEvents(events: EventLogEntry[]): number | undefined {
-  const end = [...events].reverse().find((e) => e.event_type === 'end');
-  const val = end?.metadata?.['kickoff_ceiling_usd'];
-  return typeof val === 'number' ? val : undefined;
+  let ceiling: number | undefined;
+  for (const e of events) {
+    const val = e.metadata?.['kickoff_ceiling_usd'];
+    if (typeof val === 'number') ceiling = val;
+  }
+  return ceiling;
 }
 
 /** Validate a raw `trigger` field off the wire body into `RunDetail`'s
@@ -139,45 +141,56 @@ function triggerFromBody(raw: unknown): RunDetail['trigger'] {
 
 /**
  * Pure: turn one resolved fetch response (`status` + parsed JSON `body`)
- * into a `RunDetail`. Extracted out of `fetchRunDetail` (R6-04 D22
- * follow-up) so the status-vs-body precedence — status decides `found`
- * BEFORE body is ever inspected, and any non-2xx status (not just 404)
- * means not-found, mirroring `fetch`'s own `res.ok` — is unit-testable
- * without a running bridge. `body` is untyped/unvalidated on purpose: a
- * malformed or unexpected 200 body (null, a bare string, missing fields)
- * degrades to the same honest defaults `fetchRunDetail` always used, never
- * throws.
+ * into a `RunDetail`. W7-B5 three-state rules (see module header): only a
+ * 404 is `'not-found'`; any OTHER non-2xx is `'unresolved'`, carrying the
+ * bridge's own error text when the body has one. `body` is untyped/
+ * unvalidated on purpose: a malformed 200 body degrades to honest defaults,
+ * never throws.
  */
 export function resolveRunDetailFromResponse(status: number, body: unknown): RunDetail {
-  if (status < 200 || status >= 300) return NOT_FOUND_DETAIL;
+  if (status === 404) return emptyDetail('not-found');
+  if (status < 200 || status >= 300) {
+    const message = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string'
+      ? (body as { error: string }).error
+      : `bridge answered HTTP ${status}`;
+    return { ...emptyDetail('unresolved'), readError: { message, status } };
+  }
   const data = body && typeof body === 'object'
-    ? (body as { state?: unknown; costUsd?: unknown; lines?: unknown; trigger?: unknown })
+    ? (body as { state?: unknown; costUsd?: unknown; lines?: unknown; trigger?: unknown; outputRefs?: unknown; errorText?: unknown; ceilingUsd?: unknown })
     : {};
   const rawLines = Array.isArray(data.lines) ? (data.lines as Record<string, unknown>[]) : [];
   const events = rawLines.map(toEventLogEntry);
   const trigger = triggerFromBody(data.trigger);
+  const outputRefs = Array.isArray(data.outputRefs)
+    ? (data.outputRefs as unknown[]).filter((r): r is string => typeof r === 'string')
+    : [];
+  const serverCeiling = typeof data.ceilingUsd === 'number' ? data.ceilingUsd : undefined;
   return {
+    resolution: 'found',
     found: true,
     state: typeof data.state === 'string' ? data.state : 'unknown',
     costUsd: typeof data.costUsd === 'number' ? data.costUsd : 0,
     lines: events.map(deriveLogLine),
     materials: materialsFromEvents(events),
-    ceilingUsd: ceilingFromEvents(events),
-    outputs: [],
+    ceilingUsd: serverCeiling ?? ceilingFromEvents(events),
+    outputRefs,
+    ...(typeof data.errorText === 'string' && data.errorText.length > 0 ? { errorText: data.errorText } : {}),
     // Carried through only when present + valid — mirrors
-    // studio-client.ts:588's declared-data-fails-open convention: an absent
+    // studio-client.ts's declared-data-fails-open convention: an absent
     // `trigger` key must stay absent, never defaulted.
     ...(trigger !== undefined ? { trigger } : {}),
   };
 }
 
-/** Fetch + derive everything `RunView` needs for one runId. */
+/** Fetch + derive everything `RunView` needs for one runId. A transport
+ *  failure is `'unresolved'` (the read failed), NEVER `'not-found'`. */
 export async function fetchRunDetail(runId: string): Promise<RunDetail> {
   try {
     const res = await bridgeFetch(`/api/agents/runs/${encodeURIComponent(runId)}`);
     const body = await res.json().catch(() => null);
     return resolveRunDetailFromResponse(res.status, body);
-  } catch {
-    return NOT_FOUND_DETAIL;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ...emptyDetail('unresolved'), readError: { message: `bridge unreachable (${message})` } };
   }
 }

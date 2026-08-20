@@ -210,6 +210,12 @@ export type LedgerRow = {
   /** R6-06 D8 — OPTIONAL: this row's own provenance, when the run/entry
    *  carries one. Absent on every existing (pre-R6-06) flow-ledger row. */
   trigger?: LedgerRowTrigger;
+  /** W7-B5 (agents-04) — OPTIONAL: WHICH agent(s) this row belongs to, for
+   *  cross-agent ledgers (the /agents + Home recent-runs sections, fed by
+   *  the aggregate route). Rendered as a leading chip by `HistoryLedger`
+   *  when present. Absent on every single-agent/flow-scoped ledger, whose
+   *  rows render byte-identically to before this field existed. */
+  agent?: string;
 };
 
 // ---------------------------------------------------------------------------

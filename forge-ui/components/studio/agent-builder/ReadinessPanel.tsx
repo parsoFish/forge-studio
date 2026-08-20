@@ -22,16 +22,26 @@ export function ReadinessPanel({ state }: Props) {
   return (
     <div className="readiness-panel panel" style={{ padding: '12px 12px 14px' }} data-component="readiness-panel">
       <div className="panel-head" style={{ margin: '-12px -12px 10px', padding: '10px 12px' }}>Readiness</div>
+      {/* W7-B5 (agents-13): pass/fail is DATA + text, not only a CSS class —
+          `data-ok` per row, an aria-label naming the outcome, and a title
+          that always says passed/not-met (with the check's own detail when
+          it has one) so screen readers and the journey harness can tell the
+          two states apart. */}
       <ul className="readiness-list" id="readiness-list" data-ready-count={readyCount}>
         {checks.map((c) => (
           <li
             key={c.key}
             className={`readiness-item${c.ok ? ' ok' : ''}`}
             data-check={c.key}
-            title={c.detail}
+            data-ok={c.ok ? 'true' : 'false'}
+            aria-label={`${c.label}: ${c.ok ? 'passed' : 'not met'}`}
+            title={c.detail ?? (c.ok ? `${c.label} — passed` : `${c.label} — not met`)}
           >
             <span className="ri-dot" />
             {c.label}
+            <span className="visually-hidden" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+              {c.ok ? ' — passed' : ' — not met'}
+            </span>
           </li>
         ))}
       </ul>

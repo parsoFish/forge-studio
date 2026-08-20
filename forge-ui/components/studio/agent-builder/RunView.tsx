@@ -31,7 +31,6 @@
 import { RunLog } from '@/components/studio/RunLog';
 import type { RunLogLine } from '@/lib/run-log-line';
 
-export type RunOutput = { id: string; title: string; artifact: string };
 export type RunMaterialRef = { path: string; kind: string };
 
 export type RunViewProps = {
@@ -46,7 +45,14 @@ export type RunViewProps = {
   materials: RunMaterialRef[];
   /** undefined = no ceiling was ever set for this run. */
   ceilingUsd?: number;
-  outputs: RunOutput[];
+  /** W7-B5 (agents-06 / forge-75j): the run's REAL output references (the
+   *  end event's own `output_refs`, served on the wire) — replaces the old
+   *  typed `RunOutput[]` section that was hard-wired to `[]` and could never
+   *  show anything. */
+  outputRefs: string[];
+  /** W7-B5 (agents-19): the dispatch failure's own recorded reason —
+   *  rendered verbatim as a banner. Absent when the run never failed. */
+  errorText?: string;
   /**
    * Debt-T trigger plumbing: what started this run, mirroring
    * `FlowRunDetail.tsx`'s own `Run.trigger` provenance. Absent when the run
@@ -59,7 +65,7 @@ export type RunViewProps = {
   };
 };
 
-export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputs, trigger }: RunViewProps) {
+export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputRefs, errorText, trigger }: RunViewProps) {
   return (
     <div
       data-page="agent-run"
@@ -74,6 +80,17 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
         <RunNotFound runId={runId} />
       ) : (
         <>
+          {/* W7-B5 (agents-19): the failure reason, verbatim, next to the
+              run — never only the bare word "failed". */}
+          {errorText ? (
+            <div
+              data-component="run-error"
+              role="alert"
+              style={{ border: '1px solid var(--err, #b91c1c)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12.5, color: 'var(--err, #b91c1c)' }}
+            >
+              Run failed: {errorText}
+            </div>
+          ) : null}
           <RunTrigger trigger={trigger} />
 
           <section data-section="run-log">
@@ -83,7 +100,7 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
 
           <RunMaterialsSection materials={materials} />
           <CeilingProvenance ceilingUsd={ceilingUsd} />
-          <RunOutputsSection outputs={outputs} />
+          <RunOutputsSection outputRefs={outputRefs} />
         </>
       )}
     </div>
@@ -156,21 +173,25 @@ function CeilingProvenance({ ceilingUsd }: { ceilingUsd?: number }) {
   );
 }
 
-function RunOutputsSection({ outputs }: { outputs: RunOutput[] }) {
+/** W7-B5 (agents-06 / forge-75j): real output REFERENCES (the end event's
+ *  own `output_refs` — repo-relative paths the run reported writing). Shown
+ *  as references, never fabricated contents. */
+function RunOutputsSection({ outputRefs }: { outputRefs: string[] }) {
   return (
-    <section data-section="run-outputs" data-outputs-count={outputs.length}>
+    <section data-section="run-outputs" data-outputs-count={outputRefs.length}>
       <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Outputs</h3>
-      {outputs.length === 0 ? (
+      {outputRefs.length === 0 ? (
         <div data-component="run-outputs-empty" className="muted" style={{ fontSize: 12 }}>
-          No outputs yet.
+          No outputs recorded for this run.
         </div>
       ) : (
-        outputs.map((o) => (
-          <details key={o.id} data-output-id={o.id} style={{ marginBottom: 8 }}>
-            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>{o.title}</summary>
-            <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{o.artifact}</pre>
-          </details>
-        ))
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+          {outputRefs.map((ref) => (
+            <li key={ref} data-output-ref={ref}>
+              <code>{ref}</code>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

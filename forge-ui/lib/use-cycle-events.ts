@@ -26,6 +26,12 @@ export function useCycleEvents(
   useEffect(() => {
     let cancelled = false;
     setEvents([]);
+    // W7-B5 (agents-01): an EMPTY cycle id means "no run exists yet" — do not
+    // fetch (`GET /api/events/` 404s and logs a red network-layer console
+    // error on every agent page load) and do not subscribe (no WS `event`
+    // message can ever carry `cycleId: ''`). The effect stays inert until a
+    // real id arrives, at which point `[cycleId]` re-runs it.
+    if (!cycleId) return;
     fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
     const sub = subscribe({
       onMessage: (msg) => {
