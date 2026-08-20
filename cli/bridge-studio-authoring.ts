@@ -105,7 +105,7 @@ import {
   type StudioContext,
 } from './bridge-studio.ts';
 import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
-import { installSkillPackage } from '../orchestrator/studio/skill-library.ts';
+import { installSkillPackage, SkillIdOccupiedError } from '../orchestrator/studio/skill-library.ts';
 import {
   hookDir,
   hooksDir,
@@ -207,9 +207,16 @@ async function finalizeSkillFromLanded(
     }
     return { ok: true };
   } catch (err) {
-    // Every installSkillPackage throw (bad slug, no SKILL.md at the package
-    // root, cap exceeded, binary file, escaping destination, ...) is a
-    // caller-input problem by contract — 400, never a 500 here.
+    // W7-B3 (library-31): an id occupied by an UNMANAGED local skill now
+    // throws the NAMED SkillIdOccupiedError instead of answering a false
+    // `alreadyInstalled` — for this route it is the SAME operator fact as
+    // the managed collision above: the id is taken, pick another. 409.
+    if (err instanceof SkillIdOccupiedError) {
+      return { ok: false, status: 409, error: `skill "${id}" already exists — choose a different id` };
+    }
+    // Every OTHER installSkillPackage throw (bad slug, no SKILL.md at the
+    // package root, cap exceeded, binary file, escaping destination, ...)
+    // is a caller-input problem by contract — 400, never a 500 here.
     return { ok: false, status: 400, error: sanitizeError(err) };
   }
 }

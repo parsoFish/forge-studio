@@ -30,7 +30,7 @@ import { parseProbeResult, type ConnectionProbeResult } from './connection-clien
 export const COMMUNITY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
 export type CommunityKind = (typeof COMMUNITY_KINDS)[number];
 
-export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed'] as const;
+export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed', 'present-unmanaged'] as const;
 export type CommunityInstallState = (typeof COMMUNITY_INSTALL_STATES)[number];
 
 export const COMMUNITY_PROBE_STATES = ['not-installed', 'available', 'misconfigured'] as const;
@@ -381,36 +381,69 @@ function errorFrom(data: unknown, fallback: string): string {
   return isPlainObject(data) && typeof data['error'] === 'string' ? data['error'] : fallback;
 }
 
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03) — registry-level meta on the index
+// payload. Same refuse-don't-coerce discipline as every parser above: a
+// malformed meta THROWS (the caller maps it to ok:false), never a silently
+// defaulted shape.
+// ---------------------------------------------------------------------------
+
+export type CommunityIndexMeta = {
+  /** commitRegistryDraft's stamp — null = no agent refresh ever committed. */
+  lastRefresh: string | null;
+  /** Uncommitted changes on the repo-tracked registry file; null = git did
+   *  not answer (not a repo) — an unknown, never a fabricated "clean". */
+  registryDirty: boolean | null;
+};
+
+export function parseCommunityIndexMeta(raw: unknown): CommunityIndexMeta {
+  if (!isPlainObject(raw)) throw new Error('community index meta: not an object');
+  const lastRefresh = raw['lastRefresh'];
+  if (lastRefresh !== null && typeof lastRefresh !== 'string') {
+    throw new Error('community index meta: lastRefresh must be a string or null');
+  }
+  const registryDirty = raw['registryDirty'];
+  if (registryDirty !== null && typeof registryDirty !== 'boolean') {
+    throw new Error('community index meta: registryDirty must be a boolean or null');
+  }
+  return { lastRefresh, registryDirty };
+}
+
 /** Fetch the community index: every real hub (with a DERIVED itemCount) plus
  *  the cross-kind item list. Distinguishes a reachable-but-empty index from
  *  an unreachable bridge or a malformed payload (`ok: false` for both) —
  *  never rendered the same way. */
-export async function fetchCommunityIndex(): Promise<{
+/** `kind` (optional) narrows the index the BRIDGE builds — a hooks-only
+ *  consumer must not trigger a probe per catalog connection (W7-B3 review
+ *  F7). Omitted = the full cross-kind index. */
+export async function fetchCommunityIndex(kind?: CommunityKind): Promise<{
   ok: boolean;
   hubs: CommunityHubWithCount[];
   items: CommunityItem[];
+  meta: CommunityIndexMeta | null;
   error?: string;
 }> {
   let res: Response;
   try {
-    res = await bridgeFetch(`/api/studio/community`);
+    res = await bridgeFetch(kind === undefined ? `/api/studio/community` : `/api/studio/community?kind=${encodeURIComponent(kind)}`);
   } catch (err) {
-    return { ok: false, hubs: [], items: [], error: `bridge unreachable: ${String(err)}` };
+    return { ok: false, hubs: [], items: [], meta: null, error: `bridge unreachable: ${String(err)}` };
   }
 
   try {
     const data = await res.json().catch(() => undefined);
-    if (!res.ok) return { ok: false, hubs: [], items: [], error: errorFrom(data, `HTTP ${res.status}`) };
+    if (!res.ok) return { ok: false, hubs: [], items: [], meta: null, error: errorFrom(data, `HTTP ${res.status}`) };
     if (!isPlainObject(data) || !Array.isArray(data['hubs']) || !Array.isArray(data['items'])) {
-      return { ok: false, hubs: [], items: [], error: 'malformed bridge response: "hubs"/"items" missing or not arrays' };
+      return { ok: false, hubs: [], items: [], meta: null, error: 'malformed bridge response: "hubs"/"items" missing or not arrays' };
     }
     return {
       ok: true,
       hubs: (data['hubs'] as unknown[]).map(parseCommunityHubWithCount),
       items: (data['items'] as unknown[]).map(parseCommunityItem),
+      meta: parseCommunityIndexMeta(data['meta']),
     };
   } catch (err) {
-    return { ok: false, hubs: [], items: [], error: `malformed bridge response: ${String(err)}` };
+    return { ok: false, hubs: [], items: [], meta: null, error: `malformed bridge response: ${String(err)}` };
   }
 }
 
@@ -489,4 +522,108 @@ export async function installCommunityItem(
   } catch (err) {
     return { ok: false, error: `malformed bridge response: ${String(err)}` };
   }
+}
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-23) — registry CRUD. The server forces the hand-curated
+// stamps (fetchedAt:null / fetchedBy:'operator'); this client only carries
+// the operator's curated fields. `status` is surfaced so callers can tell
+// 409 (duplicate id) / 404 (unknown id) / 400 (invalid field) apart.
+// ---------------------------------------------------------------------------
+
+export type RegistryItemInput = {
+  id: string;
+  kind: CommunityKind;
+  name: string;
+  desc?: string;
+  category: string;
+  sourceUrl: string;
+  provenance: string;
+  tier?: string;
+  signals?: { stars?: number | null; starsDisplay?: string | null; attributedTo?: string | null };
+  upstreamUpdatedAt?: string | null;
+};
+
+type RegistryCrudResult = { ok: boolean; status?: number; error?: string };
+
+async function registryCrud(path: string, method: 'POST' | 'PUT' | 'DELETE', item?: RegistryItemInput): Promise<RegistryCrudResult> {
+  let res: Response;
+  try {
+    res = await bridgeFetch(path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      ...(item !== undefined ? { body: JSON.stringify({ item }) } : {}),
+    });
+  } catch (err) {
+    return { ok: false, error: `bridge unreachable: ${String(err)}` };
+  }
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) return { ok: false, status: res.status, error: errorFrom(data, `HTTP ${res.status}`) };
+  return { ok: true, status: res.status };
+}
+
+export function addRegistryItem(item: RegistryItemInput): Promise<RegistryCrudResult> {
+  return registryCrud('/api/studio/community/registry/items', 'POST', item);
+}
+
+export function updateRegistryItem(id: string, item: RegistryItemInput): Promise<RegistryCrudResult> {
+  return registryCrud(`/api/studio/community/registry/items/${encodeURIComponent(id)}`, 'PUT', item);
+}
+
+export function deleteRegistryItem(id: string): Promise<RegistryCrudResult> {
+  return registryCrud(`/api/studio/community/registry/items/${encodeURIComponent(id)}`, 'DELETE');
+}
+
+/** The RAW registry row (category/tier/signals included — the browse wire
+ *  projection does not carry them) for the edit form's prefill. 404 → null. */
+export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item?: RegistryItemInput; error?: string }> {
+  let res: Response;
+  try {
+    res = await bridgeFetch(`/api/studio/community/registry/items/${encodeURIComponent(id)}`);
+  } catch (err) {
+    return { ok: false, error: `bridge unreachable: ${String(err)}` };
+  }
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) return { ok: false, error: errorFrom(data, `HTTP ${res.status}`) };
+  // W7-B3 review F6: the parse below throws on an unexpected shape
+  // (asRecord/requireString) — wrap it like every sibling in this module so
+  // a malformed 200 body becomes ok:false, never an unhandled rejection that
+  // strands the edit form at data-page-ready="false".
+  try {
+    return parseRegistryItemResponse(data);
+  } catch (err) {
+    return { ok: false, error: `malformed bridge response: ${String(err)}` };
+  }
+}
+
+/** Exported for the parse-contract pin in community-client.test.ts (W7-B3
+ *  review F6): throws on any unexpected shape; `fetchRegistryItem` above is
+ *  the ONE caller and converts the throw to `ok:false`. */
+export function parseRegistryItemResponse(data: unknown): { ok: true; item: RegistryItemInput } {
+  const r = asRecord(data);
+  const item = asRecord(r['item']);
+  return {
+    ok: true,
+    item: {
+      id: requireString(item, 'id'),
+      kind: requireString(item, 'kind') as CommunityKind,
+      name: requireString(item, 'name'),
+      desc: typeof item['desc'] === 'string' ? item['desc'] : undefined,
+      category: requireString(item, 'category'),
+      sourceUrl: requireString(item, 'sourceUrl'),
+      provenance: requireString(item, 'provenance'),
+      tier: typeof item['tier'] === 'string' ? item['tier'] : undefined,
+      signals: (() => {
+        const s = item['signals'];
+        if (s === null || typeof s !== 'object' || Array.isArray(s)) return undefined;
+        const sig = s as Record<string, unknown>;
+        return {
+          stars: typeof sig['stars'] === 'number' ? sig['stars'] : null,
+          starsDisplay: typeof sig['starsDisplay'] === 'string' ? sig['starsDisplay'] : null,
+          attributedTo: typeof sig['attributedTo'] === 'string' ? sig['attributedTo'] : null,
+        };
+      })(),
+      upstreamUpdatedAt: typeof item['upstreamUpdatedAt'] === 'string' ? item['upstreamUpdatedAt'] : null,
+    },
+  };
 }

@@ -1470,6 +1470,23 @@ both the bridge's 409s and the UI's action-group gate consume.
 `scripts/request-path-sinks.baseline.txt` now records `cli/kb-job-state.ts`
 `readFileSync` at 2.
 
+### W7-B3 — community registry CRUD + index meta (fixed-path sinks; one guarded read)
+
+Wave-7 lane B3 (community; bead forge-bzt.8). `check-request-path-sinks.mjs`
+delta (8 rows across 3 files) — the headline fact for every new fs sink in
+the two bridge files: **no request-derived value ever becomes a path
+segment.** The routes' `:id` is `assertSkillSlug`-validated and then used
+ONLY to match parsed registry rows in memory; every fs operation targets the
+ONE fixed, forge-root-derived registry path.
+
+| file | op(s) | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/bridge-studio-writes.ts` (`mutateCommunityRegistry`) | `existsSync` + `mkdirSync` + `writeFileSync` + `renameSync` + `unlinkSync` | none — `destPath = communityRegistryPath(ctx.forgeRoot)` (a fixed literal under the trusted forge root); `tempPath` is a sibling `.registry.yaml.tmp-<server-random>` (`randomBytes`, never request text). The URL `:id` / body `item.id` never reach a path: they are slug-validated (`assertSkillSlug`) and matched against `loadCommunityRegistry`'s parsed rows in memory only. | fixed-path (accidentally-safe by construction) | Temp-then-rename with a re-parse through `loadCommunityRegistry` before the rename — a document the ONE loader refuses never replaces the real file; refused mutations (`null` from `mutate`) write nothing at all. Verified `[exec]` by `cli/bridge-community-registry-crud.test.ts` (CRUD-8: a traversal-shaped id 400s with the file byte-identical; CRUD-2/6: 409/404 leave the file byte-identical). |
+| `cli/bridge-studio-community.ts` (`communityIndexMeta`, the registry-row GET) | `existsSync` ×2 (new) + `execFileSync` (new) | none — both `existsSync` calls probe the SAME fixed `communityRegistryPath(forgeRoot)`; `execFileSync('git', ['status','--porcelain','--','studio/community/registry.yaml'], {cwd: forgeRoot})` is a FIXED argv + FIXED literal path with `shell:false` semantics (execFileSync never invokes a shell) — no request-derived byte reaches argv, env, or cwd. The row GET's `:id` is `assertSkillSlug`-validated and used only for in-memory row matching. | fixed-path / fixed-argv | A git failure (non-repo root) degrades to `registryDirty: null` — an honest unknown, never a fabricated clean and never an error channel that echoes request data. Verified `[exec]` by `cli/bridge-studio-community.test.ts` (the three W7-B3 meta tests: null outside a repo, false→true across a real commit + modify). |
+| `orchestrator/studio/skill-library.ts` (`installSkillPackage`) | `readFileSync` (+1) | none — the read target is `guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read')`'s OWN non-null return (the guard's resolved real path; `id` rode as its own `segments[]` element) | guarded `[read]` | The read exists to tell a MANAGED occupancy (provenance block → honest `alreadyInstalled`) from an unrelated local skill (no provenance → throw, `present-unmanaged`) — closing library-31's laundered false success. Read-only either way; the victim file is byte-unchanged on refusal (pinned by `skill-library.test.ts` W7-B3 row). |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta.
+
 ### W7-B2 code-review round — the approve-path consolidate's log-dir stake-out (one new `[exec]`-class sink, guarded)
 
 `approveKbCleanup` (`cli/bridge-studio-kbs.ts`) minted a

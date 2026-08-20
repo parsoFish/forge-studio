@@ -45,6 +45,9 @@ export type SkillLibraryEntry = {
   stars?: string;
   hub?: string;
   error?: string; // malformed on-disk skill — surfaced, never dropped
+  /** W7-B3 — browse-only registry reference with no local bytes (see
+   *  orchestrator/studio/skill-library.ts's field doc). */
+  reference?: boolean;
 };
 
 function parseSkillProvenance(raw: unknown): SkillProvenance | null {
@@ -94,6 +97,7 @@ function parseSkillLibraryEntry(raw: unknown): SkillLibraryEntry {
     stars: typeof r['stars'] === 'string' ? r['stars'] : undefined,
     hub: typeof r['hub'] === 'string' ? r['hub'] : undefined,
     error: typeof r['error'] === 'string' ? r['error'] : undefined,
+    ...(r['reference'] === true ? { reference: true } : {}),
   };
 }
 

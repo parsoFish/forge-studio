@@ -326,3 +326,31 @@ test('buildHookDetailView: an unbound hook (carriedBy empty) still reports a rea
   expect(view.carriedByCount).toBe(0);
   expect(view.carriedByDerivation.scanned).toBeGreaterThanOrEqual(0);
 });
+
+// ---------------------------------------------------------------------------
+// W7-B3 (library-11): /hooks unions the community index's hook items the way
+// /skills unions community skills — this pure predicate picks the community
+// hooks the LOCAL library does not already carry (an installed community
+// hook is already a local row; showing it twice would double-count).
+// ---------------------------------------------------------------------------
+
+import { communityHooksToUnion } from './hook-library-view.ts';
+
+const communityHookItem = (id: string, installState: string) =>
+  ({ id, kind: 'hook', installState } as { id: string; kind: string; installState: string });
+
+test('W7-B3 communityHooksToUnion: keeps hook items absent from the local library', () => {
+  const items = [communityHookItem('block-protected-branch-push', 'not-installed'), { id: 'a-skill', kind: 'skill', installState: 'not-installed' }];
+  const localIds = new Set(['some-local-hook']);
+  expect(communityHooksToUnion(items as never, localIds).map((i) => i.id)).toEqual(['block-protected-branch-push']);
+});
+
+test('W7-B3 communityHooksToUnion: an id already in the local library is never doubled', () => {
+  const items = [communityHookItem('block-protected-branch-push', 'installed')];
+  expect(communityHooksToUnion(items as never, new Set(['block-protected-branch-push']))).toEqual([]);
+});
+
+test('W7-B3 communityHooksToUnion: non-hook kinds never leak in', () => {
+  const items = [{ id: 'handoff', kind: 'skill', installState: 'not-installed' }];
+  expect(communityHooksToUnion(items as never, new Set())).toEqual([]);
+});

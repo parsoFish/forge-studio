@@ -280,8 +280,11 @@ describe('constants', () => {
     assert.deepEqual(COMMUNITY_KINDS, ['skill', 'hook', 'mcp', 'tool']);
   });
 
-  it('COMMUNITY_INSTALL_STATES is exactly the 4-member union (D3 spec correction: needs-review is a real 4th member)', () => {
-    assert.deepEqual(COMMUNITY_INSTALL_STATES, ['not-installed', 'draft-pending-approval', 'needs-review', 'installed']);
+  // W7-B3 amendment (library-31): 'present-unmanaged' joins as the honest
+  // name for an id occupied by a local skill the community pipeline does
+  // not manage — see communityInstallState's skill branch.
+  it('COMMUNITY_INSTALL_STATES is exactly the 5-member union (D3 + W7-B3 present-unmanaged)', () => {
+    assert.deepEqual(COMMUNITY_INSTALL_STATES, ['not-installed', 'draft-pending-approval', 'needs-review', 'installed', 'present-unmanaged']);
   });
 });
 
@@ -409,11 +412,19 @@ describe('communityInstallState — skill (D3)', () => {
       }),
       'utf8',
     );
+    // W7-B3 amendment (library-31): 'not-installed' was itself half the lie —
+    // it made /community offer an Install for a path install could never
+    // touch, while /skills said the same id was fine. The third state names
+    // the truth both surfaces now share: the id is OCCUPIED by a local skill
+    // the community pipeline does not manage. The original intent ("never
+    // reported as installed") is preserved and re-asserted below.
+    const state = communityInstallState(root, 'skill', 'collide-id');
     assert.equal(
-      communityInstallState(root, 'skill', 'collide-id'),
-      'not-installed',
-      'a local skill with no provenance block must never be reported as an INSTALLED community package — it merely occupies the id',
+      state,
+      'present-unmanaged',
+      'a local skill with no provenance block is present-unmanaged — occupied, but this community package was never installed',
     );
+    assert.notEqual(state, 'installed', 'a local skill with no provenance block must never be reported as an INSTALLED community package');
   });
 });
 

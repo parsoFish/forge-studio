@@ -872,6 +872,51 @@ export function loadCommunityRegistry(registryYamlPath: string): CommunityRegist
   };
 }
 
+/** Renders one `CommunityRegistryItem` back to the plain-object shape
+ *  `js-yaml` dumps — optional fields (`desc`/`tier`) are OMITTED (never
+ *  written as `null`/`undefined`) when absent, mirroring
+ *  `serializeFlowDefinition`'s own "spread in only when defined" discipline
+ *  rather than trusting `yaml.dump` to drop `undefined` values on its own. */
+function serializeCommunityRegistryItem(item: CommunityRegistryItem): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: item.id, kind: item.kind, name: item.name };
+  if (item.desc !== undefined) out.desc = item.desc;
+  out.category = item.category;
+  out.sourceUrl = item.sourceUrl;
+  out.provenance = item.provenance;
+  if (item.tier !== undefined) out.tier = item.tier;
+  out.signals = {
+    stars: item.signals.stars,
+    starsDisplay: item.signals.starsDisplay,
+    attributedTo: item.signals.attributedTo,
+  };
+  out.upstreamUpdatedAt = item.upstreamUpdatedAt;
+  out.fetchedAt = item.fetchedAt;
+  out.fetchedBy = item.fetchedBy;
+  return out;
+}
+
+/**
+ * W7-B3 — the ONE serializer for the whole registry document, shared by
+ * `commitRegistryDraft` (orchestrator/interactive-finalizers.ts) and the
+ * Studio CRUD routes (cli/bridge-studio-writes.ts). Pure: takes the parsed
+ * shape, returns the YAML text; the CALLER owns the temp-then-rename write.
+ * Symmetric with `loadCommunityRegistry` above so a round-trip
+ * (serialize → load) is the natural structural validation.
+ */
+export function serializeCommunityRegistry(doc: {
+  schemaVersion: number;
+  lastRefresh: string | null;
+  items: readonly CommunityRegistryItem[];
+}): string {
+  return yaml.dump(
+    {
+      meta: { schemaVersion: doc.schemaVersion, lastRefresh: doc.lastRefresh },
+      items: doc.items.map(serializeCommunityRegistryItem),
+    },
+    { lineWidth: 100, quotingType: '"', forceQuotes: false },
+  );
+}
+
 /** Projects a registry item down onto the LEGACY `CommunitySkill` shape every
  *  existing consumer already depends on (skill-library.ts, validate.ts,
  *  community-index.ts, community-install.ts, the bridge routes) — `stars`

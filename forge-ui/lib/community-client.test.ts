@@ -23,7 +23,7 @@
  * response, never silently treated the same as an explicit null.
  */
 import { test, expect } from 'vitest';
-import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem } from './community-client.ts';
+import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem, parseCommunityIndexMeta, parseRegistryItemResponse } from './community-client.ts';
 
 const WELL_FORMED_HUB = { id: 'mcp-servers', name: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', kinds: 'MCPs' };
 
@@ -195,4 +195,70 @@ test('parseCommunityItem: throws when "vendored" is not a boolean', () => {
 test('parseCommunityItem: a hub object with a missing field inside it throws (the nested parser is reused, not re-implemented)', () => {
   const item = { ...WELL_FORMED_SKILL_ITEM, hub: { id: 'x', name: 'X' /* missing url, kinds */ } };
   expect(() => parseCommunityItem(item)).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03): the registry-level meta block —
+// refuse-don't-coerce like every other parser here.
+// ---------------------------------------------------------------------------
+
+test('parseCommunityIndexMeta: both nulls round-trip (fresh root / non-git root)', () => {
+  expect(parseCommunityIndexMeta({ lastRefresh: null, registryDirty: null })).toEqual({ lastRefresh: null, registryDirty: null });
+});
+
+test('parseCommunityIndexMeta: real values round-trip', () => {
+  expect(parseCommunityIndexMeta({ lastRefresh: '2026-08-19T10:00:00.000Z', registryDirty: true })).toEqual({
+    lastRefresh: '2026-08-19T10:00:00.000Z',
+    registryDirty: true,
+  });
+});
+
+test('parseCommunityIndexMeta: throws on a missing meta object or coerced-looking shapes', () => {
+  expect(() => parseCommunityIndexMeta(undefined)).toThrow();
+  expect(() => parseCommunityIndexMeta({ lastRefresh: 12345, registryDirty: null })).toThrow();
+  expect(() => parseCommunityIndexMeta({ lastRefresh: null, registryDirty: 'clean' })).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 review F6 — parseRegistryItemResponse (fetchRegistryItem's parse
+// step). The defect: this parse used to run INLINE after `res.ok` with no
+// guard, so a malformed 200 body (proxy HTML, field rename) rejected
+// UNHANDLED and stranded the edit form at data-page-ready="false" forever.
+// The contract now: the parse THROWS on any unexpected shape (same
+// refuse-don't-coerce rule as every parser above), and fetchRegistryItem —
+// its one caller — catches and returns ok:false like every sibling.
+// ---------------------------------------------------------------------------
+
+const WELL_FORMED_REGISTRY_ROW = {
+  item: {
+    id: 'handoff',
+    kind: 'skill',
+    name: 'Handoff',
+    desc: 'Compress the current session.',
+    category: 'memory',
+    sourceUrl: 'https://github.com/obra/superpowers',
+    provenance: 'obra/superpowers',
+    tier: 'sonnet',
+    signals: { stars: 4200, starsDisplay: '4.2k', attributedTo: 'obra' },
+    upstreamUpdatedAt: '2026-08-01',
+  },
+};
+
+test('parseRegistryItemResponse: a well-formed registry row round-trips (ok:true, fields intact)', () => {
+  const r = parseRegistryItemResponse(WELL_FORMED_REGISTRY_ROW);
+  expect(r.ok).toBe(true);
+  expect(r.item.id).toBe('handoff');
+  expect(r.item.signals?.stars).toBe(4200);
+  expect(r.item.upstreamUpdatedAt).toBe('2026-08-01');
+});
+
+test('parseRegistryItemResponse: THROWS on a body with no "item" object — never a fabricated empty form prefill', () => {
+  expect(() => parseRegistryItemResponse({ ok: true })).toThrow();
+  expect(() => parseRegistryItemResponse('<!doctype html>')).toThrow();
+  expect(() => parseRegistryItemResponse(null)).toThrow();
+});
+
+test('parseRegistryItemResponse: THROWS when a required string field is missing (e.g. sourceUrl) — never defaulted', () => {
+  const { sourceUrl: _dropped, ...rest } = WELL_FORMED_REGISTRY_ROW.item;
+  expect(() => parseRegistryItemResponse({ item: rest })).toThrow();
 });

@@ -1075,3 +1075,30 @@ desc: A per-project brain (Brain-3) that legitimately grants the reviewer.
 
   cleanup(root);
 });
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-01 / sessions-kinds-32): studio/community/staging/ is
+// pre-fence community-refresh debris — an error naming the cleanup, since no
+// code change can delete an untracked directory from the operator's checkout.
+// ---------------------------------------------------------------------------
+
+test('W7-B3: a stray studio/community/staging/ dir is a lint ERROR telling the operator to delete it', () => {
+  const root = tmpRoot();
+  mkdirSync(join(root, 'studio', 'community', 'staging'), { recursive: true });
+  writeFileSync(join(root, 'studio', 'community', 'staging', 'registry.yaml'), 'debris\n', 'utf8');
+
+  const result = runStudioLint(root);
+  const stray = result.findings.filter((f) => f.check === 'community/stray-staging');
+  assert.equal(stray.length, 1, 'exactly one stray-staging finding expected');
+  assert.equal(stray[0].level, 'error');
+  assert.match(stray[0].message, /[Dd]elete/);
+
+  cleanup(root);
+});
+
+test('W7-B3: no stray-staging finding when the debris dir is absent', () => {
+  const root = tmpRoot();
+  const result = runStudioLint(root);
+  assert.equal(result.findings.filter((f) => f.check === 'community/stray-staging').length, 0);
+  cleanup(root);
+});
