@@ -866,6 +866,8 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     ],
     flowLineage: ['forge-develop'],
     trigger: { kind: 'schedule', source: 'cron', scope: null },
+    // W7-B7 (artifact-plan-17): the PR artifact page's link source.
+    prUrl: 'https://github.com/parsoFish/gitpulse/pull/12',
   };
 
   const parsed = parseRun(raw);

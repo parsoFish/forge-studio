@@ -21,7 +21,7 @@ function run(over: Partial<Run>): Run {
   };
 }
 
-test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict gate = no verdict yet on a gated/active run', () => {
+test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict gate = the queue state alone (gated)', () => {
   expect(inferArtifactMode('plan', run({ status: 'gated', artifactsReady: { plan: 'gate' } }))).toBe('gate');
   expect(inferArtifactMode('plan', run({ status: 'complete', artifactsReady: { plan: 'view' } }))).toBe('view');
   expect(inferArtifactMode('workitems', run({ artifactsReady: { 'work-items': 'gate' } }))).toBe('gate');
@@ -29,6 +29,17 @@ test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict g
   expect(inferArtifactMode('verdict', run({ status: 'complete', artifactsReady: { verdict: 'view' } }))).toBe('view');
   expect(inferArtifactMode('verdict', run({ status: 'complete' }))).toBe('view');
   expect(inferArtifactMode('plan', null)).toBe('view');
+});
+
+// W7-B7 (artifact-plan-11/-14): verdict-gate arming, both directions.
+test('verdict gate: ROUND 2 stays armed — a gated run with a prior send-back verdict.json still awaits the operator', () => {
+  expect(inferArtifactMode('verdict', run({ status: 'gated', artifactsReady: { verdict: 'view' } }))).toBe('gate');
+});
+
+test('verdict gate: an ACTIVE run does not arm it (agents still working — nothing awaits the operator), and failed/planned never do', () => {
+  expect(inferArtifactMode('verdict', run({ status: 'active' }))).toBe('view');
+  expect(inferArtifactMode('verdict', run({ status: 'failed' }))).toBe('view');
+  expect(inferArtifactMode('verdict', run({ status: 'planned' }))).toBe('view');
 });
 
 test('?mode=gate on a run that is NOT gated for that artifact → view (artifact-plan-05)', () => {
