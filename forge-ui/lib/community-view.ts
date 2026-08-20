@@ -328,3 +328,17 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
   if (!Number.isFinite(thenMs)) return 'never refreshed — every row is still the hand-curated seed';
   return `last refreshed ${relativeAge(Math.max(0, nowMs - thenMs))}`;
 }
+
+/**
+ * W7-B3 review F2 (community-16): pick the newest TERMINAL community-refresh
+ * session — the row the "open-last-refresh-session" link targets when nothing
+ * is in flight. CONTRACT: `rows` must come from `fetchStudioSessions(false)`
+ * (all sessions) — the default `activeOnly=true` fetch excludes every
+ * terminal row, which silently turns this into a constant `null` and the
+ * link into dead code (the exact defect this helper pins against).
+ * Session ids are timestamp-prefixed (`2026-08-18T12-54-32...`), so a
+ * lexicographic sort IS the recency sort.
+ */
+export function lastTerminalRefreshOf<T extends { terminal: boolean; sessionId: string }>(rows: readonly T[]): T | null {
+  return rows.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
+}

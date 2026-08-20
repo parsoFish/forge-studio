@@ -23,7 +23,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -101,9 +101,9 @@ function del(id: string): Promise<Response> {
   return fetch(`${url}/api/studio/community/registry/items/${encodeURIComponent(id)}`, { method: 'DELETE', headers: CSRF });
 }
 
-test('CRUD-1: POST adds a row — stamped fetchedAt:null / fetchedBy:operator regardless of body claims', async () => {
+test('CRUD-1: POST adds a row — fetchedAt/fetchedBy AND the fetch facts (stars/starsDisplay/upstreamUpdatedAt) are server-owned, regardless of body claims', async () => {
   seedRegistry([SEED_ROW]);
-  const res = await post({ item: { ...NEW_ITEM_BODY, fetchedAt: '2026-01-01T00:00:00Z', fetchedBy: 'liar' } });
+  const res = await post({ item: { ...NEW_ITEM_BODY, upstreamUpdatedAt: '2026-07-01', fetchedAt: '2026-01-01T00:00:00Z', fetchedBy: 'liar' } });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const doc = readRegistryDoc();
@@ -112,7 +112,14 @@ test('CRUD-1: POST adds a row — stamped fetchedAt:null / fetchedBy:operator re
   assert.equal(row!.fetchedAt, null, 'an operator add is hand-curated — never a fabricated verification stamp');
   assert.equal(row!.fetchedBy, 'operator');
   assert.equal(row!.name, 'New Item');
-  assert.equal((row!.signals as Record<string, unknown>).stars, 1200);
+  // W7-B3 review F5 (declared-data-fails-open): the body claimed stars:1200 /
+  // starsDisplay:'1.2k' / upstreamUpdatedAt — all fabricated-signal vectors
+  // (stars drives the "Stars" sort). The server IGNORES them on create.
+  const signals = row!.signals as Record<string, unknown>;
+  assert.equal(signals.stars, null, 'a hand-entered star count is a fabricated signal — server-owned, starts null');
+  assert.equal(signals.starsDisplay, null, 'starsDisplay summarizes stars — it must not survive without it');
+  assert.equal(signals.attributedTo, 'Operator Pick', 'the attribution note IS operator text — kept');
+  assert.equal(row!.upstreamUpdatedAt, null, 'nothing was fetched — no upstream fact to record');
   // The untouched seed row survives byte-equivalent (same parsed value).
   assert.ok(doc.items.some((i) => i.id === 'seed-item' && i.fetchedAt === '2026-08-01T00:00:00.000Z'));
 });
@@ -186,4 +193,62 @@ test('CRUD-9: the written file still parses through the structural loader (round
   assert.equal(res.status, 200);
   const body = (await res.json()) as { items: Array<{ id: string }> };
   assert.ok(body.items.some((i) => i.id === 'new-item'), 'the added row must surface on the live index read');
+});
+
+// W7-B3 review F1 (CONFIRMED by live probe): the community index projects
+// ONLY kind:'skill' registry rows — a hand-added hook/mcp/tool row would
+// write fine and then be invisible and un-curatable (the form's post-submit
+// redirect to /community/hook/<id> 404s, and edit/remove live on that page).
+test('CRUD-10: POST with kind "hook" (a real registry kind the index never surfaces) → 400 naming the skill-only rule; file byte-identical', async () => {
+  seedRegistry([SEED_ROW]);
+  const before = readFileSync(registryPath(), 'utf8');
+  const res = await post({ item: { ...NEW_ITEM_BODY, kind: 'hook' } });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /skill/, 'the 400 must explain the skill-only rule, not just reject');
+  assert.equal(readFileSync(registryPath(), 'utf8'), before, 'a refused kind must write nothing');
+});
+
+// W7-B3 review F4: an operator EDIT must not wipe agent-fetched facts — and
+// review F5: nor may the body fabricate them. stars/starsDisplay/
+// upstreamUpdatedAt come from the EXISTING row on PUT; only fetchedAt/
+// fetchedBy reset (the content is now hand-curated).
+test('CRUD-11: PUT carries the existing row\'s stars/starsDisplay/upstreamUpdatedAt forward — body spoofs ignored, attribution note editable', async () => {
+  const agentRow = {
+    ...SEED_ROW,
+    signals: { stars: 4200, starsDisplay: '4.2k', attributedTo: null },
+    upstreamUpdatedAt: '2026-08-01',
+    fetchedAt: '2026-08-02T00:00:00.000Z',
+    fetchedBy: 'community-refresh/2026-08-02T00-00-00-fx',
+  };
+  seedRegistry([agentRow]);
+  const res = await put('seed-item', {
+    item: {
+      ...SEED_ROW,
+      desc: 'typo fixed',
+      signals: { stars: 999999, starsDisplay: 'one MILLION', attributedTo: 'curator note' },
+      upstreamUpdatedAt: '1999-01-01',
+    },
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const row = readRegistryDoc().items.find((i) => i.id === 'seed-item')!;
+  assert.equal(row.desc, 'typo fixed', 'the edit itself lands');
+  const signals = row.signals as Record<string, unknown>;
+  assert.equal(signals.stars, 4200, 'the agent-fetched star count survives the edit — never wiped, never spoofed');
+  assert.equal(signals.starsDisplay, '4.2k', 'the display string stays consistent with the number it summarizes');
+  assert.equal(signals.attributedTo, 'curator note', 'the attribution note IS operator text — editable');
+  assert.equal(row.upstreamUpdatedAt, '2026-08-01', 'the fetched upstream fact survives; the body\'s 1999 claim is ignored');
+  assert.equal(row.fetchedAt, null, 'the honesty reset still applies — the CONTENT is now hand-curated');
+  assert.equal(row.fetchedBy, 'operator');
+});
+
+// W7-B3 review F3 (guard-symmetry): admitting DELETE into
+// handleStudioWriteRoutes for the registry route must NOT let a DELETE fall
+// into the pre-existing method-less write arms (agents/:slug, projects/:id,
+// flows/:slug all dispatch on URL alone and would treat it as their PUT).
+test('CRUD-12: DELETE on a non-registry write route falls through to 404 — never executes that route\'s PUT/write handler', async () => {
+  const res = await fetch(`${url}/api/studio/agents/some-agent`, { method: 'DELETE', headers: CSRF });
+  assert.equal(res.status, 404, `a DELETE outside the registry route must fall through exactly as before W7-B3 (got ${res.status})`);
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'agents', 'some-agent')), false, 'and must write nothing');
 });

@@ -49,7 +49,10 @@ export default function HookLibraryPage() {
       setError(null);
     }
     void load();
-    fetchCommunityIndex()
+    // W7-B3 review F7: kind-scoped fetch — the bridge builds ONLY the hook
+    // section (vendored packages), skipping the per-connection probe spawn
+    // the full index pays. This page discards every non-hook item anyway.
+    fetchCommunityIndex('hook')
       .then((r) => {
         if (!cancelled && r.ok) setCommunityItems(r.items);
       })

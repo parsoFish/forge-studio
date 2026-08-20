@@ -15,6 +15,7 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
+  lastTerminalRefreshOf,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
   DEFAULT_COMMUNITY_SORT_KEY,
@@ -84,7 +85,11 @@ export default function CommunityBrowserPage() {
       setError(null);
     }
     void load();
-    fetchStudioSessions()
+    // W7-B3 review F2: activeOnly=false is load-bearing — the default
+    // (?active=1) excludes every TERMINAL row, which made
+    // lastTerminalRefresh permanently null and the
+    // "open-last-refresh-session" link dead code (the community-16 defect).
+    fetchStudioSessions(false)
       .then((rows) => {
         if (!cancelled) setRefreshSessions(rows.filter((row) => row.kind === 'community-refresh'));
       })
@@ -99,8 +104,7 @@ export default function CommunityBrowserPage() {
   const searched = filterCommunityItems(byHub, query);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
   const inFlightRefresh = refreshSessions.filter((row) => !row.terminal);
-  const lastTerminalRefresh =
-    refreshSessions.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
+  const lastTerminalRefresh = lastTerminalRefreshOf(refreshSessions);
 
   return (
     <StudioPage

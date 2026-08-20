@@ -29,7 +29,13 @@ export function defaultKickoffTier(allowedTiers: readonly string[]): string {
  * placeholder (community-12).
  */
 export function sessionDirPreview(kind: string, selector: 'project' | 'kb' | 'none', project: string): string {
-  if (selector === 'none') return `projects/${COMMUNITY_REGISTRY_ANCHOR}/_${kind}/<sessionId>`;
+  // W7-B3 review F9: the anchor is keyed on the KIND, not the selector shape
+  // — `.community-registry` is community-refresh's OWN pseudo-project. A
+  // future selector-less kind gets the honest generic placeholder below, not
+  // a real-looking path under an anchor it does not use (the community-12
+  // fabricated-context-card class).
+  if (kind === 'community-refresh') return `projects/${COMMUNITY_REGISTRY_ANCHOR}/_${kind}/<sessionId>`;
+  if (selector === 'none') return `projects/<anchor>/_${kind}/<sessionId>`;
   if (selector === 'kb') return `projects/<kb-project>/_${kind}/<sessionId>`;
   return `projects/${project.trim() || '<project>'}/_${kind}/<sessionId>`;
 }

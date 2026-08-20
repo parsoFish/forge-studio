@@ -23,7 +23,7 @@
  * response, never silently treated the same as an explicit null.
  */
 import { test, expect } from 'vitest';
-import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem, parseCommunityIndexMeta } from './community-client.ts';
+import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem, parseCommunityIndexMeta, parseRegistryItemResponse } from './community-client.ts';
 
 const WELL_FORMED_HUB = { id: 'mcp-servers', name: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', kinds: 'MCPs' };
 
@@ -217,4 +217,48 @@ test('parseCommunityIndexMeta: throws on a missing meta object or coerced-lookin
   expect(() => parseCommunityIndexMeta(undefined)).toThrow();
   expect(() => parseCommunityIndexMeta({ lastRefresh: 12345, registryDirty: null })).toThrow();
   expect(() => parseCommunityIndexMeta({ lastRefresh: null, registryDirty: 'clean' })).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 review F6 — parseRegistryItemResponse (fetchRegistryItem's parse
+// step). The defect: this parse used to run INLINE after `res.ok` with no
+// guard, so a malformed 200 body (proxy HTML, field rename) rejected
+// UNHANDLED and stranded the edit form at data-page-ready="false" forever.
+// The contract now: the parse THROWS on any unexpected shape (same
+// refuse-don't-coerce rule as every parser above), and fetchRegistryItem —
+// its one caller — catches and returns ok:false like every sibling.
+// ---------------------------------------------------------------------------
+
+const WELL_FORMED_REGISTRY_ROW = {
+  item: {
+    id: 'handoff',
+    kind: 'skill',
+    name: 'Handoff',
+    desc: 'Compress the current session.',
+    category: 'memory',
+    sourceUrl: 'https://github.com/obra/superpowers',
+    provenance: 'obra/superpowers',
+    tier: 'sonnet',
+    signals: { stars: 4200, starsDisplay: '4.2k', attributedTo: 'obra' },
+    upstreamUpdatedAt: '2026-08-01',
+  },
+};
+
+test('parseRegistryItemResponse: a well-formed registry row round-trips (ok:true, fields intact)', () => {
+  const r = parseRegistryItemResponse(WELL_FORMED_REGISTRY_ROW);
+  expect(r.ok).toBe(true);
+  expect(r.item.id).toBe('handoff');
+  expect(r.item.signals?.stars).toBe(4200);
+  expect(r.item.upstreamUpdatedAt).toBe('2026-08-01');
+});
+
+test('parseRegistryItemResponse: THROWS on a body with no "item" object — never a fabricated empty form prefill', () => {
+  expect(() => parseRegistryItemResponse({ ok: true })).toThrow();
+  expect(() => parseRegistryItemResponse('<!doctype html>')).toThrow();
+  expect(() => parseRegistryItemResponse(null)).toThrow();
+});
+
+test('parseRegistryItemResponse: THROWS when a required string field is missing (e.g. sourceUrl) — never defaulted', () => {
+  const { sourceUrl: _dropped, ...rest } = WELL_FORMED_REGISTRY_ROW.item;
+  expect(() => parseRegistryItemResponse({ item: rest })).toThrow();
 });

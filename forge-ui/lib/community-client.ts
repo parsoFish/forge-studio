@@ -413,7 +413,10 @@ export function parseCommunityIndexMeta(raw: unknown): CommunityIndexMeta {
  *  the cross-kind item list. Distinguishes a reachable-but-empty index from
  *  an unreachable bridge or a malformed payload (`ok: false` for both) —
  *  never rendered the same way. */
-export async function fetchCommunityIndex(): Promise<{
+/** `kind` (optional) narrows the index the BRIDGE builds — a hooks-only
+ *  consumer must not trigger a probe per catalog connection (W7-B3 review
+ *  F7). Omitted = the full cross-kind index. */
+export async function fetchCommunityIndex(kind?: CommunityKind): Promise<{
   ok: boolean;
   hubs: CommunityHubWithCount[];
   items: CommunityItem[];
@@ -422,7 +425,7 @@ export async function fetchCommunityIndex(): Promise<{
 }> {
   let res: Response;
   try {
-    res = await bridgeFetch(`/api/studio/community`);
+    res = await bridgeFetch(kind === undefined ? `/api/studio/community` : `/api/studio/community?kind=${encodeURIComponent(kind)}`);
   } catch (err) {
     return { ok: false, hubs: [], items: [], meta: null, error: `bridge unreachable: ${String(err)}` };
   }
@@ -582,6 +585,21 @@ export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item
   }
   const data = await res.json().catch(() => undefined);
   if (!res.ok) return { ok: false, error: errorFrom(data, `HTTP ${res.status}`) };
+  // W7-B3 review F6: the parse below throws on an unexpected shape
+  // (asRecord/requireString) — wrap it like every sibling in this module so
+  // a malformed 200 body becomes ok:false, never an unhandled rejection that
+  // strands the edit form at data-page-ready="false".
+  try {
+    return parseRegistryItemResponse(data);
+  } catch (err) {
+    return { ok: false, error: `malformed bridge response: ${String(err)}` };
+  }
+}
+
+/** Exported for the parse-contract pin in community-client.test.ts (W7-B3
+ *  review F6): throws on any unexpected shape; `fetchRegistryItem` above is
+ *  the ONE caller and converts the throw to `ok:false`. */
+export function parseRegistryItemResponse(data: unknown): { ok: true; item: RegistryItemInput } {
   const r = asRecord(data);
   const item = asRecord(r['item']);
   return {

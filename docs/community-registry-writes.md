@@ -17,7 +17,7 @@ trail. Structural schema lives in `orchestrator/studio/registry.ts`
 | Writer | Path | Stamps |
 | --- | --- | --- |
 | `commitRegistryDraft` (orchestrator/interactive-finalizers.ts) | community-refresh session → operator **approve** verdict | `fetchedAt: <now>` / `fetchedBy: community-refresh/<sid>` on rows the agent genuinely verified; `meta.lastRefresh: <now>` |
-| Studio CRUD routes (cli/bridge-studio-writes.ts, W7-B3) | `POST/PUT/DELETE /api/studio/community/registry/items[/:id]` | `fetchedAt: null` / `fetchedBy: "operator"` — FORCED; a hand-curated row honestly reads "seed — never verified" |
+| Studio CRUD routes (cli/bridge-studio-writes.ts, W7-B3) | `POST/PUT/DELETE /api/studio/community/registry/items[/:id]` — `kind: skill` only (the index sources every other kind outside the registry) | `fetchedAt: null` / `fetchedBy: "operator"` — FORCED; `signals.stars`, `signals.starsDisplay` and `upstreamUpdatedAt` are SERVER-OWNED fetch facts: body values are ignored, a create starts them `null`, an edit carries the existing row's values forward (an operator edit must neither fabricate nor wipe agent-fetched facts — W7-B3 review F4/F5); a hand-curated row honestly reads "seed — never verified" |
 | A human editing the YAML in a PR | ordinary code review | whatever the diff says — lint is the gate |
 
 All three converge on the ONE serializer (`serializeCommunityRegistry`,

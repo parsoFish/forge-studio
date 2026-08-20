@@ -8,7 +8,6 @@ import {
   addRegistryItem,
   updateRegistryItem,
   fetchRegistryItem,
-  COMMUNITY_KINDS,
   type CommunityKind,
   type RegistryItemInput,
 } from '@/lib/community-client';
@@ -20,8 +19,11 @@ import {
 // trusts and FORCES the hand-curated stamps (fetchedAt: null / fetchedBy:
 // operator) — this form never fabricates a verification fact, which is why
 // there is no "stars" number input: a hand-entered star count is exactly the
-// invented signal the registry's own seed discipline forbids. starsDisplay +
-// attribution stay curated display text.
+// invented signal the registry's own seed discipline forbids. Since the
+// W7-B3 review (F4/F5) stars/starsDisplay/upstreamUpdatedAt are fully
+// SERVER-OWNED (create → null; edit → carried from the existing row), and
+// only the attribution note is operator text. Kind is fixed to "skill" —
+// the index sources every other kind outside the registry (F1).
 //
 // Commit policy (decision, recorded in docs/community-registry-writes.md):
 // Studio writes the repo-tracked file; the operator commits via their normal
@@ -37,14 +39,16 @@ type FormState = {
   sourceUrl: string;
   provenance: string;
   tier: string;
-  starsDisplay: string;
   attributedTo: string;
 };
 
-const EMPTY: FormState = { id: '', kind: 'skill', name: '', desc: '', category: '', sourceUrl: '', provenance: '', tier: '', starsDisplay: '', attributedTo: '' };
+const EMPTY: FormState = { id: '', kind: 'skill', name: '', desc: '', category: '', sourceUrl: '', provenance: '', tier: '', attributedTo: '' };
 
 function toInput(form: FormState): RegistryItemInput {
-  const starsDisplay = form.starsDisplay.trim();
+  // W7-B3 review F4/F5: stars/starsDisplay/upstreamUpdatedAt are SERVER-OWNED
+  // — the bridge ignores any body value (create starts them null; edit
+  // carries the existing row's values forward), so the form sends only the
+  // operator-authored attribution note.
   const attributedTo = form.attributedTo.trim();
   return {
     id: form.id.trim(),
@@ -55,9 +59,7 @@ function toInput(form: FormState): RegistryItemInput {
     sourceUrl: form.sourceUrl.trim(),
     provenance: form.provenance.trim(),
     ...(form.tier.trim() ? { tier: form.tier.trim() } : {}),
-    ...(starsDisplay || attributedTo
-      ? { signals: { stars: null, starsDisplay: starsDisplay || null, attributedTo: attributedTo || null } }
-      : {}),
+    ...(attributedTo ? { signals: { stars: null, starsDisplay: null, attributedTo } } : {}),
   };
 }
 
@@ -91,7 +93,6 @@ function RegistryItemFormInner(): JSX.Element {
         sourceUrl: r.item.sourceUrl,
         provenance: r.item.provenance,
         tier: r.item.tier ?? '',
-        starsDisplay: r.item.signals?.starsDisplay ?? '',
         attributedTo: r.item.signals?.attributedTo ?? '',
       });
       setLoaded(true);
@@ -156,12 +157,16 @@ function RegistryItemFormInner(): JSX.Element {
           <Field label="id (slug)" required>
             <input data-field="registry-id" value={form.id} onChange={set('id')} disabled={editing} placeholder="my-skill-id" style={inputStyle} />
           </Field>
-          <Field label="kind" required>
-            <select data-field="registry-kind" value={form.kind} onChange={set('kind')} style={inputStyle}>
-              {COMMUNITY_KINDS.map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
+          <Field label="kind">
+            {/* W7-B3 review F1: the registry CRUD surface admits ONLY skills —
+                the community index sources hooks from vendored packages and
+                mcp/tool from studio/catalog.yaml, so a hand-added row of any
+                other kind would be invisible and un-curatable (the bridge
+                refuses them with the same explanation). */}
+            <input data-field="registry-kind" value="skill" readOnly disabled style={{ ...inputStyle, opacity: 0.7 }} />
+            <span style={{ fontSize: 11.5, color: 'var(--muted, #8a8f98)' }}>
+              only skills live in the registry — hooks are vendored packages; mcp/tool connections live in the catalog
+            </span>
           </Field>
           <Field label="name" required>
             <input data-field="registry-name" value={form.name} onChange={set('name')} style={inputStyle} />
@@ -181,11 +186,13 @@ function RegistryItemFormInner(): JSX.Element {
           <Field label="tier">
             <input data-field="registry-tier" value={form.tier} onChange={set('tier')} placeholder="haiku / sonnet / opus (optional)" style={inputStyle} />
           </Field>
-          <Field label="signals — curated display text (optional)">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input data-field="registry-stars-display" value={form.starsDisplay} onChange={set('starsDisplay')} placeholder="e.g. 228k" style={{ ...inputStyle, maxWidth: 140 }} />
-              <input data-field="registry-attributed-to" value={form.attributedTo} onChange={set('attributedTo')} placeholder="attributed to…" style={inputStyle} />
-            </div>
+          <Field label="attributed to (curation note, optional)">
+            {/* W7-B3 review F4/F5: no starsDisplay input either — stars,
+                starsDisplay and upstreamUpdatedAt are SERVER-OWNED fetch
+                facts (a refresh pass stamps them; an edit carries them
+                forward untouched). Only the attribution note is operator
+                text. */}
+            <input data-field="registry-attributed-to" value={form.attributedTo} onChange={set('attributedTo')} placeholder="attributed to…" style={inputStyle} />
           </Field>
         </div>
 

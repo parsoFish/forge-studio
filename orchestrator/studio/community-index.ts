@@ -547,7 +547,13 @@ function registrySource(forgeRoot: string): { exists: boolean; communitySkills: 
   return { exists, communitySkills: communitySkillsFromRegistry(forgeRoot) };
 }
 
-export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
+/** W7-B3 review F7: `kinds` (optional, additive — ADR-042 disclose-not-park)
+ *  narrows which sections are BUILT, not merely which are returned: a caller
+ *  that wants only hooks (the /hooks page's community shelf) must not pay a
+ *  child-process probe per catalog connection plus the registry read to get
+ *  them. Omitted = every kind, byte-identical to the pre-F7 behavior. */
+export function listCommunityIndex(forgeRoot: string, kinds?: readonly CommunityKind[]): CommunityItem[] {
+  const want = (k: CommunityKind): boolean => kinds === undefined || kinds.includes(k);
   const hubs = listCommunityHubs(forgeRoot);
   // MAJOR 2 (T2 round 4 adversarial review), now split across TWO independent
   // files (W6-CR-1 decoupled community-skill sourcing from catalog.yaml):
@@ -561,25 +567,29 @@ export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   //  - catalogExists (below): studio/catalog.yaml's own existence, gating
   //    ONLY the mcp/tool connections loop — listConnections reads catalog.yaml
   //    independently of the community-skill registry above.
-  const { communitySkills } = registrySource(forgeRoot);
   const items: CommunityItem[] = [];
 
   // --- skill: catalog community-skills ∪ vendored-with-no-catalog-id (E-1) ---
-  const catalogSkillIds = new Set(communitySkills.map((cs) => cs.id));
-  const vendoredSkillIdSet = new Set(listVendoredIds(forgeRoot, 'skill'));
+  if (want('skill')) {
+    const { communitySkills } = registrySource(forgeRoot);
+    const catalogSkillIds = new Set(communitySkills.map((cs) => cs.id));
+    const vendoredSkillIdSet = new Set(listVendoredIds(forgeRoot, 'skill'));
 
-  for (const cs of communitySkills) {
-    items.push(buildCatalogSkillItem(forgeRoot, hubs, cs, vendoredSkillIdSet.has(cs.id)));
-  }
+    for (const cs of communitySkills) {
+      items.push(buildCatalogSkillItem(forgeRoot, hubs, cs, vendoredSkillIdSet.has(cs.id)));
+    }
 
-  for (const id of vendoredSkillIdSet) {
-    if (catalogSkillIds.has(id)) continue; // collision — lintCommunityIndex reports it; represented once, above
-    items.push(buildVendoredOnlySkillItem(forgeRoot, hubs, id));
+    for (const id of vendoredSkillIdSet) {
+      if (catalogSkillIds.has(id)) continue; // collision — lintCommunityIndex reports it; represented once, above
+      items.push(buildVendoredOnlySkillItem(forgeRoot, hubs, id));
+    }
   }
 
   // --- hook: vendored packages only (D1) ---
-  for (const id of listVendoredIds(forgeRoot, 'hook')) {
-    items.push(buildHookItem(forgeRoot, hubs, id));
+  if (want('hook')) {
+    for (const id of listVendoredIds(forgeRoot, 'hook')) {
+      items.push(buildHookItem(forgeRoot, hubs, id));
+    }
   }
 
   // --- mcp / tool: listConnections(forgeRoot), 1:1, never re-parsed (D1) ---
@@ -589,8 +599,9 @@ export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   // this loop used to be re-entered independently by hubsWithCounts and by
   // the bridge's own second listCommunityIndex call; both now derive from
   // ONE computation, see hubCountsFrom below and cli/bridge-studio-community.ts).
-  if (existsSync(join(forgeRoot, 'studio', 'catalog.yaml'))) {
+  if ((want('mcp') || want('tool')) && existsSync(join(forgeRoot, 'studio', 'catalog.yaml'))) {
     for (const conn of listConnections(forgeRoot)) {
+      if (!want(conn.kind)) continue;
       items.push(buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn)));
     }
   }

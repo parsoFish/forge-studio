@@ -74,6 +74,7 @@ import {
   communityItem,
   buildConnectionItem,
   readVendoredPackage,
+  COMMUNITY_KINDS,
   type CommunityKind,
   type CommunityItem,
 } from '../orchestrator/studio/community-index.ts';
@@ -326,7 +327,7 @@ function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): Hoo
 // resolveConnectionOrRespond.
 // ---------------------------------------------------------------------------
 
-function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
+export function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
   let id: string;
   try {
     id = decodeURIComponent(rawIdSegment);
@@ -536,13 +537,23 @@ export async function handleStudioCommunityRoutes(
   // ---- GET /api/studio/community — hubs + cross-kind items (D1) -----------
   if (method === 'GET' && url === '/api/studio/community') {
     try {
+      // W7-B3 review F7: `?kind=<k>` narrows the BUILD, not just the response
+      // — a hooks-only consumer (the /hooks community shelf) must not pay one
+      // probeConnection child process per catalog connection to render
+      // vendored hook rows. No param = the full index, unchanged. Hub counts
+      // stay derived from the SAME (here: filtered) item computation.
+      const kindParam = new URL(rawUrl, 'http://forge.local').searchParams.get('kind');
+      if (kindParam !== null && !(COMMUNITY_KINDS as readonly string[]).includes(kindParam)) {
+        sendJson(res, 400, { error: `unknown community kind "${kindParam}" — expected one of ${COMMUNITY_KINDS.join(', ')}` }, origin);
+        return true;
+      }
       // Computed ONCE (T2 round 5/6 probe-budget fix): every connection item
       // in `rawItems` was already probed exactly once inside this single
       // listCommunityIndex call. Hub counts and wire items are BOTH derived
       // from this SAME computation — never a second, independent
       // hubsWithCounts()/listCommunityIndex() call re-entering the same
       // probes a second (and third) time.
-      const rawItems = listCommunityIndex(ctx.forgeRoot);
+      const rawItems = listCommunityIndex(ctx.forgeRoot, kindParam === null ? undefined : [kindParam as CommunityKind]);
       const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
       const wctx = buildWireCtx(ctx.forgeRoot);
       const items = rawItems.map((item) => toWireItemSafe(item, wctx));

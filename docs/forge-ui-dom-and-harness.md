@@ -966,15 +966,21 @@ inventory rather than one shared page-level contract:
   `main[data-page="community-registry-form"][data-form-mode="add"|"edit"]
   [data-page-ready]`; fields `[data-field="registry-id"|"registry-kind"|
   "registry-name"|"registry-desc"|"registry-category"|"registry-source-url"|
-  "registry-provenance"|"registry-tier"|"registry-stars-display"|
-  "registry-attributed-to"]`; submit `[data-action="submit-registry-item"]`
-  (add) / `[data-action="save-registry-item"]` (edit, reached via
-  `?edit=<id>`), disabled until the required fields are filled. There is
-  deliberately NO numeric star-count input — a hand-entered star count is a
-  fabricated signal; the bridge stamps every operator-written row
-  `fetchedAt: null` / `fetchedBy: "operator"` regardless of body claims, so
-  it honestly reads "seed — never verified" until a refresh pass checks it.
-  Errors surface as `[data-component="registry-form-error"]`.
+  "registry-provenance"|"registry-tier"|"registry-attributed-to"]`; submit
+  `[data-action="submit-registry-item"]` (add) /
+  `[data-action="save-registry-item"]` (edit, reached via `?edit=<id>`),
+  disabled until the required fields are filled. `registry-kind` is a FIXED
+  read-only "skill" (W7-B3 review F1): the CRUD surface admits only skills —
+  the index sources hooks from vendored packages and mcp/tool from the
+  catalog, so any other kind would be written and then invisible; the bridge
+  400s them with the same explanation. There is deliberately NO
+  star-count/starsDisplay input — `stars`, `starsDisplay` and
+  `upstreamUpdatedAt` are SERVER-OWNED fetch facts (W7-B3 review F4/F5):
+  the bridge ignores any body value, a create starts them `null`, an edit
+  carries the existing row's values forward, and only
+  `fetchedAt: null` / `fetchedBy: "operator"` reset (the honesty stamp), so
+  a hand-curated row reads "seed — never verified" until a refresh pass
+  checks it. Errors surface as `[data-component="registry-form-error"]`.
 
   **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
   (a real `<a href="/sessions/community-refresh/new">`, rendered via

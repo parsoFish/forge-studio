@@ -307,6 +307,32 @@ test('GET /api/studio/community: returns hubs (with itemCount) and the cross-kin
   assert.ok(body.items.some((i) => i['kind'] === 'hook' && i['id'] === 'listed-hook'));
 });
 
+// W7-B3 review F7: `?kind=<k>` narrows the index the bridge BUILDS — the
+// /hooks community shelf must not pay one probeConnection child process per
+// catalog connection to render vendored hook rows. Observable contract:
+// with mcp/tool connections PRESENT in the catalog, ?kind=hook returns ONLY
+// hook items (the connections loop — the probe site — never ran for them),
+// and an unknown kind is refused, never silently treated as "no filter".
+test('GET /api/studio/community?kind=hook: only hook items even with catalog connections present; ?kind=bogus → 400', async () => {
+  writeCatalog({
+    communitySkills: [{ id: 'kf-catalog-skill', source: 'https://example.com/list-hub/kf' }],
+    tools: [{ id: 'kf-tool' }],
+    mcps: [{ id: 'kf-mcp' }],
+  });
+  vendorHookPackage('kf-hook');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community?kind=hook`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { items: Array<Record<string, unknown>>; meta: unknown };
+  assert.ok(body.items.length > 0, 'the vendored hook must be in the filtered index');
+  assert.ok(body.items.every((i) => i['kind'] === 'hook'), `?kind=hook must return ONLY hooks, got kinds: ${body.items.map((i) => i['kind']).join(',')}`);
+  assert.ok(body.items.some((i) => i['id'] === 'kf-hook'));
+  assert.ok(body.meta !== undefined && body.meta !== null, 'the meta block stays on the filtered response (the client parser requires it)');
+
+  const bad = await fetch(`${bridgeUrl}/api/studio/community?kind=bogus`);
+  assert.equal(bad.status, 400, 'an unknown kind is a caller error — never silently the full (probe-triggering) index');
+});
+
 // W6-CR-2: fetchedAt/fetchedBy/upstreamUpdatedAt carried through the wire —
 // a registry-sourced item carries its real seed facts, a vendored/connection
 // item (no registry row) honestly carries fetchedAt:null/fetchedBy:'local'.

@@ -52,6 +52,7 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
+  lastTerminalRefreshOf,
   installActionForItem,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
@@ -576,4 +577,26 @@ test('installActionForItem: an external-method connection says browse at the rea
 test('installActionForItem: a system-provided connection not present has nothing to install (honest absence)', () => {
   const action = installActionForItem({ kind: 'tool', id: 'docker', vendored: false, installState: 'not-installed', upstream: 'https://docker.com', installMethod: 'system-provided' });
   expect(action).toEqual({ action: 'none-system' });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 review F2 (community-16) — lastTerminalRefreshOf. The defect this
+// pins against: /community fetched sessions with the DEFAULT activeOnly=true
+// (?active=1 excludes every terminal row), so the "open-last-refresh-session"
+// link was dead code — permanently null. The page now fetches
+// fetchStudioSessions(false); this helper owns the selection.
+// ---------------------------------------------------------------------------
+
+test('lastTerminalRefreshOf: picks the NEWEST terminal row (timestamp-prefixed session ids sort lexicographically)', () => {
+  const rows = [
+    { terminal: true, sessionId: '2026-08-17T10-00-00-aa' },
+    { terminal: false, sessionId: '2026-08-19T09-00-00-cc' },
+    { terminal: true, sessionId: '2026-08-18T12-54-32-bb' },
+  ];
+  expect(lastTerminalRefreshOf(rows)?.sessionId).toBe('2026-08-18T12-54-32-bb');
+});
+
+test('lastTerminalRefreshOf: null when no terminal row exists — and an all-ACTIVE list (the ?active=1 fetch shape) yields null, which is exactly why the page must fetch with activeOnly=false', () => {
+  expect(lastTerminalRefreshOf([])).toBeNull();
+  expect(lastTerminalRefreshOf([{ terminal: false, sessionId: '2026-08-19T09-00-00-cc' }])).toBeNull();
 });

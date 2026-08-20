@@ -62,6 +62,10 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
+// W7-B3 review F8: ONE decode-and-slug-validate helper for community-item URL
+// ids — the community routes' own, not a local re-implementation (its
+// malformed-%-encoding branch answers a distinct, friendlier 400).
+import { decodeIdOrRespond } from './bridge-studio-community.ts';
 
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3)
@@ -360,7 +364,13 @@ function spawnPreflightFix(
 // badge reads such a row as never-verified, which is the truth).
 // ---------------------------------------------------------------------------
 
-const COMMUNITY_REGISTRY_ITEM_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
+// W7-B3 review F1 (confirmed by live probe): the community index projects ONLY
+// kind:'skill' rows out of the registry (hooks come from vendored packages,
+// mcp/tool from studio/catalog.yaml), so a hand-added hook/mcp/tool row would
+// write successfully and then be invisible and un-curatable — the detail page
+// the form redirects to 404s and the edit/remove controls live there. The CRUD
+// surface therefore admits ONLY 'skill'.
+const COMMUNITY_REGISTRY_ITEM_KINDS = ['skill'] as const;
 
 function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistryItem } | { ok: false; error: string } {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'body must be a JSON object with an "item" field' };
@@ -384,7 +394,10 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
 
   const kindRaw = e['kind'];
   if (typeof kindRaw !== 'string' || !(COMMUNITY_REGISTRY_ITEM_KINDS as readonly string[]).includes(kindRaw)) {
-    return { ok: false, error: `item.kind must be one of ${COMMUNITY_REGISTRY_ITEM_KINDS.join(', ')}` };
+    return {
+      ok: false,
+      error: `item.kind must be "skill" — the community index surfaces only skill rows from the registry (hooks are vendored packages under studio/community/hooks/; mcp/tool connections live in studio/catalog.yaml)`,
+    };
   }
 
   const name = requireString('name');
@@ -407,8 +420,6 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   }
 
   const signalsRaw = e['signals'];
-  let stars: number | null = null;
-  let starsDisplay: string | null = null;
   let attributedTo: string | null = null;
   if (signalsRaw !== undefined && signalsRaw !== null) {
     if (typeof signalsRaw !== 'object' || Array.isArray(signalsRaw)) return { ok: false, error: 'item.signals must be an object when present' };
@@ -416,8 +427,6 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
     if (s['stars'] !== undefined && s['stars'] !== null && typeof s['stars'] !== 'number') return { ok: false, error: 'item.signals.stars must be a number or null' };
     if (s['starsDisplay'] !== undefined && s['starsDisplay'] !== null && typeof s['starsDisplay'] !== 'string') return { ok: false, error: 'item.signals.starsDisplay must be a string or null' };
     if (s['attributedTo'] !== undefined && s['attributedTo'] !== null && typeof s['attributedTo'] !== 'string') return { ok: false, error: 'item.signals.attributedTo must be a string or null' };
-    stars = (s['stars'] as number | null | undefined) ?? null;
-    starsDisplay = (s['starsDisplay'] as string | null | undefined) ?? null;
     attributedTo = (s['attributedTo'] as string | null | undefined) ?? null;
   }
 
@@ -432,27 +441,23 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
       sourceUrl,
       provenance,
       ...(tier !== undefined ? { tier } : {}),
-      signals: { stars, starsDisplay, attributedTo },
-      upstreamUpdatedAt,
-      // FORCED hand-curated stamps — never trusted from the body.
+      // SERVER-OWNED fetch facts — never trusted from the body (W7-B3 review
+      // F5, the declared-data-fails-open class): stars/starsDisplay/
+      // upstreamUpdatedAt are facts a refresh pass fetched about upstream. A
+      // hand-entered value would be a fabricated signal that drives the
+      // "Stars" sort, so a CREATE starts them null; the PUT arm carries the
+      // EXISTING row's values forward (an operator edit must not wipe agent-
+      // fetched facts either — review F4). Body values for these fields are
+      // type-checked above (bad shapes still 400) and then IGNORED.
+      // `attributedTo` stays operator-suppliable: it is a curation note, not
+      // a fetched signal. `upstreamUpdatedAt` was type-checked above; its
+      // parsed value is deliberately discarded here.
+      signals: { stars: null, starsDisplay: null, attributedTo },
+      upstreamUpdatedAt: null,
       fetchedAt: null,
       fetchedBy: 'operator',
     },
   };
-}
-
-/** Decode + slug-validate a registry-item URL id; writes its own 400 and
- *  returns null on failure (mirrors bridge-studio-community.ts's
- *  decodeIdOrRespond). */
-function decodeRegistryItemIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
-  try {
-    const id = decodeURIComponent(rawIdSegment);
-    assertSkillSlug(id, 'community item');
-    return id;
-  } catch (err) {
-    sendJson(res, 400, { error: sanitizeError(err) }, origin);
-    return null;
-  }
 }
 
 /** Load the live registry tolerantly (missing file = the fresh-root empty
@@ -501,6 +506,15 @@ export async function handleStudioWriteRoutes(
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
+  // W7-B3 review F3 (guard-symmetry): DELETE is admitted into this function
+  // ONLY for the registry-item route below. Every pre-existing write arm
+  // (agents/:slug, projects/:id, flows/:slug, ...) dispatches on its URL match
+  // alone with no `method ===` test — an unscoped DELETE would fall into a
+  // PUT write handler and act. Any other DELETE falls through (404) exactly
+  // as it did before W7-B3 added the method to the top gate.
+  const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  if (method === 'DELETE' && !registryItemMatch) return false;
+
   // ---- W7-B3 (community-23): community registry CRUD ----------------------
   if (method === 'POST' && url === '/api/studio/community/registry/items') {
     try {
@@ -531,11 +545,12 @@ export async function handleStudioWriteRoutes(
   // (PUT and DELETE are two separate dispatch lines, each with its own
   // explicit `method ===` test, so cli/dry-bridge-coverage.test.ts's route
   // derivation sees BOTH — a combined `(PUT || DELETE)` arm derives only the
-  // first method and leaves the DELETE invisible to the coverage gate.)
-  const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  // first method and leaves the DELETE invisible to the coverage gate.
+  // `registryItemMatch` itself is hoisted to the top of this function: the
+  // DELETE-scoping guard there needs it.)
   if (registryItemMatch && method === 'PUT') {
     try {
-      const id = decodeRegistryItemIdOrRespond(registryItemMatch[1], res, origin);
+      const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
       if (id === null) return true;
       const parsed = parseRegistryItemBody(await readJson(req));
       if (!parsed.ok) {
@@ -551,7 +566,21 @@ export async function handleStudioWriteRoutes(
         const next = items.map((i) => {
           if (i.id !== id) return i;
           found = true;
-          return parsed.item;
+          // W7-B3 review F4: an operator EDIT carries the EXISTING row's
+          // agent-fetched facts forward — stars, starsDisplay and
+          // upstreamUpdatedAt are server-owned (see parseRegistryItemBody).
+          // Only fetchedAt/fetchedBy reset (the documented honesty reset:
+          // the CONTENT is now hand-curated). attributedTo comes from the
+          // body — it is a curation note the operator may edit.
+          return {
+            ...parsed.item,
+            signals: {
+              stars: i.signals.stars,
+              starsDisplay: i.signals.starsDisplay,
+              attributedTo: parsed.item.signals.attributedTo,
+            },
+            upstreamUpdatedAt: i.upstreamUpdatedAt,
+          };
         });
         return found ? next : null; // 404 path writes nothing
       });
@@ -568,7 +597,7 @@ export async function handleStudioWriteRoutes(
 
   if (registryItemMatch && method === 'DELETE') {
     try {
-      const id = decodeRegistryItemIdOrRespond(registryItemMatch[1], res, origin);
+      const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
       if (id === null) return true;
       let found = false;
       mutateCommunityRegistry(ctx.forgeRoot, (items) => {

@@ -37,6 +37,16 @@ test('selector:none previews the real community anchor, never a placeholder', ()
   expect(preview).not.toContain('<forge-anchor>');
 });
 
+// W7-B3 review F9: the community anchor is keyed on the KIND — it is
+// community-refresh's OWN pseudo-project. A FUTURE selector-less kind must
+// get an honest generic placeholder, never a real-looking path under an
+// anchor it does not use (the community-12 fabricated-context-card class).
+test('a future selector:none kind does NOT inherit the community anchor — honest placeholder instead', () => {
+  const preview = sessionDirPreview('some-future-kind', 'none', '');
+  expect(preview).not.toContain(COMMUNITY_REGISTRY_ANCHOR);
+  expect(preview).toBe('projects/<anchor>/_some-future-kind/<sessionId>');
+});
+
 test('selector:project previews the typed project (placeholder until typed)', () => {
   expect(sessionDirPreview('demo', 'project', 'gitpulse')).toBe('projects/gitpulse/_demo/<sessionId>');
   expect(sessionDirPreview('demo', 'project', '')).toBe('projects/<project>/_demo/<sessionId>');
