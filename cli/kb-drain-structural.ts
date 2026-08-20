@@ -11,9 +11,15 @@
  *
  *   A drain-dispatched agent fix may land directly ONLY when every byte it
  *   changed is STRUCTURAL — frontmatter (fields, related_themes, keywords),
- *   markdown/wikilink TARGETS, or an index/category page. Any change to body
- *   prose is reverted and re-emitted as a kb-cleanup DRAFT session carrying
- *   a reviewable diff the operator approves.
+ *   markdown/wikilink TARGETS, or the body of an EXISTING index/category
+ *   page. Any change to body prose — and any file created, deleted, or
+ *   written outside the markdown corpus at all — is reverted and re-emitted
+ *   as a kb-cleanup DRAFT session carrying a reviewable diff the operator
+ *   approves.
+ *
+ * "Every byte" is meant literally: the walkers below snapshot EVERY file
+ * under the KB's brain dir, not just `*.md`, so a `kb.yaml` rewrite or a
+ * stray non-markdown file cannot slip past the gate unseen.
  *
  * Everything here is a pure function over strings/paths (plus two thin fs
  * walkers) so the classification matrix is directly unit-testable
@@ -55,26 +61,43 @@ export function splitFrontmatter(raw: string): { fm: string; body: string } {
 /** Replace every markdown link TARGET and wikilink TARGET with a fixed
  *  placeholder, so two bodies that differ ONLY in where their links point
  *  normalize to the same string. Link TEXT (the part a reader reads) is
- *  prose and is deliberately NOT normalized away. */
+ *  prose and is deliberately NOT normalized away.
+ *
+ *  A wikilink's ALIAS — the half after `|` in `[[target|alias]]` — is link
+ *  TEXT, not a target, and is preserved for exactly that reason (W7-B2
+ *  code-review round). Collapsing the whole `[[…]]` body let an agent invert
+ *  a sentence's MEANING behind an unchanged target
+ *  (`[[x|never reads the brain]]` → `[[x|reads allowed]]`) and have it
+ *  classify 'structural', landing ungated. */
 export function normalizeLinkTargets(body: string): string {
   return body
     .replace(/\]\(([^)\n]*)\)/g, '](#)')
-    .replace(/\[\[([^\]\n]+)\]\]/g, '[[#]]');
+    .replace(/\[\[([^\]\n]+)\]\]/g, (_match, inner: string) => {
+      const bar = inner.indexOf('|');
+      return bar === -1 ? '[[#]]' : `[[#|${inner.slice(bar + 1)}]]`;
+    });
 }
 
 /**
  * Classify one file's change. `before === null` = the file was created;
- * `after === null` = deleted. Deciding rule (see module header):
- *   - index/category pages → structural (creating one included);
- *   - created or deleted theme files → prose (a drain fix never silently
- *     adds or removes a theme);
+ * `after === null` = deleted. Deciding rule (see module header), IN ORDER:
+ *   - created or deleted file → prose, whatever its name (a drain fix never
+ *     silently adds or removes a file — index/category pages INCLUDED: the
+ *     listing pages are curated, with ordering and annotations no agent can
+ *     re-derive, so their deletion is the most destructive edit of the lot);
+ *   - MODIFIED index/category page → structural (that is what those pages
+ *     are for);
  *   - frontmatter-only change → structural;
  *   - body change that is link-target-only → structural;
  *   - anything else → prose.
+ *
+ * Order is load-bearing (W7-B2 code-review round): the index-page rule used
+ * to run FIRST, so deleting `patterns.md` classified 'structural' and landed
+ * unattended with no draft, no approval and no undo.
  */
 export function classifyKbEdit(relPath: string, before: string | null, after: string | null): KbEditClass {
-  if (INDEX_PAGE_NAMES.has(basename(relPath))) return 'structural';
   if (before === null || after === null) return 'prose';
+  if (INDEX_PAGE_NAMES.has(basename(relPath))) return 'structural';
   const b = splitFrontmatter(before);
   const a = splitFrontmatter(after);
   if (b.body === a.body) return 'structural';
@@ -86,12 +109,33 @@ export function classifyKbEdit(relPath: string, before: string | null, after: st
 // Snapshot / diff-detection walkers
 // ---------------------------------------------------------------------------
 
-/** All `.md` files under `brainDir` (recursive), keyed by path relative to
+/** EVERY regular file under `brainDir` (recursive), keyed by path relative to
  *  `brainDir`, values = full content. `brainDir` is ALWAYS a resolved,
  *  trusted dir (`resolveKbBrainDir`'s return) — never request-derived text.
  *  Symlinked subdirectories are not followed (`withFileTypes` reports the
- *  link itself). */
-export function snapshotKbMarkdown(brainDir: string): Map<string, string> {
+ *  link itself).
+ *
+ *  ALL files, not just `*.md` (W7-B2 code-review round). A `*.md`-only walk
+ *  left the gate blind to every non-markdown byte an agent turn could write:
+ *  a `kb.yaml` rewrite (the KB's own identity, binding and consolidate
+ *  obligation — more dangerous than any theme prose) or a stray file dropped
+ *  into the tree produced ZERO detected changes and landed completely
+ *  ungated. That directly contradicts this module's own declared rule — a fix
+ *  may land only when EVERY BYTE it changed is structural, enforced in code —
+ *  which is the declared-data-fails-open shape the rule exists to prevent.
+ *
+ *  Content is read as utf8 because the gate's whole job is comparing and, on
+ *  a prose verdict, RESTORING text; a brain dir holds markdown, YAML and
+ *  JSONL by contract. A binary an agent writes into one is out of contract
+ *  and is gated (detected → reverted) rather than silently allowed.
+ *
+ *  DO NOT make this lazy on `(mtime, size)`. It is the obvious optimisation
+ *  and it is wrong twice over: the BEFORE side must hold real bytes or a
+ *  prose verdict has nothing to restore from, and `(mtime, size)` is not a
+ *  sound change oracle for a gate whose whole purpose is catching a rewrite —
+ *  a same-size rewrite inside one filesystem mtime tick reads as unchanged
+ *  and lands ungated. Correctness over IO here, deliberately. */
+export function snapshotKbFiles(brainDir: string): Map<string, string> {
   const snapshot = new Map<string, string>();
   const walk = (dir: string, rel: string): void => {
     let entries;
@@ -106,7 +150,7 @@ export function snapshotKbMarkdown(brainDir: string): Map<string, string> {
         walk(join(dir, entry.name), childRel);
         continue;
       }
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      if (!entry.isFile()) continue;
       try {
         snapshot.set(childRel, readFileSync(join(dir, entry.name), 'utf8'));
       } catch {
@@ -126,10 +170,10 @@ export type KbEditChange = {
 };
 
 /** Compare the current on-disk state of `brainDir` against a prior
- *  `snapshotKbMarkdown` capture; one entry per changed/created/deleted `.md`
- *  file, each classified. */
+ *  `snapshotKbFiles` capture; one entry per changed/created/deleted file,
+ *  each classified. */
 export function diffKbSnapshot(brainDir: string, snapshot: Map<string, string>): KbEditChange[] {
-  const current = snapshotKbMarkdown(brainDir);
+  const current = snapshotKbFiles(brainDir);
   const changes: KbEditChange[] = [];
   for (const [relPath, after] of current) {
     const before = snapshot.get(relPath) ?? null;

@@ -100,8 +100,8 @@ import {
 } from './brain-lint.ts';
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
-import { snapshotKbMarkdown, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
-import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
+import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
 import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { isDryBridge } from './dry-bridge.ts';
@@ -341,9 +341,10 @@ export type KbRunRow = {
 };
 
 /** One consolidate run's terminal facts, read from its own events.jsonl
- *  (the same file `readBrainFixState` in cli/bridge-studio-kbs.ts reads —
- *  re-parsed locally rather than exported across the module boundary, per
- *  that file's own "never imports ./ui-bridge" convention). */
+ *  through the SHARED readers in cli/kb-job-state.ts (W7-B2 code-review
+ *  round) — the same 'end'=done / 'error'=failed definition the active-job
+ *  gate uses, so the RecentRuns status and the gate can never disagree about
+ *  whether a run has finished. */
 function readConsolidateRunRow(forgeRoot: string, runId: string): { status: string; costUsd: number | null; when: string; detail: string | null } {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
   let raw: string | null = null;
@@ -356,31 +357,19 @@ function readConsolidateRunRow(forgeRoot: string, runId: string): { status: stri
   } catch {
     raw = null;
   }
-  let status = 'running';
+  const events = parseKbRunEvents(raw ?? '');
+  const terminal = terminalKbRunEvent(events);
+  const when = firstKbRunEventTs(events) ?? '';
   let costUsd: number | null = null;
-  let when = '';
   let detail: string | null = null;
-  for (const line of (raw ?? '').split('\n')) {
-    if (!line.trim()) continue;
-    let ev: { event_type?: string; ts?: string; cost_usd?: number; metadata?: Record<string, unknown> };
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!when && typeof ev.ts === 'string') when = ev.ts;
-    if (ev.event_type === 'end') {
-      status = 'done';
-      if (typeof ev.cost_usd === 'number') costUsd = ev.cost_usd;
-      const md = ev.metadata ?? {};
-      if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
-        detail = `cleared ${md['clearedCount']}/${md['total']}`;
-      }
-    } else if (ev.event_type === 'error') {
-      status = 'failed';
+  if (terminal?.status === 'done') {
+    if (typeof terminal.event.cost_usd === 'number') costUsd = terminal.event.cost_usd;
+    const md = terminal.event.metadata ?? {};
+    if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
+      detail = `cleared ${md['clearedCount']}/${md['total']}`;
     }
   }
-  return { status, costUsd, when, detail };
+  return { status: terminal?.status ?? 'running', costUsd, when, detail };
 }
 
 /** Best-effort ISO stamp from a session id shaped `2026-08-18T12-54-32-…`
@@ -852,6 +841,15 @@ export async function runKbDrain(
     const cancelRequested = (): boolean => isKbDrainCancelRequested(forgeRoot, runId);
 
     for (;;) {
+      // Cancel is honored BEFORE any work, not only between agent turns: a run
+      // cancelled while it was still QUEUED (the cancel route's forced branch
+      // stakes the flag for exactly this case) must terminate without touching
+      // a single file — no auto-fix pass, no agent turn.
+      if (cancelRequested()) {
+        emitProgress('kb-drain.cancelled', { round });
+        status = persist({ ...base, state: 'cancelled', round, counts: status.counts, perFinding: [...completed], costUsd, updatedAt: now() });
+        break;
+      }
       round += 1;
       // Round visible from its START (knowledge-11: no blank round-0 screen).
       emitProgress(`kb-drain.round-start (round ${round}/${maxRounds})`, { round, maxRounds });
@@ -887,7 +885,7 @@ export async function runKbDrain(
           round, file: f.file, check: f.check, kind: f.kind, turn: turnIndex, turns: agentResidual.length,
         });
         // orch-01 STRUCTURAL GATE — snapshot before the turn, classify after.
-        const snapshot = snapshotKbMarkdown(brainDir);
+        const snapshot = snapshotKbFiles(brainDir);
         let outcome: KbDrainPerFinding['outcome'] = 'not-cleared';
         let draftSession: { id: string; project: string } | undefined;
         try {
@@ -1098,6 +1096,15 @@ export async function handleStudioKbDrainRoutes(
       const updatedMs = new Date(active.status.updatedAt).getTime();
       const stale = !Number.isFinite(updatedMs) || Date.now() - updatedMs > KB_DRAIN_STALE_MS;
       if (stale) {
+        // BOTH signals, always (W7-B2 code-review round). A stale status is
+        // NOT proof the loop is dead: a drain that sat QUEUED behind another
+        // job on the same per-kbId `enqueueConsolidate` lock never heartbeats
+        // either, so it reads stale while being perfectly alive. Writing only
+        // the terminal status let such a run start late, re-persist 'running'
+        // over the operator's 'cancelled', and execute every agent turn to a
+        // real terminal AFTER the operator was told it had been terminated.
+        // The FLAG is what a late start actually observes (`cancelRequested`).
+        requestKbDrainCancel(ctx.forgeRoot, active.runId);
         writeKbDrainStatus(ctx.forgeRoot, active.runId, { ...active.status, state: 'cancelled', updatedAt: new Date().toISOString() });
         sendJson(res, 200, { ok: true, runId: active.runId, mode: 'forced' }, origin);
         return true;

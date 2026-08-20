@@ -624,7 +624,11 @@ export async function approveKbCleanup(
       // a sibling KB, never anything outside brain/). `brainDir` is already
       // realpath-resolved by resolveKbBrainDir; `resolve` collapses any
       // lexical `..` in the target before the boundary check.
-      if (target !== brainDir && !target.startsWith(brainDir + sep)) {
+      // `target === brainDir` is refused too (W7-B2 code-review round): the
+      // brain dir is a DIRECTORY, so letting it through only bought an EISDIR
+      // deeper in — a containment check must reject the boundary itself, not
+      // rely on the write failing.
+      if (!target.startsWith(brainDir + sep)) {
         return { ok: false, status: 422, error: `kb-cleanup apply: draft target escapes kb "${kbId}"'s own brain dir: ${file}` };
       }
       // The draft body is read through the SAME guarded read the session
@@ -654,12 +658,33 @@ export async function approveKbCleanup(
     // Same per-kbId serialization as the consolidate path below (forge-sqn's
     // invariant): the draft write may never interleave with a live drain's
     // own agent turns against the same files.
+    // The callback owns its OWN error handling (W7-B2 code-review round).
+    // `enqueueConsolidate` always RESOLVES — its queue continuation swallows
+    // the run's rejection by contract (see its doc comment) — so a callback
+    // that lets a write throw made the failure vanish entirely: the session
+    // was stamped 'applied' and ok:true returned while nothing had landed.
+    // The operator was told a drain-gated prose draft applied, the theme file
+    // still held the old content, and the finding re-flagged next drain.
+    let writeError: string | null = null;
     await enqueueConsolidate(kbId, async () => {
-      for (const w of writes) {
-        mkdirSync(dirname(w.target), { recursive: true });
-        writeFileSync(w.target, w.content, 'utf8');
+      try {
+        for (const w of writes) {
+          mkdirSync(dirname(w.target), { recursive: true });
+          writeFileSync(w.target, w.content, 'utf8');
+        }
+      } catch (err) {
+        writeError = sanitizeError(err);
       }
     });
+    if (writeError !== null) {
+      // Release the claim back to 'awaiting-approval' rather than wedging the
+      // session at 'applying' forever: every draft write is a whole-file
+      // replacement, so a retry after the operator fixes the underlying
+      // problem is idempotent. The failure itself is recorded on the session
+      // AND returned — never only one of the two.
+      guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'awaiting-approval', apply_error: writeError });
+      return { ok: false, status: 500, error: `kb-cleanup apply: draft write failed: ${writeError}` };
+    }
     const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
     if (draftDone === null) {
       return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
@@ -671,6 +696,18 @@ export async function approveKbCleanup(
   // — the equality check above makes the two identical by construction from
   // here on, which is why a caller cannot observe a swap to `expectedKbId`.
   const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+  // Stake out this run's log dir SYNCHRONOUSLY, exactly as the sibling
+  // maintenance op=consolidate route does (W7-B2 code-review round).
+  // `runBrainConsolidateNow` only creates `_logs/_brainfix-<runId>/` at its
+  // OWN terminal write, so without this the run was invisible to
+  // `deriveKbActiveJob` for its whole duration — minutes of real agent turns
+  // during which the knowledge-05 mutual gate reported NO active job for this
+  // KB and index / delete / drain were all still dispatchable against the
+  // files this run was editing. SEC-04: routed through the shared guard, same
+  // as that route — `runId` embeds the KB_ID_RE-validated `kbId`, but the
+  // whole compound directory name is still built from request-derived text.
+  const consolidateLogGuard = resolveGuardedPath(forgeRoot, ['_logs', `_brainfix-${runId}`]);
+  if (consolidateLogGuard.ok) mkdirSync(consolidateLogGuard.realPath, { recursive: true });
   // `enqueueConsolidate` — the SAME per-kbId serialization queue the sibling
   // maintenance op=consolidate route uses (see its own doc comment: "Always
   // invoked via enqueueConsolidate, never directly"). Awaited so this

@@ -1486,3 +1486,23 @@ ONE fixed, forge-root-derived registry path.
 | `orchestrator/studio/skill-library.ts` (`installSkillPackage`) | `readFileSync` (+1) | none — the read target is `guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read')`'s OWN non-null return (the guard's resolved real path; `id` rode as its own `segments[]` element) | guarded `[read]` | The read exists to tell a MANAGED occupancy (provenance block → honest `alreadyInstalled`) from an unrelated local skill (no provenance → throw, `present-unmanaged`) — closing library-31's laundered false success. Read-only either way; the victim file is byte-unchanged on refusal (pinned by `skill-library.test.ts` W7-B3 row). |
 
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta.
+
+### W7-B2 code-review round — the approve-path consolidate's log-dir stake-out (one new `[exec]`-class sink, guarded)
+
+`approveKbCleanup` (`cli/bridge-studio-kbs.ts`) minted a
+`` `${kbId}-consolidate-${stamp}` `` runId and enqueued
+`runBrainConsolidateNow` **without** staking out `_logs/_brainfix-<runId>/`,
+which that function only creates at its own terminal write — so for the whole
+run (real agent turns, minutes) `deriveKbActiveJob` could not see it and the
+knowledge-05 mutual gate had a hole for exactly this dispatch path. The fix
+adds the same synchronous stake-out the sibling `op=consolidate` maintenance
+route has carried since W6-B14. `check-request-path-sinks.mjs` delta (1 file,
+`mkdirSync` 8 → 9):
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/bridge-studio-kbs.ts` (`approveKbCleanup`, consolidate path) | `mkdirSync` | `runId` — server-minted as `` `${kbId}-consolidate-${Date.now().toString(36)}` ``; `kbId` comes from the SESSION's own `status.kb_id` (read through `guardedReadSessionStatus`), never from the URL | guarded `[exec]` | Routed through `resolveGuardedPath(forgeRoot, ['_logs', '_brainfix-<runId>'])` and created only on `.ok` — byte-identical to the `op=consolidate` route's own stake-out (the W6-B14 row above), same fixed root, same single compound segment. Verified `[exec]` by `cli/kb-drain-structural.test.ts`'s "the consolidate path stakes its log dir SYNCHRONOUSLY" pin, which asserts `deriveKbActiveJob` reports THIS dispatch's runId in the same tick. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records `cli/bridge-studio-kbs.ts`
+`mkdirSync` at 9.
