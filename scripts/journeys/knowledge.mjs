@@ -1024,6 +1024,13 @@ export const journey = defineJourney({
               await page.waitForFunction(
                 () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
                 null, { timeout: 8000 }).catch(() => {});
+              // The group's buttons stay disabled while the drain panel's
+              // mount-time reattach is in flight ('attaching') — wait for the
+              // arm button to be genuinely clickable before arming.
+              await page.waitForFunction(() => {
+                const b = document.querySelector('[data-section="kb-danger-zone"] [data-action="kb-delete"]');
+                return b !== null && !b.hasAttribute('disabled');
+              }, null, { timeout: 10000 }).catch(() => {});
               await page.locator('[data-section="kb-danger-zone"] [data-action="kb-delete"]').click().catch(() => {});
               await page.locator('[data-field="kb-delete-confirm"]').fill(SCRATCH_KB_ID).catch(() => {});
               await page.locator('[data-action="kb-delete-confirm"]').click().catch(() => {});
@@ -1181,6 +1188,10 @@ export const journey = defineJourney({
                 // W7-B2 (knowledge-06): "Refresh this KB's index" moved into the ONE
                 // KB-actions group; its result span reports BOTH halves (this KB's
                 // link repairs + the meta-index rebuild), so match the stable prefix.
+                await page.waitForFunction(() => {
+                  const b = document.querySelector('[data-component="kb-action-group"] [data-action="kb-index"]');
+                  return b !== null && !b.hasAttribute('disabled');
+                }, null, { timeout: 10000 }).catch(() => {});
                 await page.locator('[data-component="kb-action-group"] [data-action="kb-index"]').click().catch(() => {});
                 let indexResult = '';
                 try {
@@ -1580,6 +1591,10 @@ export const journey = defineJourney({
               check(VALID_CHECK_STATUSES.includes(checkProjectBrainIndexesBefore), `kb-maintain: the named-check itemization renders checkProjectBrainIndexes with a real per-check status (R6-08 WI-1, not a pooled data-lint-warnings count; got "${checkProjectBrainIndexesBefore}")`);
               await frame(page, 'kb-maintain-1-flagged', `Knowledge — the seeded scratch KB opened, KB HEALTH shows the named per-check itemization (checkProjectBrainIndexes observed status=${checkProjectBrainIndexesBefore})`);
 
+              await page.waitForFunction(() => {
+                const b = document.querySelector('[data-component="kb-action-group"] [data-action="kb-maintain-session"]');
+                return b !== null && !b.hasAttribute('disabled');
+              }, null, { timeout: 10000 }).catch(() => {});
               await page.locator('[data-component="kb-action-group"] [data-action="kb-maintain-session"]').click().catch(() => {});
               await caption(page, 'Consolidate — the real op=consolidate pipeline, dispatched and polled to a genuine terminal.');
 
