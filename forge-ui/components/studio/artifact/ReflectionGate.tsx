@@ -30,7 +30,7 @@ import {
   postReflectionAnswers,
   type ReflectionData,
 } from '@/lib/bridge-client';
-import { reflectionAllAnswered, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
+import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
 
 export function ReflectionGate({
   cycleId,
@@ -290,22 +290,31 @@ export function ReflectionGate({
         style={{ ...textareaStyle, marginBottom: 10 }}
       />
       {error && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-      <button
-        onClick={() => void submit()}
-        disabled={!allAnswered || submitting}
-        data-action="submit-reflection"
-        style={{
-          background: allAnswered && !submitting ? '#238636' : 'var(--panel-2)',
-          color: allAnswered && !submitting ? '#fff' : 'var(--dim)',
-          border: '1px solid var(--line)',
-          borderRadius: 6,
-          padding: '6px 14px',
-          fontSize: 13,
-          cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed',
-        }}
-      >
-        {submitting ? 'Submitting…' : 'Submit reflection'}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => void submit()}
+          disabled={!allAnswered || submitting}
+          data-action="submit-reflection"
+          // W7-B7 (artifact-plan-24): the disabled state says WHY.
+          title={allAnswered ? undefined : `Answer all ${questions.length} questions to submit`}
+          style={{
+            background: allAnswered && !submitting ? '#238636' : 'var(--panel-2)',
+            color: allAnswered && !submitting ? '#fff' : 'var(--dim)',
+            border: '1px solid var(--line)',
+            borderRadius: 6,
+            padding: '6px 14px',
+            fontSize: 13,
+            cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {submitting ? 'Submitting…' : 'Submit reflection'}
+        </button>
+        {!allAnswered && (
+          <span data-reflect-answered-count style={{ fontSize: 12, color: 'var(--dim)' }}>
+            {reflectionAnsweredCount(questions, choices)} of {questions.length} answered
+          </span>
+        )}
+      </div>
     </div>
   );
 }

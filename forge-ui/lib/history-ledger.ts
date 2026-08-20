@@ -178,6 +178,45 @@ export type LedgerRowLinkKind = 'flow-node' | 'standalone' | 'session';
  *  renders, now also reaching the ledger row. */
 export type LedgerRowTrigger = { kind: string; source: string; scope: string | null };
 
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-33) — the session-phase → run-vocabulary map for the
+// `data-run-status` DOM attribute.
+// ---------------------------------------------------------------------------
+
+/** Terminal phases that mean "finished successfully" vs "stopped", across
+ *  the session runners (studio/session-kinds.yaml's `step: terminal` rows +
+ *  the universal `cancelled`). ONE source: `session-lifecycle-client.ts`'s
+ *  terminal copy ("Done — committed" vs "Cancelled — …") imports these SAME
+ *  sets, so the ledger's mapped status and the lifecycle sentence can never
+ *  disagree about what counts as done. Declared here (the pure, transport-
+ *  free module) so this file never has to import the cancel client.
+ *  Review round 1: `applying` added (kb-cleanup's yaml-declared terminal
+ *  phase — it was silently mapping to a forever-"active" ledger row), and
+ *  the whole union is now yaml-parity-pinned: `history-ledger.test.ts`
+ *  scans the REAL registry's `step: terminal` rows and asserts every one
+ *  maps to complete|failed — a future kind's new terminal token turns the
+ *  suite red instead of drifting. */
+export const SESSION_DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applying', 'applied', 'complete']);
+export const SESSION_STOPPED_PHASES: ReadonlySet<string> = new Set(['rejected', 'abandoned', 'cancelled', 'failed']);
+
+/**
+ * Map a session's own status.json phase (an OPEN per-runner vocabulary —
+ * D12, deliberately carried verbatim on `LedgerRow.status`) onto the CLOSED
+ * run vocabulary the `data-run-status` DOM contract promises
+ * (home-sessions-33: eight vocabularies were leaking into one attribute).
+ * Done-terminal → 'complete'; stopped-terminal → 'failed'; anything else —
+ * including a future runner's unknown token — → 'active': "in flight as far
+ * as this surface can honestly tell", the least-claiming in-flight value.
+ * The RAW phase always rides alongside on `data-session-phase`, so nothing
+ * is lost — only the closed attribute stops lying. Used ONLY at the DOM
+ * boundary (HistoryLedger.tsx); `LedgerRow.status` itself is untouched.
+ */
+export function sessionPhaseRunStatus(phase: string): 'active' | 'complete' | 'failed' {
+  if (SESSION_DONE_PHASES.has(phase)) return 'complete';
+  if (SESSION_STOPPED_PHASES.has(phase)) return 'failed';
+  return 'active';
+}
+
 export type LedgerRow = {
   id: string;
   /** Raw ISO `run.startedAt`, or '' if absent (D7) — formatting is a

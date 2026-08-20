@@ -13,13 +13,21 @@ export type ArtifactType = 'plan' | 'workitems' | 'pr' | 'demo' | 'verdict' | 'r
 
 /** The pre-existing inference rule (was `resolveMode(null, …)` inline in
  *  app/artifact/page.tsx): artifactsReady drives plan/workitems/pr/demo/
- *  reflection; verdict is the gate while a gated/active run has no verdict. */
+ *  reflection; the verdict gate is armed by the QUEUE STATE alone.
+ *
+ *  W7-B7 (artifact-plan-11/-14): now that `artifactsReady['verdict']` is real
+ *  (derived from the cycle's own artifacts/verdict.json), the old
+ *  `!verdictReady && (gated || active)` rule broke ROUND 2 — a send-back
+ *  writes verdict.json, so when the fix loop re-parks the run at
+ *  ready-for-review the gate would read "already decided" and never arm
+ *  again. A run whose queue state is `gated` (ready-for-review) awaits an
+ *  operator verdict BY DEFINITION — prior-round verdicts notwithstanding —
+ *  and a run in any other state does not (`active` no longer arms it either:
+ *  agents are still working; nothing awaits the operator yet). */
 export function inferArtifactMode(type: ArtifactType, run: Run | null): 'gate' | 'view' {
   if (!run) return 'view';
   if (type === 'verdict') {
-    const verdictReady = run.artifactsReady['verdict'];
-    if (!verdictReady && (run.status === 'gated' || run.status === 'active')) return 'gate';
-    return 'view';
+    return run.status === 'gated' ? 'gate' : 'view';
   }
   const readyKey = type === 'workitems' ? 'work-items' : type;
   const ready = run.artifactsReady[readyKey as keyof Run['artifactsReady']];

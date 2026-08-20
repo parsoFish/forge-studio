@@ -5,7 +5,7 @@
  * reflection gate.
  */
 import { test, expect } from 'vitest';
-import { reflectionAllAnswered, buildReflectionAnswers, hasInferredAnswers } from './reflection-form.ts';
+import { reflectionAllAnswered, reflectionAnsweredCount, buildReflectionAnswers, hasInferredAnswers } from './reflection-form.ts';
 import type { ArchitectQuestion, ReflectionQuestion } from './bridge-client.ts';
 
 function q(question: string): ArchitectQuestion {
@@ -61,4 +61,14 @@ test('hasInferredAnswers: false when empty', () => {
 test('hasInferredAnswers: true only when EVERY question is inferred', () => {
   expect(hasInferredAnswers([inferred('a', 'x'), inferred('b', 'y')])).toBe(true);
   expect(hasInferredAnswers([inferred('a', 'x'), q('b')])).toBe(false);
+});
+
+// W7-B7 (artifact-plan-24): the disabled Submit names its reason —
+// "N of M answered" — instead of a bare grey button.
+test('reflectionAnsweredCount: counts recorded choices only', () => {
+  expect(reflectionAnsweredCount(QUESTIONS, {})).toBe(0);
+  expect(reflectionAnsweredCount(QUESTIONS, { 0: 'well' })).toBe(1);
+  expect(reflectionAnsweredCount(QUESTIONS, { 0: 'well', 1: 'held' })).toBe(2);
+  expect(reflectionAnsweredCount(QUESTIONS, { 1: '' })).toBe(0);
+  expect(reflectionAnsweredCount([], {})).toBe(0);
 });

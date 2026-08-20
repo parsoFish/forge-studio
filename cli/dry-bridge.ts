@@ -215,6 +215,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'runs the KB drain-to-green loop (runKbDrain) — that loop already self-suppresses its own agent-tier spawn under dry-bridge, so this route is never suppressed further (mirrors op=consolidate|lint|fix-auto|index and /cleanup/apply above)' },
   { method: 'POST', route: '/api/review-comments/:cycleId', classification: 'exempt-local', reason: 'appends to the local review-comments sidecar' },
   { method: 'POST', route: '/api/review-comments/:cycleId/resolve', classification: 'exempt-local', reason: 'marks a local review-comments sidecar entry resolved' },
+  { method: 'POST', route: '/api/review-comments/:cycleId/edit', classification: 'exempt-local', reason: 'rewrites one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
+  { method: 'POST', route: '/api/review-comments/:cycleId/delete', classification: 'exempt-local', reason: 'removes one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
   { method: 'POST', route: '/api/studio/skills', classification: 'exempt-local', reason: 'writes a local skill definition' },

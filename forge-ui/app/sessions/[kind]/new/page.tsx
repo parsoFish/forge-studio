@@ -8,8 +8,10 @@ import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
+import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
+import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
 import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/kickoff-view';
 
 // ---------------------------------------------------------------------------
@@ -44,46 +46,11 @@ import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/ki
 // kickoff alike).
 // ---------------------------------------------------------------------------
 
-type KickoffKindId = 'instructions' | 'demo' | 'kb-cleanup' | 'authoring' | 'project-brain' | 'community-refresh';
-
-type KickoffKindSpec = {
-  title: string;
-  /** The skill slug this kind's agent runs — resolves the SKILL.md-declared
-   *  model envelope via `fetchAgentCapability()` (the unfiltered per-slug
-   *  route, W6-B6 fix — NOT `fetchStudioAgents()`'s roster, which drops
-   *  every `library:false` kickoff-only agent). */
-  agentSlug: string;
-  artifactLabel: string;
-  /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
-   *  route takes neither, and the context card renders the fixed session
-   *  home directly rather than an operator-filled path. */
-  selector: 'project' | 'kb' | 'none';
-  /** A free-text prompt field. `authoring`'s `/start` body REQUIRES one
-   *  (`promptRequired`); `community-refresh` takes an OPTIONAL brief (W7-B3,
-   *  community-08 — empty means "full refresh", text means a targeted
-   *  "find me skills for X" pass). Every other kind's `/start` route needs
-   *  no operator prose at kickoff (instructions/demo take their brief on a
-   *  LATER turn, via their own panel's briefing step). */
-  promptLabel?: string;
-  promptPlaceholder?: string;
-  promptRequired?: boolean;
-};
-
-const KICKOFF_KINDS: Record<KickoffKindId, KickoffKindSpec> = {
-  instructions: { title: 'Instructions session', agentSlug: 'instructions-creator', artifactLabel: 'AGENTS.md draft', selector: 'project' },
-  demo: { title: 'Demo capability session', agentSlug: 'demo-builder', artifactLabel: 'Demo generations', selector: 'project' },
-  'kb-cleanup': { title: 'KB cleanup session', agentSlug: 'brain-maintenance', artifactLabel: 'Cleanup plan', selector: 'kb' },
-  authoring: { title: 'Authoring session', agentSlug: 'creation-agent', artifactLabel: 'Package', selector: 'project', promptLabel: 'Describe what to build', promptPlaceholder: 'Describe what it should do…', promptRequired: true },
-  'project-brain': { title: 'Brain creation session', agentSlug: 'project-brain-builder', artifactLabel: 'Seeded structure', selector: 'project' },
-  'community-refresh': {
-    title: 'Community refresh session', agentSlug: 'community-refresh', artifactLabel: 'Registry draft', selector: 'none',
-    promptLabel: 'Focus (optional)', promptPlaceholder: 'e.g. find me skills for terraform drift detection — leave empty for a full refresh', promptRequired: false,
-  },
-};
-
-function isKickoffKind(kind: string): kind is KickoffKindId {
-  return kind in KICKOFF_KINDS;
-}
+// W7-B1 (home-sessions-19): the per-kind form specs moved to
+// `lib/session-kind-meta.ts` (KICKOFF_SPECS + the hasOwn-guarded
+// `kickoffSpecFor` accessor) — ONE module beside the kind titles and the
+// shared kickoff list, parity-pinned against studio/session-kinds.yaml,
+// ending this page's half of the two-list drift.
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);
@@ -108,10 +75,6 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [confirmingAnother, setConfirmingAnother] = useState(false);
   const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
-  // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
-  // run the bridge actually knows — arbitrary query text was echoed back as
-  // if it were a real object. null = nothing to validate / not resolved.
-  const [initiativeKnown, setInitiativeKnown] = useState<boolean | null>(null);
 
   const [project, setProject] = useState(prefillProject);
   const [kbId, setKbId] = useState('');
@@ -119,8 +82,12 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [modelTier, setModelTier] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
+  // run the bridge actually knows — arbitrary query text was echoed back as
+  // if it were a real object. null = nothing to validate / not resolved.
+  const [initiativeKnown, setInitiativeKnown] = useState<boolean | null>(null);
 
-  const spec = isKickoffKind(kind) ? KICKOFF_KINDS[kind] : null;
+  const spec = kickoffSpecFor(kind);
 
   useEffect(() => {
     if (!spec) {
@@ -328,32 +295,32 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     <StudioArchitectShell
       dataPage="session-kickoff"
       ready={ready}
-      title={spec.title}
+      title={sessionKindTitle(kind)}
       mainData={{ 'data-kickoff-kind': kind }}
     >
-      <div data-section="kickoff-context" style={{ ...cardStyle, marginBottom: 14 }}>
-        <div style={rowLabel}>Agent</div>
-        <div style={rowValue}>
-          {spec.agentSlug} <span style={mono}>· skills/{spec.agentSlug}/SKILL.md</span>
-        </div>
-        <div style={rowLabel}>Produces</div>
-        <div style={rowValue}>{spec.artifactLabel}</div>
-        <div style={rowLabel}>Session directory</div>
-        <div style={{ ...rowValue, ...mono }}>{sessionDirPreview(kind, spec.selector, project)}</div>
-        {prefillInitiative && initiativeKnown === true && (
-          <div data-section="kickoff-initiative-context" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
-            Opened from initiative <span style={mono}>{prefillInitiative}</span> — sessions here are
-            project-scoped, not tied to it; this is context only.
-          </div>
-        )}
+      {/* W7-B1 (sessions-kinds-05): plain-English orientation first, the
+          on-disk provenance demoted to one line, and a way back out —
+          see KickoffContextCard's own header. */}
+      <div style={{ marginBottom: 14 }}>
+        <KickoffContextCard
+          kind={kind}
+          spec={spec}
+          // W7-B3 (community-12): the REAL anchor for community-refresh —
+          // never the literal `<forge-anchor>` placeholder; other kinds keep
+          // their honest placeholders (kickoff-view.sessionDirPreview).
+          sessionDirHint={sessionDirPreview(kind, spec.selector, project)}
+          // W7-B3 (community-22): only a run the bridge actually knows renders
+          // as context — an unknown ref shows the "ignored" notice below.
+          initiative={initiativeKnown === true ? prefillInitiative : null}
+        />
         {prefillInitiative && initiativeKnown === false && (
-          <div data-section="kickoff-initiative-ignored" style={{ fontSize: 11.5, color: 'var(--faint)' }}>
-            The <span style={mono}>?initiative=</span> reference in this URL matches no known run — ignored.
+          <div data-section="kickoff-initiative-ignored" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 8 }}>
+            The <span style={monoInline}>?initiative=</span> reference in this URL matches no known run — ignored.
           </div>
         )}
         {spec.selector === 'none' && prefillProject && (
-          <div data-section="kickoff-project-ignored" style={{ fontSize: 11.5, color: 'var(--faint)' }}>
-            The <span style={mono}>?project=</span> parameter is ignored — this session kind is forge-wide,
+          <div data-section="kickoff-project-ignored" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 8 }}>
+            The <span style={monoInline}>?project=</span> parameter is ignored — this session kind is forge-wide,
             not project-scoped.
           </div>
         )}
@@ -491,8 +458,7 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--line)', borderRadius: 10, padding: 16, background: 'var(--bg-2)', maxWidth: 560,
 };
 const rowLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 };
-const rowValue: React.CSSProperties = { fontSize: 13, color: 'var(--text)', marginBottom: 12 };
-const mono: React.CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', color: 'var(--dim)' };
+const monoInline: React.CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', color: 'var(--dim)' };
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)',
   border: '1px solid var(--line)', borderRadius: 6, padding: '8px 10px', fontSize: 13,

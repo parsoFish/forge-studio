@@ -39,7 +39,7 @@ const TRANSPORT = 'lib/bridge-client.ts';
 /** Files that may import `resolveBridgeUrl` for a documented non-fetch use. */
 const RESOLVE_URL_ALLOWLIST: Record<string, string> = {
   'components/DemoComparison.tsx': 'builds `<video src>` URLs for artifact media served by the bridge (no fetch)',
-  'app/artifact/page.tsx': 'builds the sandboxed PLAN.html `<iframe src>` URL (its fetches ride bridgeFetch)',
+  'app/artifact/page.tsx': 'builds the sandboxed PLAN.html `<iframe src>` URL + the raw-artifact chip `<a href>` (W7-B7 artifact-plan-26); its fetches ride bridgeFetch',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

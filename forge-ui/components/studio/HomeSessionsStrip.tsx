@@ -4,21 +4,31 @@ import Link from 'next/link';
 import type { HomeSessionsStrip as HomeSessionsStripData } from '@/lib/home-view';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import { describeLifecycle, type CancelOutcome } from '@/lib/session-lifecycle-client';
+import { sessionKindTitle } from '@/lib/session-kind-meta';
 import { CancelOutcomeNotice } from '@/components/studio/session/CancelOutcomeNotice';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
+import { NeedsYouChip } from '@/components/studio/session/NeedsYouChip';
 
 // ---------------------------------------------------------------------------
-// HomeSessionsStrip — Home's active-sessions strip (W6-B11, the IA-4 marked
-// slot). Extracted out of app/page.tsx (review fix) so its data-* contract
-// (section/counts/cards) gets a `renderToStaticMarkup` pin, mirroring
-// `SessionsIndexBody`'s own split (`components/studio/SessionsIndex.tsx` +
-// `lib/sessions-index-render.test.ts`).
+// HomeSessionsStrip — Home's sessions strip (W6-B11; W7-B1 IA pass:
+// `data-section="sessions-needing-you"`, the goal pack's named-strip
+// contract). Extracted out of app/page.tsx so its data-* contract gets a
+// `renderToStaticMarkup` pin (`lib/home-sessions-strip-render.test.ts`).
 //
-// Mirrors mockups/session-surface-v1/sessions-index.html's "Home
-// active-sessions strip" variant: <=4 cards, needs-you first, "N need you"
-// in the header, overflow to /sessions. Renders NOTHING when there is no
-// in-flight session — a real condition, mirroring the attention strip's own
-// "never on mere existence" rule.
+// W7-B1 changes (docs/roadmaps/wave-7-walkthrough-findings.md):
+//   - home-sessions-01/02: the strip is NAMED on screen ("Sessions needing
+//     you") — one of Home's two named, visually distinct strips (the other
+//     is `kbs-needing-attention`, app/page.tsx).
+//   - home-sessions-31: the section NEVER unmounts at zero — it owns Home's
+//     only link to /sessions, and navigation must survive an empty data
+//     set. Empty renders an honest one-liner + a start-a-session link.
+//   - home-sessions-32: a truncated strip SAYS so — "showing 4 of 13" +
+//     "+9 more →", so the "N need you" pill and the visible cards reconcile.
+//   - home-sessions-20: cards name their kind by the descriptor's own title
+//     (`sessionKindTitle`), raw id intact on `data-session-kind`.
+//   - home-sessions-03: the needs-you signal is the shared labelled
+//     `NeedsYouChip` (its own `needs-you` status token + aria-label) —
+//     never a bare dot borrowing `data-status="retrying"`.
 //
 // Pure, props-driven — no fetch, no useEffect. `strip` is
 // `home-view.ts`'s `buildHomeSessionsStrip(sessions)` output, computed by
@@ -29,6 +39,7 @@ export function HomeSessionsStrip({
   strip,
   onCancelled,
   lastCancel = null,
+  ready = true,
 }: {
   strip: HomeSessionsStripData;
   /** W7-A2 — fired after a card's cancel succeeds so Home refetches;
@@ -37,20 +48,28 @@ export function HomeSessionsStrip({
   /** W7A2-02 — the last cancel from this strip (held by Home so the notice
    *  survives the refetch that drops the card). */
   lastCancel?: { row: SessionIndexRow; outcome: CancelOutcome } | null;
+  /** Review round 1 — whether Home's first load has SETTLED: an unsettled
+   *  zero must never render the settled "Nothing in flight right now."
+   *  claim (the strip is always mounted now, so loading passes through
+   *  here). Default true keeps every props-only render (tests, settled
+   *  callers) unchanged. */
+  ready?: boolean;
 }) {
-  if (strip.totalCount === 0 && lastCancel === null) return null;
+  const shown = strip.cards.length;
+  const truncated = strip.totalCount > shown;
 
   return (
     <section
-      data-section="active-sessions"
-      aria-label="Active in-flight sessions"
+      data-section="sessions-needing-you"
+      aria-label="Sessions needing you"
       data-active-session-count={strip.totalCount}
       data-needs-you-count={strip.needsYouCount}
+      data-session-cards-shown={shown}
       style={{ marginBottom: 32 }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
-          Active sessions
+          Sessions needing you
         </h2>
         {strip.needsYouCount > 0 && (
           <span
@@ -68,6 +87,13 @@ export function HomeSessionsStrip({
             {strip.needsYouCount} need you
           </span>
         )}
+        {/* W7-B1 (home-sessions-32): the cards below are a SLICE — say so,
+            right where the "N need you" number lives, so the two reconcile. */}
+        {truncated && (
+          <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+            showing {shown} of {strip.totalCount}
+          </span>
+        )}
         <Link
           href="/sessions"
           data-action="view-all-sessions"
@@ -83,12 +109,33 @@ export function HomeSessionsStrip({
           <CancelOutcomeNotice outcome={lastCancel.outcome} subject={`${lastCancel.row.kind} · ${lastCancel.row.sessionId}`} />
         </div>
       )}
+      {strip.totalCount === 0 && !ready ? (
+        // Review round 1: the first load has not settled — say nothing
+        // settled. (The header + /sessions link above stay: navigation.)
+        <div data-component="sessions-strip-loading" style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic', padding: '8px 2px' }}>
+          Loading sessions…
+        </div>
+      ) : strip.totalCount === 0 ? (
+        // W7-B1 (home-sessions-31): an honest empty line — never an
+        // unmounted section that takes Home's only /sessions link with it.
+        <div
+          data-component="sessions-strip-empty"
+          style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontSize: 12.5, color: 'var(--dim)', padding: '8px 2px' }}
+        >
+          <span style={{ fontStyle: 'italic' }}>Nothing in flight right now.</span>
+          <Link
+            href="/sessions"
+            data-action="start-a-session"
+            style={{ color: 'var(--ember)', fontWeight: 600, textDecoration: 'none', fontSize: 12.5 }}
+          >
+            start a session →
+          </Link>
+        </div>
+      ) : (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
         {strip.cards.map((s) => (
           // W7-A2 — the card is a DIV wrapping the link + a cancel control
-          // (a button inside an <a> is nested-interactive; the whole card
-          // used to be the <Link>). Layout otherwise unchanged (B1 owns
-          // Home's IA — this lane adds the button only).
+          // (a button inside an <a> is nested-interactive).
           <div
             key={`${s.kind}-${s.sessionId}`}
             data-session-card
@@ -109,17 +156,17 @@ export function HomeSessionsStrip({
               position: 'relative',
             }}
           >
+            {/* W7-B1 (home-sessions-03): the labelled chip, not a colour-only
+                dot hardcoded to "retrying". */}
             {s.needsYou && (
-              <span
-                className="status-dot"
-                data-status="retrying"
-                title="needs you"
-                style={{ position: 'absolute', top: 10, right: 10 }}
-              />
+              <span style={{ position: 'absolute', top: 8, right: 8 }}>
+                <NeedsYouChip />
+              </span>
             )}
             <Link href={s.href} data-action="open-session" style={{ display: 'flex', flexDirection: 'column', gap: 4, textDecoration: 'none', color: 'inherit' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)', textTransform: 'capitalize' }}>
-                {s.kind}
+              {/* W7-B1 (home-sessions-20): the descriptor's own title. */}
+              <span style={{ fontSize: 11.5, fontWeight: 600, paddingRight: s.needsYou ? 84 : 0 }}>
+                {sessionKindTitle(s.kind)}
               </span>
               <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{s.project}</span>
               <span style={{ fontSize: 11, color: s.needsYou ? 'var(--ember)' : 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
@@ -143,7 +190,23 @@ export function HomeSessionsStrip({
             )}
           </div>
         ))}
+        {/* W7-B1 (home-sessions-32): the overflow card — the +N that makes
+            the header's arithmetic visible and clickable. */}
+        {truncated && (
+          <Link
+            href="/sessions"
+            data-action="sessions-strip-more"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '10px 12px', border: '1px dashed var(--line-2)', borderRadius: 'var(--radius-sm)',
+              color: 'var(--dim)', textDecoration: 'none', fontSize: 12.5, fontFamily: 'var(--font-mono)',
+            }}
+          >
+            +{strip.totalCount - shown} more →
+          </Link>
+        )}
       </div>
+      )}
     </section>
   );
 }

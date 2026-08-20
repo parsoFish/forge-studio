@@ -90,7 +90,7 @@
 
 import { test, expect } from 'vitest';
 
-import { resolveFlowRunDetailFromResponse, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
+import { resolveFlowRunDetailFromResponse, fetchFlowRunDetail, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution } from './flow-run-detail-client.ts';
 import { parseRun, type Run } from './studio-client.ts';
 
 const REAL_RUN_BODY = {
@@ -314,4 +314,43 @@ test('resolveRunPageState: a FAILED list read never yields "unregistered" — a 
   expect(resolveRunPageState(notFound, 'forge-develop', { ok: false }).resolution).toEqual(notFound);
   const unresolved: FlowRunDetailResolution = { kind: 'unresolved' };
   expect(resolveRunPageState(unresolved, 'forge-develop', { ok: false }).resolution).toEqual(unresolved);
+});
+
+// ---------------------------------------------------------------------------
+// W7-B7 (bd forge-2w4) — the WRAPPER is status-decides-first too. The pure
+// resolver always was; the wrapper's unconditional `await res.json()` threw
+// on a 404 with a non-JSON body (the ordinary real-404 shape) and fell into
+// the sentinel-0 catch → `unresolved` instead of the authoritative
+// `not-found`. Pinned via the injectable fetchImpl.
+// ---------------------------------------------------------------------------
+
+test('fetchFlowRunDetail: a 404 whose body is NOT JSON resolves not-found (status first, body never consulted)', async () => {
+  let jsonCalled = false;
+  const res = await fetchFlowRunDetail('nope', async () => ({
+    status: 404,
+    json: async () => { jsonCalled = true; throw new SyntaxError('Unexpected token < in JSON'); },
+  }) as unknown as Response);
+  expect(res).toEqual({ kind: 'not-found' });
+  expect(jsonCalled).toBe(false);
+});
+
+test('fetchFlowRunDetail: a 2xx with an unparseable body resolves unresolved (anomaly, never degrade-to-found or not-found)', async () => {
+  const res = await fetchFlowRunDetail('x', async () => ({
+    status: 200,
+    json: async () => { throw new SyntaxError('bad json'); },
+  }) as unknown as Response);
+  expect(res).toEqual({ kind: 'unresolved' });
+});
+
+test('fetchFlowRunDetail: a thrown fetch resolves unresolved via the sentinel-0 convention', async () => {
+  const res = await fetchFlowRunDetail('x', async () => { throw new TypeError('network down'); });
+  expect(res).toEqual({ kind: 'unresolved' });
+});
+
+test('fetchFlowRunDetail: a 200 with a real run body resolves found', async () => {
+  const res = await fetchFlowRunDetail('x', async () => ({
+    status: 200,
+    json: async () => REAL_RUN_BODY,
+  }) as unknown as Response);
+  expect(res.kind).toBe('found');
 });
