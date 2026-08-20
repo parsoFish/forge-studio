@@ -1453,3 +1453,18 @@ instead of `guardedWriteFile` (same guard, plus the sticky rule); and
 '_logs'), [sessionLogDirName(kind, sid), 'turn.pid'])`, with `kind`/`sid`
 derived from the route's ALREADY-validated `sessionDir` (never request text)
 and `sid` re-checked by `isSafeRunId`.
+
+### W7-B2 — KB active-job derivation (`cli/kb-job-state.ts`, two new `[read]`-class sinks, both accidentally-safe by construction)
+
+The ONE per-KB "a mutating job is running" derivation (knowledge-05) that
+both the bridge's 409s and the UI's action-group gate consume.
+`check-request-path-sinks.mjs` delta (1 file, `readFileSync` 0 → 2):
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/kb-job-state.ts` (`readJsonFile`, via `findLiveDrain`) | `readFileSync` | none reaches the path — the request-derived `kbId` is used ONLY as a string PREFIX FILTER over `readdirSync(forgeRoot/_logs)`'s own enumerated entry names; the path read is `join(forgeRoot, '_logs', name, 'status.json')` where `name` is a server-enumerated directory entry, never caller text | accidentally-safe `[read]` | `kbId` never appears in any `join()`; a hostile `kbId` can at most fail every `startsWith` and select nothing. Verified `[exec]` by `cli/bridge-studio-kbs-w7.test.ts` (active-job gate pins) and the drain-route 409 pins in `cli/bridge-studio-kb-drain-w7.test.ts`. |
+| `cli/kb-job-state.ts` (`consolidateRunning`) | `readFileSync` | none — `runId` at both call sites is sliced from the SAME `readdirSync` enumeration (`name.slice('_brainfix-'.length)` after a `startsWith('_brainfix-<kbId>-consolidate-')` filter); `_brainfix-<runId>/events.jsonl` is a re-join of the enumerated name | accidentally-safe `[read]` | Same enumeration-only trust chain as the row above; the parse is line-tolerant JSON with no bytes surfaced to the caller beyond a boolean/kind. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records `cli/kb-job-state.ts`
+`readFileSync` at 2.

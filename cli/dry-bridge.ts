@@ -213,6 +213,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // than the whole route refusing outright.
   { method: 'POST', route: '/api/studio/kbs/:id/drain', classification: 'exempt-local',
     reason: 'runs the KB drain-to-green loop (runKbDrain) — that loop already self-suppresses its own agent-tier spawn under dry-bridge, so this route is never suppressed further (mirrors op=consolidate|lint|fix-auto|index and /cleanup/apply above)' },
+  { method: 'POST', route: '/api/studio/kbs/:id/drain/cancel', classification: 'exempt-local',
+    reason: 'W7-B2 (knowledge-14): writes the local cancel flag (_logs/_kb-drain-<runId>/cancel.json) a live drain loop honors between turns, or force-terminates a DEAD run by rewriting its local status.json — local files only, no agent spawn, no network; the loop it stops is the same self-suppressing runKbDrain above' },
   { method: 'POST', route: '/api/review-comments/:cycleId', classification: 'exempt-local', reason: 'appends to the local review-comments sidecar' },
   { method: 'POST', route: '/api/review-comments/:cycleId/resolve', classification: 'exempt-local', reason: 'marks a local review-comments sidecar entry resolved' },
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },

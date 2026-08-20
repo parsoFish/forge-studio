@@ -102,7 +102,7 @@ import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintF
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { snapshotKbMarkdown, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { isDryBridge } from './dry-bridge.ts';
 
@@ -348,7 +348,11 @@ function readConsolidateRunRow(forgeRoot: string, runId: string): { status: stri
   const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
   let raw: string | null = null;
   try {
-    raw = existsSync(evPath) ? readFileSync(evPath, 'utf8') : null;
+    // Probe and read on separate lines — the raw-fs-guarded allowlist keys
+    // one audited entry per (file, line, sink).
+    if (existsSync(evPath)) {
+      raw = readFileSync(evPath, 'utf8');
+    }
   } catch {
     raw = null;
   }
@@ -661,16 +665,15 @@ function mintKbCleanupDraftSession(
     if (written === null) return null;
 
     // Session dir now exists (guardedWriteSessionStatus created it); drafts/
-    // and plan/ are its own server-minted children — created through the
-    // shared guard, mirroring the kbs.ts convention.
-    const draftsGuard = resolveGuardedPath(projectsRoot, [project, '_kb-cleanup', sessionId, 'drafts']);
-    const planGuard = resolveGuardedPath(projectsRoot, [project, '_kb-cleanup', sessionId, 'plan']);
-    if (!draftsGuard.ok || !planGuard.ok) return null;
-    mkdirSync(draftsGuard.realPath, { recursive: true });
-    mkdirSync(planGuard.realPath, { recursive: true });
+    // and plan/ are its own server-minted children. Every write goes through
+    // guardedWriteFile — the LEAF included (raw-fs-guarded's leaf-append
+    // rule), which also creates the parent dir.
+    let draftsOk = true;
     draftBodies.forEach((body, i) => {
-      writeFileSync(join(draftsGuard.realPath, `${i}.md`), body, 'utf8');
+      const p = guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'drafts', `${i}.md`], body);
+      if (p === null) draftsOk = false;
     });
+    if (!draftsOk) return null;
 
     const plan = [
       '# Drain-gated prose edit',
@@ -692,7 +695,7 @@ function mintKbCleanupDraftSession(
       '```',
       '',
     ].join('\n');
-    writeFileSync(join(planGuard.realPath, 'cleanup-plan.md'), plan, 'utf8');
+    if (guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'plan', 'cleanup-plan.md'], plan) === null) return null;
 
     return { id: sessionId, project };
   } catch {
