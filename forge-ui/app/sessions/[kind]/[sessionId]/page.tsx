@@ -17,6 +17,7 @@ import {
   fetchProjectBrainSessions,
   fetchStagedThemes,
   listDemoSessions,
+  demoBuilderLock,
   type ArchitectSessionSummary,
   type InstructionsSessionSummary,
   type ProjectBrainSession,
@@ -192,6 +193,31 @@ export default function SessionShellPage({
 
   const viewState = useMemo(() => deriveSessionShellViewState(shellResult), [shellResult]);
 
+  // W7-B1 (sessions-kinds-07) — the artifact pane is wired for real on this
+  // page now: `project`/`sessionId` thread through (generation "view →"
+  // links need both), and a DEMO session that is still live gets a working
+  // finalize — the SAME `demoBuilderLock` POST the project-page panel uses,
+  // then a shell+summary refetch so the locked state lands. A failed lock
+  // surfaces its error here (`data-section="finalize-error"`), never a
+  // silently-swallowed click. Terminal (already locked/abandoned) sessions
+  // keep the control disabled — the pane's own honest absent-handler state.
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const canFinalizeDemo = kind === 'demo' && project !== null && viewState.status === 'ready' && !viewState.terminal;
+  const onFinalizeGeneration = canFinalizeDemo
+    ? (generationNumber: number) => {
+        setFinalizeError(null);
+        void demoBuilderLock({ project: project as string, sessionId, generation: generationNumber })
+          .then((r) => {
+            if (!r.ok) setFinalizeError(r.error ?? 'failed to finalize this generation');
+            refreshShell();
+            refreshSummary();
+          })
+          .catch((err) => {
+            setFinalizeError(err instanceof Error ? err.message : String(err));
+          });
+      }
+    : undefined;
+
 
 
   // ---- live events (StageHex burst chips + activity log; architect/instructions) --
@@ -325,7 +351,22 @@ export default function SessionShellPage({
                 />
               ) : null}
             </SessionTranscript>
-            <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />
+            <div>
+              {finalizeError && (
+                <div data-section="finalize-error" style={{ marginBottom: 10, fontSize: 12.5, color: 'var(--red, #f87171)' }}>
+                  {finalizeError}
+                </div>
+              )}
+              {/* W7-B1 (sessions-kinds-07): project/sessionId/finalize
+                  threaded — see the handler above. */}
+              <SessionArtifactPane
+                artifact={viewState.artifact}
+                activeStage={viewState.selectedStage}
+                project={project ?? undefined}
+                sessionId={sessionId}
+                onFinalizeGeneration={onFinalizeGeneration}
+              />
+            </div>
           </div>
         </div>
       ) : viewState.status === 'error' ? (
