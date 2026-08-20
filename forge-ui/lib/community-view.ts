@@ -34,12 +34,29 @@ export function filterByKind(items: readonly CommunityItem[], kind: CommunityKin
   return items.filter((item) => item.kind === kind);
 }
 
-/** Case-insensitive match on name + desc. Empty query returns a NEW array of
- *  every item, unfiltered. */
+/** Case-insensitive match on name + desc + id + hub label + signals
+ *  attribution + upstream URL (W7-B3, community-05: the operator's natural
+ *  query terms — the id shown in the URL, the hub names in the strip, the
+ *  attribution on the card — all used to return zero results). Empty query
+ *  returns a NEW array of every item, unfiltered. */
 export function filterCommunityItems(items: readonly CommunityItem[], query: string): CommunityItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return [...items];
-  return items.filter((item) => item.name.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q));
+  return items.filter((item) =>
+    item.name.toLowerCase().includes(q) ||
+    item.desc.toLowerCase().includes(q) ||
+    item.id.toLowerCase().includes(q) ||
+    hubLabel(item.hub).toLowerCase().includes(q) ||
+    (item.signals !== null && item.signals.attributedTo.toLowerCase().includes(q)) ||
+    item.upstream.toLowerCase().includes(q),
+  );
+}
+
+/** W7-B3 (community-17): hub chips filter the LOCAL index. `null` = no hub
+ *  filter (every item, as a NEW array). Same conventions as filterByKind. */
+export function filterByHub(items: readonly CommunityItem[], hubId: string | null): CommunityItem[] {
+  if (hubId === null) return [...items];
+  return items.filter((item) => item.hub?.id === hubId);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +145,18 @@ export function communityBadgeForSkill(entry: { id: string; source: string }, it
 
 export const COMMUNITY_SORT_KEYS = ['name', 'stars', 'updated', 'source'] as const;
 export type CommunitySortKey = (typeof COMMUNITY_SORT_KEYS)[number];
+
+/** W7-B3 (community-04): the operator-facing label for each sort key. The
+ *  `updated` key sorts on `fetchedAt` — when FORGE last verified the row —
+ *  so its label says exactly that ("Last checked"), never the overloaded
+ *  word "Updated" (upstream change time is a DIFFERENT claim, rendered as
+ *  its own row on the detail page). */
+export const COMMUNITY_SORT_LABELS: Record<CommunitySortKey, string> = {
+  name: 'Name',
+  stars: 'Stars',
+  updated: 'Last checked',
+  source: 'Source',
+};
 
 export const COMMUNITY_SORT_DIRECTIONS = ['asc', 'desc'] as const;
 export type CommunitySortDirection = (typeof COMMUNITY_SORT_DIRECTIONS)[number];
@@ -233,4 +262,17 @@ export function freshnessBadge(fetchedAt: string | null, nowMs: number): Freshne
   const ageMs = Math.max(0, nowMs - thenMs);
   if (ageMs > STALE_AFTER_MS) return { state: 'stale', label: 'stale' };
   return { state: 'fresh', label: relativeAge(ageMs) };
+}
+
+/**
+ * W7-B3 (community-16 / community-03): the registry-LEVEL freshness line —
+ * `meta.lastRefresh` is stamped only by `commitRegistryDraft` (an approved
+ * agent refresh actually landing). `null` — and an unparsable stamp — read
+ * as the honest "never", never a fabricated or NaN age.
+ */
+export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): string {
+  if (lastRefresh === null) return 'never refreshed — every row is still the hand-curated seed';
+  const thenMs = Date.parse(lastRefresh);
+  if (!Number.isFinite(thenMs)) return 'never refreshed — every row is still the hand-curated seed';
+  return `last refreshed ${relativeAge(Math.max(0, nowMs - thenMs))}`;
 }

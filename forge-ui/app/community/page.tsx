@@ -3,16 +3,20 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { StudioPage } from '@/components/StudioPage';
-import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind } from '@/lib/community-client';
+import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind, type CommunityIndexMeta } from '@/lib/community-client';
+import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 import {
   filterByKind,
+  filterByHub,
   filterCommunityItems,
   installStateLabel,
   signalsLabel,
   hubLabel,
   sortCommunityItems,
   freshnessBadge,
+  lastRefreshLabel,
   COMMUNITY_SORT_KEYS,
+  COMMUNITY_SORT_LABELS,
   DEFAULT_COMMUNITY_SORT_KEY,
   DEFAULT_COMMUNITY_SORT_DIRECTION,
   type CommunitySortKey,
@@ -36,13 +40,6 @@ import {
 
 const KIND_FILTERS: Array<CommunityKind | 'all'> = ['all', ...COMMUNITY_KINDS];
 
-const SORT_KEY_LABEL: Record<CommunitySortKey, string> = {
-  name: 'Name',
-  stars: 'Stars',
-  updated: 'Updated',
-  source: 'Source',
-};
-
 const KIND_LABEL: Record<CommunityKind | 'all', string> = {
   all: 'All',
   skill: 'Skills',
@@ -54,13 +51,21 @@ const KIND_LABEL: Record<CommunityKind | 'all', string> = {
 export default function CommunityBrowserPage() {
   const [hubs, setHubs] = useState<CommunityHubWithCount[]>([]);
   const [items, setItems] = useState<CommunityItem[]>([]);
+  const [meta, setMeta] = useState<CommunityIndexMeta | null>(null);
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<CommunityKind | 'all'>('all');
+  // W7-B3 (community-17): hub chips filter the LOCAL index; null = all hubs.
+  const [hubFilter, setHubFilter] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<CommunitySortKey>(DEFAULT_COMMUNITY_SORT_KEY);
   const [sortDir, setSortDir] = useState<CommunitySortDirection>(DEFAULT_COMMUNITY_SORT_DIRECTION);
   const [nowMs] = useState(() => Date.now());
+  // W7-B3 (community-16): the refresh sessions this surface used to lose —
+  // in-flight (non-terminal) + the most recent terminal one, from the SAME
+  // sessions index /sessions reads. Advisory: a failed read keeps [] (the
+  // strip renders nothing false; the index itself carries its own state).
+  const [refreshSessions, setRefreshSessions] = useState<SessionIndexRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,18 +79,28 @@ export default function CommunityBrowserPage() {
       }
       setHubs(r.hubs);
       setItems(r.items);
+      setMeta(r.meta);
       setStatus('ready');
       setError(null);
     }
     void load();
+    fetchStudioSessions()
+      .then((rows) => {
+        if (!cancelled) setRefreshSessions(rows.filter((row) => row.kind === 'community-refresh'));
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
   const byKind = filterByKind(items, kind);
-  const searched = filterCommunityItems(byKind, query);
+  const byHub = filterByHub(byKind, hubFilter);
+  const searched = filterCommunityItems(byHub, query);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
+  const inFlightRefresh = refreshSessions.filter((row) => !row.terminal);
+  const lastTerminalRefresh =
+    refreshSessions.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
 
   return (
     <StudioPage
@@ -94,9 +109,11 @@ export default function CommunityBrowserPage() {
       data={{
         'data-item-count': filtered.length,
         'data-kind-filter': kind,
+        'data-hub-filter': hubFilter ?? 'all',
         'data-hub-count': hubs.length,
         'data-sort-key': sortKey,
         'data-sort-dir': sortDir,
+        ...(meta ? { 'data-registry-dirty': String(meta.registryDirty), 'data-last-refresh': meta.lastRefresh ?? 'never' } : {}),
       }}
       title="Community"
       lede={
@@ -119,23 +136,87 @@ export default function CommunityBrowserPage() {
     >
 
         {status === 'ready' && (
-          <div data-component="hub-strip" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-            {hubs.map((hub) => (
-              <a
-                key={hub.id}
-                href={hub.url}
-                target="_blank"
-                rel="noreferrer"
-                data-hub-id={hub.id}
-                data-hub-kinds={hub.kinds}
-                data-hub-item-count={hub.itemCount}
-                className="badge"
-                style={{ textDecoration: 'none' }}
-                title={hub.kinds}
+          <section
+            data-section="refresh-registry-state"
+            data-in-flight-count={inFlightRefresh.length}
+            style={{
+              display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 14,
+              fontSize: 12.5, color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 12px',
+            }}
+          >
+            <span data-component="registry-last-refresh">Registry {lastRefreshLabel(meta?.lastRefresh ?? null, nowMs)}.</span>
+            {meta?.registryDirty === true && (
+              <span data-component="registry-dirty" style={{ color: 'var(--ember)' }}>
+                Uncommitted changes — <code style={{ fontSize: 11.5 }}>studio/community/registry.yaml</code> has been
+                written by Studio but not yet committed; commit it via your normal git flow.
+              </span>
+            )}
+            {inFlightRefresh.map((row) => (
+              <Link
+                key={row.sessionId}
+                href={row.href}
+                data-action="open-refresh-session"
+                data-session-state={row.state}
+                style={{ color: 'var(--ember)', textDecoration: 'none' }}
               >
-                {hub.name} <span style={{ color: 'var(--faint)' }}>· {hub.itemCount}</span>
-              </a>
+                Refresh in flight ({row.state}) — {row.sessionId} →
+              </Link>
             ))}
+            {inFlightRefresh.length === 0 && lastTerminalRefresh && (
+              <Link
+                href={lastTerminalRefresh.href}
+                data-action="open-last-refresh-session"
+                style={{ color: 'var(--dim)', textDecoration: 'underline' }}
+              >
+                Last refresh session: {lastTerminalRefresh.sessionId} ({lastTerminalRefresh.phase}) →
+              </Link>
+            )}
+          </section>
+        )}
+
+        {status === 'ready' && (
+          <div data-component="hub-strip" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+            {hubs.map((hub) => {
+              const declaredOnly = hub.itemCount === 0;
+              const active = hubFilter === hub.id;
+              return (
+                <span key={hub.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    type="button"
+                    data-action="filter-hub"
+                    data-hub-id={hub.id}
+                    data-hub-kinds={hub.kinds}
+                    data-hub-item-count={hub.itemCount}
+                    data-hub-declared-only={declaredOnly ? 'true' : 'false'}
+                    className="badge"
+                    onClick={() => setHubFilter((prev) => (prev === hub.id ? null : hub.id))}
+                    style={{
+                      cursor: 'pointer', border: active ? '1px solid var(--ember, #FF9E4A)' : undefined,
+                      opacity: declaredOnly ? 0.65 : 1,
+                    }}
+                    title={
+                      declaredOnly
+                        ? `${hub.name} is a declared source — nothing from it is indexed yet (a targeted refresh can propose items from it)`
+                        : `Filter the index to ${hub.name}'s items (${hub.kinds})`
+                    }
+                  >
+                    {hub.name}{' '}
+                    <span style={{ color: 'var(--faint)' }}>{declaredOnly ? '· declared — nothing indexed' : `· ${hub.itemCount}`}</span>
+                  </button>
+                  <a
+                    href={hub.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-action="open-hub-site"
+                    data-hub-id={hub.id}
+                    title={`Open ${hub.name} in a new tab`}
+                    style={{ color: 'var(--faint)', textDecoration: 'none', fontSize: 11 }}
+                  >
+                    ⧉
+                  </a>
+                </span>
+              );
+            })}
           </div>
         )}
 
@@ -143,7 +224,7 @@ export default function CommunityBrowserPage() {
           <input
             type="text"
             data-field="community-search"
-            placeholder="Search the community index by name or description…"
+            placeholder="Search by name, id, description, hub or provenance…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
@@ -176,7 +257,7 @@ export default function CommunityBrowserPage() {
           >
             {COMMUNITY_SORT_KEYS.map((k) => (
               <option key={k} value={k}>
-                Sort: {SORT_KEY_LABEL[k]}
+                Sort: {COMMUNITY_SORT_LABELS[k]}
               </option>
             ))}
           </select>
@@ -208,7 +289,7 @@ export default function CommunityBrowserPage() {
 
         {status === 'ready' && filtered.length === 0 && (
           <div style={{ color: 'var(--faint)', fontSize: 13, fontStyle: 'italic', padding: '24px 0' }}>
-            {query || kind !== 'all' ? 'Nothing matches this filter.' : 'The community index is empty.'}
+            {query || kind !== 'all' || hubFilter !== null ? 'Nothing matches this filter.' : 'The community index is empty.'}
           </div>
         )}
 

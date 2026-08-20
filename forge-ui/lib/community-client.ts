@@ -381,6 +381,34 @@ function errorFrom(data: unknown, fallback: string): string {
   return isPlainObject(data) && typeof data['error'] === 'string' ? data['error'] : fallback;
 }
 
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03) — registry-level meta on the index
+// payload. Same refuse-don't-coerce discipline as every parser above: a
+// malformed meta THROWS (the caller maps it to ok:false), never a silently
+// defaulted shape.
+// ---------------------------------------------------------------------------
+
+export type CommunityIndexMeta = {
+  /** commitRegistryDraft's stamp — null = no agent refresh ever committed. */
+  lastRefresh: string | null;
+  /** Uncommitted changes on the repo-tracked registry file; null = git did
+   *  not answer (not a repo) — an unknown, never a fabricated "clean". */
+  registryDirty: boolean | null;
+};
+
+export function parseCommunityIndexMeta(raw: unknown): CommunityIndexMeta {
+  if (!isPlainObject(raw)) throw new Error('community index meta: not an object');
+  const lastRefresh = raw['lastRefresh'];
+  if (lastRefresh !== null && typeof lastRefresh !== 'string') {
+    throw new Error('community index meta: lastRefresh must be a string or null');
+  }
+  const registryDirty = raw['registryDirty'];
+  if (registryDirty !== null && typeof registryDirty !== 'boolean') {
+    throw new Error('community index meta: registryDirty must be a boolean or null');
+  }
+  return { lastRefresh, registryDirty };
+}
+
 /** Fetch the community index: every real hub (with a DERIVED itemCount) plus
  *  the cross-kind item list. Distinguishes a reachable-but-empty index from
  *  an unreachable bridge or a malformed payload (`ok: false` for both) —
@@ -389,28 +417,30 @@ export async function fetchCommunityIndex(): Promise<{
   ok: boolean;
   hubs: CommunityHubWithCount[];
   items: CommunityItem[];
+  meta: CommunityIndexMeta | null;
   error?: string;
 }> {
   let res: Response;
   try {
     res = await bridgeFetch(`/api/studio/community`);
   } catch (err) {
-    return { ok: false, hubs: [], items: [], error: `bridge unreachable: ${String(err)}` };
+    return { ok: false, hubs: [], items: [], meta: null, error: `bridge unreachable: ${String(err)}` };
   }
 
   try {
     const data = await res.json().catch(() => undefined);
-    if (!res.ok) return { ok: false, hubs: [], items: [], error: errorFrom(data, `HTTP ${res.status}`) };
+    if (!res.ok) return { ok: false, hubs: [], items: [], meta: null, error: errorFrom(data, `HTTP ${res.status}`) };
     if (!isPlainObject(data) || !Array.isArray(data['hubs']) || !Array.isArray(data['items'])) {
-      return { ok: false, hubs: [], items: [], error: 'malformed bridge response: "hubs"/"items" missing or not arrays' };
+      return { ok: false, hubs: [], items: [], meta: null, error: 'malformed bridge response: "hubs"/"items" missing or not arrays' };
     }
     return {
       ok: true,
       hubs: (data['hubs'] as unknown[]).map(parseCommunityHubWithCount),
       items: (data['items'] as unknown[]).map(parseCommunityItem),
+      meta: parseCommunityIndexMeta(data['meta']),
     };
   } catch (err) {
-    return { ok: false, hubs: [], items: [], error: `malformed bridge response: ${String(err)}` };
+    return { ok: false, hubs: [], items: [], meta: null, error: `malformed bridge response: ${String(err)}` };
   }
 }
 

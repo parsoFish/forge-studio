@@ -44,12 +44,16 @@ import { test, expect } from 'vitest';
 import {
   filterByKind,
   filterCommunityItems,
+  filterByHub,
   installStateLabel,
   signalsLabel,
   hubLabel,
   communityBadgeForSkill,
   sortCommunityItems,
   freshnessBadge,
+  lastRefreshLabel,
+  COMMUNITY_SORT_KEYS,
+  COMMUNITY_SORT_LABELS,
 } from './community-view.ts';
 import type { CommunityItem, CommunityHub } from './community-client.ts';
 
@@ -422,4 +426,94 @@ test('freshnessBadge: a fetchedAt in the future (clock skew) never renders a neg
 test('freshnessBadge: is wall-clock independent — the SAME fetchedAt + nowMs pair always produces the SAME badge (D7)', () => {
   const fetchedAt = '2026-08-10T00:00:00.000Z';
   expect(freshnessBadge(fetchedAt, NOW)).toEqual(freshnessBadge(fetchedAt, NOW));
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-05): search matches id + hub label + provenance/
+// attributedTo + upstream — not just name/desc. The operator's natural query
+// terms (the id in the URL, the hub names in the strip, the attribution on
+// the card) all resolved to zero results.
+// ---------------------------------------------------------------------------
+
+test('filterCommunityItems: matches on id ("tdd" finds superpowers-tdd whose display name never says tdd)', () => {
+  const items = [item({ id: 'superpowers-tdd', name: 'Test-Driven Development' }), item({ id: 'other', name: 'Other' })];
+  expect(filterCommunityItems(items, 'TDD').map((i) => i.id)).toEqual(['superpowers-tdd']);
+});
+
+test('filterCommunityItems: matches on the hub label shown in the strip', () => {
+  const items = [
+    item({ id: 'a', hub: { id: 'superpowers', name: 'Superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' } }),
+    item({ id: 'b', hub: null }),
+  ];
+  expect(filterCommunityItems(items, 'superpowers').map((i) => i.id)).toEqual(['a']);
+});
+
+test('filterCommunityItems: matches on the signals attribution (provenance shown on the card)', () => {
+  const items = [
+    item({ id: 'a', signals: { stars: 1, attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 1 } }),
+    item({ id: 'b' }),
+  ];
+  expect(filterCommunityItems(items, 'obra').map((i) => i.id)).toEqual(['a']);
+});
+
+test('filterCommunityItems: matches on the upstream URL host', () => {
+  const items = [item({ id: 'a', upstream: 'https://github.com/anthropics/skills' }), item({ id: 'b' })];
+  expect(filterCommunityItems(items, 'anthropics').map((i) => i.id)).toEqual(['a']);
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-04): the sort control's label for the fetchedAt sort is
+// "Last checked" — the fact it actually sorts on (when FORGE last verified
+// the row), never the overloaded word "Updated" (which reads as upstream
+// change time, a DIFFERENT claim rendered separately on the detail page).
+// ---------------------------------------------------------------------------
+
+test('COMMUNITY_SORT_LABELS names the fetchedAt sort "Last checked", never "Updated"', () => {
+  expect(COMMUNITY_SORT_LABELS.updated).toBe('Last checked');
+  for (const key of COMMUNITY_SORT_KEYS) {
+    expect(typeof COMMUNITY_SORT_LABELS[key]).toBe('string');
+    expect(COMMUNITY_SORT_LABELS[key].length).toBeGreaterThan(0);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-17): hub chips are FILTERS on the local index — pure
+// predicate here; the chip's outbound URL stays a secondary affordance.
+// ---------------------------------------------------------------------------
+
+test('filterByHub(null) passes every item through as a NEW array', () => {
+  const items = [item({ id: 'a' }), item({ id: 'b' })];
+  const result = filterByHub(items, null);
+  expect(result).toEqual(items);
+  expect(result).not.toBe(items);
+});
+
+test('filterByHub keeps only items whose hub id matches', () => {
+  const hub = { id: 'superpowers', name: 'Superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' };
+  const items = [item({ id: 'a', hub }), item({ id: 'b', hub: null })];
+  expect(filterByHub(items, 'superpowers').map((i) => i.id)).toEqual(['a']);
+  expect(filterByHub(items, 'nothing-indexed-hub')).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16/community-03): the registry-level freshness line —
+// meta.lastRefresh is the agent-commit stamp; null is the honest "no refresh
+// has ever been committed", never a fabricated date.
+// ---------------------------------------------------------------------------
+
+test('lastRefreshLabel: null reads as never-refreshed, with no date in it', () => {
+  const label = lastRefreshLabel(null, NOW);
+  expect(label.toLowerCase()).toContain('never');
+  expect(label).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+});
+
+test('lastRefreshLabel: a real lastRefresh renders a relative age', () => {
+  const twoHoursAgo = new Date(NOW - 2 * 60 * 60 * 1000).toISOString();
+  expect(lastRefreshLabel(twoHoursAgo, NOW)).toMatch(/2h ago/);
+});
+
+test('lastRefreshLabel: an unparsable stamp degrades to the never-refreshed wording, not NaN', () => {
+  const label = lastRefreshLabel('not-a-date', NOW);
+  expect(label).not.toMatch(/NaN/);
+  expect(label.toLowerCase()).toContain('never');
 });

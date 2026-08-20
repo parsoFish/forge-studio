@@ -59,7 +59,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
@@ -84,7 +84,7 @@ import type { HookPermissionManifest } from '../orchestrator/studio/hook-library
 import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
-import { communitySkillsFromRegistry } from '../orchestrator/studio/registry.ts';
+import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../orchestrator/studio/registry.ts';
 import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
 import type { CommunitySkill } from '../orchestrator/studio/types.ts';
 
@@ -157,6 +157,38 @@ function buildWireCtx(forgeRoot: string): WireCtx {
   const communitySkills = communitySkillsFromRegistry(forgeRoot);
   const connections = catalogExists ? listConnections(forgeRoot) : [];
   return { communitySkills, connections };
+}
+
+/**
+ * W7-B3 (community-16 / community-03) — the registry-level `meta` block on
+ * the list payload:
+ *   - `lastRefresh`: the commitRegistryDraft stamp, straight from
+ *     studio/community/registry.yaml's own `meta.lastRefresh` — never
+ *     re-derived from item rows. A missing registry file is the honest
+ *     fresh-root `null`.
+ *   - `registryDirty`: whether the repo-tracked registry file carries
+ *     uncommitted changes (Studio writes it on approve; the operator commits
+ *     via their normal git flow — the page must say when that commit is
+ *     still pending). THREE-state: true/false only when git itself answered;
+ *     `null` when the forge root is not a git repo or git is unavailable —
+ *     an unknown must never render as a fabricated "clean".
+ * Fixed argv, fixed path — nothing request-derived reaches the child.
+ */
+function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; registryDirty: boolean | null } {
+  const registryPath = communityRegistryPath(forgeRoot);
+  const lastRefresh = existsSync(registryPath) ? loadCommunityRegistry(registryPath).lastRefresh : null;
+  let registryDirty: boolean | null = null;
+  try {
+    const out = execFileSync('git', ['status', '--porcelain', '--', 'studio/community/registry.yaml'], {
+      cwd: forgeRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    registryDirty = out.trim().length > 0;
+  } catch {
+    registryDirty = null;
+  }
+  return { lastRefresh, registryDirty };
 }
 
 function originFor(item: CommunityItem): string {
@@ -514,7 +546,7 @@ export async function handleStudioCommunityRoutes(
       const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
       const wctx = buildWireCtx(ctx.forgeRoot);
       const items = rawItems.map((item) => toWireItemSafe(item, wctx));
-      sendJson(res, 200, { hubs, items }, origin);
+      sendJson(res, 200, { hubs, items, meta: communityIndexMeta(ctx.forgeRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -253,6 +253,14 @@ function HubSignalsSection({ item }: { item: CommunityItemDetail }) {
         </dd>
         <dt>signals</dt>
         <dd>{signalsLabel(item.signals)}</dd>
+        {/* W7-B3 (community-04): the two DIFFERENT "updated" claims, each
+            named for what it is — the upstream project's own last change vs
+            when forge last verified this row. Parsed over the wire since
+            W6-CR-2 but never rendered anywhere. */}
+        <dt>upstream updated</dt>
+        <dd data-field="upstream-updated">{item.upstreamUpdatedAt ?? 'not recorded'}</dd>
+        <dt>last checked by forge</dt>
+        <dd data-field="last-checked">{item.fetchedAt ?? 'never — hand-curated seed row'}</dd>
         <dt>origin</dt>
         <dd>{item.origin}</dd>
         <dt>upstream</dt>

@@ -23,7 +23,7 @@
  * response, never silently treated the same as an explicit null.
  */
 import { test, expect } from 'vitest';
-import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem } from './community-client.ts';
+import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem, parseCommunityIndexMeta } from './community-client.ts';
 
 const WELL_FORMED_HUB = { id: 'mcp-servers', name: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', kinds: 'MCPs' };
 
@@ -195,4 +195,26 @@ test('parseCommunityItem: throws when "vendored" is not a boolean', () => {
 test('parseCommunityItem: a hub object with a missing field inside it throws (the nested parser is reused, not re-implemented)', () => {
   const item = { ...WELL_FORMED_SKILL_ITEM, hub: { id: 'x', name: 'X' /* missing url, kinds */ } };
   expect(() => parseCommunityItem(item)).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03): the registry-level meta block —
+// refuse-don't-coerce like every other parser here.
+// ---------------------------------------------------------------------------
+
+test('parseCommunityIndexMeta: both nulls round-trip (fresh root / non-git root)', () => {
+  expect(parseCommunityIndexMeta({ lastRefresh: null, registryDirty: null })).toEqual({ lastRefresh: null, registryDirty: null });
+});
+
+test('parseCommunityIndexMeta: real values round-trip', () => {
+  expect(parseCommunityIndexMeta({ lastRefresh: '2026-08-19T10:00:00.000Z', registryDirty: true })).toEqual({
+    lastRefresh: '2026-08-19T10:00:00.000Z',
+    registryDirty: true,
+  });
+});
+
+test('parseCommunityIndexMeta: throws on a missing meta object or coerced-looking shapes', () => {
+  expect(() => parseCommunityIndexMeta(undefined)).toThrow();
+  expect(() => parseCommunityIndexMeta({ lastRefresh: 12345, registryDirty: null })).toThrow();
+  expect(() => parseCommunityIndexMeta({ lastRefresh: null, registryDirty: 'clean' })).toThrow();
 });

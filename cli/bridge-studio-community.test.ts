@@ -88,6 +88,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -752,4 +753,65 @@ test('M3: handleStudioCommunityRoutes is MOUNTED in the real cli/ui-bridge.ts di
   const body = (await res.json()) as { id: string; kind: string };
   assert.equal(body.id, 'm3-mount-proof-tool');
   assert.equal(body.kind, 'tool');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03): the list route carries registry-level
+// `meta` — `lastRefresh` (the commitRegistryDraft stamp, straight from
+// studio/community/registry.yaml's own meta block, never re-derived) and
+// `registryDirty` (whether the repo-tracked registry file has uncommitted
+// changes — Studio writes it on approve; the operator commits via their
+// normal git flow, and the page must SAY when that commit is still pending).
+// `registryDirty` is honest three-state: true/false only when git actually
+// answered; null when the forge root is not a git repo (never a fabricated
+// "clean").
+// ---------------------------------------------------------------------------
+
+test('W7-B3 meta: GET /api/studio/community carries meta.lastRefresh from the registry and registryDirty=null outside a git repo', async () => {
+  writeCatalog({});
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'registry.yaml'),
+    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T10:00:00.000Z' }, items: [] }),
+    'utf8',
+  );
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { meta?: { lastRefresh: string | null; registryDirty: boolean | null } };
+  assert.ok(body.meta, 'the list payload must carry a meta block');
+  assert.equal(body.meta!.lastRefresh, '2026-08-19T10:00:00.000Z');
+  assert.equal(body.meta!.registryDirty, null, 'a non-git forge root must answer null (unknown), never a fabricated clean/dirty');
+});
+
+test('W7-B3 meta: registryDirty is false after a commit and true once the file is modified', async () => {
+  writeCatalog({});
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: forgeRoot, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' } });
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  git('add', '--', 'studio/community/registry.yaml');
+  git('commit', '-q', '-m', 'seed registry');
+
+  const clean = (await (await fetch(`${bridgeUrl}/api/studio/community`)).json()) as { meta: { registryDirty: boolean | null } };
+  assert.equal(clean.meta.registryDirty, false, 'a committed, unmodified registry must read clean');
+
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'registry.yaml'),
+    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T11:00:00.000Z' }, items: [] }),
+    'utf8',
+  );
+  const dirty = (await (await fetch(`${bridgeUrl}/api/studio/community`)).json()) as { meta: { registryDirty: boolean | null } };
+  assert.equal(dirty.meta.registryDirty, true, 'an uncommitted modification must surface as dirty');
+
+  // Leave no git repo behind for the tests that assume a bare tempdir.
+  rmSync(join(forgeRoot, '.git'), { recursive: true, force: true });
+});
+
+test('W7-B3 meta: a missing registry file degrades to lastRefresh:null (fresh-root shape), never a 500', async () => {
+  writeCatalog({});
+  rmSync(join(forgeRoot, 'studio', 'community', 'registry.yaml'), { force: true });
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { meta: { lastRefresh: string | null } };
+  assert.equal(body.meta.lastRefresh, null);
 });
