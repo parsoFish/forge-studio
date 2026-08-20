@@ -97,12 +97,28 @@ export const journey = defineJourney({
     {
       id: 'demo-showcase-render',
       title: 'The seeded demo renders — stats + evidence, not the empty state',
-      narration: 'The showcase is derived, not authored a second time: the stats strip\'s real counts (tests, AC met/partial/missed) come off the SAME DemoModel the evidence gallery below it renders — the reused <DemoComparison>, unchanged from the per-run /artifact view. No separate showcase-only schema to drift out of sync.',
+      narration: 'The showcase is derived, not authored a second time: the stats strip\'s real counts (tests, AC met/partial/missed) come off the SAME DemoModel the evidence gallery below it renders — the reused <DemoComparison>, unchanged from the per-run /artifact view. No separate showcase-only schema to drift out of sync. And it is no longer a dead end (W7-B6): a cycle switcher over every eligible cycle plus links into the source cycle — its run page and its demo artifact — sit right above the stats.',
       drive: async (ctx) => {
         const { page, check, frame } = ctx;
         console.log('\n[R4-14] demo showcase — render');
 
         check(await page.locator('[data-section="showcase-empty"]').count() === 0, 'demo-showcase-render: NOT the honest-empty state — a real demo is seeded');
+
+        // W7-B6 (projects-21): the loop-closing nav — a real cycle picker +
+        // run/artifact links carrying the CYCLE id.
+        const nav = await page.evaluate(() => {
+          const root = document.querySelector('[data-section="showcase-cycle-nav"]');
+          if (!root) return null;
+          return {
+            count: Number(root.getAttribute('data-eligible-count') ?? '0'),
+            hasPicker: root.querySelector('[data-field="showcase-cycle"]') !== null,
+            runHref: root.querySelector('[data-action="showcase-open-run"]')?.getAttribute('href') ?? null,
+            artifactHref: root.querySelector('[data-action="showcase-open-artifact"]')?.getAttribute('href') ?? null,
+          };
+        });
+        check(nav !== null && nav.hasPicker && nav.count >= 1, `W7-B6 (projects-21): the showcase renders a cycle picker over its eligible cycles (got ${JSON.stringify(nav)})`);
+        check(nav !== null && typeof nav.runHref === 'string' && nav.runHref.includes('/flows/forge-develop/run/'), `W7-B6: the run link carries the cycle as a run handle (got "${nav?.runHref}")`);
+        check(nav !== null && typeof nav.artifactHref === 'string' && nav.artifactHref.includes('/artifact?run=') && nav.artifactHref.includes('type=demo'), `W7-B6: the demo-artifact link targets the source cycle's evidence view (got "${nav?.artifactHref}")`);
 
         const statsPresent = await page.locator('[data-section="showcase-stats"]').count() > 0;
         check(statsPresent, 'demo-showcase-render: [data-section="showcase-stats"] renders');
@@ -195,6 +211,10 @@ export const journey = defineJourney({
           });
           const testsTile = tiles.find((t) => t.label === 'Tests');
           check(testsTile?.value === '2', `demo-showcase-refresh: the stats strip's Tests count flips to the newer cycle's own real testEvidence count (got "${testsTile?.value}")`);
+
+          // W7-B6 (projects-21): with TWO merged cycles the picker offers both.
+          const eligibleCount = await page.locator('[data-section="showcase-cycle-nav"]').getAttribute('data-eligible-count').catch(() => null);
+          check(eligibleCount === '2', `W7-B6: the cycle picker lists BOTH eligible cycles (data-eligible-count, got "${eligibleCount}")`);
 
           await caption(page, 'A second merged cycle landed — same project, same page, zero code changes — and the showcase already shows its evidence.');
           await frame(page, 'showcase-4-refresh', 'R4-14 — the showcase re-derives to the newest merged cycle, no code change needed', { key: true });

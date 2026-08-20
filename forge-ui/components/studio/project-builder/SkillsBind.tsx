@@ -103,11 +103,16 @@ export function SkillsBind({
                         <span key={sid} className="chip" data-kind="skill">
                           <span className="dot" />
                           {item?.name ?? sid}
-                          <span
+                          {/* W7-B6 (projects-07): a REAL button — keyboard-
+                              reachable, announced ("Remove skill X") — not a
+                              click-only bare span. */}
+                          <button
+                            type="button"
                             className="x"
+                            aria-label={`Remove skill ${item?.name ?? sid}`}
                             onClick={() => removeSkill(sid)}
-                            style={{ cursor: 'pointer' }}
-                          >×</span>
+                            style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', font: 'inherit', padding: 0 }}
+                          >×</button>
                         </span>
                       );
                     })

@@ -1088,7 +1088,20 @@ export async function handleStudioRoutes(
         // gets smoothed into a 200 ("declared data fails open" is the shape
         // this campaign keeps finding and closing).
         const status = /^unknown project /.test(result.error.message) ? 404 : 409;
-        sendJson(res, status, { ok: false, error: result.error.message }, origin);
+        // W7-B6 (projects-01 / crosscut-12): when the 409 is the R1-03
+        // MIGRATE shape ("the flat gate keys moved to the typed testProcess
+        // object"), the message names the mechanical remedy — `forge project
+        // migrate <id>` applies the exact mapping the validator's text
+        // describes. Review F6: the CONFLICT shape ("conflicting flat gate
+        // key(s) alongside testProcess") must NOT get the hint — migrate
+        // REFUSES that shape ('conflict': which source wins is a human
+        // decision), so the old broad /flat gate key/ match pointed the
+        // operator at a command that would decline to act.
+        const error =
+          status === 409 && /flat gate keys moved to the typed testProcess object/.test(result.error.message)
+            ? `${result.error.message} Run \`forge project migrate ${id}\` to apply this migration automatically.`
+            : result.error.message;
+        sendJson(res, status, { ok: false, error }, origin);
         return true;
       }
       sendJson(res, 200, { ok: true, project: id, stages: result.rows, sourcesScanned: result.sourcesScanned }, origin);

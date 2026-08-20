@@ -1696,6 +1696,45 @@ inventory rather than one shared page-level contract:
   link to `/projects` (W6-SW-3 sweep C2#3; consolidated onto the shared
   contract by W7-A4). `/projects/new` (the onboarding form) fires NO
   per-project fetch (W7-A4, projects-04).
+  **W7-B6 (operator note 11 / orch-02, projects-18/-19/-20, 2026-08-21):**
+  the PRIMARY action group `[data-section="start-work"]` renders directly
+  under the tab bar on BOTH tabs (within the first viewport at 1440×1000 —
+  the `roadmap` journey asserts the geometry) with four REAL actions:
+  `[data-action="start-work-plan"]` (planInitiative on the first
+  unplanned-ready initiative), `[data-action="start-work-develop"]`
+  (startDevelopment for every planned+ready one),
+  `[data-action="start-work-run-flow"]` (a two-select picker —
+  `[data-field="start-work-flow"]` + `[data-field="start-work-initiative"]`
+  — posting `POST /api/flows/:id/run`; success links the run via
+  `[data-action="start-work-open-run"]`), and
+  `[data-action="start-work-architect"]` (a link carrying the project ID).
+  Disabled actions carry `data-disabled-reason` + a visible hint
+  (crosscut-25); outcomes land on `[data-start-work-outcome="ok"|"error"]`.
+  Ids whose develop dispatch already came back ok THIS SESSION are excluded
+  from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
+  review F7 — the queue keeps them `pending` until the scheduler claims, so
+  a refetched roadmap would otherwise re-arm the button with the same ids;
+  all-dispatched reads "development already enqueued" as the reason).
+  The old bottom-of-page `[data-section="run-a-flow"]` select (whose chosen
+  flow rode a `?flow=` nothing read) is REMOVED. The Roadmap tab additionally
+  renders `[data-section="roadmap-actionable"][data-actionable-count]` — the
+  "what needs me now" list beside the canvas: one
+  `[data-actionable-row="plan"|"start"|"failed"][data-initiative-id]` per
+  actionable initiative with `[data-action="actionable-plan"|
+  "actionable-start"|"actionable-view-run"]` (the failed row's run link
+  carries the CYCLE id). The editor aside gains
+  `[data-section="project-open-sessions"][data-open-session-count]` — this
+  project's non-terminal sessions with `[data-action="resume-open-session"]`
+  links (projects-19) — and the Instructions panel offers
+  `[data-action="resume-instructions"]` as the primary when one is already
+  open (the plain `[data-action="launch-instructions"]` becomes the explicit
+  "start another"). Unsaved edits are guarded (projects-05): a `beforeunload`
+  prompt while `data-dirty="true"` plus a confirm on the header project
+  switcher; a successful save also refreshes the page's own roster
+  (projects-26). The onboarding-agent launcher stays disabled while its run
+  is live (`onboardLaunchState`, projects-25). The completed-at badge on a
+  roadmap card is `[data-badge="completed-at"][data-badge-status]` — status
+  colour, `✕` for failed (projects-33).
   Roadmap renders `RoadmapCanvas.tsx` (**W6-RV-2**, replacing `RoadmapDag.tsx`
   — R4-13's dependency-depth **column** layout, itself the replacement for
   the retired `SerpentineTimeline` time-ordered spine): a **completion-time
@@ -1927,8 +1966,14 @@ inventory rather than one shared page-level contract:
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]`
   whose `href` carries the FULL `cycleId` AS-IS to
   `/flows/forge-develop/run/<cycleId>` (the shared flow run-detail surface —
-  a completed `cycleId` resolves there as a `runId`); `data-ledger-cost-usd`
-  is omitted (a `Cycle` carries no cost). An empty ledger honestly renders
+  a completed `cycleId` resolves there as a `runId`). **W7-B6
+  (projects-27):** `data-run-when` falls back to the timestamp the `cycleId`
+  ITSELF embeds (`cycleIdEmbeddedIso`) when the payload carries no
+  `startedAt` (it never does today), and `data-ledger-cost-usd` carries the
+  per-cycle total from `GET /api/cost/<cycleId>` (fetched by the page,
+  `costByCycleId`); a cycle whose cost read failed/404'd — or whose rotated
+  log yields an empty summary — stays the honest em dash, never `$0.00`. An
+  empty ledger honestly renders
   `[data-component="history-ledger-empty"]`, never a fabricated row.
 - **`/projects/[id]/showcase` — the demo showcase (R4-14, 2026-08-10).** A
   per-project **standing** demo page — "show someone the project" — distinct
@@ -1976,6 +2021,20 @@ inventory rather than one shared page-level contract:
   (`demo-showcase-refresh` beat — ported from the mockup's
   `run-agent-demo-runner` story's own closing claim, "the showcase never goes
   stale — merges refresh it automatically"; see `scripts/journeys/story-registry.mjs`).
+  **W7-B6 (projects-21/-22, 2026-08-21) — no longer a dead end:**
+  `[data-section="showcase-cycle-nav"][data-eligible-count]` renders above
+  the stats with `[data-field="showcase-cycle"]` — a picker over EVERY
+  eligible cycle (`listShowcaseCycleIds`, newest first; `loadShowcase`
+  honours a picked id only when it is genuinely eligible) — plus
+  `[data-action="showcase-open-run"]` (`/flows/forge-develop/run/<cycleId>`)
+  and `[data-action="showcase-open-artifact"]`
+  (`/artifact?run=<cycleId>&type=demo`); the PR link stays a stats-strip
+  tile when the model carries one. The `no-demo` empty state offers
+  `[data-action="showcase-capture-demo"]` (the demo-builder kickoff for this
+  project). The TESTS tile (`[data-tile="tests"]`) renders ONLY when the
+  model genuinely carries a `testEvidence` block —
+  `deriveShowcaseStats.testEvidenceCount` is `null` for an absent block
+  ("not captured" ≠ "zero tests").
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it
@@ -2151,7 +2210,40 @@ inventory rather than one shared page-level contract:
   the retired `/dashboard` launcher —
   `[data-page="architect-new"][data-page-ready]` wrapping
   `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
-  `/sessions/architect/<sid>`.
+  `/sessions/architect/<sid>`. **W7-B6 (projects-14/-15, sessions-kinds-03/
+  -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
+  architect kickoff form, rendered by BOTH `/architect/new` and
+  `/sessions/architect/new` (the two entries converge — no more bounce link).
+  Contract: `[data-section="new-idea"][data-new-idea-ready]
+  [data-roster-state="loading"|"ok"|"error"]`; the project field
+  (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
+  `name (id)`) — an unknown `?project=` prefill surfaces
+  `[data-unknown-project="<id>"]` and is never submitted
+  (`reconcileProjectPrefill`, `lib/kickoff-form.ts` — the ONE rule, shared
+  with the generic `/sessions/[kind]/new` select since the W7-B6 review
+  round); the SKILL-declared
+  model-tier envelope renders via the shared `KickoffModelTierPicker`
+  (architect is `strategy:fixed` today, so it states the tier that will
+  run); `[data-field="cost-ceiling-usd"]` rides to
+  `POST /api/architect/start` as `costCeilingUsd` (validated client-side by
+  `kickoffCeilingInvalidReason` — `lib/kickoff-form.ts`, a parity-tested
+  mirror of `MAX_KICKOFF_COST_CEILING_USD` so an over-cap value disables
+  Start with the reason instead of round-tripping a 400 (review F8) — and
+  server-side like the agent
+  dispatch route's; persisted into the session status; ENFORCED by
+  `runArchitectTurn` at every turn start — a turn that would start at/past
+  the ceiling refuses with the reason in the session's error surface); a
+  disabled Start explains itself (`data-disabled-reason` +
+  `[data-section="start-architect-hint"]`). Server side, every
+  project-taking session `/start` route (architect / instructions /
+  project-brain / demo-builder) 404s an unknown project
+  (`unknownProjectReason` vs `discoverProjects`) BEFORE any write — and,
+  since the W7-B6 review round (F1), refuses any string that fails
+  `PROJECT_ID_RE` outright (the creation-mode containment guards tolerate
+  spaces/dots/leading `_`/`.`/`-`, so "my project" or ".hidden" used to slip
+  past the roster check) — a typo
+  can no longer mint a phantom `projects/<typo>/` (sessions-kinds-02,
+  projects-15).
   **R4-19-F2, retired W6-B8** — the kb-cleanup kind. Its bespoke
   `SessionCleanupPanel` (a status block + one explicit approve act, gated on
   phase AND a resolvable `kbId`) is DELETED — `kb-cleanup` now renders the
@@ -2505,9 +2597,15 @@ inventory rather than one shared page-level contract:
   produces) and a way back out (`a[data-action="kickoff-back"]
   href="/sessions"`), with the agent slug + `SKILL.md` path + session
   directory demoted to one `[data-kickoff-provenance]` line — demoted, not
-  deleted. Then a project select (`[data-field="kickoff-project"]`,
-  datalist-backed, mirroring `NewIdeaBox`/`AuthoringLauncher`'s own
-  convention), or, for `kb-cleanup` only, a KB select
+  deleted. Then a project select (`[data-field="kickoff-project"]` — a
+  REAL `<select>` over roster ids since W7-B6, sessions-kinds-02; the old
+  datalist accepted any typo and minted phantom project dirs; a `?project=`
+  prefill is reconciled against the loaded roster (`reconcileProjectPrefill`,
+  `lib/kickoff-form.ts`, W7-B6 review F2 — shared with `NewIdeaBox`): a miss
+  surfaces `[data-unknown-project="<value>"]` and never rides a submit; a
+  disabled Start explains itself via `data-disabled-reason` +
+  `[data-section="start-session-hint"]`, crosscut-25), or, for `kb-cleanup`
+  only, a KB select
   (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
   `community-refresh` only, **no selector section renders at all**
   (`[data-section="kickoff-selector"]` is absent from the DOM, not merely

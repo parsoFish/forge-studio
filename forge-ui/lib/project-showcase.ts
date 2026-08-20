@@ -78,22 +78,27 @@ function isShowcaseTerminalCycle(cycle: Cycle): boolean {
  * other project.
  */
 export function deriveShowcaseCycleId(cycles: Cycle[], projectId: string): string | null {
-  const eligible = cycles.filter((cycle) => cycle.project === projectId && isShowcaseTerminalCycle(cycle));
-  if (eligible.length === 0) return null;
+  return listShowcaseCycleIds(cycles, projectId)[0] ?? null;
+}
 
-  let newest = eligible[0];
-  let newestMs = resolveShowcaseCycleTimeMs(newest) ?? -Infinity;
-  for (const cycle of eligible.slice(1)) {
-    const ms = resolveShowcaseCycleTimeMs(cycle) ?? -Infinity;
-    // Deterministic tie-break: on an exact timestamp tie, prefer the
-    // lexicographically greater cycleId (it embeds the ISO stamp), so the pick
-    // never depends on the bridge's live/recent concatenation order.
-    if (ms > newestMs || (ms === newestMs && cycle.cycleId > newest.cycleId)) {
-      newest = cycle;
-      newestMs = ms;
-    }
-  }
-  return newest.cycleId;
+/**
+ * W7-B6 (projects-21): EVERY showcase-eligible cycle for the project,
+ * newest-first — the cycle picker's option list. `deriveShowcaseCycleId` is
+ * the head of this list (one ordering rule, not two that could drift).
+ * Deterministic tie-break on an exact timestamp tie: the lexicographically
+ * greater cycleId wins (it embeds the ISO stamp), so the order never depends
+ * on the bridge's live/recent concatenation order.
+ */
+export function listShowcaseCycleIds(cycles: Cycle[], projectId: string): string[] {
+  return cycles
+    .filter((cycle) => cycle.project === projectId && isShowcaseTerminalCycle(cycle))
+    .sort((a, b) => {
+      const aMs = resolveShowcaseCycleTimeMs(a) ?? -Infinity;
+      const bMs = resolveShowcaseCycleTimeMs(b) ?? -Infinity;
+      if (aMs !== bMs) return bMs - aMs;
+      return b.cycleId.localeCompare(a.cycleId);
+    })
+    .map((cycle) => cycle.cycleId);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +108,10 @@ export function deriveShowcaseCycleId(cycles: Cycle[], projectId: string): strin
 export type ShowcaseAcVerdictCounts = { met: number; partial: number; missed: number };
 
 export type ShowcaseStats = {
-  testEvidenceCount: number;
+  /** W7-B6 (projects-22): `null` when the model carries NO `testEvidence`
+   *  block at all — absent-vs-zero must render differently ("not captured"
+   *  is not "zero tests"). A present-but-empty block is a real 0. */
+  testEvidenceCount: number | null;
   prUrl: string | null;
   branch: string | null;
   commitSha: string | null;
@@ -123,7 +131,7 @@ export function deriveShowcaseStats(model: DemoModel): ShowcaseStats {
     acVerdictCounts[evaluation.verdict] += 1;
   }
   return {
-    testEvidenceCount: model.testEvidence?.length ?? 0,
+    testEvidenceCount: model.testEvidence?.length ?? null,
     prUrl: model.summary?.prUrl ?? null,
     branch: model.summary?.branch ?? null,
     commitSha: model.summary?.commitSha ?? null,
@@ -145,4 +153,25 @@ export function deriveShowcaseStats(model: DemoModel): ShowcaseStats {
  */
 export function showShowcaseEntry(cycles: Cycle[], projectId: string): boolean {
   return deriveShowcaseCycleId(cycles, projectId) !== null;
+}
+
+// ---------------------------------------------------------------------------
+// resolveShowcaseSelectValue (W7-B6 review F9)
+// ---------------------------------------------------------------------------
+
+/**
+ * The cycle-switcher select's `value`. The naive `pickedCycleId ||
+ * resolvedCycleId` renders a BLANK control whenever the operator's pick has
+ * left the eligible list (a refresh dropped the cycle) — while the run/
+ * artifact links beside it follow `loadShowcase`'s FALLBACK cycle: the select
+ * and the links silently disagree. Rule: show the pick only while it is
+ * genuinely eligible; otherwise show the cycle the page actually resolved.
+ */
+export function resolveShowcaseSelectValue(
+  pickedCycleId: string,
+  resolvedCycleId: string | undefined,
+  eligibleCycles: readonly string[],
+): string {
+  if (pickedCycleId !== '' && eligibleCycles.includes(pickedCycleId)) return pickedCycleId;
+  return resolvedCycleId ?? '';
 }

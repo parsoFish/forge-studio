@@ -226,7 +226,7 @@ const CONTROL_CHAR_RE = /[\u0000-\u001f]/;
  * narrows the "non-string" branch to `never`; that is expected, not a sign
  * the check is unreachable — the annotation is exactly the boundary claim
  * this check exists to verify at runtime. */
-function isSafeSegment(seg: string): boolean {
+export function isSafeSegment(seg: string): boolean {
   if (typeof seg !== 'string') return false;
   return (
     seg.length > 0 &&

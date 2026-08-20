@@ -7,7 +7,7 @@ lib/
 coverage/
 .tsbuildinfo
 # forge scratch (C2 hygiene)
-.forge/work-items/
+.forge/work-items
 .forge/.create-complete
 AGENT.md
 PROMPT.md

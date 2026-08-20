@@ -223,3 +223,34 @@ test('R4-12 AT-F1-4 (server half, GREEN-ON-ARRIVAL REGRESSION LOCK): deriveContr
     `instructions row bytes must have INCREASED after AGENTS.md grew, got before=${instructionsBefore.bytes} after=${instructionsAfter.bytes} — a cached/stale result would still show the original byte count`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// W7-B6 review F6 — the migrate hint targets ONLY the shape migrate can fix
+// ---------------------------------------------------------------------------
+
+test('W7-B6 F6 (RED) contract-stages 409: the MIGRATE-shape (flat keys, no testProcess) message appends the `forge project migrate` hint', async () => {
+  const dir = join(forgeRoot, 'projects', 'flatkeysproj');
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ name: 'flatkeysproj', quality_gate_cmd: ['npm', 'test'] }), 'utf8');
+  const res = await fetch(`${url}/api/studio/projects/flatkeysproj/contract-stages`);
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error?: string };
+  assert.match(String(body.error), /forge project migrate flatkeysproj/, 'the migrate-shape 409 must name the mechanical remedy');
+});
+
+test('W7-B6 F6 (RED) contract-stages 409: the CONFLICT-shape (flat keys ALONGSIDE testProcess) message must NOT append the migrate hint — migrate refuses that shape', async () => {
+  const dir = join(forgeRoot, 'projects', 'conflictkeysproj');
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(
+    join(dir, '.forge', 'project.json'),
+    JSON.stringify({ name: 'conflictkeysproj', testProcess: { local: { cmd: ['npm', 'test'] } }, quality_gate_cmd: ['make', 'check'] }),
+    'utf8',
+  );
+  const res = await fetch(`${url}/api/studio/projects/conflictkeysproj/contract-stages`);
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error?: string };
+  assert.ok(
+    !String(body.error).includes('forge project migrate'),
+    `the conflict shape points at a command that would DECLINE to act — the hint must not appear; got: ${body.error}`,
+  );
+});

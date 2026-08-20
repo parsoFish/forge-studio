@@ -247,7 +247,9 @@ export const journey = defineJourney({
           ).then(() => true).catch(() => false);
           check(ready, 'DB-4: the generic kickoff screen renders ([data-page="session-kickoff"])');
           await caption(page, 'One kickoff screen for every session kind — project, model tier, Start.');
-          await page.locator('[data-field="kickoff-project"]').fill(PROJECT).catch(() => {});
+          // W7-B6 (sessions-kinds-02): the kickoff project field is a SELECT
+          // over roster ids — pick, never type.
+          await page.locator('[data-field="kickoff-project"]').selectOption(PROJECT).catch(() => {});
 
           // W6-B6 post-merge review (MEDIUM): demo-builder is a
           // strategy:range skill (range: [sonnet, opus]) — the picker must
