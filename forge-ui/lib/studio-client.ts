@@ -312,6 +312,11 @@ export type Agent = {
    * payload degrades to `false` — never fabricated as enforceable.
    */
   costCeilingEnforceable?: boolean;
+  /** W7-B5 (agents-21): the agent's own declared `budgets.maxBudgetUsd`
+   *  (its default standalone-run ceiling — docs/agent-cost-ceilings.md).
+   *  Absent = the agent declares none; the run-level policy default
+   *  applies. */
+  declaredMaxBudgetUsd?: number;
   /**
    * W6-B6 (ADR-043 2026-08-15 amendment §3) — server-computed FACT
    * (`orchestrator/studio/derive.ts`'s `agentCapabilityDescriptor().
@@ -1063,6 +1068,12 @@ function parseAgentDefinition(raw: unknown): Agent {
     fanout:         parseFanout(r['fanout']),
     materials:      parseMaterials(r['materials']),
     costCeilingEnforceable: cap['costCeilingEnforceable'] === true,
+    // W7-B5 (agents-21): the agent's OWN declared default ceiling
+    // (SKILL.md `budgets.maxBudgetUsd`) — seeds the kickoff field ahead of
+    // the run-level policy default. Absent stays absent.
+    declaredMaxBudgetUsd: typeof (r['budgets'] as Record<string, unknown> | undefined)?.['maxBudgetUsd'] === 'number'
+      ? ((r['budgets'] as Record<string, unknown>)['maxBudgetUsd'] as number)
+      : undefined,
     allowedTiers:   parseAllowedTiers(cap['allowedTiers']),
     provenance:     parseProvenance(r['provenance']),
     runtime: {
@@ -1697,10 +1708,23 @@ export type AgentRunStatus = {
   ok: boolean;
   /** `'unknown'` with `ok:true` = the bridge answered with no state recorded;
    *  with `ok:false` = the READ failed (`error` carries the bridge's text /
-   *  "bridge unreachable (…)") — W7-FIX-A1 A1-10 keeps the two distinct. */
-  state: 'running' | 'done' | 'suppressed' | 'failed' | 'unknown';
+   *  "bridge unreachable (…)") — W7-FIX-A1 A1-10 keeps the two distinct.
+   *  W7-B5 adds `'cancelled'` (the sticky operator-cancel terminal) and
+   *  `'budget-exceeded'` (the SDK ceiling stop — served by the bridge since
+   *  R6-04 but previously collapsed to 'unknown' by this parser's cast). */
+  state: 'running' | 'done' | 'suppressed' | 'failed' | 'budget-exceeded' | 'cancelled' | 'unknown';
   costUsd: number;
   events: number;
+  /** W7-B5 (agents-19): the run's own recorded failure reason
+   *  (`agent-dispatch.failed` metadata.error), verbatim off the wire —
+   *  absent when the run never failed. Distinct from `error` (a READ
+   *  failure). */
+  errorText?: string;
+  /** W7-B5 (agents-06): the run's real output references (end event
+   *  `output_refs`). */
+  outputRefs?: string[];
+  /** W7-B5 (agents-31): the ceiling in force, recorded from dispatch time. */
+  ceilingUsd?: number;
   /** Present only on a failed read (`ok:false`). */
   error?: string;
   /** On a failed read: the HTTP status iff the bridge ANSWERED (R6-04 D22: a
@@ -1713,14 +1737,76 @@ export type AgentRunStatus = {
  *  event log server-side). Status-shaped: never throws; a failed read is
  *  `{ok:false, state:'unknown', error, status?}`. */
 export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> {
-  const r = await studioGet<{ state?: string; costUsd?: number; events?: number }>(`/api/agents/runs/${encodeURIComponent(runId)}`);
+  const r = await studioGet<{ state?: string; costUsd?: number; events?: number; errorText?: string; outputRefs?: unknown; ceilingUsd?: number }>(`/api/agents/runs/${encodeURIComponent(runId)}`);
   if (!r.ok) return { ok: false, state: 'unknown', costUsd: 0, events: 0, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
   return {
     ok: true,
     state: (r.data.state as AgentRunStatus['state']) ?? 'unknown',
     costUsd: typeof r.data.costUsd === 'number' ? r.data.costUsd : 0,
     events: typeof r.data.events === 'number' ? r.data.events : 0,
+    ...(typeof r.data.errorText === 'string' && r.data.errorText.length > 0 ? { errorText: r.data.errorText } : {}),
+    ...(Array.isArray(r.data.outputRefs)
+      ? { outputRefs: (r.data.outputRefs as unknown[]).filter((x): x is string => typeof x === 'string') }
+      : {}),
+    ...(typeof r.data.ceilingUsd === 'number' ? { ceilingUsd: r.data.ceilingUsd } : {}),
   };
+}
+
+/** W7-B5 (agents-30): cancel a dispatched standalone run —
+ *  `POST /api/agents/runs/:runId/cancel`. 409 (already terminal) and 404
+ *  surface as `{ok:false, error}` with the bridge's own text. */
+export async function cancelAgentRun(runId: string): Promise<{ ok: boolean; killed?: boolean; error?: string }> {
+  const r = await studioPost(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`, {});
+  return {
+    ok: r.ok,
+    ...(typeof r.data?.killed === 'boolean' ? { killed: r.data.killed as boolean } : {}),
+    ...(r.error !== undefined ? { error: r.error } : {}),
+  };
+}
+
+/** One row of `GET /api/agents/runs/recent` (W7-B5, agents-03/04/39) — the
+ *  server-side aggregate: run-level status/cost plus the participating
+ *  agent slug(s) per row. */
+export type RecentAgentRunWireRow = {
+  id: string;
+  when: string;
+  what: string;
+  agents: string[];
+  status: string;
+  costUsd: number | null;
+  href: string;
+  linkKind: 'flow' | 'standalone';
+  errorText?: string;
+};
+
+/** Fetch the aggregate recent-runs rows — ONE bounded request replacing the
+ *  old one-history-fetch-per-roster-agent fan-out (agents-39: 1.33 MB / 13
+ *  requests to render 20 rows). THROWS on a failed read (fail-closed, A1). */
+export async function fetchRecentAgentRunsAggregate(
+  limit?: number,
+  kind?: 'flow' | 'standalone' | 'all',
+): Promise<RecentAgentRunWireRow[]> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  // Review round 1: a caller that already holds one half of the ledger asks
+  // for the other half, so the bound is not spent on rows it will discard.
+  if (kind !== undefined && kind !== 'all') params.set('kind', kind);
+  const qs = params.toString() === '' ? '' : `?${params.toString()}`;
+  const body = await studioRead<{ ok?: boolean; rows?: unknown }>(`/api/agents/runs/recent${qs}`);
+  const rows = Array.isArray(body.rows) ? (body.rows as Record<string, unknown>[]) : [];
+  return rows
+    .filter((r) => typeof r['id'] === 'string' && typeof r['href'] === 'string')
+    .map((r) => ({
+      id: r['id'] as string,
+      when: typeof r['when'] === 'string' ? (r['when'] as string) : '',
+      what: typeof r['what'] === 'string' ? (r['what'] as string) : '',
+      agents: Array.isArray(r['agents']) ? (r['agents'] as unknown[]).filter((a): a is string => typeof a === 'string') : [],
+      status: typeof r['status'] === 'string' ? (r['status'] as string) : 'unknown',
+      costUsd: typeof r['costUsd'] === 'number' ? (r['costUsd'] as number) : null,
+      href: r['href'] as string,
+      linkKind: r['linkKind'] === 'standalone' ? 'standalone' as const : 'flow' as const,
+      ...(typeof r['errorText'] === 'string' ? { errorText: r['errorText'] as string } : {}),
+    }));
 }
 
 /** One row of `GET /api/agents/:slug/history`'s standalone-dispatch shape —
@@ -1729,23 +1815,27 @@ export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> 
  *  `cli/ui-bridge.ts`) is server-internal and never re-declared client-side. */
 export type StandaloneHistoryRow = { id: string; status: string; when: string };
 
-/** The most recent standalone-dispatch row for `slug` whose own `status` is
- *  still `'running'` (W6-B14 RunPanel reattach) — `GET /api/agents/:slug/
- *  history` already joins flow-node/standalone/session execution paths into
- *  one ledger (R6-06 WI-1); this reads only the `linkKind:'standalone'` rows
- *  (a bare dispatch from THIS panel, never a flow-node run) and returns the
- *  one with the latest `when`, or `null` if none is currently running. The
- *  row's `id` IS the runId {@link pollAgentRun} needs — no separate lookup. */
+/** The most recent standalone-dispatch row for `slug` — ANY status
+ *  (⚑ W7-B5, agents-26: the reattach used to filter `status === 'running'`,
+ *  so a finished/failed run vanished from the panel on reload; the panel now
+ *  reattaches to the LAST run regardless and shows its real terminal state
+ *  + link, while a still-running row resumes polling exactly as before).
+ *  `GET /api/agents/:slug/history` already joins flow-node/standalone/
+ *  session execution paths into one ledger (R6-06 WI-1); this reads only
+ *  the `linkKind:'standalone'` rows (a bare dispatch from THIS panel, never
+ *  a flow-node run) and returns the one with the latest `when`, or `null`
+ *  if the agent has never been dispatched standalone. The row's `id` IS the
+ *  runId {@link pollAgentRun} needs — no separate lookup. */
 export async function fetchLatestStandaloneRun(slug: string): Promise<StandaloneHistoryRow | null> {
   const body = await studioRead<{ ok?: boolean; rows?: Array<Record<string, unknown>> }>(
     `/api/agents/${encodeURIComponent(slug)}/history`,
   );
-  const running = (body.rows ?? []).filter(
-    (r) => r['linkKind'] === 'standalone' && r['status'] === 'running' && typeof r['id'] === 'string',
+  const standalone = (body.rows ?? []).filter(
+    (r) => r['linkKind'] === 'standalone' && typeof r['id'] === 'string' && typeof r['status'] === 'string',
   );
-  if (running.length === 0) return null;
-  running.sort((a, b) => String(b['when'] ?? '').localeCompare(String(a['when'] ?? '')));
-  const top = running[0];
+  if (standalone.length === 0) return null;
+  standalone.sort((a, b) => String(b['when'] ?? '').localeCompare(String(a['when'] ?? '')));
+  const top = standalone[0];
   return { id: top['id'] as string, status: top['status'] as string, when: String(top['when'] ?? '') };
 }
 

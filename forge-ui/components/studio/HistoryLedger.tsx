@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * HistoryLedger — the SHARED, purely presentational run-history ledger
  * (R6-05 Task 4). Renders whatever `LedgerRow[]` it is given
@@ -7,17 +9,7 @@
  *
  * SURFACE-AGNOSTIC ON PURPOSE (D2, the R6-06 reuse seam): this component
  * contains NOTHING flow-specific — no flow ids, no route construction. A
- * row's `href` arrives already-built on the row and is rendered verbatim,
- * exactly like `FlowRunDetail.tsx`'s own established "renders whatever it
- * is given" discipline for props it does not own the derivation of. R6-06
- * (agent monitor) reuses this component unchanged with a different `href`
- * shape (`/agents/...` rather than `/flows/.../run/...`).
- *
- * Embedded as a page-level SECTION (not a route), matching the existing
- * `<section data-section="run-timeline">` / `<section
- * data-section="run-trigger">` convention already shipped in
- * `FlowRunDetail.tsx` — see `../../lib/history-ledger-render.test.ts` for
- * the full pinned DOM contract this component satisfies.
+ * row's `href` arrives already-built on the row and is rendered verbatim.
  *
  * DOM-as-metrics contract:
  *   <section data-section="history-ledger" data-ledger-count={n}>
@@ -25,56 +17,44 @@
  *     (n>0)   -> one <a data-ledger-row="true" data-run-id data-run-status
  *                    data-run-when data-ledger-cost-usd href={row.href}>
  *                  per row, in the ARRAY ORDER GIVEN (sorting is the
- *                  caller's job, `sortLedgerRowsNewestFirst` — this
- *                  component trusts its input order)
+ *                  caller's job, `sortLedgerRowsNewestFirst`)
  *                [data-ledger-narrative]   ONLY when row.narrative !== null
  *                [data-narrative-kinds]    ONLY when row.narrativeKinds is
- *                                           non-empty — `row.narrativeKinds.
- *                                           join(',')` verbatim, in array
- *                                           order, NEVER re-derived by
- *                                           parsing `row.narrative`'s human
- *                                           string (D11 — the two surfaces
- *                                           agree only because both come
- *                                           from the same row).
+ *                                           non-empty — join(',') verbatim
+ *                [data-ledger-link-kind]   ONLY when row.linkKind !== undefined
+ *                [data-trigger-*]          ONLY when row.trigger !== undefined
+ *                [data-ledger-agent]       ONLY when row.agent !== undefined
+ *                                           (W7-B5 agents-04 — the chip is
+ *                                           also visible text)
  *
- * `data-ledger-cost-usd` is bare `.toFixed(2)` (no `$`) — deliberately NOT
- * `data-run-cost-usd`, which `MonitorSummary.tsx:107` already emits at
- * `.toFixed(4)` precision on the page-level summary strip; reusing that
- * name here would make one attribute mean two different precisions across
- * two different elements. The `$`-prefixed form is display text only.
- * R6-06: `row.costUsd` can be `null` (a cost that genuinely does not exist
- * yet — e.g. a session with no log dir) — BOTH the attribute and the
- * display text are then omitted entirely, never a fabricated `"0.00"`/
- * `"$0.00"` standing in for an absent fact.
+ * `data-ledger-cost-usd` is bare `.toFixed(2)` (no `$`). `row.costUsd:
+ * null` omits BOTH the attribute and the display text — never a fabricated
+ * `"0.00"` standing in for an absent fact.
  *
- * The row is a REAL `<a href>` (amendment 29) — not a `<div>` with an
- * `onClick` bolted on, which is invisible to keyboard nav, screen readers,
- * and cmd-click/open-in-new-tab, and which the render tests below
- * explicitly assert the tag name to catch (attribute-only assertions
- * cannot distinguish `<a>` from `<div>`). (W6-IA-6: rendered via `next/link`'s
- * `Link` for same-tab client-side routing instead of a full page reload —
- * `Link` still renders a real `<a>`, so amendment 29's tag-name contract is
- * unchanged.)
+ * The row is a REAL `<a href>` via `next/link` (amendment 29 / W6-IA-6).
  *
  * `data-run-when` carries the raw ISO `row.when` verbatim (D7); the
- * human-readable relative text is rendered separately via
- * `formatWhen(row.when, nowMs)` from the REQUIRED `nowMs` prop — never
- * `Date.now()` read inside this component.
+ * human-readable relative text renders via `formatWhen(row.when, nowMs)`
+ * from the REQUIRED `nowMs` prop — never `Date.now()` inside.
  *
- * R6-06 D8 — TWO new CONDITIONAL attributes, mirroring `data-ledger-narrative`/
- * `data-narrative-kinds`'s own "only when present" discipline exactly, so
- * every EXISTING (pre-R6-06) flow-ledger row renders BYTE-IDENTICALLY:
- *   [data-ledger-link-kind]                 ONLY when row.linkKind !== undefined
- *   [data-trigger-kind/source/scope]        ONLY when row.trigger !== undefined
- *                                             (all three together — an
- *                                             unscoped trigger still renders
- *                                             `data-trigger-scope=""`, never
- *                                             omitted, never "null")
- * The trigger attribute NAMES mirror `FlowRunDetail.tsx`'s already-shipped
- * `data-trigger-kind`/`data-trigger-source`/`data-trigger-scope` vocabulary
- * verbatim — reused here on the ROW element instead of a page-level section.
+ * W7-B5 (agents-32 / agents-04) — THREE new OPTIONAL props, each following
+ * the established byte-identical-when-absent discipline (`showKindChip`,
+ * R6-06 D8):
+ *   - `pageSize`   — renders only the first N rows plus a
+ *                    `[data-action="ledger-show-more"]` control; the section
+ *                    gains `data-ledger-shown`. Replaces the old
+ *                    fixed-220px-scroller answer to a 77-row history: when
+ *                    set, the scroller is dropped (paging bounds the DOM
+ *                    instead). Absent → the legacy maxHeight scroller,
+ *                    byte-identical.
+ *   - `filterable` — renders a `[data-ledger-filter]` status `<select>`
+ *                    whose options are the DISTINCT statuses actually
+ *                    present in `rows` (each vocabulary shown verbatim —
+ *                    D12: never mapped onto an invented shared vocabulary).
+ *   - (row-level)  — `row.agent` renders a leading agent chip.
  */
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { formatWhen, ledgerRowKind, sessionPhaseRunStatus } from '@/lib/history-ledger';
 import type { LedgerRow } from '@/lib/history-ledger';
@@ -87,29 +67,55 @@ export type HistoryLedgerProps = {
   /**
    * W6-IA-4 — OPTIONAL, default false/omitted: renders a `data-ledger-kind`
    * attribute + a small visible "flow"/"agent" badge per row, derived via
-   * `ledgerRowKind(row)`. Only Home's merged everything-ledger opts in
-   * (`showKindChip`) — every OTHER existing caller (the flow monitor's own
-   * ledger, the agents index's recent-runs section, an agent's own ledger)
-   * renders BYTE-IDENTICALLY to before this prop existed, matching this
-   * component's own established byte-identical-when-absent discipline
-   * (R6-06 D8's `linkKind`/`trigger` attributes, same file).
+   * `ledgerRowKind(row)`. Only Home's merged everything-ledger opts in.
    */
   showKindChip?: boolean;
+  /** W7-B5 (agents-32): page the rows instead of cramming them into the
+   *  legacy 220px scroller. Absent → byte-identical legacy rendering. */
+  pageSize?: number;
+  /** W7-B5 (agents-32): render the status filter row. Absent → no filter
+   *  UI, byte-identical legacy rendering. */
+  filterable?: boolean;
 };
 
-export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps) {
+export function HistoryLedger({ rows, nowMs, showKindChip, pageSize, filterable }: HistoryLedgerProps) {
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [shownPages, setShownPages] = useState(1);
+
+  const distinctStatuses = filterable ? [...new Set(rows.map((r) => String(r.status)))] : [];
+  // Review round 1: the ACTIVE filter is DERIVED, not the stored one taken on
+  // trust. This component keeps its identity across a `rows` change — the
+  // agent builder renders one instance and swaps `rows` when the operator
+  // picks a different agent. Filtering to `budget-exceeded` on agent A and
+  // then switching to agent B left the stored filter in place: `filtered`
+  // went empty ("No runs match this filter."), while the `<select>`'s value
+  // matched no `<option>` so the browser displayed "all (N)" — an empty
+  // history claiming to be unfiltered, with no visible way back. A stored
+  // filter that the current rows cannot satisfy is stale state, so it reads
+  // as no filter until the operator picks again.
+  const activeFilter = distinctStatuses.includes(statusFilter) ? statusFilter : '';
+  const filtered = filterable && activeFilter !== ''
+    ? rows.filter((r) => String(r.status) === activeFilter)
+    : rows;
+  // Paging is likewise clamped by `slice`, so a page count carried over from
+  // a longer history simply shows everything this one has.
+  const paged = pageSize !== undefined ? filtered.slice(0, pageSize * shownPages) : filtered;
+  const hasMore = pageSize !== undefined && paged.length < filtered.length;
+
   return (
     <section
       data-section="history-ledger"
-      data-ledger-count={rows.length}
+      data-ledger-count={filtered.length}
+      {...(pageSize !== undefined ? { 'data-ledger-shown': paged.length } : {})}
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
         padding: '10px 20px',
         flexShrink: 0,
-        maxHeight: 220,
-        overflowY: 'auto',
+        // W7-B5 (agents-32): paging bounds the DOM; the legacy fixed-height
+        // scroller only applies when no pageSize is given.
+        ...(pageSize === undefined ? { maxHeight: 220, overflowY: 'auto' as const } : {}),
         borderTop: '1px solid var(--line)',
         background: 'var(--panel)',
       }}
@@ -117,12 +123,29 @@ export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps)
       <h3 style={{ margin: '0 0 4px', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--faint)' }}>
         History
       </h3>
-      {rows.length === 0 ? (
+      {filterable && rows.length > 0 && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--faint)', marginBottom: 4 }}>
+          Status
+          <select
+            className="input"
+            data-ledger-filter
+            value={activeFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setShownPages(1); }}
+            style={{ fontSize: 11, padding: '2px 6px', width: 'auto' }}
+          >
+            <option value="">all ({rows.length})</option>
+            {distinctStatuses.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {filtered.length === 0 ? (
         <div data-component="history-ledger-empty" className="muted" style={{ fontStyle: 'italic', fontSize: 12 }}>
-          No runs yet.
+          {rows.length === 0 ? 'No runs yet.' : 'No runs match this filter.'}
         </div>
       ) : (
-        rows.map((row) => (
+        paged.map((row) => (
           <Link
             key={row.id}
             data-ledger-row="true"
@@ -146,6 +169,7 @@ export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps)
               'data-trigger-scope': row.trigger.scope ?? '',
             } : {})}
             {...(showKindChip ? { 'data-ledger-kind': ledgerRowKind(row) } : {})}
+            {...(row.agent !== undefined ? { 'data-ledger-agent': row.agent } : {})}
             href={row.href}
             title={`${row.what} — ${formatWhen(row.when, nowMs)}`}
             style={{
@@ -172,6 +196,19 @@ export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps)
                 {ledgerRowKind(row)}
               </span>
             )}
+            {row.agent !== undefined && (
+              <span
+                data-ledger-agent-badge
+                style={{
+                  flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 9.5,
+                  color: 'var(--dim)', border: '1px solid var(--line-2)',
+                  borderRadius: 999, padding: '1px 6px', maxWidth: 220,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
+                {row.agent}
+              </span>
+            )}
             <span style={{ flexShrink: 0, fontWeight: 600 }}>{row.what}</span>
             <span data-run-status-badge style={{ color: 'var(--dim)', flexShrink: 0, textTransform: 'uppercase', fontSize: 10 }}>
               {row.status}
@@ -186,6 +223,17 @@ export function HistoryLedger({ rows, nowMs, showKindChip }: HistoryLedgerProps)
             )}
           </Link>
         ))
+      )}
+      {hasMore && (
+        <button
+          type="button"
+          className="btn btn-sm"
+          data-action="ledger-show-more"
+          onClick={() => setShownPages((n) => n + 1)}
+          style={{ alignSelf: 'flex-start', marginTop: 4 }}
+        >
+          Show more ({filtered.length - paged.length} more)
+        </button>
       )}
     </section>
   );

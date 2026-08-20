@@ -100,14 +100,14 @@ test('GET /api/studio/agents: a one-shot agent\'s capability carries costCeiling
   }
 });
 
-test('GET /api/studio/agents: an agent with NO loopStrategy declared carries costCeilingEnforceable: false on the wire', async () => {
+test('GET /api/studio/agents: an agent with NO loopStrategy declared carries costCeilingEnforceable: TRUE on the wire (⚑ AMENDED W7-B5 agents-21: the legacy invocation path now enforces via the adapter per-iteration budget — see run-agent-w7b5.test.ts)', async () => {
   const root = scaffoldForgeRoot();
   const bridge = await startBridge({ forgeRoot: root, port: 0 });
   try {
     const { agents } = await fetchAgents(bridge.url);
     const agent = agents.find((a) => a.slug === 'fixture-legacy');
     assert.ok(agent, 'expected fixture-legacy in the served roster');
-    assert.equal(agent!.capability!.costCeilingEnforceable, false);
+    assert.equal(agent!.capability!.costCeilingEnforceable, true);
   } finally {
     await bridge.close();
     rmSync(root, { recursive: true, force: true });
@@ -158,7 +158,7 @@ test('GET /api/studio/agents: costCeilingEnforceable coexists with the existing 
 // route (skill discovery + frontmatter parse + descriptor + JSON
 // serialization) gets the real project-manager/architect agents right, not
 // just a synthetic fixture that might not mirror the real YAML shape.
-test('GET /api/studio/agents: real roster — project-manager true, architect false, served over the real bridge process', async () => {
+test('GET /api/studio/agents: real roster — project-manager true, architect TRUE (⚑ AMENDED W7-B5 agents-21: legacy path enforceable), developer-ralph false, served over the real bridge process', async () => {
   // Deliberately NOT scaffoldForgeRoot() here — this test points the bridge
   // at the REAL repo root (this process's cwd, expected to be the forge
   // install root when run via `node --test`) so it exercises the full route
@@ -170,10 +170,13 @@ test('GET /api/studio/agents: real roster — project-manager true, architect fa
     const { agents } = await fetchAgents(bridge.url);
     const pm = agents.find((a) => a.slug === 'project-manager');
     const architect = agents.find((a) => a.slug === 'architect');
+    const ralph = agents.find((a) => a.slug === 'developer-ralph');
     assert.ok(pm, 'expected the real project-manager agent in the roster');
     assert.ok(architect, 'expected the real architect agent in the roster');
+    assert.ok(ralph, 'expected the real developer-ralph agent in the roster');
     assert.equal(pm!.capability!.costCeilingEnforceable, true, 'project-manager declares loopStrategy: one-shot');
-    assert.equal(architect!.capability!.costCeilingEnforceable, false, 'architect declares no loopStrategy at all');
+    assert.equal(architect!.capability!.costCeilingEnforceable, true, 'architect declares no loopStrategy — the legacy invocation path enforces since W7-B5');
+    assert.equal(ralph!.capability!.costCeilingEnforceable, false, 'developer-ralph declares loopStrategy: ralph — standalone dispatch is refused outright');
   } finally {
     await bridge.close();
   }

@@ -85,7 +85,7 @@ import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
-import { deriveSessionLifecycleFor, sessionLogDirName, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
+import { deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -131,7 +131,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions, communityRegistryPath, discoverProjects } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath, loadFlowDefinition, discoverProjects } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -467,11 +467,34 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
   const ensureTailFor = (cycleId: string): void => {
     if (tails.has(cycleId)) return;
+    // Review round 1 (W7-B5): no client, no tail — the SAME rule
+    // `startTailsForLive` states just below ("with no client there is nobody
+    // to stream to"), applied at the one choke point every caller goes
+    // through. Standalone agent runs made this load-bearing: a dispatch
+    // arms a tail directly, so a run started with no browser attached used
+    // to register a `setInterval` that `stopAllTails` — which only fires on
+    // the LAST client disconnecting — would never be triggered to clear.
+    // Self-healing: every caller (the status poll, session-detail routes,
+    // startTailsForLive on connect) re-arms, and those only run while a UI
+    // is open.
+    if (clients.size === 0) return;
     const filePath = join(logsRoot, cycleId, 'events.jsonl');
     if (!existsSync(filePath)) return;
     const state: TailState = { cycleId, filePath, offset: 0 };
     state.timer = setInterval(() => pumpTail(state, (event) => broadcast({ type: 'event', cycleId, event })), TAIL_POLL_MS);
     tails.set(cycleId, state);
+  };
+
+  /** Release ONE tail (review round 1). A terminal run's `events.jsonl` is
+   *  immutable and served on demand by `/api/events`, so a poller on it is
+   *  pure waste — and `stopAllTails` is far too coarse to be the only
+   *  release: it needs every WS client to disconnect, so a long Studio
+   *  session that dispatched N agents carried N permanent pollers. */
+  const stopTailFor = (cycleId: string): void => {
+    const t = tails.get(cycleId);
+    if (t === undefined) return;
+    if (t.timer) clearInterval(t.timer);
+    tails.delete(cycleId);
   };
 
   // W6-B2 — the ONE generalized session-tail activator, replacing the four
@@ -644,6 +667,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // (bridge-studio-sessions.ts) for authoring and kb-cleanup, which have
       // no per-kind list route of their own.
       ensureSessionTail,
+      // W7-B5 (agents-20) — the standalone-run tail activator. The runId is
+      // its own `_logs/` directory name, so this is `ensureTailFor` direct.
+      ensureAgentRunTail: ensureTailFor,
+      releaseAgentRunTail: stopTailFor,
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -754,6 +781,17 @@ type HttpContext = {
    *  on the session-kind id (== `SPAWN_AGENT_SPECS[agentId].logPrefix`).
    *  Replaces the four former per-kind `ensure<Kind>Tail` fields. */
   ensureSessionTail: (kind: string, sessionId: string) => void;
+  /** W7-B5 (agents-20) — start (idempotently) live-tailing a STANDALONE
+   *  agent-dispatch run's event log (`_logs/<runId>/events.jsonl`, runId
+   *  minted `_agent-<slug>-<stamp>`) — the third tailable category next to
+   *  session logs and live flow cycles. Called at dispatch time and re-armed
+   *  by the run-status route while the run is live (a WS reconnect resets
+   *  every tail; the panel/run-page poll recovers it). */
+  ensureAgentRunTail: (runId: string) => void;
+  /** Release a standalone run's tail once the run is terminal (review round
+   *  1) — its log is immutable from then on, and `stopAllTails` alone only
+   *  fires when the LAST WS client disconnects. */
+  releaseAgentRunTail: (runId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -841,10 +879,23 @@ type AgentHistoryRow =
   | { id: string; linkKind: 'session'; href: string; status: string; costUsd: number | null; when: string; what: string };
 
 type StandaloneRunState = {
-  state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded';
+  state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded' | 'cancelled';
   costUsd: number | null;
   events: number;
   lines: Record<string, unknown>[];
+  /** W7-B5 (agents-19): the dispatch failure's own recorded reason
+   *  (`agent-dispatch.failed` metadata.error) — absent when the run never
+   *  failed. Served verbatim; never summarised into the bare word "failed". */
+  errorText?: string;
+  /** W7-B5 (agents-06 / forge-75j): the terminal end event's own
+   *  `output_refs` — what the run actually produced. `[]` until an end
+   *  event exists. */
+  outputRefs: string[];
+  /** W7-B5 (agents-31): the ceiling in force, read from ANY event carrying
+   *  `metadata.kickoff_ceiling_usd` (the t0 `agent-run.dispatched` marker,
+   *  the `start` event, or the terminal `end`) — latest wins. Absent when
+   *  no ceiling was ever recorded. */
+  ceilingUsd?: number;
 };
 
 /**
@@ -896,7 +947,14 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
   // `runAgent` emits `end` only on success; a crashed dispatch writes a
   // terminal 'agent-dispatch.failed' marker (cli/agent-run.ts) instead —
   // without it the run would read 'running' forever.
-  const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
+  const failedMarker = [...parsed].reverse().find((e) => e['message'] === 'agent-dispatch.failed');
+  // W7-B5 (agents-30): an operator cancel writes a durable
+  // 'agent-dispatch.cancelled' marker (the cancel route). STICKY — it wins
+  // over every other terminal fact, including an `end` event that lands
+  // after the cancel (a SIGTERM'd agent finishing anyway must never
+  // resurrect the run as 'done' — the same sticky-cancel rule W7-A2
+  // established for sessions).
+  const cancelled = parsed.some((e) => e['message'] === 'agent-dispatch.cancelled');
   const endEvent = parsed.find((e) => e['event_type'] === 'end');
   // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype: 'error_max_budget_usd'`,
   // recorded into the end event's metadata by runAgent) is a DISTINCT
@@ -904,12 +962,50 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
   const endMetadata = endEvent?.['metadata'] as Record<string, unknown> | undefined;
   const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
   const state: StandaloneRunState['state'] =
-    failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
+    cancelled ? 'cancelled'
+      : failedMarker ? 'failed'
+        : suppressed ? 'suppressed'
+          : ceilingStopped ? 'budget-exceeded'
+            : endEvent ? 'done'
+              : 'running';
   const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : null;
+  const failedMeta = failedMarker?.['metadata'] as Record<string, unknown> | undefined;
+  const errorText = typeof failedMeta?.['error'] === 'string' ? (failedMeta['error'] as string) : undefined;
+  const outputRefs = Array.isArray(endEvent?.['output_refs'])
+    ? (endEvent!['output_refs'] as unknown[]).filter((r): r is string => typeof r === 'string')
+    : [];
+  // Latest recorded ceiling across ALL events (dispatched marker → start
+  // → end); a run that never recorded one stays honestly absent. TWO keys,
+  // in precedence order (review round 1): `kickoff_ceiling_usd` is the
+  // OPERATOR's explicit ceiling, `effective_ceiling_usd` is whatever cap the
+  // run actually executed under — the agent's own declared
+  // `budgets.maxBudgetUsd` when no operator ceiling was given. Reading only
+  // the first meant every dispatch that relied on a declared default (the
+  // whole onboarding route, and any agent run without an explicit ceiling)
+  // reported "no ceiling was recorded" for a cap that was genuinely in
+  // force. Same event may carry both; the operator's wins.
+  let ceilingUsd: number | undefined;
+  for (const e of parsed) {
+    const meta = e['metadata'] as Record<string, unknown> | undefined;
+    const recorded = typeof meta?.['kickoff_ceiling_usd'] === 'number'
+      ? (meta['kickoff_ceiling_usd'] as number)
+      : typeof meta?.['effective_ceiling_usd'] === 'number'
+        ? (meta['effective_ceiling_usd'] as number)
+        : undefined;
+    if (recorded !== undefined) ceilingUsd = recorded;
+  }
   // `events` stays the COUNT (uncapped); `lines` is the tail slice served for
   // rendering — a fixed cap regardless of log size, TAIL-preserving.
   const lines = parsed.slice(-RUN_LOG_LINES_MAX);
-  return { state, costUsd, events: parsed.length, lines };
+  return {
+    state,
+    costUsd,
+    events: parsed.length,
+    lines,
+    outputRefs,
+    ...(errorText !== undefined ? { errorText } : {}),
+    ...(ceilingUsd !== undefined ? { ceilingUsd } : {}),
+  };
 }
 
 /** Full derivation for a standalone run directory: handles the "dispatched,
@@ -923,7 +1019,7 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
  *  as its own path segment (R6-06 round 6). */
 function deriveStandaloneRunState(logsRoot: string, runEntryName: string): StandaloneRunState {
   const parsed = parseGuardedEventsJsonl(logsRoot, runEntryName);
-  if (parsed === null) return { state: 'running', costUsd: null, events: 0, lines: [] };
+  if (parsed === null) return { state: 'running', costUsd: null, events: 0, lines: [], outputRefs: [] };
   return deriveStandaloneStateFromEvents(parsed);
 }
 
@@ -1040,6 +1136,173 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
     });
   }
   return rows;
+}
+
+/**
+ * W7-B5 (agents-03 / agents-04 / agents-39) — ONE row of the aggregate
+ * `GET /api/agents/runs/recent` route. Two shapes:
+ *   - `linkKind: 'flow'` — one row per FLOW RUN, carrying the RUN-level
+ *     status/cost (never one node's slice attributed to the whole run — the
+ *     exact defect the pre-B5 client-side merge shipped) plus `agents`, the
+ *     slugs of every agent whose node this run actually reached.
+ *   - `linkKind: 'standalone'` — one row per standalone dispatch, its OWN
+ *     state/cost, attributed to its own slug (exact-match identity off the
+ *     run's own events — D4, never a runId-prefix guess).
+ * Sessions are deliberately NOT joined here: they have their own pillar
+ * (`/sessions`) and their own per-agent history rows; "recent agent runs"
+ * is the flow + standalone execution record.
+ */
+type RecentAgentRunRow = {
+  id: string;
+  when: string;
+  what: string;
+  agents: string[];
+  status: string;
+  costUsd: number | null;
+  href: string;
+  linkKind: 'flow' | 'standalone';
+  errorText?: string;
+};
+
+/** Default + hard cap for `GET /api/agents/runs/recent?limit=` — named, not
+ *  scattered literals. */
+const RECENT_AGENT_RUNS_DEFAULT_LIMIT = 20;
+const RECENT_AGENT_RUNS_MAX_LIMIT = 100;
+
+/** The slug a standalone run's own events attribute it to (D4's exact-match
+ *  identity: `metadata.agent_slug` or top-level `skill` — first event that
+ *  carries either wins). `null` = honestly unattributable (no row). */
+function standaloneRunSlug(events: readonly Record<string, unknown>[]): string | null {
+  for (const e of events) {
+    const metadata = e['metadata'] as Record<string, unknown> | undefined;
+    if (typeof metadata?.['agent_slug'] === 'string') return metadata['agent_slug'] as string;
+    if (typeof e['skill'] === 'string' && (e['skill'] as string).length > 0) return e['skill'] as string;
+  }
+  return null;
+}
+
+/**
+ * node id → agent slug, PER FLOW (review round 1). The first draft inverted
+ * the GLOBAL `buildAgentSlugToNodeId` map, which is flat across every flow —
+ * so two flows sharing a node id (`review`, `dev`, `demo`: entirely ordinary
+ * once an operator authors a flow) collapsed onto ONE arbitrary agent, and
+ * runs of the second flow were labelled with the first flow's agent. That is
+ * precisely the wrong-agent attribution this route exists to fix; the OOTB
+ * four just happen not to collide today, so it would have stayed silent
+ * until a user authored a flow. Node ids are only unique WITHIN a flow, so
+ * the map has to be keyed that way too.
+ */
+function buildFlowNodeToSlug(forgeRoot: string): Map<string, Map<string, string>> {
+  const byFlow = new Map<string, Map<string, string>>();
+  try {
+    const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
+    if (!existsSync(flowsDir)) return byFlow;
+    for (const entry of readdirSync(flowsDir).sort()) {
+      const flowPath = join(flowsDir, entry, 'flow.yaml');
+      if (!existsSync(flowPath)) continue;
+      let flow;
+      try {
+        flow = loadFlowDefinition(flowPath);
+      } catch {
+        continue; // one malformed flow must never sink the whole mapping
+      }
+      const nodes = new Map<string, string>();
+      for (const node of flow.nodes) {
+        if (!node.agent) continue; // gate-only nodes have no agent
+        if (!nodes.has(node.id)) nodes.set(node.id, node.agent);
+      }
+      byFlow.set(flow.id, nodes);
+    }
+  } catch {
+    // Registry unavailable — an empty map means rows carry no `agents`
+    // attribution, which is honest; it never fabricates one.
+  }
+  return byFlow;
+}
+
+function collectRecentAgentRuns(
+  forgeRoot: string,
+  logsRoot: string,
+  limit: number,
+  kind: 'flow' | 'standalone' | 'all' = 'all',
+): RecentAgentRunRow[] {
+  // Flow runs — run-level facts, plus which agents participated, resolved
+  // through the run's OWN flow (node ids are unique per flow, not globally).
+  const flowNodeToSlug = buildFlowNodeToSlug(forgeRoot);
+  const rows: RecentAgentRunRow[] = [];
+  // Review round 1: dedupe by `id`. `HistoryLedger` keys each rendered row on
+  // `row.id` (`key={row.id}`) — an implicit contract every consumer of that
+  // shared component must uphold, and the reason the client-side join this
+  // route replaced documented its own dedupe as "REQUIRED, not cosmetic".
+  // Two manifests resolving to the SAME cycle id (a threaded architect →
+  // develop hand-off, a requeued initiative whose manifest exists in two
+  // queue states) otherwise emit two rows with identical ids: a duplicate
+  // React key and a double-listed run. First-seen wins — `cachedListRuns` is
+  // already ordered, so that is the newer/canonical one.
+  const seenIds = new Set<string>();
+  for (const run of kind === 'standalone' ? [] : cachedListRuns(forgeRoot, Date.now())) {
+    if (seenIds.has(run.id)) continue;
+    seenIds.add(run.id);
+    const nodeToSlug = flowNodeToSlug.get(run.flowId);
+    const agents = nodeToSlug === undefined ? [] : [...new Set(
+      Object.keys(run.phases)
+        .map((nodeId) => nodeToSlug.get(nodeId))
+        .filter((slug): slug is string => slug !== undefined),
+    )];
+    rows.push({
+      id: run.id,
+      when: run.startedAt ?? '',
+      what: run.initiative,
+      agents,
+      status: run.status,
+      costUsd: run.costUsd ?? null,
+      href: `/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`,
+      linkKind: 'flow',
+    });
+  }
+  // Standalone dispatches — same guarded enumeration discipline as
+  // collectStandaloneRows (entry names come from readdir, never a caller).
+  let entries: string[];
+  try {
+    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
+  } catch {
+    entries = [];
+  }
+  for (const entry of kind === 'flow' ? [] : entries) {
+    if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
+    if (seenIds.has(entry)) continue; // same row-id contract as the flow half
+    const parsed = parseGuardedEventsJsonl(logsRoot, entry);
+    if (parsed === null) continue;
+    const slug = standaloneRunSlug(parsed);
+    if (slug === null) continue; // unattributable — never a fabricated row
+    const derived = deriveStandaloneStateFromEvents(parsed);
+    const firstStartedAt = parsed[0]?.['started_at'];
+    seenIds.add(entry);
+    rows.push({
+      id: entry,
+      when: typeof firstStartedAt === 'string' ? firstStartedAt : '',
+      what: slug,
+      agents: [slug],
+      status: derived.state,
+      costUsd: derived.costUsd,
+      href: `/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(entry)}`,
+      linkKind: 'standalone',
+      ...(derived.errorText !== undefined ? { errorText: derived.errorText } : {}),
+    });
+  }
+  // Newest first; rows with no usable `when` sort last (mirrors the client
+  // ledger's own rule). Bounded.
+  rows.sort((a, b) => {
+    const aMs = a.when ? Date.parse(a.when) : NaN;
+    const bMs = b.when ? Date.parse(b.when) : NaN;
+    const aOk = Number.isFinite(aMs);
+    const bOk = Number.isFinite(bMs);
+    if (!aOk && !bOk) return 0;
+    if (!aOk) return 1;
+    if (!bOk) return -1;
+    return bMs - aMs;
+  });
+  return rows.slice(0, Math.max(0, limit));
 }
 
 /** Cost + `when` facts read from a session's OWN log dir
@@ -1992,6 +2255,121 @@ async function handleHttp(
   // DIRECTORY, not `events.jsonl` — a real, freshly-dispatched run's
   // directory exists before its first event lands, and that case must keep
   // reporting 200/`running`/`lines: []`, not 404.
+  // W7-B5 (agents-03/04/39) — the aggregate recent-runs route. Matched
+  // BEFORE the per-runId detail route below ('recent' is not a real run id;
+  // real ids are `_agent-*` or cycle-shaped, so no collision is possible,
+  // but the order makes it structural rather than lucky).
+  if (method === 'GET' && (url === '/api/agents/runs/recent' || url.startsWith('/api/agents/runs/recent?'))) {
+    try {
+      const qs = url.includes('?') ? new URLSearchParams(url.slice(url.indexOf('?') + 1)) : new URLSearchParams();
+      const rawLimit = qs.get('limit');
+      let limit = RECENT_AGENT_RUNS_DEFAULT_LIMIT;
+      if (rawLimit !== null) {
+        const parsedLimit = Number(rawLimit);
+        if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > RECENT_AGENT_RUNS_MAX_LIMIT) {
+          sendJson(res, 400, { error: `invalid limit: ${JSON.stringify(rawLimit)} (must be an integer 1..${RECENT_AGENT_RUNS_MAX_LIMIT})` }, origin);
+          return;
+        }
+        limit = parsedLimit;
+      }
+      // Review round 1 — `kind` is a SERVER-SIDE filter, applied before the
+      // bound. Home merges this ledger with its OWN flow-run rows and drops
+      // every duplicate, so on an install with `limit` or more recent flow
+      // runs the entire window came back as rows Home already had and threw
+      // away, leaving zero standalone agent rows on the page. Asking the
+      // server for rows the caller will discard is the bug; `kind` lets Home
+      // spend its budget on the rows only this route can supply.
+      const rawKind = qs.get('kind');
+      if (rawKind !== null && rawKind !== 'flow' && rawKind !== 'standalone' && rawKind !== 'all') {
+        sendJson(res, 400, { error: `invalid kind: ${JSON.stringify(rawKind)} (must be "flow", "standalone" or "all")` }, origin);
+        return;
+      }
+      const kind = (rawKind ?? 'all') as 'flow' | 'standalone' | 'all';
+      sendJson(res, 200, { ok: true, rows: collectRecentAgentRuns(ctx.forgeRoot, ctx.logsRoot, limit, kind) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // W7-B5 (agents-30 / projects-29) — cancel a dispatched standalone run.
+  // CSRF: the global x-forge-csrf guard above already gates every POST.
+  // Containment: `runId` passes isSafeRunId (single `_logs/` segment) and
+  // the SAME resolveGuardedPath choke point the detail route uses; a
+  // rejected guard and a genuinely absent run collapse into ONE 404.
+  if (method === 'POST' && url.startsWith('/api/agents/runs/') && url.endsWith('/cancel')) {
+    // Review round 1: `decodeURIComponent` throws `URIError` on a malformed
+    // escape (`%E0%A4%A`), and `handleHttp` is invoked as `void handleHttp(…)`
+    // with no top-level catch — an unhandled rejection that never writes a
+    // response and, under `--unhandled-rejections=throw`, takes the bridge
+    // down. Same guard shape the sibling history route in this file already
+    // applies to its own decode.
+    let runId: string;
+    try {
+      runId = decodeURIComponent(url.slice('/api/agents/runs/'.length, url.length - '/cancel'.length));
+    } catch {
+      sendJson(res, 400, { error: 'invalid runId: malformed percent-encoding' }, origin);
+      return;
+    }
+    if (!isSafeRunId(runId)) {
+      sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    // Review round 1 — SCOPE. `isSafeRunId` gates CHARSET, not identity:
+    // every cycle id under `_logs/` passes it too. Without this check,
+    // cancelling a live develop cycle's id found a real `_logs/<cycleId>`,
+    // derived `running` (no `end` event yet), found no `turn.pid`, and
+    // answered `200 {ok:true, killed:false}` — having appended an
+    // `agent-dispatch.cancelled` line into the RUNNING cycle's own
+    // events.jsonl. The cycle kept going, the operator was told it had been
+    // cancelled, and a marker no flow-run derivation expects was left in a
+    // real cycle log. Reachable, not hypothetical: `GET /api/agents/runs/
+    // recent` serves flow-run rows whose `id` IS a cycle id. This route
+    // cancels STANDALONE dispatches only — a flow run is cancelled through
+    // its own flow/scheduler surface.
+    if (!runId.startsWith(STANDALONE_RUN_DIR_PREFIX)) {
+      sendJson(
+        res,
+        400,
+        { error: `not a standalone agent run: ${JSON.stringify(runId)} (this route cancels ${JSON.stringify(STANDALONE_RUN_DIR_PREFIX)}* dispatches; cancel a flow run from its flow)` },
+        origin,
+      );
+      return;
+    }
+    const cancelDirGuard = resolveGuardedPath(ctx.logsRoot, [runId]);
+    if (!cancelDirGuard.ok || !cancelDirGuard.exists) {
+      sendJson(res, 404, { error: `no run found for id ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    try {
+      const current = deriveStandaloneRunState(ctx.logsRoot, runId);
+      if (current.state !== 'running') {
+        sendJson(res, 409, { error: `run is already terminal (${current.state}) — nothing to cancel` }, origin);
+        return;
+      }
+      // Kill the tracked dispatch child if one is alive AND provably ours
+      // (its argv carries this runId as a whole element — the `--run-id`
+      // value `spawnAgentDispatch` passed). A dead/unowned/absent pid is an
+      // honest `killed:false`; the marker below still lands either way, so
+      // the run reads `cancelled` (sticky) rather than `running` forever.
+      const killed = killTrackedRun(ctx.logsRoot, runId);
+      createLogger(runId, ctx.logsRoot).emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: 'ui-bridge',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-dispatch.cancelled',
+        metadata: { killed, cancelled_by: 'operator' },
+      });
+      sendJson(res, 200, { ok: true, killed }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
   if (method === 'GET' && url.startsWith('/api/agents/runs/')) {
     const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
     if (!isSafeRunId(runId)) {
@@ -2018,7 +2396,27 @@ async function handleHttp(
       // `deriveStandaloneRunState`'s own doc comment. `costUsd: null` (not a
       // fabricated `0`) once a run has no `end` event yet — Amendment 2.
       const derived = deriveStandaloneRunState(ctx.logsRoot, runId);
-      sendJson(res, 200, { ok: true, state: derived.state, costUsd: derived.costUsd, events: derived.events, lines: derived.lines }, origin);
+      // W7-B5 (agents-20): a LIVE standalone run must be tailed so the
+      // thinking drawer/run page stream instead of freezing. Re-armed here
+      // (the panel/run page poll this route) so a WS reconnect — which
+      // resets every tail — recovers on the next poll tick.
+      // Arm while live, RELEASE once terminal (review round 1) — otherwise
+      // a finished run's immutable log keeps being polled for the whole life
+      // of the Studio session.
+      if (derived.state === 'running') ctx.ensureAgentRunTail(runId);
+      else ctx.releaseAgentRunTail(runId);
+      sendJson(res, 200, {
+        ok: true,
+        state: derived.state,
+        costUsd: derived.costUsd,
+        events: derived.events,
+        lines: derived.lines,
+        // W7-B5: outputRefs (agents-06) + errorText (agents-19) + ceilingUsd
+        // (agents-31) — see StandaloneRunState's field docs.
+        outputRefs: derived.outputRefs,
+        ...(derived.errorText !== undefined ? { errorText: derived.errorText } : {}),
+        ...(derived.ceilingUsd !== undefined ? { ceilingUsd: derived.ceilingUsd } : {}),
+      }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -2048,7 +2446,15 @@ async function handleHttp(
     try {
       slug = decodeURIComponent(url.slice('/api/agents/'.length, url.length - '/history'.length));
     } catch {
-      sendJson(res, 200, { ok: true, rows: [] }, origin);
+      sendJson(res, 400, { error: 'invalid agent slug (malformed percent-encoding)' }, origin);
+      return;
+    }
+    // W7-B5 (agents-02): an empty or shape-invalid slug is a CLIENT BUG, not
+    // a filter that happens to match nothing — the RunPanel used to fire
+    // `GET /api/agents//history` on every mount and this route answered 200.
+    // Same validator the POST /run route applies to the same path segment.
+    if (!SAFE_AGENT_SLUG_RE.test(slug)) {
+      sendJson(res, 400, { error: `invalid agent slug: ${JSON.stringify(slug)}` }, origin);
       return;
     }
     try {
@@ -2086,6 +2492,24 @@ async function handleHttp(
         def = resolveDispatchableAgent(slug, listAgentDefinitions(skillsDir(ctx.forgeRoot)));
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return;
+      }
+      // W7-B5 (agents-21): a 'ralph'-strategy agent cannot run standalone at
+      // all — `runAgent` refuses multi-iteration loops (orchestrator-band),
+      // so pre-B5 this route happily minted a run that then always died with
+      // agent-dispatch.failed. Refuse HERE, before any run dir exists, with
+      // the honest reason the UI can show next to the Run control.
+      if (def.runtime.loopStrategy === 'ralph') {
+        sendJson(
+          res,
+          400,
+          {
+            error:
+              `agent "${slug}" declares loopStrategy 'ralph' — multi-iteration loops run inside the develop flow ` +
+              `(orchestrator-band), never as a standalone dispatch. Start it through its flow instead.`,
+          },
+          origin,
+        );
         return;
       }
       // R3-04 D9.2 — pre-spawn connection-readiness refusal, BEFORE
@@ -2168,7 +2592,12 @@ async function handleHttp(
           );
           return;
         }
-        if (def.runtime.loopStrategy !== 'one-shot') {
+        // W7-B5 (agents-21): the legacy invocation path (absent loopStrategy)
+        // now ENFORCES a ceiling (adapter maxBudgetUsdPerIteration — see
+        // orchestrator/run-agent.ts runInvocationSpawn), so only an UNKNOWN
+        // declared strategy is refused here ('ralph' was already refused
+        // above, before the ceiling was ever considered).
+        if (def.runtime.loopStrategy !== undefined && def.runtime.loopStrategy !== 'one-shot') {
           sendJson(
             res,
             400,
@@ -2176,7 +2605,7 @@ async function handleHttp(
               error:
                 `costCeilingUsd: ceiling not enforceable for this agent's loop strategy ` +
                 `(agent "${slug}" declares ${JSON.stringify(def.runtime.loopStrategy)} — an operator ` +
-                `cost ceiling can only be enforced for loopStrategy: 'one-shot')`,
+                `cost ceiling is enforced for loopStrategy 'one-shot' and for the legacy invocation path)`,
             },
             origin,
           );
@@ -2208,6 +2637,41 @@ async function handleHttp(
         return;
       }
       const runId = `_agent-${slug}-${newRunStamp()}`;
+      // Guard symmetry, hoisted (W7-B5): the t0 marker below is now the FIRST
+      // thing that writes under `runId` (`createLogger` does
+      // `resolve(logsRoot, runId)` + `mkdirSync`), so the server-minted-id
+      // safety check this file applies to this SAME value at its other sites
+      // (spawnAgentDispatch, the run-status route, the staging mkdir below)
+      // has to run BEFORE it — otherwise the very first write is the one that
+      // skips the check. A server-minted id failing its own safety check is a
+      // server anomaly, not a client mistake, so it raises to the route's
+      // existing 500 path, never a 400.
+      if (!isSafeRunId(runId)) {
+        throw new Error('refused to dispatch — unsafe server-minted run id');
+      }
+      // W7-B5 (agents-20 / agents-31 / sessions-kinds-24 sibling): the run's
+      // FIRST event lands the moment the id is minted — so `GET
+      // /api/events/<runId>` is 200 at t0 (no console 404 on the drawer's
+      // first fetch), the history route can attribute the run to its slug
+      // even if the child dies before runAgent's own `start` event, and the
+      // ceiling in force is durable from the moment it was accepted (a
+      // failed/still-running run can still surface it). `skill: slug` is the
+      // D4 identity field. Emitted BEFORE materials staging so the log reads
+      // in real order: dispatched → materials-staged → (child lifecycle).
+      createLogger(runId, ctx.logsRoot).emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: slug,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-run.dispatched',
+        metadata: {
+          agent_slug: slug,
+          ...(project !== undefined ? { project } : {}),
+          ...(costCeilingUsd !== undefined ? { kickoff_ceiling_usd: costCeilingUsd } : {}),
+        },
+      });
       // Staging happens AFTER runId is minted (it needs a run dir to write
       // into) and BEFORE spawnAgentDispatch (so the spawned agent process
       // can see the files). A `MaterialsStagingError` here is a SERVER-side
@@ -2221,19 +2685,14 @@ async function handleHttp(
         // `runId` is server-minted (just above) and `ctx.logsRoot` is
         // config-derived — both trusted, neither built from untrusted
         // input — so realizing the run's own directory here is safe.
-        // Still applying `isSafeRunId` defensively before the mkdir below,
-        // mirroring the SAME check this file already runs on this SAME
-        // value at its other two sites (spawnAgentDispatch ~line 1789,
-        // the run-status route ~line 1118) — guard-symmetry, so a future
-        // change to `newRunStamp()`/the slug regex can't quietly turn this
-        // THIRD site into the one that skips it. A server-minted id
-        // failing its own safety check is a server anomaly, not a client
-        // mistake, so it's raised as MaterialsStagingError -> the route's
-        // existing 500 path, never a 400.
-        if (!isSafeRunId(runId)) {
-          throw new MaterialsStagingError('materials: refused to stage — unsafe run id');
-        }
-        // This is the run's FIRST artifact: under FORGE_DRY_BRIDGE,
+        // `isSafeRunId(runId)` is already enforced immediately after the id
+        // is minted (see the hoisted guard above) — it used to live here,
+        // but W7-B5's t0 marker now writes under `runId` before this block
+        // runs, so the check had to move ahead of the FIRST write rather
+        // than sit in front of the second one. Same guard-symmetry intent
+        // (spawnAgentDispatch, the run-status route, this mkdir), one site
+        // earlier.
+        // This is the run's FIRST staged artifact: under FORGE_DRY_BRIDGE,
         // spawnAgentDispatch below never runs, so nothing else creates
         // `runDir` before `stageMaterials`/`resolveGuardedPath` need it to
         // already exist.
@@ -2267,6 +2726,11 @@ async function handleHttp(
         });
       }
       spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd);
+      // agents-20: start streaming this run's log to connected WS clients
+      // now that events.jsonl exists (ensureTailFor no-ops on a missing
+      // file, which is why the t0 event above must land first). The status
+      // route re-arms after any WS reconnect.
+      ctx.ensureAgentRunTail(runId);
       sendJson(
         res,
         200,
@@ -2996,6 +3460,15 @@ function spawnAgentDispatch(
     const proc = spawn(process.execPath, args, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
     closeSync(stderrFd);
     proc.unref();
+    // W7-B5 (agents-30): EVERY dispatch records its child pid at
+    // `_logs/<runId>/turn.pid` so the cancel route (`POST /api/agents/runs/
+    // :runId/cancel`) can reach it. Ownership proof at kill time is the
+    // runId in the child's own argv (`--run-id <runId>` — a whole element),
+    // via the same `isTurnAlive` the session cancel uses. Guarded write,
+    // best-effort like stderr.log.
+    if (typeof proc.pid === 'number') {
+      guardedWriteFile(join(forgeRoot, '_logs'), [runId, 'turn.pid'], `${proc.pid}\n`);
+    }
     // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
     // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
     // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/
@@ -4804,6 +5277,30 @@ async function handleDemoBuilder(
       // below would silently follow.
       const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs);
 
+      // W7-B5 (agents-20/31 + projects-31): the SAME t0 `agent-run.dispatched`
+      // marker the generic `POST /api/agents/:slug/run` host emits. This route
+      // mints a runId on the SAME shared run identity space, so it must reach
+      // the SAME state on the shared surfaces at t0 — without this event
+      // `GET /api/agents/runs/<runId>` 404s here while the generic route's
+      // runId already 200s (the AT-6 status-equivalence pin in
+      // cli/ui-bridge-onboarding-start.test.ts is exactly that check), the
+      // onboarding panel's first poll reads "no such run" for a run it just
+      // started, and the drawer's `GET /api/events/<runId>` 404s at t0.
+      // Guard symmetry with the generic host: the server-minted id is checked
+      // before this, its FIRST write.
+      if (!isSafeRunId(runId)) {
+        throw new Error('refused to dispatch — unsafe server-minted run id');
+      }
+      createLogger(runId, ctx.logsRoot).emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: 'onboarding-agent',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-run.dispatched',
+        metadata: { agent_slug: 'onboarding-agent', project },
+      });
       spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir);
       // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
       // for this route (cli/dry-bridge.ts) claims the agent dispatch is

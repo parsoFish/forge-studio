@@ -92,7 +92,7 @@ function baseProps(overrides: Partial<RunViewProps> = {}): RunViewProps {
     lines: [],
     materials: [],
     ceilingUsd: undefined,
-    outputs: [],
+    outputRefs: [],
     ...overrides,
   };
 }
@@ -222,44 +222,39 @@ test('ceiling: absent (no ceiling was ever set for this run) -> an honest "not r
 // disclosure), no click-simulation needed to prove the content is reachable.
 // ---------------------------------------------------------------------------
 
-test('outputs: zero outputs -> an honest empty state, not a fabricated placeholder card — kills "renders a fake sample card when there is no output yet"', () => {
-  const html = render({ found: true, outputs: [] });
+test('outputs: zero output refs -> an honest empty state, not a fabricated placeholder card — kills "renders a fake sample card when there is no output yet"', () => {
+  const html = render({ found: true, outputRefs: [] });
   expect(html).toContain('data-section="run-outputs"');
   expect(html).toContain('data-outputs-count="0"');
   expect(html).toContain('data-component="run-outputs-empty"');
   expect(html).not.toContain('<details');
 });
 
-test('outputs: one output renders as a <details> card, collapsed by default, whose summary carries the title and whose body carries the FULL artifact text verbatim — kills "artifact body never actually shipped, only a preview" and "renders expanded by default, defeating the point of a card list"', () => {
+test('outputs: real output REFERENCES render (⚑ AMENDED W7-B5 agents-06/forge-75j: the old typed RunOutput cards were hard-wired to [] — a data source that could never exist; the wire now serves the end event\'s own output_refs and the section shows THOSE)', () => {
   const html = render({
     found: true,
-    outputs: [{ id: 'CAND-1', title: 'Rate-limit handling on GitHub API calls', artifact: 'FULL-ARTIFACT-BODY-MARKER-7788' }],
+    outputRefs: ['projects/demo/CLAUDE.md', 'projects/demo/README.md'],
   });
-  expect(html).toContain('data-outputs-count="1"');
-  const block = detailsBlockContaining(html, 'data-output-id="CAND-1"');
-  expect(block).not.toBe('');
-  expect(block).toContain('Rate-limit handling on GitHub API calls');
-  expect(block).toContain('FULL-ARTIFACT-BODY-MARKER-7788');
-  // Collapsed by default: the boolean `open` attribute must be absent from
-  // this <details> tag specifically (its own open tag, not anywhere in the page).
-  const openTag = block.slice(0, block.indexOf('>') + 1);
-  expect(openTag).not.toMatch(/\bopen\b/);
+  expect(html).toContain('data-outputs-count="2"');
+  expect(html).toContain('data-output-ref="projects/demo/CLAUDE.md"');
+  expect(html).toContain('data-output-ref="projects/demo/README.md"');
+  expect(html).toContain('projects/demo/CLAUDE.md');
+  expect(html).not.toContain('data-component="run-outputs-empty"');
 });
 
-test('outputs: two outputs do not leak into each other\'s card — kills "always renders the FIRST output\'s artifact inside every card"', () => {
+test('errorText: a failed run\'s recorded reason renders VERBATIM as a run-error banner (W7-B5 agents-19 — never only the bare word "failed")', () => {
   const html = render({
     found: true,
-    outputs: [
-      { id: 'CAND-1', title: 'First candidate', artifact: 'ARTIFACT-ONE-MARKER' },
-      { id: 'CAND-2', title: 'Second candidate', artifact: 'ARTIFACT-TWO-MARKER' },
-    ],
+    state: 'failed',
+    errorText: 'spawn ENOENT: claude binary missing',
   });
-  const blockOne = detailsBlockContaining(html, 'data-output-id="CAND-1"');
-  const blockTwo = detailsBlockContaining(html, 'data-output-id="CAND-2"');
-  expect(blockOne).toContain('ARTIFACT-ONE-MARKER');
-  expect(blockOne).not.toContain('ARTIFACT-TWO-MARKER');
-  expect(blockTwo).toContain('ARTIFACT-TWO-MARKER');
-  expect(blockTwo).not.toContain('ARTIFACT-ONE-MARKER');
+  expect(html).toContain('data-component="run-error"');
+  expect(html).toContain('spawn ENOENT: claude binary missing');
+});
+
+test('errorText absent: no run-error banner is fabricated', () => {
+  const html = render({ found: true, state: 'done' });
+  expect(html).not.toContain('data-component="run-error"');
 });
 
 // ---------------------------------------------------------------------------
@@ -287,11 +282,10 @@ test('found=false wins even if the caller ALSO supplied non-empty lines/material
     lines: [{ kind: 'out', text: 'SHOULD-NOT-APPEAR-LOG', eventType: 'log' }],
     materials: [{ path: 'materials/x.md', kind: 'documents' }],
     ceilingUsd: 9.99,
-    outputs: [{ id: 'CAND-9', title: 'SHOULD-NOT-APPEAR-TITLE', artifact: 'SHOULD-NOT-APPEAR-ARTIFACT' }],
+    outputRefs: ['SHOULD-NOT-APPEAR-REF'],
   });
   expect(html).not.toContain('SHOULD-NOT-APPEAR-LOG');
-  expect(html).not.toContain('SHOULD-NOT-APPEAR-TITLE');
-  expect(html).not.toContain('SHOULD-NOT-APPEAR-ARTIFACT');
+  expect(html).not.toContain('SHOULD-NOT-APPEAR-REF');
   expect(html).not.toContain('materials/x.md');
   expect(html).not.toContain('9.99');
 });

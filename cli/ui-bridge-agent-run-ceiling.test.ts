@@ -405,12 +405,16 @@ test('POST /api/agents/<slug>/run: an agent declaring its own budget AND an oper
 // unlike WI-1's gate-refusal messages).
 // ---------------------------------------------------------------------------
 
-test('POST /api/agents/<slug>/run: costCeilingUsd against "test-legacy" (no loopStrategy declared — the round-7 fixture mirroring 14 of 19 real dispatchable agents) ⇒ 400, fail-closed, before any spawn — a ceiling that cannot be enforced is refused, never silently accepted', async () => {
+test('POST /api/agents/<slug>/run: costCeilingUsd against "test-legacy" (no loopStrategy declared) ⇒ ACCEPTED and recorded on the t0 dispatched event. ⚑ AMENDED W7-B5 (agents-21): the legacy invocation path now ENFORCES the ceiling (adapter maxBudgetUsdPerIteration — run-agent-w7b5.test.ts pins the SDK call record), so the R6-04 refusal would leave the six no-loopStrategy roster agents permanently uncappable', async () => {
   const skipsBefore = runRouteSkipCount();
   const { status, body } = await postRunAs('test-legacy', { project: 'gitpulse', costCeilingUsd: 2.5 });
-  assertRefused(status, body, skipsBefore, 'non-one-shot-ceiling');
-  assert.match(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `expected the pinned reason — got: ${JSON.stringify(body.error)}`);
-  assert.match(body.error ?? '', /one-shot/, `expected the enforceable class named — got: ${JSON.stringify(body.error)}`);
+  assertAccepted(status, body, skipsBefore);
+  assert.match(body.runId as string, /^_agent-test-legacy-/);
+  // The ceiling is durable from t0 (agents-31): the run detail serves it
+  // before any start/end event exists.
+  const detail = await fetch(`${url}/api/agents/runs/${encodeURIComponent(body.runId as string)}`);
+  const detailBody = await detail.json() as Record<string, unknown>;
+  assert.equal(detailBody.ceilingUsd, 2.5, 'the accepted ceiling must be readable off the run detail at t0');
 });
 
 test('POST /api/agents/<slug>/run: NEGATIVE TWIN, load-bearing — no costCeilingUsd at all against "test-legacy" ⇒ still 200, completely unaffected by the new guard. This is the path every ordinary dispatch of the 14 non-one-shot roster agents takes; if the refusal leaked into this case, most of the roster would break to add a limit feature', async () => {
@@ -437,12 +441,12 @@ test('POST /api/agents/<slug>/run: NEGATIVE TWIN, load-bearing — no costCeilin
 // fail-closed"; not duplicated here.)
 // ---------------------------------------------------------------------------
 
-test('PRECEDENCE: an OUT-OF-BOUNDS ceiling against a LEGACY-PATH agent ⇒ the ENFORCEABILITY message, NOT the bounds message — the bounds message ("use a smaller number") would name a remedy that cannot work for this agent at any value', async () => {
+test('PRECEDENCE: an OUT-OF-BOUNDS ceiling against a LEGACY-PATH agent ⇒ the BOUNDS message. ⚑ AMENDED W7-B5 (agents-21): the legacy path is now ENFORCEABLE, so "use a smaller number" is once again a remedy that genuinely works for this agent — the R6-04 enforceability-wins ordering only ever applied because no value was acceptable then', async () => {
   const skipsBefore = runRouteSkipCount();
   const { status, body } = await postRunAs('test-legacy', { costCeilingUsd: MAX_KICKOFF_COST_CEILING_USD + 1 });
   assertRefused(status, body, skipsBefore, 'out-of-bounds-legacy-path');
-  assert.match(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `expected the ENFORCEABILITY message to win — got: ${JSON.stringify(body.error)}`);
-  assert.doesNotMatch(body.error ?? '', /invalid costCeilingUsd/, `the bounds message must NOT appear here — it would name a remedy ("use a smaller number") that cannot work for this agent at any value — got: ${JSON.stringify(body.error)}`);
+  assert.match(body.error ?? '', /invalid costCeilingUsd/, `expected the BOUNDS message (the legacy path is enforceable since W7-B5) — got: ${JSON.stringify(body.error)}`);
+  assert.doesNotMatch(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `the enforceability message must not appear for an agent that IS enforceable — got: ${JSON.stringify(body.error)}`);
 });
 
 test('PRECEDENCE: POSITIVE CONTROL — an OUT-OF-BOUNDS ceiling against a ONE-SHOT agent ⇒ the BOUNDS message, unchanged. Without this pair, the test above could pass for the trivial (wrong) reason that enforceability swallows EVERY refusal regardless of agent — this proves bounds still fires, and fires with its own message, for the class that can actually use it', async () => {

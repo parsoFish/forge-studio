@@ -104,6 +104,10 @@ type AgentState = {
   // rather than inside `capability` (parseCapability's return shape is
   // pinned byte-for-byte by existing studio-client.test.ts assertions).
   costCeilingEnforceable: boolean;
+  /** W7-B5 (agents-21): the agent's own declared default ceiling
+   *  (SKILL budgets.maxBudgetUsd) — seeds the Run panel's field ahead of
+   *  the run-level policy default. */
+  declaredMaxBudgetUsd?: number;
 };
 
 const DEFAULT_RUNTIME: AgentRuntime = {
@@ -221,6 +225,7 @@ function parseAgent(raw: Agent): AgentState {
     phase:          raw.phase ?? '',
     capability:     raw.capability,
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
+    declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
   };
 }
 
@@ -878,6 +883,13 @@ export default function AgentBuilderPage() {
             catalog={catalog}
           />
           <ReadinessPanel state={readinessState} />
+          {/* W7-B5 (agents-21/36): defaultCostCeilingUsd — the agent's OWN
+              declared ceiling wins the seed slot, the run-level policy
+              default is the fallback; standaloneBlockedReason — a
+              ralph-loop agent cannot run standalone (the bridge refuses
+              the dispatch), say so up front instead of minting a run that
+              always fails; unreadyConnectionIds — link the blocked
+              connections straight to /connections/<id>. */}
           <RunPanel
             slug={state.slug}
             interactive={state.capability?.interactive === true}
@@ -885,8 +897,12 @@ export default function AgentBuilderPage() {
             blockedMessage={runBlockMessage}
             projects={projects}
             declaredMaterialKinds={state.materials}
-            defaultCostCeilingUsd={defaultCostCeilingUsd}
+            defaultCostCeilingUsd={state.declaredMaxBudgetUsd ?? defaultCostCeilingUsd}
             costCeilingEnforceable={state.costCeilingEnforceable}
+            standaloneBlockedReason={state.runtime.loopStrategy === 'ralph'
+              ? 'This agent is a multi-iteration (ralph) loop — it runs inside the develop flow, never as a standalone dispatch. Start it through its flow instead.'
+              : null}
+            unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
           />
@@ -916,8 +932,11 @@ export default function AgentBuilderPage() {
               Could not load run history — try again shortly.
             </div>
           )}
+          {/* W7-B5 (agents-32): paged + status-filterable instead of 77
+              rows crammed into a 220px scroller with a mixed, unfiltered
+              vocabulary. */}
           {!isNew && (historyResolution?.kind === 'found' || historyResolution?.kind === 'not-found') && (
-            <HistoryLedger rows={historyRows} nowMs={Date.now()} />
+            <HistoryLedger rows={historyRows} nowMs={Date.now()} pageSize={15} filterable />
           )}
         </aside>
 

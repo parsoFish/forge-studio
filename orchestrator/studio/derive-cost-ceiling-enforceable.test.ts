@@ -1,7 +1,14 @@
 /**
- * Acceptance tests for WI-3 (R6-04): `agentCapabilityDescriptor()` gains a
- * new FACT, `costCeilingEnforceable: boolean`, computed SERVER-SIDE as
- * `runtime.loopStrategy === 'one-shot'` (orchestrator/studio/derive.ts).
+ * Acceptance tests for `agentCapabilityDescriptor().costCeilingEnforceable`.
+ *
+ * ⚑ AMENDED W7-B5 (agents-21): the fact is now computed SERVER-SIDE as
+ * `runtime.loopStrategy === undefined || runtime.loopStrategy === 'one-shot'`
+ * (orchestrator/studio/derive.ts) — the legacy invocation path (absent
+ * loopStrategy) ENFORCES a ceiling for real since W7-B5 wired it to the
+ * adapter's `maxBudgetUsdPerIteration` (see run-agent-w7b5.test.ts). 'ralph'
+ * and unknown declared strategies stay false: runAgent refuses to dispatch
+ * either standalone, so there is no run to cap. R6-04's original rule was
+ * `=== 'one-shot'`, from when the legacy path had no budget wiring.
  *
  * WHY this fact, computed HERE: the bridge route `POST /api/agents/:slug/run`
  * (cli/ui-bridge.ts, R6-04 WI-2) already refuses an operator-supplied
@@ -64,18 +71,18 @@ test('agentCapabilityDescriptor: runtime.loopStrategy "one-shot" -> costCeilingE
   assert.equal(agentCapabilityDescriptor(def).costCeilingEnforceable, true);
 });
 
-// Kills "an agent with no loopStrategy field is treated as enforceable" —
-// the exact defect shape WI-2's route guard exists to prevent (a ceiling
-// silently accepted then silently unenforced for 14 of 19 roster agents).
-test('agentCapabilityDescriptor: absent runtime.loopStrategy -> costCeilingEnforceable false', () => {
+// ⚑ AMENDED W7-B5: an absent loopStrategy is the legacy invocation path,
+// which now enforces the ceiling for real (maxBudgetUsdPerIteration; one
+// invocation run == one iteration) — so it reads enforceable.
+test('agentCapabilityDescriptor: absent runtime.loopStrategy -> costCeilingEnforceable TRUE (W7-B5: the legacy path enforces via the adapter per-iteration budget)', () => {
   const def = baseAgentDefFixture({ runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' } });
-  assert.equal(agentCapabilityDescriptor(def).costCeilingEnforceable, false);
+  assert.equal(agentCapabilityDescriptor(def).costCeilingEnforceable, true);
 });
 
-// Kills a loose truthy check (`!!loopStrategy` instead of `=== 'one-shot'`):
 // 'ralph' is a real, truthy, declared loopStrategy value that is NOT
-// enforceable — distinct from the "absent" case above, which a truthy check
-// would also get right by accident.
+// enforceable — runAgent refuses a standalone ralph dispatch outright, so
+// there is no run to cap (and the bridge route now refuses the dispatch
+// itself, W7-B5).
 test('agentCapabilityDescriptor: runtime.loopStrategy "ralph" (declared, non-one-shot) -> costCeilingEnforceable false', () => {
   const def = baseAgentDefFixture({ runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'ralph' } });
   assert.equal(agentCapabilityDescriptor(def).costCeilingEnforceable, false);
@@ -83,7 +90,9 @@ test('agentCapabilityDescriptor: runtime.loopStrategy "ralph" (declared, non-one
 
 // Kills a case-collapsed or substring match ("One-Shot", "one-shot-ish",
 // "not-one-shot" all containing the substring "one-shot" in some form must
-// not slip through a loose `.includes('one-shot')` check).
+// not slip through a loose `.includes('one-shot')` check) — an unknown
+// declared strategy is refused by runAgent, so it must never read
+// enforceable.
 test('agentCapabilityDescriptor: loopStrategy values that merely CONTAIN "one-shot" as a substring are NOT enforceable — exact match only', () => {
   for (const value of ['One-Shot', 'one-shot-ish', 'not-one-shot', 'ONE-SHOT']) {
     const def = baseAgentDefFixture({ runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: value } });
@@ -102,9 +111,12 @@ test('agentCapabilityDescriptor: costCeilingEnforceable is independent of surfac
   assert.equal(agentCapabilityDescriptor(interactiveOneShot).interactive, true);
   assert.equal(agentCapabilityDescriptor(interactiveOneShot).costCeilingEnforceable, true);
 
-  const unattendedLegacy = baseAgentDefFixture({ surface: 'unattended' });
-  assert.equal(agentCapabilityDescriptor(unattendedLegacy).interactive, false);
-  assert.equal(agentCapabilityDescriptor(unattendedLegacy).costCeilingEnforceable, false);
+  const unattendedRalph = baseAgentDefFixture({
+    surface: 'unattended',
+    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'ralph' },
+  });
+  assert.equal(agentCapabilityDescriptor(unattendedRalph).interactive, false);
+  assert.equal(agentCapabilityDescriptor(unattendedRalph).costCeilingEnforceable, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -121,18 +133,21 @@ test('agentCapabilityDescriptor: real roster — project-manager (loopStrategy: 
   assert.equal(agentCapabilityDescriptor(pm!).costCeilingEnforceable, true);
 });
 
-test('agentCapabilityDescriptor: real roster — architect (no loopStrategy, absent surface) -> costCeilingEnforceable false', () => {
+test('agentCapabilityDescriptor: real roster — architect (no loopStrategy) -> costCeilingEnforceable TRUE (W7-B5); developer-ralph (ralph) -> false', () => {
   const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
   const architect = defs.find((d) => d.slug === 'architect');
   assert.ok(architect, 'expected skills/architect in the real roster');
   assert.equal(architect!.runtime.loopStrategy, undefined, 'sanity: architect SKILL.md must declare no loopStrategy');
-  assert.equal(agentCapabilityDescriptor(architect!).costCeilingEnforceable, false);
+  assert.equal(agentCapabilityDescriptor(architect!).costCeilingEnforceable, true);
+  const ralph = defs.find((d) => d.slug === 'developer-ralph');
+  assert.ok(ralph, 'expected skills/developer-ralph in the real roster');
+  assert.equal(agentCapabilityDescriptor(ralph!).costCeilingEnforceable, false);
 });
 
 // Full-roster sweep: the fact must be a boolean for every real agent, and it
 // must agree EXACTLY with the raw frontmatter field for each — no agent's
 // descriptor may diverge from its own declared loopStrategy.
-test('agentCapabilityDescriptor: computes a boolean costCeilingEnforceable for every real roster agent, always matching runtime.loopStrategy === "one-shot"', () => {
+test('agentCapabilityDescriptor: computes a boolean costCeilingEnforceable for every real roster agent, always matching (loopStrategy absent OR one-shot)', () => {
   const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
   assert.ok(defs.length > 0, 'roster must be non-empty');
   for (const def of defs) {
@@ -140,8 +155,8 @@ test('agentCapabilityDescriptor: computes a boolean costCeilingEnforceable for e
     assert.equal(typeof descriptor.costCeilingEnforceable, 'boolean', `${def.slug}: costCeilingEnforceable must be a boolean`);
     assert.equal(
       descriptor.costCeilingEnforceable,
-      def.runtime.loopStrategy === 'one-shot',
-      `${def.slug}: costCeilingEnforceable must equal (runtime.loopStrategy === 'one-shot')`,
+      def.runtime.loopStrategy === undefined || def.runtime.loopStrategy === 'one-shot',
+      `${def.slug}: costCeilingEnforceable must equal (loopStrategy absent OR 'one-shot')`,
     );
   }
 });

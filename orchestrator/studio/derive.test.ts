@@ -268,12 +268,13 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
 // key appears on the wire.
 test('agentCapabilityDescriptor: surface unattended → interactive:false', () => {
   const def = baseAgentDefFixture({ surface: 'unattended' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: false });
+  // W7-B5: absent loopStrategy = legacy invocation path = ceiling enforceable (see derive-cost-ceiling-enforceable.test.ts).
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true });
 });
 
 test('agentCapabilityDescriptor: surface interactive → interactive:true', () => {
   const def = baseAgentDefFixture({ surface: 'interactive' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: false });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true });
 });
 
 test('agentCapabilityDescriptor: R2-03-F2 — fanoutCapable reflects a declared fanout: block', () => {

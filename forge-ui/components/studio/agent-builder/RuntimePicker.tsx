@@ -107,7 +107,9 @@ export function RuntimePicker({
       {/* SDK cards */}
       <div style={{ marginBottom: 14 }}>
         <div className="field-label" style={{ marginBottom: 8 }}>SDK</div>
-        <div className="sdk-cards" id="sdk-cards">
+        {/* W7-B5 (agents-41): the option-card groups are radiogroups — each
+            card a role=radio with aria-checked, not a bare focusable div. */}
+        <div className="sdk-cards" id="sdk-cards" role="radiogroup" aria-label="SDK">
           {sdks.map((sdk) => {
             const available = sdkAvailable(sdk);
             const selected = runtime.sdk === sdk.id;
@@ -116,6 +118,10 @@ export function RuntimePicker({
                 key={String(sdk.id)}
                 className={`sdk-card${selected ? ' selected' : ''}${!available ? ' disabled' : ''}`}
                 data-sdk-id={sdk.id}
+                role="radio"
+                aria-checked={selected}
+                aria-disabled={!available || undefined}
+                aria-label={String(sdk.name)}
                 tabIndex={available ? 0 : -1}
                 title={!available ? 'Not installed — coming in a future milestone' : undefined}
                 style={!available ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
@@ -139,10 +145,14 @@ export function RuntimePicker({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <div className="field-label" style={{ margin: 0 }}>Model Strategy</div>
           <div className="seg-control">
+            {/* W7-B5 (agents-17): ONE convention for active state — the
+                loop-strategy segments already expose data-active; these now
+                match instead of encoding selection in a CSS class only. */}
             <button
               className={`seg-btn${!isRange ? ' active' : ''}`}
               data-strategy="fixed"
               id="seg-fixed"
+              {...(!isRange ? { 'data-active': 'true' } : {})}
               onClick={() => setStrategy('fixed')}
             >
               Fixed
@@ -151,6 +161,7 @@ export function RuntimePicker({
               className={`seg-btn${isRange ? ' active' : ''}`}
               data-strategy="range"
               id="seg-range"
+              {...(isRange ? { 'data-active': 'true' } : {})}
               onClick={() => setStrategy('range')}
             >
               Range
@@ -203,7 +214,7 @@ export function RuntimePicker({
       {/* Brain / Knowledge access */}
       <div>
         <div className="field-label" style={{ marginBottom: 8 }}>Knowledge Access</div>
-        <div className="brain-options" id="brain-options">
+        <div className="brain-options" id="brain-options" role="radiogroup" aria-label="Knowledge access">
           {(['mandatory', 'advisory', 'none'] as const).map((access) => (
             <BrainAccessCard
               key={access}
@@ -239,7 +250,7 @@ function ModelChipRow({ models, selectedIds, onToggle }: ModelChipRowProps) {
     );
   }
   return (
-    <div className="model-chip-row">
+    <div className="model-chip-row" role="group" aria-label="Models">
       {models.map((m) => {
         const selected = selectedIds.includes(String(m.id));
         const tier = String(m.tier ?? 'worker');
@@ -249,6 +260,11 @@ function ModelChipRow({ models, selectedIds, onToggle }: ModelChipRowProps) {
             key={String(m.id)}
             className={`model-chip${selected ? ' selected' : ''}`}
             data-model-id={m.id}
+            // W7-B5 (agents-41): a chip is a toggleable option — checkbox
+            // semantics (a Range strategy selects several at once).
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={String(m.name)}
             tabIndex={0}
             onClick={() => onToggle(String(m.id))}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(String(m.id)); } }}
@@ -284,6 +300,12 @@ function BrainAccessCard({ access, selected, onSelect }: { access: string; selec
     <div
       className={`brain-option${selected ? ' selected' : ''}`}
       data-access={access}
+      // W7-B5 (agents-41): one of a mutually-exclusive radiogroup (the
+      // wrapper carries role=radiogroup) — announced with its checked state
+      // instead of being a bare focusable div.
+      role="radio"
+      aria-checked={selected}
+      aria-label={BRAIN_LABELS[access] ?? access}
       tabIndex={0}
       onClick={() => onSelect(access)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(access); } }}

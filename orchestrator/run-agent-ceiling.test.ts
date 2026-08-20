@@ -434,28 +434,27 @@ test('runAgent one-shot + SELF lifecycle: ctx.kickoffCeilingUsd reaches options.
 // are asserted with full-string equality there).
 // =============================================================================
 
-test('dispatchAgentRun: kickoffCeilingUsd against the REAL roster agent "project-scoped-review" (undeclared loopStrategy on disk — the legacy-path case for 14 of 19 dispatchable agents) is REFUSED, not silently threaded. This is the amended test #8: it keeps its original value (the one test in either ceiling file driving a real roster agent as actually dispatched) but now pins the refusal the review found missing, not the threading the review found wrong', async () => {
+test('dispatchAgentRun: kickoffCeilingUsd against the REAL roster agent "project-scoped-review" (undeclared loopStrategy on disk — the legacy-path case for 14 of 19 dispatchable agents) is THREADED to the SDK call record. ⚑ AMENDED BY W7-B5 (agents-21): R6-04 pinned a REFUSAL here because the legacy path then had no budget wiring at all — an accepted-but-unenforced ceiling would have been a lie. W7-B5 wired the legacy invocation path to the adapter\'s maxBudgetUsdPerIteration (one invocation run == one iteration, so the per-iteration cap IS the run ceiling — see run-agent-w7b5.test.ts), so acceptance is now honest and the refusal would leave the six no-loopStrategy agents permanently uncappable', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
-  const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-refuse-'));
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-thread-'));
   try {
     const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
-    await assert.rejects(
-      dispatchAgentRun({
-        slug: 'project-scoped-review',
-        skillsDir: join(ROOT, 'skills'),
-        runId: '_agent-dispatch-ceiling-refuse',
-        logsRoot: join(scratchRoot, '_logs'),
-        workdir: mkdtempSync(join(scratchRoot, 'wd-')),
-        kickoffCeilingUsd: 0.6,
-        queryFn: capturingQueryFn(calls),
-      }),
-      (err: Error) => {
-        assert.match(err.message, /ceiling not enforceable for this agent's loop strategy/, `expected the pinned reason in the error message — got: ${JSON.stringify(err.message)}`);
-        assert.match(err.message, /one-shot/, `expected the enforceable class named in the error message — got: ${JSON.stringify(err.message)}`);
-        return true;
-      },
+    const out = await dispatchAgentRun({
+      slug: 'project-scoped-review',
+      skillsDir: join(ROOT, 'skills'),
+      runId: '_agent-dispatch-ceiling-thread',
+      logsRoot: join(scratchRoot, '_logs'),
+      workdir: mkdtempSync(join(scratchRoot, 'wd-')),
+      kickoffCeilingUsd: 0.6,
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(out.slug, 'project-scoped-review');
+    assert.equal(calls.length, 1, 'the run must actually reach the SDK call');
+    assert.equal(
+      calls[0]?.options.maxBudgetUsd,
+      0.6,
+      'the operator ceiling must reach options.maxBudgetUsd — the exact record the SDK reads to stop the run',
     );
-    assert.equal(calls.length, 0, 'the refusal must happen BEFORE any SDK call is attempted — nothing may reach the spawn point');
   } finally {
     restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
@@ -491,7 +490,7 @@ test('dispatchAgentRun: ONE-SHOT POSITIVE CONTROL, paired deliberately alongside
   }
 });
 
-test('dispatchAgentRun: NEGATIVE TWIN, load-bearing — no kickoffCeilingUsd at all against the SAME non-one-shot agent behaves EXACTLY as it does today: no refusal, no maxBudgetUsd anywhere in the SDK call. This is the path every ordinary dispatch of the 14 non-one-shot roster agents takes; if the new refusal leaked into this case, most of the roster would break to add a limit feature', async () => {
+test('dispatchAgentRun: NEGATIVE TWIN, amended twice — no kickoffCeilingUsd against the SAME legacy agent still proceeds (no refusal), and ⚑ W7-B5 the agent\'s OWN declared default ceiling (project-scoped-review SKILL budgets.maxBudgetUsd: 5, docs/agent-cost-ceilings.md) now reaches the SDK call — an ordinary dispatch is no longer uncapped', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-negtwin-'));
   try {
@@ -509,9 +508,9 @@ test('dispatchAgentRun: NEGATIVE TWIN, load-bearing — no kickoffCeilingUsd at 
     assert.equal(out.slug, 'project-scoped-review');
     assert.equal(calls.length, 1, 'the legacy path must still genuinely proceed to the real SDK call — this is not a refusal, and the run must actually happen');
     assert.equal(
-      Object.prototype.hasOwnProperty.call(calls[0]?.options ?? {}, 'maxBudgetUsd'),
-      false,
-      'the legacy path has no budget concept at all — "maxBudgetUsd" must never appear in its SDK call options, with or without this feature',
+      calls[0]?.options.maxBudgetUsd,
+      5,
+      'the agent\'s own declared budgets.maxBudgetUsd (SKILL.md, W7-B5 default) must reach the SDK call when no operator ceiling is given — the "no cap declared anywhere ⇒ no key" case is pinned in run-agent-w7b5.test.ts with a budgets:{} clone',
     );
   } finally {
     restoreEnv();
@@ -519,28 +518,22 @@ test('dispatchAgentRun: NEGATIVE TWIN, load-bearing — no kickoffCeilingUsd at 
   }
 });
 
-test('runAgent: throws directly when ctx.kickoffCeilingUsd is set and the agent\'s loopStrategy is not "one-shot" — the SECOND enforcement layer (guard symmetry). "forge agent dispatch --cost-ceiling-usd" never passes through the bridge route at all, so the route\'s own 400 alone would leave this CLI path silently ignoring the ceiling — the same defect, one door over', async () => {
+test('runAgent: ctx.kickoffCeilingUsd on an undeclared-loopStrategy agent THREADS to the SDK call record (⚑ AMENDED BY W7-B5, agents-21 — R6-04\'s direct-throw guard is retired now that the legacy path enforces for real; the "forge agent dispatch --cost-ceiling-usd" CLI door therefore enforces too, one mechanism for both doors). A standalone ralph dispatch is still refused outright — pinned in run-agent-w7b5.test.ts', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
-  const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-direct-refuse-'));
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-direct-thread-'));
   try {
     const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
     const def = getFixtureDef(listAgentDefinitions(join(ROOT, 'skills')), 'project-scoped-review'); // real, undeclared loopStrategy
-    await assert.rejects(
-      runAgent(def, {
-        runId: '_agent-runagent-ceiling-refusal',
-        workdir: mkdtempSync(join(scratchRoot, 'wd-')),
-        prompt: 'irrelevant — the refusal must happen before this is ever used',
-        logsRoot: join(scratchRoot, '_logs'),
-        kickoffCeilingUsd: 1.5,
-        queryFn: capturingQueryFn(calls),
-      } as Parameters<typeof runAgent>[1]),
-      (err: Error) => {
-        assert.match(err.message, /ceiling not enforceable for this agent's loop strategy/, `expected the pinned reason — got: ${JSON.stringify(err.message)}`);
-        assert.match(err.message, /one-shot/, `expected the enforceable class named — got: ${JSON.stringify(err.message)}`);
-        return true;
-      },
-    );
-    assert.equal(calls.length, 0, 'the refusal must happen BEFORE any SDK call is attempted');
+    await runAgent(def, {
+      runId: '_agent-runagent-ceiling-thread',
+      workdir: mkdtempSync(join(scratchRoot, 'wd-')),
+      prompt: 'test',
+      logsRoot: join(scratchRoot, '_logs'),
+      kickoffCeilingUsd: 1.5,
+      queryFn: capturingQueryFn(calls),
+    } as Parameters<typeof runAgent>[1]);
+    assert.equal(calls.length, 1, 'the run reaches the SDK call');
+    assert.equal(calls[0]?.options.maxBudgetUsd, 1.5, 'the ceiling reaches options.maxBudgetUsd on the CLI door too');
   } finally {
     restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
