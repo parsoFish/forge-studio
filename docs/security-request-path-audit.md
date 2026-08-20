@@ -1457,3 +1457,35 @@ instead of `guardedWriteFile` (same guard, plus the sticky rule); and
 '_logs'), [sessionLogDirName(kind, sid), 'turn.pid'])`, with `kind`/`sid`
 derived from the route's ALREADY-validated `sessionDir` (never request text)
 and `sid` re-checked by `isSafeRunId`.
+
+### W7-B2 — KB active-job derivation (`cli/kb-job-state.ts`, two new `[read]`-class sinks, both accidentally-safe by construction)
+
+The ONE per-KB "a mutating job is running" derivation (knowledge-05) that
+both the bridge's 409s and the UI's action-group gate consume.
+`check-request-path-sinks.mjs` delta (1 file, `readFileSync` 0 → 2):
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/kb-job-state.ts` (`readJsonFile`, via `findLiveDrain`) | `readFileSync` | none reaches the path — the request-derived `kbId` is used ONLY as a string PREFIX FILTER over `readdirSync(forgeRoot/_logs)`'s own enumerated entry names; the path read is `join(forgeRoot, '_logs', name, 'status.json')` where `name` is a server-enumerated directory entry, never caller text | accidentally-safe `[read]` | `kbId` never appears in any `join()`; a hostile `kbId` can at most fail every `startsWith` and select nothing. Verified `[exec]` by `cli/bridge-studio-kbs-w7.test.ts` (active-job gate pins) and the drain-route 409 pins in `cli/bridge-studio-kb-drain-w7.test.ts`. |
+| `cli/kb-job-state.ts` (`consolidateRunning`) | `readFileSync` | none — `runId` at both call sites is sliced from the SAME `readdirSync` enumeration (`name.slice('_brainfix-'.length)` after a `startsWith('_brainfix-<kbId>-consolidate-')` filter); `_brainfix-<runId>/events.jsonl` is a re-join of the enumerated name | accidentally-safe `[read]` | Same enumeration-only trust chain as the row above; the parse is line-tolerant JSON with no bytes surfaced to the caller beyond a boolean/kind. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records `cli/kb-job-state.ts`
+`readFileSync` at 2.
+
+### W7-B3 — community registry CRUD + index meta (fixed-path sinks; one guarded read)
+
+Wave-7 lane B3 (community; bead forge-bzt.8). `check-request-path-sinks.mjs`
+delta (8 rows across 3 files) — the headline fact for every new fs sink in
+the two bridge files: **no request-derived value ever becomes a path
+segment.** The routes' `:id` is `assertSkillSlug`-validated and then used
+ONLY to match parsed registry rows in memory; every fs operation targets the
+ONE fixed, forge-root-derived registry path.
+
+| file | op(s) | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/bridge-studio-writes.ts` (`mutateCommunityRegistry`) | `existsSync` + `mkdirSync` + `writeFileSync` + `renameSync` + `unlinkSync` | none — `destPath = communityRegistryPath(ctx.forgeRoot)` (a fixed literal under the trusted forge root); `tempPath` is a sibling `.registry.yaml.tmp-<server-random>` (`randomBytes`, never request text). The URL `:id` / body `item.id` never reach a path: they are slug-validated (`assertSkillSlug`) and matched against `loadCommunityRegistry`'s parsed rows in memory only. | fixed-path (accidentally-safe by construction) | Temp-then-rename with a re-parse through `loadCommunityRegistry` before the rename — a document the ONE loader refuses never replaces the real file; refused mutations (`null` from `mutate`) write nothing at all. Verified `[exec]` by `cli/bridge-community-registry-crud.test.ts` (CRUD-8: a traversal-shaped id 400s with the file byte-identical; CRUD-2/6: 409/404 leave the file byte-identical). |
+| `cli/bridge-studio-community.ts` (`communityIndexMeta`, the registry-row GET) | `existsSync` ×2 (new) + `execFileSync` (new) | none — both `existsSync` calls probe the SAME fixed `communityRegistryPath(forgeRoot)`; `execFileSync('git', ['status','--porcelain','--','studio/community/registry.yaml'], {cwd: forgeRoot})` is a FIXED argv + FIXED literal path with `shell:false` semantics (execFileSync never invokes a shell) — no request-derived byte reaches argv, env, or cwd. The row GET's `:id` is `assertSkillSlug`-validated and used only for in-memory row matching. | fixed-path / fixed-argv | A git failure (non-repo root) degrades to `registryDirty: null` — an honest unknown, never a fabricated clean and never an error channel that echoes request data. Verified `[exec]` by `cli/bridge-studio-community.test.ts` (the three W7-B3 meta tests: null outside a repo, false→true across a real commit + modify). |
+| `orchestrator/studio/skill-library.ts` (`installSkillPackage`) | `readFileSync` (+1) | none — the read target is `guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read')`'s OWN non-null return (the guard's resolved real path; `id` rode as its own `segments[]` element) | guarded `[read]` | The read exists to tell a MANAGED occupancy (provenance block → honest `alreadyInstalled`) from an unrelated local skill (no provenance → throw, `present-unmanaged`) — closing library-31's laundered false success. Read-only either way; the victim file is byte-unchanged on refusal (pinned by `skill-library.test.ts` W7-B3 row). |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta.

@@ -1234,9 +1234,14 @@ export async function startCommunityRefresh(input: {
   /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
    *  own doc; validated against community-refresh's own SKILL.md envelope. */
   modelTier?: string;
+  /** W7-B3 (community-08) — optional operator focus ("find me skills for X").
+   *  Omitted entirely when absent: the agent reads no-brief as a full
+   *  refresh. */
+  brief?: string;
 }): Promise<{ ok: boolean; sessionId?: string; project?: string; error?: string }> {
   const r = await bridgePost('/api/studio/community-refresh/start', {
     ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+    ...(input.brief ? { brief: input.brief } : {}),
   });
   if (!r.ok) return { ok: false, error: r.error };
   return {

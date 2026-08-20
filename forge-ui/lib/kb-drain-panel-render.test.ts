@@ -34,15 +34,19 @@ function baseProps(overrides: Partial<KbDrainPanelViewProps> = {}): KbDrainPanel
     costUsd: 0,
     counts: { auto: 0, agent: 0, user: 0 },
     perFinding: [],
-    dispatching: false,
+    nowMs: 1_755_000_000_000,
     attaching: false,
     dispatchError: null,
+    cancelArmed: false,
+    cancelBusy: false,
+    cancelMsg: null,
     userIdx: 0,
     userNote: '',
     userBusy: false,
     userMsg: null,
     events: [],
-    onDrain: () => {},
+    onCancel: () => {},
+    onCancelDisarm: () => {},
     onRecheck: () => {},
     onUserNoteChange: () => {},
     onSubmitUserAnswer: () => {},
@@ -75,7 +79,7 @@ function tagContaining(html: string, marker: string): string {
 
 const ALL_DISPLAY_STATES: KbDrainDisplayState[] = [
   'idle', 'attaching', 'running', 'green', 'needs-you', 'no-progress',
-  'round-cap', 'cost-ceiling', 'failed', 'timed-out',
+  'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out', 'unreadable',
 ];
 
 test('root [data-component="kb-drain-panel"][data-drain-state] renders EVERY display-state value verbatim — the full vocabulary, not just a subset', () => {
@@ -102,41 +106,88 @@ test('the drain-to-green root also carries id="kb-drain-panel" — the anchor Kb
 });
 
 // ---------------------------------------------------------------------------
-// Button disabled matrix — dispatching/running/attaching → disabled;
-// every terminal state (with dispatching/attaching both false) → enabled.
+// W7-B2: the DISPATCH button moved to KbActionGroup (the one action group) —
+// this panel renders NO drain-to-green button any more. In its place: the
+// Stop (cancel) control while running (knowledge-14), the elapsed ticker +
+// real budget, and the per-round grouping (knowledge-12).
 // ---------------------------------------------------------------------------
 
-test('drain-to-green button DISABLED while dispatching', () => {
-  const html = render({ dispatching: true, displayState: 'idle' });
-  const tag = tagContaining(html, 'data-action="drain-to-green"');
-  expect(tag).toContain('disabled');
-});
-
-test('drain-to-green button DISABLED while displayState is "running"', () => {
-  const html = render({ displayState: 'running', dispatching: false, attaching: false });
-  const tag = tagContaining(html, 'data-action="drain-to-green"');
-  expect(tag).toContain('disabled');
-});
-
-test('drain-to-green button DISABLED while attaching (the mount-time reattach fetch is still in flight)', () => {
-  const html = render({ attaching: true, displayState: 'attaching' });
-  const tag = tagContaining(html, 'data-action="drain-to-green"');
-  expect(tag).toContain('disabled');
-});
-
-test('drain-to-green button ENABLED for every terminal state once dispatching/attaching are both false — an operator must always be able to re-run', () => {
-  const terminals: KbDrainDisplayState[] = ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed', 'timed-out'];
-  for (const s of terminals) {
-    const html = render({ displayState: s, dispatching: false, attaching: false });
-    const tag = tagContaining(html, 'data-action="drain-to-green"');
-    expect(tag, `state=${s}`).not.toContain('disabled');
+test('W7-B2: the panel renders NO drain-to-green dispatch button (it lives in KbActionGroup now)', () => {
+  for (const s of ALL_DISPLAY_STATES) {
+    expect(render({ displayState: s })).not.toContain('data-action="drain-to-green"');
   }
 });
 
-test('drain-to-green button ENABLED for the idle state (no run has ever been dispatched)', () => {
-  const html = render({ displayState: 'idle', dispatching: false, attaching: false });
-  const tag = tagContaining(html, 'data-action="drain-to-green"');
-  expect(tag).not.toContain('disabled');
+test('cancel-drain (Stop) renders ONLY while running; two-step arm; disarm affordance while armed (knowledge-14)', () => {
+  const running = render({ displayState: 'running', runId: 'kb-drain-x' });
+  expect(tagContaining(running, 'data-action="cancel-drain"')).toContain('data-cancel-armed="false"');
+  expect(running).toContain('Stop');
+  const armed = render({ displayState: 'running', runId: 'kb-drain-x', cancelArmed: true });
+  expect(tagContaining(armed, 'data-action="cancel-drain"')).toContain('data-cancel-armed="true"');
+  expect(armed).toContain('Confirm stop');
+  expect(armed).toContain('data-action="cancel-drain-keep"');
+  for (const s of ALL_DISPLAY_STATES.filter((x) => x !== 'running')) {
+    expect(render({ displayState: s }), `state=${s}`).not.toContain('data-action="cancel-drain"');
+  }
+});
+
+test('elapsed ticker renders while running when startedAt is known — never fabricated without it (knowledge-14)', () => {
+  const nowMs = new Date('2026-08-20T10:02:05Z').getTime();
+  const withStart = render({ displayState: 'running', startedAt: '2026-08-20T10:00:00Z', nowMs });
+  expect(withStart).toContain('data-component="drain-elapsed"');
+  expect(withStart).toContain('2m 5s elapsed');
+  const withoutStart = render({ displayState: 'running', startedAt: undefined, nowMs });
+  expect(withoutStart).not.toContain('data-component="drain-elapsed"');
+});
+
+test('the cost line names the run\'s REAL ceiling when the status carries one (knowledge-14)', () => {
+  const html = render({ displayState: 'running', costUsd: 0.31, maxCostUsd: 2 });
+  expect(html).toContain('$0.31 of $2.00');
+});
+
+test('the round chip uses the status\'s own maxRounds over the display constant', () => {
+  const html = render({ displayState: 'running', round: 2, maxRounds: 7 });
+  expect(html).toContain('round 2/7');
+});
+
+test('multi-round runs group rows under per-round headers (knowledge-12)', () => {
+  const html = render({
+    displayState: 'green',
+    perFinding: [
+      finding({ key: 'r1', tier: 'agent', outcome: 'cleared', round: 1, message: 'round one work' }),
+      finding({ key: 'r2', tier: 'agent', outcome: 'cleared', round: 2, message: 'round two work' }),
+    ],
+  });
+  expect(html).toContain('data-drain-round-group="1"');
+  expect(html).toContain('data-drain-round-group="2"');
+});
+
+test('each finding row names its FILE and RULE — two findings with the same message are distinguishable (knowledge-08)', () => {
+  const html = render({
+    displayState: 'no-progress',
+    perFinding: [
+      finding({ key: 'a', file: '/x/brain/cycles/themes/alpha.md', check: 'checkStaleness', message: 'stale citation (missing): skills/x/SKILL.md' }),
+      finding({ key: 'b', file: '/x/brain/cycles/themes/beta.md', check: 'checkStaleness', message: 'stale citation (missing): skills/x/SKILL.md' }),
+    ],
+  });
+  expect(html).toContain('data-drain-finding-file="alpha.md"');
+  expect(html).toContain('data-drain-finding-file="beta.md"');
+  expect(html).toContain('checkStaleness');
+});
+
+test('a drain-gated finding renders its review-draft link (orch-01)', () => {
+  const html = render({
+    displayState: 'needs-you',
+    perFinding: [finding({ key: 'g', tier: 'agent', outcome: 'needs-you', draftSession: { id: '2026-08-20T10-00-00-ab12', project: '.kb-forge-dev' } })],
+  });
+  expect(html).toContain('data-action="open-drain-draft"');
+  expect(html).toContain('/sessions/kb-cleanup/2026-08-20T10-00-00-ab12?project=.kb-forge-dev');
+});
+
+test('cancelled terminal renders its own honest copy', () => {
+  const html = render({ displayState: 'cancelled' });
+  expect(html).toContain('data-drain-state="cancelled"');
+  expect(html).toContain('Stopped on your request');
 });
 
 // ---------------------------------------------------------------------------
@@ -253,11 +304,22 @@ test('needs-you section is ABSENT for every non-needs-you state, even with a use
 // timed-out — the explicit re-check affordance (never silent).
 // ---------------------------------------------------------------------------
 
-test('timed-out: [data-action="recheck-drain"] renders ONLY in the timed-out state', () => {
+test('timed-out/unreadable: [data-action="recheck-drain"] renders ONLY in the two watch-lost states (timed-out, unreadable — W7-B2)', () => {
   expect(render({ displayState: 'timed-out' })).toContain('data-action="recheck-drain"');
-  for (const s of ALL_DISPLAY_STATES.filter((s) => s !== 'timed-out')) {
+  expect(render({ displayState: 'unreadable' })).toContain('data-action="recheck-drain"');
+  for (const s of ALL_DISPLAY_STATES.filter((s) => s !== 'timed-out' && s !== 'unreadable')) {
     expect(render({ displayState: s }), `state=${s}`).not.toContain('data-action="recheck-drain"');
   }
+});
+
+test('unreadable (W7-B2): a bridge-ANSWERED failed read renders the honest "status unreadable" chip + the bridge\'s own error text — and never the "still watching" suffix (the poll has stopped)', () => {
+  const html = render({ displayState: 'unreadable', readError: 'unknown drain run "forge-dev-drain-9"' });
+  expect(html.toLowerCase()).toContain('status unreadable');
+  expect(html).toContain('data-component="drain-read-error"');
+  expect(html).toContain('unknown drain run');
+  expect(html).not.toContain('still watching');
+  // no Stop control — there is nothing verifiably live to stop
+  expect(html).not.toContain('data-action="cancel-drain"');
 });
 
 test('timed-out: the state copy explicitly says the run keeps going server-side (never implies it stopped)', () => {

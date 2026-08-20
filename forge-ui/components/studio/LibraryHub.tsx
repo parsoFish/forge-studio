@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { SkillLibraryEntry } from '@/lib/skill-client';
-import { groupSkillLibrary, skillBadges } from '@/lib/skill-library-view';
+import { groupSkillLibrary, skillBadges, shelfSkillPreview } from '@/lib/skill-library-view';
 import type { HookLibraryEntry } from '@/lib/hook-client';
 import { hookBadges } from '@/lib/hook-library-view';
 import type { ConnectionWire } from '@/lib/connection-client';
@@ -78,7 +78,9 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
         browseAction="browse-skills"
         create={{ href: '/skills/new', action: 'new-skill', label: '+ New skill' }}
       >
-        {[...skillGroups.local, ...skillGroups.community].slice(0, LIBRARY_SHELF_CARD_LIMIT).map((entry) => (
+        {/* W7-B3 (library-27): interleaved preview — a community entry can
+            actually appear in the six slots the count claims to summarise. */}
+        {shelfSkillPreview(skillGroups, LIBRARY_SHELF_CARD_LIMIT).map((entry) => (
           <ShelfSkillCard key={entry.id} entry={entry} />
         ))}
       </ShelfSection>

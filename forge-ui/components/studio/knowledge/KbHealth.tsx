@@ -31,7 +31,7 @@ function Dot({ ok }: { ok: boolean }) {
 }
 
 export function KbHealth({ health }: Props) {
-  const { layerBalance, orphans, linkDensity, staleness, lintFlags, lintErrors, checks, healthError } = health;
+  const { layerBalance, orphans, unlinkedRaw, linkDensity, staleness, lintFlags, lintErrors, checks, healthError } = health;
   const total = (layerBalance.index ?? 0) + (layerBalance.theme ?? 0) + (layerBalance.raw ?? 0);
   const staleRaw   = staleness?.staleRawCount   ?? 0;
   const staleTheme = staleness?.staleThemeCount  ?? 0;
@@ -68,26 +68,40 @@ export function KbHealth({ health }: Props) {
             <Dot ok={orphans === 0} />
             {orphans === 0
               ? 'No orphan nodes'
-              : `${orphans} orphan node${orphans !== 1 ? 's' : ''} (degree 0)`}
+              : `${orphans} orphan node${orphans !== 1 ? 's' : ''} (degree 0, raw layer excluded)`}
           </div>
+          {(unlinkedRaw ?? 0) > 0 && (
+            // W7-B2 (knowledge-28): raw archives are unlinked BY DESIGN — a
+            // neutral count, never an amber warning contradicting the
+            // checkOrphans verdict below.
+            <div data-component="kb-unlinked-raw" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12.5, color: 'var(--faint)' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, display: 'inline-block', background: 'var(--faint)' }} />
+              {unlinkedRaw} unlinked raw note{unlinkedRaw !== 1 ? 's' : ''} (normal for the raw layer)
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12.5, color: 'var(--dim)' }}>
             <Dot ok={true} />
             Link density {linkDensity.toFixed(2)} edges/node
           </div>
         </div>
 
-        {/* Lint — W6-B13: these counts are ACTIONABLE (the drain-to-green
-            panel is what actually clears them), so they link straight to it
-            rather than sitting as orphan numbers with no path to a fix. */}
+        {/* Lint — W7-B2 (knowledge-09): a plain readout with ONE explicit
+            fix affordance, replacing the two full-width invisible anchors
+            that wrapped this block and the Checks block. */}
         {(lintFlags > 0 || lintErrors > 0) && (
-          <a
-            href="#kb-drain-panel"
-            data-action="goto-drain-panel"
-            style={{ display: 'block', marginBottom: 12, textDecoration: 'none', color: 'inherit' }}
-          >
-            <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
-              Lint
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+              <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                Lint
+              </div>
+              <a
+                href="#kb-drain-panel"
+                data-action="goto-drain-panel"
+                style={{ fontSize: 11, color: 'var(--c-kb)' }}
+              >
+                Fix {lintErrors + lintFlags} finding{lintErrors + lintFlags !== 1 ? 's' : ''} →
+              </a>
             </div>
             {lintErrors > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12.5, color: 'var(--dim)' }}>
@@ -101,19 +115,16 @@ export function KbHealth({ health }: Props) {
                 {lintFlags} lint flag{lintFlags !== 1 ? 's' : ''}
               </div>
             )}
-          </a>
+          </div>
         )}
 
         {/* R6-08 WI-1: per-check itemization. Always renders when `checks` is
             present (a real bridge response always sets it) — including every
             clean/'pass' check, so an operator can see what was actually run,
-            not just what failed. */}
+            not just what failed. W7-B2 (knowledge-09): an INERT readout now —
+            the one fix affordance lives on the Lint heading above. */}
         {checks && checks.length > 0 && (
-          <a
-            href="#kb-drain-panel"
-            data-action="goto-drain-panel"
-            style={{ display: 'block', marginBottom: 12, textDecoration: 'none', color: 'inherit' }}
-          >
+          <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
               Checks
@@ -147,7 +158,7 @@ export function KbHealth({ health }: Props) {
                 </span>
               </div>
             ))}
-          </a>
+          </div>
         )}
 
         {/* Staleness */}

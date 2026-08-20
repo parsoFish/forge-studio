@@ -1,69 +1,42 @@
 'use client';
 
 /**
- * KbDrainPanel — the ONE button on KB health (W6-B13): click "Drain to
- * green" and forge iteratively fixes every auto- and agent-tier lint
- * finding for this KB, server-side, until it's green or honestly stops and
- * says why (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain` state machine —
- * see that file's own header for the full green/needs-you/no-progress/
- * round-cap/cost-ceiling/failed table). This component is a pure OBSERVER
- * of that server state: nav-away never loses the work, because the work was
- * never IN this component — `_logs/_kb-drain-<runId>/status.json` is the
- * single source of truth, and mounting always re-attaches to it first
- * (`fetchActiveOrLatestKbDrain`) instead of assuming a fresh, run-less
- * state.
+ * KbDrainPanel — the live OBSERVER of a KB's drain-to-green run (W6-B13,
+ * reshaped by W7-B2). The DISPATCH button moved to `KbActionGroup.tsx` (the
+ * one action group, knowledge-32/05) — this panel watches whatever run is
+ * active-or-latest, renders per-finding rows (file · rule · outcome, grouped
+ * by round — knowledge-08/12), an elapsed ticker + the run's real budget
+ * (knowledge-14), a Stop control for a live run, and tails the drain's own
+ * progress events (knowledge-01). Nav-away never loses the work: the server's
+ * `_logs/_kb-drain-<runId>/status.json` is the single source of truth and
+ * mounting always re-attaches (`fetchActiveOrLatestKbDrain`).
  *
- * REPLACES `LintResolutionPanel.tsx` (deleted): that component owned a
- * client-side "fix all N with agent" loop (`fixAllAgent`, dispatching one
- * turn per finding and polling each to completion IN THE BROWSER) — the
- * exact fragile-loop poll-state pattern this batch retires (see
- * `cli/bridge-studio-kb-drain.ts`'s own header for why that logic moved
- * server-side). The ONE piece that survives is the USER tier: an operator
- * decision the drain loop never makes on its own. When the server reports
- * `state: 'needs-you'`, this panel walks the operator through each
- * remaining user-tier finding one at a time, same UX as the old panel's own
- * Stage 3 — but its poll (`pollAgentFix`, `lib/agent-dispatch.ts`) now has
- * an explicit `'timed-out'` state instead of the old `pollFix`'s silent
- * still-'running'-forever (sweep finding C9#2), and stepping past the last
- * finding reaches an explicit "reviewed all N" completion instead of
- * re-showing the same last item forever (sweep finding C9#3) —
- * `resolveUserTierStep`, `lib/kb-drain-view.ts`.
+ * The USER tier walkthrough (the one operator decision the drain loop never
+ * makes on its own) is unchanged from W6-B13 — see `resolveUserTierStep`
+ * (lib/kb-drain-view.ts).
  *
- * CONTAINER/VIEW SPLIT (review round, reviewer HIGH finding): this file's
- * "interesting" states (running/green/needs-you/...) only ever exist via
- * async fetch/poll results, which `renderToStaticMarkup` never runs — a
- * single-component RunPanel-style render test could only ever observe this
- * file's permanently-stuck 'attaching' initial state. `KbDrainPanelView`
- * below is the pure, hooks-free presentational half (state in via props,
- * callbacks out via props) — exported specifically so
- * `lib/kb-drain-panel-render.test.ts` can drive every terminal-vocab value +
- * 'running' + the disabled-button matrix directly, the same way
- * `KbHealth.tsx` (already a plain props-in component) is tested. `KbDrainPanel`
- * itself stays the container: all hooks/effects/fetch/poll wiring, verified
- * by `tsc`/`next build` plus `lib/kb-drain-view.test.ts` +
- * `lib/agent-dispatch.test.ts` (no jsdom in this repo — see `RunPanel.tsx`'s
- * own header for why a simulated click/effect pass isn't available for the
- * CONTAINER half).
+ * CONTAINER/VIEW SPLIT (unchanged discipline): `KbDrainPanelView` below is
+ * the pure, hooks-free presentational half, exported for
+ * `lib/kb-drain-panel-render.test.ts`; the container owns all fetch/poll
+ * wiring (verified by `tsc`/`next build` — no jsdom in this repo).
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  dispatchKbDrain, fetchActiveOrLatestKbDrain, dispatchAgentFix,
+  dispatchKbDrain, fetchActiveOrLatestKbDrain, dispatchAgentFix, cancelKbDrain,
   type KbDrainPerFinding,
 } from '@/lib/studio-client';
 import { pollKbDrain, pollAgentFix, pollDisplayState, type PolledKbDrainStatus } from '@/lib/agent-dispatch';
 import {
   drainStateCopy, findingsByTier, resolveUserTierStep, isKbDrainTerminal,
+  findingRounds, formatDrainElapsed, deriveDrainDisplayState,
   KB_DRAIN_MAX_ROUNDS_DISPLAY, type KbDrainDisplayState,
 } from '@/lib/kb-drain-view';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import type { EventLogEntry } from '@/lib/bridge-client';
+import Link from 'next/link';
 
-const primaryBtn: CSSProperties = {
-  fontSize: 12, padding: '7px 14px', background: 'var(--panel-2)', color: 'var(--c-kb)',
-  border: '1px solid var(--c-kb)', borderRadius: 5, cursor: 'pointer', fontWeight: 600,
-};
 const btn: CSSProperties = {
   fontSize: 11.5, padding: '5px 11px', background: 'var(--panel-2)', color: 'var(--text)',
   border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
@@ -72,19 +45,38 @@ const btn: CSSProperties = {
 const OUTCOME_GLYPH: Record<KbDrainPerFinding['outcome'], string> = { cleared: '✓', 'not-cleared': '⚠', 'needs-you': '?' };
 
 // ---------------------------------------------------------------------------
-// Container — hooks, effects, fetch/poll wiring. No render-shape decisions
-// live here beyond deriving the props KbDrainPanelView needs.
+// Container — hooks, effects, fetch/poll wiring.
 // ---------------------------------------------------------------------------
 
-export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: () => void }) {
+export function KbDrainPanel({
+  kbId,
+  onChanged,
+  attachNonce = 0,
+  onDisplayStateChange,
+}: {
+  kbId: string;
+  onChanged?: () => void;
+  /** W7-B2: bumped by the action group after it dispatches a drain — makes
+   *  this panel re-run its active-or-latest reattach without a remount. */
+  attachNonce?: number;
+  /** Reports every display-state change up (the action group's local gate). */
+  onDisplayStateChange?: (state: KbDrainDisplayState) => void;
+}) {
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<PolledKbDrainStatus | null>(null);
   const [attaching, setAttaching] = useState(true);
-  const [dispatching, setDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [pollNonce, setPollNonce] = useState(0);
 
-  // User-tier walkthrough (the one surviving piece of LintResolutionPanel).
+  // Stop (cancel) — two-step arm/confirm, mirroring A2's cancel affordance.
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState<string | null>(null);
+
+  // Elapsed ticker — a real clock the view receives (never Date.now() there).
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // User-tier walkthrough (unchanged from W6-B13).
   const [userIdx, setUserIdx] = useState(0);
   const [userNote, setUserNote] = useState('');
   const [userBusy, setUserBusy] = useState(false);
@@ -93,25 +85,12 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  // The in-flight user-tier fix poll's own stop fn (review round, reviewer
-  // MEDIUM finding): `submitUserAnswer` dispatches this imperatively (not
-  // from inside a useEffect, since it's a click handler), so nothing
-  // previously cancelled it on unmount — an unmounted panel would still take
-  // a late `onUpdate` callback and try to `setState` on a dead component.
-  // Stored here and cancelled in the SAME unmount cleanup as the runId poll
-  // effect below. The underlying mechanism this relies on — a still-running
-  // poll, once its returned stop fn is called, makes zero further fetch
-  // calls — is pinned directly in `lib/agent-dispatch.test.ts` ("pollAgentFix:
-  // 'unmount mid-poll'…"); this file's own container wiring is otherwise only
-  // verified by `tsc`/`next build` (no jsdom in this repo).
   const userPollStopRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     return () => { userPollStopRef.current?.(); };
   }, []);
 
-  // Reattach on mount / kbId change — GET the active-or-latest run instead
-  // of assuming a fresh, run-less state. This is what makes nav-away and
-  // back show the SAME live/terminal state rather than resetting to idle.
+  // Reattach on mount / kbId change / an action-group dispatch (attachNonce).
   useEffect(() => {
     let cancelled = false;
     setAttaching(true);
@@ -120,6 +99,8 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     setUserIdx(0);
     setUserNote('');
     setUserMsg(null);
+    setCancelArmed(false);
+    setCancelMsg(null);
     setDispatchError(null); // a previous KB's read failure is not this KB's state
     fetchActiveOrLatestKbDrain(kbId).then((r) => {
       if (cancelled) return;
@@ -128,23 +109,37 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
         setRunId(r.runId);
         setStatus(r);
       } else if (!r.ok) {
-        // The reattach READ failed (status-shaped `ok:false` + the bridge's
-        // text) — not "no run has ever run": surface it, never silently idle.
+        // The reattach READ failed — not "no run has ever run": surface it.
         setDispatchError(`could not read the drain state: ${r.error ?? 'read failed'}`);
       }
     }).catch(() => { if (!cancelled) setAttaching(false); });
     return () => { cancelled = true; };
-  }, [kbId]);
+  }, [kbId, attachNonce]);
 
-  // Poll while a run is known. `pollNonce` lets the "Re-check" button
-  // restart a bounded poll for the SAME runId after a watch timeout,
-  // without needing runId itself to change. The returned stop fn is the
-  // effect's own cleanup — cancelled automatically on unmount or re-run.
+  // Poll while a run is known — the poll itself is progress-aware now
+  // (lib/agent-dispatch.ts's progressKey): a heartbeating run never times out.
   useEffect(() => {
     if (!runId) return;
     return pollKbDrain(kbId, runId, { onUpdate: (s) => { if (mountedRef.current) setStatus(s); } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, kbId, pollNonce]);
+
+  // W7-B2: the ONE display-state derivation (lib/kb-drain-view.ts) — a
+  // bridge-ANSWERED 4xx failed read derives 'unreadable' (the poll stopped;
+  // never a fabricated 'running'); transport blips / 5xx keep 'running'
+  // while the poll is genuinely still watching.
+  const displayState: KbDrainDisplayState = deriveDrainDisplayState(status, attaching);
+
+  // Report state up + tick the elapsed clock while running.
+  useEffect(() => {
+    onDisplayStateChange?.(displayState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayState]);
+  useEffect(() => {
+    if (displayState !== 'running') return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [displayState]);
 
   const attachRun = useCallback((r: PolledKbDrainStatus) => {
     setUserIdx(0); setUserNote(''); setUserMsg(null);
@@ -153,21 +148,21 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     setPollNonce((n) => n + 1);
   }, []);
 
+  /** Internal redispatch — the user-tier flow re-verifies with a fresh drain
+   *  pass after a resolution lands. (The OPERATOR-facing dispatch button
+   *  lives in KbActionGroup now.) */
   const handleDrain = useCallback(async () => {
-    setDispatching(true);
     setDispatchError(null);
     const r = await dispatchKbDrain(kbId);
     if (!mountedRef.current) return;
-    setDispatching(false);
     if (r.ok && r.runId) {
-      attachRun({ ok: true, runId: r.runId, kbId, state: 'running', round: 0, counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0, updatedAt: new Date().toISOString() });
+      attachRun({
+        ok: true, runId: r.runId, kbId, state: 'running', round: 0,
+        counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0,
+        updatedAt: new Date().toISOString(), startedAt: new Date().toISOString(),
+      });
       return;
     }
-    // 409 (already active) or any other dispatch failure — studioPost drops
-    // the response body on a non-2xx, so recover the REAL active run via
-    // the reattach route rather than trust anything off this call's error
-    // path (covers a double-click race honestly instead of surfacing a
-    // spurious "already active" error the operator can't act on).
     const active = await fetchActiveOrLatestKbDrain(kbId);
     if (!mountedRef.current) return;
     if (active.runId) {
@@ -181,10 +176,29 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     setPollNonce((n) => n + 1);
   }, []);
 
+  const handleCancel = useCallback(async () => {
+    if (!cancelArmed) {
+      setCancelArmed(true);
+      return;
+    }
+    setCancelBusy(true);
+    const r = await cancelKbDrain(kbId);
+    if (!mountedRef.current) return;
+    setCancelBusy(false);
+    setCancelArmed(false);
+    if (!r.ok) {
+      setCancelMsg(r.error ?? 'cancel failed');
+      return;
+    }
+    setCancelMsg(r.mode === 'forced'
+      ? 'run was dead (no heartbeat) — terminated directly'
+      : 'stop requested — the run halts after its current turn');
+    setPollNonce((n) => n + 1);
+  }, [kbId, cancelArmed]);
+
   const cycleId = runId ? `_kb-drain-${runId}` : '';
   const events = useCycleEvents(cycleId);
 
-  const displayState: KbDrainDisplayState = status?.state ?? (attaching ? 'attaching' : 'idle');
   const tiers = status ? findingsByTier(status.perFinding) : { auto: [], agent: [], user: [] };
   const userStep = resolveUserTierStep(tiers.user, userIdx);
 
@@ -206,17 +220,11 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
     }
     userPollStopRef.current = pollAgentFix(kbId, d.runId, {
       onUpdate: (s) => {
-        // A transiently FAILED status read (ok:false 'unknown', W7-FIX-A1
-        // A1-10) is still being watched — not a verdict; only a settled poll
-        // (terminal / timed-out) reports here.
         if (!mountedRef.current || pollDisplayState(s) === 'watching') return;
         setUserBusy(false);
         if (s.state === 'cleared') {
           setUserNote('');
           setUserMsg(null);
-          // Re-verify with a fresh drain pass — resolving a user-tier
-          // finding continues the SAME "drain to green" loop, never a
-          // client-side guess about what's left.
           void handleDrain();
         } else if (s.state === 'timed-out') {
           setUserMsg('still working — the fix may still land; re-check in a moment (never silently reset)');
@@ -244,16 +252,23 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
         costUsd={status?.costUsd ?? 0}
         counts={status?.counts ?? { auto: 0, agent: 0, user: 0 }}
         perFinding={status?.perFinding ?? []}
-        dispatching={dispatching}
+        startedAt={status?.startedAt}
+        maxRounds={status?.maxRounds}
+        maxCostUsd={status?.maxCostUsd}
+        nowMs={nowMs}
         attaching={attaching}
         dispatchError={dispatchError}
         readError={status && !status.ok && status.error ? status.error : null}
+        cancelArmed={cancelArmed}
+        cancelBusy={cancelBusy}
+        cancelMsg={cancelMsg}
         userIdx={userIdx}
         userNote={userNote}
         userBusy={userBusy}
         userMsg={userMsg}
         events={events}
-        onDrain={() => void handleDrain()}
+        onCancel={() => void handleCancel()}
+        onCancelDisarm={() => setCancelArmed(false)}
         onRecheck={handleRecheck}
         onUserNoteChange={setUserNote}
         onSubmitUserAnswer={() => void submitUserAnswer()}
@@ -266,12 +281,7 @@ export function KbDrainPanel({ kbId, onChanged }: { kbId: string; onChanged?: ()
   );
 }
 
-/** Fires `onChanged` exactly once per (freshly reached) terminal state —
- *  refreshes the parent's own KB detail fetch so the rest of the Health tab
- *  (KbHealth's counts) reflects the drain's real effect, without the panel
- *  re-running its own separate fetch of the same data. A side-effect-only
- *  component (returns null) — kept OUT of KbDrainPanelView so that view
- *  stays free of any useEffect at all. */
+/** Fires `onChanged` exactly once per (freshly reached) terminal state. */
 function DrainChangedSignal({ onChanged, state }: { onChanged: () => void; state: KbDrainDisplayState }) {
   const lastRef = useRef<KbDrainDisplayState | null>(null);
   useEffect(() => {
@@ -284,9 +294,8 @@ function DrainChangedSignal({ onChanged, state }: { onChanged: () => void; state
 }
 
 // ---------------------------------------------------------------------------
-// View — pure, hooks-free, props-in/JSX-out. Exported so
-// lib/kb-drain-panel-render.test.ts can drive every state directly via
-// `renderToStaticMarkup`, the same way KbHealth.tsx is tested.
+// View — pure, hooks-free, props-in/JSX-out. Exported for
+// lib/kb-drain-panel-render.test.ts.
 // ---------------------------------------------------------------------------
 
 export type KbDrainPanelViewProps = {
@@ -296,19 +305,24 @@ export type KbDrainPanelViewProps = {
   costUsd: number;
   counts: { auto: number; agent: number; user: number };
   perFinding: KbDrainPerFinding[];
-  dispatching: boolean;
+  /** W7-B2 (knowledge-14): elapsed + real budget — optional (pre-W7 runs). */
+  startedAt?: string;
+  maxRounds?: number;
+  maxCostUsd?: number;
+  nowMs: number;
   attaching: boolean;
   dispatchError: string | null;
-  /** W7-FIX-A1 (review): the LAST status read failed (`ok:false` — transport
-   *  or bridge error text, `failedKbDrainStatus`); the poll keeps watching,
-   *  but the panel says so instead of a bare "running" it never observed. */
   readError?: string | null;
+  cancelArmed: boolean;
+  cancelBusy: boolean;
+  cancelMsg: string | null;
   userIdx: number;
   userNote: string;
   userBusy: boolean;
   userMsg: string | null;
   events: EventLogEntry[];
-  onDrain: () => void;
+  onCancel: () => void;
+  onCancelDisarm: () => void;
   onRecheck: () => void;
   onUserNoteChange: (note: string) => void;
   onSubmitUserAnswer: () => void;
@@ -316,16 +330,21 @@ export type KbDrainPanelViewProps = {
 };
 
 export function KbDrainPanelView({
-  displayState, round, runId, costUsd, counts, perFinding, dispatching, attaching,
-  dispatchError, readError = null, userIdx, userNote, userBusy, userMsg, events,
-  onDrain, onRecheck, onUserNoteChange, onSubmitUserAnswer, onSkipUser,
+  displayState, round, runId, costUsd, counts, perFinding,
+  startedAt, maxRounds, maxCostUsd, nowMs,
+  attaching, dispatchError, readError = null,
+  cancelArmed, cancelBusy, cancelMsg,
+  userIdx, userNote, userBusy, userMsg, events,
+  onCancel, onCancelDisarm, onRecheck, onUserNoteChange, onSubmitUserAnswer, onSkipUser,
 }: KbDrainPanelViewProps) {
   const hasStatus = displayState !== 'idle' && displayState !== 'attaching';
   const copy = drainStateCopy(displayState, costUsd);
   const tiers = findingsByTier(perFinding);
   const userStep = resolveUserTierStep(tiers.user, userIdx);
   const progressFindings = [...tiers.auto, ...tiers.agent];
-  const disableDrainButton = dispatching || displayState === 'running' || attaching;
+  const rounds = findingRounds(progressFindings);
+  const roundsDisplay = maxRounds ?? KB_DRAIN_MAX_ROUNDS_DISPLAY;
+  const elapsed = displayState === 'running' ? formatDrainElapsed(startedAt, nowMs) : null;
 
   return (
     <div
@@ -343,28 +362,42 @@ export function KbDrainPanelView({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button
-          data-action="drain-to-green"
-          style={{ ...primaryBtn, opacity: disableDrainButton ? 0.6 : 1 }}
-          disabled={disableDrainButton}
-          onClick={onDrain}
-        >
-          {dispatching ? 'Starting…' : displayState === 'running' ? 'Draining…' : 'Drain to green'}
-        </button>
-
         {hasStatus && (
           <span data-component="drain-state-chip" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-            {copy.label}{round > 0 ? ` · round ${round}/${KB_DRAIN_MAX_ROUNDS_DISPLAY}` : ''}
+            {copy.label}{round > 0 ? ` · round ${round}/${roundsDisplay}` : ''}
           </span>
         )}
 
         {hasStatus && (
           <span style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
-            auto {counts.auto} · agent {counts.agent} · you {counts.user} · ${costUsd.toFixed(2)}
+            auto {counts.auto} · agent {counts.agent} · you {counts.user} · ${costUsd.toFixed(2)}{typeof maxCostUsd === 'number' ? ` of $${maxCostUsd.toFixed(2)}` : ''}
           </span>
         )}
 
-        {displayState === 'timed-out' && (
+        {elapsed && (
+          <span data-component="drain-elapsed" style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>
+            {elapsed} elapsed
+          </span>
+        )}
+
+        {displayState === 'running' && (
+          <>
+            <button
+              data-action="cancel-drain"
+              data-cancel-armed={cancelArmed ? 'true' : 'false'}
+              style={{ ...btn, borderColor: cancelArmed ? 'var(--error, #f87171)' : 'var(--line-2)', color: cancelArmed ? 'var(--error, #f87171)' : 'var(--text)' }}
+              disabled={cancelBusy}
+              onClick={onCancel}
+            >
+              {cancelBusy ? 'Stopping…' : cancelArmed ? 'Confirm stop' : 'Stop'}
+            </button>
+            {cancelArmed && !cancelBusy && (
+              <button data-action="cancel-drain-keep" style={btn} onClick={onCancelDisarm}>Keep running</button>
+            )}
+          </>
+        )}
+
+        {(displayState === 'timed-out' || displayState === 'unreadable') && (
           <button data-action="recheck-drain" style={btn} onClick={onRecheck}>Re-check</button>
         )}
 
@@ -374,6 +407,12 @@ export function KbDrainPanelView({
           </span>
         )}
       </div>
+
+      {cancelMsg && (
+        <div data-component="drain-cancel-note" style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8 }}>
+          {cancelMsg}
+        </div>
+      )}
 
       {dispatchError && (
         <div data-component="drain-dispatch-error" style={{ fontSize: 11.5, color: 'var(--error, #f87171)', marginTop: 8 }}>
@@ -385,16 +424,24 @@ export function KbDrainPanelView({
         <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8 }}>{copy.detail}</div>
       )}
 
-      {/* This-round progress — auto+agent tier findings, whatever the
-          terminal (or in-flight) state. */}
+      {/* Progress — auto+agent rows, EVERY round kept (knowledge-12), grouped
+          by round with each row naming its file + rule (knowledge-08). */}
       {progressFindings.length > 0 && (
         <div data-drain-section="progress" style={{ marginTop: 12 }}>
-          {progressFindings.map((f) => <FindingRow key={f.key} f={f} />)}
+          {rounds.map((r) => (
+            <div key={r} data-drain-round-group={r}>
+              {rounds.length > 1 && (
+                <div style={{ fontSize: 10.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 0 2px' }}>
+                  round {r}
+                </div>
+              )}
+              {progressFindings.filter((f) => (f.round ?? 0) === r).map((f) => <FindingRow key={`${r}::${f.key}::${f.outcome}`} f={f} />)}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* USER tier — the one surviving piece of LintResolutionPanel. Only
-          shown once the server has actually stopped and said "needs-you". */}
+      {/* USER tier — unchanged walkthrough. */}
       {displayState === 'needs-you' && (
         <div data-drain-section="needs-you" data-user-index={userIdx} data-user-total={userStep.total} style={{ marginTop: 14 }}>
           {userStep.finding ? (
@@ -450,18 +497,33 @@ export function KbDrainPanelView({
   );
 }
 
+/** One finding row: outcome glyph · file basename · rule · message — plus a
+ *  link to the drain-gated draft session when one was minted (orch-01). */
 function FindingRow({ f }: { f: KbDrainPerFinding }) {
+  const fileBase = f.file.split('/').pop() ?? f.file;
   return (
     <div
       data-drain-finding
       data-drain-finding-tier={f.tier}
       data-drain-finding-outcome={f.outcome}
-      style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', fontSize: 11.5, color: 'var(--dim)', borderTop: '1px solid var(--line)' }}
+      data-drain-finding-file={fileBase}
+      style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', fontSize: 11.5, color: 'var(--dim)', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}
     >
       <span style={{ fontFamily: 'var(--font-mono)', color: f.outcome === 'not-cleared' ? 'var(--amber)' : 'var(--faint)', fontSize: 10 }}>
         {OUTCOME_GLYPH[f.outcome]}
       </span>
-      <span style={{ flex: 1 }}>{f.message}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{fileBase}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint)', fontSize: 10.5 }}>{f.check}</span>
+      <span style={{ flex: 1, minWidth: 180 }}>{f.message}</span>
+      {f.draftSession && (
+        <Link
+          data-action="open-drain-draft"
+          href={`/sessions/kb-cleanup/${encodeURIComponent(f.draftSession.id)}?project=${encodeURIComponent(f.draftSession.project)}`}
+          style={{ fontSize: 11, color: 'var(--c-kb)' }}
+        >
+          review draft →
+        </Link>
+      )}
     </div>
   );
 }

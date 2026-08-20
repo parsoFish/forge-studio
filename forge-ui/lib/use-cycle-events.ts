@@ -26,6 +26,12 @@ export function useCycleEvents(
   useEffect(() => {
     let cancelled = false;
     setEvents([]);
+    // W7-B2 (knowledge-07 / crosscut-15): no cycle id yet → no fetch, no
+    // socket. Callers must pass '' while no run exists (React's hooks rule
+    // forbids a conditional hook call) — the guard lives HERE so every
+    // consumer (KbDrainPanel, RunPanel, …) stops firing the guaranteed-404
+    // GET /api/events/ + a WebSocket that can never match.
+    if (!cycleId) return;
     fetchEvents(cycleId).then((rows) => { if (!cancelled) setEvents(rows); }).catch(() => {});
     const sub = subscribe({
       onMessage: (msg) => {

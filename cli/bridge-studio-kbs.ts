@@ -45,9 +45,12 @@ import { resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, 
 import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import {
   findingUnderDir,
   scopeFindingsToKb,
+  collectKbFindings,
+  ownThemeFindingsLens,
   listOwnThemeFiles,
   unionFindings,
   computeKbLintChecks,
@@ -432,7 +435,10 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
   // end and returns without throwing, so the catch never double-fires.
   try {
     const { findings } = runBrainLintFullMemoized(forgeRoot);
-    const scoped = scopeFindingsToKb(forgeRoot, kbId, findings);
+    // W7-B2 (knowledge-10): the union lens — a project-bound KB's own-theme
+    // agent-tier findings are consolidate's obligation too, and the old
+    // scopeFindingsToKb-alone read was structurally empty for them.
+    const scoped = collectKbFindings(forgeRoot, kbId, findings);
     const agentTier = scoped.filter(
       (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
     );
@@ -481,7 +487,7 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
     try {
       const { findings: after } = runBrainLintFullFresh(forgeRoot);
       const stillPresent = new Set(
-        scopeFindingsToKb(forgeRoot, kbId, after)
+        collectKbFindings(forgeRoot, kbId, after)
           .filter((f) => f.resolution === 'agent')
           .map((f) => `${f.kind}::${f.file}`),
       );
@@ -588,6 +594,50 @@ export async function approveKbCleanup(
     return { ok: false, status: 409, error: `session is not awaiting-approval (current phase: "${status.phase}")` };
   }
   const kbId = status.kb_id;
+
+  // ---- W7-B2 (orch-01): a DRAFT-carrying session (minted by the drain's
+  // structural-only gate — `mintKbCleanupDraftSession`, cli/bridge-studio-
+  // kb-drain.ts) applies EXACTLY the parked draft files on approve, never a
+  // consolidate. Validated fully — every target contained to THIS session's
+  // own KB brain dir, every draft readable — BEFORE the atomic claim below,
+  // so a refused draft leaves the session still approvable after the
+  // problem is fixed (all checks here are synchronous; the SYNC INVARIANT
+  // span is preserved). ------------------------------------------------------
+  const draftApplyRaw = (status as Record<string, unknown>)['draft_apply'];
+  let draftWrites: Array<{ target: string; content: string }> | null = null;
+  if (Array.isArray(draftApplyRaw) && draftApplyRaw.length > 0) {
+    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    if (!brainDir) {
+      return { ok: false, status: 500, error: `kb-cleanup apply: kb id "${kbId}" does not resolve to any brain directory` };
+    }
+    draftWrites = [];
+    for (const raw of draftApplyRaw) {
+      const entry = raw as Record<string, unknown> | null;
+      const file = entry && typeof entry['file'] === 'string' ? entry['file'] : null;
+      const draft = entry && typeof entry['draft'] === 'string' ? entry['draft'] : null;
+      if (!file || !draft) {
+        return { ok: false, status: 422, error: 'kb-cleanup apply: malformed draft_apply entry (need string "file" and "draft")' };
+      }
+      const target = resolve(forgeRoot, file);
+      // Real containment to the session's OWN kb dir — a draft may only ever
+      // replace a file inside the brain dir status.kb_id resolves to (never
+      // a sibling KB, never anything outside brain/). `brainDir` is already
+      // realpath-resolved by resolveKbBrainDir; `resolve` collapses any
+      // lexical `..` in the target before the boundary check.
+      if (target !== brainDir && !target.startsWith(brainDir + sep)) {
+        return { ok: false, status: 422, error: `kb-cleanup apply: draft target escapes kb "${kbId}"'s own brain dir: ${file}` };
+      }
+      // The draft body is read through the SAME guarded read the session
+      // status came through — a draft path escaping the session dir reads
+      // null and refuses.
+      const content = guardedReadFile(projectsRoot, [...dirSegs, ...draft.split('/')]);
+      if (content === null) {
+        return { ok: false, status: 422, error: `kb-cleanup apply: draft file unreadable or escapes the session dir: ${draft}` };
+      }
+      draftWrites.push({ target, content });
+    }
+  }
+
   // THE ATOMIC CLAIM — the write that makes this a claim, not merely a
   // check: any concurrent caller reading status AFTER this line observes
   // 'applying', never 'awaiting-approval', so at most one caller ever passes
@@ -597,6 +647,25 @@ export async function approveKbCleanup(
     return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applying" failed containment' };
   }
   // --- SYNC INVARIANT SPAN END — everything below may safely await. ---
+
+  if (draftWrites !== null) {
+    const writes = draftWrites;
+    const draftRunId = `${kbId}-draftapply-${Date.now().toString(36)}`;
+    // Same per-kbId serialization as the consolidate path below (forge-sqn's
+    // invariant): the draft write may never interleave with a live drain's
+    // own agent turns against the same files.
+    await enqueueConsolidate(kbId, async () => {
+      for (const w of writes) {
+        mkdirSync(dirname(w.target), { recursive: true });
+        writeFileSync(w.target, w.content, 'utf8');
+      }
+    });
+    const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+    if (draftDone === null) {
+      return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
+    }
+    return { ok: true, runId: draftRunId };
+  }
 
   // The drain's SOLE source of truth is `status.kb_id`, never `expectedKbId`
   // — the equality check above makes the two identical by construction from
@@ -632,7 +701,12 @@ export async function approveKbCleanup(
 
 type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
+  /** Degree-0 nodes EXCLUDING the raw layer (W7-B2, knowledge-28) — raw
+   *  archives are unlinked by design, so counting them here made the
+   *  Connectivity block contradict the checkOrphans verdict beside it. */
   orphans: number;
+  /** Degree-0 RAW-layer nodes, reported separately and neutrally. */
+  unlinkedRaw: number;
   linkDensity: number;
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
@@ -671,14 +745,19 @@ function buildKbHealth(
     raw: nodes.filter((n) => n.layer === 'raw').length,
   };
 
-  // Orphans: nodes with degree 0 (no inbound AND no outbound edges)
+  // Orphans: nodes with degree 0 (no inbound AND no outbound edges).
+  // W7-B2 (knowledge-28): the raw layer is EXCLUDED — raw cycle archives are
+  // unlinked by design, and folding them in ('79 orphan nodes' with an amber
+  // dot) contradicted the checkOrphans 'pass' rendered six lines below.
+  // They're still reported, separately and neutrally, as `unlinkedRaw`.
   const degree = new Map<string, number>();
   for (const n of nodes) degree.set(n.id, 0);
   for (const e of edges) {
     degree.set(e.from, (degree.get(e.from) ?? 0) + 1);
     degree.set(e.to, (degree.get(e.to) ?? 0) + 1);
   }
-  const orphans = nodes.filter((n) => (degree.get(n.id) ?? 0) === 0).length;
+  const orphans = nodes.filter((n) => n.layer !== 'raw' && (degree.get(n.id) ?? 0) === 0).length;
+  const unlinkedRaw = nodes.filter((n) => n.layer === 'raw' && (degree.get(n.id) ?? 0) === 0).length;
 
   // Link density
   const linkDensity = nodes.length > 0 ? edges.length / nodes.length : 0;
@@ -748,6 +827,7 @@ function buildKbHealth(
   return {
     layerBalance,
     orphans,
+    unlinkedRaw,
     linkDensity,
     staleness: { staleRawCount, staleThemeCount },
     lintFlags,
@@ -1133,9 +1213,28 @@ export async function handleStudioKbRoutes(
       // Health: run brain-lint + derive metrics for this kb
       const health = buildKbHealth(ctx.forgeRoot, kbId, graph, kb.counts);
 
+      // W7-B2 (knowledge-29): pinned-guidance notes awaiting an ingest pass —
+      // listed so the operator can SEE the queue the pin button feeds,
+      // instead of the note vanishing behind a promise about a pass that may
+      // never have run. Server-enumerated names under the KB's own dir.
+      const guidance: Array<{ file: string; at: string }> = [];
+      try {
+        const kbBrainDirForGuidance = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        const gDir = kbBrainDirForGuidance ? join(kbBrainDirForGuidance, '_guidance') : null;
+        if (gDir && existsSync(gDir)) {
+          for (const name of readdirSync(gDir)) {
+            if (!name.endsWith('.md')) continue;
+            guidance.push({ file: name, at: name.replace(/\.md$/, '') });
+          }
+          guidance.sort((a, b) => (a.at < b.at ? 1 : -1));
+        }
+      } catch {
+        // best-effort — an unreadable _guidance dir just lists nothing
+      }
+
       // Drop 'path' from the KB response (client Kb type doesn't carry it)
       const { path: _path, ...kbPublic } = kb;
-      sendJson(res, 200, { kb: kbPublic, graph, health }, origin);
+      sendJson(res, 200, { kb: kbPublic, graph, health, guidance }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1180,11 +1279,11 @@ export async function handleStudioKbRoutes(
         sendJson(res, 400, { error: 'name is required and must be non-empty' }, origin);
         return true;
       }
-      const desc = typeof b['desc'] === 'string' ? b['desc'].trim() : '';
-      if (!desc) {
-        sendJson(res, 400, { error: 'desc is required and must be non-empty' }, origin);
-        return true;
-      }
+      // W7-B2 (knowledge-22): the form has ALWAYS marked Description
+      // optional — honour it. The KB descriptor contract (ADR-027 §4 / R1-01)
+      // keeps `desc` a required non-empty field, so an omitted description
+      // gets an honest, binding-derived default instead of a 400.
+      const descInput = typeof b['desc'] === 'string' ? b['desc'].trim() : '';
 
       // 4. Validate binding (R1-01 KB contract — replaces the old scope enum)
       const bindingRaw = b['binding'];
@@ -1248,6 +1347,16 @@ export async function handleStudioKbRoutes(
         }
       }
 
+      // 4b. Default the description from the binding when omitted (see the
+      // knowledge-22 note above) — binding is fully validated by here.
+      const desc = descInput !== ''
+        ? descInput
+        : binding.kind === 'project'
+          ? `Project knowledge base for ${binding.ref}.`
+          : binding.kind === 'flow'
+            ? `Flow knowledge base for ${binding.ref}${'band' in binding && binding.band ? ` (band ${binding.band})` : ''}.`
+            : `Knowledge base "${name}".`;
+
       // 5. Containment: `brain/` is the fixed, forgeRoot-derived root and `id`
       // is its own segment (never folded into the root — see the CONTRACT
       // section of ./studio-path-guard.ts). Replaces a vacuous lexical check.
@@ -1265,6 +1374,17 @@ export async function handleStudioKbRoutes(
       // never become a create-through-the-link.
       if (kbGuard.exists) {
         sendJson(res, 409, { error: `kb already exists: ${id}` }, origin);
+        return true;
+      }
+      // 6b. W7-B2 (knowledge-V01): the id must be unique across BOTH
+      // containment roots — brain/<id> (checked above) AND the central
+      // per-project root brain/projects/<id> (ADR 035). Without this, a new
+      // KB named after an already-onboarded project scaffolded a second,
+      // empty kb.yaml at brain/<id> that resolveKbBrainDir (roots tried in
+      // order [brain/, brain/projects/]) then resolved FIRST — silently
+      // shadowing the project's real central brain everywhere.
+      if (resolveKbBrainDir(ctx.forgeRoot, id)) {
+        sendJson(res, 409, { error: `kb already exists: ${id} (its brain lives at brain/projects/${id})` }, origin);
         return true;
       }
 
@@ -1327,7 +1447,10 @@ export async function handleStudioKbRoutes(
         throw new Error(`kb create: hand-off session status.json for "${id}" failed containment`);
       }
 
-      sendJson(res, 200, { ok: true, id, sessionId }, origin);
+      // W7-B2 (knowledge-23): `project` (the seeding session's anchor) rides
+      // along so the create form can LINK the operator to the session it
+      // just spawned instead of silently discarding the sessionId.
+      sendJson(res, 200, { ok: true, id, sessionId, project: sessionProject }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1353,6 +1476,12 @@ export async function handleStudioKbRoutes(
         sendJson(res, 404, { error: `unknown kb: ${id}` }, origin);
         return true;
       }
+      // W7-B2 (knowledge-05): never delete a KB out from under a live job.
+      const deleteActiveJob = deriveKbActiveJob(ctx.forgeRoot, id);
+      if (deleteActiveJob) {
+        sendJson(res, 409, { error: activeJobReason(deleteActiveJob), runId: deleteActiveJob.runId }, origin);
+        return true;
+      }
       // Containment is enforced at the choke point: `resolveKbBrainDir` now
       // runs the per-segment realpath identity walk, so `dir` is either a
       // verified real directory under `brain/` (or `brain/projects/`) or
@@ -1361,7 +1490,39 @@ export async function handleStudioKbRoutes(
       // had just built against that path's own prefix — and is removed rather
       // than kept as false assurance.
       rmSync(dir, { recursive: true, force: true });
-      sendJson(res, 200, { ok: true, id }, origin);
+      // W7-B2 (knowledge-24): tidy the sessions anchored to this KB instead
+      // of orphaning them in the sessions index. A NON-project KB's sessions
+      // all live under its own dot-anchor pseudo-project
+      // (`projects/.kb-<id>/`) — server-derived, safe to remove wholesale. A
+      // project-bound KB shares its REAL project's dir, so its kb-cleanup
+      // sessions are only REPORTED (their kb_id names a dead KB now), never
+      // swept along with the project's own state.
+      const projectsRootForDelete = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const anchorGuard = resolveGuardedPath(projectsRootForDelete, [`${KB_SEEDING_ANCHOR_PREFIX}${id}`]);
+      let removedSessionAnchor = false;
+      if (anchorGuard.ok && anchorGuard.exists) {
+        rmSync(anchorGuard.realPath, { recursive: true, force: true });
+        removedSessionAnchor = true;
+      }
+      const orphanedSessions: string[] = [];
+      try {
+        for (const projName of readdirSync(projectsRootForDelete)) {
+          if (projName.startsWith('.')) continue; // dot-anchors handled above
+          const cleanupDir = join(projectsRootForDelete, projName, '_kb-cleanup');
+          if (!existsSync(cleanupDir)) continue;
+          for (const sid of readdirSync(cleanupDir)) {
+            try {
+              const st = JSON.parse(readFileSync(join(cleanupDir, sid, 'status.json'), 'utf8')) as { kb_id?: unknown };
+              if (st.kb_id === id) orphanedSessions.push(`${projName}/_kb-cleanup/${sid}`);
+            } catch {
+              // unreadable session — not attributable to this KB
+            }
+          }
+        }
+      } catch {
+        // best-effort reporting only — the delete itself already succeeded
+      }
+      sendJson(res, 200, { ok: true, id, removedSessionAnchor, orphanedSessions }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1597,7 +1758,10 @@ export async function handleStudioKbRoutes(
 
       if (op === 'lint') {
         const { findings } = runBrainLintFullMemoized(ctx.forgeRoot);
-        const scoped = scopeFindingsToKb(ctx.forgeRoot, kbId, findings);
+        // W7-B2 (knowledge-10): the SAME full-scan ∪ own-theme union the
+        // health readout counts from — never scopeFindingsToKb alone, which
+        // is structurally empty for every project-bound KB.
+        const scoped = collectKbFindings(ctx.forgeRoot, kbId, findings);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.
         sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length, counts: resolutionCounts(scoped) }, origin);
@@ -1646,11 +1810,60 @@ export async function handleStudioKbRoutes(
         return true;
       }
       if (op === 'index') {
+        // W7-B2 (knowledge-05): index REWRITES brain files — refuse while any
+        // KB job runs (before this it wasn't even queued, so it could rewrite
+        // brain/INDEX.md while a drain was mid-edit of theme files).
+        const activeJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+        if (activeJob) {
+          sendJson(res, 409, { error: activeJobReason(activeJob), runId: activeJob.runId }, origin);
+          return true;
+        }
+        // W7-B2 (knowledge-06): the button lives on a PER-KB screen — do the
+        // per-KB index work it claims (drain every index-tier auto finding
+        // scoped to THIS kb, via the same union lens the drain uses), and
+        // ALSO refresh the global brain meta-index (cheap, and its counts
+        // include this KB). The response reports both halves so the UI can
+        // say what actually happened.
+        const idxBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        if (!idxBrainDir) {
+          sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+          return true;
+        }
+        const idxInKb = (f: Finding): boolean =>
+          findingUnderDir(ctx.forgeRoot, idxBrainDir, f) && typeof f.kind === 'string' && f.kind.startsWith('index.');
+        // Two per-KB repair lanes, both deterministic and spawn-free: the
+        // auto-tier index fixers (forge sub-wiki indexes), plus the SAME
+        // ensureLinkedAt repair consolidate uses for a project brain's
+        // "not listed in project category index" findings.
+        const kbResult = applyAutoFixesUntilStable(ctx.forgeRoot, {
+          filter: idxInKb,
+          extraFindings: ownThemeFindingsLens(ctx.forgeRoot, kbId),
+        });
+        const { findings: idxFindings } = runBrainLintFullFresh(ctx.forgeRoot);
+        const idxDeterministic = collectKbFindings(ctx.forgeRoot, kbId, idxFindings).filter(
+          (f): f is AgentFinding =>
+            typeof f.check === 'string' && typeof f.kind === 'string' && isDeterministicNotListedFinding(f as AgentFinding),
+        );
+        const idxResidual = applyDeterministicConsolidateFixes(ctx.forgeRoot, idxDeterministic);
         const result = regenerateBrainIndex({ cwd: ctx.forgeRoot });
-        sendJson(res, 200, { op: 'index', ok: true, result }, origin);
+        sendJson(res, 200, {
+          op: 'index', ok: true, result,
+          kb: {
+            applied: kbResult.applied.length + (idxDeterministic.length - idxResidual.length),
+            skipped: kbResult.skipped.length + idxResidual.length,
+          },
+        }, origin);
         return true;
       }
       if (op === 'consolidate') {
+        // W7-B2 (knowledge-05): refuse while any KB job runs — before this a
+        // Consolidate clicked during a drain silently queued behind it and
+        // read as "Consolidating…" for however long the drain took.
+        const consolidateActiveJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+        if (consolidateActiveJob) {
+          sendJson(res, 409, { error: activeJobReason(consolidateActiveJob), runId: consolidateActiveJob.runId }, origin);
+          return true;
+        }
         // NO route-level dry-bridge refusal here (unlike op=fix-agent above).
         // Consolidate's shipped shape clears the deterministic
         // `checkProjectBrainIndexes` "not listed" findings IN-PROCESS via

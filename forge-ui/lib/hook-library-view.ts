@@ -50,6 +50,22 @@ export function needsReviewCountOf(entries: readonly HookLibraryEntry[]): number
 }
 
 // ---------------------------------------------------------------------------
+// communityHooksToUnion — W7-B3 (library-11): /hooks unions the community
+// index's hook items the way /skills unions community skills. Pure pick of
+// the community hooks the LOCAL library does not already carry (an installed
+// community hook already appears as a local row — never doubled). The facts
+// come from the community index route (the one executed-per-item source);
+// this only joins.
+// ---------------------------------------------------------------------------
+
+export function communityHooksToUnion<T extends { id: string; kind: string }>(
+  items: readonly T[],
+  localHookIds: ReadonlySet<string>,
+): T[] {
+  return items.filter((item) => item.kind === 'hook' && !localHookIds.has(item.id));
+}
+
+// ---------------------------------------------------------------------------
 // hookBadges — derived from real fields only. A 'blocked' badge PERSISTS
 // even after override — the verdict is never laundered, at the view layer
 // either.

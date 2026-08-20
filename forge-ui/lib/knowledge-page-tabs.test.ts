@@ -111,9 +111,10 @@ describe('knowledge page — Health tab gating (R6-08 WI-3, F1)', () => {
   it('RED: <KbDrainPanel is nested under a health-tab conditional, not merely gated on currentId', () => {
     const idx = block.indexOf('<KbDrainPanel');
     expect(idx).toBeGreaterThan(-1);
-    const before = block.slice(Math.max(0, idx - 250), idx);
-    // Today (RED): the ONLY gate is `{currentId && (` (page.tsx:278) — no tab
-    // reference anywhere near it.
+    // W7-B2 widened the sniff window: the KbActionGroup block now sits
+    // between the health-tab conditional and the drain panel — the panel is
+    // still nested under `tab === 'health'`, just further from it.
+    const before = block.slice(Math.max(0, idx - 1400), idx);
     expect(before).toMatch(/tab\s*===\s*['"]health['"]/);
   });
 });

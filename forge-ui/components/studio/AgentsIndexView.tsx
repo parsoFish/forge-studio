@@ -38,9 +38,8 @@
 
 import Link from 'next/link';
 import { AgentCard } from '@/components/studio/LibraryCard';
-import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { RecentRuns } from '@/components/RecentRuns';
 import { FetchErrorState } from '@/components/FetchErrorState';
-import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import type { Agent } from '@/lib/studio-client';
 import type { LedgerRow } from '@/lib/history-ledger';
 
@@ -147,34 +146,20 @@ export function AgentsIndexView({
 
         <hr style={{ border: 'none', borderTop: '1px solid var(--line)', margin: '44px 0 40px' }} />
 
-        {/* ===== RECENT AGENT RUNS ===== */}
-        <section
-          className="lib-section"
-          data-section="recent-agent-runs"
-          data-recent-runs-unresolved={recentRunsReady ? recentRunsUnresolved : 0}
-          style={{ marginBottom: 40 }}
-        >
-          <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-              Recent agent runs
-            </span>
-          </div>
-
-          {!recentRunsReady ? (
-            <div
-              data-component="recent-agent-runs-loading"
-              className="muted"
-              style={{ fontStyle: 'italic', fontSize: 13, padding: '10px 0' }}
-            >
-              Loading recent runs…
-            </div>
-          ) : (
-            <>
-              <UnresolvedHistoriesNotice unresolved={recentRunsUnresolved} total={recentRunsTotal} onRetry={onRetryRecentRuns} />
-              <HistoryLedger rows={recentRuns} nowMs={nowMs} />
-            </>
-          )}
-        </section>
+        {/* ===== RECENT AGENT RUNS — the shared RecentRuns widget (W7-B2
+            extraction; the KB health tab consumes the same component). The
+            section token stays `recent-agent-runs` (this page's established
+            DOM contract). ===== */}
+        <RecentRuns
+          section="recent-agent-runs"
+          title="Recent agent runs"
+          ready={recentRunsReady}
+          rows={recentRuns}
+          nowMs={nowMs}
+          unresolved={recentRunsUnresolved}
+          total={recentRunsTotal}
+          onRetryUnresolved={onRetryRecentRuns}
+        />
 
       </div>
     </main>

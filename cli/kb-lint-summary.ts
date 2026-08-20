@@ -23,7 +23,7 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
 
 import { guardedReadDir } from './studio-path-guard.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { runBrainLint, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, lintThemeFiles, type Finding, type RunBrainLintResult } from './brain-lint.ts';
+import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, lintThemeFiles, type Finding, type RunBrainLintResult } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Findings-scoping helpers (moved verbatim from cli/bridge-studio-kbs.ts)
@@ -72,6 +72,52 @@ export function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: rea
   const brainDir = resolveKbBrainDir(forgeRoot, kbId);
   if (!brainDir) return [];
   return findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
+}
+
+/**
+ * W7-B2 (knowledge-10) — THE one per-KB finding lens. Unions the full-scan
+ * findings scoped to this KB's dir with the KB's OWN theme-file lens
+ * (`lintThemeFiles(listOwnThemeFiles(brainDir))` — the ONLY lens that ever
+ * sees a project/band KB's themes, since the shared `readThemeFiles`-based
+ * scan only walks brain/cycles + brain/forge-dev). `buildKbHealth`'s
+ * `computeKbLintChecks` already unioned exactly these two lenses; the drain
+ * (`runKbDrain`) and the maintenance `op:'lint'` route used
+ * `scopeFindingsToKb` ALONE — so for every project-bound KB the drain saw an
+ * empty set and reported an instant false GREEN while the health readout on
+ * the same screen still counted real flags. Every read AND every fix path
+ * derives from THIS function now, so the two can never diverge again
+ * (derive-don't-store; also closes the forge-9hq skew class).
+ *
+ * Every returned finding carries a `resolution` — an unstamped finding (the
+ * own-theme lens emits raw ones) is `classify()`-stamped; an
+ * already-classified finding is passed through UNTOUCHED (classify()
+ * re-derives kind/resolution from the check name, which would clobber a
+ * caller-supplied classification).
+ */
+export function collectKbFindings(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
+  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!brainDir) return [];
+  const scoped = findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
+  const ownThemeFiles = listOwnThemeFiles(brainDir);
+  const own = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
+  return unionFindings(scoped, own).map((f) => (f.resolution ? f : classify(f)));
+}
+
+/**
+ * The own-theme half of `collectKbFindings` alone, classified — injected into
+ * `applyAutoFixesUntilStable` (its `extraFindings` option) so the auto-fix
+ * fixed-point loop can SEE (and therefore fix) a project/band KB's own
+ * auto-tier findings, which its internal full-scope re-lint never surfaces.
+ */
+export function ownThemeFindingsLens(forgeRoot: string, kbId: string): () => Finding[] {
+  return () => {
+    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    if (!brainDir) return [];
+    const ownThemeFiles = listOwnThemeFiles(brainDir);
+    return ownThemeFiles.length > 0
+      ? lintThemeFiles(forgeRoot, ownThemeFiles).map((f) => (f.resolution ? f : classify(f)))
+      : [];
+  };
 }
 
 // ---------------------------------------------------------------------------

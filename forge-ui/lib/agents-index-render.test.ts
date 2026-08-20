@@ -36,7 +36,7 @@
  *       ready && count>0  -> one AgentCard (LibraryCard.tsx, reused unchanged) per agent
  *     </section>
  *     <section data-section="recent-agent-runs">
- *       !recentRunsReady  -> <div data-component="recent-agent-runs-loading">
+ *       !recentRunsReady  -> <div data-component="recent-runs-loading">
  *       recentRunsReady   -> <HistoryLedger rows={recentRuns} nowMs={nowMs}/> (reused unchanged)
  *     </section>
  *   </main>
@@ -192,7 +192,7 @@ test('agent-roster: the "Sessions" secondary-nav link carries data-nav="sessions
 
 test('recent-agent-runs: not ready yet -> the honest loading state, never HistoryLedger\'s own empty state standing in for "unknown"', () => {
   const html = render({ recentRunsReady: false, recentRuns: [] });
-  expect(html).toContain('data-component="recent-agent-runs-loading"');
+  expect(html).toContain('data-component="recent-runs-loading"');
   // HistoryLedger's own section must not render at all while unresolved —
   // its honest-empty state ("No runs yet.") would misrepresent "not fetched
   // yet" as "fetched, genuinely empty".
@@ -204,7 +204,7 @@ test('recent-agent-runs: ready with zero rows -> renders the REAL HistoryLedger,
   expect(html).toContain('data-section="history-ledger"');
   expect(html).toContain('data-ledger-count="0"');
   expect(html).toContain('data-component="history-ledger-empty"');
-  expect(html).not.toContain('data-component="recent-agent-runs-loading"');
+  expect(html).not.toContain('data-component="recent-runs-loading"');
 });
 
 test('recent-agent-runs: rows are rendered VERBATIM by the REAL HistoryLedger — this view derives nothing itself (D2, the reuse seam)', () => {
@@ -224,7 +224,7 @@ test('recent-agent-runs: rows are rendered VERBATIM by the REAL HistoryLedger �
 test('the roster and the runs ledger are two INDEPENDENT readiness facts — the roster can be ready while the runs ledger is still loading, and vice versa', () => {
   const rosterReadyRunsLoading = render({ ready: true, agents: [agent()], recentRunsReady: false, recentRuns: [] });
   expect(rosterReadyRunsLoading).not.toContain('data-component="agent-roster-loading"');
-  expect(rosterReadyRunsLoading).toContain('data-component="recent-agent-runs-loading"');
+  expect(rosterReadyRunsLoading).toContain('data-component="recent-runs-loading"');
 
   const rosterLoadingRunsReady = render({ ready: false, agents: [], recentRunsReady: true, recentRuns: [] });
   expect(rosterLoadingRunsReady).toContain('data-component="agent-roster-loading"');
