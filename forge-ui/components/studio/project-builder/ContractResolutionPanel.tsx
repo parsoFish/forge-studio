@@ -185,6 +185,14 @@ export function ContractResolutionPanel({
         Resolve contract gaps
       </div>
       {msg && <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>{msg}</div>}
+      {/* W7-B6 (projects-24): while one clause runs, every OTHER clause's
+          controls are disabled — say so once, at the top, instead of a wall
+          of silently-grey buttons. */}
+      {busy !== null && (
+        <div data-section="resolution-busy-reason" style={{ fontSize: 10.5, color: 'var(--faint)', marginBottom: 8 }}>
+          {busyReason(busy)} — other clauses unlock when it finishes.
+        </div>
+      )}
 
       {/* STAGE 1 — AUTO */}
       {auto.length > 0 && (
@@ -213,7 +221,7 @@ export function ContractResolutionPanel({
                     data-resolve-blocked={blocked ? 'true' : 'false'}
                     style={btn}
                     disabled={busy !== null || blocked}
-                    title={blocked ? BRAIN_FIX_UNBOUND_HINT : undefined}
+                    title={blocked ? BRAIN_FIX_UNBOUND_HINT : busy !== null ? `${busyReason(busy)} — one clause at a time` : undefined}
                     onClick={() => void resolveAgent(c)}
                   >
                     {busy === `agent:${c.id}` ? 'Routing…' : agentResolveLabel(c.route)}
@@ -255,6 +263,7 @@ export function ContractResolutionPanel({
                     data-apply-clause-id={c.id}
                     style={btn}
                     disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
+                    title={busy !== null ? `${busyReason(busy)} — one clause at a time` : (notes[c.id] ?? '').trim() === '' ? 'state the decision (or your reasoning) first' : undefined}
                     onClick={() => void submitUser(c)}
                   >
                     {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
@@ -277,6 +286,13 @@ export function ContractResolutionPanel({
       )}
     </div>
   );
+}
+
+/** W7-B6 (projects-24): the one-at-a-time lock, in words. */
+function busyReason(busy: string): string {
+  if (busy === 'auto') return 'Auto-fixes are applying';
+  const [kind, id] = busy.split(':');
+  return kind === 'agent' ? `Clause ${id} is routing to its builder` : `Clause ${id} is applying with the agent`;
 }
 
 function Stage({ title, sub }: { title: string; sub: string }) {

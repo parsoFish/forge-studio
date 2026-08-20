@@ -144,6 +144,17 @@ export type ArchitectStatus = {
    * here. Absent ⇒ unchanged default behavior (`ARCHITECT_MODEL`).
    */
   modelTier?: ModelTier;
+  /**
+   * W7-B6 (projects-14 / sessions-kinds-03): operator-declared cost ceiling
+   * (USD) for the WHOLE session, validated by `POST /api/architect/start`
+   * (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) before it is persisted.
+   * Enforced by `runArchitectTurn` at every turn start: when the session's
+   * accumulated event-log cost (`readArchitectSessionStats`) has reached the
+   * ceiling, the turn REFUSES to start (an `error` event + a thrown error the
+   * session lifecycle surfaces) instead of silently overrunning. Absent ⇒ no
+   * ceiling (unchanged default).
+   */
+  costCeilingUsd?: number;
 };
 
 /** One operator-facing question — the reflector's `StructuredQuestion` shape so
@@ -259,6 +270,33 @@ export async function runArchitectTurn(
     createLogger(`_architect-${input.sessionId}`, input.logsRoot ?? resolve('_logs'));
   const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
+
+  // W7-B6 (projects-14): cost-ceiling enforcement at the turn boundary. The
+  // operator's kickoff ceiling rides in status.json; the session's spend is
+  // DERIVED from its own event log (readArchitectSessionStats — never a
+  // stored copy). A turn that would START at/past the ceiling refuses with
+  // an `error` event + a throw: the spawn wrapper's stderr.log + the A2
+  // lifecycle derivation surface the reason on the session page, and the
+  // operator can cancel or start a fresh session with a higher ceiling.
+  if (typeof status.costCeilingUsd === 'number' && Number.isFinite(status.costCeilingUsd) && status.costCeilingUsd > 0) {
+    const stats = readArchitectSessionStats(input.logsRoot ?? resolve('_logs'), input.sessionId);
+    if (stats !== null && stats.cost_usd >= status.costCeilingUsd) {
+      const message =
+        `architect session cost ceiling reached: $${stats.cost_usd.toFixed(4)} spent >= $${status.costCeilingUsd.toFixed(2)} ceiling — ` +
+        `refusing to start another turn (cancel the session, or start a new one with a higher ceiling)`;
+      logger.emit({
+        initiative_id: `architect-session-${input.sessionId}`,
+        phase: 'architect',
+        skill: 'architect-runner',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message,
+        metadata: { session_id: input.sessionId, cost_usd: stats.cost_usd, cost_ceiling_usd: status.costCeilingUsd },
+      });
+      throw new Error(message);
+    }
+  }
 
   // ARCH-1: load brain navigation index at turn start and inject into prompts.
   // Mirrors the PM/reflector pattern (phases/pm-binding.ts, phases/reflector-binding.ts).

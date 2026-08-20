@@ -578,9 +578,18 @@ function RoadmapCanvasNode({
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: colour, flexShrink: 0 }} />
           {status}
         </span>
+        {/* W7-B6 (projects-33): the completion-time badge takes the STATUS
+            colour and only earns a ✓ for a successful terminal state — a
+            FAILED card used to show a green "✓ HH:MM" because the badge was
+            keyed off completedAt's mere presence. */}
         {completedAt !== undefined && (
-          <span title={`real cycle-end ${completedAt}`} style={{ color: STATUS_COLOR.complete }}>
-            ✓ {completedAt.slice(11, 16)}
+          <span
+            data-badge="completed-at"
+            data-badge-status={status}
+            title={`real cycle-end ${completedAt}`}
+            style={{ color: status === 'failed' ? STATUS_COLOR.failed : colour }}
+          >
+            {status === 'failed' ? '✕' : '✓'} {completedAt.slice(11, 16)}
           </span>
         )}
         <span data-micro-badge="deps-count" data-badge-value={depsCount} style={microBadgeStyle}>

@@ -32,9 +32,24 @@ import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib
  * `data-onboard-attaching` unchanged from R4-17/W6-B14.
  */
 
-/** W7-B5 (projects-29): the onboarding poll ceiling — ≥ a routine run's real
+/** W7-B5 (projects-29): the onboarding poll ceiling — >= a routine run's real
  *  length (222s observed) with margin, at the shared 2s cadence. */
 export const ONBOARDING_POLL_MAX_ATTEMPTS = 300;
+
+/**
+ * W7-B6 (projects-25): the launch button's whole enablement, as ONE pure
+ * rule — `busy` (the dispatch round-trip) OR a LIVE run for this project
+ * disables it, each with its label + stated reason. Exported for its direct
+ * render-independent pin (the running state is only reachable through the
+ * poll effect, which a static render can't drive).
+ */
+export function onboardLaunchState(busy: boolean, runState: string): { disabled: boolean; label: string; reason: string | null } {
+  if (busy) return { disabled: true, label: 'Dispatching…', reason: null };
+  if (runState === 'running') {
+    return { disabled: true, label: 'Onboarding running…', reason: 'an onboarding run is already in flight for this project' };
+  }
+  return { disabled: false, label: 'Run onboarding agent', reason: null };
+}
 
 export function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
@@ -162,7 +177,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
             placeholder="North star — what this project is for"
             value={northStar}
             onChange={(e) => setNorthStar(e.target.value)}
-            disabled={busy || runningNow}
+            disabled={onboardLaunchState(busy, runState).disabled}
           />
           <input
             className="input"
@@ -170,7 +185,7 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
             placeholder="Quality gate command (e.g. npm test)"
             value={gateCommand}
             onChange={(e) => setGateCommand(e.target.value)}
-            disabled={busy || runningNow}
+            disabled={onboardLaunchState(busy, runState).disabled}
           />
           <input
             className="input"
@@ -178,18 +193,22 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
             placeholder="Constraints / what done means"
             value={constraints}
             onChange={(e) => setConstraints(e.target.value)}
-            disabled={busy || runningNow}
+            disabled={onboardLaunchState(busy, runState).disabled}
           />
         </div>
       </details>
+      {/* W7-B6 (projects-25): the button stays disabled for as long as a run
+          for THIS project is live — `busy` only covered the dispatch
+          round-trip, so a second click could dispatch a concurrent
+          onboarding agent at the same project. */}
       <button
         className="btn btn-primary"
         data-action="run-onboarding-agent"
         onClick={() => void onRun()}
-        disabled={busy || runningNow}
-        title={runningNow ? 'An onboarding run is already in flight for this project' : 'Dispatch the onboarding agent'}
+        disabled={onboardLaunchState(busy, runState).disabled}
+        {...(onboardLaunchState(busy, runState).reason ? { 'data-disabled-reason': onboardLaunchState(busy, runState).reason as string, title: onboardLaunchState(busy, runState).reason as string } : {})}
       >
-        {busy ? 'Dispatching…' : 'Run onboarding agent'}
+        {onboardLaunchState(busy, runState).label}
       </button>
       {runningNow && sessionId && (
         <button

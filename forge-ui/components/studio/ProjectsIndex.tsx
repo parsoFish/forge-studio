@@ -55,14 +55,27 @@ export function ProjectsIndexBody({
       title="Projects"
       lede="Every project forge can build. Open one to work its editor and roadmap, or bring a new repo online."
       actions={
-        <a
-          className="btn btn-primary"
-          href="/projects/new"
-          data-action="onboard-project-cta"
-          style={{ textDecoration: 'none' }}
-        >
-          Onboard a project
-        </a>
+        <>
+          <a
+            className="btn btn-primary"
+            href="/projects/new"
+            data-action="onboard-project-cta"
+            style={{ textDecoration: 'none' }}
+          >
+            Onboard a project
+          </a>
+          {/* W7-B6 (projects-09): the greenfield entry exists in the header
+              REGARDLESS of roster size — it used to live only in the empty
+              state, so an operator with projects never learned it existed. */}
+          <a
+            className="btn"
+            href="/projects/new"
+            data-action="create-project-cta"
+            style={{ textDecoration: 'none', marginLeft: 8 }}
+          >
+            Start a greenfield project
+          </a>
+        </>
       }
     >
       {error ? (

@@ -17,7 +17,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync, renameSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, openSync, closeSync, renameSync, unlinkSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve, sep } from 'node:path';
 
@@ -164,8 +164,11 @@ function checkContractArtifactContainment(projectRoot: string): void {
  * project's brain sub-wiki `profile.md` (under the project.json `artifactRoot`,
  * default `.`). Each file is written ONLY if absent — an existing operator file
  * is never clobbered. The stubs are clearly marked as TODO scaffolding so a
- * hollow roadmap is never written silently. A git repo is initialised if the
- * project dir is not already inside one (C6/preflight needs a git surface).
+ * hollow roadmap is never written silently. A git repo is initialised when
+ * the dir has no legitimate repo of its own — its OWN work tree and an
+ * enclosing NON-forge repo both count as legitimate; only "no repo" or
+ * "inside forge's own work tree" init (C6/preflight needs a git surface;
+ * see the three-way rule at the probe below, W7-B6 review F4).
  *
  * SEC-03 Defect 5: validating `projectRoot`'s own identity (the caller's
  * `isContainedProjectRepoPath` check) does not validate what gets written
@@ -201,18 +204,48 @@ function checkContractArtifactContainment(projectRoot: string): void {
  * Returns the list of relative paths actually created (empty if everything was
  * already present), so the caller can tell the operator what it touched.
  */
-export function scaffoldContractArtifacts(projectRoot: string, name: string): string[] {
+export function scaffoldContractArtifacts(projectRoot: string, name: string, forgeRoot: string): string[] {
   const created: string[] = [];
 
-  // git init if the dir is not already a git work tree.
-  let isGit = false;
+  // git init decision — three-way, not a boolean. W7-B6 (projects-11): the
+  // original probe (`rev-parse --is-inside-work-tree`) reports true for ANY
+  // dir inside an enclosing repo — `projects/` lives inside the forge work
+  // tree, so every freshly onboarded project silently inherited FORGE's own
+  // git repo (C2/C6 then evaluated against the wrong repo, and dev-loop
+  // branches/commits would land in forge's history). W7-B6 review F4: the
+  // first fix ("init unless projectRoot is ITSELF the work-tree root")
+  // overcorrected — a subdirectory of an operator's REAL cloned repo (a
+  // monorepo package onboarded as the repoPath, contained under projects/)
+  // got a fresh empty repo NESTED inside their checkout, repointing every
+  // subsequent forge git operation at a history-less repo. The honest rule:
+  //   - projectRoot IS its own work-tree root            → skip (own repo);
+  //   - enclosed by FORGE's own work tree                → init (the
+  //     gitignored-projects/ case — the project must not inherit forge);
+  //   - enclosed by any OTHER repo                       → skip (the
+  //     operator's real repo governs; never nest a .git inside it);
+  //   - in no repo at all                                → init.
+  let needsInit: boolean;
   try {
-    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: projectRoot, stdio: 'ignore' });
-    isGit = true;
+    const toplevel = realpathSync(
+      execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim(),
+    );
+    if (toplevel === realpathSync(projectRoot)) {
+      needsInit = false; // already its own repo
+    } else {
+      let forgeToplevel: string | null = null;
+      try {
+        forgeToplevel = realpathSync(
+          execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: forgeRoot, encoding: 'utf8' }).trim(),
+        );
+      } catch {
+        forgeToplevel = null; // forge root not in a repo (test fixtures) — the enclosing repo cannot be forge's
+      }
+      needsInit = forgeToplevel !== null && toplevel === forgeToplevel;
+    }
   } catch {
-    isGit = false;
+    needsInit = true; // not in any repo at all — init below
   }
-  if (!isGit) {
+  if (needsInit) {
     try {
       execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
       created.push('.git/');
@@ -275,6 +308,16 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
 // ---------------------------------------------------------------------------
 // Write routes (M2-2) — PUT /api/studio/agents/:slug, PUT /api/studio/projects/:id
 // ---------------------------------------------------------------------------
+
+/**
+ * W7-B6 (projects-28): "run demo-design" is signalled ONLY when the save
+ * genuinely CHANGED demoProcess — presence-as-change tripped the banner on
+ * every save because the client always sends the field. Pure decision rule,
+ * exported for its direct pin (ADR-042: cli/ is not surface-capped).
+ */
+export function demoProcessChanged(incoming: unknown, stored: unknown): boolean {
+  return Array.isArray(incoming) && JSON.stringify(incoming) !== JSON.stringify(stored ?? null);
+}
 
 /**
  * Handle Forge Studio write (PUT) routes.
@@ -1212,7 +1255,7 @@ export async function handleStudioWriteRoutes(
       // below), never surface it as an unrelated 500.
       let scaffoldedLocal: string[];
       try {
-        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
@@ -1430,11 +1473,14 @@ export async function handleStudioWriteRoutes(
       let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
       try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
-      // F5: when demoProcess was in the save body, signal that the demo-design
+      // F5: when demoProcess CHANGED in this save, signal that the demo-design
       // skill should be run to generate per-project demo machinery. The UI
       // surfaces this as data-demo-design-state="needed" on the project page
       // so the operator can trigger: `forge run skill demo-design --project <id>`.
-      const demoDesignNeeded = Array.isArray(b['demoProcess']);
+      // W7-B6 (projects-28): the client always sends demoProcess, so mere
+      // PRESENCE tripped the banner after every save (a north-star-only edit
+      // included) — compare against what was stored instead.
+      const demoDesignNeeded = demoProcessChanged(b['demoProcess'], existingRaw['demoProcess']);
 
       sendJson(res, 200, { ok: true, id, ...(save ? { save } : {}), ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
     } catch (err) {

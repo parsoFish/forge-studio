@@ -18,8 +18,17 @@
  * `initiativeId` (the two differ: `<ISO-ish-timestamp>_<initiativeId>` vs
  * `<initiativeId>`).
  *
- * ⚑ costUsd is `null` — a `Cycle` carries no cost source, so an honest
- * absent-cost (history-ledger's rule), NEVER a fabricated `0`/`$0.00`.
+ * ⚑ costUsd (W7-B6, projects-27): a `Cycle` itself carries no cost, but the
+ * bridge's per-cycle cost route (`GET /api/cost/<cycleId>`) does — the page
+ * fetches those and hands the totals in as `costByCycleId`; a cycle with no
+ * fetched total stays `null` (honest absent-cost, history-ledger's rule),
+ * NEVER a fabricated `0`/`$0.00`.
+ *
+ * ⚑ when (W7-B6, projects-27): `startedAt` when the payload carries it, else
+ * the timestamp the `cycleId` ITSELF embeds
+ * (`2026-07-11T17-26-34_INIT-…` → ISO) — the ledger rendered an em dash on
+ * every row of every project because the cycles payload carries no
+ * startedAt and the embedded stamp was never read.
  *
  * See `./project-cycle-ledger.test.ts` for the full acceptance contract.
  */
@@ -68,17 +77,33 @@ function deriveProjectCycleLedgerSegments(cycle: Cycle): LedgerSegment[] {
  * `costUsd` is `null` — no cost source exists on a `Cycle`. `href` carries
  * the FULL `cycleId` AS-IS (D2, the reuse seam; P0 census).
  */
-export function deriveProjectCycleLedgerRows(cycles: Cycle[]): LedgerRow[] {
+/**
+ * W7-B6 (projects-27): the ISO timestamp a cycleId embeds
+ * (`2026-07-11T17-26-34_INIT-…` → `2026-07-11T17:26:34Z`), or `null` when
+ * the id carries no recognizable leading stamp. The time-of-day segment uses
+ * `-` for `:` (filesystem-safe), rewritten before `Date` validation.
+ */
+export function cycleIdEmbeddedIso(cycleId: string): string | null {
+  const match = cycleId.match(/^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})_/);
+  if (!match) return null;
+  const iso = `${match[1]}:${match[2]}:${match[3]}Z`;
+  return Number.isFinite(new Date(iso).getTime()) ? iso : null;
+}
+
+export function deriveProjectCycleLedgerRows(
+  cycles: Cycle[],
+  costByCycleId: Record<string, number | null> = {},
+): LedgerRow[] {
   const rows: LedgerRow[] = cycles.map((cycle) => {
     const segments = deriveProjectCycleLedgerSegments(cycle);
     return {
       id: cycle.cycleId,
-      when: cycle.startedAt ?? '',
+      when: cycle.startedAt ?? cycleIdEmbeddedIso(cycle.cycleId) ?? '',
       what: cycle.initiativeId,
       narrative: renderNarrative(segments),
       narrativeKinds: segments.map((s) => s.kind),
       status: cycle.status,
-      costUsd: null,
+      costUsd: costByCycleId[cycle.cycleId] ?? null,
       href: `/flows/${DEVELOP_FLOW_ID}/run/${cycle.cycleId}`,
     };
   });

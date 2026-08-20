@@ -14,11 +14,12 @@ import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
 import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
-  fetchCycles,
+  fetchCycles, fetchCost,
   listDemoSessions,
   type ProjectRoadmap, type PlanInitiativeResult, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
+import { deriveActionableNow } from '@/lib/roadmap-actionable';
 import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
@@ -38,13 +39,38 @@ import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
+import { OpenSessionsPanel } from '@/components/studio/project-builder/OpenSessionsPanel';
 import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { buildProjectSavePayload } from '@/lib/project-save-payload';
-import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
+import { StartWorkActions } from '@/components/studio/StartWorkActions';
+import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
+
+/**
+ * W7-B6 (projects-27): per-cycle cost totals from `GET /api/cost/<cycleId>`
+ * — enrichment, fetched per row (bounded by this project's cycle count). A
+ * failed/404 read stays `null` → the ledger's honest em dash, never $0.00.
+ * An absent/rotated event log yields an EMPTY summary (totalUsd 0) — that is
+ * "no cost recorded", not "cost $0.00"; kept null too.
+ */
+// W7-B6 review F5: `prev` memoizes resolved costs for TERMINAL cycles (they
+// cannot gain spend), so the refetch after every dispatch/save only hits the
+// cost route for live cycles + first-sight/unresolved ones — never an
+// unbounded N-request storm per refresh. Decision rule: lib/cycle-cost-cache.
+async function fetchCycleCostMap(cycles: Cycle[], prev: Record<string, number | null>): Promise<Record<string, number | null>> {
+  const { reused, toFetch } = planCycleCostFetch(cycles, prev);
+  const entries = await Promise.all(
+    toFetch.map(async (cycleId) => {
+      const summary = await fetchCost(cycleId).catch(() => null);
+      const total = summary !== null && summary.totalUsd > 0 ? summary.totalUsd : null;
+      return [cycleId, total] as const;
+    }),
+  );
+  return { ...reused, ...Object.fromEntries(entries) };
+}
 
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -82,6 +108,13 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // `deriveProjectCycleLedgerRows` inside <ProjectCycleLedger>. Populated from
   // the same `fetchCycles()` call that backs `cycleGroups`.
   const [projectCycles, setProjectCycles] = useState<Cycle[]>([]);
+  // W7-B6 (projects-27): per-cycle cost totals (GET /api/cost/<cycleId>) for
+  // the ledger's cost column — null/absent renders the honest em dash.
+  const [costByCycleId, setCostByCycleId] = useState<Record<string, number | null>>({});
+  // Review F5: the cross-refresh memo of resolved TERMINAL cycle costs (see
+  // fetchCycleCostMap above). A ref on purpose — state here would churn
+  // loadCycleGroups's identity (it is an effect dependency) on every update.
+  const costCacheRef = useRef<Record<string, number | null>>({});
 
   // W7-FIX-A1 (A1-02): a FAILED roster read is an ERROR state (PageLoadError
   // with Retry) — never the shared NotFound ("No project <id>" for a project
@@ -206,9 +239,13 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       // project (drop cycles with no/other `project`), left RAW so the ledger's
       // shared `deriveProjectCycleLedgerRows` transform runs on the render path.
       const mine = all.filter((c) => c.project === id);
+      // projects-27 + review F5: ref reuses terminal-cycle totals (see above).
+      const costs = await fetchCycleCostMap(mine, costCacheRef.current);
       if (signal.cancelled) return;
+      costCacheRef.current = costs;
       setCycleGroups(groups);
       setProjectCycles(mine);
+      setCostByCycleId(costs);
       setPanelError('cycles', null);
     } catch (err) {
       if (signal.cancelled) return;
@@ -287,6 +324,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       setDirty(false);
       setKbTouched(false);
       void loadPreflight({ cancelled: false });
+      // W7-B6 (projects-26): a successful save refreshes the page's OWN
+      // roster too — the header project switcher kept showing the old name
+      // until a manual reload (loadData leaves the operator's just-saved
+      // fields untouched: dirty is false, and it re-hydrates from the roster
+      // that now carries exactly what was saved).
+      void loadData({ cancelled: false });
       // F5: surface demo-design trigger when demoProcess was in the save.
       if (result.demoDesignNeeded) setDemoDesignNeeded(true);
     }
@@ -309,7 +352,23 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   function markDirty() { setDirty(true); }
 
+  // W7-B6 (projects-05): unsaved edits are no longer discarded silently.
+  // beforeunload covers tab close / reload / full navigations; the project
+  // switcher below confirms in-app. (Next's client-side <Link> navigations
+  // in the top nav bypass beforeunload — the honest residual, noted in the
+  // PR; the two loss paths the walkthrough reproduced are covered.)
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   function handleProjectSelect(newId: string) {
+    if (dirty && !window.confirm('You have unsaved changes — switch project and discard them?')) return;
     router.push(`/projects/${encodeURIComponent(newId)}`);
   }
 
@@ -445,6 +504,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         ))}
       </div>
 
+      {/* W7-B6 (operator note 11 / orch-02): the PRIMARY action group, above
+          the fold on BOTH tabs — Plan · Start development · Run a flow ·
+          Architect. Real controls (queue writes / flow-run POST), never an
+          inert select. */}
+      <StartWorkActions
+        projectId={id}
+        roadmap={roadmap}
+        flows={flows}
+        onChanged={refreshRoadmap}
+      />
+
       {/* W7-FIX-A1 (A1-02): a side-panel read (preflight / roadmap) failed while
           the project itself loaded — shown inline, never silently absent. */}
       {panelErrorList.length > 0 ? (
@@ -503,7 +573,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                   </Link>
                 )}
               </div>
-              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} />
+              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} costByCycleId={costByCycleId} />
             </section>
           </div>
 
@@ -576,7 +646,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
             <OnboardWithAgent projectId={id} />
 
-            <UsedByFlows flows={flows} projectId={id} />
+            {/* W7-B6 (projects-19): this project's open sessions with resume
+                links — the page no longer only mints new ones. */}
+            <OpenSessionsPanel projectId={id} />
+            {/* W7-B6 (orch-02 / projects-20): the bottom "Run a flow" select
+                (UsedByFlows) is REMOVED — kick-off now lives in the
+                above-the-fold Start-work action group under the tab bar. */}
           </aside>
         </div>
       )}
@@ -683,10 +758,19 @@ function CreateFromTemplate() {
           {appTypes.length === 0 && <option value="">(no templates found)</option>}
           {appTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <div style={{ marginTop: 14 }}>
-          <button className="btn btn-primary" data-action="create-project" disabled={!canSubmit || creating} onClick={() => void onCreate()}>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            className="btn btn-primary"
+            data-action="create-project"
+            disabled={!canSubmit || creating}
+            {...(!canSubmit ? { 'data-disabled-reason': 'Name, north star, and app type are required.', title: 'Name, north star, and app type are required.' } : {})}
+            onClick={() => void onCreate()}
+          >
             {creating ? 'Creating…' : 'Create project'}
           </button>
+          {/* W7-B6 (crosscut-25): the disabled CTA explains itself, like the
+              onboard form beside it already did. */}
+          {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, north star, and app type are required.</span>}
         </div>
         {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 8 }}>{error}</p>}
       </div>
@@ -766,9 +850,10 @@ function ProjectOnboardForm() {
             <>
               Register a code project so a flow can build it. You only need a name, the command that
               proves a change is good (the quality gate), and a one-line north star. Everything else has
-              a sensible default. The repo path must point at an <strong>existing git repository</strong>
-              {' '}(clone or symlink it under <code>projects/</code> first); onboarding scaffolds the
-              contract files and <code>git init</code>s the dir if it is not already a repo.
+              a sensible default. The repo path must point at an <strong>existing directory</strong>
+              {' '}(clone it under <code>projects/</code> first — a symlink is rejected); onboarding
+              scaffolds the contract files and <code>git init</code>s the dir if it is not already
+              its own repo.
             </>
           }
         />
@@ -980,6 +1065,10 @@ function RoadmapView({
 
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
 
+  // W7-B6 (projects-18): the "what needs me now" list rendered beside the
+  // canvas — same source data, one pure deriver (lib/roadmap-actionable.ts).
+  const actionable = useMemo(() => deriveActionableNow(initiatives, cycleGroups), [initiatives, cycleGroups]);
+
   // plan-everything-before-kickoff: the whole roadmap can be decomposed up
   // front (the flow_id-aware gate), so any number of initiatives may already
   // be pending AND ready at once. "Start eligible" kicks all of them off in a
@@ -1098,6 +1187,70 @@ function RoadmapView({
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
       <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+
+      {/* W7-B6 (projects-18): "what needs me now" — the actionable buckets as
+          a LIST beside the canvas, with the same actions the per-node drawer
+          offers. The canvas stays the map; this is the queue. */}
+      {actionable.length > 0 && (
+        <div
+          data-section="roadmap-actionable"
+          data-actionable-count={actionable.length}
+          style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px' }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
+            Actionable now
+          </div>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {actionable.map((row) => {
+              const dev = developByInitiative[row.initiativeId]?.status ?? 'idle';
+              const plan = planByInitiative[row.initiativeId]?.status ?? 'idle';
+              return (
+                <li
+                  key={row.initiativeId}
+                  data-actionable-row={row.kind}
+                  data-initiative-id={row.initiativeId}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.initiativeId}</span>
+                  <span style={{ color: 'var(--faint)', flex: 1, minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</span>
+                  {row.kind === 'plan' && (
+                    <button
+                      className="btn btn-sm"
+                      data-action="actionable-plan"
+                      disabled={plan === 'planning' || plan === 'started'}
+                      onClick={() => void planOne(row.initiativeId)}
+                    >
+                      {plan === 'planning' ? 'Planning…' : plan === 'started' ? 'Plan enqueued' : 'Plan →'}
+                    </button>
+                  )}
+                  {row.kind === 'start' && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      data-action="actionable-start"
+                      disabled={dev === 'starting' || dev === 'started'}
+                      onClick={() => void startOne(row.initiativeId)}
+                    >
+                      {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
+                    </button>
+                  )}
+                  {row.kind === 'failed' && (
+                    <>
+                      <span style={{ color: 'var(--red, #f87171)', fontWeight: 600 }}>failed</span>
+                      {row.runHref ? (
+                        <Link data-action="actionable-view-run" href={row.runHref} style={{ color: 'var(--dim)', fontSize: 12 }}>
+                          view run →
+                        </Link>
+                      ) : (
+                        <span style={{ color: 'var(--faint)', fontSize: 11.5 }}>no recorded cycle</span>
+                      )}
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* W6-RV-2: the roadmap is a completion-time canvas — done initiatives
           placed on a real day-by-day time axis in completion order, pending

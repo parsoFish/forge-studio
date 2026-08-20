@@ -797,36 +797,35 @@ test('AT-4on-7 (RED) [SEC-05 4on] retryability regression lock — a mid-Phase-2
   }
 });
 
-test('AT-4on-8 (RED-today) [SEC-05 4on] a stale marker-less orphan is reconciled away and a fresh create over the slot succeeds', () => {
+test('AT-4on-8 (AMENDED W7-B6, projects-35) a marker-less projects/<id> is REFUSED byte-untouched — the old sweep-and-rescaffold contract WAS the data-loss defect', () => {
   const forgeRoot = isolatedForgeRoot();
   const id = 'my-tool';
   const projectDir = join(forgeRoot, 'projects', id);
   try {
-    // A previous crashed create left a half-built projects/<id> carrying NO
-    // .forge/.create-complete marker (the marker the ruled fix writes LAST).
+    // HISTORY: this test used to pin the OPPOSITE contract — "a marker-less
+    // projects/<id> is a crashed-create orphan; sweep it and rescaffold". That
+    // inference is exactly projects-35's DATA LOSS: every onboarded /
+    // hand-added project is marker-less, so a name collision deleted a real
+    // project (live-reproduced against projects/mdtoc). The immutable-gates
+    // "tests pin the defect" shape — amended, not deleted, so the history is
+    // auditable. The transactional staging design means a genuine crashed
+    // create leaves only `.staging-<id>-*` dirs (swept by name marker,
+    // AT-4on-10) and NEVER a marker-less final-path dir, so ANY existing
+    // `projects/<id>` must be refused.
     mkdirSync(join(projectDir, '.forge'), { recursive: true });
     writeFileSync(join(projectDir, '.forge', 'project.json'), '{"partial":true}', 'utf8');
-    writeFileSync(join(projectDir, 'ORPHAN_SENTINEL.txt'), 'left by a crashed create\n', 'utf8');
-    assert.ok(!existsSync(join(projectDir, '.forge', '.create-complete')), 'precondition: the orphan carries no completion marker');
+    writeFileSync(join(projectDir, 'ORPHAN_SENTINEL.txt'), 'indistinguishable from operator data\n', 'utf8');
+    assert.ok(!existsSync(join(projectDir, '.forge', '.create-complete')), 'precondition: no completion marker (the onboarded-project shape)');
 
-    // Today: existsSync(projectDir) → throws "already exists" (no reconcile).
-    // After the fix: the pre-create reconcile sweeps the marker-less orphan and
-    // a FRESH scaffold lands — proven by ORPHAN_SENTINEL.txt being GONE (a real
-    // scaffold, not adoption of the crashed dir).
-    let ok = false;
-    let err = '';
-    try {
-      const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
-      ok = out.id === id
-        && !existsSync(join(projectDir, 'ORPHAN_SENTINEL.txt'))
-        && existsSync(join(projectDir, 'package.json'));
-    } catch (e) { err = e instanceof Error ? e.message : String(e); }
-    assert.ok(ok, `a marker-less orphan must be reconciled + replaced by a fresh scaffold — got: ${err}`);
-    // EXPIRY: GREEN once the fix adds (a) the .forge/.create-complete marker
-    // written LAST and (b) a pre-create reconcile that removes any projects/<id>
-    // lacking it. If a future change makes an existsSync collision non-fatal by
-    // ADOPTING the dir instead of sweeping it, the ORPHAN_SENTINEL assertion
-    // above catches it — re-audit rather than relax.
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /already exists/i,
+      'a marker-less projects/<id> must be REFUSED — marker absence is not proof of orphanhood',
+    );
+    // Assert the ARTIFACT: nothing was swept, nothing rescaffolded.
+    assert.ok(existsSync(join(projectDir, 'ORPHAN_SENTINEL.txt')), 'the existing directory must survive byte-untouched');
+    assert.equal(readFileSync(join(projectDir, '.forge', 'project.json'), 'utf8'), '{"partial":true}', 'project.json must be byte-unchanged');
+    assert.ok(!existsSync(join(projectDir, 'package.json')), 'no fresh scaffold may land over the refused slot');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

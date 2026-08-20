@@ -35,11 +35,13 @@ export type { KickoffCandidate } from '@/lib/kickoff-candidates';
  */
 export function FlowKickoff({
   flow,
-  knownProjects,
   candidates = [],
   onEnqueued,
 }: {
   flow: Flow;
+  /** W7-B6: unused — NewIdeaBox now owns its roster (a SELECT over real
+   *  project ids, crosscut-21); kept in the type so existing callers that
+   *  still pass it stay compiling (B5 owns the flows page). */
   knownProjects?: string[];
   /** Generic kickoff only: the initiatives that can be enqueued onto this flow. */
   candidates?: KickoffCandidate[];
@@ -49,7 +51,7 @@ export function FlowKickoff({
 }): JSX.Element {
   const kind = flow.kickoff?.kind;
 
-  if (kind === 'idea') return <IdeaKickoff knownProjects={knownProjects} project={flow.project} />;
+  if (kind === 'idea') return <IdeaKickoff project={flow.project} />;
   if (kind === 'initiative-select') return <InitiativeSelectKickoff />;
   if (kind === 'trigger-only') return <TriggerOnlyKickoff />;
   return <GenericKickoff flowId={flow.id} candidates={candidates} onEnqueued={onEnqueued} />;
@@ -77,7 +79,7 @@ const launchButtonStyle: React.CSSProperties = {
 
 // ---- idea ----------------------------------------------------------------
 
-function IdeaKickoff({ knownProjects, project }: { knownProjects?: string[]; project?: string }): JSX.Element {
+function IdeaKickoff({ project }: { project?: string }): JSX.Element {
   const router = useRouter();
   return (
     <div data-section="flow-kickoff" data-kickoff-kind="idea" style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}>
@@ -85,7 +87,6 @@ function IdeaKickoff({ knownProjects, project }: { knownProjects?: string[]; pro
         <NewIdeaBox
           key={project ?? ''}
           initialProject={project ?? ''}
-          knownProjects={knownProjects}
           onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
         />
       </div>
