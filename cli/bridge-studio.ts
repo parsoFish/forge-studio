@@ -1088,7 +1088,15 @@ export async function handleStudioRoutes(
         // gets smoothed into a 200 ("declared data fails open" is the shape
         // this campaign keeps finding and closing).
         const status = /^unknown project /.test(result.error.message) ? 404 : 409;
-        sendJson(res, status, { ok: false, error: result.error.message }, origin);
+        // W7-B6 (projects-01 / crosscut-12): when the 409 is the R1-03
+        // flat-gate-keys shape, the message names the mechanical remedy —
+        // `forge project migrate <id>` applies the exact mapping the
+        // validator's text describes.
+        const error =
+          status === 409 && /flat gate key/.test(result.error.message)
+            ? `${result.error.message} Run \`forge project migrate ${id}\` to apply this migration automatically.`
+            : result.error.message;
+        sendJson(res, status, { ok: false, error }, origin);
         return true;
       }
       sendJson(res, 200, { ok: true, project: id, stages: result.rows, sourcesScanned: result.sourcesScanned }, origin);

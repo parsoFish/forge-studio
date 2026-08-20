@@ -29,6 +29,7 @@ import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from './
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '../cli/agent-run.ts';
+import { cmdProjectMigrate } from '../cli/project-migrate.ts';
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 const args = process.argv.slice(2);
@@ -109,6 +110,15 @@ process.chdir(FORGE_ROOT);
       if (args[1] === 'fix') return await cmdPreflightFix(args.slice(2));
       if (args[1] === 'converge') return cmdPreflightConverge(args.slice(2));
       return cmdPreflight(args.slice(1));
+    case 'project':
+      // W7-B6 (projects-01): `forge project migrate <id>` — the one-shot
+      // flat-gate-keys → testProcess config migration the contract-stages
+      // 409 names as its remedy. Hidden from help (operator runs it once,
+      // pointed there by the Studio error text).
+      if (args[1] === 'migrate') process.exit(cmdProjectMigrate(args.slice(2)));
+      console.error('forge project: subcommands: migrate <project-id>');
+      process.exit(2);
+      break;
     case '--help':
     case '-h':
     case undefined:

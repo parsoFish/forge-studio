@@ -1,393 +1,387 @@
 {
- "_comment": "W7-A0 walkthrough baseline: the failures KNOWN on main when this file was generated. Lanes must SHRINK this file (delete the entries their PR fixes) and NEVER grow it — a new failing route/request/error fails `npm run ui:walkthrough -- --assert`, and scripts/ui-walkthrough/check-baseline-shrinks.mjs fails CI if a PR adds an entry (growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, expectedRoutes recorded). expectedRoutes[ci|host] is the coverage floor: a full crawl in that environment must visit >= 90% of it. Regenerate only from main with `--write-baseline` (ids are normalized to <id>).",
- "generatedAt": "2026-08-19T02:57:07.333Z",
- "source": "main@08ec533d — read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) — http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json)",
- "expectedRoutes": {
-  "ci": 136,
-  "host": 924
- },
- "expectedRoutesSource": {
-  "ci": "main@08ec533d — CI run 32199260116 (github ubuntu, --boot dry-bridge clean checkout) — http://localhost:4124 at 2026-08-19T00:01:47.315Z (replayed from _walkthrough/ci-run-32199260116/crawl.json) (136 routes, 0 unvisited)",
-  "host": "main@08ec533d — read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) — http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json) (924 routes, 0 unvisited)"
- },
- "entries": [
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/adversarial-review",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
+  "_comment": "W7-A0 walkthrough baseline: the failures KNOWN on main when this file was generated. Lanes must SHRINK this file (delete the entries their PR fixes) and NEVER grow it \u2014 a new failing route/request/error fails `npm run ui:walkthrough -- --assert`, and scripts/ui-walkthrough/check-baseline-shrinks.mjs fails CI if a PR adds an entry (growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, expectedRoutes recorded). expectedRoutes[ci|host] is the coverage floor: a full crawl in that environment must visit >= 90% of it. Regenerate only from main with `--write-baseline` (ids are normalized to <id>).",
+  "generatedAt": "2026-08-19T02:57:07.333Z",
+  "source": "main@08ec533d \u2014 read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) \u2014 http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json)",
+  "expectedRoutes": {
+    "ci": 136,
+    "host": 924
   },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/architect",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
+  "expectedRoutesSource": {
+    "ci": "main@08ec533d \u2014 CI run 32199260116 (github ubuntu, --boot dry-bridge clean checkout) \u2014 http://localhost:4124 at 2026-08-19T00:01:47.315Z (replayed from _walkthrough/ci-run-32199260116/crawl.json) (136 routes, 0 unvisited)",
+    "host": "main@08ec533d \u2014 read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) \u2014 http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json) (924 routes, 0 unvisited)"
   },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/brain-ingest",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/community-refresh",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/contract-check",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/demo-agent",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/developer-ralph",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/new",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/onboarding-agent",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/project-manager",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/project-scoped-review",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/reflector",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/agents/release-finalizer",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?cycle=<id>",
-   "detail": "404 [bridge]/api/artifact/<id>/PLAN.html",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?cycle=<id>",
-   "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?cycle=<id>",
-   "detail": "404 [bridge]/api/artifact/<id>/plan.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?cycle=<id>",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=demo",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/<id>/PLAN.html",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/<id>/plan.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/<id>/plan.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=pr",
-   "detail": "404 [bridge]/api/artifact/<id>/pr-description.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=pr",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=reflection",
-   "detail": "404 [bridge]/api/artifact/<id>/reflection.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=reflection",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=<id>&type=workitems",
-   "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=demo",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.html",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/plan.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.html",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/plan.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=plan",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=pr",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/pr-description.md",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=pr",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=reflection",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/reflection.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=reflection",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-1",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-10",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-11",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-2",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-3",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-4",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-5",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-6",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-7",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-8",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/artifact?run=INIT-<id>&type=workitems",
-   "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-9",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/release-refine/run/<id>",
-   "detail": "404 [bridge]/api/studio/flows/release-refine",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/unknown/run/<id>",
-   "detail": "404 [bridge]/api/studio/flows/unknown",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/unknown/run/INIT-<id>",
-   "detail": "404 [bridge]/api/studio/flows/unknown",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=cycles&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=forge-dev&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=gitpulse&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/knowledge?id=trafficGame&tab=health",
-   "detail": "404 [bridge]/api/events/",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/projects/gitpulse",
-   "detail": "409 [bridge]/api/studio/projects/gitpulse/contract-stages",
-   "message": "first-party request answered 409"
-  }
- ]
+  "entries": [
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/adversarial-review",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/architect",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/brain-ingest",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/community-refresh",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/contract-check",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/demo-agent",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/developer-ralph",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/new",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/onboarding-agent",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/project-manager",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/project-scoped-review",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/reflector",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/agents/release-finalizer",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?cycle=<id>",
+      "detail": "404 [bridge]/api/artifact/<id>/PLAN.html",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?cycle=<id>",
+      "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?cycle=<id>",
+      "detail": "404 [bridge]/api/artifact/<id>/plan.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?cycle=<id>",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=demo",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/<id>/PLAN.html",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/<id>/plan.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/<id>/PLAN.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/<id>/plan.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=pr",
+      "detail": "404 [bridge]/api/artifact/<id>/pr-description.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=pr",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=reflection",
+      "detail": "404 [bridge]/api/artifact/<id>/reflection.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=reflection",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=<id>&type=workitems",
+      "detail": "404 [bridge]/api/artifact/<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=demo",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.html",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/plan.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan&mode=view",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.html",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/PLAN.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/plan.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=plan",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=pr",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/pr-description.md",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=pr",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=reflection",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/reflection.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=reflection",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/artifact/INIT-<id>/verdict.json",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-1",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-10",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-11",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-2",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-3",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-4",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-5",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-6",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-7",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-8",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/artifact?run=INIT-<id>&type=workitems",
+      "detail": "404 [bridge]/api/work-item/INIT-<id>/WI-9",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/flows/release-refine/run/<id>",
+      "detail": "404 [bridge]/api/studio/flows/release-refine",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/flows/unknown/run/<id>",
+      "detail": "404 [bridge]/api/studio/flows/unknown",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/flows/unknown/run/INIT-<id>",
+      "detail": "404 [bridge]/api/studio/flows/unknown",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/knowledge?id=cycles&tab=health",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/knowledge?id=forge-dev&tab=health",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/knowledge?id=gitpulse&tab=health",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    },
+    {
+      "kind": "first-party-4xx",
+      "route": "/knowledge?id=trafficGame&tab=health",
+      "detail": "404 [bridge]/api/events/",
+      "message": "first-party request answered 404"
+    }
+  ]
 }
