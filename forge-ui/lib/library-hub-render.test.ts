@@ -177,22 +177,24 @@ test('the Community shelf renders a real item count and a card per item', () => 
 });
 
 // ---------------------------------------------------------------------------
-// Create CTAs — Skills and Hooks only (Connections/Templates have no create
-// path; Community gets a browse entry, never a create CTA).
+// Create CTAs — Skills, Hooks and (W7-B4, library-17) Templates. Connections
+// stay curation-by-PR; Community gets a browse entry, never a create CTA.
 // ---------------------------------------------------------------------------
 
-test('Skills and Hooks each carry a create CTA routing to their real builder', () => {
+test('Skills, Hooks and Templates each carry a create CTA routing to their real builder', () => {
   const html = render(EMPTY_READY_PROPS);
   expect(html).toContain('data-action="new-skill"');
   expect(html).toContain('href="/skills/new"');
   expect(html).toContain('data-action="new-hook"');
   expect(html).toContain('href="/hooks/new"');
+  // W7-B4 (library-17/library-01): templates are authorable now.
+  expect(html).toContain('data-action="new-template"');
+  expect(html).toContain('href="/templates/new"');
 });
 
-test('Connections and Templates carry NO create CTA — curation/registry-scan only, no author-here path', () => {
+test('Connections carry NO create CTA — curation by PR to studio/catalog.yaml only', () => {
   const html = render(EMPTY_READY_PROPS);
   expect(html).not.toContain('data-action="new-connection"');
-  expect(html).not.toContain('data-action="new-template"');
 });
 
 test('Community carries a "Browse community" entry, never a create CTA', () => {
@@ -218,14 +220,37 @@ test('the old landing-page surfaces (hero pulse, attention strip, projects/agent
 });
 
 // ---------------------------------------------------------------------------
-// KB cross-link card
+// KB cross-link card — REMOVED (W7-B4, library-02: operator note 9 asked for
+// its removal; the pillar nav already carries Knowledge, the card duplicated
+// it).
 // ---------------------------------------------------------------------------
 
-test('a small KB cross-link card points at /knowledge — Library no longer creates or lists knowledge bases', () => {
+test('the KB cross-link card is GONE — the nav owns the Knowledge pillar (library-02)', () => {
   const html = render(EMPTY_READY_PROPS);
-  expect(html).toContain('data-section="kb-crosslink"');
-  expect(html).toContain('data-action="kb-crosslink"');
-  expect(html).toContain('href="/knowledge"');
+  expect(html).not.toContain('data-section="kb-crosslink"');
+  expect(html).not.toContain('data-action="kb-crosslink"');
+});
+
+// ---------------------------------------------------------------------------
+// Installed marker — W7-B4 (library-04): the DOM attribute must have a
+// HUMAN-VISIBLE counterpart on every skill card.
+// ---------------------------------------------------------------------------
+
+test('a skill card renders a visible install-state marker, not just a data attribute (library-04)', () => {
+  const html = render({
+    ...EMPTY_READY_PROPS,
+    skills: {
+      status: 'ready',
+      entries: [
+        makeSkill('local-one', { installed: true }),
+        makeSkill('community-gap', { source: 'community', installed: false, paletteVisible: false }),
+      ],
+      error: null,
+    },
+  });
+  expect(html).toContain('data-component="install-state"');
+  expect(html).toMatch(/data-component="install-state"[^>]*data-installed="true"/);
+  expect(html).toMatch(/data-component="install-state"[^>]*data-installed="false"/);
 });
 
 // ---------------------------------------------------------------------------
