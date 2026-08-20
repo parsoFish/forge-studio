@@ -2497,7 +2497,7 @@ async function handleHttp(
       // server anomaly, not a client mistake, so it raises to the route's
       // existing 500 path, never a 400.
       if (!isSafeRunId(runId)) {
-        throw new MaterialsStagingError('refused to dispatch — unsafe server-minted run id');
+        throw new Error('refused to dispatch — unsafe server-minted run id');
       }
       // W7-B5 (agents-20 / agents-31 / sessions-kinds-24 sibling): the run's
       // FIRST event lands the moment the id is minted — so `GET
@@ -5051,6 +5051,30 @@ async function handleDemoBuilder(
       // below would silently follow.
       const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs);
 
+      // W7-B5 (agents-20/31 + projects-31): the SAME t0 `agent-run.dispatched`
+      // marker the generic `POST /api/agents/:slug/run` host emits. This route
+      // mints a runId on the SAME shared run identity space, so it must reach
+      // the SAME state on the shared surfaces at t0 — without this event
+      // `GET /api/agents/runs/<runId>` 404s here while the generic route's
+      // runId already 200s (the AT-6 status-equivalence pin in
+      // cli/ui-bridge-onboarding-start.test.ts is exactly that check), the
+      // onboarding panel's first poll reads "no such run" for a run it just
+      // started, and the drawer's `GET /api/events/<runId>` 404s at t0.
+      // Guard symmetry with the generic host: the server-minted id is checked
+      // before this, its FIRST write.
+      if (!isSafeRunId(runId)) {
+        throw new Error('refused to dispatch — unsafe server-minted run id');
+      }
+      createLogger(runId, ctx.logsRoot).emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: 'onboarding-agent',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-run.dispatched',
+        metadata: { agent_slug: 'onboarding-agent', project },
+      });
       spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir);
       // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
       // for this route (cli/dry-bridge.ts) claims the agent dispatch is

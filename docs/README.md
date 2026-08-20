@@ -58,6 +58,7 @@ before forge merges). Everything between runs unattended.
 **UI, testing & security**
 - [Forge-UI DOM contract & harness](./forge-ui-dom-and-harness.md) — the per-route `data-*` contract, status vocabularies, the journeys-as-data harness, and the real-capability (`verify-cycle`) harness. (Kept out of CLAUDE.md so the always-injected instructions stay lean.)
 - [Studio first-flow UX](./reference/studio-first-flow-ux.md) — the UX spec backing the shipped first-flow starters.
+- [Agent cost ceilings](./agent-cost-ceilings.md) — which standalone spawn shapes can enforce a ceiling, the per-agent default `budgets.maxBudgetUsd` values and how they were derived, and the operator-ceiling precedence rule.
 - [Request-derived filesystem path audit](./security-request-path-audit.md) — the finite enumeration of every fs read/write whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe`, plus the escape-shape catalogue. Add a row when a route turns request data into a path.
 - [Verify-cycle idea corpus](./verify-cycle-ideas/README.md) — hand-authored initiative ideas fed to `scripts/verify-cycle.mjs --idea-file` for the gitpulse reference-project harness.
 

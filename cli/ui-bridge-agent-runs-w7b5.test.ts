@@ -167,6 +167,9 @@ before(async () => {
   }
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
+  // A real project dir for the onboarding-start t0 pin below — that route
+  // refuses a project it cannot resolve under the contained projects root.
+  mkdirSync(join(forgeRoot, 'projects', 'w7b5proj'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills', 'w7b5-oneshot'), { recursive: true });
   writeFileSync(join(forgeRoot, 'skills', 'w7b5-oneshot', 'SKILL.md'), studioAgent('w7b5-oneshot', { loopStrategy: 'one-shot' }));
   const flowDir = join(forgeRoot, 'studio', 'flows', 'forge-architect');
@@ -314,10 +317,34 @@ test('cancel: a live tracked pid whose argv carries the runId is signalled (kill
   // A stand-in for the detached dispatch child: sleeps forever, carries the
   // runId as its own whole argv element (exactly what `--run-id <id>` gives
   // the real child).
-  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '--run-id', runId], { detached: true, stdio: 'ignore' });
+  // The `--` is load-bearing: without it node parses `--run-id` as one of
+  // ITS OWN options, prints "node: bad option: --run-id" and exits 9
+  // immediately — the child was dead before the cancel request arrived, so
+  // `killed:true` only ever passed by winning a race against process reaping
+  // (~5-in-60 losses when measured). `--` ends node's option parsing, so the
+  // flag and the id land in the child's argv where the bridge's ownership
+  // proof reads them, and the process genuinely stays alive.
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '--', '--run-id', runId], { detached: true, stdio: 'ignore' });
   child.unref();
   assert.ok(typeof child.pid === 'number');
   writeFileSync(join(forgeRoot, '_logs', runId, 'turn.pid'), `${child.pid}\n`);
+
+  // Wait until the child has actually EXEC'd, i.e. until the very thing the
+  // bridge's ownership proof reads (`/proc/<pid>/cmdline`, whole argv
+  // elements — cli/bridge-studio-lifecycle.ts) reports this runId. Between
+  // `spawn()` returning a pid and the exec landing, cmdline is still the
+  // FORKING process's — so cancelling in that window legitimately reports
+  // `killed:false` ("not provably ours"), and the test would be asserting a
+  // race, not the behaviour. Deterministic wait on the real signal, not a
+  // sleep: this fails loudly if exec never happens.
+  let argvVisible = false;
+  for (let i = 0; i < 100 && !argvVisible; i++) {
+    try {
+      argvVisible = readFileSync(`/proc/${child.pid}/cmdline`, 'utf8').split('\0').includes(runId);
+    } catch { /* not readable yet */ }
+    if (!argvVisible) await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.ok(argvVisible, 'the stand-in child must have exec\'d with the runId in its argv before cancel is asked to prove ownership');
 
   try {
     const { status, body } = await postJson(`/api/agents/runs/${encodeURIComponent(runId)}/cancel`);
@@ -420,6 +447,32 @@ test('dispatch: POST /api/agents/:slug/run writes agent-run.dispatched (with the
   // first fetch.
   const ev = await getJson(`/api/events/${encodeURIComponent(runId)}`);
   assert.equal(ev.status, 200);
+});
+
+test('dispatch: the ONBOARDING start route mints a runId on the same shared identity space and writes the SAME t0 marker — its run is 200 on GET /api/agents/runs/:runId and GET /api/events/:runId at t0, exactly like a generic dispatch (agents-20 / projects-31)', async () => {
+  // The failure this pins: only the generic host emitted the t0 marker, so
+  // an onboarding run 404'd on both shared surfaces until its spawned child
+  // got far enough to write its own `start` event — the onboarding panel's
+  // first poll read "no such run" for a run it had just started. The
+  // status-EQUIVALENCE pin lives in cli/ui-bridge-onboarding-start.test.ts
+  // (AT-6); this one pins the ABSOLUTE state, so both routes going 404
+  // together could never satisfy it.
+  const { status, body } = await postJson('/api/studio/onboarding/start', { project: 'w7b5proj' });
+  assert.equal(status, 200, `onboarding start must accept the fixture project (got ${status}: ${JSON.stringify(body)})`);
+  const runId = body.runId as string;
+  assert.ok(runId, 'onboarding start returns a runId');
+
+  const eventsPath = join(forgeRoot, '_logs', runId, 'events.jsonl');
+  assert.ok(existsSync(eventsPath), 'events.jsonl must exist the moment the onboarding start response returns');
+  const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+  const dispatched = lines.find((l) => l.message === 'agent-run.dispatched');
+  assert.ok(dispatched, 'an agent-run.dispatched event is written at t0 for the onboarding run too');
+  assert.equal(dispatched!.skill, 'onboarding-agent', 'attributed to the onboarding agent by the D4 identity field');
+
+  const detail = await getJson(`/api/agents/runs/${encodeURIComponent(runId)}`);
+  assert.equal(detail.status, 200, 'the onboarding runId resolves on the shared run-detail surface at t0');
+  const ev = await getJson(`/api/events/${encodeURIComponent(runId)}`);
+  assert.equal(ev.status, 200, 'and on the shared events surface at t0');
 });
 
 /** Wait for one WS message satisfying `match`, or reject after `ms`. */
