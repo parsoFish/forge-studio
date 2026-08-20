@@ -14,11 +14,12 @@ import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
 import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
-  fetchCycles,
+  fetchCycles, fetchCost,
   listDemoSessions,
   type ProjectRoadmap, type PlanInitiativeResult, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
+import { deriveActionableNow } from '@/lib/roadmap-actionable';
 import { resolveDemoEntryHref } from '@/lib/demo-entry-view';
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
@@ -45,6 +46,24 @@ import { buildProjectSavePayload } from '@/lib/project-save-payload';
 import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
+
+/**
+ * W7-B6 (projects-27): per-cycle cost totals from `GET /api/cost/<cycleId>`
+ * — enrichment, fetched per row (bounded by this project's cycle count). A
+ * failed/404 read stays `null` → the ledger's honest em dash, never $0.00.
+ * An absent/rotated event log yields an EMPTY summary (totalUsd 0) — that is
+ * "no cost recorded", not "cost $0.00"; kept null too.
+ */
+async function fetchCycleCostMap(cycles: Cycle[]): Promise<Record<string, number | null>> {
+  const entries = await Promise.all(
+    cycles.map(async (c) => {
+      const summary = await fetchCost(c.cycleId).catch(() => null);
+      const total = summary !== null && summary.totalUsd > 0 ? summary.totalUsd : null;
+      return [c.cycleId, total] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
 
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -82,6 +101,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // `deriveProjectCycleLedgerRows` inside <ProjectCycleLedger>. Populated from
   // the same `fetchCycles()` call that backs `cycleGroups`.
   const [projectCycles, setProjectCycles] = useState<Cycle[]>([]);
+  // W7-B6 (projects-27): per-cycle cost totals (GET /api/cost/<cycleId>) for
+  // the ledger's cost column — null/absent renders the honest em dash.
+  const [costByCycleId, setCostByCycleId] = useState<Record<string, number | null>>({});
 
   // W7-FIX-A1 (A1-02): a FAILED roster read is an ERROR state (PageLoadError
   // with Retry) — never the shared NotFound ("No project <id>" for a project
@@ -206,9 +228,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       // project (drop cycles with no/other `project`), left RAW so the ledger's
       // shared `deriveProjectCycleLedgerRows` transform runs on the render path.
       const mine = all.filter((c) => c.project === id);
+      // W7-B6 (projects-27): per-cycle cost from the cost route (helper below).
+      const costs = await fetchCycleCostMap(mine);
       if (signal.cancelled) return;
       setCycleGroups(groups);
       setProjectCycles(mine);
+      setCostByCycleId(costs);
       setPanelError('cycles', null);
     } catch (err) {
       if (signal.cancelled) return;
@@ -514,7 +539,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                   </Link>
                 )}
               </div>
-              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} />
+              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} costByCycleId={costByCycleId} />
             </section>
           </div>
 
@@ -992,6 +1017,10 @@ function RoadmapView({
 
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
 
+  // W7-B6 (projects-18): the "what needs me now" list rendered beside the
+  // canvas — same source data, one pure deriver (lib/roadmap-actionable.ts).
+  const actionable = useMemo(() => deriveActionableNow(initiatives, cycleGroups), [initiatives, cycleGroups]);
+
   // plan-everything-before-kickoff: the whole roadmap can be decomposed up
   // front (the flow_id-aware gate), so any number of initiatives may already
   // be pending AND ready at once. "Start eligible" kicks all of them off in a
@@ -1110,6 +1139,70 @@ function RoadmapView({
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
       <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+
+      {/* W7-B6 (projects-18): "what needs me now" — the actionable buckets as
+          a LIST beside the canvas, with the same actions the per-node drawer
+          offers. The canvas stays the map; this is the queue. */}
+      {actionable.length > 0 && (
+        <div
+          data-section="roadmap-actionable"
+          data-actionable-count={actionable.length}
+          style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px' }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 8 }}>
+            Actionable now
+          </div>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {actionable.map((row) => {
+              const dev = developByInitiative[row.initiativeId]?.status ?? 'idle';
+              const plan = planByInitiative[row.initiativeId]?.status ?? 'idle';
+              return (
+                <li
+                  key={row.initiativeId}
+                  data-actionable-row={row.kind}
+                  data-initiative-id={row.initiativeId}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.initiativeId}</span>
+                  <span style={{ color: 'var(--faint)', flex: 1, minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</span>
+                  {row.kind === 'plan' && (
+                    <button
+                      className="btn btn-sm"
+                      data-action="actionable-plan"
+                      disabled={plan === 'planning' || plan === 'started'}
+                      onClick={() => void planOne(row.initiativeId)}
+                    >
+                      {plan === 'planning' ? 'Planning…' : plan === 'started' ? 'Plan enqueued' : 'Plan →'}
+                    </button>
+                  )}
+                  {row.kind === 'start' && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      data-action="actionable-start"
+                      disabled={dev === 'starting' || dev === 'started'}
+                      onClick={() => void startOne(row.initiativeId)}
+                    >
+                      {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
+                    </button>
+                  )}
+                  {row.kind === 'failed' && (
+                    <>
+                      <span style={{ color: 'var(--red, #f87171)', fontWeight: 600 }}>failed</span>
+                      {row.runHref ? (
+                        <Link data-action="actionable-view-run" href={row.runHref} style={{ color: 'var(--dim)', fontSize: 12 }}>
+                          view run →
+                        </Link>
+                      ) : (
+                        <span style={{ color: 'var(--faint)', fontSize: 11.5 }}>no recorded cycle</span>
+                      )}
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* W6-RV-2: the roadmap is a completion-time canvas — done initiatives
           placed on a real day-by-day time axis in completion order, pending

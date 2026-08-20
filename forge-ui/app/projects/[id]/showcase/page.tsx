@@ -54,12 +54,16 @@ import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
-import { deriveShowcaseStats, type ShowcaseStats } from '@/lib/project-showcase';
+import { deriveShowcaseStats, listShowcaseCycleIds, type ShowcaseStats } from '@/lib/project-showcase';
 
 export default function ProjectShowcasePage({ params }: { params: { id: string } }) {
   const { id } = params;
 
   const [result, setResult] = useState<ShowcaseLoadResult | null>(null);
+  // W7-B6 (projects-21): the cycle switcher — all showcase-eligible cycles,
+  // newest first; '' = the derived newest pick.
+  const [eligibleCycles, setEligibleCycles] = useState<string[]>([]);
+  const [pickedCycleId, setPickedCycleId] = useState('');
   const [ready, setReady] = useState(false);
   // W7-A4 (projects-23): the showcase is a PROJECT surface — an id the roster
   // does not know renders the shared NotFound, not a plausible "No showcase
@@ -92,8 +96,14 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
       }
       const snapshot = await fetchCycles();
       const cycles = [...(snapshot?.live ?? []), ...(snapshot?.recent ?? [])];
-      const loaded = await loadShowcase({ cycles, projectId: id, fetchDemo: fetchDemoModel });
+      const loaded = await loadShowcase({
+        cycles,
+        projectId: id,
+        fetchDemo: fetchDemoModel,
+        ...(pickedCycleId ? { requestedCycleId: pickedCycleId } : {}),
+      });
       if (signal.cancelled) return;
+      setEligibleCycles(listShowcaseCycleIds(cycles, id));
       setResult(loaded);
       setLoadError(null);
     } catch (err) {
@@ -104,7 +114,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
     } finally {
       if (!signal.cancelled) setReady(true);
     }
-  }, [id]);
+  }, [id, pickedCycleId]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -188,6 +198,53 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
           </p>
         </div>
 
+        {/* W7-B6 (projects-21): the showcase is no longer a dead end — a
+            cycle switcher over every eligible cycle plus links INTO the
+            source cycle (run page + demo artifact; the PR link rides the
+            stats strip when the model carries one). */}
+        {ready && eligibleCycles.length > 0 && (
+          <div
+            data-section="showcase-cycle-nav"
+            data-eligible-count={eligibleCycles.length}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--faint)' }}>
+              Cycle
+              <select
+                data-field="showcase-cycle"
+                value={pickedCycleId || (cycleId ?? '')}
+                onChange={(e) => setPickedCycleId(e.target.value)}
+                style={{
+                  background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text)', fontSize: 12, padding: '5px 8px', outline: 'none', maxWidth: 380,
+                }}
+              >
+                {eligibleCycles.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            {cycleId && (
+              <>
+                <Link
+                  data-action="showcase-open-run"
+                  href={`/flows/forge-develop/run/${encodeURIComponent(cycleId)}`}
+                  style={{ fontSize: 12, color: 'var(--c-project)', textDecoration: 'none' }}
+                >
+                  run →
+                </Link>
+                <Link
+                  data-action="showcase-open-artifact"
+                  href={`/artifact?run=${encodeURIComponent(cycleId)}&type=demo`}
+                  style={{ fontSize: 12, color: 'var(--c-project)', textDecoration: 'none' }}
+                >
+                  demo artifact →
+                </Link>
+              </>
+            )}
+          </div>
+        )}
+
         {!ready ? (
           <div style={{ fontSize: 13, color: 'var(--faint)', padding: '40px 0' }}>Loading…</div>
         ) : isEmpty ? (
@@ -239,10 +296,15 @@ function ShowcaseStatsStrip({ stats }: { stats: ShowcaseStats }) {
       data-section="showcase-stats"
       style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 26 }}
     >
-      <div style={tileStyle}>
-        <div style={labelStyle}>Tests</div>
-        <div style={valueStyle}>{stats.testEvidenceCount}</div>
-      </div>
+      {/* W7-B6 (projects-22): the tile renders ONLY when the model genuinely
+          carries a testEvidence block — an absent block used to render as a
+          hard "TESTS 0" next to 23 met ACs. */}
+      {stats.testEvidenceCount !== null && (
+        <div style={tileStyle} data-tile="tests">
+          <div style={labelStyle}>Tests</div>
+          <div style={valueStyle}>{stats.testEvidenceCount}</div>
+        </div>
+      )}
       <div style={tileStyle}>
         <div style={labelStyle}>AC met</div>
         <div style={{ ...valueStyle, color: 'var(--green)' }}>{stats.acVerdictCounts.met}</div>
@@ -332,23 +394,38 @@ function ShowcaseEmptyState({ projectId, reason }: { projectId: string; reason: 
           showcase fills in once a cycle completes.</>
         )}
       </p>
-      <Link
-        href={`/projects/${encodeURIComponent(projectId)}`}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '8px 16px',
-          background: 'var(--panel)',
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: 13,
-          color: 'var(--dim)',
-          textDecoration: 'none',
-        }}
-      >
-        ← Back to project
-      </Link>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {/* W7-B6 (projects-21): the no-demo empty state offers the way to
+            CAPTURE one — the demo-builder kickoff for this project — instead
+            of only a way back. */}
+        {reason === 'no-demo' && (
+          <Link
+            data-action="showcase-capture-demo"
+            className="btn btn-primary"
+            href={`/sessions/demo/new?project=${encodeURIComponent(projectId)}`}
+            style={{ textDecoration: 'none' }}
+          >
+            Build the demo →
+          </Link>
+        )}
+        <Link
+          href={`/projects/${encodeURIComponent(projectId)}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 16px',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 13,
+            color: 'var(--dim)',
+            textDecoration: 'none',
+          }}
+        >
+          ← Back to project
+        </Link>
+      </div>
     </div>
   );
 }

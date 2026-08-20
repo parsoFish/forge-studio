@@ -170,9 +170,12 @@ test('AT-2 (HONESTY): deriveShowcaseStats on a DemoModel with ONLY real checkpoi
   // the retired DEMO.html category out of habit).
   expect(JSON.stringify(stats)).not.toContain('html-summary');
 
-  // The real-kinds model still has zero testEvidence/summary — stats must
-  // report that honestly (0 / null), not fabricate non-zero values.
-  expect(stats.testEvidenceCount).toBe(0);
+  // The real-kinds model carries NO testEvidence block at all — W7-B6
+  // (projects-22) amendment: an ABSENT block is `null` ("not captured"),
+  // distinct from a present-but-empty block's real `0`; the old `0` here
+  // was the exact absent-vs-zero conflation that rendered "TESTS 0" beside
+  // 23 met ACs on gitpulse's showcase.
+  expect(stats.testEvidenceCount).toBeNull();
   expect(stats.prUrl).toBeNull();
   expect(stats.branch).toBeNull();
   expect(stats.commitSha).toBeNull();

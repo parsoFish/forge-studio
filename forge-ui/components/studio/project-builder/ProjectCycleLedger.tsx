@@ -33,8 +33,11 @@ export type ProjectCycleLedgerProps = {
   /** Explicit "now", threaded straight through to `HistoryLedger` (D7) — the
    *  shared component reads it for `formatWhen`, never `Date.now()` itself. */
   nowMs: number;
+  /** W7-B6 (projects-27): per-cycle totals from `GET /api/cost/<cycleId>`
+   *  (fetched by the page). Absent entries render the honest em dash. */
+  costByCycleId?: Record<string, number | null>;
 };
 
-export function ProjectCycleLedger({ cycles, nowMs }: ProjectCycleLedgerProps): JSX.Element {
-  return <HistoryLedger rows={deriveProjectCycleLedgerRows(cycles)} nowMs={nowMs} />;
+export function ProjectCycleLedger({ cycles, nowMs, costByCycleId }: ProjectCycleLedgerProps): JSX.Element {
+  return <HistoryLedger rows={deriveProjectCycleLedgerRows(cycles, costByCycleId)} nowMs={nowMs} />;
 }
