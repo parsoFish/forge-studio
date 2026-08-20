@@ -98,7 +98,8 @@ export async function handleStudioSkillsRoutes(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  if (method !== 'GET' && method !== 'POST') return false;
+  // PUT/DELETE joined in W7-B4 (library-05): the edit/delete half of CRUD.
+  if (method !== 'GET' && method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return false;
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
@@ -317,6 +318,115 @@ export async function handleStudioSkillsRoutes(
       }
 
       approveSkillDraft({ forgeRoot: ctx.forgeRoot, id });
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- PUT /api/studio/skills/:id — edit / rename (W7-B4, library-05) ------
+  // The edit half of CRUD the create-only surface never had. Edits the THREE
+  // operator-authorable fields of a plain composable skill — display `name`,
+  // `description`, and the SKILL.md body — never the id (the directory) and
+  // never runtime/frontmatter machinery. Editing a community-installed skill
+  // is legitimate; the trust pipeline already answers honestly (the pinned
+  // content hash no longer matches ⇒ needs-review), nothing here launders it.
+  const putMatch = url.match(/^\/api\/studio\/skills\/([^/]+)$/);
+  if (putMatch && method === 'PUT') {
+    try {
+      let id: string;
+      try {
+        id = decodeIdSegment(putMatch[1]);
+      } catch {
+        sendJson(res, 400, { error: 'invalid skill id — malformed URL encoding' }, origin);
+        return true;
+      }
+      // Layer 1 — SHAPE (assertSkillSlug via skillPath); layer 2 — CONTAINMENT
+      // (same two-layer idiom as GET/approve above; rejection reads as 404).
+      try {
+        skillPath(id, ctx.forgeRoot);
+      } catch (err) {
+        sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return true;
+      }
+      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
+      if (!pathGuard.ok || !pathGuard.exists) {
+        sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
+        return true;
+      }
+      const mdPath = pathGuard.realPath;
+      // Studio AGENTS are edited via PUT /api/studio/agents/:slug — mirroring
+      // the GET exclusion so this route cannot silently rewrite an agent.
+      if (isStudioAgent(mdPath)) {
+        sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill` }, origin);
+        return true;
+      }
+
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      const b = (body ?? {}) as Record<string, unknown>;
+      const name = typeof b['name'] === 'string' ? b['name'].trim() : undefined;
+      const description = typeof b['description'] === 'string' ? b['description'].trim() : undefined;
+      const skillBody = typeof b['body'] === 'string' ? b['body'] : undefined;
+      if (name === undefined && description === undefined && skillBody === undefined) {
+        sendJson(res, 400, { error: 'nothing to update — provide at least one of name, description, body' }, origin);
+        return true;
+      }
+      if (name !== undefined && !name) { sendJson(res, 400, { error: 'name must be non-empty' }, origin); return true; }
+      if (description !== undefined && !description) { sendJson(res, 400, { error: 'description must be non-empty' }, origin); return true; }
+
+      const { data, content } = matter(readFileSync(mdPath, 'utf8'), {});
+      const d = { ...(data as Record<string, unknown>) };
+      if (name !== undefined) d['name'] = name;
+      if (description !== undefined) d['description'] = description;
+      const nextContent = skillBody !== undefined ? '\n' + skillBody.trim() + '\n' : content;
+      writeFileSync(mdPath, matter.stringify(nextContent, d), 'utf8');
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- DELETE /api/studio/skills/:id (W7-B4, library-05) -------------------
+  // Refuses (409, naming them) while any agent still composes the skill —
+  // the same real `usedBy` derivation the listing renders, one source.
+  if (putMatch && method === 'DELETE') {
+    try {
+      let id: string;
+      try {
+        id = decodeIdSegment(putMatch[1]);
+      } catch {
+        sendJson(res, 400, { error: 'invalid skill id — malformed URL encoding' }, origin);
+        return true;
+      }
+      try {
+        skillPath(id, ctx.forgeRoot);
+      } catch (err) {
+        sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return true;
+      }
+      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
+      if (!pathGuard.ok || !pathGuard.exists) {
+        sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
+        return true;
+      }
+      if (isStudioAgent(pathGuard.realPath)) {
+        sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill — delete it from the agent builder` }, origin);
+        return true;
+      }
+      const entry = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      const usedBy = entry?.usedBy ?? [];
+      if (usedBy.length > 0) {
+        sendJson(res, 409, {
+          error: `skill "${id}" is still composed by ${usedBy.length} agent(s): ${usedBy.join(', ')} — unbind it from their builders first`,
+          usedBy,
+        }, origin);
+        return true;
+      }
+      // rm the whole package dir, derived from the ALREADY-GUARDED real path.
+      rmSync(dirname(pathGuard.realPath), { recursive: true, force: true });
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

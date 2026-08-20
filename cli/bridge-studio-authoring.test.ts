@@ -161,7 +161,7 @@ before(async () => {
       'origin: seed',
       'nodes:',
       '  # node comment',
-      '  - { id: work, agent: binder-agent }',
+      '  - { id: work, agent: binder-agent, gate: verdict }',
       'edges: []',
       'triggers: []',
       'kickoff:',
@@ -218,27 +218,22 @@ before(async () => {
   writeSkillFixtureAgent('existing-agent');
 
   // A session-kind descriptor referencing kind-bound-agent (blocks DELETE).
+  // The real file is a bare top-level YAML SEQUENCE (session-kinds.ts).
   writeFileSync(
     join(forgeRoot, 'studio', 'session-kinds.yaml'),
-    [
-      'kinds:',
-      '  - id: test-kind',
-      '    title: Test Kind',
-      '    agent: kind-bound-agent',
-      '',
-    ].join('\n'),
+    ['- id: test-kind', '  title: Test Kind', '  agent: kind-bound-agent', ''].join('\n'),
     'utf8',
   );
 
   // ---- template fixtures ----
   writeFileSync(
     join(forgeRoot, 'studio', 'artifact-templates', 'editable-tpl.md'),
-    matter.stringify('\nTemplate body.\n', { id: 'editable-tpl', name: 'Editable', kind: 'doc' }),
+    matter.stringify('\nTemplate body.\n', { id: 'editable-tpl', name: 'Editable', kind: 'file' }),
     'utf8',
   );
   writeFileSync(
     join(forgeRoot, 'studio', 'artifact-templates', 'used-tpl.md'),
-    matter.stringify('\nUsed template body.\n', { id: 'used-tpl', name: 'Used', kind: 'doc' }),
+    matter.stringify('\nUsed template body.\n', { id: 'used-tpl', name: 'Used', kind: 'file' }),
     'utf8',
   );
   // A flow whose edge carries artifact `used-tpl` → usedBy non-empty.
@@ -454,7 +449,7 @@ test('DELETE /api/studio/hooks/:id — unknown 404', async () => {
 const VALID_PLANNING = matter.stringify('\nA fresh planning template.\n', {
   id: 'fresh-tpl',
   name: 'Fresh Template',
-  kind: 'doc',
+  kind: 'file',
 });
 
 test('POST /api/studio/templates creates a planning template', async () => {
@@ -474,7 +469,7 @@ test('POST /api/studio/templates creates a demo-output template', async () => {
   const content = matter.stringify('\nHow to capture.\n', {
     id: 'fresh-demo',
     name: 'Fresh Demo Element',
-    phase: 'narrative',
+    phase: 'present',
     description: 'a demo element',
   });
   const res = await send('POST', '/api/studio/templates', {
@@ -495,7 +490,7 @@ test('POST /api/studio/templates — duplicate 409, bad category 400, id mismatc
     (await send('POST', '/api/studio/templates', { category: 'project-scaffold', id: 'x', content: 'x' })).status,
     400,
   );
-  const mismatched = matter.stringify('\nBody.\n', { id: 'other-id', name: 'X', kind: 'doc' });
+  const mismatched = matter.stringify('\nBody.\n', { id: 'other-id', name: 'X', kind: 'file' });
   assert.equal(
     (await send('POST', '/api/studio/templates', { category: 'planning', id: 'mismatch-tpl', content: mismatched })).status,
     400,
@@ -506,7 +501,7 @@ test('POST /api/studio/templates — duplicate 409, bad category 400, id mismatc
     400,
   );
   assert.equal(existsSync(join(forgeRoot, 'studio', 'artifact-templates', 'broken-tpl.md')), false);
-  const reserved = matter.stringify('\nBody.\n', { id: 'new', name: 'X', kind: 'doc' });
+  const reserved = matter.stringify('\nBody.\n', { id: 'new', name: 'X', kind: 'file' });
   assert.equal(
     (await send('POST', '/api/studio/templates', { category: 'planning', id: 'new', content: reserved })).status,
     400,
@@ -528,7 +523,7 @@ test('POST /api/studio/templates duplicates an existing template (duplicateOf)',
 });
 
 test('PUT /api/studio/templates/:id updates content; invalid content 400 leaves the file untouched', async () => {
-  const updated = matter.stringify('\nUpdated body.\n', { id: 'editable-tpl', name: 'Editable v2', kind: 'doc' });
+  const updated = matter.stringify('\nUpdated body.\n', { id: 'editable-tpl', name: 'Editable v2', kind: 'file' });
   const ok = await send('PUT', '/api/studio/templates/editable-tpl', { content: updated });
   assert.equal(ok.status, 200);
   const onDisk = readFileSync(join(forgeRoot, 'studio', 'artifact-templates', 'editable-tpl.md'), 'utf8');
@@ -688,7 +683,7 @@ test('a NO-OP builder save leaves the seed file byte-identical — kickoff + com
 test('a REAL edit preserves the kickoff declaration through the merge (flows-12)', async () => {
   const res = await send('PUT', '/api/studio/flows/seeded-flow', {
     goal: 'A genuinely changed goal.',
-    nodes: [{ id: 'work', agent: 'binder-agent' }],
+    nodes: [{ id: 'work', agent: 'binder-agent', gate: 'verdict' }],
     edges: [],
   });
   assert.equal(res.status, 200);
@@ -725,7 +720,28 @@ test('DELETE /api/studio/flows/:id — an active run locks deletion (423)', asyn
   // Plant an in-flight manifest claiming tpl-user (flowId stamped via flow_id).
   writeFileSync(
     join(forgeRoot, '_queue', 'in-flight', 'INIT-B4-DEL-LOCK.md'),
-    ['---', 'initiative_id: INIT-B4-DEL-LOCK', 'project: demo', 'flow_id: tpl-user', '---', '', '# lock', ''].join('\n'),
+    [
+      '---',
+      'initiative_id: INIT-B4-DEL-LOCK',
+      'project: demo',
+      'created_at: 2026-08-20T00:00:00.000Z',
+      'iteration_budget: 3',
+      'cost_budget_usd: 5',
+      'flow_id: tpl-user',
+      'cycle_id: INIT-B4-DEL-LOCK',
+      '---',
+      '',
+      '# lock',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  // An in-flight run needs its cycle log dir to count as active (run-model
+  // treats a logless in-flight manifest as still planned).
+  mkdirSync(join(forgeRoot, '_logs', 'INIT-B4-DEL-LOCK'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_logs', 'INIT-B4-DEL-LOCK', 'events.jsonl'),
+    JSON.stringify({ event: 'phase.started', phase: 'dev', started_at: new Date().toISOString() }) + '\n',
     'utf8',
   );
   const res = await send('DELETE', '/api/studio/flows/tpl-user');

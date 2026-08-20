@@ -17,8 +17,9 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
+import yaml from 'js-yaml';
 
 import { classifyClause } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
@@ -27,6 +28,7 @@ import type { ClauseResult } from './preflight.ts';
 
 import {
   listAgentDefinitions,
+  listStarterAgents,
   loadAgentDefinition,
   loadCatalog,
   loadFlowDefinition,
@@ -341,6 +343,100 @@ function spawnPreflightFix(
   proc.unref();
 }
 
+// ---------------------------------------------------------------------------
+// W7-B4 helpers — agent/flow lifecycle (delete guards, no-op detection,
+// starter-agent materialisation).
+// ---------------------------------------------------------------------------
+
+/**
+ * Which session-kind descriptors reference each agent slug (the DELETE
+ * guard's second reference source, beside flow nodes). Deliberately a
+ * TOLERANT scan rather than the strict `loadSessionKinds` parse: for a
+ * refusal guard, over-collecting references from a descriptor that would
+ * fail the strict parse is the fail-closed direction (a strict throw here
+ * would let a malformed sibling descriptor unblock a guarded delete).
+ * A missing file is genuinely "no session kinds" — an empty map.
+ */
+function sessionKindAgentRefs(forgeRoot: string): Map<string, string[]> {
+  const refs = new Map<string, string[]>();
+  const file = join(forgeRoot, 'studio', 'session-kinds.yaml');
+  if (!existsSync(file)) return refs;
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(readFileSync(file, 'utf8'));
+  } catch {
+    return refs; // unparseable file: validateSessionKinds owns surfacing that
+  }
+  if (!Array.isArray(parsed)) return refs;
+  for (const row of parsed) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const agent = typeof r['agent'] === 'string' ? r['agent'] : '';
+    const kindId = typeof r['id'] === 'string' ? r['id'] : '(unnamed kind)';
+    if (!agent) continue;
+    refs.set(agent, [...(refs.get(agent) ?? []), kindId]);
+  }
+  return refs;
+}
+
+/** Key-sorted JSON — a stable equality basis for the flow no-op check. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** The UI-editable projection of a flow definition — the fields a builder
+ *  save can actually change. Version is EXCLUDED on purpose: a save that
+ *  changes nothing else must not bump it (flows-12's no-op preservation). */
+function flowEditableProjection(def: FlowDefinition): string {
+  return canonicalJson({
+    name: def.name,
+    goal: def.goal,
+    project: def.project ?? null,
+    kb: def.kb ?? null,
+    costCeilingUsd: def.costCeilingUsd,
+    nodes: def.nodes,
+    edges: def.edges,
+    triggers: def.triggers,
+    kickoff: def.kickoff ?? null,
+  });
+}
+
+/**
+ * W7-B4 (flows-09) — materialise any STARTER agents a flow save references
+ * into the real roster (skills/<slug>/), so the seeded plan→dev→review
+ * canvas is saveable on a fresh install. The slug set is CLOSED — only slugs
+ * `listStarterAgents` itself enumerates (server-controlled values; the
+ * client's node.agent strings merely SELECT from that set by equality), and
+ * only when skills/<slug> does not already exist (an operator's own agent of
+ * the same name always wins — nothing is ever overwritten).
+ */
+function materializeReferencedStarterAgents(forgeRoot: string, nodes: unknown[]): string[] {
+  const wanted = new Set<string>();
+  for (const raw of nodes) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const agent = (raw as Record<string, unknown>)['agent'];
+    if (typeof agent === 'string' && agent) wanted.add(agent);
+  }
+  if (wanted.size === 0) return [];
+  const materialized: string[] = [];
+  for (const starter of listStarterAgents(forgeRoot)) {
+    if (!wanted.has(starter.slug)) continue;
+    const guard = resolveGuardedPath(toSkillsDir(forgeRoot), [starter.slug]);
+    if (!guard.ok || guard.exists) continue; // existing roster agent wins
+    cpSync(join(forgeRoot, 'studio', 'starters', 'agents', starter.slug), guard.realPath, { recursive: true });
+    materialized.push(starter.slug);
+  }
+  return materialized;
+}
+
 export async function handleStudioWriteRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -348,7 +444,7 @@ export async function handleStudioWriteRoutes(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  if (method !== 'PUT' && method !== 'POST') return false;
+  if (method !== 'PUT' && method !== 'POST' && method !== 'DELETE') return false;
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
@@ -479,6 +575,47 @@ export async function handleStudioWriteRoutes(
       }
       const skillMdPath = pathGuard.realPath;
 
+      // ---- DELETE /api/studio/agents/:slug (W7-B4, agents-09) --------------
+      // Refuses while anything REAL still references the agent: a flow node
+      // (the run-time dispatch source) or a session-kind descriptor (the
+      // interactive dispatch source) — each 409 names the referrers.
+      if (method === 'DELETE') {
+        if (!pathGuard.exists) {
+          sendJson(res, 404, { error: `unknown agent "${slug}"` }, origin);
+          return true;
+        }
+        const referencingFlows: string[] = [];
+        for (const flowId of listFlowIds(ctx.forgeRoot)) {
+          const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [flowId, 'flow.yaml']);
+          if (!guarded.ok || !guarded.exists) continue;
+          try {
+            const def = loadFlowDefinition(guarded.realPath);
+            if (def.nodes.some((n) => n.agent === slug)) referencingFlows.push(flowId);
+          } catch {
+            // a malformed sibling flow is studio-lint's finding, not a
+            // reason to unblock (or block) this delete
+          }
+        }
+        if (referencingFlows.length > 0) {
+          sendJson(res, 409, {
+            error: `agent "${slug}" is still a node in ${referencingFlows.length} flow(s): ${referencingFlows.join(', ')} — edit those flows first`,
+            referencedBy: referencingFlows,
+          }, origin);
+          return true;
+        }
+        const kindRefs = sessionKindAgentRefs(ctx.forgeRoot).get(slug) ?? [];
+        if (kindRefs.length > 0) {
+          sendJson(res, 409, {
+            error: `agent "${slug}" drives the session kind(s): ${kindRefs.join(', ')} (studio/session-kinds.yaml) — retire the descriptor first`,
+            referencedBy: kindRefs,
+          }, origin);
+          return true;
+        }
+        rmSync(dirname(skillMdPath), { recursive: true, force: true });
+        sendJson(res, 200, { ok: true, slug }, origin);
+        return true;
+      }
+
       // 3. Parse request body
       let body: unknown;
       try {
@@ -492,6 +629,16 @@ export async function handleStudioWriteRoutes(
         return true;
       }
       const b = body as Record<string, unknown>;
+
+      // W7-B4 (agents-28): an EXPLICIT create must never silently overwrite
+      // an existing agent — the /agents/new save path sends `create: true`
+      // and collides with 409, leaving the file untouched.
+      if (b['create'] === true && pathGuard.exists) {
+        sendJson(res, 409, {
+          error: `agent "${slug}" already exists — open /agents/${slug} to edit it, or pick another name`,
+        }, origin);
+        return true;
+      }
 
       // 4. Load existing def or scaffold minimal one. Also capture the RAW
       // on-disk bytes (D5 wiring): five phase bindings + the release
@@ -618,7 +765,12 @@ export async function handleStudioWriteRoutes(
         slug,
         name,
         description: existing?.description ?? name,
-        phase: existing?.phase,
+        // W7-B4 (agents-18): a BRAND-NEW mint synthesises `phase: <slug>` so
+        // the agent is dispatchable (deriveAgentSpec hard-requires phase;
+        // without it a Studio-made agent could NEVER run). An existing
+        // agent's phase — including deliberately-absent (declaration-only) —
+        // is preserved verbatim, never backfilled.
+        phase: existing ? existing.phase : slug,
         surface: existing?.surface,
         // R4-01 review: preserve the declared executor row — dropping it on a
         // builder save would silently strip developer-unifier's dispatch (the
@@ -1034,7 +1186,10 @@ export async function handleStudioWriteRoutes(
 
   // ---- PUT /api/studio/projects/:id ----------------------------------------
   const projectMatch = url.match(/^\/api\/studio\/projects\/([^/]+)$/);
-  if (projectMatch) {
+  // W7-B4: DELETE now passes this handler's entry gate (agents/flows grew
+  // delete routes) — projects deliberately have no delete surface here, so a
+  // DELETE must fall through as unhandled (404), never enter the PUT logic.
+  if (projectMatch && method !== 'DELETE') {
     if (isDryBridge()) {
       refuseDryBridge(res, origin, { route: '/api/studio/projects/:id', method, action: 'git-remote', logsRoot: ctx.logsRoot });
       return true;
@@ -1205,6 +1360,38 @@ export async function handleStudioWriteRoutes(
       }
       const flowYamlPath = pathGuard.realPath;
 
+      // ---- DELETE /api/studio/flows/:id (W7-B4, flows-11) ------------------
+      // A shipped seed is refused outright (403 — the OOTB pipeline is not
+      // deletable state); an in-flight run locks deletion exactly like edits
+      // (423, ADR-028 D6); an authored flow deletes with its directory.
+      if (method === 'DELETE') {
+        if (!pathGuard.exists) {
+          sendJson(res, 404, { error: `unknown flow "${id}"` }, origin);
+          return true;
+        }
+        let def: FlowDefinition;
+        try {
+          def = loadFlowDefinition(flowYamlPath);
+        } catch (err) {
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
+          return true;
+        }
+        if (def.origin === 'seed') {
+          sendJson(res, 403, { error: `flow "${id}" is a shipped seed (origin: seed) — the OOTB pipeline cannot be deleted from Studio` }, origin);
+          return true;
+        }
+        const activeDel = cachedListRuns(ctx.forgeRoot, Date.now()).find(
+          (r) => r.flowId === id && r.status === 'active',
+        );
+        if (activeDel) {
+          sendJson(res, 423, { error: 'flow locked — a run is in flight', runId: activeDel.id }, origin);
+          return true;
+        }
+        rmSync(dirname(flowYamlPath), { recursive: true, force: true });
+        sendJson(res, 200, { ok: true, id }, origin);
+        return true;
+      }
+
       // 3. Parse request body
       let body: unknown;
       try {
@@ -1219,6 +1406,15 @@ export async function handleStudioWriteRoutes(
       }
       const b = body as Record<string, unknown>;
 
+      // W7-B4 (flows-13): an EXPLICIT create must never silently overwrite an
+      // existing flow — /flows/new sends `create: true`, collides with 409.
+      if (b['create'] === true && pathGuard.exists) {
+        sendJson(res, 409, {
+          error: `flow "${id}" already exists — open /flows/${id} to edit it, or pick another name`,
+        }, origin);
+        return true;
+      }
+
       // 4. Load existing flow (or scaffold for new flow)
       let existing: FlowDefinition | null = null;
       if (pathGuard.exists) {
@@ -1229,6 +1425,15 @@ export async function handleStudioWriteRoutes(
           return true;
         }
       }
+
+      // W7-B4 (flows-09): a save referencing STARTER agents materialises them
+      // into the roster first, so the seeded plan→dev→review canvas actually
+      // validates (agent-ref) on a fresh install. Closed slug set; an
+      // existing skills/<slug> always wins. Runs BEFORE the agents map below.
+      const materializedAgents = materializeReferencedStarterAgents(
+        ctx.forgeRoot,
+        Array.isArray(b['nodes']) ? (b['nodes'] as unknown[]) : [],
+      );
 
       // 5. Merge UI-editable fields over existing; preserve id/origin/disposable/path
       const name = typeof b['name'] === 'string' ? b['name'] : existing?.name ?? id;
@@ -1267,6 +1472,10 @@ export async function handleStudioWriteRoutes(
         nodes: nodes as FlowDefinition['nodes'],
         edges: edges as FlowDefinition['edges'],
         triggers: triggers as FlowDefinition['triggers'],
+        // W7-B4 (flows-12): kickoff is a NON-UI field the builder never
+        // sends — it must ride the merge like origin/disposable, or every
+        // BUILD-tab save of a seeded flow silently strips its launch surface.
+        kickoff: existing?.kickoff,
         path: flowYamlPath,
       };
 
@@ -1342,6 +1551,18 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
+      const flagFindings = findings.filter((f) => f.level === 'flag');
+
+      // W7-B4 (flows-12): a save that changes NOTHING the builder can edit is
+      // a no-op — the file is left byte-identical (hand-authored comments in
+      // seed files survive) and the version does not bump. serializeFlow-
+      // Definition drops YAML comments by construction, so "don't rewrite"
+      // is the only preservation that actually preserves.
+      if (existing && flowEditableProjection(existing) === flowEditableProjection(merged)) {
+        sendJson(res, 200, { ok: true, id, version: existing.version, noop: true, findings: flagFindings }, origin);
+        return true;
+      }
+
       // 9. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);
       const flowDir = dirname(flowYamlPath);
@@ -1350,8 +1571,13 @@ export async function handleStudioWriteRoutes(
       }
       writeFileSync(flowYamlPath, serialized, 'utf8');
 
-      const flagFindings = findings.filter((f) => f.level === 'flag');
-      sendJson(res, 200, { ok: true, id, version, findings: flagFindings }, origin);
+      sendJson(res, 200, {
+        ok: true,
+        id,
+        version,
+        findings: flagFindings,
+        ...(materializedAgents.length > 0 ? { materializedAgents } : {}),
+      }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

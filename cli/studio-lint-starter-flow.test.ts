@@ -66,10 +66,33 @@ test('a starter-agent-backed node is resolvable (no finding) — the materialisa
   try {
     // node agent lives ONLY under studio/starters/agents/ — resolvable by
     // the flow PUT's materialisation, so lint must stay clean.
+    // A starter agent is a real AgentDefinition (runtime block — the same
+    // shape studio/starters/agents/{plan,dev,review} ship with).
     mkdirSync(join(root, 'studio', 'starters', 'agents', 'planner'), { recursive: true });
     writeFileSync(
       join(root, 'studio', 'starters', 'agents', 'planner', 'SKILL.md'),
-      ['---', 'name: Planner', 'description: d', '---', '', '# Planner', ''].join('\n'),
+      [
+        '---',
+        'name: Planner',
+        'description: d',
+        'purpose: p',
+        'composition:',
+        '  skills: []',
+        '  tools: []',
+        '  mcps: []',
+        '  guards: [event-log]',
+        'runtime:',
+        '  sdk: claude',
+        '  strategy: fixed',
+        '  model: claude-sonnet-4-6',
+        'brainAccess: none',
+        'interactivity: autonomous',
+        'budgets: {}',
+        '---',
+        '',
+        '# Planner',
+        '',
+      ].join('\n'),
       'utf8',
     );
     writeFileSync(
