@@ -368,3 +368,61 @@ test('POST /api/studio/kbs/:id/drain/cancel — 409 when no active run', async (
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7-B2 code-review round — the forced-cancel branch must ALSO stake the
+// cancel FLAG. A "stale" status is not proof the loop is DEAD: a drain that
+// sat QUEUED behind another job on the same per-kbId lock never heartbeats
+// either, so it reads stale while being perfectly alive. Terminating only the
+// status file let such a run start late, re-persist 'running' over the
+// operator's 'cancelled', and execute every agent turn to a real terminal.
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel flag; a late-starting queued run cannot resurrect', async () => {
+  const iso = await makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'cx-kb');
+    const runId = 'cx-kb-drain-queued1';
+    const stale = new Date(Date.now() - (KB_DRAIN_STALE_MS + 60_000)).toISOString();
+    writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, updatedAt: stale });
+
+    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(res.json['mode'], 'forced');
+    assert.ok(
+      existsSync(join(iso.root, '_logs', `_kb-drain-${runId}`, 'cancel.json')),
+      'the forced branch must ALSO write the cancel flag, not only the terminal status',
+    );
+
+    // Simulated LATE start: the run was queued, not dead, and reaches the head
+    // of the queue AFTER the operator was told it had been terminated.
+    const brainDir = join(iso.root, 'brain', 'cx-kb');
+    const late: Finding & { check: string; kind: string } = {
+      category: 'flag',
+      file: join(brainDir, 'themes', 'late.md'),
+      message: 'synthetic fixture finding: late',
+      check: 'fixtureCheck',
+      kind: 'late',
+      resolution: 'agent',
+    };
+    let turns = 0;
+    let autoCalls = 0;
+    const status = await runKbDrain(iso.root, 'cx-kb', runId, {
+      lint: () => ({ findings: [late] }),
+      applyAutoFixes: () => {
+        autoCalls += 1;
+        return { ...EMPTY_AUTO_RESULT, remaining: [late] };
+      },
+      runFixTurn: async (input) => {
+        turns += 1;
+        return { runId: input.runId, cleared: false, costUsd: 0.01 };
+      },
+    });
+    assert.equal(status.state, 'cancelled', JSON.stringify(status));
+    assert.equal(turns, 0, 'a cancelled run must dispatch no agent turn at all');
+    assert.equal(autoCalls, 0, 'a cancelled run must not apply auto-fixes either');
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});

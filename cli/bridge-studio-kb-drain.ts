@@ -852,6 +852,15 @@ export async function runKbDrain(
     const cancelRequested = (): boolean => isKbDrainCancelRequested(forgeRoot, runId);
 
     for (;;) {
+      // Cancel is honored BEFORE any work, not only between agent turns: a run
+      // cancelled while it was still QUEUED (the cancel route's forced branch
+      // stakes the flag for exactly this case) must terminate without touching
+      // a single file — no auto-fix pass, no agent turn.
+      if (cancelRequested()) {
+        emitProgress('kb-drain.cancelled', { round });
+        status = persist({ ...base, state: 'cancelled', round, counts: status.counts, perFinding: [...completed], costUsd, updatedAt: now() });
+        break;
+      }
       round += 1;
       // Round visible from its START (knowledge-11: no blank round-0 screen).
       emitProgress(`kb-drain.round-start (round ${round}/${maxRounds})`, { round, maxRounds });
@@ -1098,6 +1107,15 @@ export async function handleStudioKbDrainRoutes(
       const updatedMs = new Date(active.status.updatedAt).getTime();
       const stale = !Number.isFinite(updatedMs) || Date.now() - updatedMs > KB_DRAIN_STALE_MS;
       if (stale) {
+        // BOTH signals, always (W7-B2 code-review round). A stale status is
+        // NOT proof the loop is dead: a drain that sat QUEUED behind another
+        // job on the same per-kbId `enqueueConsolidate` lock never heartbeats
+        // either, so it reads stale while being perfectly alive. Writing only
+        // the terminal status let such a run start late, re-persist 'running'
+        // over the operator's 'cancelled', and execute every agent turn to a
+        // real terminal AFTER the operator was told it had been terminated.
+        // The FLAG is what a late start actually observes (`cancelRequested`).
+        requestKbDrainCancel(ctx.forgeRoot, active.runId);
         writeKbDrainStatus(ctx.forgeRoot, active.runId, { ...active.status, state: 'cancelled', updatedAt: new Date().toISOString() });
         sendJson(res, 200, { ok: true, runId: active.runId, mode: 'forced' }, origin);
         return true;
