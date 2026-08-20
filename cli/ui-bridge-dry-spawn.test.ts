@@ -63,7 +63,17 @@ function skipEvents(route: string): SkipEvent[] {
     .filter((e) => e.message === 'dry-bridge.skip' && e.metadata?.route === route);
 }
 
-function assertStubbed(json: Record<string, unknown>, eventRoute: string, logDirName: string): void {
+/** The artifacts ONLY a real `spawnAgentDispatch`/spawn-helper child leaves
+ *  behind in `_logs/<dir>`: the child's stderr sink and its recorded pid.
+ *  Neither is written anywhere above the `|| isDryBridge()` guard. */
+const SPAWN_ONLY_ARTIFACTS = ['stderr.log', 'turn.pid'] as const;
+
+function assertStubbed(
+  json: Record<string, unknown>,
+  eventRoute: string,
+  logDirName: string,
+  opts: { logDirPreCreatedBy?: string } = {},
+): void {
   assert.deepEqual(
     json.dryBridge,
     { skipped: ['agent-turn'] },
@@ -78,6 +88,27 @@ function assertStubbed(json: Record<string, unknown>, eventRoute: string, logDir
   // emit this same marker+event while creating the dir below. Assert the dir
   // does NOT exist so deleting the guard reds this test (see the manual
   // bite-demonstration in the task report).
+  //
+  // W7-B5 amendment: for a family whose ROUTE legitimately writes into
+  // `_logs/<runId>` BEFORE it ever calls the spawn helper (the t0
+  // `agent-run.dispatched` marker — agents-20/31), "the dir does not exist"
+  // stopped being a proxy for "the spawn was suppressed"; it would just red
+  // on the route's own honest bookkeeping. Those families instead assert the
+  // artifacts ONLY a real child leaves — `stderr.log` (opened by the spawn
+  // itself) and `turn.pid` (written from the live child's pid). Both sit
+  // strictly BELOW the `|| isDryBridge()` guard, so deleting that guard still
+  // reds this test — and this shape is the stricter one, since it also fails
+  // if a suppressed spawn somehow half-ran.
+  if (opts.logDirPreCreatedBy !== undefined) {
+    for (const artifact of SPAWN_ONLY_ARTIFACTS) {
+      assert.ok(
+        !existsSync(join(forgeRoot, '_logs', logDirName, artifact)),
+        `dry-bridge must not leave the spawn-only artifact _logs/${logDirName}/${artifact} for ${eventRoute} `
+        + `(the dir itself is created above the guard by ${opts.logDirPreCreatedBy})`,
+      );
+    }
+    return;
+  }
   assert.ok(
     !existsSync(join(forgeRoot, '_logs', logDirName)),
     `dry-bridge must not create the spawn log dir _logs/${logDirName} for ${eventRoute}`,
@@ -124,6 +155,9 @@ const FAMILIES: Array<{
   family: string;
   eventRoute: string;
   drive: () => Promise<{ status: number; json: Record<string, unknown>; logDirName: string }>;
+  /** Set (to the name of the writer) ONLY for a family whose route writes
+   *  into the run's log dir above the spawn guard — see `assertStubbed`. */
+  logDirPreCreatedBy?: string;
 }> = [
   {
     family: 'architect (spawnArchitectTurn)',
@@ -209,6 +243,10 @@ const FAMILIES: Array<{
       });
       return { status, json, logDirName: json.runId as string };
     },
+    // W7-B5 (agents-20/31): this route emits the run's t0
+    // `agent-run.dispatched` marker into `_logs/<runId>` before it calls
+    // spawnAgentDispatch, so the dir legitimately exists under dry-bridge.
+    logDirPreCreatedBy: 'the route\'s own t0 agent-run.dispatched marker',
   },
 ];
 
@@ -217,7 +255,7 @@ for (const f of FAMILIES) {
     const { status, json, logDirName } = await f.drive();
     assert.equal(status, 200, JSON.stringify(json));
     assert.equal(json.ok, true, 'session bookkeeping must still succeed under dry-bridge');
-    assertStubbed(json, f.eventRoute, logDirName);
+    assertStubbed(json, f.eventRoute, logDirName, { ...(f.logDirPreCreatedBy !== undefined ? { logDirPreCreatedBy: f.logDirPreCreatedBy } : {}) });
   });
 }
 
