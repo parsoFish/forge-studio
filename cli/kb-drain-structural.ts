@@ -127,7 +127,14 @@ export function classifyKbEdit(relPath: string, before: string | null, after: st
  *  Content is read as utf8 because the gate's whole job is comparing and, on
  *  a prose verdict, RESTORING text; a brain dir holds markdown, YAML and
  *  JSONL by contract. A binary an agent writes into one is out of contract
- *  and is gated (detected → reverted) rather than silently allowed. */
+ *  and is gated (detected → reverted) rather than silently allowed.
+ *
+ *  DO NOT make this lazy on `(mtime, size)`. It is the obvious optimisation
+ *  and it is wrong twice over: the BEFORE side must hold real bytes or a
+ *  prose verdict has nothing to restore from, and `(mtime, size)` is not a
+ *  sound change oracle for a gate whose whole purpose is catching a rewrite —
+ *  a same-size rewrite inside one filesystem mtime tick reads as unchanged
+ *  and lands ungated. Correctness over IO here, deliberately. */
 export function snapshotKbFiles(brainDir: string): Map<string, string> {
   const snapshot = new Map<string, string>();
   const walk = (dir: string, rel: string): void => {
