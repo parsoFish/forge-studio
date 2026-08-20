@@ -17,6 +17,7 @@
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { Agent, RecentAgentRunWireRow } from './studio-client';
+import type { LedgerRow } from './history-ledger';
 
 // `vi.mock()` calls are hoisted above imports by vitest — the mock factory
 // below must not reference outer-scope variables.
@@ -30,6 +31,7 @@ import {
   recentRunRowToLedgerRow,
   RECENT_AGENT_RUNS_LIMIT,
   RECENT_AGENT_RUNS_EXPANDED_LIMIT,
+  mergeRecentAgentRuns,
 } from './agents-index';
 import { fetchRecentAgentRunsAggregate } from './studio-client';
 
@@ -98,7 +100,7 @@ test('makes exactly ONE aggregate request regardless of roster size (agents-39 �
   const agents = Array.from({ length: 13 }, (_, i) => agent(`a${i}`));
   const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents);
   expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledTimes(1);
-  expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledWith(RECENT_AGENT_RUNS_LIMIT);
+  expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledWith(RECENT_AGENT_RUNS_LIMIT, 'all');
   expect(rows).toHaveLength(1);
   expect(unresolved).toBe(0);
   expect(total).toBe(13);
@@ -107,7 +109,7 @@ test('makes exactly ONE aggregate request regardless of roster size (agents-39 �
 test('threads a caller limit through to the aggregate (the show-more affordance, agents-40)', async () => {
   vi.mocked(fetchRecentAgentRunsAggregate).mockResolvedValue([]);
   await fetchRecentAgentRunsWithMeta([agent('a')], RECENT_AGENT_RUNS_EXPANDED_LIMIT);
-  expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledWith(RECENT_AGENT_RUNS_EXPANDED_LIMIT);
+  expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledWith(RECENT_AGENT_RUNS_EXPANDED_LIMIT, 'all');
 });
 
 test('a FAILED aggregate read → rows [] with unresolved === total — never an empty ledger passing as "never ran" (A1-09)', async () => {
@@ -125,9 +127,73 @@ test('an EMPTY roster still reports total 1 on a failed read (the one aggregate 
   expect(total).toBe(1);
 });
 
+test('fetchRecentAgentRunsWithMeta threads a `kind` through to the aggregate — review round 1 (Home asks for the standalone half only, since it already renders its own flow rows and dedupes the aggregate\'s away)', async () => {
+  vi.mocked(fetchRecentAgentRunsAggregate).mockResolvedValue([]);
+  await fetchRecentAgentRunsWithMeta([agent('a')], 7, 'standalone');
+  expect(fetchRecentAgentRunsAggregate).toHaveBeenCalledWith(7, 'standalone');
+});
+
 test('fetchRecentAgentRuns (rows-only wrapper) resolves the mapped rows', async () => {
   vi.mocked(fetchRecentAgentRunsAggregate).mockResolvedValue([wireRow()]);
   const rows = await fetchRecentAgentRuns([agent('a')]);
   expect(rows).toHaveLength(1);
   expect(rows[0].agent).toBe('architect, project-manager');
+});
+
+
+// ---------------------------------------------------------------------------
+// mergeRecentAgentRuns — STILL LIVE, restored coverage (review round 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * W7-B5 replaced this module's per-agent fan-out with one aggregate route,
+ * and the fan-out's own unit pins went with it — but `mergeRecentAgentRuns`
+ * did NOT: `lib/home-view.ts`'s `buildHomeLedgerRows` still calls it to fold
+ * Home's flow rows together with the agent rows. Deleting the pins left a
+ * live, load-bearing pure function with no direct coverage at all. These are
+ * its four contracts, pinned against the function as it is used TODAY.
+ */
+function ledgerRow(id: string, when: string): LedgerRow {
+  return {
+    id,
+    when,
+    what: id,
+    narrative: null,
+    narrativeKinds: [],
+    status: 'done',
+    costUsd: null,
+    href: `/x/${id}`,
+  } as unknown as LedgerRow;
+}
+
+test('mergeRecentAgentRuns: flattens every source list into one ledger', () => {
+  const merged = mergeRecentAgentRuns([
+    [ledgerRow('a', '2026-01-01T00:00:00.000Z')],
+    [ledgerRow('b', '2026-01-02T00:00:00.000Z')],
+  ]);
+  expect(merged.map((r) => r.id).sort()).toEqual(['a', 'b']);
+});
+
+test('mergeRecentAgentRuns: re-sorts the WHOLE merged set newest-first, not per source', () => {
+  const merged = mergeRecentAgentRuns([
+    [ledgerRow('older', '2026-01-01T00:00:00.000Z'), ledgerRow('newest', '2026-03-01T00:00:00.000Z')],
+    [ledgerRow('middle', '2026-02-01T00:00:00.000Z')],
+  ]);
+  expect(merged.map((r) => r.id)).toEqual(['newest', 'middle', 'older']);
+});
+
+test('mergeRecentAgentRuns: dedupes by row.id, FIRST-seen wins — HistoryLedger renders key={row.id}, so a duplicate id is a React key collision, not merely a double listing', () => {
+  const homeFlowRow = { ...ledgerRow('same-run', '2026-01-01T00:00:00.000Z'), what: 'home-owned' };
+  const agentRow = { ...ledgerRow('same-run', '2026-01-01T00:00:00.000Z'), what: 'agent-owned' };
+  // Home passes its own flow rows FIRST precisely so they win this dedupe.
+  const merged = mergeRecentAgentRuns([[homeFlowRow], [agentRow]]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].what).toBe('home-owned');
+});
+
+test('mergeRecentAgentRuns: bounds the result to `limit`, and a non-positive limit yields an empty ledger rather than throwing', () => {
+  const rows = [1, 2, 3, 4, 5].map((n) => ledgerRow(`r${n}`, `2026-01-0${n}T00:00:00.000Z`));
+  expect(mergeRecentAgentRuns([rows], 2)).toHaveLength(2);
+  expect(mergeRecentAgentRuns([rows], 0)).toHaveLength(0);
+  expect(mergeRecentAgentRuns([rows], -3)).toHaveLength(0);
 });

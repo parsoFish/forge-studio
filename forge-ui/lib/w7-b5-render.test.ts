@@ -319,3 +319,63 @@ test('projects-31: the onboarding panel renders the optional brief inputs (north
   expect(html).toContain('data-action="run-onboarding-agent"');
   expect(html).toContain('data-onboard-run-status="idle"');
 });
+
+// ---------------------------------------------------------------------------
+// RunPanel — every hook sits ABOVE the `interactive` early return
+// ---------------------------------------------------------------------------
+
+/**
+ * REGRESSION PIN (W7-B5 review round 1). The cancel state (`cancelArmed` /
+ * `cancelBusy`) was first written next to the `onCancel` handler that reads
+ * it — which is BELOW `if (interactive) { return … }`. `interactive` is not a
+ * constant: `app/agents/[id]/page.tsx` passes
+ * `state.capability?.interactive === true`, which is `false` until the async
+ * agent fetch resolves and changes again whenever the operator picks a
+ * different agent. When it flipped true on an already-mounted panel, React
+ * saw 11 hooks where the previous render had 13 and threw error #300
+ * ("Rendered fewer hooks than expected"), unmounting the whole builder page.
+ * The walkthrough gate caught it live on `/agents/community-refresh`
+ * (`never-ready` + a console `pageerror`) — no unit test could, since this
+ * repo renders with `renderToStaticMarkup` and has no jsdom/re-render
+ * harness (adding one is a dependency decision, not this lane's call).
+ *
+ * So the pin is structural, over the source itself: inside `RunPanel`'s own
+ * function body, no hook call may appear after the early return. That is
+ * exactly the Rules-of-Hooks invariant the crash violated, and it reds the
+ * moment someone re-adds a hook down beside its handler again.
+ */
+test('agents-30 REGRESSION: every hook in RunPanel is called ABOVE the `interactive` early return (React error #300 class)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, '..', 'components', 'studio', 'agent-builder', 'RunPanel.tsx'), 'utf8');
+  const lines = src.split('\n');
+
+  const start = lines.findIndex((l) => l.startsWith('export function RunPanel('));
+  expect(start, 'RunPanel must be declared as `export function RunPanel(` for this scan to be meaningful').toBeGreaterThan(-1);
+
+  // The component body ends where its brace depth returns to 0.
+  let depth = 0;
+  let end = lines.length - 1;
+  for (let i = start; i < lines.length; i++) {
+    depth += (lines[i].match(/\{/g) ?? []).length - (lines[i].match(/\}/g) ?? []).length;
+    if (i > start && depth <= 0) { end = i; break; }
+  }
+
+  const guard = lines.findIndex((l, i) => i > start && i < end && /^ {2}if \(interactive\) \{/.test(l));
+  expect(guard, 'the `if (interactive) {` early return must still exist — this pin is about what may follow it').toBeGreaterThan(-1);
+
+  const HOOK = /(?:^|[^.\w])(use[A-Z]\w*)\s*\(/;
+  const offenders: string[] = [];
+  for (let i = guard; i < end; i++) {
+    const m = lines[i].match(HOOK);
+    if (m) offenders.push(`RunPanel.tsx:${i + 1}  ${m[1]}(  →  ${lines[i].trim().slice(0, 80)}`);
+  }
+  expect(
+    offenders,
+    'A React hook is called after RunPanel\'s `if (interactive)` early return. When `interactive` flips true on a '
+    + 'mounted panel the render takes that return and calls FEWER hooks than the previous render — React error #300, '
+    + 'which unmounts the agent builder. Move the hook up with the others, above the guard.',
+  ).toEqual([]);
+});

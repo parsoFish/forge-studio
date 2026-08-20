@@ -83,7 +83,14 @@ export default function HomePage() {
     if (!ready) return;
     let cancelled = false;
     async function loadRecentAgentRuns(): Promise<void> {
-      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents);
+      // `'standalone'` (review round 1): Home already renders its OWN
+      // flow-run rows and `buildHomeLedgerRows` drops every duplicate,
+      // keeping Home's copy. Asking for the flow half too meant that on an
+      // install with 20+ recent flow runs the whole 20-row window came back
+      // as rows Home discarded — and no standalone agent run reached the
+      // ledger at all. The server applies the filter before the bound, so
+      // the budget is spent on the rows only this route can supply.
+      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents, undefined, 'standalone');
       if (cancelled) return;
       setRecentAgentRuns(rows);
       setRecentAgentRunsMeta({ unresolved, total });

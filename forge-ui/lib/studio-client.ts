@@ -1782,8 +1782,16 @@ export type RecentAgentRunWireRow = {
 /** Fetch the aggregate recent-runs rows — ONE bounded request replacing the
  *  old one-history-fetch-per-roster-agent fan-out (agents-39: 1.33 MB / 13
  *  requests to render 20 rows). THROWS on a failed read (fail-closed, A1). */
-export async function fetchRecentAgentRunsAggregate(limit?: number): Promise<RecentAgentRunWireRow[]> {
-  const qs = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+export async function fetchRecentAgentRunsAggregate(
+  limit?: number,
+  kind?: 'flow' | 'standalone' | 'all',
+): Promise<RecentAgentRunWireRow[]> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  // Review round 1: a caller that already holds one half of the ledger asks
+  // for the other half, so the bound is not spent on rows it will discard.
+  if (kind !== undefined && kind !== 'all') params.set('kind', kind);
+  const qs = params.toString() === '' ? '' : `?${params.toString()}`;
   const body = await studioRead<{ ok?: boolean; rows?: unknown }>(`/api/agents/runs/recent${qs}`);
   const rows = Array.isArray(body.rows) ? (body.rows as Record<string, unknown>[]) : [];
   return rows

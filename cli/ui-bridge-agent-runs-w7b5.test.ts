@@ -113,7 +113,7 @@ function writeEvents(cycleId: string, events: Ev[]): void {
   writeFileSync(join(dir, 'events.jsonl'), lines.join('\n') + '\n');
 }
 
-function manifestText(initId: string, cycleId: string): string {
+function manifestText(initId: string, cycleId: string, flowId = 'forge-architect'): string {
   return [
     '---',
     `initiative_id: ${initId}`,
@@ -124,7 +124,7 @@ function manifestText(initId: string, cycleId: string): string {
     'iteration_budget: 5',
     'cost_budget_usd: 20.0',
     `cycle_id: ${cycleId}`,
-    'flow_id: forge-architect',
+    `flow_id: ${flowId}`,
     '---',
     '',
     `# ${initId}`,
@@ -253,6 +253,99 @@ test('recent: ?limit bounds the rows, newest first', async () => {
   assert.equal(rows[0].id, '_agent-w7b5-oneshot-2026-02-02T00-00-00-000-aaaa');
 });
 
+test('recent: two flows sharing a node id each attribute their OWN agent — review round 1 (node ids are unique per flow, not globally)', async () => {
+  // The defect: the first draft inverted the GLOBAL slug→nodeId map, so a
+  // node id used by two flows collapsed onto ONE arbitrary agent and runs of
+  // the second flow were labelled with the first flow's agent — the
+  // wrong-agent attribution this route exists to fix. The OOTB flows happen
+  // not to collide, so it would have stayed silent until a user authored a
+  // flow. This fixture is that user's flow: node id `architect`, bound to a
+  // DIFFERENT agent than forge-architect's node of the same name.
+  const collideDir = join(forgeRoot, 'studio', 'flows', 'w7b5-collide');
+  mkdirSync(collideDir, { recursive: true });
+  writeFileSync(join(collideDir, 'flow.yaml'), `id: w7b5-collide
+name: W7B5 Collide
+version: 1
+goal: fixture
+project: null
+kb: cycles
+costCeilingUsd: 10
+origin: seed
+nodes:
+  - { id: architect, agent: w7b5-oneshot }
+edges: []
+triggers: []
+kickoff: { kind: idea }
+`);
+  const cycleId = '2026-02-04T00-00-00_INIT-w7b5-collide';
+  writeEvents(cycleId, [
+    { skill: 'w7b5-collide', event_type: 'start', started_at: '2026-02-04T00:00:00.000Z' },
+    { phase: 'architect', skill: 'w7b5-oneshot', event_type: 'start', started_at: '2026-02-04T00:01:00.000Z' },
+    { phase: 'architect', skill: 'w7b5-oneshot', event_type: 'end', cost_usd: 1.5, started_at: '2026-02-04T00:02:00.000Z' },
+  ]);
+  writeFileSync(join(forgeRoot, '_queue', 'done', 'INIT-w7b5-collide.md'), manifestText('INIT-w7b5-collide', cycleId, 'w7b5-collide'));
+
+  const { body } = await getJson('/api/agents/runs/recent?limit=100');
+  const rows = body.rows as Array<Record<string, unknown>>;
+  const collided = rows.find((r) => r.id === cycleId);
+  assert.ok(collided, `expected a row for ${cycleId} — got ${JSON.stringify(rows.map((r) => r.id))}`);
+  assert.deepEqual(
+    collided!.agents,
+    ['w7b5-oneshot'],
+    'the run must be attributed to ITS OWN flow\'s agent for that node id, never another flow\'s agent that happens to use the same node id',
+  );
+  // Control: the original flow's own run keeps its own attribution.
+  const original = rows.find((r) => r.id === '2026-02-01T00-00-00_INIT-w7b5-agg');
+  assert.ok(original, 'the forge-architect run must still be present');
+  assert.ok((original!.agents as string[]).includes('architect'));
+});
+
+test('recent: two manifests resolving to the SAME cycle id produce ONE row — review round 1 (HistoryLedger keys rows on row.id)', async () => {
+  // `HistoryLedger` renders `key={row.id}`; two rows sharing an id is a
+  // duplicate React key and a double-listed run, which is why the
+  // client-side join this route replaced called its own dedupe "REQUIRED,
+  // not cosmetic". A requeued initiative whose manifest exists in two queue
+  // states is the ordinary way to get here.
+  const cycleId = '2026-02-05T00-00-00_INIT-w7b5-dup';
+  writeEvents(cycleId, [
+    { skill: 'forge-architect', event_type: 'start', started_at: '2026-02-05T00:00:00.000Z' },
+    { phase: 'architect', skill: 'architect', event_type: 'end', cost_usd: 1, started_at: '2026-02-05T00:01:00.000Z' },
+  ]);
+  writeFileSync(join(forgeRoot, '_queue', 'done', 'INIT-w7b5-dup.md'), manifestText('INIT-w7b5-dup', cycleId));
+  writeFileSync(join(forgeRoot, '_queue', 'merged', 'INIT-w7b5-dup-again.md'), manifestText('INIT-w7b5-dup-again', cycleId));
+
+  const { body } = await getJson('/api/agents/runs/recent?limit=100');
+  const rows = body.rows as Array<Record<string, unknown>>;
+  const matching = rows.filter((r) => r.id === cycleId);
+  assert.equal(matching.length, 1, `exactly one row per run id (got ${matching.length} for ${cycleId})`);
+});
+
+test('recent: ?kind filters SERVER-SIDE, before the bound — review round 1 (a caller holding one half must not spend its window on the other)', async () => {
+  // Home renders its own flow rows and dedupes the aggregate's away, so with
+  // `limit` flow runs on disk the whole window came back as rows Home threw
+  // out — zero standalone agent runs reached its ledger. The filter has to
+  // be applied before the slice for the budget to mean anything.
+  const standalone = await getJson('/api/agents/runs/recent?kind=standalone&limit=100');
+  const sRows = standalone.body.rows as Array<Record<string, unknown>>;
+  assert.ok(sRows.length > 0, 'the standalone half must be non-empty in this fixture');
+  assert.deepEqual([...new Set(sRows.map((r) => r.linkKind))], ['standalone']);
+
+  const flow = await getJson('/api/agents/runs/recent?kind=flow&limit=100');
+  const fRows = flow.body.rows as Array<Record<string, unknown>>;
+  assert.ok(fRows.length > 0, 'the flow half must be non-empty in this fixture');
+  assert.deepEqual([...new Set(fRows.map((r) => r.linkKind))], ['flow']);
+
+  // Applied BEFORE the bound: one standalone row asked for is one standalone
+  // row returned, however many flow runs are newer.
+  const bounded = await getJson('/api/agents/runs/recent?kind=standalone&limit=1');
+  const bRows = bounded.body.rows as Array<Record<string, unknown>>;
+  assert.equal(bRows.length, 1);
+  assert.equal(bRows[0].linkKind, 'standalone');
+
+  const bad = await getJson('/api/agents/runs/recent?kind=sideways');
+  assert.equal(bad.status, 400);
+});
+
 // ---------------------------------------------------------------------------
 // 2 — POST /api/agents/runs/:runId/cancel (agents-30 / projects-29)
 // ---------------------------------------------------------------------------
@@ -268,6 +361,37 @@ test('cancel: unknown runId → 404; traversal-shaped runId → 400; missing CSR
     method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
   });
   assert.equal(noCsrf.status, 403);
+});
+
+test('cancel: a FLOW cycle id is refused (400) and the running cycle\'s own event log is left byte-identical — review round 1 (this route cancels standalone dispatches only)', async () => {
+  // The defect: isSafeRunId gates charset, not identity, so a live develop
+  // cycle id passed it, derived "running" (no end event yet), found no
+  // turn.pid, and got a 200 {ok:true, killed:false} — after appending an
+  // agent-dispatch.cancelled marker into the RUNNING cycle's events.jsonl.
+  // The aggregate recent-runs route serves flow rows keyed on exactly this
+  // id, so an operator could reach it from the ledger.
+  const cycleId = '2026-02-03T00-09-00-000_INIT-live-cycle';
+  writeEvents(cycleId, [
+    { skill: 'developer-ralph', event_type: 'start', metadata: {} },
+  ]);
+  const eventsPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+  const before = readFileSync(eventsPath, 'utf8');
+
+  const { status, body } = await postJson(`/api/agents/runs/${encodeURIComponent(cycleId)}/cancel`);
+  assert.equal(status, 400, `a flow cycle id must be refused, not silently "cancelled" (got ${status}: ${JSON.stringify(body)})`);
+  assert.match(String(body.error), /standalone/i);
+  assert.equal(readFileSync(eventsPath, 'utf8'), before, 'the live cycle\'s own event log must be byte-identical after a refused cancel');
+});
+
+test('cancel: a malformed percent-escape in the runId is a 400, never an unhandled rejection that hangs the request — review round 1', async () => {
+  // decodeURIComponent throws URIError on '%E0%A4%A'; handleHttp is called as
+  // `void handleHttp(...)` with no top-level catch, so an uncaught throw here
+  // writes NO response at all (the client hangs) and reports an unhandled
+  // rejection. A response arriving at all is half the assertion.
+  const res = await fetch(`${url}/api/agents/runs/%E0%A4%A/cancel`, { method: 'POST', headers: CSRF, body: '{}' });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.match(String(body.error), /malformed/i);
 });
 
 test('cancel: a terminal (done) run → 409, and its events are untouched', async () => {
@@ -514,6 +638,41 @@ test('tail: a dispatched standalone run is TAILED — an appended event reaches 
     );
     const msg = await waiter;
     assert.equal((msg.event as Record<string, unknown>).message, 'live-line');
+  } finally {
+    ws.close();
+  }
+});
+
+test('tail: a run\'s tail is RELEASED once the run is terminal — an event appended afterwards is not broadcast (review round 1: a finished run\'s immutable log must not be polled for the life of the session)', async () => {
+  const { body } = await postJson('/api/agents/w7b5-oneshot/run', {});
+  const runId = body.runId as string;
+  const eventsPath = join(forgeRoot, '_logs', runId, 'events.jsonl');
+
+  const ws = new WebSocket(`${url.replace('http', 'ws')}/ws`);
+  await new Promise<void>((r, j) => { ws.on('open', () => r()); ws.on('error', j); });
+  try {
+    // 1. Live → the status poll arms the tail, and a live append streams.
+    await getJson(`/api/agents/runs/${encodeURIComponent(runId)}`);
+    const live = nextWsEvent(ws, (m) => m.type === 'event' && m.cycleId === runId
+      && (m.event as Record<string, unknown> | undefined)?.message === 'while-live', 4000);
+    appendFileSync(eventsPath, JSON.stringify({ event_id: 'EV_rel_1', cycle_id: runId, initiative_id: runId, phase: 'orchestrator', skill: 'w7b5-oneshot', event_type: 'log', message: 'while-live', input_refs: [], output_refs: [], started_at: new Date().toISOString() }) + '\n');
+    await live;
+
+    // 2. Terminal → the next status poll must RELEASE the tail.
+    appendFileSync(eventsPath, JSON.stringify({ event_id: 'EV_rel_end', cycle_id: runId, initiative_id: runId, phase: 'orchestrator', skill: 'w7b5-oneshot', event_type: 'end', cost_usd: 0.1, input_refs: [], output_refs: [], started_at: new Date().toISOString() }) + '\n');
+    const after = await getJson(`/api/agents/runs/${encodeURIComponent(runId)}`);
+    assert.equal(after.body.state, 'done', 'the run must read terminal before the release is asserted');
+
+    // 3. Nothing appended now may reach the socket. A negative with a real
+    //    window: the positive case one step above proves the transport works
+    //    and lands well inside it, so a silent window here means released.
+    const late = nextWsEvent(ws, (m) => m.type === 'event' && m.cycleId === runId
+      && (m.event as Record<string, unknown> | undefined)?.message === 'after-terminal', 1500);
+    appendFileSync(eventsPath, JSON.stringify({ event_id: 'EV_rel_2', cycle_id: runId, initiative_id: runId, phase: 'orchestrator', skill: 'w7b5-oneshot', event_type: 'log', message: 'after-terminal', input_refs: [], output_refs: [], started_at: new Date().toISOString() }) + '\n');
+    await assert.rejects(
+      late,
+      'a terminal run must no longer be tailed — its log is immutable and served on demand by /api/events',
+    );
   } finally {
     ws.close();
   }

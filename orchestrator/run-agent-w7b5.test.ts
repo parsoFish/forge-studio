@@ -7,8 +7,7 @@
  * halt spend in-process — the SDK does, keyed off the options it is handed.
  * The legacy-path assertions below therefore pin the observable call record:
  * `createClaudeAgent` builds `options.maxBudgetUsd` from its
- * `maxBudgetUsdPerIteration` opt and `options.maxTurns` from
- * `maxTurnsPerIteration` (loops/ralph/claude-agent.ts:227-228), and one
+ * `maxBudgetUsdPerIteration` opt (loops/ralph/claude-agent.ts:228), and one
  * invocation-path run is exactly ONE iteration, so a per-iteration cap IS the
  * run ceiling. The injected `queryFn` captures the options the SDK would have
  * read.
@@ -134,7 +133,7 @@ test('legacy path: ctx.kickoffCeilingUsd reaches options.maxBudgetUsd (agents-21
   }
 });
 
-test('legacy path: no ceiling, declared budgets → options.maxBudgetUsd/maxTurns from def.budgets (the declared budget becomes REAL on this path)', async () => {
+test('legacy path: no ceiling, declared budgets → options.maxBudgetUsd from def.budgets, and NO options.maxTurns (review round 1: this lane wires the COST cap only — a turn cap on this path would silently truncate runs into an ordinary "done")', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const logsRoot = mkdtempSync(join(tmpdir(), 'w7b5-legacy-budget-'));
   try {
@@ -151,7 +150,16 @@ test('legacy path: no ceiling, declared budgets → options.maxBudgetUsd/maxTurn
       queryFn: capturingQueryFn(captured),
     });
     assert.equal(captured[0].options['maxBudgetUsd'], 2.75);
-    assert.equal(captured[0].options['maxTurns'], 33);
+    // The fixture DECLARES maxTurns: 33 — and it must NOT reach the SDK.
+    // The legacy invocation path never carried a turn cap; adding one here
+    // would newly stop long runs (onboarding-agent declares maxTurns: 60)
+    // at `error_max_turns`, which nothing maps to a distinct run state, so
+    // the operator would read a truncated run as complete.
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(captured[0].options, 'maxTurns'),
+      false,
+      'a declared maxTurns must not become an SDK turn cap on the legacy invocation path — that is a separate change with its own terminal state',
+    );
   } finally {
     restore();
     rmSync(logsRoot, { recursive: true, force: true });

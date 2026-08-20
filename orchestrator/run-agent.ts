@@ -237,6 +237,20 @@ export type RunAgentResult = {
  * positive share contribution wins the max. A true no-spend agent belongs
  * behind the dry-bridge seam, not a zero budget.
  */
+/**
+ * The cost ceiling ACTUALLY in force for one standalone run, from whichever
+ * source supplied it: an explicit operator kickoff ceiling WINS over the
+ * agent's own declared budget (`??`, never max/min — the operator is
+ * overriding, not bidding). One derivation, three readers — the `start`
+ * event's `effective_ceiling_usd`, `runOneShotSpawn`'s `options.maxBudgetUsd`
+ * and `runInvocationSpawn`'s `maxBudgetUsdPerIteration` — so what a run
+ * RECORDS as its ceiling and what the SDK is actually HANDED can never
+ * drift apart. `undefined` = genuinely uncapped; never a fabricated default.
+ */
+function effectiveCeilingUsd(def: AgentDefinition, ctx: RunContext): number | undefined {
+  return ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
+}
+
 export function resolveOneShotBudgetUsd(
   budgets: AgentBudgets,
   initiative?: InitiativeBinding,
@@ -315,6 +329,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
 
+  const inForceCeilingUsd = effectiveCeilingUsd(def, ctx);
   const startEvent = logger.emit({
     initiative_id: initiativeId,
     phase: 'orchestrator',
@@ -331,6 +346,17 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
       // ceiling that was submitted and enforced. The end event keeps its
       // copy (terminal provenance, unchanged).
       ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
+      // Review round 1 — the OPERATOR ceiling is not the only ceiling. Both
+      // spawn paths resolve `kickoffCeilingUsd ?? resolveOneShotBudgetUsd(
+      // def.budgets, …)`, so an agent with a declared `budgets.maxBudgetUsd`
+      // and NO operator ceiling still runs under a real cap. Recorded under
+      // its own key rather than folded into `kickoff_ceiling_usd`, which
+      // would lie about where it came from: the onboarding route dispatches
+      // with no operator ceiling, yet onboarding-agent declares $5 — and
+      // every honesty surface read "no ceiling was recorded" for it. Same
+      // `effectiveCeilingUsd()` derivation the spawn functions apply, so
+      // what is recorded is what is enforced, by construction.
+      ...(inForceCeilingUsd !== undefined ? { effective_ceiling_usd: inForceCeilingUsd } : {}),
     },
   });
 
@@ -421,6 +447,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
       // | …) so a downstream reader (GET /api/agents/runs/:runId) can tell
       // the two apart without re-deriving anything from cost alone.
       ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
+      ...(inForceCeilingUsd !== undefined ? { effective_ceiling_usd: inForceCeilingUsd } : {}),
       ...(spawned.resultSubtype !== undefined ? { result_subtype: spawned.resultSubtype } : {}),
     },
   });
@@ -453,7 +480,7 @@ async function runOneShotSpawn(
   // declared budget — not max()/min() of the two. `??` gives exactly that:
   // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
   // when present, regardless of which is numerically larger.
-  const budgetUsd = ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
+  const budgetUsd = effectiveCeilingUsd(def, ctx);
   if (budgetUsd !== undefined) options['maxBudgetUsd'] = budgetUsd;
 
   let abortController: AbortController | undefined;
@@ -550,13 +577,21 @@ async function runInvocationSpawn(
   // iteration (`iteration: 1` below), so a per-iteration cap IS the run
   // ceiling. Same precedence rule as the one-shot path: an explicit operator
   // ceiling WINS over the agent's own declared budget (`??`, not max/min).
-  const invocationBudgetUsd =
-    ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
+  const invocationBudgetUsd = effectiveCeilingUsd(def, ctx);
   const agent = adapter.createAgent({
     model: modelForSpec(spec),
     allowedTools: [...spec.allowedTools],
     disallowedTools: [...spec.disallowedTools],
-    ...(def.budgets.maxTurns !== undefined ? { maxTurnsPerIteration: def.budgets.maxTurns } : {}),
+    // NOT `maxTurnsPerIteration` (review round 1). An earlier draft also
+    // threaded `def.budgets.maxTurns` here; that is a DIFFERENT cap from the
+    // one this lane is about, and it had never applied on this path before.
+    // `createClaudeAgent` maps it straight to the SDK's `options.maxTurns`,
+    // so onboarding-agent (`budgets: { maxTurns: 60 }`, no loopStrategy)
+    // would have started truncating standalone runs at 60 turns — and the
+    // SDK's `error_max_turns` is not mapped to a distinct run state, so a
+    // truncated run would surface as an ordinary `done`. A silent behaviour
+    // change riding along inside a cost-ceiling lane. Wiring the turn cap
+    // (with its own honest terminal state) is its own piece of work.
     ...(invocationBudgetUsd !== undefined ? { maxBudgetUsdPerIteration: invocationBudgetUsd } : {}),
     // W7-B5 (agents-23): the adapter's own live telemetry hooks feed the
     // shared per-turn sink, so a standalone legacy-path run leaves a real

@@ -81,8 +81,17 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
       ) : (
         <>
           {/* W7-B5 (agents-19): the failure reason, verbatim, next to the
-              run — never only the bare word "failed". */}
-          {errorText ? (
+              run — never only the bare word "failed".
+              Review round 1: keyed off the run's STATE, not off `errorText`
+              alone. The cancel route SIGTERMs the child before writing its
+              own marker, so a child that catches the signal and writes
+              `agent-dispatch.failed` on the way out leaves BOTH markers in
+              the log — `state` correctly derives the sticky `cancelled`,
+              but the banner was still announcing "Run failed: …" (in a
+              `role="alert"`) about a run the operator deliberately stopped.
+              A cancelled run's error text is a consequence of the cancel,
+              not a failure to report. */}
+          {errorText && state !== 'cancelled' ? (
             <div
               data-component="run-error"
               role="alert"

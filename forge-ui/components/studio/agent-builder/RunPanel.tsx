@@ -166,6 +166,19 @@ export function RunPanel({
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
   const [pollNonce, setPollNonce] = useState(0);
+  // W7-B5 (agents-30) cancel state. These live UP HERE with every other hook,
+  // ABOVE the `if (interactive) return …` early return below — not next to
+  // the `onCancel` handler that reads them, where they were first written.
+  // `interactive` comes from an async fetch (`app/agents/[id]/page.tsx` reads
+  // `state.capability?.interactive`), so it is `false` on the first render of
+  // a mounted panel and can flip to `true` when the agent resolves or when
+  // the operator picks a different agent. A hook below the early return means
+  // that flip renders FEWER hooks than the previous render — React error #300,
+  // which unmounts the whole builder page. Caught by the walkthrough gate on
+  // `/agents/community-refresh` (an interactive agent), not by a unit test:
+  // the same rule `lib/use-cycle-events.ts` cites for its own guard.
+  const [cancelArmed, setCancelArmed] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   // W6-B14: reattach on mount — this panel only ever knew its dispatched
   // runId from its OWN `runId` state, so a nav-away-and-back (or a reload)
@@ -285,8 +298,6 @@ export function RunPanel({
     setMaterials(encoded);
   };
 
-  const [cancelArmed, setCancelArmed] = useState(false);
-  const [cancelBusy, setCancelBusy] = useState(false);
   // W7-B5 (agents-30): cancel the live dispatched run — two-step confirm,
   // then POST /api/agents/runs/:runId/cancel and re-poll for the sticky
   // 'cancelled' terminal.
@@ -509,8 +520,13 @@ export function RunPanel({
             )}
           </div>
           {/* W7-B5 (agents-19): the failure reason, verbatim, right where
-              the failed status is shown — never only the word "failed". */}
-          {status?.errorText && (
+              the failed status is shown — never only the word "failed".
+              Review round 1: suppressed on a CANCELLED run for the same
+              reason RunView's banner is — a child killed by the cancel can
+              write its own `agent-dispatch.failed` marker on the way out,
+              and reporting that as this run's failure misdescribes an
+              outcome the operator chose. */}
+          {status?.errorText && status.state !== 'cancelled' && (
             <p data-component="run-error" className="save-hint save-hint-dirty" style={{ margin: '4px 0 0' }}>
               {status.errorText}
             </p>

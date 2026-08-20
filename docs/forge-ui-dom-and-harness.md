@@ -1195,7 +1195,7 @@ inventory rather than one shared page-level contract:
     run (`'not-found'` = never ran is NOT counted). Home's activity section
     carries the same root attribute + notice. **⚑ W7-B5 (agents-03/04/39):
     the aggregate bridge route now exists** — `GET /api/agents/runs/recent
-    [?limit=1..100]` (`cli/ui-bridge.ts`) joins flow runs (ONE row per run,
+    [?limit=1..100][&kind=flow|standalone|all]` (`cli/ui-bridge.ts`) joins flow runs (ONE row per run,
     RUN-level status/cost + `agents: [<slugs whose nodes the run reached>]`)
     and standalone dispatches (each attributed to its own slug off its own
     events — the D4 exact-match identity) server-side, newest-first, bounded
@@ -1209,6 +1209,13 @@ inventory rather than one shared page-level contract:
     carries `data-count` + `data-limit` (agents-40) and, while truncation is
     possible, `[data-action="recent-runs-show-all"]` refetches under
     `RECENT_AGENT_RUNS_EXPANDED_LIMIT` (100 — the route's own hard cap).
+    Rows are deduped by `id` before the bound (`HistoryLedger` keys each row
+    on `row.id`), and a run's participating agents resolve through the run's
+    OWN flow — node ids are unique per flow, never globally. `kind` filters
+    SERVER-SIDE, before the bound: **Home passes `standalone`**, because it
+    renders its own flow rows and `buildHomeLedgerRows` drops the duplicates
+    — without the filter, an install with 20+ recent flow runs spent the
+    whole window on rows Home threw away and showed no agent runs at all.
     Sessions are deliberately not joined (they have `/sessions`); the pure
     `mergeRecentAgentRuns` survives solely as Home's generic
     flatten+dedupe+bound merge (`buildHomeLedgerRows`). The section itself is
@@ -1460,8 +1467,19 @@ inventory rather than one shared page-level contract:
   recorded at DISPATCH time (the t0 `agent-run.dispatched` marker's / the
   `start` event's `metadata.kickoff_ceiling_usd`) as well as on the terminal
   `end`, so a failed or still-running run shows the ceiling that was
-  actually accepted — `data-ceiling-set="false"` now genuinely means "no
-  ceiling was ever given". **W7-B5 (agents-07/19/30 + bead forge-irn):** the
+  actually accepted. TWO metadata keys are read, in precedence order:
+  `kickoff_ceiling_usd` (the OPERATOR's explicit ceiling) then
+  `effective_ceiling_usd` (the cap the run actually executed under — the
+  agent's own declared `budgets.maxBudgetUsd` when nobody gave one, from
+  `orchestrator/run-agent.ts`'s single `effectiveCeilingUsd()` derivation, so
+  what a run records is what the SDK was handed). Reading only the first made
+  every declared-default dispatch — the whole onboarding route — claim "no
+  ceiling was recorded" about a real cap. `data-ceiling-set="false"` now
+  genuinely means "no ceiling of either kind was ever in force".
+  `[data-component="run-error"]` is keyed off the run's STATE, not off
+  `errorText` alone: a CANCELLED run whose child wrote its own
+  `agent-dispatch.failed` marker while being killed never renders "Run
+  failed" about an outcome the operator chose. **W7-B5 (agents-07/19/30 + bead forge-irn):** the
   page POLLS `fetchRunDetail` on the shared bounded cadence while the run is
   live — `[data-section="run-live-controls"]
   [data-poll-state="watching"|"timed-out"|"terminal"]` in the breadcrumb row

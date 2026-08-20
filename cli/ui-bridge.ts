@@ -131,7 +131,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions, communityRegistryPath } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath, loadFlowDefinition } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -463,11 +463,34 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
   const ensureTailFor = (cycleId: string): void => {
     if (tails.has(cycleId)) return;
+    // Review round 1 (W7-B5): no client, no tail — the SAME rule
+    // `startTailsForLive` states just below ("with no client there is nobody
+    // to stream to"), applied at the one choke point every caller goes
+    // through. Standalone agent runs made this load-bearing: a dispatch
+    // arms a tail directly, so a run started with no browser attached used
+    // to register a `setInterval` that `stopAllTails` — which only fires on
+    // the LAST client disconnecting — would never be triggered to clear.
+    // Self-healing: every caller (the status poll, session-detail routes,
+    // startTailsForLive on connect) re-arms, and those only run while a UI
+    // is open.
+    if (clients.size === 0) return;
     const filePath = join(logsRoot, cycleId, 'events.jsonl');
     if (!existsSync(filePath)) return;
     const state: TailState = { cycleId, filePath, offset: 0 };
     state.timer = setInterval(() => pumpTail(state, (event) => broadcast({ type: 'event', cycleId, event })), TAIL_POLL_MS);
     tails.set(cycleId, state);
+  };
+
+  /** Release ONE tail (review round 1). A terminal run's `events.jsonl` is
+   *  immutable and served on demand by `/api/events`, so a poller on it is
+   *  pure waste — and `stopAllTails` is far too coarse to be the only
+   *  release: it needs every WS client to disconnect, so a long Studio
+   *  session that dispatched N agents carried N permanent pollers. */
+  const stopTailFor = (cycleId: string): void => {
+    const t = tails.get(cycleId);
+    if (t === undefined) return;
+    if (t.timer) clearInterval(t.timer);
+    tails.delete(cycleId);
   };
 
   // W6-B2 — the ONE generalized session-tail activator, replacing the four
@@ -643,6 +666,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       // W7-B5 (agents-20) — the standalone-run tail activator. The runId is
       // its own `_logs/` directory name, so this is `ensureTailFor` direct.
       ensureAgentRunTail: ensureTailFor,
+      releaseAgentRunTail: stopTailFor,
       mergePr: mergePrFn,
       finalizeAfterMerge: finalizeAfterMergeFn,
       runReleaseFinalize: runReleaseFinalizeFn,
@@ -760,6 +784,10 @@ type HttpContext = {
    *  by the run-status route while the run is live (a WS reconnect resets
    *  every tail; the panel/run-page poll recovers it). */
   ensureAgentRunTail: (runId: string) => void;
+  /** Release a standalone run's tail once the run is terminal (review round
+   *  1) — its log is immutable from then on, and `stopAllTails` alone only
+   *  fires when the LAST WS client disconnects. */
+  releaseAgentRunTail: (runId: string) => void;
   /** Merge the remote PR. Injectable for tests; defaults to mergePullRequest. */
   mergePr: (worktreePath: string) => boolean;
   /** Fire finalization after merge. Injectable for tests; defaults to finalizeMergedReadyForReview. */
@@ -942,12 +970,25 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
   const outputRefs = Array.isArray(endEvent?.['output_refs'])
     ? (endEvent!['output_refs'] as unknown[]).filter((r): r is string => typeof r === 'string')
     : [];
-  // Latest kickoff_ceiling_usd across ALL events (dispatched marker → start
-  // → end); a run that never recorded one stays honestly absent.
+  // Latest recorded ceiling across ALL events (dispatched marker → start
+  // → end); a run that never recorded one stays honestly absent. TWO keys,
+  // in precedence order (review round 1): `kickoff_ceiling_usd` is the
+  // OPERATOR's explicit ceiling, `effective_ceiling_usd` is whatever cap the
+  // run actually executed under — the agent's own declared
+  // `budgets.maxBudgetUsd` when no operator ceiling was given. Reading only
+  // the first meant every dispatch that relied on a declared default (the
+  // whole onboarding route, and any agent run without an explicit ceiling)
+  // reported "no ceiling was recorded" for a cap that was genuinely in
+  // force. Same event may carry both; the operator's wins.
   let ceilingUsd: number | undefined;
   for (const e of parsed) {
     const meta = e['metadata'] as Record<string, unknown> | undefined;
-    if (typeof meta?.['kickoff_ceiling_usd'] === 'number') ceilingUsd = meta['kickoff_ceiling_usd'] as number;
+    const recorded = typeof meta?.['kickoff_ceiling_usd'] === 'number'
+      ? (meta['kickoff_ceiling_usd'] as number)
+      : typeof meta?.['effective_ceiling_usd'] === 'number'
+        ? (meta['effective_ceiling_usd'] as number)
+        : undefined;
+    if (recorded !== undefined) ceilingUsd = recorded;
   }
   // `events` stays the COUNT (uncapped); `lines` is the tail slice served for
   // rendering — a fixed cap regardless of log size, TAIL-preserving.
@@ -1136,18 +1177,70 @@ function standaloneRunSlug(events: readonly Record<string, unknown>[]): string |
   return null;
 }
 
-function collectRecentAgentRuns(forgeRoot: string, logsRoot: string, limit: number): RecentAgentRunRow[] {
-  // Flow runs — run-level facts, plus which agents participated. The
-  // node→slug attribution inverts the SAME `buildAgentSlugToNodeId` map the
-  // per-agent history route resolves through (one derivation, two readers).
-  const slugToNode = buildAgentSlugToNodeId(forgeRoot);
-  const nodeToSlug = new Map<string, string>();
-  for (const [slug, nodeId] of slugToNode) {
-    if (!nodeToSlug.has(nodeId)) nodeToSlug.set(nodeId, slug);
+/**
+ * node id → agent slug, PER FLOW (review round 1). The first draft inverted
+ * the GLOBAL `buildAgentSlugToNodeId` map, which is flat across every flow —
+ * so two flows sharing a node id (`review`, `dev`, `demo`: entirely ordinary
+ * once an operator authors a flow) collapsed onto ONE arbitrary agent, and
+ * runs of the second flow were labelled with the first flow's agent. That is
+ * precisely the wrong-agent attribution this route exists to fix; the OOTB
+ * four just happen not to collide today, so it would have stayed silent
+ * until a user authored a flow. Node ids are only unique WITHIN a flow, so
+ * the map has to be keyed that way too.
+ */
+function buildFlowNodeToSlug(forgeRoot: string): Map<string, Map<string, string>> {
+  const byFlow = new Map<string, Map<string, string>>();
+  try {
+    const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
+    if (!existsSync(flowsDir)) return byFlow;
+    for (const entry of readdirSync(flowsDir).sort()) {
+      const flowPath = join(flowsDir, entry, 'flow.yaml');
+      if (!existsSync(flowPath)) continue;
+      let flow;
+      try {
+        flow = loadFlowDefinition(flowPath);
+      } catch {
+        continue; // one malformed flow must never sink the whole mapping
+      }
+      const nodes = new Map<string, string>();
+      for (const node of flow.nodes) {
+        if (!node.agent) continue; // gate-only nodes have no agent
+        if (!nodes.has(node.id)) nodes.set(node.id, node.agent);
+      }
+      byFlow.set(flow.id, nodes);
+    }
+  } catch {
+    // Registry unavailable — an empty map means rows carry no `agents`
+    // attribution, which is honest; it never fabricates one.
   }
+  return byFlow;
+}
+
+function collectRecentAgentRuns(
+  forgeRoot: string,
+  logsRoot: string,
+  limit: number,
+  kind: 'flow' | 'standalone' | 'all' = 'all',
+): RecentAgentRunRow[] {
+  // Flow runs — run-level facts, plus which agents participated, resolved
+  // through the run's OWN flow (node ids are unique per flow, not globally).
+  const flowNodeToSlug = buildFlowNodeToSlug(forgeRoot);
   const rows: RecentAgentRunRow[] = [];
-  for (const run of cachedListRuns(forgeRoot, Date.now())) {
-    const agents = [...new Set(
+  // Review round 1: dedupe by `id`. `HistoryLedger` keys each rendered row on
+  // `row.id` (`key={row.id}`) — an implicit contract every consumer of that
+  // shared component must uphold, and the reason the client-side join this
+  // route replaced documented its own dedupe as "REQUIRED, not cosmetic".
+  // Two manifests resolving to the SAME cycle id (a threaded architect →
+  // develop hand-off, a requeued initiative whose manifest exists in two
+  // queue states) otherwise emit two rows with identical ids: a duplicate
+  // React key and a double-listed run. First-seen wins — `cachedListRuns` is
+  // already ordered, so that is the newer/canonical one.
+  const seenIds = new Set<string>();
+  for (const run of kind === 'standalone' ? [] : cachedListRuns(forgeRoot, Date.now())) {
+    if (seenIds.has(run.id)) continue;
+    seenIds.add(run.id);
+    const nodeToSlug = flowNodeToSlug.get(run.flowId);
+    const agents = nodeToSlug === undefined ? [] : [...new Set(
       Object.keys(run.phases)
         .map((nodeId) => nodeToSlug.get(nodeId))
         .filter((slug): slug is string => slug !== undefined),
@@ -1171,14 +1264,16 @@ function collectRecentAgentRuns(forgeRoot: string, logsRoot: string, limit: numb
   } catch {
     entries = [];
   }
-  for (const entry of entries) {
+  for (const entry of kind === 'flow' ? [] : entries) {
     if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
+    if (seenIds.has(entry)) continue; // same row-id contract as the flow half
     const parsed = parseGuardedEventsJsonl(logsRoot, entry);
     if (parsed === null) continue;
     const slug = standaloneRunSlug(parsed);
     if (slug === null) continue; // unattributable — never a fabricated row
     const derived = deriveStandaloneStateFromEvents(parsed);
     const firstStartedAt = parsed[0]?.['started_at'];
+    seenIds.add(entry);
     rows.push({
       id: entry,
       when: typeof firstStartedAt === 'string' ? firstStartedAt : '',
@@ -2173,7 +2268,20 @@ async function handleHttp(
         }
         limit = parsedLimit;
       }
-      sendJson(res, 200, { ok: true, rows: collectRecentAgentRuns(ctx.forgeRoot, ctx.logsRoot, limit) }, origin);
+      // Review round 1 — `kind` is a SERVER-SIDE filter, applied before the
+      // bound. Home merges this ledger with its OWN flow-run rows and drops
+      // every duplicate, so on an install with `limit` or more recent flow
+      // runs the entire window came back as rows Home already had and threw
+      // away, leaving zero standalone agent rows on the page. Asking the
+      // server for rows the caller will discard is the bug; `kind` lets Home
+      // spend its budget on the rows only this route can supply.
+      const rawKind = qs.get('kind');
+      if (rawKind !== null && rawKind !== 'flow' && rawKind !== 'standalone' && rawKind !== 'all') {
+        sendJson(res, 400, { error: `invalid kind: ${JSON.stringify(rawKind)} (must be "flow", "standalone" or "all")` }, origin);
+        return;
+      }
+      const kind = (rawKind ?? 'all') as 'flow' | 'standalone' | 'all';
+      sendJson(res, 200, { ok: true, rows: collectRecentAgentRuns(ctx.forgeRoot, ctx.logsRoot, limit, kind) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -2186,9 +2294,42 @@ async function handleHttp(
   // the SAME resolveGuardedPath choke point the detail route uses; a
   // rejected guard and a genuinely absent run collapse into ONE 404.
   if (method === 'POST' && url.startsWith('/api/agents/runs/') && url.endsWith('/cancel')) {
-    const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length, url.length - '/cancel'.length));
+    // Review round 1: `decodeURIComponent` throws `URIError` on a malformed
+    // escape (`%E0%A4%A`), and `handleHttp` is invoked as `void handleHttp(…)`
+    // with no top-level catch — an unhandled rejection that never writes a
+    // response and, under `--unhandled-rejections=throw`, takes the bridge
+    // down. Same guard shape the sibling history route in this file already
+    // applies to its own decode.
+    let runId: string;
+    try {
+      runId = decodeURIComponent(url.slice('/api/agents/runs/'.length, url.length - '/cancel'.length));
+    } catch {
+      sendJson(res, 400, { error: 'invalid runId: malformed percent-encoding' }, origin);
+      return;
+    }
     if (!isSafeRunId(runId)) {
       sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    // Review round 1 — SCOPE. `isSafeRunId` gates CHARSET, not identity:
+    // every cycle id under `_logs/` passes it too. Without this check,
+    // cancelling a live develop cycle's id found a real `_logs/<cycleId>`,
+    // derived `running` (no `end` event yet), found no `turn.pid`, and
+    // answered `200 {ok:true, killed:false}` — having appended an
+    // `agent-dispatch.cancelled` line into the RUNNING cycle's own
+    // events.jsonl. The cycle kept going, the operator was told it had been
+    // cancelled, and a marker no flow-run derivation expects was left in a
+    // real cycle log. Reachable, not hypothetical: `GET /api/agents/runs/
+    // recent` serves flow-run rows whose `id` IS a cycle id. This route
+    // cancels STANDALONE dispatches only — a flow run is cancelled through
+    // its own flow/scheduler surface.
+    if (!runId.startsWith(STANDALONE_RUN_DIR_PREFIX)) {
+      sendJson(
+        res,
+        400,
+        { error: `not a standalone agent run: ${JSON.stringify(runId)} (this route cancels ${JSON.stringify(STANDALONE_RUN_DIR_PREFIX)}* dispatches; cancel a flow run from its flow)` },
+        origin,
+      );
       return;
     }
     const cancelDirGuard = resolveGuardedPath(ctx.logsRoot, [runId]);
@@ -2255,7 +2396,11 @@ async function handleHttp(
       // thinking drawer/run page stream instead of freezing. Re-armed here
       // (the panel/run page poll this route) so a WS reconnect — which
       // resets every tail — recovers on the next poll tick.
+      // Arm while live, RELEASE once terminal (review round 1) — otherwise
+      // a finished run's immutable log keeps being polled for the whole life
+      // of the Studio session.
       if (derived.state === 'running') ctx.ensureAgentRunTail(runId);
+      else ctx.releaseAgentRunTail(runId);
       sendJson(res, 200, {
         ok: true,
         state: derived.state,

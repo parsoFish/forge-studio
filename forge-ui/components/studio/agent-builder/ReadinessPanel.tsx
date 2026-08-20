@@ -39,9 +39,13 @@ export function ReadinessPanel({ state }: Props) {
           >
             <span className="ri-dot" />
             {c.label}
-            <span className="visually-hidden" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-              {c.ok ? ' — passed' : ' — not met'}
-            </span>
+            {/* No visually-hidden pass/fail span here (review round 1): the
+                `aria-label` on this same <li> overrides its entire contents
+                for assistive tech, so a hidden span repeating the outcome is
+                announced to nobody — it only costs a DOM node and a
+                duplicated string per check. The outcome reaches every reader
+                that needs it: aria-label (screen readers), title (pointer),
+                data-ok (journeys + render pins), the CSS class (sighted). */}
           </li>
         ))}
       </ul>

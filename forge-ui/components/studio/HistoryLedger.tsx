@@ -82,12 +82,25 @@ export function HistoryLedger({ rows, nowMs, showKindChip, pageSize, filterable 
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [shownPages, setShownPages] = useState(1);
 
-  const filtered = filterable && statusFilter !== ''
-    ? rows.filter((r) => String(r.status) === statusFilter)
+  const distinctStatuses = filterable ? [...new Set(rows.map((r) => String(r.status)))] : [];
+  // Review round 1: the ACTIVE filter is DERIVED, not the stored one taken on
+  // trust. This component keeps its identity across a `rows` change — the
+  // agent builder renders one instance and swaps `rows` when the operator
+  // picks a different agent. Filtering to `budget-exceeded` on agent A and
+  // then switching to agent B left the stored filter in place: `filtered`
+  // went empty ("No runs match this filter."), while the `<select>`'s value
+  // matched no `<option>` so the browser displayed "all (N)" — an empty
+  // history claiming to be unfiltered, with no visible way back. A stored
+  // filter that the current rows cannot satisfy is stale state, so it reads
+  // as no filter until the operator picks again.
+  const activeFilter = distinctStatuses.includes(statusFilter) ? statusFilter : '';
+  const filtered = filterable && activeFilter !== ''
+    ? rows.filter((r) => String(r.status) === activeFilter)
     : rows;
+  // Paging is likewise clamped by `slice`, so a page count carried over from
+  // a longer history simply shows everything this one has.
   const paged = pageSize !== undefined ? filtered.slice(0, pageSize * shownPages) : filtered;
   const hasMore = pageSize !== undefined && paged.length < filtered.length;
-  const distinctStatuses = filterable ? [...new Set(rows.map((r) => String(r.status)))] : [];
 
   return (
     <section
@@ -116,7 +129,7 @@ export function HistoryLedger({ rows, nowMs, showKindChip, pageSize, filterable 
           <select
             className="input"
             data-ledger-filter
-            value={statusFilter}
+            value={activeFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setShownPages(1); }}
             style={{ fontSize: 11, padding: '2px 6px', width: 'auto' }}
           >

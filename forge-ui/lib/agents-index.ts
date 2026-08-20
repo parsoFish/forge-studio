@@ -98,10 +98,11 @@ export type RecentAgentRunsResult = {
 export async function fetchRecentAgentRunsWithMeta(
   agents: Agent[],
   limit: number = RECENT_AGENT_RUNS_LIMIT,
+  kind: 'flow' | 'standalone' | 'all' = 'all',
 ): Promise<RecentAgentRunsResult> {
   const total = Math.max(1, agents.length);
   try {
-    const rows = await fetchRecentAgentRunsAggregate(limit);
+    const rows = await fetchRecentAgentRunsAggregate(limit, kind);
     return { rows: rows.map(recentRunRowToLedgerRow), unresolved: 0, total };
   } catch {
     // Fail-closed honesty (A1-09): a failed aggregate read is "no agent's
@@ -113,6 +114,7 @@ export async function fetchRecentAgentRunsWithMeta(
 export async function fetchRecentAgentRuns(
   agents: Agent[],
   limit: number = RECENT_AGENT_RUNS_LIMIT,
+  kind: 'flow' | 'standalone' | 'all' = 'all',
 ): Promise<LedgerRow[]> {
-  return (await fetchRecentAgentRunsWithMeta(agents, limit)).rows;
+  return (await fetchRecentAgentRunsWithMeta(agents, limit, kind)).rows;
 }

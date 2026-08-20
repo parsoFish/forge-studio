@@ -121,7 +121,13 @@ export function materialsFromEvents(events: EventLogEntry[]): RunMaterialRef[] {
 export function ceilingFromEvents(events: EventLogEntry[]): number | undefined {
   let ceiling: number | undefined;
   for (const e of events) {
-    const val = e.metadata?.['kickoff_ceiling_usd'];
+    // Two keys, operator ceiling first (review round 1) — mirrors the
+    // bridge's own derivation in `deriveStandaloneStateFromEvents`.
+    // `effective_ceiling_usd` is the cap the run actually executed under
+    // when nobody gave an explicit one (the agent's declared
+    // `budgets.maxBudgetUsd`); without it, every dispatch relying on a
+    // declared default rendered "no ceiling was recorded" about a real cap.
+    const val = e.metadata?.['kickoff_ceiling_usd'] ?? e.metadata?.['effective_ceiling_usd'];
     if (typeof val === 'number') ceiling = val;
   }
   return ceiling;
