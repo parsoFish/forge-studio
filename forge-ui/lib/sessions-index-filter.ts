@@ -68,3 +68,12 @@ export function distinctSessionProjects(rows: readonly SessionIndexRow[]): strin
 export function distinctSessionStates(rows: readonly SessionIndexRow[]): string[] {
   return distinctInOrder(rows.map((r) => r.state));
 }
+
+/** Review round 1 — a controlled `<select>` whose ACTIVE value vanished from
+ *  the live set (the W7-B1 WS refetch can remove the last row of the
+ *  filtered kind) would silently display the "all …" option while the stale
+ *  constraint keeps filtering. Keep the active value in the option list so
+ *  the UI always SHOWS the constraint it is applying. */
+export function filterOptions(present: readonly string[], active: string): string[] {
+  return active !== '' && !present.includes(active) ? [...present, active] : [...present];
+}

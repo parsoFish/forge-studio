@@ -109,6 +109,14 @@ export type KickoffKindSpec = {
   promptPlaceholder?: string;
 };
 
+/** The ONE lookup for a kind's kickoff spec — `Object.hasOwn`-guarded
+ *  (review round 1): a bare `KICKOFF_SPECS[kind]` resolves Object.prototype
+ *  members ('constructor', 'toString', …) to truthy functions, silently
+ *  bypassing the unknown-kind guard on `/sessions/<kind>/new`. */
+export function kickoffSpecFor(kind: string): KickoffKindSpec | null {
+  return Object.hasOwn(KICKOFF_SPECS, kind) ? KICKOFF_SPECS[kind] : null;
+}
+
 export const KICKOFF_SPECS: Record<string, KickoffKindSpec> = {
   instructions: {
     blurb: 'Drafts (or refreshes) the project’s AGENTS.md working instructions, interviewing you when it needs answers — you approve the draft before it lands.',

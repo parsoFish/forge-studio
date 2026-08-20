@@ -270,6 +270,18 @@ test('W7-B1: the filter bar does not render in the zero-state (nothing to filter
   expect(errored).not.toContain('data-section="sessions-filters"');
 });
 
+// ---- review round 1: loading renders NO body — no table, no filters, and --
+// ---- never the "No sessions match these filters" false claim. -------------
+
+test('W7-B1 review round 1: before the first fetch settles (ready=false) the body renders nothing — no table, no filter bar, and NEVER "No sessions match these filters — 0 in flight"', () => {
+  const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [], ready: false }));
+  expect(html).toContain('data-fetch-status="loading"');
+  expect(html).not.toContain('data-section="sessions-table"');
+  expect(html).not.toContain('data-section="sessions-filters"');
+  expect(html).not.toContain('No sessions match these filters');
+  expect(html).not.toContain('data-component="sessions-filter-empty"');
+});
+
 // ---- error + zero rows: the kickoff section stays out of the failure view -
 
 test('W7-B1: a failed read with no rows renders neither table, zero-state, nor kickoff row — the failure state is the whole body (A1 discipline preserved)', () => {

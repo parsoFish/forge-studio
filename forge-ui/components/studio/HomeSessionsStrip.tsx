@@ -7,7 +7,7 @@ import { describeLifecycle, type CancelOutcome } from '@/lib/session-lifecycle-c
 import { sessionKindTitle } from '@/lib/session-kind-meta';
 import { CancelOutcomeNotice } from '@/components/studio/session/CancelOutcomeNotice';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
-import { NeedsYouChip } from '@/components/studio/SessionsIndex';
+import { NeedsYouChip } from '@/components/studio/session/NeedsYouChip';
 
 // ---------------------------------------------------------------------------
 // HomeSessionsStrip — Home's sessions strip (W6-B11; W7-B1 IA pass:
@@ -39,6 +39,7 @@ export function HomeSessionsStrip({
   strip,
   onCancelled,
   lastCancel = null,
+  ready = true,
 }: {
   strip: HomeSessionsStripData;
   /** W7-A2 — fired after a card's cancel succeeds so Home refetches;
@@ -47,6 +48,12 @@ export function HomeSessionsStrip({
   /** W7A2-02 — the last cancel from this strip (held by Home so the notice
    *  survives the refetch that drops the card). */
   lastCancel?: { row: SessionIndexRow; outcome: CancelOutcome } | null;
+  /** Review round 1 — whether Home's first load has SETTLED: an unsettled
+   *  zero must never render the settled "Nothing in flight right now."
+   *  claim (the strip is always mounted now, so loading passes through
+   *  here). Default true keeps every props-only render (tests, settled
+   *  callers) unchanged. */
+  ready?: boolean;
 }) {
   const shown = strip.cards.length;
   const truncated = strip.totalCount > shown;
@@ -102,7 +109,13 @@ export function HomeSessionsStrip({
           <CancelOutcomeNotice outcome={lastCancel.outcome} subject={`${lastCancel.row.kind} · ${lastCancel.row.sessionId}`} />
         </div>
       )}
-      {strip.totalCount === 0 ? (
+      {strip.totalCount === 0 && !ready ? (
+        // Review round 1: the first load has not settled — say nothing
+        // settled. (The header + /sessions link above stay: navigation.)
+        <div data-component="sessions-strip-loading" style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic', padding: '8px 2px' }}>
+          Loading sessions…
+        </div>
+      ) : strip.totalCount === 0 ? (
         // W7-B1 (home-sessions-31): an honest empty line — never an
         // unmounted section that takes Home's only /sessions link with it.
         <div

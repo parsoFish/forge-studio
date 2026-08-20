@@ -10,6 +10,7 @@ import {
   NO_SESSION_FILTERS,
   hasActiveSessionFilters,
   filterSessionRows,
+  filterOptions,
   distinctSessionKinds,
   distinctSessionProjects,
   distinctSessionStates,
@@ -82,4 +83,11 @@ test('distinct* helpers return present values only, first-seen order, no duplica
   expect(distinctSessionKinds(ROWS)).toEqual(['instructions', 'demo', 'kb-cleanup']);
   expect(distinctSessionProjects(ROWS)).toEqual(['gitpulse', '.kb-cycles', 'trafficGame']);
   expect(distinctSessionStates(ROWS)).toEqual(['awaiting-operator', 'working', 'crashed', 'stalled']);
+});
+
+test('review round 1 — filterOptions keeps an ACTIVE value that vanished from the live set (a controlled select must always show the constraint it is applying)', () => {
+  expect(filterOptions(['instructions', 'kb-cleanup'], 'demo')).toEqual(['instructions', 'kb-cleanup', 'demo']);
+  // Present or empty active values change nothing.
+  expect(filterOptions(['instructions', 'demo'], 'demo')).toEqual(['instructions', 'demo']);
+  expect(filterOptions(['instructions'], '')).toEqual(['instructions']);
 });

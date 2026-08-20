@@ -345,7 +345,9 @@ inventory rather than one shared page-level contract:
   - `section[data-section="kbs-needing-attention"]` — **W7-B1: the KB-lint
     strip, split out of the attention strip with a visibly DIFFERENT
     treatment** (visible `h2` "Knowledge bases needing attention"; rows carry
-    a `badge-kb` chip + a severity accent border instead of the gate rows'
+    a `badge-kb` chip + a severity accent border — fail=red, warn=amber,
+    unknown=neutral (the lint run itself threw; never overstated as a warn
+    finding) — instead of the gate rows'
     ember border + status-dot, so "things an agent is running" and
     "knowledge that needs fixing" stop reading as one list —
     home-sessions-02). Present ONLY when `buildKbAttention(kbs)` returns ≥1
@@ -432,7 +434,9 @@ inventory rather than one shared page-level contract:
     `view-all-sessions` link and renders
     `[data-component="sessions-strip-empty"]` ("Nothing in flight right
     now." + `a[data-action="start-a-session"] href="/sessions"`) instead of
-    unmounting. Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
+    unmounting; an UNSETTLED zero (Home's first load still in flight)
+    renders `[data-component="sessions-strip-loading"]` instead — never the
+    settled empty claim. Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
     `fetchStudioSessions()` (`?active=1` default — operator-locked,
     in-flight sessions ONLY, never terminal history), folded into the same
     `loadAll` `Promise.all` and refetched on the SAME debounced

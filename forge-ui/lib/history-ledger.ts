@@ -189,8 +189,14 @@ export type LedgerRowTrigger = { kind: string; source: string; scope: string | n
  *  terminal copy ("Done — committed" vs "Cancelled — …") imports these SAME
  *  sets, so the ledger's mapped status and the lifecycle sentence can never
  *  disagree about what counts as done. Declared here (the pure, transport-
- *  free module) so this file never has to import the cancel client. */
-export const SESSION_DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applied', 'complete']);
+ *  free module) so this file never has to import the cancel client.
+ *  Review round 1: `applying` added (kb-cleanup's yaml-declared terminal
+ *  phase — it was silently mapping to a forever-"active" ledger row), and
+ *  the whole union is now yaml-parity-pinned: `history-ledger.test.ts`
+ *  scans the REAL registry's `step: terminal` rows and asserts every one
+ *  maps to complete|failed — a future kind's new terminal token turns the
+ *  suite red instead of drifting. */
+export const SESSION_DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applying', 'applied', 'complete']);
 export const SESSION_STOPPED_PHASES: ReadonlySet<string> = new Set(['rejected', 'abandoned', 'cancelled', 'failed']);
 
 /**

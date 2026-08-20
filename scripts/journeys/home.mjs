@@ -474,6 +474,33 @@ export const journey = defineJourney({
           const overflowHref = await page.evaluate(() => document.querySelector('[data-action="view-all-sessions"]')?.getAttribute('href') ?? null);
           check(overflowHref === '/sessions', `HOME.1: the strip's overflow link targets the real /sessions index (got "${overflowHref}")`);
 
+          // W7-B1 (home-sessions-25): the ledger cap is PAGING now — the
+          // activity section carries shown/total and they reconcile.
+          const activityAttrs = await page.evaluate(() => {
+            const el = document.querySelector('[data-section="activity"]');
+            return el ? { shown: el.getAttribute('data-ledger-shown'), total: el.getAttribute('data-ledger-total') } : null;
+          });
+          check(activityAttrs !== null && activityAttrs.shown !== null && activityAttrs.total !== null,
+            `HOME.1 (W7-B1): the activity section carries data-ledger-shown/-total (got ${JSON.stringify(activityAttrs)})`);
+          check(parseInt(activityAttrs?.shown ?? '-1', 10) <= parseInt(activityAttrs?.total ?? '-1', 10),
+            `HOME.1 (W7-B1): shown <= total — the paging arithmetic reconciles (${activityAttrs?.shown} of ${activityAttrs?.total})`);
+
+          // W7-B1 (home-sessions-15): exactly ONE live-run CTA renders, and
+          // its identity matches its data-live claim — "Watch live run" only
+          // when something is genuinely live/gated, "Browse flows" otherwise.
+          const liveCta = await page.evaluate(() => {
+            const live = document.querySelector('[data-action="watch-live-run"]');
+            const browse = document.querySelector('[data-action="browse-flows"]');
+            return {
+              count: (live ? 1 : 0) + (browse ? 1 : 0),
+              liveAttr: live?.getAttribute('data-live') ?? null,
+              browseAttr: browse?.getAttribute('data-live') ?? null,
+            };
+          });
+          check(liveCta.count === 1, `HOME.1 (W7-B1): exactly one live-run CTA renders (got ${liveCta.count})`);
+          check(liveCta.liveAttr === 'true' || liveCta.browseAttr === 'false',
+            `HOME.1 (W7-B1): the CTA's data-live matches its identity (watch-live-run→"true" / browse-flows→"false"; got ${JSON.stringify(liveCta)})`);
+
           await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
         } catch (err) {
           cleanInstructionsSession(HOME_SESSION_SID); // shared-mdtoc fixture — never leak it on a throw

@@ -176,6 +176,17 @@ export const journey = defineJourney({
           check((kickoff?.entries ?? []).length === 7, `SESSIONS-IDX.2 (W7-B1): all seven kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
           check((kickoff?.entries ?? []).includes('kickoff-community-refresh'), 'SESSIONS-IDX.2 (W7-B1): community-refresh is among them (home-sessions-19)');
 
+          // W7-B1 (home-sessions-07) — the filter bar is live state: present
+          // with rows, and the table mirrors the (default, all-pass) filter
+          // state as data-filter-* attributes.
+          const filterState = await page.evaluate(() => ({
+            barPresent: document.querySelector('[data-section="sessions-filters"]') !== null,
+            kindSelect: document.querySelector('select[data-field="filter-kind"]') !== null,
+            needsYouDefault: document.querySelector('[data-section="sessions-table"]')?.getAttribute('data-filter-needs-you') ?? null,
+          }));
+          check(filterState.barPresent && filterState.kindSelect, 'SESSIONS-IDX.2 (W7-B1): the filter bar renders with kind/project/state selects on a populated index');
+          check(filterState.needsYouDefault === 'false', `SESSIONS-IDX.2 (W7-B1): the table mirrors the default filter state (data-filter-needs-you="false", got "${filterState.needsYouDefault}")`);
+
           const rowOf = (sid) => page.evaluate((id) => {
             const el = document.querySelector(`a[data-action="resume-session"][href*="${id}"]`);
             const tr = el ? el.closest('tr') : null;

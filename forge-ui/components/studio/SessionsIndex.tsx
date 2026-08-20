@@ -7,12 +7,14 @@ import { StudioPage } from '@/components/StudioPage';
 import { describeLifecycle, type CancelOutcome } from '@/lib/session-lifecycle-client';
 import { CancelOutcomeNotice } from '@/components/studio/session/CancelOutcomeNotice';
 import { CancelSessionButton } from '@/components/studio/session/CancelSessionButton';
+import { NeedsYouChip } from '@/components/studio/session/NeedsYouChip';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { KICKOFF_ENTRIES, sessionKindTitle } from '@/lib/session-kind-meta';
 import {
   NO_SESSION_FILTERS,
   hasActiveSessionFilters,
   filterSessionRows,
+  filterOptions,
   distinctSessionKinds,
   distinctSessionProjects,
   distinctSessionStates,
@@ -84,28 +86,6 @@ function stateTone(state: SessionIndexRow['state']): string {
     case 'terminal': return 'var(--faint)';
     default: return 'var(--dim)';
   }
-}
-
-/** W7-B1 (home-sessions-03/24, community-24) — the ONE needs-you signal:
- *  a labelled text chip carrying the dedicated `needs-you` status token
- *  (globals.css), never the borrowed `retrying` run state, never a
- *  colour-only dot. Shared by the /sessions rows and Home's session cards. */
-export function NeedsYouChip(): JSX.Element {
-  return (
-    <span
-      data-needs-you-chip
-      aria-label="needs you"
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 10.5, fontWeight: 600, color: 'var(--ember)',
-        border: '1px solid var(--ember)', borderRadius: 999, padding: '1px 8px',
-        fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
-      }}
-    >
-      <span className="status-dot" data-status="needs-you" aria-hidden="true" />
-      needs you
-    </span>
-  );
 }
 
 /** W7-B1 (crosscut-13 / home-sessions-19) — the kickoff CTA row, rendered in
@@ -203,7 +183,12 @@ export function SessionsIndexBody({
           settled honestly — populated AND empty alike; only a FAILED read
           keeps them out (the failure state is the whole story then). */}
       {ready && !error && <KickoffRow />}
-      {error && sessions.length === 0 ? null : isEmpty ? (
+      {/* Review round 1: while the FIRST fetch is still in flight
+          (`!ready`, no rows yet) render NO body at all — the filter-empty
+          line below would otherwise claim "No sessions match these filters
+          — 0 in flight in total" before any data exists, the exact false
+          flash the isEmpty gate already forbids for the zero-state. */}
+      {!ready && sessions.length === 0 ? null : error && sessions.length === 0 ? null : isEmpty ? (
         <section
           data-section="sessions-empty"
           aria-label="No sessions in flight"
@@ -238,7 +223,13 @@ export function SessionsIndexBody({
                 style={filterSelectStyle}
               >
                 <option value="">all kinds</option>
-                {distinctSessionKinds(sessions).map((k) => (
+                {/* Review round 1: `filterOptions` keeps the ACTIVE value in
+                    the option list even when the live refetch removed its
+                    last row — a controlled select whose value has no option
+                    silently displays "all kinds" while the stale constraint
+                    keeps filtering (contradictory UI). Same for project and
+                    state below. */}
+                {filterOptions(distinctSessionKinds(sessions), filters.kind).map((k) => (
                   <option key={k} value={k}>{sessionKindTitle(k)}</option>
                 ))}
               </select>
@@ -250,7 +241,7 @@ export function SessionsIndexBody({
                 style={filterSelectStyle}
               >
                 <option value="">all projects</option>
-                {distinctSessionProjects(sessions).map((p) => (
+                {filterOptions(distinctSessionProjects(sessions), filters.project).map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
@@ -262,7 +253,7 @@ export function SessionsIndexBody({
                 style={filterSelectStyle}
               >
                 <option value="">all states</option>
-                {distinctSessionStates(sessions).map((s) => (
+                {filterOptions(distinctSessionStates(sessions), filters.state).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>

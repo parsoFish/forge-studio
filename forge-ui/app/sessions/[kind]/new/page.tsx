@@ -11,7 +11,7 @@ import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components
 import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
-import { KICKOFF_SPECS, sessionKindTitle, type KickoffKindSpec } from '@/lib/session-kind-meta';
+import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -46,12 +46,10 @@ import { KICKOFF_SPECS, sessionKindTitle, type KickoffKindSpec } from '@/lib/ses
 // ---------------------------------------------------------------------------
 
 // W7-B1 (home-sessions-19): the per-kind form specs moved to
-// `lib/session-kind-meta.ts` (KICKOFF_SPECS) — ONE module beside the kind
-// titles and the shared kickoff list, parity-pinned against
-// studio/session-kinds.yaml, ending this page's half of the two-list drift.
-function kickoffSpecFor(kind: string): KickoffKindSpec | null {
-  return KICKOFF_SPECS[kind] ?? null;
-}
+// `lib/session-kind-meta.ts` (KICKOFF_SPECS + the hasOwn-guarded
+// `kickoffSpecFor` accessor) — ONE module beside the kind titles and the
+// shared kickoff list, parity-pinned against studio/session-kinds.yaml,
+// ending this page's half of the two-list drift.
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);

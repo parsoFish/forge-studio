@@ -160,3 +160,14 @@ test('W7-B1 (home-sessions-03): a needs-you card renders the labelled chip with 
   expect(html).toContain('data-status="needs-you"');
   expect(html).not.toContain('data-status="retrying"');
 });
+
+test('review round 1 — an UNSETTLED zero (ready=false) renders a loading line, never the settled "Nothing in flight" claim or a start CTA', () => {
+  const html = renderToStaticMarkup(React.createElement(HomeSessionsStrip, { strip: buildHomeSessionsStrip([]), ready: false }));
+  expect(html).toContain('data-section="sessions-needing-you"');
+  expect(html).toContain('data-component="sessions-strip-loading"');
+  expect(html).toContain('Loading sessions');
+  expect(html).not.toContain('Nothing in flight');
+  expect(html).not.toContain('data-action="start-a-session"');
+  // The navigation link survives loading too.
+  expect(html).toContain('data-action="view-all-sessions"');
+});

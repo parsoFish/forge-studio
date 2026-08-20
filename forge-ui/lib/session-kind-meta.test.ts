@@ -32,6 +32,7 @@ import {
   SESSION_KIND_META,
   KICKOFF_ENTRIES,
   KICKOFF_SPECS,
+  kickoffSpecFor,
   sessionKindTitle,
   sessionKindAgent,
 } from './session-kind-meta.ts';
@@ -142,4 +143,12 @@ test('every KICKOFF_SPECS agentSlug matches the registry descriptor\'s own agent
   for (const [kind, spec] of Object.entries(KICKOFF_SPECS)) {
     expect(spec.agentSlug, `agentSlug for ${kind}`).toBe(sessionKindAgent(kind));
   }
+});
+
+test('review round 1 — kickoffSpecFor is hasOwn-guarded: Object.prototype members never leak a truthy fake spec past the unknown-kind guard', () => {
+  expect(kickoffSpecFor('constructor')).toBeNull();
+  expect(kickoffSpecFor('toString')).toBeNull();
+  expect(kickoffSpecFor('__proto__')).toBeNull();
+  expect(kickoffSpecFor('not-a-kind')).toBeNull();
+  expect(kickoffSpecFor('demo')).toBe(KICKOFF_SPECS['demo']);
 });

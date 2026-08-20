@@ -206,6 +206,7 @@ export default function HomePage() {
           contract description. ===== */}
       <HomeSessionsStrip
         strip={sessionsStrip}
+        ready={ready}
         lastCancel={lastCancel}
         onCancelled={(row, outcome) => { setLastCancel({ row, outcome }); void refreshSessions(); }}
       />
@@ -323,7 +324,10 @@ export default function HomePage() {
                 padding: '9px 14px',
                 background: 'var(--panel-2)',
                 border: '1px solid var(--line)',
-                borderLeft: `3px solid ${item.status === 'fail' ? 'var(--red, #f87171)' : 'var(--amber, var(--ember))'}`,
+                // Review round 1: three arms for the three-value vocabulary —
+                // 'unknown' (the lint RUN itself threw; the server cannot
+                // attest) reads neutral, never overstated as a warn finding.
+                borderLeft: `3px solid ${item.status === 'fail' ? 'var(--red, #f87171)' : item.status === 'warn' ? 'var(--amber, var(--ember))' : 'var(--faint)'}`,
                 borderRadius: 'var(--radius)',
                 textDecoration: 'none',
                 color: 'var(--text)',
