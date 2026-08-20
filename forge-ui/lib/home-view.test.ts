@@ -40,6 +40,12 @@ import {
   gateAttentionStatusDot,
   deriveWatchLiveRunHref,
   buildHomeLedgerRows,
+  // W7-B1 additions (home-sessions-14/-15) — same missing-named-export
+  // convention as the forge-2am note above: these resolve to `undefined`
+  // until home-view.ts ships them, so only the new tests that CALL them go
+  // red, on an honest "is not a function" reason.
+  deriveWatchLiveRun,
+  deriveKbStatus,
   // W6-B11 additions
   buildHomeSessionsStrip,
   HOME_SESSIONS_STRIP_LIMIT,
@@ -621,6 +627,114 @@ test('deriveWatchLiveRunHref: an empty runs list falls back to the flows index',
 });
 
 // ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-15) — deriveWatchLiveRun: the CTA must KNOW whether it
+// is pointing at something live, so the page can stop promising "Watch live
+// run" when the target is just the flows index.
+// ---------------------------------------------------------------------------
+
+test('W7-B1 deriveWatchLiveRun: an active run -> live:true with that run\'s own flow href', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-develop', status: 'active' })];
+  expect(deriveWatchLiveRun(runs)).toEqual({ href: '/flows/forge-develop', live: true });
+});
+
+test('W7-B1 deriveWatchLiveRun: a gated run still counts as a live destination (something real is parked there)', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-architect', status: 'gated' })];
+  expect(deriveWatchLiveRun(runs)).toEqual({ href: '/flows/forge-architect', live: true });
+});
+
+test('W7-B1 deriveWatchLiveRun: nothing active or gated -> live:false and the flows-index fallback — the caller must relabel, never claim "live"', () => {
+  expect(deriveWatchLiveRun([makeRun({ id: 'r1', flowId: 'f', status: 'complete' })])).toEqual({ href: '/flows', live: false });
+  expect(deriveWatchLiveRun([])).toEqual({ href: '/flows', live: false });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-14) — sessions light the constellation: 13 in-flight
+// sessions with agents actively running must never read "0 live / all idle".
+// The session model (W6-B11) now feeds hex status alongside the flow-run
+// model — through the REAL kind→agent mapping (session-kind-meta, itself
+// yaml-parity-pinned) and the session's own bridge-derived state, never a
+// fabricated field.
+// ---------------------------------------------------------------------------
+
+// (fixture: the SAME `makeSessionRow` the W6-B11 strip tests below already
+// declare — function declarations hoist; W7-B1 extended it with the A2
+// lifecycle fields.)
+
+test('W7-B1 deriveProjectStatus: a working session anchored on the project lights it active (sessions are a live-status source now)', () => {
+  const sessions = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'working' })];
+  expect(deriveProjectStatus('gitpulse', [], sessions)).toBe('active');
+});
+
+test('W7-B1 deriveProjectStatus: a needs-you session (awaiting-operator / crashed / stalled) reads gated — operator attention, not activity', () => {
+  const awaiting = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'awaiting-operator', needsYou: true })];
+  expect(deriveProjectStatus('gitpulse', [], awaiting)).toBe('gated');
+  const crashed = [makeSessionRow({ kind: 'demo', sessionId: 's2', project: 'gitpulse', state: 'crashed', needsYou: true, error: 'boom' })];
+  expect(deriveProjectStatus('gitpulse', [], crashed)).toBe('gated');
+});
+
+test('W7-B1 deriveProjectStatus: active (a working session) beats gated (the attention aggregate) — same precedence deriveFlowStatus already uses', () => {
+  const attention = [makeAttention({ projectId: 'gitpulse', gated: 1 })];
+  const sessions = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'working' })];
+  expect(deriveProjectStatus('gitpulse', attention, sessions)).toBe('active');
+});
+
+test('W7-B1 deriveProjectStatus: a terminal session contributes nothing; a session on ANOTHER project contributes nothing (fail closed)', () => {
+  const terminal = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'terminal', terminal: true, phase: 'committed' })];
+  expect(deriveProjectStatus('gitpulse', [], terminal)).toBe('idle');
+  const elsewhere = [makeSessionRow({ kind: 'instructions', sessionId: 's2', project: 'other', state: 'working' })];
+  expect(deriveProjectStatus('gitpulse', [], elsewhere)).toBe('idle');
+});
+
+test('W7-B1 deriveAgentStatus: a working session lights its kind\'s OWN agent through the yaml-pinned mapping (instructions -> instructions-creator)', () => {
+  const sessions = [makeSessionRow({ kind: 'instructions', sessionId: 's1', state: 'working' })];
+  expect(deriveAgentStatus(makeAgent('instructions-creator'), [], [], sessions)).toBe('active');
+  // The mapping is real, not "any session lights any agent".
+  expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], sessions)).toBe('idle');
+});
+
+test('W7-B1 deriveAgentStatus: a needs-you session marks its agent gated; terminal contributes nothing', () => {
+  const awaiting = [makeSessionRow({ kind: 'demo', sessionId: 's1', state: 'awaiting-operator', needsYou: true })];
+  expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], awaiting)).toBe('gated');
+  const terminal = [makeSessionRow({ kind: 'demo', sessionId: 's2', state: 'terminal', terminal: true })];
+  expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], terminal)).toBe('idle');
+});
+
+test('W7-B1 deriveKbStatus: a kb-cleanup session anchored .kb-<id> lights THAT kb — working=active, needs-you=gated, none=idle', () => {
+  const working = [makeSessionRow({ kind: 'kb-cleanup', sessionId: 's1', project: '.kb-cycles', state: 'working' })];
+  expect(deriveKbStatus('cycles', working)).toBe('active');
+  const needsYou = [makeSessionRow({ kind: 'kb-cleanup', sessionId: 's2', project: '.kb-cycles', state: 'awaiting-operator', needsYou: true })];
+  expect(deriveKbStatus('cycles', needsYou)).toBe('gated');
+  expect(deriveKbStatus('forge-dev', working)).toBe('idle');
+});
+
+test('W7-B1 buildConstellation: 13 in-flight sessions can never again read as an all-idle fleet — hexes light and the active count is honest', () => {
+  const flows = [makeFlow('forge-develop')];
+  const agents = [makeAgent('instructions-creator'), makeAgent('brain-maintenance')];
+  const projects = [makeProject('gitpulse')];
+  const kbs = [makeKb('cycles')];
+  const sessions = [
+    makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'working' }),
+    makeSessionRow({ kind: 'kb-cleanup', sessionId: 's2', project: '.kb-cycles', state: 'working' }),
+  ];
+  const hexes = buildConstellation({ flows, agents, projects, kbs, runs: [], attention: [], sessions });
+  const byId = new Map(hexes.map((h) => [`${h.kind}-${h.id}`, h.status]));
+  expect(byId.get('agent-instructions-creator')).toBe('active');
+  expect(byId.get('agent-brain-maintenance')).toBe('active');
+  expect(byId.get('project-gitpulse')).toBe('active');
+  expect(byId.get('kb-cycles')).toBe('active');
+  expect(hexes.filter((h) => h.status === 'active').length).toBe(4);
+});
+
+test('W7-B1 buildConstellation: omitting sessions (or passing []) keeps the pre-W7 derivation byte-identical — no fabricated light', () => {
+  const flows = [makeFlow('forge-develop')];
+  const agents = [makeAgent('instructions-creator')];
+  const projects = [makeProject('gitpulse')];
+  const kbs = [makeKb('cycles')];
+  const without = buildConstellation({ flows, agents, projects, kbs, runs: [], attention: [] });
+  expect(without.every((h) => h.status === 'idle')).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
 // W6-IA-4 — buildHomeLedgerRows: the merged everything-ledger
 // ---------------------------------------------------------------------------
 
@@ -688,6 +802,10 @@ function makeSessionRow(overrides: Partial<SessionIndexRow> = {}): SessionIndexR
     phase: 'drafting',
     terminal: false,
     needsYou: false,
+    // W7-B1: the A2 lifecycle fields, at their honest working defaults.
+    state: 'working',
+    error: null,
+    idleMs: null,
     modelTier: null,
     updatedAt: '2026-01-01T00:00:00.000Z',
     href: '/sessions/instructions/fixture?project=p',

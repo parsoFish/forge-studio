@@ -1030,6 +1030,21 @@ export const journey = defineJourney({
               await ac2.locator('[data-action="add-comment"]').click();
               await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 8000 });
               check(await ac2.locator('[data-comment-id]').count() > 0, 'the anchored comment renders under its region');
+              // W7-B7 (artifact-plan-15): every authored comment is correctable
+              // and clearable — edit + delete controls render on the row (a
+              // non-blocking comment's ONLY clearing affordance is delete).
+              check(await ac2.locator('[data-action="edit-comment"]').count() > 0, 'W7-B7: the authored comment carries an edit control');
+              check(await ac2.locator('[data-action="delete-comment"]').count() > 0, 'W7-B7: the authored comment carries a delete control');
+              // W7-B7 (artifact-plan-31): the review-shape summary counts the
+              // blocker and offers a jump — the wall is legible before scrolling.
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="review-summary"]')?.getAttribute('data-blocking-count') === '1',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              check(
+                await page.locator('[data-section="review-summary"][data-blocking-count="1"]').count() > 0,
+                'W7-B7: the review-summary strip counts the one blocking comment',
+              );
               // The verdict is DERIVED — a blocking comment flips the bar to send-back.
               await page.waitForFunction(
                 () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'send-back',

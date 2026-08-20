@@ -12,11 +12,12 @@
  *   mode — gate | view (auto-inferred if absent; an explicit `gate` is honoured
  *          ONLY when the run is actually gated for that artifact — lib/artifact-mode.ts)
  *
- * Gate-bar wiring:
- *   plan    → PlanRenderer + GateBar (gateId='plan', approve disabled until decisions resolved)
- *   demo    → GateBar  (gateId='verdict', decisions always resolved for demo)
- *   verdict → DemoComparison (evidence) + ReviewVerdictForm (the harness depends on its data-* intact)
- *   workitems / pr / reflection → view only (no gate bar)
+ * Gate-bar wiring (W7-B7: the structured-plan decisions gate was deleted —
+ * artifact-plan-19 — a cycle plan is always view-only; the plan's interactive
+ * gate is the architect session's PlanGate):
+ *   demo    → GateBar  (gateId='verdict'; posts rationale + synthesized AC — artifact-plan-18/V01)
+ *   verdict → DemoReviewSurface / ReviewVerdictForm (the harness depends on their data-* intact)
+ *   plan / workitems / pr / reflection → view only (no gate bar)
  *
  * data-* contract (main):
  *   data-page="artifact", data-page-ready, data-run, data-artifact-type,
@@ -43,7 +44,6 @@ import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { ArtifactTrail, type ArtifactKey } from '@/components/studio/artifact/ArtifactTrail';
 import { GateBar, type GateState } from '@/components/studio/artifact/GateBar';
-import { PlanRenderer, type PlanDoc } from '@/components/studio/artifact/PlanRenderer';
 import { WorkItemsRenderer, type WorkItemEntry } from '@/components/studio/artifact/WorkItemsRenderer';
 import { PrRenderer, type PrDoc } from '@/components/studio/artifact/PrRenderer';
 import { VerdictRenderer, verdictRecordToDoc, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
@@ -55,10 +55,16 @@ import { ReviewVerdictForm } from '@/components/ReviewVerdictForm';
 import { DemoReviewSurface } from '@/components/DemoReviewSurface';
 import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGate';
 
-import { fetchRunLookup, fetchStudioFlows, type Run } from '@/lib/studio-client';
+import { fetchRunLookup, fetchStudioFlows, type Run, type Flow } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, bridgeFetch, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 import { resolveArtifactMode, isRunNotFound } from '@/lib/artifact-mode';
+import { planArtifactRequests, type ArtifactRequestPlan } from '@/lib/artifact-request-plan';
+import { prDocWithRunLink } from '@/lib/artifact-pr-view';
+import { effectiveInitiativeId } from '@/lib/initiative-id';
+import { shouldFetchReviewFindings } from '@/lib/flow-run-detail-client';
+import { fetchDemoMarkdown } from '@/lib/review-comments-client';
+import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
 import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
@@ -74,9 +80,13 @@ type PrArtifactDoc = {
 };
 
 type ArtifactDoc =
-  | { type: 'plan';       doc: PlanDoc }
-  // Only the RENDERED PLAN.html was snapshotted into the cycle artifacts/ (no
-  // structured plan.json / PLAN.md) — show it in a sandboxed iframe.
+  // The RENDERED PLAN.html is the ONLY plan artifact a cycle carries — shown
+  // in a sandboxed iframe. W7-B7 (artifact-plan-19): the structured plan.json
+  // / PLAN.md branches (PlanRenderer + the "resolve design decisions" gate)
+  // were dead paths — nothing ever produced either file — and are DELETED;
+  // the plan's interactive review moment is the architect session gate
+  // (ArchitectPlanGate), never a cycle artifact. Decision recorded in
+  // lib/artifact-request-plan.ts + the W7-B7 PR.
   | { type: 'plan-html';  url: string }
   | { type: 'workitems';  doc: WorkItemEntry[] }
   | { type: 'pr';         doc: PrArtifactDoc }
@@ -95,7 +105,24 @@ const TYPE_META: Record<ArtifactKey, { title: string; filename: string }> = {
   pr:         { title: 'Pull Request',    filename: 'PR' },
   demo:       { title: 'Demo Evidence',   filename: 'demo-evidence/' },
   verdict:    { title: 'Verdict',         filename: 'verdict.json' },
-  reflection: { title: 'Reflection',      filename: 'reflection.md' },
+  // W7-B7: the artifact this page actually renders is reflection.json (the
+  // reflector's structured summary) — the old reflection.md label named a
+  // file the viewer never reads.
+  reflection: { title: 'Reflection',      filename: 'reflection.json' },
+};
+
+/**
+ * W7-B7 (artifact-plan-26): the RAW file behind each artifact type — the
+ * filename chip links it (`/api/artifact/<cycle>/<file>`) once the artifact
+ * resolved. Types without a single file (workitems, pr's composite) link
+ * their primary where one exists.
+ */
+const RAW_FILE_FOR_TYPE: Partial<Record<ArtifactKey, string>> = {
+  plan:       'PLAN.html',
+  pr:         'pr-description.md',
+  demo:       'demo.json',
+  verdict:    'verdict.json',
+  reflection: 'reflection.json',
 };
 
 const ARTIFACT_TYPES: readonly ArtifactKey[] = ['plan', 'workitems', 'pr', 'demo', 'verdict', 'reflection'];
@@ -108,13 +135,22 @@ function isValidType(t: string): t is ArtifactKey {
 // Fetch helpers for each artifact type
 // ---------------------------------------------------------------------------
 
+/**
+ * W7-B7: every optional artifact GET below is decided by `reqPlan`
+ * (lib/artifact-request-plan.ts) — the run model's own `artifactsReady` is
+ * the disk truth, so an artifact the run declares absent is rendered as the
+ * honest empty state WITHOUT a guaranteed-404 probe. Only an UNKNOWN run
+ * (orphan `_logs/<id>/`) probes its type's primary file directly.
+ */
 async function fetchArtifactDoc(
   runId: string,
   type: ArtifactKey,
   run: Run | null,
+  reqPlan: ArtifactRequestPlan,
 ): Promise<ArtifactDoc> {
   try {
     if (type === 'demo') {
+      if (!reqPlan.probeDemoJson) return { type: 'empty' };
       // cycleId ~ runId for the existing bridge routes
       const model = await fetchDemoModel(runId);
       if (!model) return { type: 'empty' };
@@ -122,20 +158,16 @@ async function fetchArtifactDoc(
     }
 
     if (type === 'workitems') {
-      // Fetch the work-items snapshot list then fetch each spec
-      const wiList = run?.workItems ?? [];
-      if (wiList.length === 0) {
-        // Try fetching known WI ids from the run's phase keys
-        // Fall through to empty
-        return { type: 'empty' };
-      }
+      // Per-WI spec fetches, keyed on the snapshot the run itself declares.
+      if (reqPlan.workItemIds.length === 0) return { type: 'empty' };
+      const statusById = new Map((run?.workItems ?? []).map((w) => [w.id, w.status] as const));
       const items = await Promise.all(
-        wiList.map(async (wi) => {
-          const detail = await fetchWorkItem(runId, wi.id);
+        reqPlan.workItemIds.map(async (wiId) => {
+          const detail = await fetchWorkItem(runId, wiId);
           const entry: WorkItemEntry = {
-            id: wi.id,
-            title: detail?.body ? extractTitle(detail.body) : wi.id,
-            status: wi.status,
+            id: wiId,
+            title: detail?.body ? extractTitle(detail.body) : wiId,
+            status: statusById.get(wiId) ?? 'pending',
             ac: detail?.acceptance_criteria?.map(
               (a) => `Given ${a.given}, when ${a.when}, then ${a.then}`,
             ),
@@ -148,54 +180,47 @@ async function fetchArtifactDoc(
     }
 
     if (type === 'reflection') {
-      const refl: ReflectionData | null = await fetchReflection(runId);
-      if (!refl) return { type: 'empty' };
-      // ReflectionData from bridge-client has questions/answered,
-      // not the wentWell/friction/lessons shape. The reflection artifact
-      // proper lives in the cycle log. Fetch it via the artifact route.
+      // W7-B7 (artifact-plan-13): a run that never reflected returns the
+      // HONEST empty state — never `{type:'reflection', doc:{}}`, which
+      // rendered "None logged ✓ closes clean" for a cycle the reflector
+      // never touched.
+      if (!reqPlan.probeReflectionJson) return { type: 'empty' };
       const doc = await fetchJsonArtifact<ReflectionDoc>(runId, 'reflection.json');
       if (doc) return { type: 'reflection', doc };
-      // Degrade gracefully: return empty shape
-      return { type: 'reflection', doc: {} };
+      return { type: 'empty' };
     }
 
     if (type === 'pr') {
-      // PRIMARY: fetch demo.json (resolves mid-cycle since it's the gate's own
-      // evidence and is mirrored to artifacts/). Fall back to pr-description.md
-      // text when demo.json is absent (current behaviour, preserves the chip).
-      const demoModel = await fetchDemoModel(runId);
+      // PRIMARY: demo.json (the gate's own evidence, mirrored to artifacts/).
+      const demoModel = reqPlan.probeDemoJson ? await fetchDemoModel(runId) : null;
 
       // SECONDARY (optional): pr-description.md as hero header text.
       let prDoc: PrDoc | null = null;
-      try {
-        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
-        if (res.ok) prDoc = parsePrDescription(await res.text());
-      } catch { /* best-effort */ }
+      if (reqPlan.probePrDescription) {
+        try {
+          const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
+          if (res.ok) prDoc = parsePrDescription(await res.text());
+        } catch { /* best-effort */ }
+      }
 
-      if (!demoModel && !prDoc) return { type: 'empty' };
+      // artifact-plan-17: a recorded PR URL alone (run.prUrl) still renders a
+      // linkable PR card — the render path merges via prDocWithRunLink.
+      // Review r1: demoModel does NOT count toward resolution — the pr render
+      // path shows only the merged hero (prDoc + run.prUrl; demo evidence is
+      // deliberately not duplicated here), so a demo-only cycle whose reviewer
+      // hit pr-open-failed must get the honest EmptyState, not a blank body.
+      if (!prDoc && !run?.prUrl) return { type: 'empty' };
       return { type: 'pr', doc: { demoModel, prDoc } };
     }
 
     if (type === 'plan') {
-      // PRIMARY: structured plan.json
-      const planJson = await fetchJsonArtifact<PlanDoc>(runId, 'plan.json');
-      if (planJson) return { type: 'plan', doc: planJson };
-      // SECONDARY: PLAN.md text fallback — the architect writes PLAN.md; only
-      // PLAN.html is snapshotted into artifacts/ (run-model-derive.ts:439).
-      // Fetch the raw markdown and surface it as a minimal PlanDoc so the
-      // chip is selectable and the content is readable without the PLAN.html viewer.
+      // The rendered PLAN.html — the ONLY plan file a cycle snapshots into
+      // artifacts/ (run-model-derive.ts). Shown in a sandboxed iframe. The
+      // probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's own
+      // `src` needs the absolute base — the ONE non-fetch use of
+      // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
+      if (!reqPlan.probePlanHtml) return { type: 'empty' };
       try {
-        const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/PLAN.md`);
-        if (res.ok) {
-          const text = await res.text();
-          if (text.trim()) return { type: 'plan', doc: parsePlanMd(text) };
-        }
-        // TERTIARY: the rendered PLAN.html — the ONLY plan file snapshotted into
-        // the cycle artifacts/ (run-model-derive.ts). Show it in a sandboxed
-        // iframe so the plan is actually viewable post-cycle, not "not produced".
-        // The probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's
-        // own `src` needs the absolute base — the ONE non-fetch use of
-        // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
         const htmlPath = `/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
         const htmlRes = await bridgeFetch(htmlPath);
         if (htmlRes.ok) {
@@ -209,11 +234,11 @@ async function fetchArtifactDoc(
     if (type === 'verdict') {
       // The on-disk shape is VerdictRecord ({kind, decidedBy, rationale}) —
       // map it onto the renderer's VerdictDoc (fixes the always-"Approved"
-      // view-mode stamp, R4-08-F3).
+      // view-mode stamp, R4-08-F3). In gate mode the verdict is being
+      // AUTHORED — reqPlan never probes the prior doc there.
+      if (!reqPlan.probeVerdictJson) return { type: 'empty' };
       const verdictJson = verdictRecordToDoc(await fetchJsonArtifact<unknown>(runId, 'verdict.json'));
       if (verdictJson) return { type: 'verdict', doc: verdictJson };
-      // In gate mode the verdict doesn't exist yet (it's being authored).
-      // Return empty so gate-mode path shows the form unconditionally.
       return { type: 'empty' };
     }
   } catch {
@@ -229,6 +254,27 @@ async function fetchJsonArtifact<T>(runId: string, filename: string): Promise<T 
     return (await res.json()) as T;
   } catch {
     return null;
+  }
+}
+
+/**
+ * W7-B7 review r1: like fetchJsonArtifact, but absence is claimed ONLY on an
+ * authoritative 404 — a thrown fetch, a non-404 error status, or an unparsable
+ * body is `failed`, never "the artifact does not exist". Callers that turn
+ * null into a rendered ABSENCE CLAIM ("did not run") must use this so a
+ * transient bridge failure cannot fabricate that claim.
+ */
+async function fetchJsonArtifactChecked<T>(
+  runId: string,
+  filename: string,
+): Promise<{ doc: T | null; failed: boolean }> {
+  try {
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
+    if (res.status === 404) return { doc: null, failed: false };
+    if (!res.ok) return { doc: null, failed: true };
+    return { doc: (await res.json()) as T, failed: false };
+  } catch {
+    return { doc: null, failed: true };
   }
 }
 
@@ -260,35 +306,6 @@ function parsePrDescription(text: string): PrDoc {
     if (line && !line.startsWith('#')) break; // first real content — no title heading
   }
   return { title: title || undefined, body };
-}
-
-// Minimal PLAN.md → PlanDoc converter: pulls the title from the first heading
-// and treats top-level bullet lines as scope items. Used when only PLAN.md is
-// present (no plan.json) so the plan chip is selectable and the text is visible.
-function parsePlanMd(text: string): PlanDoc {
-  const lines = text.split('\n');
-  let title: string | undefined;
-  let goal: string | undefined;
-  const scope: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!title && trimmed.startsWith('#')) {
-      title = trimmed.replace(/^#+\s*/, '');
-      continue;
-    }
-    // First non-heading paragraph as the goal text
-    if (!goal && trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('-') && !trimmed.startsWith('*')) {
-      goal = trimmed;
-      continue;
-    }
-    // Top-level bullets as scope items
-    if ((trimmed.startsWith('- ') || trimmed.startsWith('* ')) && scope.length < 20) {
-      scope.push(trimmed.slice(2).trim());
-    }
-  }
-
-  return { title, goal: goal ?? title, scope: scope.length > 0 ? scope : undefined };
 }
 
 // ---------------------------------------------------------------------------
@@ -421,6 +438,19 @@ function ArtifactPageInner() {
   const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
   // R4-08-F3: adversarial-review findings for the verdict surface (both modes).
   const [reviewFindings, setReviewFindings] = useState<ReviewFindingsDoc | null>(null);
+  // W7-B7 (artifact-plan-16): the findings artifact is known-ABSENT for this
+  // run (the producer node never completed, or the file 404'd) — rendered as
+  // an explicit one-liner, distinguishable from a clean pass (doc with []).
+  const [reviewFindingsAbsent, setReviewFindingsAbsent] = useState(false);
+  // Review r1: a transient findings-fetch failure is an ERROR state, distinct
+  // from the authoritative "did not run" absence claim.
+  const [reviewFindingsError, setReviewFindingsError] = useState(false);
+  // W7-B7 (artifact-plan-32): the DEMO.md narrative on the demo-evidence VIEW
+  // page (rendered+sanitized srcDoc — same pipeline as the gate surface).
+  const [demoMarkdownDoc, setDemoMarkdownDoc] = useState('');
+  // W7-B7 (artifact-plan-26): absolute bridge base for the raw-artifact chip
+  // link (the ONE other non-fetch use of resolveBridgeUrl on this page).
+  const [bridgeBase, setBridgeBase] = useState<string | null>(null);
   // For plan via an architect session (runId = '_architect-<sessionId>'):
   // resolved through the sessions list (never /api/runs). `archSessionResolved`
   // flips once the first fetch settled so a missing session renders not-found
@@ -442,8 +472,6 @@ function ArtifactPageInner() {
   // so the "no queue record" note never renders off an outage.
   const [runRecordAbsent, setRunRecordAbsent] = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
-  // For plan gate-mode: track whether all decisions are resolved
-  const [decisionsResolved, setDecisionsResolved] = useState(false);
 
   const meta = TYPE_META[type];
 
@@ -452,12 +480,14 @@ function ArtifactPageInner() {
   // the run's OWN cycle id once claimed, the URL handle otherwise.
   const artifactRunId = run?.id ?? runId;
 
-  // W7-FIX-A3 (round-2 finding 1): the id every GATE post is keyed on — the
-  // run's INITIATIVE id. `POST /api/runs/<id>/gates/<gateId>` validates
-  // against INIT_ID_RE for both `plan` and `verdict`, so the raw `?run=`
-  // handle (a CYCLE id since A3-03 re-keyed the run page's artifacts link)
-  // 400s. Same resolution ReviewVerdictForm below already uses.
-  const gateInitiativeId = run?.initiativeId ?? runId;
+  // W7-FIX-A3 (round-2 finding 1) + W7-B7 (artifact-plan-18/25): the id every
+  // GATE post is keyed on — the run's INITIATIVE id. `POST
+  // /api/runs/<id>/gates/<gateId>` validates against INIT_ID_RE, so the raw
+  // `?run=` handle (a CYCLE id) 400s. ONE resolution rule for every verdict
+  // surface on this page (GateBar, ReviewVerdictForm, DemoReviewSurface):
+  // lib/initiative-id.ts — recovers the embedded INIT- id when the run model
+  // carries none (orphan log dirs, unclaimed handles).
+  const gateInitiativeId = effectiveInitiativeId(run?.initiativeId ?? runId, artifactRunId);
 
   // Derive mode (lib/artifact-mode.ts): `?mode=gate` is honoured only when the
   // run is actually gated for this artifact; an architect plan is armed by the
@@ -477,11 +507,13 @@ function ArtifactPageInner() {
   const loop = useLoopClosureState(archSession?.initiativeIds, isArchitect);
   const gateId = type === 'plan' ? 'plan' : 'verdict';
 
-  // Gate bar hint text
-  const gateLabel = 'This run is blocked on you';
+  // Gate bar hint text. W7-B7 (artifact-plan-19): the old plan hint told the
+  // operator to "resolve all design decisions" — a control that could never
+  // appear (the structured-plan branch was a dead path, now deleted).
   const gateHint = type === 'plan'
-    ? 'Resolve all design decisions, then approve the plan to continue.'
+    ? 'Review the plan below, then approve to continue.'
     : 'Review the demo evidence above, then approve or send back.';
+  const gateLabel = 'This run is blocked on you';
 
   // Load run + artifact
   const load = useCallback(async (signal: { cancelled: boolean }) => {
@@ -532,15 +564,27 @@ function ArtifactPageInner() {
       // initial cold-navigate render where `run` is still null).
       const effectiveMode = resolveArtifactMode(modeParam, type, fetchedRun, { architect: false, architectArmed: false });
 
-      const artifactDoc = await fetchArtifactDoc(artifactId, type, fetchedRun);
+      // W7-B7: the request plan — which optional artifact files exist per the
+      // run's OWN declared state (status-before-body; no blind 404 fan).
+      const reqPlan = planArtifactRequests(type, fetchedRun, effectiveMode);
+
+      const artifactDoc = await fetchArtifactDoc(artifactId, type, fetchedRun, reqPlan);
       if (signal.cancelled) return;
       setArtifact(artifactDoc);
 
-      // For verdict gate-mode: also fetch the demo evidence to show above the form.
-      // (DemoComparison handles missing demo gracefully.)
+      // For verdict gate-mode: also fetch the demo evidence to show above the
+      // form — only when the run's own state declares a demo exists.
       if (type === 'verdict' && effectiveMode === 'gate') {
-        const dm = await fetchDemoModel(artifactId);
+        const dm = reqPlan.probeDemoJson ? await fetchDemoModel(artifactId) : null;
         if (!signal.cancelled) setDemoModel(dm);
+      }
+
+      // W7-B7 (artifact-plan-32): the DEMO.md narrative on the demo VIEW page
+      // — fetched only when the demo evidence itself resolved (the narrative
+      // rides the same demo capture; absent narrative degrades to nothing).
+      if (reqPlan.probeDemoMarkdown && artifactDoc.type === 'demo') {
+        const mdText = await fetchDemoMarkdown(artifactId);
+        if (!signal.cancelled) setDemoMarkdownDoc(mdText.trim() ? renderDemoMarkdownDoc(mdText) : '');
       }
 
       // For reflection: fetch the live Stage-2 questions (user-questions.json)
@@ -566,19 +610,40 @@ function ArtifactPageInner() {
         runOnDisk: lookup.onDisk,
       }));
 
-      // Also fetch verdict doc for view-mode stamp (when type != verdict)
-      if (type !== 'verdict' && effectiveMode !== 'gate') {
+      // Also fetch verdict doc for view-mode stamp (when type != verdict) —
+      // only when the run's own state says a verdict exists (W7-B7).
+      if (type !== 'verdict' && effectiveMode !== 'gate' && reqPlan.probeVerdictJson) {
         const vd = verdictRecordToDoc(await fetchJsonArtifact<unknown>(artifactId, 'verdict.json'));
         if (!signal.cancelled) setVerdictDoc(vd);
       }
 
       // R4-08-F3: the adversarial-review findings render beside the demo
-      // evidence in BOTH verdict modes. Absent artifact (pre-R4-10 cycles)
-      // ⇒ null ⇒ the panel renders nothing.
+      // evidence in BOTH verdict modes. W7-B7 (artifact-plan-16): the fetch
+      // fires only when the run's own flow says the producer node completed
+      // (same derivation the run page uses — lib/flow-run-detail-client.ts);
+      // an absent artifact renders an explicit "did not run" note, never a
+      // silent nothing indistinguishable from a clean pass.
       if (type === 'verdict') {
-        const rf = await fetchJsonArtifact<ReviewFindingsDoc>(artifactId, 'review-findings.json');
-        if (!signal.cancelled) setReviewFindings(rf);
+        const flowDef = fetchedRun ? flows.find((f: Flow) => f.id === fetchedRun.flowId) ?? null : null;
+        const findingsPossible = fetchedRun === null || shouldFetchReviewFindings(fetchedRun, flowDef);
+        // Review r1: the "did not run" ABSENCE CLAIM is made only off the
+        // flow's own declaration or an authoritative 404 — a transient fetch
+        // failure renders the explicit error note instead (never a fabricated
+        // "no findings artifact was produced" for a cycle that has one).
+        const rf = findingsPossible
+          ? await fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json')
+          : { doc: null, failed: false };
+        if (!signal.cancelled) {
+          setReviewFindings(rf.doc);
+          setReviewFindingsAbsent(rf.doc === null && !rf.failed);
+          setReviewFindingsError(rf.doc === null && rf.failed);
+        }
       }
+
+      // W7-B7 (artifact-plan-26): resolve the bridge base once so the
+      // filename chip can link the RAW artifact file.
+      const base = await resolveBridgeUrl();
+      if (!signal.cancelled) setBridgeBase(base ?? null);
     } catch {
       // keep defaults — reach page-ready on error
     } finally {
@@ -592,6 +657,13 @@ function ArtifactPageInner() {
     setArtifact(null);
     setRunRecordAbsent(false);
     setArchSessionResolved(false);
+    // W7-B7: per-type sidecar state must not leak across a type/run switch.
+    setVerdictDoc(null);
+    setDemoModel(null);
+    setReviewFindings(null);
+    setReviewFindingsAbsent(false);
+    setReviewFindingsError(false);
+    setDemoMarkdownDoc('');
     void load(signal);
     return () => { signal.cancelled = true; };
   }, [load]);
@@ -601,20 +673,6 @@ function ArtifactPageInner() {
   // → awaiting-verdict remounts it). Drives the harness's beat-8 detach→reattach
   // lifecycle without a page reload, and resets the gate's submitted state.
   useArchitectSessionPoll(runId, isArchitect, (s) => { setArchSession(s); setArchSessionResolved(true); });
-
-  // For plan gate-mode, decisions start as unresolved only if doc has
-  // unresolved decisions. demo gate-mode is always resolved.
-  useEffect(() => {
-    if (type === 'demo') {
-      setDecisionsResolved(true);
-    } else if (type === 'plan' && artifact?.type === 'plan') {
-      const decisions = artifact.doc.decisions ?? [];
-      const hasUnresolved = decisions.some((d) => !d.chosen);
-      setDecisionsResolved(!hasUnresolved);
-    } else {
-      setDecisionsResolved(true);
-    }
-  }, [type, artifact]);
 
   // Back-to-monitor link. Only deep-link to /flows/<id> when that flow STILL
   // EXISTS — retired flows (release-refine, forge-cycle-with-review) would 404.
@@ -769,19 +827,43 @@ function ArtifactPageInner() {
                 {meta.title}
               </div>
             </div>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--c-artifact)',
-              background: 'rgba(251,191,36,.1)',
-              border: '1px solid rgba(251,191,36,.3)',
-              borderRadius: 4,
-              padding: '3px 8px',
-              marginTop: 5,
-              whiteSpace: 'nowrap',
-            }}>
-              {meta.filename}
-            </span>
+            {/* W7-B7 (artifact-plan-26): the filename chip opens the RAW
+                artifact file when one resolved — no longer inert metadata. */}
+            {(() => {
+              const rawFile = RAW_FILE_FOR_TYPE[type];
+              const chipStyle: React.CSSProperties = {
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                color: 'var(--c-artifact)',
+                background: 'rgba(251,191,36,.1)',
+                border: '1px solid rgba(251,191,36,.3)',
+                borderRadius: 4,
+                padding: '3px 8px',
+                marginTop: 5,
+                whiteSpace: 'nowrap',
+              };
+              const linkable =
+                !isArchitect && rawFile !== undefined && bridgeBase !== null &&
+                artifact !== null && artifact.type !== 'empty' &&
+                // Review r1: resolving the pr TYPE (via run.prUrl alone) does
+                // not imply the pr-description.md FILE exists — only link the
+                // raw file when it actually resolved, never a guaranteed 404.
+                (artifact.type !== 'pr' || artifact.doc.prDoc !== null);
+              return linkable ? (
+                <a
+                  href={`${bridgeBase}/api/artifact/${encodeURIComponent(artifactRunId)}/${encodeURIComponent(rawFile)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-action="open-raw-artifact"
+                  title="Open the raw artifact file"
+                  style={{ ...chipStyle, textDecoration: 'none' }}
+                >
+                  {meta.filename} ↗
+                </a>
+              ) : (
+                <span style={chipStyle}>{meta.filename}</span>
+              );
+            })()}
           </div>
 
           {/* Run context */}
@@ -849,8 +931,10 @@ function ArtifactPageInner() {
               {type === 'verdict' && isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {/* R4-08-F3: findings above the evidence — the operator weighs
-                      the critique before deciding. Claims only; never a gate. */}
-                  <ReviewFindingsPanel doc={reviewFindings} />
+                      the critique before deciding. Claims only; never a gate.
+                      W7-B7 (artifact-plan-16): an absent artifact renders an
+                      explicit "did not run" note, never silent nothing. */}
+                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
                   {demoModel ? (
                     <>
                       {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
@@ -858,11 +942,12 @@ function ArtifactPageInner() {
                       {/* DEC-5: the comment-on-page visual review IS the verdict — markdown
                           narrative + per-region slider/JSON-diff + anchored comments derive
                           approve/send-back. Replaces the textarea form; still emits the
-                          verdict-form data-* contract. */}
+                          verdict-form data-* contract. W7-B7 (artifact-plan-25):
+                          ONE id-resolution rule for every verdict surface. */}
                       <DemoReviewSurface
                         model={demoModel}
                         cycleId={artifactRunId}
-                        initiativeId={run?.initiativeId ?? runId}
+                        initiativeId={gateInitiativeId}
                         onSubmitted={(kind) => {
                           setGateState(kind === 'approve' ? 'approved' : 'sent-back');
                         }}
@@ -880,9 +965,10 @@ function ArtifactPageInner() {
                       }}>
                         No structured demo (<code>demo.json</code>) filed for this run yet — use the form below.
                       </div>
-                      {/* No-demo fallback: the plain verdict form (same data-* contract). */}
+                      {/* No-demo fallback: the plain verdict form (same data-* contract).
+                          W7-B7 (artifact-plan-25): same id resolution as its sibling. */}
                       <ReviewVerdictForm
-                        initiativeId={run?.initiativeId ?? runId}
+                        initiativeId={gateInitiativeId}
                         onSubmitted={(kind) => {
                           setGateState(kind === 'approve' ? 'approved' : 'sent-back');
                         }}
@@ -931,10 +1017,17 @@ function ArtifactPageInner() {
 
               {/* All other types: show empty state when artifact is absent.
                   In gate mode, show a compact placeholder instead of the full empty
-                  state so the gate bar (rendered unconditionally below) remains
-                  reachable. In view mode, show the full empty state.
-                  Exception: plan type with an archSession falls through to PlanGate. */}
-              {!isArchitect && type !== 'verdict' && type !== 'reflection' && (!artifact || artifact.type === 'empty') && (
+                  state so the gate bar (when one exists) remains reachable.
+                  W7-B7: verdict now gets the SAME honest empty state in view
+                  mode — a missing verdict.json rendered a completely blank
+                  page (artifact-plan-12). The verdict GATE (authoring) keeps
+                  its own surface above. Review r1: reflection is EXCLUDED —
+                  ReflectionGate below is the type's own surface and renders
+                  its honest states itself ("No reflection questions filed",
+                  artifact-plan-13's honest never-reflected state); the full
+                  "not yet produced ← Back to monitor" EmptyState would bury a
+                  LIVE gate awaiting the operator's Stage-2 answers. */}
+              {!isArchitect && type !== 'reflection' && !(type === 'verdict' && isGateMode) && (!artifact || artifact.type === 'empty') && (
                 isGateMode ? (
                   <div style={{
                     border: '1px solid var(--line)',
@@ -946,27 +1039,19 @@ function ArtifactPageInner() {
                     marginBottom: 16,
                   }}>
                     Artifact evidence not available — the {PHASE_FOR_TYPE[type]} phase has not
-                    produced the <strong>{type}</strong> artifact yet. You can still approve or
-                    send back below.
+                    produced the <strong>{type}</strong> artifact yet.
+                    {/* W7-B7 (artifact-plan-20): promise a gate control ONLY
+                        when one actually renders below. */}
+                    {showGateBar && <> You can still approve or send back below.</>}
                   </div>
                 ) : (
                   <EmptyState type={type} backHref={monitorHref} />
                 )
               )}
 
-              {/* Type-specific renderers for non-verdict types */}
-              {artifact && artifact.type === 'plan' && (
-                <PlanRenderer
-                  doc={artifact.doc}
-                  gateMode={isGateMode}
-                  onDecisionsResolved={(resolved) => {
-                    setDecisionsResolved(resolved);
-                  }}
-                />
-              )}
-
-              {/* Rendered PLAN.html (the snapshotted plan artifact) in a locked-down
-                  sandbox iframe — the post-cycle read-only plan view. */}
+              {/* Rendered PLAN.html (the snapshotted plan artifact — the only
+                  plan file a cycle carries; W7-B7 artifact-plan-19) in a
+                  locked-down sandbox iframe — the read-only plan view. */}
               {artifact && artifact.type === 'plan-html' && (
                 <iframe
                   src={artifact.url}
@@ -1012,18 +1097,27 @@ function ArtifactPageInner() {
 
               {artifact && artifact.type === 'pr' && (
                 <div>
-                  {/* PR description as hero header (when present) */}
-                  {artifact.doc.prDoc && (
-                    <div style={{
-                      marginBottom: 24,
-                      padding: '16px 20px',
-                      background: 'var(--panel)',
-                      border: '1px solid var(--line)',
-                      borderRadius: 8,
-                    }}>
-                      <PrRenderer doc={artifact.doc.prDoc} />
-                    </div>
-                  )}
+                  {/* PR hero — the parsed description merged with the run's
+                      own PR facts (url/number/state — W7-B7 artifact-plan-17:
+                      the page now links the ACTUAL pull request). */}
+                  {(() => {
+                    const merged = prDocWithRunLink(artifact.doc.prDoc, run);
+                    return merged ? (
+                      <div
+                        data-section="pr-hero"
+                        data-pr-url={merged.url ?? ''}
+                        style={{
+                          marginBottom: 24,
+                          padding: '16px 20px',
+                          background: 'var(--panel)',
+                          border: '1px solid var(--line)',
+                          borderRadius: 8,
+                        }}
+                      >
+                        <PrRenderer doc={merged} />
+                      </div>
+                    ) : null;
+                  })()}
                   {/* S9 refinement: the demo evidence is NOT duplicated here — the PR
                       artifact (above) already carries the same content, and the canonical
                       demo evidence lives on the demo-evidence artifact (type=demo) + the
@@ -1032,14 +1126,32 @@ function ArtifactPageInner() {
               )}
 
               {artifact && artifact.type === 'demo' && (
-                <div data-section="demo-evaluation">
-                  <DemoComparison model={artifact.doc} cycleId={artifactRunId} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* W7-B7 (artifact-plan-32): the DEMO.md narrative — the
+                      human-readable demo story — renders on the EVIDENCE page
+                      too, not only inside the review gate (which becomes
+                      unreachable once a run completes). Same sanitized
+                      no-JS sandbox pipeline as the gate surface. */}
+                  {demoMarkdownDoc && (
+                    <section data-section="demo-narrative">
+                      <iframe
+                        data-demo-markdown
+                        title="DEMO.md"
+                        sandbox=""
+                        srcDoc={demoMarkdownDoc}
+                        style={{ width: '100%', height: 340, border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}
+                      />
+                    </section>
+                  )}
+                  <div data-section="demo-evaluation">
+                    <DemoComparison model={artifact.doc} cycleId={artifactRunId} />
+                  </div>
                 </div>
               )}
 
               {artifact && artifact.type === 'verdict' && !isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <ReviewFindingsPanel doc={reviewFindings} />
+                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
                   <VerdictRenderer doc={artifact.doc} />
                 </div>
               )}
@@ -1072,7 +1184,10 @@ function ArtifactPageInner() {
         <GateBar
           runId={gateInitiativeId}
           gateId={gateId}
-          decisionsResolved={decisionsResolved}
+          // W7-B7 (artifact-plan-19): the structured-plan decisions gate was a
+          // dead path (nothing produces plan.json) and is deleted — nothing
+          // ever holds Approve disabled here any more.
+          decisionsResolved={true}
           label={gateLabel}
           hint={gateHint}
           // W6-SW-3 (sweep C8#1): thread the run's project through so a

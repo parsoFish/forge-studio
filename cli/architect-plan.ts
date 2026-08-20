@@ -24,7 +24,7 @@
  *  - `renderPlanHtml(session)`          — returns HTML string
  *  - `writePlanDoc(session, root)`      — returns PLAN.md path (also writes PLAN.html)
  *
- * The PLAN is reviewed + approved on the in-UI `/architect/<sid>` plan gate
+ * The PLAN is reviewed + approved on the in-UI `/artifact?run=_architect-<sid>&type=plan` gate
  * (ADR 020/023); the operator's verdict comes through the bridge, not via
  * PLAN.md annotations.
  */
@@ -124,10 +124,12 @@ export function renderPlanDoc(session: ArchitectSession): string {
   parts.push(`- Repo: \`${session.project_repo_path}\``);
   parts.push('');
 
-  // Operator quick-start — the plan is reviewed + approved on the in-UI plan gate.
+  // Operator quick-start — the plan is reviewed + approved on the in-UI plan
+  // gate. W7-B7 (artifact-plan-30): the gate lives on the /artifact plan
+  // surface — the old /architect/<sid> screen was retired (M7-4 / ADR-031).
   parts.push(
-    '> **Operator review.** This plan is presented on the `/architect/' + session.session_id +
-      '` screen in the forge UI. Read each section there, then click **approve**, **revise**, ' +
+    '> **Operator review.** This plan is presented at `/artifact?run=_architect-' + session.session_id +
+      '&type=plan` in Forge Studio. Read each section there, then click **approve**, **revise**, ' +
       'or **reject** — the runner finalizes your verdict, promoting the manifests to the queue only on approve.',
   );
   parts.push('');
@@ -269,30 +271,81 @@ function esc(s: string): string {
 }
 
 /**
- * Extract GWT blocks from a markdown body. Returns an array of objects with
- * given/when/then strings, parsed from fenced YAML blocks or from inline
- * bullet-list style. Falls back to a flat display of lines matching GWT
- * keywords if no structured blocks are found.
+ * Extract GWT blocks from a markdown manifest body.
+ *
+ * W7-B7 (artifact-plan-29): the architect emits acceptance criteria as
+ * bold-markdown PROSE — `**Given** …` / `**When** …` / `**Then** …`, each
+ * clause on its own line (demo-project 2026-08-18) or all three inline on one
+ * line (betterado 2026-07-01) — but this parser only ever matched YAML-ish
+ * `given:`/`when:`/`then:` key lines, which the architect never writes. So
+ * `gwtBlocks` was [] on 100% of real plans and every initiative card rendered
+ * "No GWT blocks parsed" — the plan's primary review evidence, missing at the
+ * exact moment the operator is asked to approve. Now recognises, in order:
+ *   1. the inline triple  — `**Given** a, **When** b, **Then** c`
+ *   2. per-clause prose   — `**Given** …` (bold REQUIRED — the GWT-intent
+ *                            signal; case-insensitive, optional list bullet,
+ *                            trailing `,`/`  ` stripped)
+ *   3. YAML key style     — `- given: "…"` (unchanged, frozen-fixture compat)
+ * Exported for direct tests (cli/ is not surface-capped).
  */
-function extractGwtBlocks(body: string): Array<{ given: string; when: string; then: string }> {
+export function extractGwtBlocks(body: string): Array<{ given: string; when: string; then: string }> {
   const blocks: Array<{ given: string; when: string; then: string }> = [];
-  // Match YAML-style GWT entries: lines starting with given:/when:/then:
   const lines = body.split('\n');
   let cur: Partial<{ given: string; when: string; then: string }> = {};
+  const flush = (): void => {
+    if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
+    cur = {};
+  };
+  // A prose clause line: optional bullet, the BOLD keyword (`**Given**` —
+  // bold is REQUIRED: it is the author's GWT-intent signal; W7-B7 review r1
+  // found that accepting bare keywords fabricated blocks out of ordinary
+  // sentences that merely start with Given/When/Then), an optional colon
+  // inside or after the bold, then the clause text. Trailing hard-break
+  // spaces + a trailing comma (the multi-line prose separator) are stripped.
+  const clause = (keyword: string, line: string): string | null => {
+    const m = new RegExp(`^\\s*(?:[-*]\\s+)?\\*\\*${keyword}:?\\*\\*[:\\s]\\s*(.+?)\\s*$`, 'i').exec(line);
+    if (!m) return null;
+    return m[1].replace(/,\s*$/, '').trim();
+  };
+  const inlineTriple = /(?:^|\s)\*\*given\*\*\s+(.+?),?\s+\*\*when\*\*\s+(.+?),?\s+\*\*then\*\*\s+(.+?)\s*$/i;
+
   for (const line of lines) {
-    const gm = /^\s*-?\s*given:\s*["']?(.*?)["']?\s*$/.exec(line);
-    const wm = /^\s*when:\s*["']?(.*?)["']?\s*$/.exec(line);
-    const tm = /^\s*then:\s*["']?(.*?)["']?\s*$/.exec(line);
-    if (gm) {
-      if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
-      cur = { given: gm[1]?.trim() ?? '' };
-    } else if (wm && cur.given) {
-      cur.when = wm[1]?.trim() ?? '';
-    } else if (tm && cur.given) {
-      cur.then = tm[1]?.trim() ?? '';
+    // 1. All three clauses inline on one line.
+    const tri = inlineTriple.exec(line);
+    if (tri) {
+      flush();
+      blocks.push({ given: tri[1].trim(), when: tri[2].trim(), then: tri[3].trim() });
+      continue;
+    }
+    // 2/3. YAML key style + per-clause prose share the same accumulator. The
+    // YAML regexes run first so quoted values keep their exact de-quoting.
+    const gy = /^\s*-?\s*given:\s*["']?(.*?)["']?\s*$/.exec(line);
+    const wy = /^\s*when:\s*["']?(.*?)["']?\s*$/.exec(line);
+    const ty = /^\s*then:\s*["']?(.*?)["']?\s*$/.exec(line);
+    if (gy) {
+      flush();
+      cur = { given: gy[1]?.trim() ?? '' };
+      continue;
+    }
+    if (wy && cur.given) { cur.when = wy[1]?.trim() ?? ''; continue; }
+    if (ty && cur.given) { cur.then = ty[1]?.trim() ?? ''; continue; }
+
+    const gp = clause('given', line);
+    if (gp !== null) {
+      flush();
+      cur = { given: gp };
+      continue;
+    }
+    if (cur.given && !cur.when) {
+      const wp = clause('when', line);
+      if (wp !== null) { cur.when = wp; continue; }
+    }
+    if (cur.given && cur.when && !cur.then) {
+      const tp = clause('then', line);
+      if (tp !== null) { cur.then = tp; continue; }
     }
   }
-  if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
+  flush();
   return blocks;
 }
 
@@ -548,8 +601,8 @@ export function renderPlanHtml(session: ArchitectSession): string {
   </div>
 
   <div class="notice">
-    <strong>Read-only viewer.</strong> Review on the
-    <code>/architect/${esc(session.session_id)}</code> screen in the forge UI —
+    <strong>Read-only viewer.</strong> Review at
+    <code>/artifact?run=_architect-${esc(session.session_id)}&amp;type=plan</code> in Forge Studio —
     approve, revise, or reject there.
   </div>
 
@@ -605,7 +658,7 @@ ${rounds.map((r, i) => `      <tr><td>${i + 1}</td><td>${esc(r.question)}</td><t
   <hr>
   <div class="footer">
     Generated by the architect runner on ${new Date().toISOString()}.
-    Reviewed + approved on the <code>/architect/${esc(session.session_id)}</code> screen.
+    Reviewed + approved at <code>/artifact?run=_architect-${esc(session.session_id)}&amp;type=plan</code> in Forge Studio.
   </div>
 </body>
 </html>

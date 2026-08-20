@@ -52,15 +52,33 @@ test('buildGateVerdictBody: plan gate send-back — full body shape (the exact w
 });
 
 // ---------------------------------------------------------------------------
-// gateId==='verdict' (demo gates) — pre-existing contract, untouched
+// gateId==='verdict' (demo gates) — W7-B7 (artifact-plan-V01): the old branch
+// sent `{}` for approve and `{notes}` for send-back, but applyReviewVerdict
+// REQUIRES `rationale` (approve + send-back) and ≥1 `acceptanceCriteria`
+// (send-back) — so the demo gate bar stayed dead even after the -18 id fix,
+// 400ing "initiativeId, kind, rationale required" / "send-back requires at
+// least one acceptanceCriteria". The body now carries what the route reads.
 // ---------------------------------------------------------------------------
 
-test('buildGateVerdictBody: demo/verdict gate approve — empty body (unchanged)', () => {
-  expect(buildGateVerdictBody('verdict', 'approve', { project: 'demo' })).toEqual({});
+test('buildGateVerdictBody: demo/verdict gate approve — carries a rationale (the field applyReviewVerdict requires)', () => {
+  expect(buildGateVerdictBody('verdict', 'approve', { project: 'demo' })).toEqual({
+    rationale: 'Approved at the demo gate.',
+  });
 });
 
-test('buildGateVerdictBody: demo/verdict gate send-back — still sends notes, no kind/rationale/project (unchanged)', () => {
-  expect(buildGateVerdictBody('verdict', 'send-back', { notes: 'needs more work' })).toEqual({
-    notes: 'needs more work',
+test('buildGateVerdictBody: demo/verdict gate approve — operator notes become the rationale when present', () => {
+  expect(buildGateVerdictBody('verdict', 'approve', { notes: 'demo shows both ACs met' })).toEqual({
+    rationale: 'demo shows both ACs met',
   });
+});
+
+test('buildGateVerdictBody: demo/verdict gate send-back — notes become rationale + ONE synthesized GWT acceptance criterion', () => {
+  const body = buildGateVerdictBody('verdict', 'send-back', { notes: 'the after screenshot is missing' });
+  expect(body.rationale).toBe('the after screenshot is missing');
+  expect(body).not.toHaveProperty('notes');
+  expect(body.acceptanceCriteria).toHaveLength(1);
+  const ac = body.acceptanceCriteria![0];
+  expect(ac.given.length).toBeGreaterThan(0);
+  expect(ac.when.length).toBeGreaterThan(0);
+  expect(ac.then).toBe('the after screenshot is missing');
 });

@@ -17,6 +17,19 @@ export function reflectionAllAnswered(
 }
 
 /**
+ * W7-B7 (artifact-plan-24): how many questions carry an answer — the
+ * disabled Submit button says "N of M answered" instead of sitting grey with
+ * no stated reason (the 4th question scrolls off; the operator could not
+ * tell what was missing).
+ */
+export function reflectionAnsweredCount(
+  questions: ArchitectQuestion[],
+  choices: Record<number, string>,
+): number {
+  return questions.reduce((n, _q, i) => n + (choices[i] ? 1 : 0), 0);
+}
+
+/**
  * R4-09-F3: true when this reflection was produced in AUTOMATED mode — every
  * question carries a reflector-inferred answer. The gate then renders the Q&A
  * read-only with provenance badges instead of the operator input form (the

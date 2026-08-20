@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 import { phaseLogRefreshSignal } from '@/lib/phase-log-refresh';
+import { drawerHeaderMeta } from '@/lib/phase-drawer-meta';
 
 // ---------------------------------------------------------------------------
 // PhaseDrawer — right slide-in panel showing per-phase detail.
@@ -169,17 +170,24 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
           }}
         >
           <StatusBadge status={status} />
-          {meta?.model && (
-            <DrawerKV label="model" value={meta.model} />
-          )}
-          <DrawerKV
-            label="cost"
-            value={meta ? `$${meta.costUsd.toFixed(2)}` : '—'}
-          />
-          <DrawerKV
-            label="retries"
-            value={meta ? String(meta.retries) : '0'}
-          />
+          {/* W7-B7 (flows-14): a WI drawer shows the WI's OWN cost (the same
+              value its hex carries as data-wi-cost-usd) and omits the
+              phase-level model/retries rather than attributing the pooled
+              dev-phase figures to one work item. */}
+          {(() => {
+            const header = drawerHeaderMeta({
+              isWi,
+              wiCostUsd: wiItem?.costUsd,
+              phaseMeta: meta ? { costUsd: meta.costUsd, retries: meta.retries, model: meta.model } : null,
+            });
+            return (
+              <>
+                {header.model !== null && <DrawerKV label="model" value={header.model} />}
+                <DrawerKV label="cost" value={header.cost} />
+                {header.retries !== null && <DrawerKV label="retries" value={header.retries} />}
+              </>
+            );
+          })()}
         </div>
 
         {/* Body — scrollable */}

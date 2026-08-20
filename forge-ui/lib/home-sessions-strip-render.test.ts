@@ -39,24 +39,36 @@ function render(strip: HomeSessionsStripData): string {
   return renderToStaticMarkup(React.createElement(HomeSessionsStrip, { strip }));
 }
 
-// ---- zero-state: renders NOTHING (never an empty section shell) ----------
+// ---- zero-state (W7-B1, home-sessions-31): the strip is Home's ONLY link --
+// ---- to /sessions — navigation must survive an empty data set. ------------
 
-test('totalCount === 0 renders nothing at all — no section, no shell, never a fabricated empty state', () => {
+test('W7-B1 (home-sessions-31): totalCount === 0 keeps the section, the header, and the "all sessions" link — an honest empty line, never a vanished route', () => {
   const html = render(buildHomeSessionsStrip([]));
-  expect(html).toBe('');
+  expect(html).toContain('data-section="sessions-needing-you"');
+  expect(html).toContain('data-active-session-count="0"');
+  expect(html).toContain('data-action="view-all-sessions"');
+  expect(html).toContain('href="/sessions"');
+  expect(html).toContain('data-component="sessions-strip-empty"');
+  expect(html).toContain('data-action="start-a-session"');
+  // But no fabricated cards. (`data-session-card=`, with the `=`, so the
+  // section's own `data-session-cards-shown` attribute can't collide.)
+  expect(html).not.toContain('data-session-card=');
 });
 
 // ---- section + counts -----------------------------------------------------
 
-test('a non-empty strip renders section[data-section="active-sessions"] carrying data-active-session-count and data-needs-you-count', () => {
+test('a non-empty strip renders section[data-section="sessions-needing-you"] carrying data-active-session-count and data-needs-you-count (W7-B1 named-strip contract)', () => {
   const sessions = [
     makeRow({ kind: 'instructions', sessionId: 's1', needsYou: true }),
     makeRow({ kind: 'demo', sessionId: 's2', needsYou: false }),
   ];
   const html = render(buildHomeSessionsStrip(sessions));
-  expect(html).toContain('data-section="active-sessions"');
+  expect(html).toContain('data-section="sessions-needing-you"');
   expect(html).toContain('data-active-session-count="2"');
   expect(html).toContain('data-needs-you-count="1"');
+  // W7-B1 (home-sessions-01/02): the strip is NAMED on screen, not just in
+  // the DOM contract.
+  expect(html).toContain('Sessions needing you');
 });
 
 test('needsYouCount counts ALL needs-you sessions, not just the ones inside the 4-card budget', () => {
@@ -111,4 +123,51 @@ test('the card budget caps at 4 even when more sessions are in flight', () => {
   const sessions = Array.from({ length: 7 }, (_, i) => makeRow({ kind: 'instructions', sessionId: `s${i}` }));
   const html = render(buildHomeSessionsStrip(sessions));
   expect((html.match(/data-session-kind="instructions"/g) ?? []).length).toBe(4);
+});
+
+// ===========================================================================
+// W7-B1 — Home strip IA (docs/roadmaps/wave-7-walkthrough-findings.md)
+// ===========================================================================
+
+test('W7-B1 (home-sessions-32): a truncated strip SAYS so — "showing 4 of 7" + a "+3 more" overflow link, so the header count and the visible cards reconcile on screen', () => {
+  const sessions = Array.from({ length: 7 }, (_, i) => makeRow({ kind: 'instructions', sessionId: `s${i}`, needsYou: true }));
+  const html = render(buildHomeSessionsStrip(sessions));
+  expect(html).toContain('data-session-cards-shown="4"');
+  expect(html).toContain('showing 4 of 7');
+  expect(html).toContain('+3 more');
+});
+
+test('W7-B1 (home-sessions-32): an untruncated strip renders no "showing"/"+N more" noise', () => {
+  const sessions = [makeRow({ kind: 'instructions', sessionId: 's1' })];
+  const html = render(buildHomeSessionsStrip(sessions));
+  expect(html).toContain('data-session-cards-shown="1"');
+  expect(html).not.toContain('showing 1 of 1');
+  expect(html).not.toContain('more');
+});
+
+test('W7-B1 (home-sessions-20 on Home): a card names its kind by the descriptor title ("KB cleanup session"), with the raw id intact on data-session-kind', () => {
+  const sessions = [makeRow({ kind: 'kb-cleanup', sessionId: 's1' })];
+  const html = render(buildHomeSessionsStrip(sessions));
+  expect(html).toContain('KB cleanup session');
+  expect(html).toContain('data-session-kind="kb-cleanup"');
+});
+
+test('W7-B1 (home-sessions-03): a needs-you card renders the labelled chip with its OWN status token — no data-status="retrying" anywhere', () => {
+  const sessions = [makeRow({ kind: 'instructions', sessionId: 's1', needsYou: true, state: 'awaiting-operator' })];
+  const html = render(buildHomeSessionsStrip(sessions));
+  expect(html).toContain('data-needs-you-chip');
+  expect(html).toContain('aria-label="needs you"');
+  expect(html).toContain('data-status="needs-you"');
+  expect(html).not.toContain('data-status="retrying"');
+});
+
+test('review round 1 — an UNSETTLED zero (ready=false) renders a loading line, never the settled "Nothing in flight" claim or a start CTA', () => {
+  const html = renderToStaticMarkup(React.createElement(HomeSessionsStrip, { strip: buildHomeSessionsStrip([]), ready: false }));
+  expect(html).toContain('data-section="sessions-needing-you"');
+  expect(html).toContain('data-component="sessions-strip-loading"');
+  expect(html).toContain('Loading sessions');
+  expect(html).not.toContain('Nothing in flight');
+  expect(html).not.toContain('data-action="start-a-session"');
+  // The navigation link survives loading too.
+  expect(html).toContain('data-action="view-all-sessions"');
 });
