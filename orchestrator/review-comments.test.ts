@@ -18,6 +18,8 @@ import {
   writeReviewComments,
   appendReviewComment,
   resolveComment,
+  editComment,
+  deleteComment,
   deriveVerdictFromComments,
   reviewCommentsPath,
 } from './review-comments.ts';
@@ -114,4 +116,51 @@ test('writeReviewComments: rejects a path-traversal cycleId', () => {
       'a traversal id reads empty, never escapes the logs root');
     assert.ok(!existsSync(join(logsRoot, '..', '..', 'etc', 'evil')), 'nothing written outside logsRoot');
   });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B7 (artifact-plan-15) — edit + delete: a comment the operator authored
+// must be correctable and clearable; a NON-BLOCKING comment (which never gets
+// a resolve affordance) must be removable at all.
+// ---------------------------------------------------------------------------
+
+test('editComment: rewrites body and blocking flag; unknown id is a no-op', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, { region: 'ac-1', body: 'typo here', blocking: false });
+  const id = sidecar.comments[0].id;
+
+  const edited = editComment(sidecar, id, { body: 'typo here — and the label is wrong', blocking: true });
+  assert.equal(edited.comments[0].body, 'typo here — and the label is wrong');
+  assert.equal(edited.comments[0].blocking, true);
+  assert.equal(edited.comments[0].id, id, 'the anchor id never changes on edit');
+  assert.equal(deriveVerdictFromComments(edited.comments).kind, 'send-back', 'an edit to blocking re-derives the verdict');
+
+  const untouched = editComment(sidecar, 'C-999', { body: 'nope' });
+  assert.deepEqual(untouched.comments, sidecar.comments);
+});
+
+test('editComment: a partial patch leaves the other fields intact', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, { region: 'ac-1', body: 'original', blocking: true });
+  const id = sidecar.comments[0].id;
+  const edited = editComment(sidecar, id, { blocking: false });
+  assert.equal(edited.comments[0].body, 'original');
+  assert.equal(edited.comments[0].blocking, false);
+});
+
+test('deleteComment: removes the comment (the only way to clear a non-blocking one) and re-derives approve', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, { region: 'ac-1', body: 'non-blocking note', blocking: false });
+  sidecar = appendReviewComment(sidecar, { region: 'ac-2', body: 'must fix', blocking: true });
+  const [nonBlocking, blocker] = sidecar.comments;
+
+  const afterDelete = deleteComment(sidecar, nonBlocking.id);
+  assert.equal(afterDelete.comments.length, 1);
+  assert.equal(afterDelete.comments[0].id, blocker.id, 'surviving ids are never renumbered');
+
+  const cleared = deleteComment(afterDelete, blocker.id);
+  assert.equal(deriveVerdictFromComments(cleared.comments).kind, 'approve');
+
+  const noop = deleteComment(sidecar, 'C-999');
+  assert.deepEqual(noop.comments, sidecar.comments, 'unknown id is a no-op');
 });

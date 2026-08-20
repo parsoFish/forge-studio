@@ -129,6 +129,42 @@ export function resolveComment(sidecar: ReviewCommentsSidecar, commentId: string
 }
 
 /**
+ * W7-B7 (artifact-plan-15): rewrite an authored comment in place (pure).
+ * Only `body` and `blocking` are patchable — the id (anchor handle), region,
+ * timestamp, and resolved flag are untouched. A no-op if the id is unknown.
+ */
+export function editComment(
+  sidecar: ReviewCommentsSidecar,
+  commentId: string,
+  patch: { body?: string; blocking?: boolean },
+): ReviewCommentsSidecar {
+  return {
+    cycleId: sidecar.cycleId,
+    comments: sidecar.comments.map((c) =>
+      c.id === commentId
+        ? {
+            ...c,
+            ...(patch.body !== undefined ? { body: patch.body } : {}),
+            ...(patch.blocking !== undefined ? { blocking: patch.blocking } : {}),
+          }
+        : c,
+    ),
+  };
+}
+
+/**
+ * W7-B7 (artifact-plan-15): remove a comment (pure) — the only way to clear a
+ * NON-BLOCKING comment, which never gets a resolve affordance. Surviving ids
+ * are never renumbered. A no-op if the id is unknown.
+ */
+export function deleteComment(sidecar: ReviewCommentsSidecar, commentId: string): ReviewCommentsSidecar {
+  return {
+    cycleId: sidecar.cycleId,
+    comments: sidecar.comments.filter((c) => c.id !== commentId),
+  };
+}
+
+/**
  * Derive the review verdict from the comment set.
  *
  * - Any blocking AND unresolved comment ⇒ `send-back`. Each such concern becomes
