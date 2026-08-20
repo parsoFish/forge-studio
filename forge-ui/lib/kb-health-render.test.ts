@@ -205,21 +205,25 @@ describe('KbHealth — lint/checks counts link to the drain panel (W6-B13)', () 
     expect(html).toContain('href="#kb-drain-panel"');
   });
 
-  it('the Lint section link WRAPS the actual count text, not a decorative sibling', () => {
-    const html = render(baseHealth({ lintErrors: 2, lintFlags: 0 }));
+  it('W7-B2 (knowledge-09): the fix affordance is ONE explicit "Fix N findings →" link on the Lint heading — the counts themselves are no longer an invisible full-width anchor', () => {
+    const html = render(baseHealth({ lintErrors: 2, lintFlags: 1 }));
     const anchorStart = html.indexOf('data-action="goto-drain-panel"');
     const anchorEnd = html.indexOf('</a>', anchorStart);
     const anchorContent = html.slice(anchorStart, anchorEnd);
-    expect(anchorContent).toContain('2 lint errors');
+    expect(anchorContent).toContain('Fix 3 findings');
+    // The count rows render OUTSIDE the anchor now.
+    expect(anchorContent).not.toContain('2 lint errors');
+    expect(html).toContain('2 lint errors');
   });
 
-  it('the per-check itemization block ALSO links to #kb-drain-panel', () => {
+  it('W7-B2 (knowledge-09): the per-check itemization block is an INERT readout — no anchor of its own', () => {
     // @ts-expect-error — `checks` widened locally, same rationale as the RED-D block above.
     const html = render(baseHealth({
       lintErrors: 0, lintFlags: 0,
       checks: [{ check: 'checkFrontmatter', status: 'pass', errorCount: 0, flagCount: 0 }],
     }));
-    expect(html).toContain('data-action="goto-drain-panel"');
+    expect(html).not.toContain('data-action="goto-drain-panel"');
+    expect(html).toContain('checkFrontmatter');
   });
 
   it('no goto-drain-panel link renders when there is nothing to act on (zero lint counts, no checks)', () => {

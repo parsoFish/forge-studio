@@ -737,7 +737,11 @@ export type KbHealthCheck = {
 
 export type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
+  /** Degree-0 nodes EXCLUDING the raw layer (W7-B2, knowledge-28). */
   orphans: number;
+  /** Degree-0 RAW-layer nodes — unlinked by design, reported neutrally.
+   *  Optional: pre-W7 responses/fixtures don't carry it. */
+  unlinkedRaw?: number;
   linkDensity: number;
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
@@ -764,6 +768,9 @@ export type KbDetail = {
   kb: Kb;
   graph: KbGraph;
   health: KbHealth;
+  /** W7-B2 (knowledge-29): pinned guidance notes awaiting an ingest pass —
+   *  file names under the KB's own `_guidance/`. Optional pre-W7. */
+  guidance?: Array<{ file: string; at: string }>;
 };
 
 export type CatalogItem = {
@@ -1494,6 +1501,7 @@ export type KbDrainState =
   | 'no-progress'
   | 'round-cap'
   | 'cost-ceiling'
+  | 'cancelled'
   | 'failed';
 
 export type KbDrainPerFinding = {
@@ -1504,6 +1512,11 @@ export type KbDrainPerFinding = {
   message: string;
   tier: 'auto' | 'agent' | 'user';
   outcome: 'cleared' | 'not-cleared' | 'needs-you';
+  /** W7-B2 (knowledge-12) — which round recorded this entry. Optional:
+   *  pre-W7 status files don't carry it. */
+  round?: number;
+  /** W7-B2 (orch-01) — set when the fix was gated into a kb-cleanup draft. */
+  draftSession?: { id: string; project: string };
 };
 
 export type KbDrainStatus = {
@@ -1517,6 +1530,11 @@ export type KbDrainStatus = {
   updatedAt: string;
   kbId?: string;
   error?: string;
+  /** W7-B2 (knowledge-14) — elapsed ticker + real budget display. Optional:
+   *  pre-W7 status files don't carry them. */
+  startedAt?: string;
+  maxRounds?: number;
+  maxCostUsd?: number;
 };
 
 /** W7-A1: the failed-read shape for a drain-status poll — `ok:false` plus the
@@ -1559,6 +1577,49 @@ export async function fetchActiveOrLatestKbDrain(id: string): Promise<KbDrainSta
     `/api/studio/kbs/${encodeURIComponent(id)}/drain`,
   );
   return r.ok ? r.data : failedKbDrainStatus(null, r.error);
+}
+
+/** W7-B2 (knowledge-14): cancel the ACTIVE drain run for a kb.
+ *  `mode:'requested'` = a live loop will honor the flag between turns;
+ *  `mode:'forced'` = the run was dead (no heartbeat) and was terminated
+ *  directly. A 409 (`ok:false`) = nothing active to cancel. */
+export async function cancelKbDrain(id: string): Promise<{ ok: boolean; error?: string; runId?: string; mode?: 'requested' | 'forced' }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/drain/cancel`, {});
+  return {
+    ok: r.ok,
+    error: r.error,
+    runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined,
+    mode: r.data?.mode === 'forced' || r.data?.mode === 'requested' ? r.data.mode : undefined,
+  };
+}
+
+/** W7-B2 (knowledge-05): the per-KB active-job fact the action group gates
+ *  on — the SAME derivation every mutating KB route 409s with. Status-shaped
+ *  (never throws): a failed read is `{ok:false, job:null, error}`. */
+export type KbActiveJob = { kind: 'drain' | 'consolidate'; runId: string } | null;
+
+export async function fetchKbActiveJob(id: string): Promise<{ ok: boolean; job: KbActiveJob; reason?: string; error?: string }> {
+  const r = await studioGet<{ job: KbActiveJob; reason?: string }>(`/api/studio/kbs/${encodeURIComponent(id)}/active-job`);
+  if (!r.ok) return { ok: false, job: null, error: r.error };
+  return { ok: true, job: r.data.job ?? null, reason: r.data.reason };
+}
+
+/** W7-B2 (knowledge-20): every drain / consolidate / kb-cleanup run recorded
+ *  for one KB — the RecentRuns widget's data source. */
+export type KbRunRow = {
+  kind: 'drain' | 'consolidate' | 'cleanup';
+  id: string;
+  when: string;
+  status: string;
+  costUsd: number | null;
+  detail: string | null;
+  project?: string;
+};
+
+export async function fetchKbRuns(id: string): Promise<{ ok: boolean; runs: KbRunRow[]; error?: string; status?: number }> {
+  const r = await studioGet<{ runs: KbRunRow[] }>(`/api/studio/kbs/${encodeURIComponent(id)}/runs`);
+  if (!r.ok) return { ok: false, runs: [], error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
+  return { ok: true, runs: Array.isArray(r.data.runs) ? r.data.runs : [] };
 }
 
 /** Parse the RunPanel inputs textarea — one `key: value` per line — into the
@@ -1957,10 +2018,17 @@ export async function createKb(body: {
   name: string;
   binding: KbBinding;
   desc: string;
-}): Promise<{ ok: boolean; id?: string; error?: string }> {
+}): Promise<{ ok: boolean; id?: string; error?: string; sessionId?: string; project?: string }> {
   const r = await studioPost('/api/studio/kbs', body);
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true, id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id };
+  return {
+    ok: true,
+    id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id,
+    // W7-B2 (knowledge-23): the seeding session the create spawns — the form
+    // TELLS the operator about it instead of silently discarding it.
+    sessionId: typeof r.data?.sessionId === 'string' ? (r.data.sessionId as string) : undefined,
+    project: typeof r.data?.project === 'string' ? (r.data.project as string) : undefined,
+  };
 }
 
 /** R4-19-F2: start a kb-cleanup session for KB `id` (`POST .../kbs/:id/

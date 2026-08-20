@@ -11,6 +11,8 @@ import {
   drainStateCopy,
   findingsByTier,
   resolveUserTierStep,
+  findingRounds,
+  formatDrainElapsed,
   KB_DRAIN_MAX_ROUNDS_DISPLAY,
 } from './kb-drain-view';
 import type { KbDrainPerFinding } from './studio-client';
@@ -118,4 +120,29 @@ test('resolveUserTierStep: an idx far past the end still reaches done:true, neve
 
 test('resolveUserTierStep: an EMPTY list is done:false (nothing to review at all is a different state than "reviewed everything")', () => {
   expect(resolveUserTierStep([], 0)).toEqual({ finding: null, done: false, total: 0 });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 additions — cancelled vocabulary, per-round grouping, elapsed label.
+// ---------------------------------------------------------------------------
+
+test('W7-B2: "cancelled" is a terminal state with its own honest copy', () => {
+  expect(isKbDrainTerminal('cancelled')).toBe(true);
+  const copy = drainStateCopy('cancelled', 0.4);
+  expect(copy.label).toBe('cancelled');
+  expect(copy.detail).toContain('Stopped on your request');
+});
+
+test('W7-B2 findingRounds: distinct rounds ascending; pre-W7 rows without a round tag group as 0', () => {
+  const f = (round?: number) => ({ key: `k${round}`, check: 'c', kind: 'k', file: 'f', message: 'm', tier: 'agent' as const, outcome: 'cleared' as const, ...(round !== undefined ? { round } : {}) });
+  expect(findingRounds([f(2), f(1), f(2)])).toEqual([1, 2]);
+  expect(findingRounds([f()])).toEqual([0]);
+});
+
+test('W7-B2 formatDrainElapsed: real elapsed label; null without startedAt or for a clock running backwards', () => {
+  const now = new Date('2026-08-20T10:02:05Z').getTime();
+  expect(formatDrainElapsed('2026-08-20T10:00:00Z', now)).toBe('2m 5s');
+  expect(formatDrainElapsed('2026-08-20T10:02:00Z', now)).toBe('5s');
+  expect(formatDrainElapsed(undefined, now)).toBeNull();
+  expect(formatDrainElapsed('2026-08-20T10:03:00Z', now)).toBeNull();
 });

@@ -65,6 +65,13 @@ export type PollUntilTerminalOptions<S> = {
   isRunning: (status: S) => boolean;
   intervalMs?: number;
   maxAttempts?: number;
+  /** W7-B2 (knowledge-15): a PROGRESS signature for a still-running status.
+   *  When two consecutive polls return DIFFERENT keys, the run demonstrably
+   *  moved and the attempt counter RESETS — the ceiling then only ever fires
+   *  after `maxAttempts` polls with zero progress ("stopped hearing from the
+   *  run"), never mid-way through a long run that keeps heartbeating. Omit
+   *  for the pre-W7 fixed ceiling. */
+  progressKey?: (status: S) => string;
   /** Called with every polled status, including the immediate first poll. */
   onUpdate: (status: S) => void;
   /** Called EXACTLY ONCE, instead of `onUpdate`, once `maxAttempts` is
@@ -102,6 +109,7 @@ export function pollUntilTerminal<S>(opts: PollUntilTerminalOptions<S>): () => v
   let attempts = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastStatus: S | null = null;
+  let lastProgressKey: string | null = null;
 
   const tick = async (): Promise<void> => {
     let s: S;
@@ -121,6 +129,14 @@ export function pollUntilTerminal<S>(opts: PollUntilTerminalOptions<S>): () => v
     lastStatus = s;
     opts.onUpdate(s);
     if (!opts.isRunning(s)) return; // terminal (or honestly unknown) — stop
+
+    // W7-B2 (knowledge-15): demonstrated progress resets the ceiling — the
+    // budget bounds SILENCE, not run length.
+    if (opts.progressKey) {
+      const key = opts.progressKey(s);
+      if (lastProgressKey !== null && key !== lastProgressKey) attempts = 0;
+      lastProgressKey = key;
+    }
 
     attempts += 1;
     if (attempts >= maxAttempts) {
@@ -208,6 +224,11 @@ export function pollKbDrain(kbId: string, runId: string, opts: PollKbDrainOption
     isRunning: (s) => s.state === 'running',
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
+    // W7-B2 (knowledge-15): the drain persists per transition AND heartbeats
+    // `updatedAt` every ~10s while a turn is in flight, so a LIVE run keeps
+    // resetting this poll's ceiling — 'timed-out' now means "the status file
+    // stopped moving for the whole budget", never "the run was merely long".
+    progressKey: (s) => `${s.updatedAt}·${s.state}·${s.round}·${s.perFinding.length}`,
     onUpdate: (s) => opts.onUpdate(s),
     onTimeout: (last) => opts.onUpdate({ ...(last ?? timedOutKbDrainStatus(kbId, runId)), state: 'timed-out' }),
   });

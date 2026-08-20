@@ -52,7 +52,13 @@ export default function NewKbPage() {
         : { kind: 'project' as const, ref };
     const result = await createKb({ id: slug, name: name.trim(), binding, desc: desc.trim() });
     if (result.ok) {
-      router.push('/knowledge');
+      // W7-B2 (knowledge-23): land on the KB that was JUST created (never the
+      // roster's first entry), and carry the seeding session the create
+      // spawned so the page can tell the operator about it.
+      const params = new URLSearchParams({ id: result.id ?? slug });
+      if (result.sessionId) params.set('seedSession', result.sessionId);
+      if (result.project) params.set('seedProject', result.project);
+      router.push(`/knowledge?${params.toString()}`);
     } else {
       setError(result.error ?? 'could not create the knowledge base');
       setSaving(false);

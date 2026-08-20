@@ -25,7 +25,7 @@ export const KB_DRAIN_MAX_ROUNDS_DISPLAY = 5;
 export type KbDrainDisplayState = KbDrainState | 'timed-out' | 'attaching' | 'idle';
 
 const SERVER_TERMINAL_STATES = new Set<KbDrainState>([
-  'green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed',
+  'green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed',
 ]);
 
 /** True for any state that will never change without a fresh dispatch —
@@ -60,6 +60,8 @@ export function drainStateCopy(state: KbDrainDisplayState, costUsd: number): Dra
       return { label: 'round cap', detail: `Ran the full ${KB_DRAIN_MAX_ROUNDS_DISPLAY}-round budget with findings still remaining — re-run to continue with a fresh budget.` };
     case 'cost-ceiling':
       return { label: 'cost ceiling', detail: `Hit this run's cost ceiling ($${costUsd.toFixed(2)} spent) — re-run to continue with a fresh budget.` };
+    case 'cancelled':
+      return { label: 'cancelled', detail: 'Stopped on your request — the rounds that already ran are kept below; re-run whenever you like.' };
     case 'failed':
       return { label: 'failed', detail: 'The run crashed unexpectedly — see the activity log below for what happened.' };
     case 'timed-out':
@@ -105,4 +107,24 @@ export function resolveUserTierStep(userFindings: readonly KbDrainPerFinding[], 
   if (total === 0) return { finding: null, done: false, total };
   if (idx >= total) return { finding: null, done: true, total };
   return { finding: userFindings[idx], done: false, total };
+}
+
+/** W7-B2 (knowledge-12): the distinct rounds present in an accumulated
+ *  `perFinding` list, ascending — the panel groups rows under a per-round
+ *  header. A pre-W7 status file without `round` tags yields `[0]`-style
+ *  grouping via the `?? 0` default (rendered as one untagged group). */
+export function findingRounds(perFinding: readonly KbDrainPerFinding[]): number[] {
+  return [...new Set(perFinding.map((f) => f.round ?? 0))].sort((a, b) => a - b);
+}
+
+/** W7-B2 (knowledge-14): elapsed-time label for a run — `null` when the
+ *  status predates `startedAt` (never a fabricated 0s). */
+export function formatDrainElapsed(startedAt: string | undefined, nowMs: number): string | null {
+  if (!startedAt) return null;
+  const startMs = new Date(startedAt).getTime();
+  if (!Number.isFinite(startMs) || nowMs < startMs) return null;
+  const totalSec = Math.floor((nowMs - startMs) / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }

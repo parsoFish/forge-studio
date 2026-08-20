@@ -1034,7 +1034,7 @@ inventory rather than one shared page-level contract:
     monitor and `/agents/[id]`'s own per-agent ledger use (reused
     UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
     and restated for `/agents/[id]` below is **not restated a third time
-    here**). `[data-component="recent-agent-runs-loading"]` before this
+    here**). `[data-component="recent-runs-loading"]` before this
     fetch resolves. The section root carries
     `data-recent-runs-unresolved=<n>` (W7-FIX-A1 A1-09): how many per-agent
     history reads came back `'unresolved'` (failed / unreachable — neither

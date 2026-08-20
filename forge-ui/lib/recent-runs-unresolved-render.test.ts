@@ -97,6 +97,6 @@ test('AgentsIndexView: recentRunsUnresolved omitted/0 → no notice, section roo
 
 test('AgentsIndexView: while the runs fetch is still loading, no notice renders even if a stale count is passed (loading is loading)', () => {
   const html = view({ recentRunsReady: false, recentRunsUnresolved: 2, recentRunsTotal: 2 });
-  expect(html).toContain('data-component="recent-agent-runs-loading"');
+  expect(html).toContain('data-component="recent-runs-loading"');
   expect(html).not.toContain('data-component="recent-agent-runs-unresolved"');
 });

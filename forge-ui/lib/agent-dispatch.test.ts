@@ -28,6 +28,7 @@ import {
   pollAgentFix,
   pollPreflightFix,
   pollDisplayState,
+  pollUntilTerminal,
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_POLL_MAX_ATTEMPTS,
   type PolledAgentRunStatus,
@@ -492,4 +493,70 @@ test('isStillWatching / pollDisplayState: transport (no status) and 5xx failed r
   expect(pollDisplayState({ ok: false, state: 'unknown', status: 503 })).toBe('watching');
   expect(pollDisplayState({ ok: false, state: 'unknown', status: 404 })).toBe('terminal');
   expect(pollDisplayState({ ok: false, state: 'unknown', status: 400 })).toBe('terminal');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 (knowledge-15) — progress-aware ceiling: demonstrated progress
+// (a changing progressKey) RESETS the attempt counter, so 'timed-out' bounds
+// SILENCE, never run length. pollKbDrain keys on the status file's own
+// updatedAt/state/round/perFinding-length, which the drain now advances per
+// transition AND heartbeats every ~10s.
+// ---------------------------------------------------------------------------
+
+test('pollKbDrain: a run whose updatedAt keeps ADVANCING never hits the ceiling (knowledge-15)', async () => {
+  let tickCount = 0;
+  const fetchStatus = vi.fn().mockImplementation(async () => {
+    tickCount += 1;
+    // updatedAt advances every poll — a live, heartbeating drain.
+    return drainStatus({ updatedAt: `2026-08-15T00:00:${String(tickCount % 60).padStart(2, '0')}.000Z` });
+  });
+  const onUpdate = vi.fn();
+  const stop = pollKbDrain('forge-dev', 'kb-drain-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
+  // Far past 3 attempts — with a fixed ceiling this would have timed out.
+  for (let i = 0; i < 12; i++) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  expect(fetchStatus.mock.calls.length).toBeGreaterThan(6);
+  expect(onUpdate).not.toHaveBeenCalledWith(expect.objectContaining({ state: 'timed-out' }));
+  stop();
+});
+
+test('pollKbDrain: a run whose status STOPS MOVING still times out after maxAttempts silent polls', async () => {
+  const frozen = drainStatus({ updatedAt: '2026-08-15T00:00:07.000Z' });
+  const fetchStatus = vi.fn().mockResolvedValue(frozen);
+  const onUpdate = vi.fn();
+  const stop = pollKbDrain('forge-dev', 'kb-drain-1', { fetchStatus, onUpdate, intervalMs: 10, maxAttempts: 3 });
+  for (let i = 0; i < 8; i++) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ state: 'timed-out' }));
+  stop();
+});
+
+test('pollUntilTerminal: progressKey resets attempts ONLY on change — identical keys still consume the budget', async () => {
+  const statuses = [
+    { state: 'running', key: 'a' }, { state: 'running', key: 'a' },
+    { state: 'running', key: 'b' }, // progress! resets
+    { state: 'running', key: 'b' }, { state: 'running', key: 'b' },
+  ];
+  let i = 0;
+  const fetchStatus = vi.fn().mockImplementation(async () => statuses[Math.min(i++, statuses.length - 1)]);
+  const timedOut = vi.fn();
+  const stop = pollUntilTerminal<{ state: string; key: string }>({
+    fetchStatus,
+    isRunning: (s) => s.state === 'running',
+    progressKey: (s) => s.key,
+    intervalMs: 10,
+    maxAttempts: 3,
+    onUpdate: () => {},
+    onTimeout: timedOut,
+  });
+  for (let j = 0; j < 10; j++) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  // Budget: polls 1,2 (a,a) consume 2; poll 3 (b) resets then consumes 1;
+  // polls 4,5 (b,b) consume 2 more → ceiling at poll 5.
+  expect(timedOut).toHaveBeenCalledTimes(1);
+  expect(fetchStatus).toHaveBeenCalledTimes(5);
+  stop();
 });
