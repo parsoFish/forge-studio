@@ -42,7 +42,7 @@ import { ProjectContractPanel } from '@/components/studio/project-builder/Projec
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { buildProjectSavePayload } from '@/lib/project-save-payload';
-import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
+import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
 
@@ -445,6 +445,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
         ))}
       </div>
 
+      {/* W7-B6 (operator note 11 / orch-02): the PRIMARY action group, above
+          the fold on BOTH tabs — Plan · Start development · Run a flow ·
+          Architect. Real controls (queue writes / flow-run POST), never an
+          inert select. */}
+      <StartWorkActions
+        projectId={id}
+        roadmap={roadmap}
+        flows={flows}
+        onChanged={refreshRoadmap}
+      />
+
       {/* W7-FIX-A1 (A1-02): a side-panel read (preflight / roadmap) failed while
           the project itself loaded — shown inline, never silently absent. */}
       {panelErrorList.length > 0 ? (
@@ -575,8 +586,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             />
 
             <OnboardWithAgent projectId={id} />
-
-            <UsedByFlows flows={flows} projectId={id} />
+            {/* W7-B6 (orch-02 / projects-20): the bottom "Run a flow" select
+                (UsedByFlows) is REMOVED — kick-off now lives in the
+                above-the-fold Start-work action group under the tab bar. */}
           </aside>
         </div>
       )}
