@@ -441,6 +441,20 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   };
 }
 
+/** Decode + slug-validate a registry-item URL id; writes its own 400 and
+ *  returns null on failure (mirrors bridge-studio-community.ts's
+ *  decodeIdOrRespond). */
+function decodeRegistryItemIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
+  try {
+    const id = decodeURIComponent(rawIdSegment);
+    assertSkillSlug(id, 'community item');
+    return id;
+  } catch (err) {
+    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+    return null;
+  }
+}
+
 /** Load the live registry tolerantly (missing file = the fresh-root empty
  *  baseline), apply `mutate`, then temp-write → re-parse → rename. A `null`
  *  from `mutate` means "refused, write NOTHING" — the file stays
@@ -514,46 +528,48 @@ export async function handleStudioWriteRoutes(
     return true;
   }
 
+  // (PUT and DELETE are two separate dispatch lines, each with its own
+  // explicit `method ===` test, so cli/dry-bridge-coverage.test.ts's route
+  // derivation sees BOTH — a combined `(PUT || DELETE)` arm derives only the
+  // first method and leaves the DELETE invisible to the coverage gate.)
   const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
-  if (registryItemMatch && (method === 'PUT' || method === 'DELETE')) {
+  if (registryItemMatch && method === 'PUT') {
     try {
-      let id: string;
-      try {
-        id = decodeURIComponent(registryItemMatch[1]);
-        assertSkillSlug(id, 'community item');
-      } catch (err) {
-        sendJson(res, 400, { error: sanitizeError(err) }, origin);
+      const id = decodeRegistryItemIdOrRespond(registryItemMatch[1], res, origin);
+      if (id === null) return true;
+      const parsed = parseRegistryItemBody(await readJson(req));
+      if (!parsed.ok) {
+        sendJson(res, 400, { error: parsed.error }, origin);
         return true;
       }
-
-      if (method === 'PUT') {
-        const parsed = parseRegistryItemBody(await readJson(req));
-        if (!parsed.ok) {
-          sendJson(res, 400, { error: parsed.error }, origin);
-          return true;
-        }
-        if (parsed.item.id !== id) {
-          sendJson(res, 400, { error: `item.id "${parsed.item.id}" does not match the URL id "${id}" — a rename is delete + add` }, origin);
-          return true;
-        }
-        let found = false;
-        mutateCommunityRegistry(ctx.forgeRoot, (items) => {
-          const next = items.map((i) => {
-            if (i.id !== id) return i;
-            found = true;
-            return parsed.item;
-          });
-          return found ? next : null; // 404 path writes nothing
+      if (parsed.item.id !== id) {
+        sendJson(res, 400, { error: `item.id "${parsed.item.id}" does not match the URL id "${id}" — a rename is delete + add` }, origin);
+        return true;
+      }
+      let found = false;
+      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+        const next = items.map((i) => {
+          if (i.id !== id) return i;
+          found = true;
+          return parsed.item;
         });
-        if (!found) {
-          sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
-          return true;
-        }
-        sendJson(res, 200, { ok: true, id }, origin);
+        return found ? next : null; // 404 path writes nothing
+      });
+      if (!found) {
+        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
         return true;
       }
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
 
-      // DELETE
+  if (registryItemMatch && method === 'DELETE') {
+    try {
+      const id = decodeRegistryItemIdOrRespond(registryItemMatch[1], res, origin);
+      if (id === null) return true;
       let found = false;
       mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         const next = items.filter((i) => {

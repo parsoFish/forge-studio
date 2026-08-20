@@ -43,6 +43,7 @@ import {
   skillTrustState,
   scanSkillPackage,
   installSkillPackage,
+  SkillIdOccupiedError,
   approveSkillDraft,
   repinSkillPackage,
   lintSkillTrust,
@@ -650,8 +651,9 @@ describe('installSkillPackage', () => {
     const packageDir = makePackageDir();
     assert.throws(
       () => installSkillPackage({ forgeRoot: root, id: 'occupied-id', packageDir, upstream: { source: 'https://x' } }),
-      /unmanaged|provenance/i,
-      'an unrelated occupancy must refuse loudly, naming why',
+      (err: unknown) =>
+        err instanceof SkillIdOccupiedError && /unmanaged|provenance/i.test((err as Error).message),
+      'an unrelated occupancy must refuse loudly via the NAMED SkillIdOccupiedError (route callers map it to 409 without string-matching), naming why',
     );
     assert.equal(readFileSync(skillPath('occupied-id', root), 'utf8'), before, 'the unrelated local skill must stay byte-identical');
   });

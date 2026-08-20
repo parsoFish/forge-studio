@@ -132,6 +132,15 @@ export interface InstallResult {
   alreadyInstalled: boolean;
 }
 
+/** W7-B3 (library-31) — thrown by `installSkillPackage` when `skills/<id>`
+ *  is occupied by a local skill with NO community-install provenance
+ *  (present-unmanaged): the package was never installed, so an
+ *  `alreadyInstalled` answer would be a laundered false success, and an
+ *  overwrite would destroy an unrelated file. A NAMED class so route
+ *  callers can map it to 409 (id collision) without string-matching the
+ *  message — the same explicit-error-contract shape ADR-042 blesses. */
+export class SkillIdOccupiedError extends Error {}
+
 /** Lint finding shape shared with `orchestrator/studio/validate.ts` — reused,
  *  not re-invented, so `forge studio lint` renders every finding uniformly. */
 export type LintFinding = Finding;
@@ -584,7 +593,7 @@ export function installSkillPackage(input: InstallInput): InstallResult {
   if (occupied !== null) {
     const { data } = matter(readFileSync(occupied, 'utf8'), {});
     if (extractProvenance((data ?? {}) as Record<string, unknown>) === null) {
-      throw new Error(
+      throw new SkillIdOccupiedError(
         `installSkillPackage: skills/${id} is occupied by a local skill with no community-install provenance (present-unmanaged) — refusing to claim alreadyInstalled for a package that was never installed`,
       );
     }
