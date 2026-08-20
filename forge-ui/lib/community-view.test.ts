@@ -44,12 +44,18 @@ import { test, expect } from 'vitest';
 import {
   filterByKind,
   filterCommunityItems,
+  filterByHub,
   installStateLabel,
   signalsLabel,
   hubLabel,
   communityBadgeForSkill,
   sortCommunityItems,
   freshnessBadge,
+  lastRefreshLabel,
+  lastTerminalRefreshOf,
+  installActionForItem,
+  COMMUNITY_SORT_KEYS,
+  COMMUNITY_SORT_LABELS,
 } from './community-view.ts';
 import type { CommunityItem, CommunityHub } from './community-client.ts';
 
@@ -422,4 +428,175 @@ test('freshnessBadge: a fetchedAt in the future (clock skew) never renders a neg
 test('freshnessBadge: is wall-clock independent — the SAME fetchedAt + nowMs pair always produces the SAME badge (D7)', () => {
   const fetchedAt = '2026-08-10T00:00:00.000Z';
   expect(freshnessBadge(fetchedAt, NOW)).toEqual(freshnessBadge(fetchedAt, NOW));
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-05): search matches id + hub label + provenance/
+// attributedTo + upstream — not just name/desc. The operator's natural query
+// terms (the id in the URL, the hub names in the strip, the attribution on
+// the card) all resolved to zero results.
+// ---------------------------------------------------------------------------
+
+test('filterCommunityItems: matches on id ("tdd" finds superpowers-tdd whose display name never says tdd)', () => {
+  const items = [item({ id: 'superpowers-tdd', name: 'Test-Driven Development' }), item({ id: 'other', name: 'Other' })];
+  expect(filterCommunityItems(items, 'TDD').map((i) => i.id)).toEqual(['superpowers-tdd']);
+});
+
+test('filterCommunityItems: matches on the hub label shown in the strip', () => {
+  const items = [
+    item({ id: 'a', hub: { id: 'superpowers', name: 'Superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' } }),
+    item({ id: 'b', hub: null }),
+  ];
+  expect(filterCommunityItems(items, 'superpowers').map((i) => i.id)).toEqual(['a']);
+});
+
+test('filterCommunityItems: matches on the signals attribution (provenance shown on the card)', () => {
+  const items = [
+    item({ id: 'a', signals: { stars: 1, attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 1 } }),
+    item({ id: 'b' }),
+  ];
+  expect(filterCommunityItems(items, 'obra').map((i) => i.id)).toEqual(['a']);
+});
+
+test('filterCommunityItems: matches on the upstream URL host', () => {
+  const items = [item({ id: 'a', upstream: 'https://github.com/anthropics/skills' }), item({ id: 'b' })];
+  expect(filterCommunityItems(items, 'anthropics').map((i) => i.id)).toEqual(['a']);
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-04): the sort control's label for the fetchedAt sort is
+// "Last checked" — the fact it actually sorts on (when FORGE last verified
+// the row), never the overloaded word "Updated" (which reads as upstream
+// change time, a DIFFERENT claim rendered separately on the detail page).
+// ---------------------------------------------------------------------------
+
+test('COMMUNITY_SORT_LABELS names the fetchedAt sort "Last checked", never "Updated"', () => {
+  expect(COMMUNITY_SORT_LABELS.updated).toBe('Last checked');
+  for (const key of COMMUNITY_SORT_KEYS) {
+    expect(typeof COMMUNITY_SORT_LABELS[key]).toBe('string');
+    expect(COMMUNITY_SORT_LABELS[key].length).toBeGreaterThan(0);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-17): hub chips are FILTERS on the local index — pure
+// predicate here; the chip's outbound URL stays a secondary affordance.
+// ---------------------------------------------------------------------------
+
+test('filterByHub(null) passes every item through as a NEW array', () => {
+  const items = [item({ id: 'a' }), item({ id: 'b' })];
+  const result = filterByHub(items, null);
+  expect(result).toEqual(items);
+  expect(result).not.toBe(items);
+});
+
+test('filterByHub keeps only items whose hub id matches', () => {
+  const hub = { id: 'superpowers', name: 'Superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' };
+  const items = [item({ id: 'a', hub }), item({ id: 'b', hub: null })];
+  expect(filterByHub(items, 'superpowers').map((i) => i.id)).toEqual(['a']);
+  expect(filterByHub(items, 'nothing-indexed-hub')).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16/community-03): the registry-level freshness line —
+// meta.lastRefresh is the agent-commit stamp; null is the honest "no refresh
+// has ever been committed", never a fabricated date.
+// ---------------------------------------------------------------------------
+
+test('lastRefreshLabel: null reads as never-refreshed, with no date in it', () => {
+  const label = lastRefreshLabel(null, NOW);
+  expect(label.toLowerCase()).toContain('never');
+  expect(label).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+});
+
+test('lastRefreshLabel: a real lastRefresh renders a relative age', () => {
+  const twoHoursAgo = new Date(NOW - 2 * 60 * 60 * 1000).toISOString();
+  expect(lastRefreshLabel(twoHoursAgo, NOW)).toMatch(/2h ago/);
+});
+
+test('lastRefreshLabel: an unparsable stamp degrades to the never-refreshed wording, not NaN', () => {
+  const label = lastRefreshLabel('not-a-date', NOW);
+  expect(label).not.toMatch(/NaN/);
+  expect(label.toLowerCase()).toContain('never');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (library-31): the fourth install state — present locally, unmanaged.
+// Distinct label; never conflated with installed OR not-installed.
+// ---------------------------------------------------------------------------
+
+test('installStateLabel: present-unmanaged reads as locally-present-but-unmanaged, distinct from every other label', () => {
+  const label = installStateLabel('present-unmanaged');
+  expect(label.toLowerCase()).toContain('unmanaged');
+  expect(label).not.toBe(installStateLabel('installed'));
+  expect(label).not.toBe(installStateLabel('not-installed'));
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-09 / -18 / -19): the ONE install-action decision for the
+// detail page — every item either installs, routes to its owning page, or
+// says exactly why not (with the real upstream to browse). Pure, so the page
+// can never re-derive it divergently.
+// ---------------------------------------------------------------------------
+
+test('installActionForItem: a non-vendored skill is a browse-upstream dead-end WITH the real URL (community-09)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'handoff', vendored: false, installState: 'not-installed', upstream: 'https://github.com/obra/superpowers', installMethod: null });
+  expect(action).toEqual({ action: 'browse-upstream', href: 'https://github.com/obra/superpowers' });
+});
+
+test('installActionForItem: present-unmanaged routes to the owning library page, never an Install button (library-31)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'handoff', vendored: false, installState: 'present-unmanaged', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'present-unmanaged', href: '/skills/handoff' });
+});
+
+test('installActionForItem: an INSTALLED connection always links its own /connections page — system-provided included (community-18)', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'git', vendored: false, installState: 'installed', upstream: 'https://git-scm.com', installMethod: 'system-provided' });
+  expect(action).toEqual({ action: 'open-owning', href: '/connections/git' });
+});
+
+test('installActionForItem: an npm connection not yet installed requires the CONFIRM flow, never a one-click spawn (community-19)', () => {
+  const action = installActionForItem({ kind: 'mcp', id: 'github-mcp', vendored: false, installState: 'not-installed', upstream: 'https://x', installMethod: 'npm' });
+  expect(action).toEqual({ action: 'install-confirm' });
+});
+
+test('installActionForItem: a vendored skill not yet installed installs directly (draft pipeline owns trust)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'dependency-diff-review', vendored: true, installState: 'not-installed', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'install' });
+});
+
+test('installActionForItem: an installed vendored skill routes to its owning page', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'dependency-diff-review', vendored: true, installState: 'installed', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'open-owning', href: '/skills/dependency-diff-review' });
+});
+
+test('installActionForItem: an external-method connection says browse at the real upstream', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'gh', vendored: false, installState: 'not-installed', upstream: 'https://cli.github.com', installMethod: 'external' });
+  expect(action).toEqual({ action: 'browse-upstream', href: 'https://cli.github.com' });
+});
+
+test('installActionForItem: a system-provided connection not present has nothing to install (honest absence)', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'docker', vendored: false, installState: 'not-installed', upstream: 'https://docker.com', installMethod: 'system-provided' });
+  expect(action).toEqual({ action: 'none-system' });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 review F2 (community-16) — lastTerminalRefreshOf. The defect this
+// pins against: /community fetched sessions with the DEFAULT activeOnly=true
+// (?active=1 excludes every terminal row), so the "open-last-refresh-session"
+// link was dead code — permanently null. The page now fetches
+// fetchStudioSessions(false); this helper owns the selection.
+// ---------------------------------------------------------------------------
+
+test('lastTerminalRefreshOf: picks the NEWEST terminal row (timestamp-prefixed session ids sort lexicographically)', () => {
+  const rows = [
+    { terminal: true, sessionId: '2026-08-17T10-00-00-aa' },
+    { terminal: false, sessionId: '2026-08-19T09-00-00-cc' },
+    { terminal: true, sessionId: '2026-08-18T12-54-32-bb' },
+  ];
+  expect(lastTerminalRefreshOf(rows)?.sessionId).toBe('2026-08-18T12-54-32-bb');
+});
+
+test('lastTerminalRefreshOf: null when no terminal row exists — and an all-ACTIVE list (the ?active=1 fetch shape) yields null, which is exactly why the page must fetch with activeOnly=false', () => {
+  expect(lastTerminalRefreshOf([])).toBeNull();
+  expect(lastTerminalRefreshOf([{ terminal: false, sessionId: '2026-08-19T09-00-00-cc' }])).toBeNull();
 });

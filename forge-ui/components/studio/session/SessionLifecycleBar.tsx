@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { SessionLifecycle, CancelOutcome } from '@/lib/session-lifecycle-client';
 import { formatIdle, describeLifecycle } from '@/lib/session-lifecycle-client';
 import { CancelSessionButton } from './CancelSessionButton';
@@ -94,6 +95,19 @@ export function SessionLifecycleBar({
           <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 4 }}>
             Cancel to clear it from your queue, or start a fresh session of this kind.
           </div>
+        )}
+        {/* W7-B3 (community-01 / sessions-kinds-32): a session with nothing
+            left to run here — crashed, stalled, or terminal — offers the way
+            forward: the kind's own kickoff. Never rendered on a healthy
+            working/awaiting session (the operator's next step is HERE). */}
+        {(state === 'crashed' || state === 'stalled' || state === 'terminal') && (
+          <Link
+            href={`/sessions/${encodeURIComponent(kind)}/new`}
+            data-action="start-new-session"
+            style={{ display: 'inline-block', marginTop: 6, fontSize: 12, color: 'var(--ember)', textDecoration: 'none' }}
+          >
+            Start a new {kind} session →
+          </Link>
         )}
         {lastCancel !== null && <CancelOutcomeNotice outcome={lastCancel} />}
       </div>

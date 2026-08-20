@@ -17,11 +17,13 @@ import { tmpdir } from 'node:os';
 import {
   runKbDrain,
   requestKbDrainCancel,
+  listKbRuns,
   KB_DRAIN_STALE_MS,
   type KbDrainStatus,
   type KbDrainOpts,
 } from './bridge-studio-kb-drain.ts';
 import { collectKbFindings } from './kb-lint-summary.ts';
+import { deriveKbActiveJob } from './kb-job-state.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
 import { startBridge } from './ui-bridge.ts';
 
@@ -366,5 +368,117 @@ test('POST /api/studio/kbs/:id/drain/cancel — 409 when no active run', async (
   } finally {
     await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 code-review round — the forced-cancel branch must ALSO stake the
+// cancel FLAG. A "stale" status is not proof the loop is DEAD: a drain that
+// sat QUEUED behind another job on the same per-kbId lock never heartbeats
+// either, so it reads stale while being perfectly alive. Terminating only the
+// status file let such a run start late, re-persist 'running' over the
+// operator's 'cancelled', and execute every agent turn to a real terminal.
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel flag; a late-starting queued run cannot resurrect', async () => {
+  const iso = await makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'cx-kb');
+    const runId = 'cx-kb-drain-queued1';
+    const stale = new Date(Date.now() - (KB_DRAIN_STALE_MS + 60_000)).toISOString();
+    writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, updatedAt: stale });
+
+    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    assert.equal(res.status, 200, JSON.stringify(res.json));
+    assert.equal(res.json['mode'], 'forced');
+    assert.ok(
+      existsSync(join(iso.root, '_logs', `_kb-drain-${runId}`, 'cancel.json')),
+      'the forced branch must ALSO write the cancel flag, not only the terminal status',
+    );
+
+    // Simulated LATE start: the run was queued, not dead, and reaches the head
+    // of the queue AFTER the operator was told it had been terminated.
+    const brainDir = join(iso.root, 'brain', 'cx-kb');
+    const late: Finding & { check: string; kind: string } = {
+      category: 'flag',
+      file: join(brainDir, 'themes', 'late.md'),
+      message: 'synthetic fixture finding: late',
+      check: 'fixtureCheck',
+      kind: 'late',
+      resolution: 'agent',
+    };
+    let turns = 0;
+    let autoCalls = 0;
+    const status = await runKbDrain(iso.root, 'cx-kb', runId, {
+      lint: () => ({ findings: [late] }),
+      applyAutoFixes: () => {
+        autoCalls += 1;
+        return { ...EMPTY_AUTO_RESULT, remaining: [late] };
+      },
+      runFixTurn: async (input) => {
+        turns += 1;
+        return { runId: input.runId, cleared: false, costUsd: 0.01 };
+      },
+    });
+    assert.equal(status.state, 'cancelled', JSON.stringify(status));
+    assert.equal(turns, 0, 'a cancelled run must dispatch no agent turn at all');
+    assert.equal(autoCalls, 0, 'a cancelled run must not apply auto-fixes either');
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 code-review round — ONE terminal-event definition. The active-job
+// gate and the RecentRuns widget read the same `_brainfix-<runId>/
+// events.jsonl` through the same helpers (cli/kb-job-state.ts), so they can
+// never disagree about whether a consolidate has finished.
+// ---------------------------------------------------------------------------
+
+function writeConsolidateEvents(root: string, runId: string, lines: readonly string[]): void {
+  const dir = join(root, '_logs', `_brainfix-${runId}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'), lines.join('\n') + '\n');
+}
+
+test('consolidate terminal reading — the active-job gate and listKbRuns agree on running/done/failed', () => {
+  const { root } = makeDrainRoot('agree-kb');
+  try {
+    const stamp = Date.now().toString(36);
+    const running = `agree-kb-consolidate-${stamp}`;
+    // A staked-out dir with a start event and no terminal = running, both ways.
+    writeConsolidateEvents(root, running, [
+      JSON.stringify({ event_type: 'start', ts: new Date().toISOString() }),
+    ]);
+    assert.deepEqual(deriveKbActiveJob(root, 'agree-kb'), { kind: 'consolidate', runId: running });
+    const runningRow = listKbRuns(root, 'agree-kb').find((r) => r.id === running);
+    assert.equal(runningRow?.status, 'running');
+
+    // Terminal 'end' -> gate clears AND the row reports done, with the cost and
+    // cleared/total detail read off that same event.
+    writeConsolidateEvents(root, running, [
+      JSON.stringify({ event_type: 'start', ts: new Date().toISOString() }),
+      JSON.stringify({ event_type: 'end', ts: new Date().toISOString(), cost_usd: 0.42, metadata: { clearedCount: 2, total: 3 } }),
+    ]);
+    assert.equal(deriveKbActiveJob(root, 'agree-kb'), null);
+    const doneRow = listKbRuns(root, 'agree-kb').find((r) => r.id === running);
+    assert.equal(doneRow?.status, 'done');
+    assert.equal(doneRow?.costUsd, 0.42);
+    assert.equal(doneRow?.detail, 'cleared 2/3');
+
+    // Terminal 'error' -> gate clears AND the row reports failed. A garbage
+    // line between the events must not break either reader.
+    const failed = `agree-kb-consolidate-${(Date.now() + 1).toString(36)}`;
+    writeConsolidateEvents(root, failed, [
+      JSON.stringify({ event_type: 'start', ts: new Date().toISOString() }),
+      '{ not json',
+      JSON.stringify({ event_type: 'error', ts: new Date().toISOString() }),
+    ]);
+    assert.equal(deriveKbActiveJob(root, 'agree-kb'), null);
+    const failedRow = listKbRuns(root, 'agree-kb').find((r) => r.id === failed);
+    assert.equal(failedRow?.status, 'failed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

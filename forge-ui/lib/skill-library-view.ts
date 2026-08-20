@@ -47,19 +47,55 @@ export function groupSkillLibrary(entries: readonly SkillLibraryEntry[]): Groupe
  * hand-authored skill apart from an operator-authored one (both are
  * `source: 'local'` with `provenance: null`) — inventing that distinction
  * would be exactly the "declared data enforced nowhere" antipattern this
- * initiative exists to fix, so this deliberately emits only the three
- * badges backed by a real field: `community` (source, or a local entry
- * whose `provenance` proves it arrived via the install pipeline),
- * `draft` and `needs-review` (trust).
+ * initiative exists to fix.
+ *
+ * W7-B3 (library-21): `provenance !== null` alone is NOT proof of community
+ * origin — the authoring finalizer stamps `provenance.source =
+ * 'forge-authoring'` on locally-authored skills too, which made a skill the
+ * operator had just authored render COMMUNITY under the LOCAL heading. The
+ * badge keys on WHERE the provenance says it came from: `forge-authoring`
+ * earns its own honest `authored` badge; anything else provenance-stamped
+ * (an upstream URL from the install pipeline) or `source: 'community'` is
+ * `community`. `reference` marks a browse-only registry row (W7-B3,
+ * community-25 — no local bytes at all).
  */
-export type SkillBadge = 'community' | 'draft' | 'needs-review';
+export type SkillBadge = 'community' | 'authored' | 'reference' | 'draft' | 'needs-review';
+
+/** The exact provenance.source stamp cli/bridge-studio-authoring.ts's
+ *  copyStagingToLibrary writes for locally-authored packages. */
+export const AUTHORING_PROVENANCE_SOURCE = 'forge-authoring';
 
 export function skillBadges(entry: SkillLibraryEntry): SkillBadge[] {
   const badges: SkillBadge[] = [];
-  if (entry.source === 'community' || entry.provenance !== null) badges.push('community');
+  const authored = entry.provenance !== null && entry.provenance.source === AUTHORING_PROVENANCE_SOURCE;
+  if (authored) badges.push('authored');
+  else if (entry.source === 'community' || entry.provenance !== null) badges.push('community');
+  if (entry.reference === true) badges.push('reference');
   if (entry.trust === 'draft') badges.push('draft');
   if (entry.trust === 'needs-review') badges.push('needs-review');
   return badges;
+}
+
+// ---------------------------------------------------------------------------
+// Shelf preview — W7-B3 (library-27)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Library Skills shelf's preview cards. The old concatenate-then-slice
+ * let local entries fill every slot, so a community entry could NEVER
+ * surface even though the shelf's count included them. Rule: when community
+ * entries exist, at least one preview slot is theirs — locals fill the rest.
+ * Pure; returns a NEW array.
+ */
+export function shelfSkillPreview(groups: GroupedSkillLibrary, limit: number): SkillLibraryEntry[] {
+  if (groups.community.length === 0) return groups.local.slice(0, limit);
+  if (groups.local.length === 0) return groups.community.slice(0, limit);
+  // Community gets up to a third of the slots (at least one); locals fill
+  // the rest; any shortfall on either side flows back to the other.
+  const communityShare = Math.min(groups.community.length, Math.max(1, Math.floor(limit / 3)));
+  const localShare = Math.min(groups.local.length, limit - communityShare);
+  const community = groups.community.slice(0, limit - localShare);
+  return [...groups.local.slice(0, localShare), ...community].slice(0, limit);
 }
 
 // ---------------------------------------------------------------------------

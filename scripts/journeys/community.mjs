@@ -312,20 +312,44 @@ export const journey = defineJourney({
         check(domCount === real, `CM-3: data-item-count matches the independently-recomputed cross-kind total (dom=${domCount}, real=${real})`);
         const domCardCount = await page.evaluate(() => document.querySelectorAll('[data-card-type="community-item"]').length);
         check(domCardCount === real, `CM-3: one rendered card per real item (${domCardCount} vs ${real})`);
-        await caption(page, 'The cross-kind community browser — skills, hooks, MCPs, tools, one shelf.');
+
+        // W7-B3 (community-16/-03): the registry-state strip — last-refresh
+        // truth (this checkout's registry has meta.lastRefresh: null, so it
+        // must read "never"), plus the refresh-session links' home. The
+        // registryDirty fact is asserted as PRESENT, not as a value — the
+        // harness checkout is clean, but a locally-dirty run must not fail
+        // the gate over an honest answer.
+        const strip = page.locator('[data-section="refresh-registry-state"]');
+        check(await strip.count() > 0, 'CM-3: [data-section="refresh-registry-state"] renders (W7-B3)');
+        const lastRefreshText = (await page.evaluate(() => document.querySelector('[data-component="registry-last-refresh"]')?.textContent ?? '')).trim();
+        const realLastRefresh = loadRegistryDoc().meta?.lastRefresh ?? null;
+        if (realLastRefresh === null) {
+          check(/never/i.test(lastRefreshText), `CM-3: with meta.lastRefresh null the strip honestly reads "never…" (got "${lastRefreshText.slice(0, 60)}")`);
+        } else {
+          check(lastRefreshText.length > 0, 'CM-3: the strip states the real last refresh');
+        }
+        const dirtyAttr = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-registry-dirty'));
+        check(dirtyAttr === 'true' || dirtyAttr === 'false' || dirtyAttr === 'null',
+          `CM-3: data-registry-dirty carries the three-state git answer (got "${dirtyAttr}")`);
+        check(await page.locator('[data-action="add-registry-item"]').count() > 0,
+          'CM-3: the "+ Add item" registry-CRUD entry renders (W7-B3, community-23)');
+        await caption(page, 'The cross-kind community browser — skills, hooks, MCPs, tools, one shelf — with the registry\'s own freshness stated.');
       },
     },
     {
       id: 'community-hub-strip',
-      title: 'The hub strip — real per-hub item counts, an honest zero included',
+      title: 'The hub strip — real per-hub counts, honest declared-only labels, chips that FILTER',
       narration:
         'Every source hub renders with a DERIVED item count — forge\'s own ' +
         'seed hub (the two vendored packages), the superpowers hub (three ' +
         'catalog skills), and skills.sh, which forge indexes NOTHING from ' +
-        'yet: it still renders "0 items", never dropped from the strip.',
+        'yet: it reads "declared — nothing indexed", never dropped from the ' +
+        'strip and never mistaken for a browsable source (W7-B3, ' +
+        'community-17). A chip is now a FILTER on the local index; the ' +
+        'outbound site link survives as a secondary ⧉ affordance.',
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
-        console.log('\n[CM-4] The hub strip — real per-hub counts');
+        console.log('\n[CM-4] The hub strip — real per-hub counts + chip filters');
         check(await page.locator('[data-component="hub-strip"]').count() > 0, 'CM-4: [data-component="hub-strip"] renders');
         const realHubCount = realHubs().length;
         const domHubCount = await page.evaluate(() =>
@@ -334,21 +358,41 @@ export const journey = defineJourney({
 
         for (const hubId of ['forge-seed', 'superpowers']) {
           const real = realHubItemCount(hubId);
-          const dom = parseInt((await page.locator(`[data-hub-id="${hubId}"]`).getAttribute('data-hub-item-count')) ?? '-1', 10);
+          const dom = parseInt((await page.locator(`[data-action="filter-hub"][data-hub-id="${hubId}"]`).getAttribute('data-hub-item-count')) ?? '-1', 10);
           check(dom === real, `CM-4: hub "${hubId}"'s data-hub-item-count is derived, not declared (dom=${dom}, real=${real})`);
         }
 
         // The honest zero — skills.sh is a real, registered hub with nothing
-        // indexed from it today. It still renders, with a genuine "0", never
-        // silently dropped from the strip.
+        // indexed from it today. It still renders, labelled a DECLARED
+        // source, never silently dropped and never a fake browsable count.
         const zeroReal = realHubItemCount('skills-sh');
         check(zeroReal === 0, 'CM-4: (sanity) skills.sh genuinely has zero real items in this checkout — the honest-zero case this beat proves');
-        const zeroCard = page.locator('[data-hub-id="skills-sh"]');
+        const zeroCard = page.locator('[data-action="filter-hub"][data-hub-id="skills-sh"]');
         check(await zeroCard.count() > 0, 'CM-4: the skills.sh hub is listed even though it has zero items — never dropped for being empty');
         const zeroDom = await zeroCard.getAttribute('data-hub-item-count');
         check(zeroDom === '0', `CM-4: skills.sh reads a genuine "0", not a fabricated or missing count (got "${zeroDom}")`);
-        await caption(page, 'Every hub renders — including skills.sh, which forge indexes nothing from yet: an honest zero, never dropped.');
-        await frame(page, 'cm-2-hub-strip', 'Part 2 (community) — the hub strip: real per-hub counts, an honest zero for skills.sh', { key: true });
+        check((await zeroCard.getAttribute('data-hub-declared-only')) === 'true',
+          'CM-4: skills.sh carries data-hub-declared-only="true" — a declared source, not something forge browses (W7-B3, community-17)');
+        check(await page.locator('[data-action="open-hub-site"][data-hub-id="skills-sh"]').count() > 0,
+          'CM-4: the outbound site link survives as a secondary affordance');
+
+        // W7-B3 (community-17): a chip click FILTERS the local index — and a
+        // second click clears it. Counts recomputed off the real hub data.
+        await page.locator('[data-action="filter-hub"][data-hub-id="superpowers"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter') === 'superpowers',
+          null, { timeout: 5000 }).catch(() => {});
+        const filteredCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10));
+        check(filteredCount === realHubItemCount('superpowers'),
+          `CM-4: filtering by the superpowers hub shows exactly its real items (dom=${filteredCount}, real=${realHubItemCount('superpowers')})`);
+        await frame(page, 'cm-2-hub-filter', 'Part 2 (community) — a hub chip FILTERS the index to that hub\'s real items', { key: true });
+        await page.locator('[data-action="filter-hub"][data-hub-id="superpowers"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter') === 'all',
+          null, { timeout: 5000 }).catch(() => {});
+        await caption(page, 'Every hub renders — skills.sh honestly reads "declared — nothing indexed", and a chip click filters the index.');
+        await frame(page, 'cm-2-hub-strip', 'Part 2 (community) — the hub strip: real per-hub counts, an honest declared-only label for skills.sh', { key: true });
       },
     },
     {
@@ -912,6 +956,22 @@ export const journey = defineJourney({
         const installBtn = page.locator('[data-action="install-community-item"]');
         check((await installBtn.getAttribute('data-install-routed-to')) === 'connection-install',
           'CM-19: data-install-routed-to="connection-install" — routes to R3-04\'s real pipeline');
+        // W7-B3 (community-19): a real npm install NEVER fires on one click —
+        // the first click ARMS an explicit confirm naming the exact
+        // package@version child process; the second fires it.
+        check((await installBtn.getAttribute('data-confirming')) === 'false', 'CM-19: the install button starts un-armed');
+        await installBtn.click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-action="install-community-item"]')?.getAttribute('data-confirming') === 'true',
+          null, { timeout: 5000 }).catch(() => {});
+        check((await installBtn.getAttribute('data-confirming')) === 'true',
+          'CM-19: the FIRST click only arms the confirm — nothing has run yet');
+        const confirmNotice = (await page.evaluate(() => document.querySelector('[data-component="install-confirm-notice"]')?.textContent ?? '')).trim();
+        check(/npm install .+@/.test(confirmNotice),
+          `CM-19: the confirm names the real npm install child process, package@version included (got "${confirmNotice.slice(0, 80)}")`);
+        check(await page.locator('[data-would-install-argv]').count() === 0,
+          'CM-19: nothing fired yet — no outcome rendered between arm and confirm');
+        await frame(page, 'cm-15-mcp-confirm', 'Part 2 (community) — the armed confirm: the exact npm child process named BEFORE anything runs', { key: true });
         await installBtn.click().catch(() => {});
         await page.waitForFunction(
           () => document.querySelector('[data-would-install-argv]') !== null,
@@ -1043,8 +1103,86 @@ export const journey = defineJourney({
         check(await page.locator('[data-section="kickoff-selector"]').count() === 0,
           'CM-23: NO project/KB selector renders — community-refresh is the one kind with selector:"none" (nothing forge-wide to pick)');
         check(await page.locator('[data-action="start-session"]').count() > 0, 'CM-23: the Start button is present — never clicked in this gate (no live agent spawn)');
-        await caption(page, 'Just Start + a model tier — the registry is forge\'s own, nothing to select.');
+
+        // W7-B3 (community-08): the optional focus brief — targeted "find me
+        // skills for X" is typeable right here; empty still means full
+        // refresh, so Start stays enabled either way.
+        check(await page.locator('[data-section="kickoff-prompt"] [data-field="kickoff-prompt"]').count() > 0,
+          'CM-23: the optional Focus brief field renders (W7-B3, community-08)');
+        check((await page.locator('[data-action="start-session"]').isDisabled().catch(() => true)) === false,
+          'CM-23: Start stays enabled with an EMPTY brief — optional means optional');
+
+        // W7-B3 (community-12): the tier that will actually run is
+        // pre-selected (the envelope's cheapest = the server default), and
+        // the session-directory preview names the REAL anchor, never a
+        // <forge-anchor> placeholder.
+        await page.waitForFunction(
+          () => document.querySelector('input[name="modelTier"]:checked') !== null,
+          null, { timeout: 10000 }).catch(() => {});
+        const checkedTier = await page.evaluate(() => document.querySelector('input[name="modelTier"]:checked')?.value ?? null);
+        check(checkedTier === 'sonnet', `CM-23: the cheapest envelope tier (sonnet) is pre-selected — what will ACTUALLY run (got "${checkedTier}")`);
+        const contextText = (await page.evaluate(() => document.querySelector('[data-section="kickoff-context"]')?.textContent ?? '')).trim();
+        check(contextText.includes('.community-registry'), 'CM-23: the session-directory preview names the real .community-registry anchor');
+        check(!contextText.includes('<forge-anchor>'), 'CM-23: the <forge-anchor> placeholder is gone');
+
+        await caption(page, 'Just Start + a pre-selected tier + an optional focus — the registry is forge\'s own, nothing to select.');
         await frame(page, 'cm-23-community-refresh-kickoff', 'Part 2 (community) — the refresh agent\'s kickoff page, unattended-safe', { key: true });
+      },
+    },
+    {
+      id: 'community-registry-crud-affordances',
+      title: 'Registry curation lives in Studio — add form + per-row edit/remove (affordances only)',
+      narration:
+        'W7-B3 (community-23): the registry was a hand-curated file whose ' +
+        'only writer was an agent commit path — Studio itself had no ' +
+        'add/edit/remove. This beat proves the AFFORDANCES: the /community/new ' +
+        'form (required-field gating, no star-count input — a number nobody ' +
+        'fetched is a fabricated signal) and a registry row\'s Edit + ' +
+        'two-step Remove controls. It deliberately writes NOTHING — the ' +
+        'write path is pinned end-to-end by ' +
+        'cli/bridge-community-registry-crud.test.ts, and a gate must not ' +
+        'reformat the seed registry\'s commented YAML as a side effect.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[CM-24] Registry CRUD affordances — /community/new + row controls');
+
+        await page.goto(watch.uiUrl + '/community/new', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-registry-form"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('[data-page="community-registry-form"][data-form-mode="add"]').count() > 0,
+          'CM-24: /community/new renders the add form');
+        for (const field of ['registry-id', 'registry-kind', 'registry-name', 'registry-category', 'registry-source-url', 'registry-provenance']) {
+          check(await page.locator(`[data-field="${field}"]`).count() > 0, `CM-24: field [data-field="${field}"] renders`);
+        }
+        check(await page.locator('[data-field="registry-stars"]').count() === 0,
+          'CM-24: NO numeric star-count input exists — hand-entered star counts are fabricated signals');
+        check((await page.locator('[data-action="submit-registry-item"]').isDisabled().catch(() => false)) === true,
+          'CM-24: Add is disabled until the required fields are filled');
+        await frame(page, 'cm-24-registry-form', 'Part 2 (community) — the registry add form: curated fields only, no invented signals', { key: true });
+
+        // A registry-origin row's detail page carries Edit + a two-step
+        // Remove. Prove the arm step (and abort it) without deleting.
+        await page.goto(watch.uiUrl + `/community/skill/${CM_CATALOG_SKILL_ID}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-detail"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('[data-section="registry-row-actions"]').count() > 0,
+          'CM-24: a registry-origin row shows the curation controls');
+        check(await page.locator('[data-action="edit-registry-item"]').count() > 0, 'CM-24: Edit renders');
+        const removeBtn = page.locator('[data-action="remove-registry-item"]');
+        check((await removeBtn.getAttribute('data-confirming')) === 'false', 'CM-24: Remove starts un-armed');
+        await removeBtn.click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-action="remove-registry-item"]')?.getAttribute('data-confirming') === 'true',
+          null, { timeout: 5000 }).catch(() => {});
+        check((await removeBtn.getAttribute('data-confirming')) === 'true', 'CM-24: the first click only ARMS the remove');
+        await page.locator('[data-action="remove-registry-item-abort"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-action="remove-registry-item"]')?.getAttribute('data-confirming') === 'false',
+          null, { timeout: 5000 }).catch(() => {});
+        check((await removeBtn.getAttribute('data-confirming')) === 'false', 'CM-24: abort disarms — nothing was deleted');
+        await frame(page, 'cm-24-registry-row-actions', 'Part 2 (community) — Edit + two-step Remove on a registry row, armed then aborted', { key: true });
       },
     },
   ],

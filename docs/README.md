@@ -60,6 +60,7 @@ before forge merges). Everything between runs unattended.
 - [Studio first-flow UX](./reference/studio-first-flow-ux.md) — the UX spec backing the shipped first-flow starters.
 - [Agent cost ceilings](./agent-cost-ceilings.md) — which standalone spawn shapes can enforce a ceiling, the per-agent default `budgets.maxBudgetUsd` values and how they were derived, and the operator-ceiling precedence rule.
 - [Request-derived filesystem path audit](./security-request-path-audit.md) — the finite enumeration of every fs read/write whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe`, plus the escape-shape catalogue. Add a row when a route turns request data into a path.
+- [Community registry writes](./community-registry-writes.md) — who writes `studio/community/registry.yaml` and how writes reach git: Studio (CRUD routes + refresh-approve) writes the file atomically; the operator commits via their normal git flow; the UI shows the uncommitted-changes state.
 - [Verify-cycle idea corpus](./verify-cycle-ideas/README.md) — hand-authored initiative ideas fed to `scripts/verify-cycle.mjs --idea-file` for the gitpulse reference-project harness.
 
 ---

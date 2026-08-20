@@ -79,9 +79,82 @@ export function findLiveDrain(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// The ONE run-log terminal-event reading (W7-B2 code-review round)
+// ---------------------------------------------------------------------------
+//
+// `_brainfix-<runId>/events.jsonl`'s terminal shape ('end' = done, 'error' =
+// failed, first `ts` = when it started) was parsed independently by the
+// active-job gate below and by `readConsolidateRunRow` (the RecentRuns widget,
+// cli/bridge-studio-kb-drain.ts). Two copies of one on-disk contract means a
+// future change to the event shape lands in one and not the other, and the
+// gate and the run history then disagree about whether a run has finished.
+// Both now read through the helpers here — this module is the leaf both
+// importers already depend on.
+//
+// `readBrainFixState` (cli/bridge-studio-kbs.ts) deliberately does NOT use
+// these: it scans BACKWARD, recognises two extra legacy message shapes
+// ('brain-fix.end' / 'brain-fix.crashed') and reads `metadata.cleared` for a
+// cleared/not-cleared verdict these two callers have no notion of. Folding it
+// in would change what the other two treat as terminal, so it keeps its own
+// reader on purpose.
+
+/** One parsed line of a run's `events.jsonl`. */
+export type KbRunEvent = {
+  event_type?: string;
+  ts?: string;
+  cost_usd?: number;
+  metadata?: Record<string, unknown>;
+};
+
+/** Line-tolerant JSONL parse — an unparseable line is skipped, never fatal
+ *  (these logs are read while they are still being appended to). */
+export function parseKbRunEvents(raw: string): KbRunEvent[] {
+  const events: KbRunEvent[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      events.push(JSON.parse(line) as KbRunEvent);
+    } catch {
+      continue;
+    }
+  }
+  return events;
+}
+
+/** The run's terminal event, or null while it is still running. FIRST
+ *  terminal wins: a run writes exactly one (sub-turns get their own log dir
+ *  precisely so their terminals cannot leak in). */
+export function terminalKbRunEvent(events: readonly KbRunEvent[]): { status: 'done' | 'failed'; event: KbRunEvent } | null {
+  for (const ev of events) {
+    if (ev.event_type === 'end') return { status: 'done', event: ev };
+    if (ev.event_type === 'error') return { status: 'failed', event: ev };
+  }
+  return null;
+}
+
+/** The first `ts` string in the log, verbatim ('' semantics are the caller's
+ *  — never fabricate a stamp), or null when no event carries one. */
+export function firstKbRunEventTs(events: readonly KbRunEvent[]): string | null {
+  for (const ev of events) {
+    if (typeof ev.ts === 'string') return ev.ts;
+  }
+  return null;
+}
+
+/** The first event `ts` that actually parses to a finite epoch, or null. */
+export function firstKbRunEventMs(events: readonly KbRunEvent[]): number | null {
+  for (const ev of events) {
+    if (typeof ev.ts !== 'string') continue;
+    const t = new Date(ev.ts).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
 /** True while `_brainfix-<runId>/events.jsonl` records no terminal
  *  ('end'/'error') event AND the run is younger than the staleness ceiling.
- *  `startedMs` falls back to the first event's `ts`, else unknown → stale. */
+ *  The start stamp falls back to the first event's `ts`, else unknown → stale. */
 function consolidateRunning(forgeRoot: string, runId: string, nowMs: number): boolean {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
   let raw = '';
@@ -90,25 +163,13 @@ function consolidateRunning(forgeRoot: string, runId: string, nowMs: number): bo
   } catch {
     return false;
   }
-  let firstTs: number | null = null;
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue;
-    let ev: { event_type?: string; ts?: string };
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (firstTs === null && typeof ev.ts === 'string') {
-      const t = new Date(ev.ts).getTime();
-      if (Number.isFinite(t)) firstTs = t;
-    }
-    if (ev.event_type === 'end' || ev.event_type === 'error') return false;
-  }
+  const events = parseKbRunEvents(raw);
+  if (terminalKbRunEvent(events) !== null) return false;
   // Dispatch stakes the dir out synchronously with an EMPTY events.jsonl (or
   // none at all) before the queued run starts — treat a young, terminal-less
   // run as running. With no readable timestamp, fall back to the base36
   // dispatch stamp embedded in the runId itself.
+  let firstTs = firstKbRunEventMs(events);
   if (firstTs === null) {
     const stamp = runId.slice(runId.lastIndexOf('-') + 1);
     const t = parseInt(stamp, 36);

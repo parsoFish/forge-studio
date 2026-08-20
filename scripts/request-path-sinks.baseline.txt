@@ -23,7 +23,8 @@ cli/bridge-recovery.ts renameSync 1
 cli/bridge-recovery.ts rmSync 1
 cli/bridge-studio-authoring.ts mkdirSync 1
 cli/bridge-studio-authoring.ts writeFileSync 2
-cli/bridge-studio-community.ts existsSync 1
+cli/bridge-studio-community.ts execFileSync 1
+cli/bridge-studio-community.ts existsSync 3
 cli/bridge-studio-community.ts spawnSync 1
 cli/bridge-studio-connections.ts spawnSync 1
 cli/bridge-studio-hooks.ts mkdirSync 1
@@ -38,7 +39,7 @@ cli/bridge-studio-kb-drain.ts rmSync 1
 cli/bridge-studio-kb-drain.ts writeFileSync 3
 cli/bridge-studio-kbs.ts appendFileSync 2
 cli/bridge-studio-kbs.ts existsSync 6
-cli/bridge-studio-kbs.ts mkdirSync 8
+cli/bridge-studio-kbs.ts mkdirSync 9
 cli/bridge-studio-kbs.ts openSync 1
 cli/bridge-studio-kbs.ts readdirSync 5
 cli/bridge-studio-kbs.ts readFileSync 3
@@ -63,12 +64,14 @@ cli/bridge-studio-skills.ts readFileSync 1
 cli/bridge-studio-skills.ts rmSync 1
 cli/bridge-studio-skills.ts writeFileSync 1
 cli/bridge-studio-writes.ts execFileSync 2
-cli/bridge-studio-writes.ts existsSync 13
-cli/bridge-studio-writes.ts mkdirSync 7
+cli/bridge-studio-writes.ts existsSync 14
+cli/bridge-studio-writes.ts mkdirSync 8
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
+cli/bridge-studio-writes.ts renameSync 1
 cli/bridge-studio-writes.ts spawn 1
-cli/bridge-studio-writes.ts writeFileSync 6
+cli/bridge-studio-writes.ts unlinkSync 1
+cli/bridge-studio-writes.ts writeFileSync 7
 cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
@@ -448,7 +451,7 @@ orchestrator/studio/skill-install-ledger.ts writeFileSync 1
 orchestrator/studio/skill-library.ts existsSync 1
 orchestrator/studio/skill-library.ts mkdirSync 2
 orchestrator/studio/skill-library.ts readdirSync 2
-orchestrator/studio/skill-library.ts readFileSync 7
+orchestrator/studio/skill-library.ts readFileSync 8
 orchestrator/studio/skill-library.ts realpathSync 1
 orchestrator/studio/skill-library.ts statSync 1
 orchestrator/studio/skill-library.ts writeFileSync 4

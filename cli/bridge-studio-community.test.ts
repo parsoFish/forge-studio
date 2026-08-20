@@ -88,6 +88,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -304,6 +305,32 @@ test('GET /api/studio/community: returns hubs (with itemCount) and the cross-kin
   assert.ok(body.items.some((i) => i['kind'] === 'tool' && i['id'] === 'listed-tool'));
   assert.ok(body.items.some((i) => i['kind'] === 'mcp' && i['id'] === 'listed-mcp'));
   assert.ok(body.items.some((i) => i['kind'] === 'hook' && i['id'] === 'listed-hook'));
+});
+
+// W7-B3 review F7: `?kind=<k>` narrows the index the bridge BUILDS — the
+// /hooks community shelf must not pay one probeConnection child process per
+// catalog connection to render vendored hook rows. Observable contract:
+// with mcp/tool connections PRESENT in the catalog, ?kind=hook returns ONLY
+// hook items (the connections loop — the probe site — never ran for them),
+// and an unknown kind is refused, never silently treated as "no filter".
+test('GET /api/studio/community?kind=hook: only hook items even with catalog connections present; ?kind=bogus → 400', async () => {
+  writeCatalog({
+    communitySkills: [{ id: 'kf-catalog-skill', source: 'https://example.com/list-hub/kf' }],
+    tools: [{ id: 'kf-tool' }],
+    mcps: [{ id: 'kf-mcp' }],
+  });
+  vendorHookPackage('kf-hook');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community?kind=hook`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { items: Array<Record<string, unknown>>; meta: unknown };
+  assert.ok(body.items.length > 0, 'the vendored hook must be in the filtered index');
+  assert.ok(body.items.every((i) => i['kind'] === 'hook'), `?kind=hook must return ONLY hooks, got kinds: ${body.items.map((i) => i['kind']).join(',')}`);
+  assert.ok(body.items.some((i) => i['id'] === 'kf-hook'));
+  assert.ok(body.meta !== undefined && body.meta !== null, 'the meta block stays on the filtered response (the client parser requires it)');
+
+  const bad = await fetch(`${bridgeUrl}/api/studio/community?kind=bogus`);
+  assert.equal(bad.status, 400, 'an unknown kind is a caller error — never silently the full (probe-triggering) index');
 });
 
 // W6-CR-2: fetchedAt/fetchedBy/upstreamUpdatedAt carried through the wire —
@@ -752,4 +779,65 @@ test('M3: handleStudioCommunityRoutes is MOUNTED in the real cli/ui-bridge.ts di
   const body = (await res.json()) as { id: string; kind: string };
   assert.equal(body.id, 'm3-mount-proof-tool');
   assert.equal(body.kind, 'tool');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-16 / community-03): the list route carries registry-level
+// `meta` — `lastRefresh` (the commitRegistryDraft stamp, straight from
+// studio/community/registry.yaml's own meta block, never re-derived) and
+// `registryDirty` (whether the repo-tracked registry file has uncommitted
+// changes — Studio writes it on approve; the operator commits via their
+// normal git flow, and the page must SAY when that commit is still pending).
+// `registryDirty` is honest three-state: true/false only when git actually
+// answered; null when the forge root is not a git repo (never a fabricated
+// "clean").
+// ---------------------------------------------------------------------------
+
+test('W7-B3 meta: GET /api/studio/community carries meta.lastRefresh from the registry and registryDirty=null outside a git repo', async () => {
+  writeCatalog({});
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'registry.yaml'),
+    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T10:00:00.000Z' }, items: [] }),
+    'utf8',
+  );
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { meta?: { lastRefresh: string | null; registryDirty: boolean | null } };
+  assert.ok(body.meta, 'the list payload must carry a meta block');
+  assert.equal(body.meta!.lastRefresh, '2026-08-19T10:00:00.000Z');
+  assert.equal(body.meta!.registryDirty, null, 'a non-git forge root must answer null (unknown), never a fabricated clean/dirty');
+});
+
+test('W7-B3 meta: registryDirty is false after a commit and true once the file is modified', async () => {
+  writeCatalog({});
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: forgeRoot, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' } });
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  git('add', '--', 'studio/community/registry.yaml');
+  git('commit', '-q', '-m', 'seed registry');
+
+  const clean = (await (await fetch(`${bridgeUrl}/api/studio/community`)).json()) as { meta: { registryDirty: boolean | null } };
+  assert.equal(clean.meta.registryDirty, false, 'a committed, unmodified registry must read clean');
+
+  writeFileSync(
+    join(forgeRoot, 'studio', 'community', 'registry.yaml'),
+    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T11:00:00.000Z' }, items: [] }),
+    'utf8',
+  );
+  const dirty = (await (await fetch(`${bridgeUrl}/api/studio/community`)).json()) as { meta: { registryDirty: boolean | null } };
+  assert.equal(dirty.meta.registryDirty, true, 'an uncommitted modification must surface as dirty');
+
+  // Leave no git repo behind for the tests that assume a bare tempdir.
+  rmSync(join(forgeRoot, '.git'), { recursive: true, force: true });
+});
+
+test('W7-B3 meta: a missing registry file degrades to lastRefresh:null (fresh-root shape), never a 500', async () => {
+  writeCatalog({});
+  rmSync(join(forgeRoot, 'studio', 'community', 'registry.yaml'), { force: true });
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { meta: { lastRefresh: string | null } };
+  assert.equal(body.meta.lastRefresh, null);
 });

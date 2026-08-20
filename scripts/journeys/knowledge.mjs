@@ -1570,6 +1570,16 @@ export const journey = defineJourney({
                   () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
                   null, { timeout: 8000 },
                 ).catch(() => {});
+                // W7-B2: the page root advertises [data-health-ready="true"] only once
+                // kbDetail.health has actually arrived — data-page-ready settles on the
+                // roster + detail reads alone, so the health payload lags it (bd forge
+                // 2026-08-09). Wait on the real readiness signal before reading any
+                // per-check row. Bounded + tolerant: the assertions below are still the
+                // gate, this only removes the race.
+                await page.waitForFunction(
+                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-health-ready') === 'true',
+                  null, { timeout: 10000 },
+                ).catch(() => {});
                 try {
                   await page.waitForFunction(() => document.querySelector('[data-check="checkProjectBrainIndexes"]') !== null, null, { timeout: 10000 });
                 } catch { /* checked below */ }
