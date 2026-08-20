@@ -24,6 +24,7 @@ import {
   renderPlanDoc,
   renderPlanHtml,
   writePlanDoc,
+  extractGwtBlocks,
   type ArchitectSession,
   type ProposedInitiative,
   type CouncilTranscript,
@@ -473,5 +474,88 @@ test('writePlanDoc: writes PLAN.html sibling alongside PLAN.md', () => {
   const html = readFileSync(join(sessionDir, 'PLAN.html'), 'utf8');
   assert.match(html, /^<!DOCTYPE html>/);
   assert.match(html, /<title>PLAN — 2026-05-24T00-00-00 — project-y<\/title>/);
+});
+
+// ---------------------------------------------------------------------------
+// 17. W7-B7 (artifact-plan-29) — extractGwtBlocks must parse the GWT shape the
+// architect ACTUALLY emits: bold-markdown prose (`**Given** …` on its own line
+// or all three clauses inline), not just the YAML-ish `given:` key style. The
+// old YAML-only regex returned [] on 100% of real plans, so every PLAN the
+// operator was asked to approve read "No GWT blocks parsed".
+// ---------------------------------------------------------------------------
+
+test('extractGwtBlocks: multi-line bold-markdown prose (the real architect output — demo-project 2026-08-18)', () => {
+  const body = [
+    '## Acceptance criteria',
+    '',
+    '**Given** the forge CLI is invoked as `forge --version` from any working directory,  ',
+    '**When** the process runs,  ',
+    '**Then** it prints the bare semver string to stdout and exits 0.',
+    '',
+    '**Given** a test `cli/version.test.ts` is added,  ',
+    '**When** the test suite runs,  ',
+    '**Then** the test passes.',
+  ].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].given, 'the forge CLI is invoked as `forge --version` from any working directory');
+  assert.equal(blocks[0].when, 'the process runs');
+  assert.equal(blocks[0].then, 'it prints the bare semver string to stdout and exits 0.');
+});
+
+test('extractGwtBlocks: single-line inline triple (betterado 2026-07-01 shape)', () => {
+  const body = '**Given** the acceptance tests, **When** live evidence captured, **Then** `CaptureLiveEvidence` called; real REST GET in demo.json.';
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 1);
+  assert.deepEqual(blocks[0], {
+    given: 'the acceptance tests',
+    when: 'live evidence captured',
+    then: '`CaptureLiveEvidence` called; real REST GET in demo.json.',
+  });
+});
+
+test('extractGwtBlocks: bare Given/When/Then prose lines (no bold markers) still parse', () => {
+  const body = ['Given a repo with no config,', 'When onboarding runs,', 'Then a default config is written.'].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].given, 'a repo with no config');
+});
+
+test('extractGwtBlocks: YAML key style keeps parsing (no regression), and mixed docs collect both', () => {
+  const body = [
+    '- given: "X exists"',
+    '  when:  "Y happens"',
+    '  then:  "Z is observable"',
+    '',
+    '**Given** prose condition,',
+    '**When** prose action,',
+    '**Then** prose outcome.',
+  ].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].given, 'X exists');
+  assert.equal(blocks[1].given, 'prose condition');
+});
+
+test('extractGwtBlocks: a body with no GWT of any shape returns []', () => {
+  assert.deepEqual(extractGwtBlocks('# Just a title\n\nSome prose about giving and taking.'), []);
+});
+
+// ---------------------------------------------------------------------------
+// 18. W7-B7 (artifact-plan-30) — the PLAN's operator notice must point at the
+// surface that exists (/artifact?run=_architect-<sid>&type=plan), not the
+// retired /architect/<sid> screen (M7-4 / ADR-031).
+// ---------------------------------------------------------------------------
+
+test('renderPlanHtml: the review notice names the /artifact plan surface, never the retired /architect route', () => {
+  const html = renderPlanHtml(fxSession({ session_id: '2026-05-24T00-00-00' }));
+  assert.ok(html.includes('/artifact?run=_architect-2026-05-24T00-00-00&amp;type=plan'), 'notice points at the live artifact plan surface');
+  assert.ok(!/\/architect\/2026-05-24T00-00-00/.test(html), 'no reference to the retired /architect/<sid> route remains');
+});
+
+test('renderPlanDoc: the PLAN.md operator note names the /artifact plan surface', () => {
+  const md = renderPlanDoc(fxSession({ session_id: '2026-05-24T00-00-00' }));
+  assert.ok(md.includes('/artifact?run=_architect-2026-05-24T00-00-00&type=plan'));
+  assert.ok(!md.includes('/architect/2026-05-24T00-00-00'));
 });
 
