@@ -632,7 +632,10 @@ inventory rather than one shared page-level contract:
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
   WI hexes additionally carry `data-wi-cost-usd`; a fanned-out dev node's
   own aggregate carries `data-fanout-phase` rather than
-  `data-hex-kind="phase"`. A single **flowLineage** run threads across
+  `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
+  same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
+  dev-phase cost/model/retries are never attributed to a single work item
+  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop` →
   `forge-reflect`) — each renders only its own slice of nodes, so
   switching `/flows/<flowId>` changes which hexes appear. MONITOR also
@@ -756,18 +759,61 @@ inventory rather than one shared page-level contract:
   build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
   breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
   / planning session (`a[data-crumb="session"]`) / PLAN with
-  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`. `type=verdict&mode=gate`
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`.
+  **W7-B7 request honesty:** every optional artifact GET is decided by
+  `lib/artifact-request-plan.ts` from the run's own `artifactsReady` — an
+  artifact the run declares absent renders the honest empty state with NO
+  guaranteed-404 probe (only an unknown/orphan run probes its type's primary
+  directly). The structured plan.json / PLAN.md branches were DELETED
+  (artifact-plan-19: nothing ever produced either file; PLAN.html is the one
+  cycle plan artifact, always view-only — the interactive plan gate is the
+  architect session's). The filename chip links the RAW artifact file when
+  one resolved (`a[data-action="open-raw-artifact"]`, artifact-plan-26). The
+  verdict GATE is armed by the queue state alone (gated ⇒ armed, round-2
+  send-backs included; active/complete/failed ⇒ view — artifact-plan-11/-14),
+  and a missing verdict.json / reflection.json in view mode renders the SAME
+  shared empty state as every other type (artifact-plan-12/-13 — never a
+  blank page, never a fabricated "closes clean"). `type=pr` renders the
+  `[data-section="pr-hero"][data-pr-url]` card — the parsed pr-description.md
+  merged with the run's own `prUrl` (derived from its `reviewer.pr-opened`
+  event; `lib/artifact-pr-view.ts` adds the number from the URL and claims
+  `merged`/`open` ONLY where the run status supports it). `type=demo` view
+  mode renders the DEMO.md narrative (`[data-section="demo-narrative"]
+  iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison.
+  `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
-  rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
-  `[data-section="review-findings"][data-findings-count]` with per-row
-  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`
-  — then `[data-section="demo-comparison"]` /
+  rendered in BOTH verdict modes) —
+  `[data-section="review-findings"][data-findings-state="present|absent"]
+  [data-findings-count]` with per-row
+  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`;
+  a known-absent artifact renders the explicit `data-findings-state="absent"`
+  one-liner (artifact-plan-16 — fetched only when the flow's own
+  review-findings producer node completed, same rule as the run page) —
+  then the review-shape summary
+  (`[data-section="review-summary"][data-region-count][data-blocking-count]`
+  with `a[data-action="jump-to-blocking"]` when a blocker exists), then
+  `[data-section="demo-comparison"]` /
   `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
-  the verdict form —
+  the per-region cards — each `[data-demo-region][data-region-comment-count]
+  [data-region-collapsed]` with a `[data-action="toggle-region"]` header
+  (regions collapse by default only on walls of > 12 regions, unless they
+  carry comments — `lib/demo-review-view.ts`, artifact-plan-31); every
+  authored comment row carries `[data-action="edit-comment"]` +
+  `[data-action="delete-comment"]` (delete is how a NON-blocking comment is
+  cleared — artifact-plan-15; editing renders `[data-comment-editing="true"]`
+  with `[data-field="comment-edit-body"]` + `[data-action="save-comment-edit"]`),
+  resolve stays blocking-only — plus the verdict form (position:sticky so the
+  control never sits 14,000px down) —
   `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
   (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
   is `approve | send-back`), submit button
-  `[data-action="approve-and-merge"|"send-back"]`. View-mode verdict renders
+  `[data-action="approve-and-merge"|"send-back"]`. Every verdict surface
+  (GateBar's caller, DemoReviewSurface, ReviewVerdictForm) resolves its
+  initiative id through the ONE rule in `lib/initiative-id.ts`
+  (artifact-plan-18/-25; the bridge's gate route recovers the same way —
+  defence in depth), and the demo-gate GateBar's wire body carries the
+  `rationale` + synthesized send-back `acceptanceCriteria` the bridge
+  requires (artifact-plan-V01 — `lib/gate-verdict-body.ts`). View-mode verdict renders
   the stamp with `[data-verdict-decision="approve|send-back"]` (mapped from the
   on-disk VerdictRecord via `verdictRecordToDoc` — R4-08-F3 fixed the raw-shape
   passthrough that rendered every verdict "Approved"). `type=reflection&mode=view`
@@ -778,7 +824,9 @@ inventory rather than one shared page-level contract:
   fieldset — options render `[data-option-label][data-option-selected]`, a
   freeform question a `[data-question-freeform]` textarea; below the list a
   `[data-field="freeform"]` notes box and a `[data-action="submit-reflection"]`
-  button gated on all-answered; once submitted (or `answered`)
+  button gated on all-answered — while disabled it carries a `title` naming
+  the reason and a sibling `[data-reflect-answered-count]` "N of M answered"
+  line (W7-B7 artifact-plan-24); once submitted (or `answered`)
   `[data-section="reflect-done"]`. **R4-09-F3 automated mode:** when the reflector
   self-answered (every question inferred), the gate renders a read-only view —
   `[data-section="reflect-questions"][data-reflect-automated="true"]`, each
