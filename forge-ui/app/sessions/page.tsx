@@ -3,13 +3,15 @@
 /**
  * /sessions — the aggregate in-flight sessions index (W6-B11).
  *
- * Reachable from Home's active-sessions strip ("all sessions (N) →" overflow
- * link) and from the Agents pillar's secondary nav (Sessions is deliberately
+ * Reachable from Home's sessions-needing-you strip ("all sessions (N) →" —
+ * W7-B1: the strip never unmounts, so this link survives an empty session
+ * set) and from the Agents pillar's secondary nav (Sessions is deliberately
  * NOT its own top-level pillar — operator decision, see
- * docs/forge-ui-dom-and-harness.md's /sessions entry). Thin fetch-only
- * wrapper (mirrors `app/projects/page.tsx`'s own split exactly) around the
+ * docs/forge-ui-dom-and-harness.md's /sessions entry). Thin fetch-owning
+ * wrapper (mirrors `app/projects/page.tsx`'s own split) around the
  * pure, props-driven `SessionsIndexBody`
- * (`components/studio/SessionsIndex.tsx`).
+ * (`components/studio/SessionsIndex.tsx`), plus the ONE live-refresh
+ * subscribe (W7-B1, home-sessions-12 — see the effect below).
  */
 
 import { useCallback, useEffect, useState } from 'react';
