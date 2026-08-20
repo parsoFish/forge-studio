@@ -46,9 +46,12 @@ export const journey = defineJourney({
               await page.goto(watch.uiUrl + '/architect/new', { waitUntil: 'domcontentloaded' });
               await page.waitForSelector('main[data-page="architect-new"][data-page-ready="true"]', { timeout: 30000 });
               await page.waitForSelector('[data-section="new-idea"]', { timeout: 10000 });
-              await caption(page, "One idea. One field. Type it like you'd tell a colleague.");
+              // W7-B6 (crosscut-21): the project field is a SELECT over real
+              // roster ids — wait for the roster to land, then pick, never type.
+              await page.waitForSelector('[data-section="new-idea"][data-roster-state="ok"]', { timeout: 10000 });
+              await caption(page, "One idea. Pick the project, type it like you'd tell a colleague.");
               await sleep(ACT);
-              await page.locator('[data-section="new-idea"] [data-field="project"]').fill(PROJECT);
+              await page.locator('[data-section="new-idea"] [data-field="project"]').selectOption(PROJECT);
               await page.locator('[data-section="new-idea"] [data-field="idea"]').click();
               await page.locator('[data-section="new-idea"] [data-field="idea"]').pressSequentially(IDEA, { delay: 18 });
               await sleep(THINK);
@@ -248,7 +251,9 @@ export const journey = defineJourney({
                   () => document.querySelector('main[data-page="architect-new"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                await caption(p, 'Where it starts — the new-idea box: a project, and what you want built.');
+                await caption(p, 'Where it starts — the new-idea box: a project picker, tier + ceiling, and what you want built.');
+                // W7-B6: the project field is a roster SELECT — pick, don't type.
+                await p.waitForSelector('[data-section="new-idea"][data-roster-state="ok"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-section="new-idea"] [data-field="project"]').scrollIntoViewIfNeeded().catch(() => {});
                 await p.locator('[data-section="new-idea"] [data-field="project"]').hover().catch(() => {});
                 await sleep(THINK);
