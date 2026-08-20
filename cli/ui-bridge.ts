@@ -3103,7 +3103,12 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * (kb-cleanup's `.kb-<id>`, community-refresh's registry anchor) have their
  * own anchor rules and never pass through this check.
  */
-function unknownProjectReason(ctx: HttpContext, candidate: string): string | null {
+function unknownProjectReason(ctx: HttpContext, candidate: unknown): string | null {
+  // Shape/containment stay each route's own (pre-existing, pinned) 400
+  // contracts — a non-string or non-id-shaped value falls THROUGH this check
+  // so those guards keep firing exactly as before. The roster 404 is only
+  // for a well-formed id that names no discovered project.
+  if (typeof candidate !== 'string' || !SAFE_PROJECT_NAME_RE.test(candidate)) return null;
   const known = discoverProjects(ctx.projectsRoot, ctx.forgeRoot).some((p) => p.id === candidate);
   return known ? null : `unknown project "${candidate}" — not in the project roster (onboard it at /projects/new first)`;
 }
