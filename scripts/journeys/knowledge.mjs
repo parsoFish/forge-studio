@@ -421,7 +421,7 @@ folded. ${SCRATCH_GUIDANCE_TEXT}
 // ── scratch KB #4 (knowledge-kb-cleanup-launch / -approve) — R4-19-F2 port ──
 // A FOURTH scratch KB, disjoint from the three above, for the NEW kb-cleanup
 // interactive session kind (studio/session-kinds.yaml, R4-19-F2): an operator
-// opens a KB, clicks "Cleanup plan" (kb-maintenance's OTHER launcher, next to
+// opens a KB, clicks "Cleanup plan" (the KB-actions group's OTHER launcher, next to
 // Consolidate), a brain-maintenance agent drafts a reviewable plan from that
 // KB's real lint findings, the operator reviews + approves it, and a real
 // drain runs. Bound `{kind: 'flow', ref: 'forge-develop'}` — deliberately NOT
@@ -1017,8 +1017,16 @@ export const journey = defineJourney({
               // Cleanup — drive the real kb-delete on the scratch KB (proves delete works
               // end to end through the UI), then defensively rmSync in case the UI path
               // didn't fully land. Zero scratch-KB state may survive this beat.
-              page.once('dialog', (dialog) => { dialog.accept().catch(() => {}); });
-              await page.locator('[data-component="kb-maintenance"] [data-action="kb-delete"]').click().catch(() => {});
+              // W7-B2 (knowledge-24): delete moved into the Health tab's KB-actions
+              // danger zone with a TYPED-ID confirm — arm, type the id, confirm
+              // (no browser dialog any more).
+              await page.locator('[data-tab="health"]').click().catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
+                null, { timeout: 8000 }).catch(() => {});
+              await page.locator('[data-section="kb-danger-zone"] [data-action="kb-delete"]').click().catch(() => {});
+              await page.locator('[data-field="kb-delete-confirm"]').fill(SCRATCH_KB_ID).catch(() => {});
+              await page.locator('[data-action="kb-delete-confirm"]').click().catch(() => {});
               let deletedFromDisk = false;
               { const dl = Date.now() + 8000; while (Date.now() < dl) { if (!existsSync(SCRATCH_KB_DIR)) { deletedFromDisk = true; break; } await sleep(150); } }
               check(deletedFromDisk, `kb-ingest: kb-delete removed brain/${SCRATCH_KB_ID}/ from disk`);
@@ -1043,7 +1051,7 @@ export const journey = defineJourney({
               cleanScratchKbDrain(); // guard against leftover state from a prior crashed run
               seedScratchKbDrain();
 
-              const TERMINAL_DRAIN_STATES = ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed', 'timed-out'];
+              const TERMINAL_DRAIN_STATES = ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out', 'unreadable'];
               const waitForTerminalDrainState = (p, timeout) => p.waitForFunction(
                 (terminals) => {
                   const v = document.querySelector('[data-component="kb-drain-panel"]')?.getAttribute('data-drain-state');
@@ -1098,6 +1106,31 @@ export const journey = defineJourney({
                 check(drainState === 'no-progress',
                   `kb-drain: [data-drain-state] reaches the real, honest terminal for a CI-suppressed agent-tier finding (got "${drainState || '(none)'}") — never a fabricated "green"`);
                 check(runIdBefore.length > 0, 'kb-drain: a real server-minted runId is recorded on the panel (data-drain-run-id)');
+
+                // W7-B2 (knowledge-01/08/12): the panel renders PER-FINDING rows —
+                // file · rule · outcome — grouped under per-round headers, never a
+                // bare state chip the operator has to take on faith.
+                const findingRows = await page.evaluate(() => Array.from(
+                  document.querySelectorAll('[data-drain-finding-file]'),
+                ).map((el) => ({
+                  file: el.getAttribute('data-drain-finding-file') ?? '',
+                  tier: el.getAttribute('data-drain-finding-tier') ?? '',
+                  outcome: el.getAttribute('data-drain-finding-outcome') ?? '',
+                })));
+                check(findingRows.length > 0 && findingRows.every((r) => r.file && r.tier && r.outcome),
+                  `kb-drain: per-finding rows render file/tier/outcome for the seeded finding (got ${findingRows.length} row(s)) — knowledge-01/08`);
+                const roundGroups = await page.locator('[data-drain-round-group]').count().catch(() => 0);
+                check(roundGroups > 0, `kb-drain: finding rows are grouped under per-round headers ([data-drain-round-group], got ${roundGroups}) — knowledge-12`);
+
+                // W7-B2 (knowledge-14): Cancel exists and is HONEST — against this
+                // already-terminal run the endpoint refuses with 409 ("no active
+                // drain run"), never a fake success. (The live-run Stop control's
+                // rendering is pinned by lib/kb-drain-panel-render.test.ts — a
+                // NO_SPAWN drain terminates too fast to click it deterministically.)
+                const cancelRes = await fetch(`${watch.bridgeUrl}/api/studio/kbs/${encodeURIComponent(SCRATCH_KB_DRAIN_ID)}/drain/cancel`, { method: 'POST' });
+                check(cancelRes.status === 409,
+                  `kb-drain: POST .../drain/cancel on a terminal run refuses with 409 (got ${cancelRes.status}) — cancel is real and honest (knowledge-14)`);
+
                 await frame(page, 'kb-drain-1-terminal', `Knowledge — drain-to-green reached a real terminal (data-drain-state="${drainState}")`);
 
                 // Reattach-on-return (the operator-brief invariant: "nav-away never loses
@@ -1128,11 +1161,36 @@ export const journey = defineJourney({
                   `kb-drain: the reattached state matches the terminal reached before navigating away (before="${drainState}" after="${reattachedState}")`);
                 await frame(page, 'kb-drain-2-reattached', `Knowledge — nav-away and back reattaches to the SAME run (data-drain-run-id="${reattachedRunId}")`, { key: true });
 
-                await page.locator('[data-component="kb-maintenance"] [data-action="kb-index"]').click().catch(() => {});
-                await page.waitForFunction(
-                  () => (document.querySelector('[data-component="kb-maintenance-result"]')?.textContent ?? '') === 'index refreshed ✓',
-                  null, { timeout: 15000 }).catch(() => {});
-                check(true, 'S3.2: kb-index maintenance triggered');
+                // W7-B2 (knowledge-20): the Health tab's shared RecentRuns widget
+                // lists this KB's run history — the drain that just terminated must
+                // appear as a real ledger row (the tab round-trip above re-fetched
+                // GET /api/studio/kbs/:id/runs).
+                let kbRunRows = 0;
+                try {
+                  await page.waitForFunction(() => {
+                    const sec = document.querySelector('[data-section="kb-recent-runs"]');
+                    const count = sec?.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count');
+                    return count !== null && count !== undefined && Number(count) > 0;
+                  }, null, { timeout: 10000 });
+                } catch { /* checked below */ }
+                kbRunRows = await page.evaluate(() => Number(
+                  document.querySelector('[data-section="kb-recent-runs"] [data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0',
+                ));
+                check(kbRunRows > 0, `kb-drain: the Health tab's RecentRuns widget lists this KB's drain run (data-ledger-count=${kbRunRows}) — knowledge-20`);
+
+                // W7-B2 (knowledge-06): "Refresh this KB's index" moved into the ONE
+                // KB-actions group; its result span reports BOTH halves (this KB's
+                // link repairs + the meta-index rebuild), so match the stable prefix.
+                await page.locator('[data-component="kb-action-group"] [data-action="kb-index"]').click().catch(() => {});
+                let indexResult = '';
+                try {
+                  await page.waitForFunction(
+                    () => (document.querySelector('[data-component="kb-action-result"]')?.textContent ?? '').startsWith('index refreshed ✓'),
+                    null, { timeout: 15000 });
+                  indexResult = await page.evaluate(() => document.querySelector('[data-component="kb-action-result"]')?.textContent ?? '');
+                } catch { /* checked below */ }
+                check(indexResult.startsWith('index refreshed ✓'),
+                  `S3.2: kb-index ran and reported its real result (got "${indexResult || '(none)'}")`);
 
                 const ootb = await page.evaluate(() => ({
                   cycles: document.querySelector('#kb-select option[value="cycles"]')?.textContent ?? '',
@@ -1434,7 +1492,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-kb-maintain-session',
         title: 'KB maintenance — Consolidate drives a real lint reduction',
-        narration: 'A scratch, per-project-shaped brain seeded with exactly one deterministically-fixable lint finding (a theme deliberately missing from its own category index — a checkProjectBrainIndexes finding, not just a pooled count); the operator opens it from its library card, reads Health\'s NAMED per-check itemization (checkProjectBrainIndexes rendered as its own row, R6-08 WI-1 — not a pooled count), and clicks Consolidate — the real op=consolidate pipeline dispatches and the maintenance panel polls [data-consolidate-state] to a genuine "cleared" terminal, the real deterministic in-process fix landing. (The checkProjectBrainIndexes finding\'s own warn -> pass transition is asserted authoritatively at the API level in cli/bridge-studio-kbs.test.ts; the UI\'s per-check status display has a known async-fetch lag, bd forge 2026-08-09, so the journey gates the robust signals — itemization renders + cleared terminal — not the laggy count delta.) This is the kb-maintain mockup\'s health/lint/fix arc, real end to end and CI-safe (the deterministic in-process repair path, no SDK turn). "Ingest activity" now has a real, read-only surface too (R6-08 WI-2, covered by the knowledge-explore-tabs beat) — its own tab lists actual reflect.kb-ingest events off the reflector\'s kb-health pass — but the operator decision-3 invariant is unchanged: ingest itself stays reflection-only, and the panel exposes no trigger of any kind, only a history of what already happened. The mockup\'s multi-turn "maintenance agent" session has since shipped for real, as its OWN session kind — `kb-cleanup` (studio/session-kinds.yaml, R4-19-F2) — riding the SAME generic session shell project-brain/authoring already use: a brain-maintenance agent drafts a reviewable plan from a KB\'s real lint findings, the operator reviews it (a load-bearing, triple-redundant open/cleared/unknown per-action derivation — never a fabricated match, session-transcript.ts\'s derive-don\'t-store fix), approves, and a real drain runs; the knowledge-kb-cleanup-launch / knowledge-kb-cleanup-approve beats below drive that arc end to end, launched from the SAME kb-maintenance block as Consolidate. Consolidate itself is unchanged by this — its own real shipped shape stays a direct dispatch-and-poll, never a chat session; the two are separate controls (`kb-maintain-session` vs `start-kb-cleanup`) sitting side by side.',
+        narration: 'A scratch, per-project-shaped brain seeded with exactly one deterministically-fixable lint finding (a theme deliberately missing from its own category index — a checkProjectBrainIndexes finding, not just a pooled count); the operator opens it from its library card, reads Health\'s NAMED per-check itemization (checkProjectBrainIndexes rendered as its own row, R6-08 WI-1 — not a pooled count), and clicks Consolidate — the real op=consolidate pipeline dispatches and the maintenance panel polls [data-consolidate-state] to a genuine "cleared" terminal, the real deterministic in-process fix landing. (The checkProjectBrainIndexes finding\'s own warn -> pass transition is asserted authoritatively at the API level in cli/bridge-studio-kbs.test.ts; the UI\'s per-check status display has a known async-fetch lag, bd forge 2026-08-09, so the journey gates the robust signals — itemization renders + cleared terminal — not the laggy count delta.) This is the kb-maintain mockup\'s health/lint/fix arc, real end to end and CI-safe (the deterministic in-process repair path, no SDK turn). "Ingest activity" now has a real, read-only surface too (R6-08 WI-2, covered by the knowledge-explore-tabs beat) — its own tab lists actual reflect.kb-ingest events off the reflector\'s kb-health pass — but the operator decision-3 invariant is unchanged: ingest itself stays reflection-only, and the panel exposes no trigger of any kind, only a history of what already happened. The mockup\'s multi-turn "maintenance agent" session has since shipped for real, as its OWN session kind — `kb-cleanup` (studio/session-kinds.yaml, R4-19-F2) — riding the SAME generic session shell project-brain/authoring already use: a brain-maintenance agent drafts a reviewable plan from a KB\'s real lint findings, the operator reviews it (a load-bearing, triple-redundant open/cleared/unknown per-action derivation — never a fabricated match, session-transcript.ts\'s derive-don\'t-store fix), approves, and a real drain runs; the knowledge-kb-cleanup-launch / knowledge-kb-cleanup-approve beats below drive that arc end to end, launched from the SAME KB-actions group as Consolidate. Consolidate itself is unchanged by this — its own real shipped shape stays a direct dispatch-and-poll, never a chat session; the two are separate controls (`kb-maintain-session` vs `start-kb-cleanup`) sitting side by side.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S3.4: KB maintenance — Consolidate drives a real lint reduction ───────
@@ -1522,24 +1580,27 @@ export const journey = defineJourney({
               check(VALID_CHECK_STATUSES.includes(checkProjectBrainIndexesBefore), `kb-maintain: the named-check itemization renders checkProjectBrainIndexes with a real per-check status (R6-08 WI-1, not a pooled data-lint-warnings count; got "${checkProjectBrainIndexesBefore}")`);
               await frame(page, 'kb-maintain-1-flagged', `Knowledge — the seeded scratch KB opened, KB HEALTH shows the named per-check itemization (checkProjectBrainIndexes observed status=${checkProjectBrainIndexesBefore})`);
 
-              await page.locator('[data-component="kb-maintenance"] [data-action="kb-maintain-session"]').click().catch(() => {});
+              await page.locator('[data-component="kb-action-group"] [data-action="kb-maintain-session"]').click().catch(() => {});
               await caption(page, 'Consolidate — the real op=consolidate pipeline, dispatched and polled to a genuine terminal.');
 
               let consolidateState = '';
               try {
-                // W6-B14: consolidate now routes through the shared
-                // pollUntilTerminal core (KbMaintenancePanel.tsx), which
-                // renders its FIRST 'running' poll almost immediately — a
-                // bare "non-empty" wait would resolve on that intermediate
-                // value instead of the real terminal one. Wait for the new
-                // generic three-state contract's 'terminal' bucket instead
+                // W6-B14: consolidate routes through the shared
+                // pollUntilTerminal core (W7-B2: the panel is KbActionGroup
+                // now), which renders its FIRST 'running' poll almost
+                // immediately — a bare "non-empty" wait would resolve on that
+                // intermediate value instead of the real terminal one. Wait
+                // for the generic three-state contract's 'terminal' bucket
                 // (never 'watching'/'timed-out'), then read the
                 // domain-specific data-consolidate-state for the exact value.
+                // Both attrs live on whichever result element the group is
+                // showing ([data-component="kb-action-result"] or the hidden
+                // kb-action-consolidate-state div).
                 await page.waitForFunction(() => {
-                  const v = document.querySelector('[data-component="kb-maintenance"]')?.getAttribute('data-poll-state');
+                  const v = document.querySelector('[data-component="kb-action-group"] [data-poll-state]')?.getAttribute('data-poll-state');
                   return v === 'terminal';
                 }, null, { timeout: 20000 });
-                consolidateState = await page.evaluate(() => document.querySelector('[data-component="kb-maintenance"]')?.getAttribute('data-consolidate-state') ?? '');
+                consolidateState = await page.evaluate(() => document.querySelector('[data-component="kb-action-group"] [data-consolidate-state]')?.getAttribute('data-consolidate-state') ?? '');
               } catch { /* checked below */ }
               check(consolidateState === 'cleared', `kb-maintain: [data-consolidate-state] reaches a real terminal (got "${consolidateState || '(none)'}") — the deterministic in-process fix path, no agent spawn needed`);
               await frame(page, 'kb-maintain-2-consolidated', `Knowledge — Consolidate reached a real terminal (data-consolidate-state="${consolidateState}")`);
@@ -1573,7 +1634,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-kb-cleanup-launch',
         title: 'KB cleanup — launch a session, review a real captured plan (R4-19-F2)',
-        narration: 'The kb-maintenance block\'s OTHER launcher — "Cleanup plan", next to Consolidate — starts a real `kb-cleanup` session: POST /api/studio/kbs/:id/cleanup/start hands off a genuine {sessionId, project}, real for a non-project-bound KB too (the same dot-anchored `.kb-<id>` carve-out R4-19 WI-2 proved reachable). Under this harness\'s FORGE_DRY_BRIDGE=1 the route returns WITHOUT spawning an agent, so the session lands honestly at phase="drafting" with no plan — never faked. This journey then replays the REAL captured output of a genuine forge-dev cleanup run (scripts/journeys/fixtures/r4-19-f2-live-capture/, cited inline in the seeded file itself) as the stand-in for that suppressed turn, and flips phase to "awaiting-approval" — the one transition a live agent turn would have written. The replayed plan renders for real (has-actions, both parsed lines), but because the replay runs on a disposable scratch KB rather than forge-dev itself (this journey may never mutate Brain 1), the two actions honestly derive "unknown" — the derive-don\'t-store fail-safe (session-transcript.ts), never a fabricated match.',
+        narration: 'The KB-actions group\'s OTHER launcher — "Cleanup plan", next to Consolidate — starts a real `kb-cleanup` session: POST /api/studio/kbs/:id/cleanup/start hands off a genuine {sessionId, project}, real for a non-project-bound KB too (the same dot-anchored `.kb-<id>` carve-out R4-19 WI-2 proved reachable). Under this harness\'s FORGE_DRY_BRIDGE=1 the route returns WITHOUT spawning an agent, so the session lands honestly at phase="drafting" with no plan — never faked. This journey then replays the REAL captured output of a genuine forge-dev cleanup run (scripts/journeys/fixtures/r4-19-f2-live-capture/, cited inline in the seeded file itself) as the stand-in for that suppressed turn, and flips phase to "awaiting-approval" — the one transition a live agent turn would have written. The replayed plan renders for real (has-actions, both parsed lines), but because the replay runs on a disposable scratch KB rather than forge-dev itself (this journey may never mutate Brain 1), the two actions honestly derive "unknown" — the derive-don\'t-store fail-safe (session-transcript.ts), never a fabricated match.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               console.log('\n[R4-19-F2] KB cleanup — launcher + drafted session (dry-bridge replay)');
@@ -1606,8 +1667,8 @@ export const journey = defineJourney({
               } catch { /* checked below */ }
               check(kbReady, 'kb-cleanup-launch: the seeded scratch KB\'s page reaches data-page-ready="true" from the Knowledge selector');
 
-              const launcher = page.locator('[data-component="kb-maintenance"] [data-action="start-kb-cleanup"]');
-              check(await launcher.count() > 0, 'kb-cleanup-launch: the "Cleanup plan" launcher ([data-action="start-kb-cleanup"]) renders in kb-maintenance, next to Consolidate');
+              const launcher = page.locator('[data-component="kb-action-group"] [data-action="start-kb-cleanup"]');
+              check(await launcher.count() > 0, 'kb-cleanup-launch: the "Cleanup plan" launcher ([data-action="start-kb-cleanup"]) renders in the KB-actions group, next to Consolidate');
               await frame(page, 'kb-cleanup-0-entry', 'Knowledge — the seeded scratch KB, the Cleanup plan launcher visible beside Consolidate');
 
               // Real POST — capture the response the form itself never surfaces
