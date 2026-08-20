@@ -198,7 +198,7 @@ function RegistryItemFormInner(): JSX.Element {
         <button
           type="button"
           className="btn btn-primary"
-          data-action={editing ? 'save-registry-item' : 'add-registry-item'}
+          data-action={editing ? 'save-registry-item' : 'submit-registry-item'}
           disabled={!requiredFilled || submitting || Boolean(loadError)}
           onClick={() => void onSubmit()}
           style={{ marginTop: 16, opacity: requiredFilled && !loadError ? 1 : 0.5 }}
