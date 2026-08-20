@@ -100,7 +100,7 @@ import {
 } from './brain-lint.ts';
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
-import { snapshotKbMarkdown, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
@@ -896,7 +896,7 @@ export async function runKbDrain(
           round, file: f.file, check: f.check, kind: f.kind, turn: turnIndex, turns: agentResidual.length,
         });
         // orch-01 STRUCTURAL GATE — snapshot before the turn, classify after.
-        const snapshot = snapshotKbMarkdown(brainDir);
+        const snapshot = snapshotKbFiles(brainDir);
         let outcome: KbDrainPerFinding['outcome'] = 'not-cleared';
         let draftSession: { id: string; project: string } | undefined;
         try {

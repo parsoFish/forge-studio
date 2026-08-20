@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { classifyKbEdit, buildUnifiedDiff } from './kb-drain-structural.ts';
+import { classifyKbEdit, buildUnifiedDiff, snapshotKbFiles, diffKbSnapshot } from './kb-drain-structural.ts';
 import { runKbDrain } from './bridge-studio-kb-drain.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import type { Finding } from './brain-lint.ts';
@@ -88,6 +88,83 @@ test('classifyKbEdit — a NEW non-index file is prose (gated)', () => {
 
 test('classifyKbEdit — a deleted file is prose (gated)', () => {
   assert.equal(classifyKbEdit('themes/gone.md', THEME_BEFORE, null), 'prose');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B2 code-review round — three holes in the structural-only gate.
+// ---------------------------------------------------------------------------
+
+test('classifyKbEdit — DELETING an index/category page is prose (gated, never a silent destruction)', () => {
+  // The index-page rule used to be checked BEFORE the created/deleted rule, so
+  // an agent removing a curated listing page (ordering + annotations) had its
+  // deletion classified 'structural' and landed with no draft, no approval and
+  // no undo — the exact destructive-edit class orch-01 exists to stop.
+  assert.equal(classifyKbEdit('patterns.md', '# Patterns\n\n- [x](./themes/x.md)\n', null), 'prose');
+  assert.equal(classifyKbEdit('themes/README.md', '# Themes\n', null), 'prose');
+});
+
+test('classifyKbEdit — CREATING an index/category page is prose (gated)', () => {
+  assert.equal(classifyKbEdit('decisions.md', null, '# Decisions\n\n- [d](./themes/d.md)\n'), 'prose');
+});
+
+test('classifyKbEdit — rewriting a wikilink ALIAS (the reader-visible half) is prose', () => {
+  // normalizeLinkTargets replaced the WHOLE wikilink body, so an inverted
+  // meaning behind an unchanged target normalized to the same string and
+  // landed ungated — contradicting the function's own contract that link TEXT
+  // is prose and is deliberately not normalized away.
+  const before = THEME_BEFORE.replace('## Policy', '## Policy\n\nSee [[dev-loop-zero-brain-reads|the dev-loop never reads the brain]].');
+  const after = before.replace('the dev-loop never reads the brain', 'dev-loop reads allowed');
+  assert.equal(classifyKbEdit('themes/brain-read-policy.md', before, after), 'prose');
+});
+
+test('classifyKbEdit — a wikilink TARGET-only change (alias untouched) stays structural', () => {
+  const before = THEME_BEFORE.replace('## Policy', '## Policy\n\nSee [[old-slug|the dev-loop never reads the brain]].');
+  const after = before.replace('[[old-slug|', '[[new-slug|');
+  assert.equal(classifyKbEdit('themes/brain-read-policy.md', before, after), 'structural');
+});
+
+test('classifyKbEdit — a bare wikilink target change stays structural', () => {
+  const before = THEME_BEFORE.replace('## Policy', '## Policy\n\nSee [[old-slug]].');
+  const after = before.replace('[[old-slug]]', '[[new-slug]]');
+  assert.equal(classifyKbEdit('themes/brain-read-policy.md', before, after), 'structural');
+});
+
+test('diffKbSnapshot — a kb.yaml rewrite is DETECTED and gates as prose (declared-data-fails-open)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-snapshot-'));
+  try {
+    const brainDir = join(root, 'brain', 'skb');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: skb\nname: skb\nbinding: { kind: unique }\ndesc: before.\n');
+    writeFileSync(join(brainDir, 'themes', 'a.md'), THEME_BEFORE);
+    const snapshot = snapshotKbFiles(brainDir);
+    // The agent turn rewrites the KB's own identity/obligation descriptor —
+    // more dangerous than any theme prose, and previously invisible to the
+    // gate because only `*.md` was ever walked.
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: skb\nname: skb\nbinding: { kind: project, ref: elsewhere }\ndesc: after.\n');
+    const changes = diffKbSnapshot(brainDir, snapshot);
+    const kbYaml = changes.find((c) => c.relPath === 'kb.yaml');
+    assert.ok(kbYaml, `kb.yaml change must be detected, got ${JSON.stringify(changes.map((c) => c.relPath))}`);
+    assert.equal(kbYaml.klass, 'prose');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('diffKbSnapshot — a stray non-markdown file dropped into the KB gates as prose', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-snapshot-stray-'));
+  try {
+    const brainDir = join(root, 'brain', 'skb');
+    mkdirSync(join(brainDir, '_raw'), { recursive: true });
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: skb\nname: skb\nbinding: { kind: unique }\ndesc: fixture.\n');
+    const snapshot = snapshotKbFiles(brainDir);
+    writeFileSync(join(brainDir, '_raw', 'helper.sh'), '#!/bin/sh\necho hi\n');
+    const changes = diffKbSnapshot(brainDir, snapshot);
+    const stray = changes.find((c) => c.relPath === '_raw/helper.sh');
+    assert.ok(stray, `stray file must be detected, got ${JSON.stringify(changes.map((c) => c.relPath))}`);
+    assert.equal(stray.klass, 'prose');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('buildUnifiedDiff — carries removed and added lines', () => {
