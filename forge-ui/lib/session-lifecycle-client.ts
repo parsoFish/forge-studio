@@ -18,6 +18,7 @@
  */
 
 import { bridgeFetch } from './bridge-client';
+import { SESSION_DONE_PHASES as DONE_PHASES, SESSION_STOPPED_PHASES as STOPPED_PHASES } from './history-ledger';
 
 export const SESSION_LIFECYCLE_STATES = ['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'] as const;
 export type SessionLifecycleState = (typeof SESSION_LIFECYCLE_STATES)[number];
@@ -65,11 +66,14 @@ export function formatIdle(idleMs: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** W7A2-10 — terminal phases that mean "finished successfully" vs
- *  "stopped"; the terminal sentence names which. Anything else terminal (a
- *  future kind's own token) reads as the neutral "Finished — <phase>". */
-const DONE_PHASES: ReadonlySet<string> = new Set(['committed', 'locked', 'applied', 'complete']);
-const STOPPED_PHASES: ReadonlySet<string> = new Set(['rejected', 'abandoned', 'cancelled', 'failed']);
+// W7A2-10 — terminal phases that mean "finished successfully" vs "stopped";
+// the terminal sentence names which. Anything else terminal (a future
+// kind's own token) reads as the neutral "Finished — <phase>". W7-B1: the
+// sets live in `./history-ledger` (SESSION_DONE_PHASES /
+// SESSION_STOPPED_PHASES — the pure module, shared with the ledger's
+// `sessionPhaseRunStatus` map, imported at the top of this file) so the
+// lifecycle sentence and the ledger's mapped `data-run-status` can never
+// disagree about what counts as done.
 
 function terminalCopy(phase: string): string {
   if (DONE_PHASES.has(phase)) return `Done — ${phase}. Nothing further to do here.`;

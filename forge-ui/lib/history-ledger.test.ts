@@ -188,6 +188,10 @@ import {
   sortLedgerRowsNewestFirst,
   formatWhen,
   ledgerRowKind,
+  // W7-B1 (home-sessions-33) — resolves to `undefined` until history-ledger
+  // ships it (the repo's missing-named-export convention), so only the new
+  // tests that CALL it go red.
+  sessionPhaseRunStatus,
   type LedgerSegment,
   type LedgerRow,
 } from './history-ledger.ts';
@@ -842,4 +846,47 @@ test('ledgerRowKind: every agent-sourced linkKind ("flow-node", "standalone", "s
   expect(ledgerRowKind({ linkKind: 'flow-node' })).toBe('agent');
   expect(ledgerRowKind({ linkKind: 'standalone' })).toBe('agent');
   expect(ledgerRowKind({ linkKind: 'session' })).toBe('agent');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-33) — sessionPhaseRunStatus: the ONE session-phase →
+// run-vocabulary map for data-run-status. The row's own `status` keeps the
+// raw phase (D12's open-vocabulary design is untouched); only the DOM
+// attribute goes through this map, in HistoryLedger.
+// ---------------------------------------------------------------------------
+
+test('W7-B1 sessionPhaseRunStatus: done-terminal phases -> "complete" (the same set describeLifecycle\'s terminal copy calls Done; "applying" — kb-cleanup\'s yaml terminal — included, review round 1)', () => {
+  for (const phase of ['committed', 'locked', 'applying', 'applied', 'complete']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('complete');
+  }
+});
+
+test('W7-B1 review round 1 — yaml parity pin: EVERY `step: terminal` phase in the REAL studio/session-kinds.yaml (plus the universal "cancelled") maps to complete|failed, never a forever-"active" row for a finished session', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const yamlPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'studio', 'session-kinds.yaml');
+  const src = readFileSync(yamlPath, 'utf8');
+  const terminalPhases = new Set<string>(['cancelled']);
+  for (const m of src.matchAll(/-\s*\{\s*phase:\s*([A-Za-z0-9-]+)\s*,\s*step:\s*terminal\b/g)) {
+    terminalPhases.add(m[1]);
+  }
+  // Sanity: the scanner found a plausible set (8+ distinct terminal tokens
+  // today) — a yaml shape change that breaks the scanner fails HERE.
+  expect(terminalPhases.size).toBeGreaterThanOrEqual(8);
+  for (const phase of terminalPhases) {
+    expect(['complete', 'failed'], `terminal phase "${phase}" must map off "active"`).toContain(sessionPhaseRunStatus(phase));
+  }
+});
+
+test('W7-B1 sessionPhaseRunStatus: stopped-terminal phases -> "failed"', () => {
+  for (const phase of ['rejected', 'abandoned', 'cancelled', 'failed']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('failed');
+  }
+});
+
+test('W7-B1 sessionPhaseRunStatus: any other phase (gathering/drafting/awaiting-verdict/a future runner\'s token) -> "active" — in flight as far as this surface can honestly tell', () => {
+  for (const phase of ['gathering', 'drafting', 'exploring', 'generating', 'awaiting-verdict', 'some-future-phase']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('active');
+  }
 });

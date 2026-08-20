@@ -146,6 +146,16 @@ a:hover { text-decoration: underline; }
   border-bottom-color: var(--ember);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
+/* W7-B1 (home-sessions-26): below ~760px the fixed-height nav row (brand +
+   six pillars at 28px gaps) was the widest element on `/` and `/sessions`,
+   forcing PAGE-level horizontal scroll. Let the nav wrap instead — wide
+   CONTENT (the sessions table) already scrolls inside its own container. */
+@media (max-width: 760px) {
+  .afb-nav { flex-wrap: wrap; height: auto; padding: 8px 16px; gap: 6px 16px; }
+  .afb-brand .sub { display: none; }
+  .afb-nav-links { flex-wrap: wrap; }
+}
+
 .afb-nav-links span.nav-disabled {
   font-family: var(--font-display);
   font-size: 13px;
@@ -379,6 +389,10 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
 .status-dot[data-status="complete"] { background: var(--green); }
 .status-dot[data-status="retrying"] { background: var(--amber); animation: pulse 1.1s ease-in-out infinite; }
 .status-dot[data-status="failed"] { background: var(--red); }
+/* W7-B1 (home-sessions-03, community-24): a session waiting on the OPERATOR.
+   Its own token — steady ember, no pulse — so "needs you" stops borrowing
+   `retrying` (a run state) and one data-status value keeps one meaning. */
+.status-dot[data-status="needs-you"] { background: var(--ember); }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @keyframes ember-flow { to { stroke-dashoffset: -20; } }
