@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
+import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
@@ -91,7 +92,9 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const prefillProject = searchParams.get('project') ?? '';
   const prefillInitiative = searchParams.get('initiative');
 
-  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+  // W7-B6 (sessions-kinds-02): real roster IDS (+ display names) — the field
+  // below is a SELECT over them, never free text a typo could submit.
+  const [knownProjects, setKnownProjects] = useState<{ id: string; name: string }[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
   // W7-A2 (home-sessions-22, sessions-kinds-28) — every in-flight session
   // (the SAME `GET /api/studio/sessions?active=1` read /sessions and Home
@@ -133,7 +136,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     ])
       .then(([projects, cap, kbList, sessions]) => {
         if (cancelled) return;
-        setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort());
+        setKnownProjects(
+          projects
+            .map((p) => ({ id: p.id, name: p.name ?? p.id }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        );
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
@@ -163,6 +170,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
   const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
+  // W7-B6 (crosscut-25): why Start is disabled, stated next to the button.
+  const kickoffDisabledReason = submitting || canSubmit
+    ? null
+    : !selectorFilled
+      ? spec?.selector === 'kb' ? 'select a knowledge base' : 'select a project'
+      : !promptFilled
+        ? `${spec?.promptLabel ?? 'a prompt'} is required`
+        : null;
 
   // W7-A2 — the in-flight sessions of THIS kind on the SAME target. The
   // target is the session's anchor project exactly as the bridge indexes it:
@@ -261,14 +276,23 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   }
 
   if (kind === 'architect') {
+    // W7-B6 (sessions-kinds-03): the two architect entries CONVERGE on the
+    // one form (`NewIdeaBox` — roster select + tier + ceiling); this page no
+    // longer bounces the operator through a link to /architect/new.
     return (
-      <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New planning session">
-        <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6 }}>
-          Architect sessions start at its own native entry — this generic kickoff never duplicates it.
+      <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
+        <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: '0 0 16px' }}>
+          Describe the idea; forge reads the project and the brain, asks only what it can&apos;t
+          resolve itself, then drafts a plan for your approval. Same form as{' '}
+          <Link href="/architect/new" style={{ color: 'var(--dim)' }}>/architect/new</Link>.
         </p>
-        <Link href="/architect/new" className="btn btn-primary" style={{ display: 'inline-block', marginTop: 6 }}>
-          Go to /architect/new →
-        </Link>
+        <div style={{ maxWidth: 560 }}>
+          <NewIdeaBox
+            key={prefillProject}
+            initialProject={prefillProject}
+            onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
+          />
+        </div>
       </StudioArchitectShell>
     );
   }
@@ -328,19 +352,22 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           ) : (
             <>
               <div style={rowLabel}>Project</div>
-              <input
-                list="forge-kickoff-known-projects"
+              {/* W7-B6 (sessions-kinds-02): a SELECT over the roster ids the
+                  page already fetched — free text minted phantom
+                  projects/<typo>/ dirs (the server now 404s unknowns too). */}
+              <select
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
-                placeholder="a project"
                 data-field="kickoff-project"
                 style={inputStyle}
-              />
-              <datalist id="forge-kickoff-known-projects">
+              >
+                <option value="">select a project…</option>
                 {knownProjects.map((p) => (
-                  <option key={p} value={p} />
+                  <option key={p.id} value={p.id}>
+                    {p.name === p.id ? p.id : `${p.name} (${p.id})`}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </>
           )}
         </div>
@@ -401,10 +428,18 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         data-confirming={hasExisting && confirmingAnother}
         disabled={!canSubmit}
         onClick={() => void onSubmit()}
+        {...(kickoffDisabledReason ? { 'data-disabled-reason': kickoffDisabledReason, title: kickoffDisabledReason } : {})}
         style={{ opacity: canSubmit ? 1 : 0.5 }}
       >
         {submitting ? 'Starting…' : hasExisting ? (confirmingAnother ? 'Yes, start another' : 'Start another session') : 'Start session'}
       </button>
+      {/* W7-B6 (crosscut-25): the disabled primary CTA explains itself, like
+          the create surfaces that already did. */}
+      {kickoffDisabledReason && (
+        <span data-section="start-session-hint" style={{ marginLeft: 10, fontSize: 11.5, color: 'var(--faint)' }}>
+          {kickoffDisabledReason}
+        </span>
+      )}
       {hasExisting && confirmingAnother && !submitting && (
         <button
           type="button"

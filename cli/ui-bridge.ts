@@ -128,7 +128,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions, communityRegistryPath } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath, discoverProjects } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -3092,6 +3092,22 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * output, so a non-string `modelTier` — `0`, `null`, `{}` — is a real shape
  * that must fail closed with a 400 naming it, not a raw `TypeError`).
  */
+/**
+ * W7-B6 (sessions-kinds-02 / projects-15 / crosscut-21): a kickoff `project`
+ * must name a DISCOVERED project. Every session /start route used to accept
+ * any string — the containment guards tolerate a not-yet-existing segment
+ * (creation mode), so a typo minted `projects/<typo>/_<kind>/<sid>/` and the
+ * phantom then appeared on /projects as a real project card (and, for the
+ * architect, spawned a real agent turn against it). Returns the 404 reason,
+ * or `null` when the project is in the roster. The KB-anchored kinds
+ * (kb-cleanup's `.kb-<id>`, community-refresh's registry anchor) have their
+ * own anchor rules and never pass through this check.
+ */
+function unknownProjectReason(ctx: HttpContext, candidate: string): string | null {
+  const known = discoverProjects(ctx.projectsRoot, ctx.forgeRoot).some((p) => p.id === candidate);
+  return known ? null : `unknown project "${candidate}" — not in the project roster (onboard it at /projects/new first)`;
+}
+
 function resolveKickoffModelTier(
   agentSlug: string,
   candidate: unknown,
@@ -3286,9 +3302,17 @@ async function handleArchitect(
   // session and kick off the first interview turn.
   if (method === 'POST' && url === '/api/architect/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string; modelTier?: unknown };
+      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string; modelTier?: unknown; costCeilingUsd?: unknown };
       if (!body.project || !body.idea) {
         sendJson(res, 400, { error: 'project and idea are required' }, origin);
+        return true;
+      }
+      // W7-B6 (projects-15 / crosscut-21): the most expensive kickoff used to
+      // accept ANY project string — a typo created a phantom project dir AND
+      // spawned a real agent turn against it. Roster check BEFORE anything.
+      const unknownReason = unknownProjectReason(ctx, body.project);
+      if (unknownReason !== null) {
+        sendJson(res, 404, { error: unknownReason }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
@@ -3304,6 +3328,25 @@ async function handleArchitect(
       if (!modelTierResult.ok) {
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
+      }
+      // W7-B6 (projects-14 / sessions-kinds-03): an operator cost ceiling for
+      // the whole architect session — same validation envelope as the agent
+      // dispatch route; enforced by the runner at every turn start (a turn
+      // that would START past the ceiling is refused with the reason in the
+      // session's own error surface — never a silent overrun).
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return true;
+        }
+        costCeilingUsd = v;
       }
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
@@ -3324,6 +3367,7 @@ async function handleArchitect(
         idea: body.idea,
         updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
       };
       // SEC-04 (bd forge-ebj) — route both leaf writes (`idea.md`, `status.json`)
       // through the guard (leaf included) rather than raw-appending onto the
@@ -3640,6 +3684,13 @@ async function handleInstructions(
       const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // W7-B6 (sessions-kinds-02): roster check — a typo'd project used to
+      // mkdir a phantom projects/<typo>/_instructions/<sid>/ forever.
+      const unknownInstrProject = unknownProjectReason(ctx, body.project);
+      if (unknownInstrProject !== null) {
+        sendJson(res, 404, { error: unknownInstrProject }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE the readAgentInstructionsFile read
@@ -4490,6 +4541,12 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
+      // W7-B6 (sessions-kinds-02): roster check — no phantom project dirs.
+      const unknownPbProject = unknownProjectReason(ctx, body.project);
+      if (unknownPbProject !== null) {
+        sendJson(res, 404, { error: unknownPbProject }, origin);
+        return true;
+      }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
@@ -5052,6 +5109,12 @@ async function handleDemoBuilder(
       const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // W7-B6 (sessions-kinds-02): roster check — no phantom project dirs.
+      const unknownDemoProject = unknownProjectReason(ctx, body.project);
+      if (unknownDemoProject !== null) {
+        sendJson(res, 404, { error: unknownDemoProject }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through

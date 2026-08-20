@@ -878,6 +878,10 @@ export async function architectFileUrl(relative: string): Promise<string> {
 export async function startArchitect(input: {
   project: string;
   idea: string;
+  /** ADR-043 §3: operator-chosen tier (validated server-side vs the architect SKILL envelope). */
+  modelTier?: string;
+  /** W7-B6 (projects-14): session cost ceiling (USD) — enforced by the runner at every turn start. */
+  costCeilingUsd?: number;
 }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
   const r = await bridgePost('/api/architect/start', input);
   if (!r.ok) return { ok: false, error: r.error };
