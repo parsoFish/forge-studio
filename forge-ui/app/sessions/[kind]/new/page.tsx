@@ -8,8 +8,10 @@ import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
+import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
+import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -43,10 +45,14 @@ import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/sessi
 // kickoff alike).
 // ---------------------------------------------------------------------------
 
-// W7-B4 (agents-22): the kind table moved to lib/kickoff-kinds.ts — the ONE
-// client-side source both this kickoff page AND the agent builder's
-// session-entry derivation read, so they can never drift apart again.
-import { KICKOFF_KINDS, isKickoffKind } from '@/lib/kickoff-kinds';
+// W7-B1 (home-sessions-19): the per-kind form specs moved to
+// `lib/session-kind-meta.ts` (KICKOFF_SPECS + the hasOwn-guarded
+// `kickoffSpecFor` accessor) — ONE module beside the kind titles and the
+// shared kickoff list, parity-pinned against studio/session-kinds.yaml,
+// ending this page's half of the two-list drift. (W7-B4's parallel
+// extraction of the same table, lib/kickoff-kinds.ts, was consolidated INTO
+// session-kind-meta at merge time — agents-22's session-entry derivation now
+// reads sessionEntryHrefForAgent from there.)
 
 function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.Element {
   const kind = decodeURIComponent(params.kind);
@@ -79,7 +85,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const spec = isKickoffKind(kind) ? KICKOFF_KINDS[kind] : null;
+  const spec = kickoffSpecFor(kind);
 
   useEffect(() => {
     if (!spec) {
@@ -257,28 +263,23 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     <StudioArchitectShell
       dataPage="session-kickoff"
       ready={ready}
-      title={spec.title}
+      title={sessionKindTitle(kind)}
       mainData={{ 'data-kickoff-kind': kind }}
     >
-      <div data-section="kickoff-context" style={{ ...cardStyle, marginBottom: 14 }}>
-        <div style={rowLabel}>Agent</div>
-        <div style={rowValue}>
-          {spec.agentSlug} <span style={mono}>· skills/{spec.agentSlug}/SKILL.md</span>
-        </div>
-        <div style={rowLabel}>Produces</div>
-        <div style={rowValue}>{spec.artifactLabel}</div>
-        <div style={rowLabel}>Session directory</div>
-        <div style={{ ...rowValue, ...mono }}>
-          {spec.selector === 'none'
-            ? `projects/<forge-anchor>/_${kind}/<sessionId>`
-            : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`}
-        </div>
-        {prefillInitiative && (
-          <div data-section="kickoff-initiative-context" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
-            Opened from initiative <span style={mono}>{prefillInitiative}</span> — sessions here are
-            project-scoped, not tied to it; this is context only.
-          </div>
-        )}
+      {/* W7-B1 (sessions-kinds-05): plain-English orientation first, the
+          on-disk provenance demoted to one line, and a way back out —
+          see KickoffContextCard's own header. */}
+      <div style={{ marginBottom: 14 }}>
+        <KickoffContextCard
+          kind={kind}
+          spec={spec}
+          sessionDirHint={
+            spec.selector === 'none'
+              ? `projects/<forge-anchor>/_${kind}/<sessionId>`
+              : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`
+          }
+          initiative={prefillInitiative}
+        />
       </div>
 
       {spec.selector !== 'none' && (
@@ -413,8 +414,6 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--line)', borderRadius: 10, padding: 16, background: 'var(--bg-2)', maxWidth: 560,
 };
 const rowLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 };
-const rowValue: React.CSSProperties = { fontSize: 13, color: 'var(--text)', marginBottom: 12 };
-const mono: React.CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', color: 'var(--dim)' };
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)',
   border: '1px solid var(--line)', borderRadius: 6, padding: '8px 10px', fontSize: 13,

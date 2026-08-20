@@ -11,8 +11,10 @@
  *   library-17        the template editor is a real content editor
  *                     (`data-field="template-content"`), not read-only text.
  *   agents-22         the session entry href is DERIVED from the shared
- *                     kickoff-kind table (lib/kickoff-kinds.ts), never a
- *                     frozen per-slug href table.
+ *                     session-kind table (lib/session-kind-meta.ts — the
+ *                     yaml-parity-pinned module; B4's parallel
+ *                     lib/kickoff-kinds.ts was consolidated into it at the
+ *                     W7-B1 merge), never a frozen per-slug href table.
  *   agents-28/09      the agent PUT payload builder carries `create: true`
  *                     for a new agent, and duplicate-prefill clears the slug.
  *
@@ -26,7 +28,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
 import { TemplateEditor } from '@/components/studio/TemplateEditor';
-import { sessionEntryHrefForAgent, KICKOFF_KINDS } from './kickoff-kinds';
+import { sessionEntryHrefForAgent, SESSION_KIND_META } from './session-kind-meta';
 import { buildAgentPutBody, parseAgentToState, duplicateAgentState } from './agent-authoring-view';
 import type { Agent } from './studio-client';
 
@@ -167,9 +169,11 @@ test('sessionEntryHrefForAgent derives /sessions/<kind>/new from the ONE kickoff
   expect(sessionEntryHrefForAgent('developer-ralph')).toBeNull();
 });
 
-test('every KICKOFF_KINDS row resolves back through sessionEntryHrefForAgent (no drift)', () => {
-  for (const [kind, spec] of Object.entries(KICKOFF_KINDS)) {
-    expect(sessionEntryHrefForAgent(spec.agentSlug)).toBe(`/sessions/${kind}/new`);
+test('every SESSION_KIND_META row resolves back through sessionEntryHrefForAgent (no drift)', () => {
+  // STRONGER than the original KICKOFF_KINDS pin: covers architect's bespoke
+  // href and onboarding's honest null, not just the six generic kinds.
+  for (const meta of SESSION_KIND_META) {
+    expect(sessionEntryHrefForAgent(meta.agent)).toBe(meta.kickoffHref);
   }
 });
 

@@ -71,7 +71,7 @@ import {
   duplicateAgentState,
   type AgentBuilderState,
 } from '@/lib/agent-authoring-view';
-import { sessionEntryHrefForAgent } from '@/lib/kickoff-kinds';
+import { sessionEntryHrefForAgent } from '@/lib/session-kind-meta';
 import { deleteAgent } from '@/lib/studio-client';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 
@@ -129,10 +129,12 @@ const BLANK_STATE: AgentState = {
 // ---------------------------------------------------------------------------
 
 // W7-B4 (agents-22): `sessionEntryHrefForAgent` now derives from the shared
-// KICKOFF_KINDS table (lib/kickoff-kinds.ts) — the frozen one-entry
-// SESSION_ENTRY_HREF_BY_SLUG map that told every interactive agent "no
-// reachable session entry point yet" is deleted. parseAgent/buildPutBody
-// live in lib/agent-authoring-view.ts (pure, unit-pinned).
+// session-kind table (lib/session-kind-meta.ts — W7-B1's yaml-parity-pinned
+// module; B4's parallel lib/kickoff-kinds.ts extraction was consolidated
+// into it at merge time) — the frozen one-entry SESSION_ENTRY_HREF_BY_SLUG
+// map that told every interactive agent "no reachable session entry point
+// yet" is deleted. parseAgent/buildPutBody live in
+// lib/agent-authoring-view.ts (pure, unit-pinned).
 const parseAgent = parseAgentToState;
 
 // ---------------------------------------------------------------------------
