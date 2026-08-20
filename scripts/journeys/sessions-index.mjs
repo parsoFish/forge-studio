@@ -83,11 +83,12 @@ export const journey = defineJourney({
           await caption(page, 'The active-sessions strip: a real in-flight session that needs the operator, surfaced right on Home.');
           await sleep(READ);
 
-          const stripCount = await page.locator('section[data-section="active-sessions"]').count();
-          check(stripCount === 1, `SESSIONS-IDX.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+          // W7-B1: the strip is the NAMED `sessions-needing-you` section now.
+          const stripCount = await page.locator('section[data-section="sessions-needing-you"]').count();
+          check(stripCount === 1, `SESSIONS-IDX.1: section[data-section="sessions-needing-you"] renders — the seeded in-flight session fired it (got ${stripCount})`);
 
           const stripAttrs = await page.evaluate(() => {
-            const el = document.querySelector('[data-section="active-sessions"]');
+            const el = document.querySelector('[data-section="sessions-needing-you"]');
             return el ? {
               count: el.getAttribute('data-active-session-count'),
               needsYou: el.getAttribute('data-needs-you-count'),
@@ -162,22 +163,45 @@ export const journey = defineJourney({
           await checkHonestPillarRead(page, check, 'sessions-index', 'SESSIONS-IDX.2');
           check(parseInt(pageAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.2: data-session-count >= 1 — the seeded session is present (got "${pageAttrs?.count}")`);
 
+          // W7-B1 (crosscut-13/home-sessions-19): the kickoff CTAs render in
+          // the POPULATED state too — with real rows on screen, starting a
+          // new session (community-refresh included) stays one click away.
+          const kickoff = await page.evaluate(() => {
+            const el = document.querySelector('[data-section="sessions-kickoff"]');
+            return el ? {
+              entries: Array.from(el.querySelectorAll('a[data-action^="kickoff-"]')).map((a) => a.getAttribute('data-action')),
+            } : null;
+          });
+          check(kickoff !== null, 'SESSIONS-IDX.2 (W7-B1): [data-section="sessions-kickoff"] renders alongside the populated table');
+          check((kickoff?.entries ?? []).length === 7, `SESSIONS-IDX.2 (W7-B1): all seven kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
+          check((kickoff?.entries ?? []).includes('kickoff-community-refresh'), 'SESSIONS-IDX.2 (W7-B1): community-refresh is among them (home-sessions-19)');
+
           const rowOf = (sid) => page.evaluate((id) => {
             const el = document.querySelector(`a[data-action="resume-session"][href*="${id}"]`);
             const tr = el ? el.closest('tr') : null;
             return tr ? {
               kind: tr.getAttribute('data-session-kind'),
+              kindLabel: tr.querySelector('a[data-action="open-session"]')?.textContent ?? '',
               phase: tr.getAttribute('data-session-phase'),
               needsYou: tr.getAttribute('data-needs-you'),
               state: tr.getAttribute('data-session-state'),
               chip: tr.querySelector('[data-session-state-chip]')?.textContent ?? '',
               hasCancel: tr.querySelector('[data-action="cancel-session"]') !== null,
+              needsYouChip: tr.querySelector('[data-needs-you-chip]')?.textContent ?? null,
+              dotStatus: tr.querySelector('[data-needs-you-chip] .status-dot')?.getAttribute('data-status') ?? null,
             } : null;
           }, sid);
           const row = await rowOf(SESSIONS_INDEX_SID);
           check(row !== null, 'SESSIONS-IDX.2: the seeded session renders its own table row');
           check(row?.kind === 'instructions', `SESSIONS-IDX.2: the row carries the real kind (got "${row?.kind}")`);
+          // W7-B1 (home-sessions-20): the visible Kind label is the
+          // descriptor's own authored title, linking into the session.
+          check((row?.kindLabel ?? '').includes('Instructions session'), `SESSIONS-IDX.2 (W7-B1): the Kind cell reads the descriptor title (got "${row?.kindLabel}")`);
           check(row?.needsYou === 'true', `SESSIONS-IDX.2: the row carries the real needsYou (got "${row?.needsYou}")`);
+          // W7-B1 (home-sessions-03/24, community-24): the needs-you signal
+          // is a labelled chip with its OWN status token — never "retrying".
+          check((row?.needsYouChip ?? '').includes('needs you'), `SESSIONS-IDX.2 (W7-B1): the needs-you chip carries visible text (got "${row?.needsYouChip}")`);
+          check(row?.dotStatus === 'needs-you', `SESSIONS-IDX.2 (W7-B1): the chip's dot carries data-status="needs-you", not the borrowed "retrying" (got "${row?.dotStatus}")`);
           check(row?.state === 'awaiting-operator', `SESSIONS-IDX.2: the row carries data-session-state from the bridge (got "${row?.state}")`);
           check(row?.hasCancel === true, 'SESSIONS-IDX.2: every in-flight row offers cancel (W7-A2)');
 

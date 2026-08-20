@@ -425,22 +425,31 @@ export const journey = defineJourney({
             parseInt(document.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0', 10));
           check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
 
-          // W6-B11 — the active-sessions strip (IA-4's marked slot): a real
-          // in-flight session (HOME_SESSION_SID, seeded above at
-          // `awaiting-verdict`) renders its own card, needs-you flagged via a
-          // REAL deriveSessionAffordances verdict affordance — never a
+          // W6-B11 → W7-B1 — the sessions strip is now the NAMED
+          // `sessions-needing-you` section (goal-pack contract; visible h2,
+          // never unmounted at zero): a real in-flight session
+          // (HOME_SESSION_SID, seeded above at `awaiting-verdict`) renders
+          // its own card, needs-you flagged via a REAL
+          // deriveSessionAffordances verdict affordance — never a
           // fabricated dot.
-          const stripCount = await page.locator('section[data-section="active-sessions"]').count();
-          check(stripCount === 1, `HOME.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+          const stripCount = await page.locator('section[data-section="sessions-needing-you"]').count();
+          check(stripCount === 1, `HOME.1: section[data-section="sessions-needing-you"] renders (got ${stripCount})`);
           const stripAttrs = await page.evaluate(() => {
-            const el = document.querySelector('[data-section="active-sessions"]');
+            const el = document.querySelector('[data-section="sessions-needing-you"]');
             return el ? {
               count: el.getAttribute('data-active-session-count'),
               needsYou: el.getAttribute('data-needs-you-count'),
+              shown: el.getAttribute('data-session-cards-shown'),
+              heading: el.querySelector('h2')?.textContent ?? '',
             } : null;
           });
           check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `HOME.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
           check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `HOME.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+          // W7-B1 (home-sessions-01/32): the strip is NAMED on screen and its
+          // card count is an attribute, so header-vs-cards arithmetic is
+          // machine-checkable.
+          check((stripAttrs?.heading ?? '').includes('Sessions needing you'), `HOME.1 (W7-B1): the strip carries its visible h2 name (got "${stripAttrs?.heading}")`);
+          check(parseInt(stripAttrs?.shown ?? '-1', 10) >= 1, `HOME.1 (W7-B1): data-session-cards-shown reflects the rendered slice (got "${stripAttrs?.shown}")`);
           // W7-A2 made the card a DIV (`[data-session-card][data-session-id]`)
           // wrapping the open link + the cancel control (a button inside an
           // <a> is nested-interactive) — select by the session id attribute,
@@ -549,6 +558,26 @@ export const journey = defineJourney({
 
         const stripCount = await page.locator('section[data-section="attention-strip"]').count();
         check(stripCount === 1, `HOME.2: [data-section="attention-strip"] renders — the seeded gated project fired it (got ${stripCount})`);
+        // W7-B1 (home-sessions-01/02): both attention strips are NAMED on
+        // screen now, and the KB rows live in their OWN visually distinct
+        // section (`kbs-needing-attention`) instead of blending into the
+        // project-gate list.
+        const gateHeading = await page.evaluate(() =>
+          document.querySelector('[data-section="attention-strip"] h2')?.textContent ?? '');
+        check(gateHeading.includes('Projects needing attention'), `HOME.2 (W7-B1): the gate strip carries its visible h2 (got "${gateHeading}")`);
+        const kbStripCount = await page.locator('section[data-section="kbs-needing-attention"]').count();
+        check(kbStripCount === 1, `HOME.2 (W7-B1): [data-section="kbs-needing-attention"] renders — the seeded KB lint flag fired it (got ${kbStripCount})`);
+        const kbStrip = await page.evaluate(() => {
+          const el = document.querySelector('[data-section="kbs-needing-attention"]');
+          return el ? {
+            heading: el.querySelector('h2')?.textContent ?? '',
+            hasDrainLink: el.querySelector('a[data-action="kb-drain-link"]') !== null,
+            drainText: el.querySelector('a[data-action="kb-drain-link"]')?.textContent ?? '',
+          } : null;
+        });
+        check((kbStrip?.heading ?? '').includes('Knowledge bases needing attention'), `HOME.2 (W7-B1): the KB strip carries its visible h2 (got "${kbStrip?.heading}")`);
+        check(kbStrip?.hasDrainLink === true, 'HOME.2 (W7-B1): each KB row is an explicit drain link (a[data-action="kb-drain-link"])');
+        check((kbStrip?.drainText ?? '').includes('Drain to green'), `HOME.2 (W7-B1): the row SAYS where the click goes (got "${(kbStrip?.drainText ?? '').slice(0, 60)}")`);
 
         const attentionCountAttr = await page.evaluate(() =>
           document.querySelector('[data-page="home"]')?.getAttribute('data-attention-count') ?? '0');
