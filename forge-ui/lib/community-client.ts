@@ -520,3 +520,92 @@ export async function installCommunityItem(
     return { ok: false, error: `malformed bridge response: ${String(err)}` };
   }
 }
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-23) — registry CRUD. The server forces the hand-curated
+// stamps (fetchedAt:null / fetchedBy:'operator'); this client only carries
+// the operator's curated fields. `status` is surfaced so callers can tell
+// 409 (duplicate id) / 404 (unknown id) / 400 (invalid field) apart.
+// ---------------------------------------------------------------------------
+
+export type RegistryItemInput = {
+  id: string;
+  kind: CommunityKind;
+  name: string;
+  desc?: string;
+  category: string;
+  sourceUrl: string;
+  provenance: string;
+  tier?: string;
+  signals?: { stars?: number | null; starsDisplay?: string | null; attributedTo?: string | null };
+  upstreamUpdatedAt?: string | null;
+};
+
+type RegistryCrudResult = { ok: boolean; status?: number; error?: string };
+
+async function registryCrud(path: string, method: 'POST' | 'PUT' | 'DELETE', item?: RegistryItemInput): Promise<RegistryCrudResult> {
+  let res: Response;
+  try {
+    res = await bridgeFetch(path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      ...(item !== undefined ? { body: JSON.stringify({ item }) } : {}),
+    });
+  } catch (err) {
+    return { ok: false, error: `bridge unreachable: ${String(err)}` };
+  }
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) return { ok: false, status: res.status, error: errorFrom(data, `HTTP ${res.status}`) };
+  return { ok: true, status: res.status };
+}
+
+export function addRegistryItem(item: RegistryItemInput): Promise<RegistryCrudResult> {
+  return registryCrud('/api/studio/community/registry/items', 'POST', item);
+}
+
+export function updateRegistryItem(id: string, item: RegistryItemInput): Promise<RegistryCrudResult> {
+  return registryCrud(`/api/studio/community/registry/items/${encodeURIComponent(id)}`, 'PUT', item);
+}
+
+export function deleteRegistryItem(id: string): Promise<RegistryCrudResult> {
+  return registryCrud(`/api/studio/community/registry/items/${encodeURIComponent(id)}`, 'DELETE');
+}
+
+/** The RAW registry row (category/tier/signals included — the browse wire
+ *  projection does not carry them) for the edit form's prefill. 404 → null. */
+export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item?: RegistryItemInput; error?: string }> {
+  let res: Response;
+  try {
+    res = await bridgeFetch(`/api/studio/community/registry/items/${encodeURIComponent(id)}`);
+  } catch (err) {
+    return { ok: false, error: `bridge unreachable: ${String(err)}` };
+  }
+  const data = await res.json().catch(() => undefined);
+  if (!res.ok) return { ok: false, error: errorFrom(data, `HTTP ${res.status}`) };
+  const r = asRecord(data);
+  const item = asRecord(r['item']);
+  return {
+    ok: true,
+    item: {
+      id: requireString(item, 'id'),
+      kind: requireString(item, 'kind') as CommunityKind,
+      name: requireString(item, 'name'),
+      desc: typeof item['desc'] === 'string' ? item['desc'] : undefined,
+      category: requireString(item, 'category'),
+      sourceUrl: requireString(item, 'sourceUrl'),
+      provenance: requireString(item, 'provenance'),
+      tier: typeof item['tier'] === 'string' ? item['tier'] : undefined,
+      signals: (() => {
+        const s = item['signals'];
+        if (s === null || typeof s !== 'object' || Array.isArray(s)) return undefined;
+        const sig = s as Record<string, unknown>;
+        return {
+          stars: typeof sig['stars'] === 'number' ? sig['stars'] : null,
+          starsDisplay: typeof sig['starsDisplay'] === 'string' ? sig['starsDisplay'] : null,
+          attributedTo: typeof sig['attributedTo'] === 'string' ? sig['attributedTo'] : null,
+        };
+      })(),
+      upstreamUpdatedAt: typeof item['upstreamUpdatedAt'] === 'string' ? item['upstreamUpdatedAt'] : null,
+    },
+  };
+}

@@ -124,14 +124,24 @@ export default function CommunityBrowserPage() {
         </>
       }
       actions={
-        <Link
-          href="/sessions/community-refresh/new"
-          data-action="refresh-community-registry"
-          className="btn btn-sm"
-          title="Kick off the community-refresh agent — fetches real upstream signals and drafts a reviewable diff of the registry (W6-CR-3)"
-        >
-          Refresh registry (agent)
-        </Link>
+        <>
+          <Link
+            href="/community/new"
+            data-action="add-registry-item"
+            className="btn btn-sm"
+            title="Add a curated item to studio/community/registry.yaml (W7-B3 — hand-curated rows are stamped fetchedBy: operator)"
+          >
+            + Add item
+          </Link>
+          <Link
+            href="/sessions/community-refresh/new"
+            data-action="refresh-community-registry"
+            className="btn btn-sm"
+            title="Kick off the community-refresh agent — fetches real upstream signals and drafts a reviewable diff of the registry (W6-CR-3)"
+          >
+            Refresh registry (agent)
+          </Link>
+        </>
       }
     >
 

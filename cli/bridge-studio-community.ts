@@ -553,6 +553,29 @@ export async function handleStudioCommunityRoutes(
     return true;
   }
 
+  // ---- GET /api/studio/community/registry/items/:id — the RAW registry row
+  // (W7-B3, community-23: the edit form pre-fills from the row's own fields —
+  // category/tier/signals — which the browse wire projection does not carry).
+  // Matched BEFORE the 2-segment detail route cannot collide: this is 3
+  // segments after /community/.
+  const registryRowMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  if (method === 'GET' && registryRowMatch) {
+    try {
+      const id = decodeIdOrRespond(registryRowMatch[1], res, origin);
+      if (id === null) return true;
+      const registryPath = communityRegistryPath(ctx.forgeRoot);
+      const row = existsSync(registryPath) ? loadCommunityRegistry(registryPath).items.find((i) => i.id === id) : undefined;
+      if (!row) {
+        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
+        return true;
+      }
+      sendJson(res, 200, { item: row }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // ---- POST /api/studio/community/:kind/:id/install ------------------------
   const installMatch = url.match(/^\/api\/studio\/community\/([^/]+)\/([^/]+)\/install$/);
   if (method === 'POST' && installMatch) {

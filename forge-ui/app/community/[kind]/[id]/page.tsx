@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 // (useState is also used by InstallSection's npm-confirm arm state.)
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
@@ -10,6 +10,7 @@ import { FilePackage } from '@/components/studio/FilePackage';
 import {
   fetchCommunityItemDetail,
   installCommunityItem,
+  deleteRegistryItem,
   COMMUNITY_KINDS,
   type CommunityItemDetail,
   type CommunitySkillDetail,
@@ -204,6 +205,12 @@ function CommunityDetailBody({
       </div>
 
       <HubSignalsSection item={item} />
+
+      {/* W7-B3 (community-23): registry-sourced rows are operator-curatable —
+          edit routes to the form, remove is a two-step confirm. Vendored
+          packages / catalog connections are NOT registry rows (their origin
+          names their own file) and get no such controls here. */}
+      {item.origin === 'studio/community/registry.yaml' && <RegistryRowActions item={item} />}
 
       {/* W7-B3 (community-10): a package section renders only when a package
           EXISTS — a non-vendored item structurally has no files, and an
@@ -557,6 +564,69 @@ function InstallSection({
             </span>
           )}
         </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RegistryRowActions — W7-B3 (community-23): edit / remove for a row whose
+// origin IS the registry file. Remove is a two-step confirm; success routes
+// back to /community (the row no longer exists to render).
+// ---------------------------------------------------------------------------
+
+function RegistryRowActions({ item }: { item: CommunityItemDetail }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onRemove(): Promise<void> {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setRemoving(true);
+    setError(null);
+    const r = await deleteRegistryItem(item.id);
+    setRemoving(false);
+    if (!r.ok) {
+      setError(r.error ?? 'the bridge refused the delete');
+      return;
+    }
+    router.push('/community');
+  }
+
+  return (
+    <section data-section="registry-row-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Link href={`/community/new?edit=${encodeURIComponent(item.id)}`} data-action="edit-registry-item" className="btn btn-sm">
+        Edit registry entry
+      </Link>
+      <button
+        type="button"
+        className="btn btn-sm"
+        data-action="remove-registry-item"
+        data-confirming={confirming ? 'true' : 'false'}
+        onClick={() => void onRemove()}
+        disabled={removing}
+        style={{ color: '#f87171', borderColor: 'rgba(248,113,113,.4)' }}
+      >
+        {removing ? 'Removing…' : confirming ? 'Yes, remove from the registry' : 'Remove…'}
+      </button>
+      {confirming && !removing && (
+        <button
+          type="button"
+          data-action="remove-registry-item-abort"
+          onClick={() => setConfirming(false)}
+          style={{ fontSize: 12, background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          keep it
+        </button>
+      )}
+      {error && (
+        <span data-component="registry-remove-error" style={{ fontSize: 12, color: '#f87171' }}>
+          {error}
+        </span>
       )}
     </section>
   );

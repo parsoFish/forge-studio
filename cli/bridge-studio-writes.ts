@@ -17,7 +17,8 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync, renameSync, unlinkSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve, sep } from 'node:path';
 
 import { classifyClause } from './preflight-resolve.ts';
@@ -36,8 +37,10 @@ import {
   listFlowIds,
 } from '../orchestrator/studio/registry.ts';
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
+import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from '../orchestrator/studio/registry.ts';
+import type { CommunityRegistryItem } from '../orchestrator/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
-import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, PathGuardContainmentError } from './studio-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
@@ -341,6 +344,137 @@ function spawnPreflightFix(
   proc.unref();
 }
 
+// ---------------------------------------------------------------------------
+// W7-B3 (community-23) — community-registry CRUD helpers. The registry
+// (studio/community/registry.yaml) had exactly one writer, an agent commit
+// path — Studio itself had no add/edit/remove. These helpers give the
+// routes below the SAME structural discipline commitRegistryDraft holds:
+// parse the body against the loader's own field rules, serialize through
+// the ONE shared serializer, write temp-then-rename, and RE-PARSE the temp
+// file through loadCommunityRegistry before it replaces the real one (a
+// write this module cannot re-load must never land).
+//
+// Honesty stamps: an operator-written row is hand-curated — `fetchedAt:
+// null` / `fetchedBy: 'operator'` are FORCED server-side regardless of what
+// the body claims (never a fabricated verification timestamp; the freshness
+// badge reads such a row as never-verified, which is the truth).
+// ---------------------------------------------------------------------------
+
+const COMMUNITY_REGISTRY_ITEM_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
+
+function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistryItem } | { ok: false; error: string } {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'body must be a JSON object with an "item" field' };
+  const itemRaw = (raw as Record<string, unknown>)['item'];
+  if (itemRaw === null || typeof itemRaw !== 'object' || Array.isArray(itemRaw)) return { ok: false, error: '"item" must be an object' };
+  const e = itemRaw as Record<string, unknown>;
+
+  const requireString = (field: string): string | { error: string } => {
+    const v = e[field];
+    if (typeof v !== 'string' || v.trim() === '') return { error: `item.${field} is required and must be a non-empty string` };
+    return v;
+  };
+
+  const id = requireString('id');
+  if (typeof id !== 'string') return { ok: false, error: id.error };
+  try {
+    assertSkillSlug(id, 'community item');
+  } catch (err) {
+    return { ok: false, error: sanitizeError(err) };
+  }
+
+  const kindRaw = e['kind'];
+  if (typeof kindRaw !== 'string' || !(COMMUNITY_REGISTRY_ITEM_KINDS as readonly string[]).includes(kindRaw)) {
+    return { ok: false, error: `item.kind must be one of ${COMMUNITY_REGISTRY_ITEM_KINDS.join(', ')}` };
+  }
+
+  const name = requireString('name');
+  if (typeof name !== 'string') return { ok: false, error: name.error };
+  const category = requireString('category');
+  if (typeof category !== 'string') return { ok: false, error: category.error };
+  const sourceUrl = requireString('sourceUrl');
+  if (typeof sourceUrl !== 'string') return { ok: false, error: sourceUrl.error };
+  if (!/^https?:\/\//.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
+  const provenance = requireString('provenance');
+  if (typeof provenance !== 'string') return { ok: false, error: provenance.error };
+
+  const desc = e['desc'];
+  if (desc !== undefined && typeof desc !== 'string') return { ok: false, error: 'item.desc must be a string when present' };
+  const tier = e['tier'];
+  if (tier !== undefined && typeof tier !== 'string') return { ok: false, error: 'item.tier must be a string when present' };
+  const upstreamUpdatedAt = e['upstreamUpdatedAt'] ?? null;
+  if (upstreamUpdatedAt !== null && typeof upstreamUpdatedAt !== 'string') {
+    return { ok: false, error: 'item.upstreamUpdatedAt must be a string or null' };
+  }
+
+  const signalsRaw = e['signals'];
+  let stars: number | null = null;
+  let starsDisplay: string | null = null;
+  let attributedTo: string | null = null;
+  if (signalsRaw !== undefined && signalsRaw !== null) {
+    if (typeof signalsRaw !== 'object' || Array.isArray(signalsRaw)) return { ok: false, error: 'item.signals must be an object when present' };
+    const s = signalsRaw as Record<string, unknown>;
+    if (s['stars'] !== undefined && s['stars'] !== null && typeof s['stars'] !== 'number') return { ok: false, error: 'item.signals.stars must be a number or null' };
+    if (s['starsDisplay'] !== undefined && s['starsDisplay'] !== null && typeof s['starsDisplay'] !== 'string') return { ok: false, error: 'item.signals.starsDisplay must be a string or null' };
+    if (s['attributedTo'] !== undefined && s['attributedTo'] !== null && typeof s['attributedTo'] !== 'string') return { ok: false, error: 'item.signals.attributedTo must be a string or null' };
+    stars = (s['stars'] as number | null | undefined) ?? null;
+    starsDisplay = (s['starsDisplay'] as string | null | undefined) ?? null;
+    attributedTo = (s['attributedTo'] as string | null | undefined) ?? null;
+  }
+
+  return {
+    ok: true,
+    item: {
+      id,
+      kind: kindRaw as CommunityRegistryItem['kind'],
+      name,
+      ...(desc !== undefined ? { desc } : {}),
+      category,
+      sourceUrl,
+      provenance,
+      ...(tier !== undefined ? { tier } : {}),
+      signals: { stars, starsDisplay, attributedTo },
+      upstreamUpdatedAt,
+      // FORCED hand-curated stamps — never trusted from the body.
+      fetchedAt: null,
+      fetchedBy: 'operator',
+    },
+  };
+}
+
+/** Load the live registry tolerantly (missing file = the fresh-root empty
+ *  baseline), apply `mutate`, then temp-write → re-parse → rename. A `null`
+ *  from `mutate` means "refused, write NOTHING" — the file stays
+ *  byte-identical (a 409/404 must never reformat the registry as a side
+ *  effect). Throws on a malformed EXISTING registry (never half-trusts a
+ *  corrupt file) and on a produced document the loader itself refuses. */
+function mutateCommunityRegistry(
+  forgeRoot: string,
+  mutate: (items: CommunityRegistryItem[]) => CommunityRegistryItem[] | null,
+): void {
+  const destPath = communityRegistryPath(forgeRoot);
+  const existing = existsSync(destPath)
+    ? loadCommunityRegistry(destPath)
+    : { schemaVersion: 1, lastRefresh: null as string | null, items: [] as CommunityRegistryItem[] };
+  const nextItems = mutate([...existing.items]);
+  if (nextItems === null) return;
+  const serialized = serializeCommunityRegistry({ schemaVersion: existing.schemaVersion, lastRefresh: existing.lastRefresh, items: nextItems });
+
+  mkdirSync(dirname(destPath), { recursive: true });
+  const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
+  writeFileSync(tempPath, serialized, 'utf8');
+  try {
+    loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
+    renameSync(tempPath, destPath);
+  } catch (err) {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw err;
+  }
+}
+
 export async function handleStudioWriteRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -348,10 +482,99 @@ export async function handleStudioWriteRoutes(
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
-  if (method !== 'PUT' && method !== 'POST') return false;
+  if (method !== 'PUT' && method !== 'POST' && method !== 'DELETE') return false;
 
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
+
+  // ---- W7-B3 (community-23): community registry CRUD ----------------------
+  if (method === 'POST' && url === '/api/studio/community/registry/items') {
+    try {
+      const parsed = parseRegistryItemBody(await readJson(req));
+      if (!parsed.ok) {
+        sendJson(res, 400, { error: parsed.error }, origin);
+        return true;
+      }
+      let conflict = false;
+      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+        if (items.some((i) => i.id === parsed.item.id)) {
+          conflict = true;
+          return null; // refused — the file stays byte-identical
+        }
+        return [...items, parsed.item];
+      });
+      if (conflict) {
+        sendJson(res, 409, { error: `a registry item with id "${parsed.item.id}" already exists — edit it instead` }, origin);
+        return true;
+      }
+      sendJson(res, 200, { ok: true, id: parsed.item.id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  if (registryItemMatch && (method === 'PUT' || method === 'DELETE')) {
+    try {
+      let id: string;
+      try {
+        id = decodeURIComponent(registryItemMatch[1]);
+        assertSkillSlug(id, 'community item');
+      } catch (err) {
+        sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return true;
+      }
+
+      if (method === 'PUT') {
+        const parsed = parseRegistryItemBody(await readJson(req));
+        if (!parsed.ok) {
+          sendJson(res, 400, { error: parsed.error }, origin);
+          return true;
+        }
+        if (parsed.item.id !== id) {
+          sendJson(res, 400, { error: `item.id "${parsed.item.id}" does not match the URL id "${id}" — a rename is delete + add` }, origin);
+          return true;
+        }
+        let found = false;
+        mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+          const next = items.map((i) => {
+            if (i.id !== id) return i;
+            found = true;
+            return parsed.item;
+          });
+          return found ? next : null; // 404 path writes nothing
+        });
+        if (!found) {
+          sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
+          return true;
+        }
+        sendJson(res, 200, { ok: true, id }, origin);
+        return true;
+      }
+
+      // DELETE
+      let found = false;
+      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+        const next = items.filter((i) => {
+          if (i.id === id) {
+            found = true;
+            return false;
+          }
+          return true;
+        });
+        return found ? next : null; // 404 path writes nothing
+      });
+      if (!found) {
+        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
+        return true;
+      }
+      sendJson(res, 200, { ok: true, id }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
 
   // ---- POST /api/studio/projects/:id/save-repo (R1-2) ----------------------
   // Merge the project's accumulated forge-studio changes into main + push.
