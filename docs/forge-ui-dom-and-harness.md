@@ -2046,9 +2046,11 @@ inventory rather than one shared page-level contract:
   plan's own content (status banner, per-action state, raw text); the panel
   only ever owned the approve control and the phase-gated status line, both
   now generic. The launcher that starts this session lives on `/knowledge`
-  (see the KB maintenance panel entry, below) —
-  `[data-action="start-kb-cleanup"]`, POSTing
-  `POST /api/studio/kbs/:id/cleanup/start`.
+  (see the KB action group entry, below) —
+  `[data-action="start-kb-cleanup"]`, which routes to the kickoff form
+  `/sessions/kb-cleanup/new?kb=<kbId>`; that form makes the
+  `POST /api/studio/kbs/:id/cleanup/start` (knowledge-33 — the launcher
+  itself stopped POSTing on click).
   **W6-B9 — the instructions kind.** Its bespoke `SessionInstructionsPanel`
   (interview form via the shared `ArchitectQuestionForm`, `InstructionsVerdict`'s
   draft-preview + approve/revise/reject gate, `SessionBriefing`'s pre-interview
@@ -2715,7 +2717,14 @@ inventory rather than one shared page-level contract:
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
     below). Journey: `knowledge-explore-tabs`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]
-    [data-fetch-status]` — the root status folds BOTH the roster read AND the
+    [data-fetch-status][data-health-ready]` — `data-health-ready="true"` is
+    present iff the selected KB's `health` payload has actually arrived
+    (W7-B2): `data-page-ready` settles on the roster + detail reads alone, so
+    the Health tab's own content lags it. Automation that reads health must
+    wait on `data-health-ready`, not `data-page-ready`
+    (`scripts/journeys/knowledge.mjs`'s `kb-maintain` health beat does). The
+    attribute is ABSENT (not `"false"`) while health is unresolved. The root
+    status itself folds BOTH the roster read AND the
     selected KB's detail read (W7-FIX-A1 A1-07: `kbsError || kbDetailError`);
     a failed KB-detail read renders `[data-section="kb-detail-error"]` wrapping
     the shared `[data-component="fetch-error"]` + Retry (which drops the cached
@@ -2822,7 +2831,7 @@ inventory rather than one shared page-level contract:
       stays a direct dispatch-and-poll, not a chat session.
   - **KB action group (W7-B2 — replaces the old `kb-maintenance` panel):**
     `[data-component="kb-action-group"][data-active-job="drain"|"consolidate"
-    |"cleanup"|"none"]` — the ONE place every KB-mutating action lives
+    |"none"]` — the ONE place every KB-mutating action lives
     (knowledge-05/32: the old header buttons, the maintenance panel, and the
     drain panel's own dispatch button all converged here). Mutually gated by
     the KB-level active-job fact: `GET /api/studio/kbs/:id/active-job`
@@ -2848,16 +2857,17 @@ inventory rather than one shared page-level contract:
     `[data-component="kb-action-result"]` (carrying `[data-consolidate-state]`
     + `[data-poll-state]` when a consolidate has run; the hidden
     `[data-component="kb-action-consolidate-state"]` div carries them while
-    no textual result is shown). `start-kb-cleanup` calls
-    `startKbCleanup(kbId)` (`POST /api/studio/kbs/:id/cleanup/start`) and, on
-    success, navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>`
-    using the **`project` the route itself returns**, never one re-derived
-    from `kbId` — a non-project-bound KB anchors its session under a
+    no textual result is shown). `start-kb-cleanup` does NOT POST on click
+    (knowledge-33): it routes to the ONE kickoff form,
+    `/sessions/kb-cleanup/new?kb=<kbId>`, and the FORM makes the
+    `POST /api/studio/kbs/:id/cleanup/start` (model choice included) and
+    navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>` using the
+    **`project` the route itself returns**, never one re-derived from
+    `kbId` — a non-project-bound KB anchors its session under a
     server-minted `.kb-<id>` scratch project
     (`KB_SEEDING_ANCHOR_PREFIX`, `cli/ui-bridge.ts`), so building the URL
-    from `kbId` instead would 404 for every such KB. A failure surfaces
-    verbatim in the SAME `[data-component="kb-action-result"]` span the
-    other ops already use, never swallowed. Render-tested:
+    from `kbId` instead would 404 for every such KB. A start failure
+    surfaces verbatim on the kickoff form, never swallowed. Render-tested:
     `lib/kb-action-group-render.test.ts`. Consolidate is genuinely
     asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
     dispatches, reads the returned `runId`, and polls
