@@ -61,12 +61,12 @@ cli/bridge-studio-skills.ts mkdirSync 2
 cli/bridge-studio-skills.ts readFileSync 1
 cli/bridge-studio-skills.ts rmSync 1
 cli/bridge-studio-skills.ts writeFileSync 1
-cli/bridge-studio-writes.ts execFileSync 2
+cli/bridge-studio-writes.ts execFileSync 3
 cli/bridge-studio-writes.ts existsSync 13
 cli/bridge-studio-writes.ts mkdirSync 7
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
-cli/bridge-studio-writes.ts realpathSync 2
+cli/bridge-studio-writes.ts realpathSync 3
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts writeFileSync 6
 cli/bridge-studio.ts existsSync 10

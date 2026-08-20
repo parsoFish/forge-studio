@@ -264,3 +264,16 @@ test('AT-4 (CALLER-COUNT, null path): when deriveShowcaseCycleId returns null (n
   expect(fetchDemo).not.toHaveBeenCalled();
   expect(result).toEqual({ kind: 'empty' });
 });
+
+// ---------------------------------------------------------------------------
+// W7-B6 review F9 — the cycle-switcher select value never goes blank while
+// the run/artifact links follow the resolved fallback cycle.
+// ---------------------------------------------------------------------------
+
+test('W7-B6 F9: resolveShowcaseSelectValue — an eligible pick wins; a STALE pick (dropped from the eligible list) falls back to the RESOLVED cycle, never a blank control that disagrees with the links', async () => {
+  const { resolveShowcaseSelectValue } = await import('./project-showcase');
+  expect(resolveShowcaseSelectValue('cyc-b', 'cyc-a', ['cyc-a', 'cyc-b'])).toBe('cyc-b');
+  expect(resolveShowcaseSelectValue('cyc-gone', 'cyc-a', ['cyc-a', 'cyc-b'])).toBe('cyc-a');
+  expect(resolveShowcaseSelectValue('', 'cyc-a', ['cyc-a'])).toBe('cyc-a');
+  expect(resolveShowcaseSelectValue('', undefined, [])).toBe('');
+});

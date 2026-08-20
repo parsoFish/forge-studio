@@ -157,8 +157,11 @@ function checkContractArtifactContainment(projectRoot: string): void {
  * project's brain sub-wiki `profile.md` (under the project.json `artifactRoot`,
  * default `.`). Each file is written ONLY if absent — an existing operator file
  * is never clobbered. The stubs are clearly marked as TODO scaffolding so a
- * hollow roadmap is never written silently. A git repo is initialised if the
- * project dir is not already inside one (C6/preflight needs a git surface).
+ * hollow roadmap is never written silently. A git repo is initialised when
+ * the dir has no legitimate repo of its own — its OWN work tree and an
+ * enclosing NON-forge repo both count as legitimate; only "no repo" or
+ * "inside forge's own work tree" init (C6/preflight needs a git surface;
+ * see the three-way rule at the probe below, W7-B6 review F4).
  *
  * SEC-03 Defect 5: validating `projectRoot`'s own identity (the caller's
  * `isContainedProjectRepoPath` check) does not validate what gets written
@@ -194,25 +197,48 @@ function checkContractArtifactContainment(projectRoot: string): void {
  * Returns the list of relative paths actually created (empty if everything was
  * already present), so the caller can tell the operator what it touched.
  */
-export function scaffoldContractArtifacts(projectRoot: string, name: string): string[] {
+export function scaffoldContractArtifacts(projectRoot: string, name: string, forgeRoot: string): string[] {
   const created: string[] = [];
 
-  // git init unless the dir is its OWN git work tree. W7-B6 (projects-11):
-  // the old probe (`rev-parse --is-inside-work-tree`) reports true for ANY
+  // git init decision — three-way, not a boolean. W7-B6 (projects-11): the
+  // original probe (`rev-parse --is-inside-work-tree`) reports true for ANY
   // dir inside an enclosing repo — `projects/` lives inside the forge work
   // tree, so every freshly onboarded project silently inherited FORGE's own
   // git repo (C2/C6 then evaluated against the wrong repo, and dev-loop
-  // branches/commits would land in forge's history). The honest question is
-  // "is projectRoot ITSELF the work-tree root?" — compare `--show-toplevel`
-  // against realpath(projectRoot).
-  let isOwnRepo = false;
+  // branches/commits would land in forge's history). W7-B6 review F4: the
+  // first fix ("init unless projectRoot is ITSELF the work-tree root")
+  // overcorrected — a subdirectory of an operator's REAL cloned repo (a
+  // monorepo package onboarded as the repoPath, contained under projects/)
+  // got a fresh empty repo NESTED inside their checkout, repointing every
+  // subsequent forge git operation at a history-less repo. The honest rule:
+  //   - projectRoot IS its own work-tree root            → skip (own repo);
+  //   - enclosed by FORGE's own work tree                → init (the
+  //     gitignored-projects/ case — the project must not inherit forge);
+  //   - enclosed by any OTHER repo                       → skip (the
+  //     operator's real repo governs; never nest a .git inside it);
+  //   - in no repo at all                                → init.
+  let needsInit: boolean;
   try {
-    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim();
-    isOwnRepo = realpathSync(toplevel) === realpathSync(projectRoot);
+    const toplevel = realpathSync(
+      execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim(),
+    );
+    if (toplevel === realpathSync(projectRoot)) {
+      needsInit = false; // already its own repo
+    } else {
+      let forgeToplevel: string | null = null;
+      try {
+        forgeToplevel = realpathSync(
+          execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: forgeRoot, encoding: 'utf8' }).trim(),
+        );
+      } catch {
+        forgeToplevel = null; // forge root not in a repo (test fixtures) — the enclosing repo cannot be forge's
+      }
+      needsInit = forgeToplevel !== null && toplevel === forgeToplevel;
+    }
   } catch {
-    isOwnRepo = false; // not in any repo at all — init below
+    needsInit = true; // not in any repo at all — init below
   }
-  if (!isOwnRepo) {
+  if (needsInit) {
     try {
       execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
       created.push('.git/');
@@ -961,7 +987,7 @@ export async function handleStudioWriteRoutes(
       // below), never surface it as an unrelated 500.
       let scaffoldedLocal: string[];
       try {
-        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;

@@ -70,6 +70,27 @@ test('AT-B6-12 (RED) instructions / project-brain / demo-builder /start with an 
   assert.ok(!existsSync(join(forgeRoot, 'projects', UNKNOWN)), 'no phantom project directory after any start route');
 });
 
+test('AT-B6-15 (RED, review F1) a NON-ID-SHAPED project string must NOT fall through the roster guard: safe-segment shapes ("my project", ".hidden", "proj.name") are 4xx-refused with no phantom dir', async () => {
+  // The guard used to pass any string failing PROJECT_ID_RE straight through
+  // to the routes' own checks — but guardedSessionDir's isSafeSegment accepts
+  // spaces, dots, and leading "_"/"."/"-" in creation mode, so these shapes
+  // minted projects/<junk>/ (a ".hidden" dir is even worse: created but
+  // invisible to discoverProjects). Every string that is not a roster id must
+  // be refused BEFORE any fs call.
+  for (const junk of ['my project', '.hidden', 'proj.name', '_underscore-lead', '-dash-lead']) {
+    for (const [path, body] of [
+      ['/api/architect/start', { project: junk, idea: 'x' }],
+      ['/api/instructions/start', { project: junk, mode: 'init' }],
+      ['/api/project-brain/start', { project: junk }],
+      ['/api/demo-builder/start', { project: junk, mode: 'create' }],
+    ] as const) {
+      const { status, json } = await post(path, body);
+      assert.ok(status >= 400 && status < 500, `${path} project=${JSON.stringify(junk)}: expected 4xx — got ${status}: ${JSON.stringify(json)}`);
+      assert.ok(!existsSync(join(forgeRoot, 'projects', junk)), `projects/${junk} must NOT be created via ${path}`);
+    }
+  }
+});
+
 test('AT-B6-13 (positive control) a ROSTER project still starts: architect 200, session dir + status written', async () => {
   const { status, json } = await post('/api/architect/start', { project: 'realproj', idea: 'a real idea' });
   assert.equal(status, 200, `expected 200 — got ${status}: ${JSON.stringify(json)}`);

@@ -154,3 +154,24 @@ export function deriveShowcaseStats(model: DemoModel): ShowcaseStats {
 export function showShowcaseEntry(cycles: Cycle[], projectId: string): boolean {
   return deriveShowcaseCycleId(cycles, projectId) !== null;
 }
+
+// ---------------------------------------------------------------------------
+// resolveShowcaseSelectValue (W7-B6 review F9)
+// ---------------------------------------------------------------------------
+
+/**
+ * The cycle-switcher select's `value`. The naive `pickedCycleId ||
+ * resolvedCycleId` renders a BLANK control whenever the operator's pick has
+ * left the eligible list (a refresh dropped the cycle) — while the run/
+ * artifact links beside it follow `loadShowcase`'s FALLBACK cycle: the select
+ * and the links silently disagree. Rule: show the pick only while it is
+ * genuinely eligible; otherwise show the cycle the page actually resolved.
+ */
+export function resolveShowcaseSelectValue(
+  pickedCycleId: string,
+  resolvedCycleId: string | undefined,
+  eligibleCycles: readonly string[],
+): string {
+  if (pickedCycleId !== '' && eligibleCycles.includes(pickedCycleId)) return pickedCycleId;
+  return resolvedCycleId ?? '';
+}

@@ -1452,6 +1452,11 @@ inventory rather than one shared page-level contract:
   `[data-action="start-work-architect"]` (a link carrying the project ID).
   Disabled actions carry `data-disabled-reason` + a visible hint
   (crosscut-25); outcomes land on `[data-start-work-outcome="ok"|"error"]`.
+  Ids whose develop dispatch already came back ok THIS SESSION are excluded
+  from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
+  review F7 — the queue keeps them `pending` until the scheduler claims, so
+  a refetched roadmap would otherwise re-arm the button with the same ids;
+  all-dispatched reads "development already enqueued" as the reason).
   The old bottom-of-page `[data-section="run-a-flow"]` select (whose chosen
   flow rode a `?flow=` nothing read) is REMOVED. The Roadmap tab additionally
   renders `[data-section="roadmap-actionable"][data-actionable-count]` — the
@@ -1932,11 +1937,18 @@ inventory rather than one shared page-level contract:
   [data-roster-state="loading"|"ok"|"error"]`; the project field
   (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
   `name (id)`) — an unknown `?project=` prefill surfaces
-  `[data-unknown-project="<id>"]` and is never submitted; the SKILL-declared
+  `[data-unknown-project="<id>"]` and is never submitted
+  (`reconcileProjectPrefill`, `lib/kickoff-form.ts` — the ONE rule, shared
+  with the generic `/sessions/[kind]/new` select since the W7-B6 review
+  round); the SKILL-declared
   model-tier envelope renders via the shared `KickoffModelTierPicker`
   (architect is `strategy:fixed` today, so it states the tier that will
   run); `[data-field="cost-ceiling-usd"]` rides to
-  `POST /api/architect/start` as `costCeilingUsd` (validated like the agent
+  `POST /api/architect/start` as `costCeilingUsd` (validated client-side by
+  `kickoffCeilingInvalidReason` — `lib/kickoff-form.ts`, a parity-tested
+  mirror of `MAX_KICKOFF_COST_CEILING_USD` so an over-cap value disables
+  Start with the reason instead of round-tripping a 400 (review F8) — and
+  server-side like the agent
   dispatch route's; persisted into the session status; ENFORCED by
   `runArchitectTurn` at every turn start — a turn that would start at/past
   the ceiling refuses with the reason in the session's error surface); a
@@ -1944,7 +1956,11 @@ inventory rather than one shared page-level contract:
   `[data-section="start-architect-hint"]`). Server side, every
   project-taking session `/start` route (architect / instructions /
   project-brain / demo-builder) 404s an unknown project
-  (`unknownProjectReason` vs `discoverProjects`) BEFORE any write — a typo
+  (`unknownProjectReason` vs `discoverProjects`) BEFORE any write — and,
+  since the W7-B6 review round (F1), refuses any string that fails
+  `PROJECT_ID_RE` outright (the creation-mode containment guards tolerate
+  spaces/dots/leading `_`/`.`/`-`, so "my project" or ".hidden" used to slip
+  past the roster check) — a typo
   can no longer mint a phantom `projects/<typo>/` (sessions-kinds-02,
   projects-15).
   **R4-19-F2, retired W6-B8** — the kb-cleanup kind. Its bespoke
@@ -2290,8 +2306,11 @@ inventory rather than one shared page-level contract:
   card (agent slug + `SKILL.md` path, produced artifact label, session
   directory shape) + a project select (`[data-field="kickoff-project"]` — a
   REAL `<select>` over roster ids since W7-B6, sessions-kinds-02; the old
-  datalist accepted any typo and minted phantom project dirs; a disabled
-  Start explains itself via `data-disabled-reason` +
+  datalist accepted any typo and minted phantom project dirs; a `?project=`
+  prefill is reconciled against the loaded roster (`reconcileProjectPrefill`,
+  `lib/kickoff-form.ts`, W7-B6 review F2 — shared with `NewIdeaBox`): a miss
+  surfaces `[data-unknown-project="<value>"]` and never rides a submit; a
+  disabled Start explains itself via `data-disabled-reason` +
   `[data-section="start-session-hint"]`, crosscut-25), or, for `kb-cleanup`
   only, a KB select
   (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for

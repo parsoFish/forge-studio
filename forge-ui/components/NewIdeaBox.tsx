@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { startArchitect } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, type AgentCapability } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
+import { kickoffCeilingInvalidReason, reconcileProjectPrefill } from '@/lib/kickoff-form';
 
 /**
  * ADR 020 — the operator's entry point into the in-UI architect. This is the
@@ -61,10 +62,11 @@ export function NewIdeaBox({
         setRosterState('ok');
         // crosscut-21: honour a ?project= prefill ONLY when it names a real
         // roster id — a stale bookmark surfaces a notice, never a submit.
-        if (initialProject) {
-          if (list.some((p) => p.id === initialProject)) setProject(initialProject);
-          else setUnknownInitial(initialProject);
-        }
+        // (Shared rule: lib/kickoff-form.ts, also used by the generic
+        // kickoff page — review F2.)
+        const reconciled = reconcileProjectPrefill(initialProject, list.map((p) => p.id));
+        if (reconciled.project) setProject(reconciled.project);
+        setUnknownInitial(reconciled.unknownPrefill);
       })
       .catch(() => {
         if (!cancelled) setRosterState('error');
@@ -76,7 +78,11 @@ export function NewIdeaBox({
 
   const isRangeTier = allowedTiersFromCapability(capability).length > 0;
   const ceilingUsd = ceilingRaw.trim() === '' ? undefined : Number(ceilingRaw);
-  const ceilingInvalid = ceilingUsd !== undefined && (!Number.isFinite(ceilingUsd) || ceilingUsd <= 0);
+  // Review F8: ONE validation rule (lib/kickoff-form.ts), including the
+  // server's MAX_KICKOFF_COST_CEILING_USD cap — an over-cap value must
+  // disable Start with the reason stated, not 400 after a round-trip.
+  const ceilingReason = kickoffCeilingInvalidReason(ceilingUsd);
+  const ceilingInvalid = ceilingReason !== null;
   const disabledReason = submitting
     ? null
     : rosterState === 'error'
@@ -85,9 +91,7 @@ export function NewIdeaBox({
         ? 'select a project'
         : idea.trim() === ''
           ? 'describe the idea'
-          : ceilingInvalid
-            ? 'the cost ceiling must be a positive number (or blank)'
-            : null;
+          : ceilingReason;
   const canSubmit = disabledReason === null && !submitting;
 
   async function onSubmit(): Promise<void> {

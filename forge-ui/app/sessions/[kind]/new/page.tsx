@@ -11,6 +11,7 @@ import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioS
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
+import { reconcileProjectPrefill } from '@/lib/kickoff-form';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -105,7 +106,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
 
-  const [project, setProject] = useState(prefillProject);
+  // W7-B6 review F2: NEVER seed the select from the raw prefill — the field
+  // is a select over roster ids, so an unvalidated prefill (a deleted
+  // project, a pre-B6 NAME-based link) rendered a BLANK select while Start
+  // stayed enabled and submitted the invisible stale value. The prefill is
+  // reconciled against the loaded roster below (shared rule with NewIdeaBox:
+  // lib/kickoff-form.ts) — a miss surfaces `data-unknown-project` instead.
+  const [project, setProject] = useState('');
+  const [unknownPrefill, setUnknownPrefill] = useState<string | null>(null);
   const [kbId, setKbId] = useState('');
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
@@ -136,11 +144,15 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     ])
       .then(([projects, cap, kbList, sessions]) => {
         if (cancelled) return;
-        setKnownProjects(
-          projects
-            .map((p) => ({ id: p.id, name: p.name ?? p.id }))
-            .sort((a, b) => a.id.localeCompare(b.id)),
-        );
+        const list = projects
+          .map((p) => ({ id: p.id, name: p.name ?? p.id }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        setKnownProjects(list);
+        // Review F2: the ?project= prefill seeds the select ONLY when it
+        // names a real roster id; a miss becomes an honest notice.
+        const reconciled = reconcileProjectPrefill(prefillProject, list.map((p) => p.id));
+        if (reconciled.project) setProject(reconciled.project);
+        setUnknownPrefill(reconciled.unknownPrefill);
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
@@ -352,6 +364,13 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           ) : (
             <>
               <div style={rowLabel}>Project</div>
+              {/* Review F2 — same honest notice as NewIdeaBox: a prefill the
+                  roster does not know is surfaced, never silently submitted. */}
+              {unknownPrefill && (
+                <div data-unknown-project={unknownPrefill} style={{ color: 'var(--red, #f87171)', fontSize: 12, marginBottom: 8 }}>
+                  Project &quot;{unknownPrefill}&quot; is not in the roster — pick a real project below (or onboard it first).
+                </div>
+              )}
               {/* W7-B6 (sessions-kinds-02): a SELECT over the roster ids the
                   page already fetched — free text minted phantom
                   projects/<typo>/ dirs (the server now 404s unknowns too). */}

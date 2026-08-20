@@ -36,9 +36,15 @@ export function StartWorkActions({
   /** Fired after any successful dispatch so the page refetches roadmap state. */
   onChanged: () => void | Promise<void>;
 }): JSX.Element {
+  // W7-B6 review F7: ids whose develop dispatch this session came back ok.
+  // The queue keeps them `pending` until the scheduler claims, so a refetched
+  // roadmap re-reports them eligible — the derivation excludes them so the
+  // button can't re-fire the same ids (RoadmapView's batch button applies the
+  // same exclusion via its per-card DevelopCardState).
+  const [dispatchedDevelop, setDispatchedDevelop] = useState<string[]>([]);
   const state = useMemo(
-    () => deriveStartWorkState(roadmap?.initiatives ?? null, flows),
-    [roadmap, flows],
+    () => deriveStartWorkState(roadmap?.initiatives ?? null, flows, dispatchedDevelop),
+    [roadmap, flows, dispatchedDevelop],
   );
   const [busy, setBusy] = useState<'plan' | 'develop' | 'run-flow' | null>(null);
   const [outcome, setOutcome] = useState<{ kind: 'ok' | 'error'; text: string; href?: string } | null>(null);
@@ -73,10 +79,14 @@ export function StartWorkActions({
     setOutcome(null);
     try {
       const r = await startDevelopment(ids);
-      const started = (r.results ?? []).filter((x) => x.ok).length;
+      const okIds = (r.results ?? []).filter((x) => x.ok).map((x) => x.initiativeId);
+      // Review F7: remember what was really enqueued so the refetched (still
+      // `pending`) roadmap can't re-arm the button with the same ids. Failed
+      // ids stay eligible — a retry is legitimate for them.
+      if (okIds.length > 0) setDispatchedDevelop((prev) => [...prev, ...okIds]);
       setOutcome(
-        started > 0
-          ? { kind: 'ok', text: `${started}/${ids.length} initiative${ids.length === 1 ? '' : 's'} enqueued for development` }
+        okIds.length > 0
+          ? { kind: 'ok', text: `${okIds.length}/${ids.length} initiative${ids.length === 1 ? '' : 's'} enqueued for development` }
           : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
       );
       await onChanged();

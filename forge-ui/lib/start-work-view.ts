@@ -49,11 +49,23 @@ export type StartWorkState = {
 export function deriveStartWorkState(
   initiatives: StartWorkInitiative[] | null,
   flows: StartWorkFlow[],
+  /** W7-B6 review F7: initiativeIds already dispatched for development THIS
+   *  SESSION (the component tracks its own ok-result ids). The queue status
+   *  stays `pending` until the scheduler claims the item, so a refetched
+   *  roadmap re-reports the same ids as eligible — without this exclusion the
+   *  button re-enabled with the same count and a second click re-POSTed the
+   *  same ids (every one 409s already-running → the outcome line read
+   *  "nothing started" for work that was in fact enqueued). Mirrors the
+   *  RoadmapView batch button's own `dev !== 'starting' && dev !== 'started'`
+   *  filter (app/projects/[id]/page.tsx). */
+  dispatchedDevelopIds: readonly string[] = [],
 ): StartWorkState {
   const list = initiatives ?? [];
   const pendingReady = list.filter((i) => i.status === 'pending' && i.ready);
   const unplannedReady = pendingReady.filter((i) => i.workItems === undefined);
-  const eligible = pendingReady.filter((i) => i.workItems !== undefined);
+  const dispatched = new Set(dispatchedDevelopIds);
+  const eligibleAll = pendingReady.filter((i) => i.workItems !== undefined);
+  const eligible = eligibleAll.filter((i) => !dispatched.has(i.initiativeId));
   const runnableFlows = flows.filter((f) => {
     const kind = f.kickoff?.kind;
     return kind !== 'idea' && kind !== 'trigger-only';
@@ -76,9 +88,11 @@ export function deriveStartWorkState(
         ? null
         : list.length === 0
           ? 'no roadmap yet — start with the Architect'
-          : unplannedReady.length > 0
-            ? 'the ready initiatives are not planned yet — Plan first'
-            : 'nothing is ready to start (blocked, running, or done)',
+          : eligibleAll.length > 0
+            ? 'development already enqueued — waiting for the scheduler to claim it'
+            : unplannedReady.length > 0
+              ? 'the ready initiatives are not planned yet — Plan first'
+              : 'nothing is ready to start (blocked, running, or done)',
     runFlowDisabledReason:
       runnableFlows.length === 0
         ? 'no runnable flow is installed'

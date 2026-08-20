@@ -69,6 +69,26 @@ test('deriveStartWorkState: ready-but-unplanned only → Start development says 
   expect(s.planDisabledReason).toBeNull();
 });
 
+test('deriveStartWorkState (review F7): session-dispatched ids are EXCLUDED from eligible — the refetched still-pending roadmap cannot re-arm the button with the same ids', () => {
+  // The queue keeps a dispatched initiative `pending` until the scheduler
+  // claims it, so after a successful batch POST the refetched roadmap
+  // re-reported the same ids eligible; a second click re-POSTed them and
+  // every item 409'd already-running → "nothing started" for work that was
+  // genuinely enqueued. Killed implementation: an eligible list blind to
+  // what THIS session already dispatched.
+  const inits = [
+    init({ initiativeId: 'INIT-a', workItems: [] }),
+    init({ initiativeId: 'INIT-b', workItems: [] }),
+  ];
+  const partial = deriveStartWorkState(inits, FLOWS, ['INIT-a']);
+  expect(partial.eligible.map((i) => i.initiativeId)).toEqual(['INIT-b']);
+  expect(partial.startDisabledReason).toBeNull();
+
+  const all = deriveStartWorkState(inits, FLOWS, ['INIT-a', 'INIT-b']);
+  expect(all.eligible).toEqual([]);
+  expect(all.startDisabledReason).toMatch(/already enqueued/i);
+});
+
 function render(roadmap: ProjectRoadmap | null, flows: unknown[]): string {
   return renderToStaticMarkup(
     React.createElement(StartWorkActions, {

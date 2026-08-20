@@ -16,7 +16,10 @@
  *                        requires_env → requiresEnv})
  *
  * Every OTHER key (unknown keys, `$…comment` keys, demo blocks) is preserved
- * byte-for-value; the migrated object is re-validated with
+ * byte-for-value; a present flat key whose value the mapping cannot carry
+ * over EXACTLY (a non-array gate cmd, extra acceptance_gate subkeys) REFUSES
+ * (`unmappable`) rather than deleting it (W7-B6 review F3); the migrated
+ * object is re-validated with
  * `validateProjectConfig` (sidecar injected for validation only, mirroring
  * the loader) BEFORE anything is written, so this can never write a config
  * the loader would then refuse. The bridge's contract-stages 409 names this
@@ -38,7 +41,43 @@ const FLAT_KEYS = ['quality_gate_cmd', 'ci_gate', 'ci_fix_cmd', 'ci_gate_unset_e
 
 export type MigrateOutcome =
   | { ok: true; path: string; moved: string[] }
-  | { ok: false; reason: 'not-found' | 'invalid-json' | 'nothing-to-migrate' | 'conflict' | 'validation-failed'; message: string };
+  | { ok: false; reason: 'not-found' | 'invalid-json' | 'nothing-to-migrate' | 'conflict' | 'unmappable' | 'validation-failed'; message: string };
+
+/** The acceptance_gate subkeys the typed mapping can carry over — anything
+ *  else present must REFUSE, never be silently dropped (W7-B6 review F3). */
+const ACCEPTANCE_GATE_MAPPABLE_KEYS = new Set(['match', 'required', 'requires_env']);
+
+/**
+ * W7-B6 review F3 — mappability check, run BEFORE any mapping/delete. The
+ * original mapping loops only handled the expected shapes (Array flat keys,
+ * object acceptance_gate) while the FLAT_KEYS delete loop removed every
+ * present flat key unconditionally: a string `ci_gate` (a plausible
+ * hand-edit) was deleted, validation still passed without a `ci` block, and
+ * an `ok:true` write silently lost the operator's CI gate — in a tool whose
+ * contract is preserve-byte-for-value + validate-before-write. Any present
+ * flat key whose value the mapping cannot carry over EXACTLY refuses with
+ * the offending key(s) named.
+ */
+function unmappableFlatKeyReasons(obj: Record<string, unknown>): string[] {
+  const reasons: string[] = [];
+  for (const k of ['quality_gate_cmd', 'ci_gate', 'ci_fix_cmd', 'ci_gate_unset_env'] as const) {
+    if (obj[k] !== undefined && !Array.isArray(obj[k])) {
+      reasons.push(`${k} must be an array of strings (got ${JSON.stringify(obj[k])?.slice(0, 80)})`);
+    }
+  }
+  const gate = obj['acceptance_gate'];
+  if (gate !== undefined) {
+    if (gate === null || typeof gate !== 'object' || Array.isArray(gate)) {
+      reasons.push(`acceptance_gate must be an object (got ${JSON.stringify(gate)?.slice(0, 80)})`);
+    } else {
+      const extras = Object.keys(gate as Record<string, unknown>).filter((k) => !ACCEPTANCE_GATE_MAPPABLE_KEYS.has(k));
+      if (extras.length > 0) {
+        reasons.push(`acceptance_gate carries key(s) the typed mapping cannot carry over: ${extras.join(', ')} (only match, required, requires_env map)`);
+      }
+    }
+  }
+  return reasons;
+}
 
 /**
  * Migrate `<projectRoot>/.forge/project.json` from the flat gate keys to the
@@ -73,6 +112,18 @@ export function migrateProjectConfig(projectRoot: string): MigrateOutcome {
       ok: false,
       reason: 'conflict',
       message: `${path} declares BOTH testProcess AND flat gate key(s) (${present.join(', ')}) — remove the flat keys yourself (testProcess is the source of truth)`,
+    };
+  }
+
+  // W7-B6 review F3: refuse BEFORE mapping when any present flat key cannot
+  // be carried over exactly — the delete loop below removes every present
+  // flat key, so an unmapped-but-deleted value would be silent data loss.
+  const unmappable = unmappableFlatKeyReasons(obj);
+  if (unmappable.length > 0) {
+    return {
+      ok: false,
+      reason: 'unmappable',
+      message: `${path} carries flat gate key(s) this migration cannot map — fix them by hand: ${unmappable.join('; ')}`,
     };
   }
 

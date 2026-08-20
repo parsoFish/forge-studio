@@ -95,6 +95,57 @@ test('AT-B6-9 migrate: flat keys ALONGSIDE testProcess → conflict refusal, fil
   }
 });
 
+test('AT-B6-16 (RED, review F3) migrate: a present-but-unmappable flat key (string ci_gate) is REFUSED, never silently deleted', () => {
+  // The mapping loops only handled Array shapes, but the FLAT_KEYS delete
+  // loop removed every flat key unconditionally — a string ci_gate (a
+  // plausible hand-edit) was deleted, validation still passed, and an
+  // ok:true write silently lost the operator's CI gate.
+  const root = plantProject({ name: 'x', quality_gate_cmd: ['npm', 'test'], ci_gate: 'npm run ci' });
+  try {
+    const bytes = readFileSync(join(root, '.forge', 'project.json'), 'utf8');
+    const out = migrateProjectConfig(root);
+    assert.ok(!out.ok, `an unmappable flat key must refuse — got ${JSON.stringify(out)}`);
+    assert.ok(!out.ok && out.reason === 'unmappable', `reason must be 'unmappable' — got ${JSON.stringify(out)}`);
+    assert.ok(!out.ok && out.message.includes('ci_gate'), 'the refusal must NAME the unmappable key');
+    assert.equal(readFileSync(join(root, '.forge', 'project.json'), 'utf8'), bytes, 'an unmappable config must not be written');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-B6-17 (RED, review F3) migrate: acceptance_gate subkeys beyond match/required/requires_env are REFUSED, never silently dropped', () => {
+  // The acceptance_gate mapper kept only match/required/requiresEnv — a
+  // $comment or timeoutMs INSIDE the gate object vanished from an ok:true
+  // write. The tool's contract is preserve-byte-for-value; anything it cannot
+  // carry over must refuse, not delete.
+  const root = plantProject({
+    name: 'x',
+    quality_gate_cmd: ['npm', 'test'],
+    acceptance_gate: { match: 'acceptance', required: true, requires_env: [], $comment: 'live tier', timeoutMs: 60000 },
+  });
+  try {
+    const bytes = readFileSync(join(root, '.forge', 'project.json'), 'utf8');
+    const out = migrateProjectConfig(root);
+    assert.ok(!out.ok && out.reason === 'unmappable', `extra acceptance_gate keys must refuse — got ${JSON.stringify(out)}`);
+    assert.ok(!out.ok && out.message.includes('$comment') && out.message.includes('timeoutMs'), 'the refusal must NAME the unmappable subkeys');
+    assert.equal(readFileSync(join(root, '.forge', 'project.json'), 'utf8'), bytes, 'file untouched on refusal');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-B6-18 (RED, review F3) migrate: a non-object acceptance_gate (string) is REFUSED, never deleted', () => {
+  const root = plantProject({ name: 'x', quality_gate_cmd: ['npm', 'test'], acceptance_gate: 'acceptance' });
+  try {
+    const bytes = readFileSync(join(root, '.forge', 'project.json'), 'utf8');
+    const out = migrateProjectConfig(root);
+    assert.ok(!out.ok && out.reason === 'unmappable', `a non-object acceptance_gate must refuse — got ${JSON.stringify(out)}`);
+    assert.equal(readFileSync(join(root, '.forge', 'project.json'), 'utf8'), bytes, 'file untouched on refusal');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AT-B6-10 migrate: a migration that would fail validation writes NOTHING (validate-before-write)', () => {
   // acceptance_gate with a non-string match — mapping it produces an invalid
   // testProcess.acceptance; the migrate must refuse and leave the file as-is.

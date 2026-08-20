@@ -45,6 +45,7 @@ import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectC
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { buildProjectSavePayload } from '@/lib/project-save-payload';
 import { StartWorkActions } from '@/components/studio/StartWorkActions';
+import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
 
@@ -55,15 +56,20 @@ import { SchedulerCard } from '@/components/SchedulerCard';
  * An absent/rotated event log yields an EMPTY summary (totalUsd 0) — that is
  * "no cost recorded", not "cost $0.00"; kept null too.
  */
-async function fetchCycleCostMap(cycles: Cycle[]): Promise<Record<string, number | null>> {
+// W7-B6 review F5: `prev` memoizes resolved costs for TERMINAL cycles (they
+// cannot gain spend), so the refetch after every dispatch/save only hits the
+// cost route for live cycles + first-sight/unresolved ones — never an
+// unbounded N-request storm per refresh. Decision rule: lib/cycle-cost-cache.
+async function fetchCycleCostMap(cycles: Cycle[], prev: Record<string, number | null>): Promise<Record<string, number | null>> {
+  const { reused, toFetch } = planCycleCostFetch(cycles, prev);
   const entries = await Promise.all(
-    cycles.map(async (c) => {
-      const summary = await fetchCost(c.cycleId).catch(() => null);
+    toFetch.map(async (cycleId) => {
+      const summary = await fetchCost(cycleId).catch(() => null);
       const total = summary !== null && summary.totalUsd > 0 ? summary.totalUsd : null;
-      return [c.cycleId, total] as const;
+      return [cycleId, total] as const;
     }),
   );
-  return Object.fromEntries(entries);
+  return { ...reused, ...Object.fromEntries(entries) };
 }
 
 export default function ProjectBuilderPage({ params }: { params: { id: string } }) {
@@ -105,6 +111,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // W7-B6 (projects-27): per-cycle cost totals (GET /api/cost/<cycleId>) for
   // the ledger's cost column — null/absent renders the honest em dash.
   const [costByCycleId, setCostByCycleId] = useState<Record<string, number | null>>({});
+  // Review F5: the cross-refresh memo of resolved TERMINAL cycle costs (see
+  // fetchCycleCostMap above). A ref on purpose — state here would churn
+  // loadCycleGroups's identity (it is an effect dependency) on every update.
+  const costCacheRef = useRef<Record<string, number | null>>({});
 
   // W7-FIX-A1 (A1-02): a FAILED roster read is an ERROR state (PageLoadError
   // with Retry) — never the shared NotFound ("No project <id>" for a project
@@ -229,9 +239,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       // project (drop cycles with no/other `project`), left RAW so the ledger's
       // shared `deriveProjectCycleLedgerRows` transform runs on the render path.
       const mine = all.filter((c) => c.project === id);
-      // W7-B6 (projects-27): per-cycle cost from the cost route (helper below).
-      const costs = await fetchCycleCostMap(mine);
+      // projects-27 + review F5: ref reuses terminal-cycle totals (see above).
+      const costs = await fetchCycleCostMap(mine, costCacheRef.current);
       if (signal.cancelled) return;
+      costCacheRef.current = costs;
       setCycleGroups(groups);
       setProjectCycles(mine);
       setCostByCycleId(costs);

@@ -54,7 +54,7 @@ import { DemoComparison } from '@/components/DemoComparison';
 import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
-import { deriveShowcaseStats, listShowcaseCycleIds, type ShowcaseStats } from '@/lib/project-showcase';
+import { deriveShowcaseStats, listShowcaseCycleIds, resolveShowcaseSelectValue, type ShowcaseStats } from '@/lib/project-showcase';
 
 export default function ProjectShowcasePage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -210,9 +210,12 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
           >
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--faint)' }}>
               Cycle
+              {/* Review F9: a pick that has left the eligible list must not
+                  render a blank control while the links follow the fallback —
+                  the value tracks what the page actually resolved. */}
               <select
                 data-field="showcase-cycle"
-                value={pickedCycleId || (cycleId ?? '')}
+                value={resolveShowcaseSelectValue(pickedCycleId, cycleId, eligibleCycles)}
                 onChange={(e) => setPickedCycleId(e.target.value)}
                 style={{
                   background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',

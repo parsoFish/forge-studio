@@ -12,6 +12,13 @@
  * Killed implementation: the is-inside-work-tree probe. The fix compares
  * `git rev-parse --show-toplevel` (cwd=projectRoot) against
  * realpath(projectRoot) and inits unless they are equal.
+ *
+ * W7-B6 review F4: init-unless-own-repo overcorrected — a subdirectory of an
+ * operator's REAL cloned repo (monorepo package onboarded as repoPath) got a
+ * fresh empty repo nested inside their checkout, repointing every forge git
+ * operation at a history-less repo. The rule is three-way: own repo → skip;
+ * inside FORGE's own work tree (the gitignored projects/ case) → init;
+ * inside any OTHER repo → skip (the operator's repo governs); no repo → init.
  */
 
 import { test } from 'node:test';
@@ -32,7 +39,9 @@ test('AT-B6-5 (RED, projects-11) onboarding a dir INSIDE an enclosing git work t
     const projectRoot = join(enclosing, 'projects', 'w7-throwaway');
     mkdirSync(projectRoot, { recursive: true });
 
-    const created = scaffoldContractArtifacts(projectRoot, 'w7 throwaway');
+    // `enclosing` plays FORGE's own work tree here — the one enclosing repo
+    // a fresh project must NOT inherit (projects/ is gitignored inside it).
+    const created = scaffoldContractArtifacts(projectRoot, 'w7 throwaway', enclosing);
 
     assert.ok(existsSync(join(projectRoot, '.git')), 'the onboarded project must get its OWN .git (not inherit the enclosing repo)');
     const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim();
@@ -50,9 +59,53 @@ test('AT-B6-6 (green-lock) a project that already IS its own repo is not re-init
     mkdirSync(projectRoot, { recursive: true });
     execFileSync('git', ['init', '-q'], { cwd: projectRoot, stdio: 'ignore' });
 
-    const created = scaffoldContractArtifacts(projectRoot, 'already repo');
+    const created = scaffoldContractArtifacts(projectRoot, 'already repo', root);
     assert.ok(!created.includes('.git/'), 'an already-own-repo project must not report a fresh .git/');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('AT-B6-19 (RED, review F4) a subdirectory of an operator\'s REAL cloned repo is NOT git-inited — the enclosing (non-forge) repo governs', () => {
+  const base = mkdtempSync(join(tmpdir(), 'onboard-gitinit-foreign-'));
+  try {
+    // The forge root: its own repo, entirely separate from the clone below.
+    const forgeRoot = join(base, 'forge');
+    mkdirSync(forgeRoot, { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: forgeRoot, stdio: 'ignore' });
+    // The operator's real monorepo clone, with the onboarded repoPath a
+    // package INSIDE it (isContainedProjectRepoPath accepts any contained
+    // dir — this is a legitimate onboard shape, not an attack).
+    const clone = join(base, 'mono');
+    mkdirSync(join(clone, 'packages', 'app'), { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: clone, stdio: 'ignore' });
+    const projectRoot = join(clone, 'packages', 'app');
+
+    const created = scaffoldContractArtifacts(projectRoot, 'mono app', forgeRoot);
+
+    assert.ok(!existsSync(join(projectRoot, '.git')), 'a nested .git inside the operator\'s real clone repoints every forge git op at a history-less repo — must NOT be created');
+    assert.ok(!created.includes('.git/'), 'the created-paths report must not claim a .git/ that would corrupt the clone');
+    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim();
+    assert.equal(realpathSync(toplevel), realpathSync(clone), 'the enclosing operator repo must still govern the onboarded dir');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('AT-B6-20 (green-lock, review F4) a dir in NO repo at all still gets git-inited', () => {
+  const base = mkdtempSync(join(tmpdir(), 'onboard-gitinit-none-'));
+  try {
+    const forgeRoot = join(base, 'forge'); // not a repo — like every test forgeRoot
+    const projectRoot = join(base, 'projects', 'fresh');
+    mkdirSync(forgeRoot, { recursive: true });
+    mkdirSync(projectRoot, { recursive: true });
+    // NOTE: mkdtemp under the system tmpdir is outside any work tree on CI
+    // and dev machines alike; if a machine ever git-inits its tmpdir this
+    // test would need a containment tweak, not the production rule.
+    const created = scaffoldContractArtifacts(projectRoot, 'fresh', forgeRoot);
+    assert.ok(existsSync(join(projectRoot, '.git')), 'no enclosing repo → the project must get its own');
+    assert.ok(created.includes('.git/'));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
   }
 });

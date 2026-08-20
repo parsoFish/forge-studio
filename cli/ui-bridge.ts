@@ -153,7 +153,7 @@ import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -3104,11 +3104,25 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * own anchor rules and never pass through this check.
  */
 function unknownProjectReason(ctx: HttpContext, candidate: unknown): string | null {
-  // Shape/containment stay each route's own (pre-existing, pinned) 400
-  // contracts — a non-string or non-id-shaped value falls THROUGH this check
-  // so those guards keep firing exactly as before. The roster 404 is only
-  // for a well-formed id that names no discovered project.
-  if (typeof candidate !== 'string' || !SAFE_PROJECT_NAME_RE.test(candidate)) return null;
+  // NON-STRING shapes and containment-rejected strings (traversal, "..",
+  // separators, control chars — everything `isSafeSegment` refuses) stay
+  // each route's own (pre-existing, PINNED) 400 contracts — they fall
+  // THROUGH this check so those guards keep firing exactly as before. But a
+  // string isSafeSegment ACCEPTS that still fails PROJECT_ID_RE is the
+  // creation-mode GAP (W7-B6 review F1): spaces, interior dots, leading
+  // "_"/"."/"-" all pass the containment guard, so "my project" or
+  // ".hidden" minted a phantom projects/<junk>/ (and, for the architect,
+  // spawned a paid agent turn) straight past the roster check — those are
+  // refused HERE. `invalidGenerationProjectReason` is the ONE project-id
+  // shape rule (length cap THEN charset, value interpolation bounded),
+  // reused rather than re-declared.
+  if (typeof candidate !== 'string') return null;
+  if (isSafeSegment(candidate)) {
+    const invalidShape = invalidGenerationProjectReason(candidate);
+    if (invalidShape !== null) return invalidShape;
+  } else {
+    return null; // the downstream containment guard's own pinned 400 fires
+  }
   const known = discoverProjects(ctx.projectsRoot, ctx.forgeRoot).some((p) => p.id === candidate);
   return known ? null : `unknown project "${candidate}" — not in the project roster (onboard it at /projects/new first)`;
 }
