@@ -52,6 +52,7 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
+  installActionForItem,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
 } from './community-view.ts';
@@ -516,4 +517,63 @@ test('lastRefreshLabel: an unparsable stamp degrades to the never-refreshed word
   const label = lastRefreshLabel('not-a-date', NOW);
   expect(label).not.toMatch(/NaN/);
   expect(label.toLowerCase()).toContain('never');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (library-31): the fourth install state — present locally, unmanaged.
+// Distinct label; never conflated with installed OR not-installed.
+// ---------------------------------------------------------------------------
+
+test('installStateLabel: present-unmanaged reads as locally-present-but-unmanaged, distinct from every other label', () => {
+  const label = installStateLabel('present-unmanaged');
+  expect(label.toLowerCase()).toContain('unmanaged');
+  expect(label).not.toBe(installStateLabel('installed'));
+  expect(label).not.toBe(installStateLabel('not-installed'));
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-09 / -18 / -19): the ONE install-action decision for the
+// detail page — every item either installs, routes to its owning page, or
+// says exactly why not (with the real upstream to browse). Pure, so the page
+// can never re-derive it divergently.
+// ---------------------------------------------------------------------------
+
+test('installActionForItem: a non-vendored skill is a browse-upstream dead-end WITH the real URL (community-09)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'handoff', vendored: false, installState: 'not-installed', upstream: 'https://github.com/obra/superpowers', installMethod: null });
+  expect(action).toEqual({ action: 'browse-upstream', href: 'https://github.com/obra/superpowers' });
+});
+
+test('installActionForItem: present-unmanaged routes to the owning library page, never an Install button (library-31)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'handoff', vendored: false, installState: 'present-unmanaged', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'present-unmanaged', href: '/skills/handoff' });
+});
+
+test('installActionForItem: an INSTALLED connection always links its own /connections page — system-provided included (community-18)', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'git', vendored: false, installState: 'installed', upstream: 'https://git-scm.com', installMethod: 'system-provided' });
+  expect(action).toEqual({ action: 'open-owning', href: '/connections/git' });
+});
+
+test('installActionForItem: an npm connection not yet installed requires the CONFIRM flow, never a one-click spawn (community-19)', () => {
+  const action = installActionForItem({ kind: 'mcp', id: 'github-mcp', vendored: false, installState: 'not-installed', upstream: 'https://x', installMethod: 'npm' });
+  expect(action).toEqual({ action: 'install-confirm' });
+});
+
+test('installActionForItem: a vendored skill not yet installed installs directly (draft pipeline owns trust)', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'dependency-diff-review', vendored: true, installState: 'not-installed', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'install' });
+});
+
+test('installActionForItem: an installed vendored skill routes to its owning page', () => {
+  const action = installActionForItem({ kind: 'skill', id: 'dependency-diff-review', vendored: true, installState: 'installed', upstream: 'https://x', installMethod: null });
+  expect(action).toEqual({ action: 'open-owning', href: '/skills/dependency-diff-review' });
+});
+
+test('installActionForItem: an external-method connection says browse at the real upstream', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'gh', vendored: false, installState: 'not-installed', upstream: 'https://cli.github.com', installMethod: 'external' });
+  expect(action).toEqual({ action: 'browse-upstream', href: 'https://cli.github.com' });
+});
+
+test('installActionForItem: a system-provided connection not present has nothing to install (honest absence)', () => {
+  const action = installActionForItem({ kind: 'tool', id: 'docker', vendored: false, installState: 'not-installed', upstream: 'https://docker.com', installMethod: 'system-provided' });
+  expect(action).toEqual({ action: 'none-system' });
 });

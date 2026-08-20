@@ -74,7 +74,12 @@ import type { Finding } from './validate.ts';
 export const COMMUNITY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
 export type CommunityKind = (typeof COMMUNITY_KINDS)[number];
 
-export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed'] as const;
+/** W7-B3 (library-31) adds `present-unmanaged`: `skills/<id>` is OCCUPIED by
+ *  a local skill with no community-install provenance — the community
+ *  package is neither installed nor installable at that id, and both /skills
+ *  and /community must say so with the same word instead of contradicting
+ *  each other forever. */
+export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed', 'present-unmanaged'] as const;
 export type CommunityInstallState = (typeof COMMUNITY_INSTALL_STATES)[number];
 
 /** Every real committed package under studio/community/ is forge-authored and
@@ -337,7 +342,11 @@ function skillHasProvenanceBlock(forgeRoot: string, id: string): boolean {
 export function communityInstallState(forgeRoot: string, kind: CommunityKind, id: string): CommunityInstallState {
   if (kind === 'skill') {
     if (!existsSync(skillPath(id, forgeRoot))) return 'not-installed';
-    if (!skillHasProvenanceBlock(forgeRoot, id)) return 'not-installed';
+    // W7-B3 (library-31): occupied WITHOUT a provenance block used to read
+    // 'not-installed' — which made this surface offer an Install that the
+    // pipeline (correctly) refuses, forever. The honest state has its own
+    // name: present locally, unmanaged by the community pipeline.
+    if (!skillHasProvenanceBlock(forgeRoot, id)) return 'present-unmanaged';
     return installStateFromSkillTrust(skillTrustState(forgeRoot, id));
   }
   if (kind === 'hook') {

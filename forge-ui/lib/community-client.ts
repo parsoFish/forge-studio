@@ -30,7 +30,7 @@ import { parseProbeResult, type ConnectionProbeResult } from './connection-clien
 export const COMMUNITY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
 export type CommunityKind = (typeof COMMUNITY_KINDS)[number];
 
-export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed'] as const;
+export const COMMUNITY_INSTALL_STATES = ['not-installed', 'draft-pending-approval', 'needs-review', 'installed', 'present-unmanaged'] as const;
 export type CommunityInstallState = (typeof COMMUNITY_INSTALL_STATES)[number];
 
 export const COMMUNITY_PROBE_STATES = ['not-installed', 'available', 'misconfigured'] as const;

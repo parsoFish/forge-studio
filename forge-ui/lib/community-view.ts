@@ -70,6 +70,9 @@ const INSTALL_STATE_LABELS: Record<CommunityInstallState, string> = {
   'draft-pending-approval': 'Draft — pending approval',
   'needs-review': 'Needs review — do not trust yet',
   installed: 'Installed',
+  // W7-B3 (library-31): the id is occupied by a local skill the community
+  // pipeline does not manage — neither installed nor installable here.
+  'present-unmanaged': 'Present locally — unmanaged',
 };
 
 export function installStateLabel(state: CommunityInstallState): string {
@@ -96,6 +99,55 @@ export function signalsLabel(signals: CommunitySignals | null): string {
 export function hubLabel(hub: CommunityHub | null): string {
   if (hub === null) return 'unaffiliated';
   return hub.name;
+}
+
+// ---------------------------------------------------------------------------
+// installActionForItem — W7-B3 (community-09 / -18 / -19, library-31): the
+// ONE decision for the detail page's install section. Every item either
+// installs (directly, or behind the confirm step for a real npm spawn),
+// routes to the page that owns it, or says exactly why not — with the real
+// upstream URL to browse. Pure; the page renders the verdict verbatim.
+// ---------------------------------------------------------------------------
+
+export type CommunityInstallAction =
+  | { action: 'install' }
+  | { action: 'install-confirm' }
+  | { action: 'open-owning'; href: string }
+  | { action: 'present-unmanaged'; href: string }
+  | { action: 'browse-upstream'; href: string }
+  | { action: 'none-system' };
+
+function owningHrefForKind(kind: CommunityKind, id: string): string {
+  if (kind === 'skill') return `/skills/${encodeURIComponent(id)}`;
+  if (kind === 'hook') return `/hooks/${encodeURIComponent(id)}`;
+  return `/connections/${encodeURIComponent(id)}`;
+}
+
+export function installActionForItem(item: {
+  kind: CommunityKind;
+  id: string;
+  vendored: boolean;
+  installState: CommunityInstallState;
+  upstream: string;
+  /** Connection kinds only — `install.method` from the detail payload; null
+   *  for skill/hook (no install method concept exists there). */
+  installMethod: string | null;
+}): CommunityInstallAction {
+  if (item.installState === 'present-unmanaged') {
+    return { action: 'present-unmanaged', href: owningHrefForKind(item.kind, item.id) };
+  }
+  if (item.kind === 'mcp' || item.kind === 'tool') {
+    // community-18: an installed connection ALWAYS links its own page —
+    // system-provided/external included (they were the unlinked ones).
+    if (item.installState !== 'not-installed') return { action: 'open-owning', href: owningHrefForKind(item.kind, item.id) };
+    if (item.installMethod === 'npm') return { action: 'install-confirm' };
+    if (item.installMethod === 'external') return { action: 'browse-upstream', href: item.upstream };
+    return { action: 'none-system' };
+  }
+  // skill | hook
+  if (!item.vendored) return { action: 'browse-upstream', href: item.upstream };
+  if (item.installState === 'not-installed') return { action: 'install' };
+  return { action: 'open-owning', href: owningHrefForKind(item.kind, item.id) };
 }
 
 // ---------------------------------------------------------------------------

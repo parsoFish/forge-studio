@@ -4,14 +4,20 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { StudioPage } from '@/components/StudioPage';
 import { fetchHookLibrary, type HookLibraryEntry } from '@/lib/hook-client';
-import { filterHooks, needsReviewCountOf, hookBadges } from '@/lib/hook-library-view';
+import { filterHooks, needsReviewCountOf, hookBadges, communityHooksToUnion } from '@/lib/hook-library-view';
+import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
+import { installStateLabel } from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
-// Hooks library — /hooks (R3-03-F4). A single flat, already-server-sorted
-// list — no Local/Community split (no community-hook catalog or install
-// pipeline exists yet; see hook-library-view.test.ts's header for the full
-// rationale). "New hook" is the ONE place hook authoring lives (mirrors
-// skills' D8 data-action="new-skill").
+// Hooks library — /hooks (R3-03-F4). The local file-package list, plus —
+// W7-B3 (library-11) — the COMMUNITY union /skills has had all along: hook
+// items from the community index that are not yet installed locally render
+// under their own heading, linking into /community/hook/<id> where install
+// lives. Facts come from the community index route (executed per item),
+// never re-derived here; a failed community fetch renders NOTHING extra
+// (absence is honest — it must never blank the primary local list, which is
+// why it is a wholly separate effect/failure mode). "New hook" is the ONE
+// place hook authoring lives (mirrors skills' D8 data-action="new-skill").
 // ---------------------------------------------------------------------------
 
 const BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -25,6 +31,8 @@ export default function HookLibraryPage() {
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  // W7-B3 (library-11) — community hook items, separate fetch + failure mode.
+  const [communityItems, setCommunityItems] = useState<CommunityItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,11 +49,17 @@ export default function HookLibraryPage() {
       setError(null);
     }
     void load();
+    fetchCommunityIndex()
+      .then((r) => {
+        if (!cancelled && r.ok) setCommunityItems(r.items);
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
   const filtered = filterHooks(entries, query);
   const needsReviewCount = needsReviewCountOf(entries);
+  const communityHooks = communityHooksToUnion(communityItems, new Set(entries.map((e) => e.id)));
 
   return (
     <StudioPage
@@ -114,6 +128,40 @@ export default function HookLibraryPage() {
               <HookCard key={entry.id} entry={entry} />
             ))}
           </div>
+        )}
+
+        {/* W7-B3 (library-11): community hooks not yet installed — the same
+            union /skills renders. Cards route to the community detail page,
+            where install (and its pre-install scan) lives. */}
+        {status === 'ready' && communityHooks.length > 0 && (
+          <section data-section="community-hooks" data-count={communityHooks.length} style={{ marginTop: 32 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>
+              Community — not installed
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+              {communityHooks.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/community/hook/${encodeURIComponent(item.id)}`}
+                  className="lib-card"
+                  data-card-type="community-hook"
+                  data-hook-id={item.id}
+                  data-install-state={item.installState}
+                  style={{ display: 'block' }}
+                >
+                  <div className="card-top">
+                    <span className="card-name">{item.name}</span>
+                    <span className="badge" style={{ color: 'var(--c-kb, #4ade80)', borderColor: 'rgba(74,222,128,.4)', background: 'rgba(74,222,128,.08)' }}>community</span>
+                  </div>
+                  <p className="card-body">{item.desc}</p>
+                  <div className="card-meta">
+                    <span className="card-stat">{installStateLabel(item.installState)}</span>
+                    <span className="card-stat">install via community →</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
         )}
     </StudioPage>
   );

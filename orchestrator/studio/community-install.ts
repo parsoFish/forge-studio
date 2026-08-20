@@ -88,8 +88,16 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
       // T2 ruling: a real install destination occupied by something that
       // ISN'T this community package (no provenance block) must refuse
       // BEFORE dispatch — see collisionReason's own header comment.
-      if (existsSync(skillPath(id, forgeRoot)) && communityInstallState(forgeRoot, 'skill', id) === 'not-installed') {
-        return { pipeline: 'none', reason: collisionReason(id) };
+      // W7-B3 (library-31): that occupancy now has its own honest state
+      // token, 'present-unmanaged' (communityInstallState's skill branch) —
+      // the old detection ('not-installed' while the path exists) is kept as
+      // a belt-and-braces alternate so a future state-mapping change can
+      // only widen, never silently disable, this refusal.
+      if (existsSync(skillPath(id, forgeRoot))) {
+        const state = communityInstallState(forgeRoot, 'skill', id);
+        if (state === 'present-unmanaged' || state === 'not-installed') {
+          return { pipeline: 'none', reason: collisionReason(id) };
+        }
       }
       return { pipeline: 'skill', packageDir: dir, upstream: { source: VENDORED_UPSTREAM_SOURCE } };
     }

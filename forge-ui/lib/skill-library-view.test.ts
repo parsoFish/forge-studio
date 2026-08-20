@@ -17,8 +17,9 @@ import {
   skillBadges,
   filterSkills,
   installStateOf,
+  shelfSkillPreview,
 } from './skill-library-view.ts';
-import type { SkillLibraryEntry } from './studio-client.ts';
+import type { SkillLibraryEntry } from './skill-client.ts';
 
 function entry(overrides: Partial<SkillLibraryEntry> & { id: string }): SkillLibraryEntry {
   return {
@@ -122,4 +123,63 @@ test('AT-65: installStateOf(entry) derives installed/not-installed from entry.in
   expect(
     installStateOf(entry({ id: 'c', installed: false, description: 'This skill is installed and ready.' })),
   ).toBe('not-installed');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (library-21): the COMMUNITY badge was keyed on `provenance !== null`,
+// but the authoring finalizer stamps provenance.source='forge-authoring' on
+// locally-authored skills too — a skill the operator just authored rendered
+// COMMUNITY under the LOCAL heading. The badge is keyed on WHERE the
+// provenance says it came from; forge-authoring gets its own honest badge.
+// ---------------------------------------------------------------------------
+
+const COMMUNITY_PROV = { source: 'https://github.com/obra/superpowers', contentHash: 'h', installedAt: '2026-08-01T00:00:00Z' };
+const AUTHORED_PROV = { source: 'forge-authoring', contentHash: 'h', installedAt: '2026-08-01T00:00:00Z' };
+
+test('W7-B3: an authored skill (provenance.source=forge-authoring) is badged authored, NEVER community', () => {
+  const badges = skillBadges(entry({ id: 'a', source: 'local', provenance: AUTHORED_PROV }));
+  expect(badges).toContain('authored');
+  expect(badges).not.toContain('community');
+});
+
+test('W7-B3: a community-installed skill (upstream provenance) keeps the community badge', () => {
+  expect(skillBadges(entry({ id: 'a', source: 'local', provenance: COMMUNITY_PROV }))).toContain('community');
+  expect(skillBadges(entry({ id: 'b', source: 'community', provenance: null }))).toContain('community');
+});
+
+test('W7-B3: a plain local skill (no provenance) gets neither community nor authored', () => {
+  const badges = skillBadges(entry({ id: 'a', source: 'local', provenance: null }));
+  expect(badges).not.toContain('community');
+  expect(badges).not.toContain('authored');
+});
+
+test('W7-B3: a browse-only registry reference is badged reference', () => {
+  expect(skillBadges(entry({ id: 'a', source: 'community', provenance: null, reference: true }))).toContain('reference');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B3 (library-27): the Library Skills shelf preview — concatenate-then-
+// slice always filled all six slots with local skills, so a community entry
+// could never appear even though the count included them.
+// ---------------------------------------------------------------------------
+
+test('W7-B3 shelfSkillPreview: with more locals than the limit, at least one community card still appears', () => {
+  const locals = Array.from({ length: 10 }, (_, i) => entry({ id: `local-${String(i).padStart(2, '0')}`, source: 'local' }));
+  const community = [entry({ id: 'handoff', source: 'community' }), entry({ id: 'sec', source: 'community' })];
+  const preview = shelfSkillPreview(groupSkillLibrary([...locals, ...community]), 6);
+  expect(preview.length).toBe(6);
+  expect(preview.some((e) => e.source === 'community')).toBe(true);
+  expect(preview.filter((e) => e.source === 'local').length).toBeGreaterThan(0);
+});
+
+test('W7-B3 shelfSkillPreview: with no community entries the limit is all locals (unchanged)', () => {
+  const locals = Array.from({ length: 8 }, (_, i) => entry({ id: `local-${i}`, source: 'local' }));
+  const preview = shelfSkillPreview(groupSkillLibrary(locals), 6);
+  expect(preview.length).toBe(6);
+  expect(preview.every((e) => e.source === 'local')).toBe(true);
+});
+
+test('W7-B3 shelfSkillPreview: fewer entries than the limit returns them all', () => {
+  const preview = shelfSkillPreview(groupSkillLibrary([entry({ id: 'a', source: 'local' }), entry({ id: 'b', source: 'community' })]), 6);
+  expect(preview.map((e) => e.id)).toEqual(['a', 'b']);
 });
