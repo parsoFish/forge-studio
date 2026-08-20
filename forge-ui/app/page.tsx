@@ -18,8 +18,9 @@ import {
   buildKbAttention,
   buildHomeLedgerRows,
   buildHomeSessionsStrip,
-  deriveWatchLiveRunHref,
+  deriveWatchLiveRun,
   gateAttentionStatusDot,
+  HOME_LEDGER_LIMIT,
   type HomeAttentionItem,
   type HomeHex,
   type HomeStatus,
@@ -58,15 +59,11 @@ const HOME_STATUS_FRAME: Record<HomeStatus, string> = {
   idle: 'pending',
 };
 
-// forge-2am: same styling-only mapping, for a KB attention row's own
-// 'fail'|'warn'|'unknown' status vocab onto the shared 5-state status-dot
-// CSS. The DOM-contract attribute (data-attention-status) always carries the
-// real buildKbAttention() value untouched.
-const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' }>['status'], string> = {
-  fail: 'failed',
-  warn: 'retrying',
-  unknown: 'pending',
-};
+// (forge-2am's KB_ATTENTION_STATUS_FRAME retired by W7-B1: the KB attention
+// rows now render a `badge-kb` chip + a severity accent border instead of a
+// status-dot, so no styling-only frame mapping is needed for them — the
+// DOM-contract attribute `data-attention-status` still carries the real
+// buildKbAttention() value untouched.)
 
 export default function HomePage() {
   const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
@@ -103,15 +100,23 @@ export default function HomePage() {
   }, [ready, agents, recentAgentRunsKey]);
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
-  const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention });
-  // forge-2am: the attention strip folds the pre-existing project-gate rows
-  // and the KB-lint rows into ONE list. Both read the SAME already-fetched
-  // KB roster useStudioHomeData() already loads (no new fetch, no new poll —
-  // see this file's header + scripts/home-no-new-polling.test.ts).
-  const attentionItems: HomeAttentionItem[] = [...buildHomeAttention(attention), ...buildKbAttention(kbs)];
-  // W6-B11 — the active-sessions strip: ≤4 cards, needs-you first (the
-  // fetched `sessions` array already arrives needs-you-first-then-newest,
-  // straight off the bridge's own sort — see buildHomeSessionsStrip's header).
+  // W7-B1 (home-sessions-14): the in-flight `sessions` index feeds hex
+  // status too — 13 sessions with agents actively running must never again
+  // read "0 live / all idle". Same already-fetched read, no new transport.
+  const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention, sessions });
+  // forge-2am → W7-B1 (home-sessions-01/02): the two attention sources are
+  // now two NAMED strips — project gates under "Projects needing attention"
+  // (`attention-strip`), KB lint under "Knowledge bases needing attention"
+  // (`kbs-needing-attention`, a visually distinct row treatment with an
+  // explicit "Drain to green" destination). Both still read the SAME
+  // already-fetched data useStudioHomeData() loads (no new fetch, no new
+  // poll — see this file's header + scripts/home-no-new-polling.test.ts).
+  const gateAttentionItems = buildHomeAttention(attention);
+  const kbAttentionItems = buildKbAttention(kbs).filter((i): i is Extract<HomeAttentionItem, { kind: 'kb' }> => i.kind === 'kb');
+  const attentionCount = gateAttentionItems.length + kbAttentionItems.length;
+  // W6-B11 — the sessions strip: ≤4 cards, needs-you first (the fetched
+  // `sessions` array already arrives needs-you-first-then-newest, straight
+  // off the bridge's own sort — see buildHomeSessionsStrip's header).
   const sessionsStrip = buildHomeSessionsStrip(sessions);
   // W7A2-02 — the last cancel from the strip: held here so the outcome
   // notice survives the refetch that drops the card.
@@ -122,15 +127,21 @@ export default function HomePage() {
   // their own independent fetch resolves — never a fabricated wait, and
   // never a blank ledger while the (typically fast) flow-run rows are
   // already known.
-  const ledgerRows = recentAgentRunsReady
-    ? buildHomeLedgerRows(flowLedgerRows, recentAgentRuns)
+  // W7-B1 (home-sessions-25): the 30-row cap becomes PAGING — the full
+  // merged list is derived once (same pure merge, uncapped), the page
+  // renders a growing slice, and the footer says "showing X of N" with a
+  // Show-more control instead of truncating silently.
+  const allLedgerRows = recentAgentRunsReady
+    ? buildHomeLedgerRows(flowLedgerRows, recentAgentRuns, Number.MAX_SAFE_INTEGER)
     : flowLedgerRows;
+  const [ledgerShown, setLedgerShown] = useState(HOME_LEDGER_LIMIT);
+  const ledgerRows = allLedgerRows.slice(0, ledgerShown);
   const liveCount = constellation.filter((h) => h.status === 'active').length;
-  // W6-IA-4 sweep finding C1#2: was a hardcoded '/flows/forge-develop',
-  // rendered unconditionally regardless of whether anything was actually
-  // running there. Now gated on an ACTUAL live run, pointed at that run's
-  // own flow — falls back to the flows index when nothing is live.
-  const watchLiveRunHref = deriveWatchLiveRunHref(runs);
+  // W6-IA-4 sweep finding C1#2 → W7-B1 (home-sessions-15): derived from an
+  // ACTUAL live run — and the page now also KNOWS whether the target is
+  // live, so the fallback renders as a plain "Browse flows", never a
+  // primary "Watch live run" promise the click cannot keep.
+  const watchLiveRun = deriveWatchLiveRun(runs);
 
   return (
     <StudioPage
@@ -138,7 +149,7 @@ export default function HomePage() {
       ready={ready}
       data={{
         'data-live-count': liveCount,
-        'data-attention-count': attentionItems.length,
+        'data-attention-count': attentionCount,
         'data-hex-count': constellation.length,
         // W7-A1: loading | ok | error — an outage is an honest ERROR state,
         // never the first-run empty fleet (home-sessions-30 / crosscut-01).
@@ -158,9 +169,19 @@ export default function HomePage() {
           <Link className="btn" href="/projects/new" data-action="onboard-project-cta" style={{ textDecoration: 'none' }}>
             Onboard a project
           </Link>
-          <Link className="btn btn-primary" href={watchLiveRunHref} data-action="watch-live-run" style={{ textDecoration: 'none' }}>
-            Watch live run
-          </Link>
+          {/* W7-B1 (home-sessions-15): the primary "Watch live run" promise
+              renders ONLY when something is actually live/gated; the
+              fallback is an honest, secondary "Browse flows" — same
+              destination the old silent degrade used, now saying so. */}
+          {watchLiveRun.live ? (
+            <Link className="btn btn-primary" href={watchLiveRun.href} data-action="watch-live-run" data-live="true" style={{ textDecoration: 'none' }}>
+              Watch live run
+            </Link>
+          ) : (
+            <Link className="btn" href={watchLiveRun.href} data-action="browse-flows" data-live="false" style={{ textDecoration: 'none' }}>
+              Browse flows
+            </Link>
+          )}
         </>
       }
     >
@@ -198,60 +219,27 @@ export default function HomePage() {
         <SchedulerCard queuedCount={runs.filter((r) => r.status === 'planned').length} />
       </section>
 
-      {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
-      {attentionItems.length > 0 && (
+      {/* ===== PROJECTS NEEDING ATTENTION — gated reviews / flagged work.
+          W7-B1 (home-sessions-01): every Home strip is NAMED on screen —
+          this one carried only an aria-label before, invisible to a sighted
+          operator. Rows fire on real conditions only (buildHomeAttention). */}
+      {gateAttentionItems.length > 0 && (
         <section
           data-section="attention-strip"
-          aria-label="Projects and knowledge bases needing attention"
-          style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 6 }}
+          aria-label="Projects needing attention"
+          style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 6 }}
         >
-          {attentionItems.map((item) => {
-            if (item.kind === 'kb') {
-              // forge-2am: a KB-lint row — status/counts come straight from
-              // THIS kb's own lint summary (buildKbAttention), never
-              // cross-attributed from another kb or fabricated on absence.
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  data-attention-item
-                  data-attention-kind="kb"
-                  data-attention-kb={item.kbId}
-                  data-attention-status={item.status}
-                  data-attention-lint-errors={item.lint.errors}
-                  data-attention-lint-flags={item.lint.flags}
-                  data-attention-checks-run={item.lint.checksRun}
-                  data-attention-checks-total={item.lint.checksTotal}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '9px 14px',
-                    background: 'var(--panel)',
-                    border: '1px solid var(--ember)',
-                    borderRadius: 'var(--radius)',
-                    textDecoration: 'none',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <span className="status-dot" data-status={KB_ATTENTION_STATUS_FRAME[item.status]} />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
-                    <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>open →</span>
-                </Link>
-              );
-            }
-
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
+            Projects needing attention
+          </h2>
+          {gateAttentionItems.map((item) => {
+            if (item.kind !== 'gate') return null;
             // The raw ProjectAttentionItem behind this fired row — Home mirrors
             // R4-11-F4's full DOM contract (the same data-attention-* count
             // vocabulary the Library strip carries) so both attention surfaces
             // speak ONE shared vocabulary, plus data-attention-status for the
             // derived condition. Counts come straight from the same
-            // attention-aggregate row, never re-derived. Every attribute
-            // this row rendered before forge-2am is unchanged; it only gains
-            // data-attention-kind alongside them.
+            // attention-aggregate row, never re-derived.
             const raw = attention.find((a) => a.projectId === item.projectId);
             return (
             <Link
@@ -294,6 +282,63 @@ export default function HomePage() {
             </Link>
             );
           })}
+        </section>
+      )}
+
+      {/* ===== KBs NEEDING ATTENTION — W7-B1 (home-sessions-01/02): the
+          KB-lint rows become their own NAMED strip with a visibly different
+          treatment (KB badge + left accent, no ember full-border), so
+          "things an agent is running" and "knowledge that needs fixing"
+          stop reading as one undifferentiated list. The whole row still
+          links to the Health tab (where the finding lives) and SAYS where
+          the click goes: Drain to green. Every data-attention-* attribute
+          the forge-2am rows carried is unchanged — only the section id,
+          heading, and visual treatment are new. */}
+      {kbAttentionItems.length > 0 && (
+        <section
+          data-section="kbs-needing-attention"
+          aria-label="Knowledge bases needing attention"
+          style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 6 }}
+        >
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
+            Knowledge bases needing attention
+          </h2>
+          {kbAttentionItems.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              data-attention-item
+              data-attention-kind="kb"
+              data-attention-kb={item.kbId}
+              data-attention-status={item.status}
+              data-attention-lint-errors={item.lint.errors}
+              data-attention-lint-flags={item.lint.flags}
+              data-attention-checks-run={item.lint.checksRun}
+              data-attention-checks-total={item.lint.checksTotal}
+              data-action="kb-drain-link"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '9px 14px',
+                background: 'var(--panel-2)',
+                border: '1px solid var(--line)',
+                borderLeft: `3px solid ${item.status === 'fail' ? 'var(--red, #f87171)' : 'var(--amber, var(--ember))'}`,
+                borderRadius: 'var(--radius)',
+                textDecoration: 'none',
+                color: 'var(--text)',
+              }}
+            >
+              <span className="badge badge-kb">KB</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
+                <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
+              </span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ember)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                Drain to green →
+              </span>
+            </Link>
+          ))}
         </section>
       )}
 
@@ -348,6 +393,8 @@ export default function HomePage() {
         data-section="activity"
         aria-label="Recent activity"
         data-recent-runs-unresolved={recentAgentRunsReady ? recentAgentRunsMeta.unresolved : 0}
+        data-ledger-shown={ledgerRows.length}
+        data-ledger-total={allLedgerRows.length}
       >
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
           Recent activity
@@ -356,6 +403,22 @@ export default function HomePage() {
           <UnresolvedHistoriesNotice unresolved={recentAgentRunsMeta.unresolved} total={recentAgentRunsMeta.total} onRetry={retryRecentAgentRuns} />
         ) : null}
         <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
+        {/* W7-B1 (home-sessions-25): the cap is PAGING now, and it says so —
+            "showing 30 of 74" + Show more, never a silent truncation the
+            operator can't tell from "that's all there is". */}
+        {allLedgerRows.length > ledgerRows.length && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 20px', fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+            <span>showing {ledgerRows.length} of {allLedgerRows.length}</span>
+            <button
+              type="button"
+              data-action="ledger-show-more"
+              onClick={() => setLedgerShown((n) => n + HOME_LEDGER_LIMIT)}
+              style={{ background: 'none', border: 'none', color: 'var(--ember)', cursor: 'pointer', fontSize: 11.5, fontFamily: 'var(--font-mono)', padding: 0, textDecoration: 'underline' }}
+            >
+              show {Math.min(HOME_LEDGER_LIMIT, allLedgerRows.length - ledgerRows.length)} more
+            </button>
+          </div>
+        )}
       </section>
       </>
       )}

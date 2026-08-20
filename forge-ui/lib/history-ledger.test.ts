@@ -188,6 +188,10 @@ import {
   sortLedgerRowsNewestFirst,
   formatWhen,
   ledgerRowKind,
+  // W7-B1 (home-sessions-33) — resolves to `undefined` until history-ledger
+  // ships it (the repo's missing-named-export convention), so only the new
+  // tests that CALL it go red.
+  sessionPhaseRunStatus,
   type LedgerSegment,
   type LedgerRow,
 } from './history-ledger.ts';
@@ -842,4 +846,29 @@ test('ledgerRowKind: every agent-sourced linkKind ("flow-node", "standalone", "s
   expect(ledgerRowKind({ linkKind: 'flow-node' })).toBe('agent');
   expect(ledgerRowKind({ linkKind: 'standalone' })).toBe('agent');
   expect(ledgerRowKind({ linkKind: 'session' })).toBe('agent');
+});
+
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-33) — sessionPhaseRunStatus: the ONE session-phase →
+// run-vocabulary map for data-run-status. The row's own `status` keeps the
+// raw phase (D12's open-vocabulary design is untouched); only the DOM
+// attribute goes through this map, in HistoryLedger.
+// ---------------------------------------------------------------------------
+
+test('W7-B1 sessionPhaseRunStatus: done-terminal phases -> "complete" (the same set describeLifecycle\'s terminal copy calls Done)', () => {
+  for (const phase of ['committed', 'locked', 'applied', 'complete']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('complete');
+  }
+});
+
+test('W7-B1 sessionPhaseRunStatus: stopped-terminal phases -> "failed"', () => {
+  for (const phase of ['rejected', 'abandoned', 'cancelled', 'failed']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('failed');
+  }
+});
+
+test('W7-B1 sessionPhaseRunStatus: any other phase (gathering/drafting/awaiting-verdict/a future runner\'s token) -> "active" — in flight as far as this surface can honestly tell', () => {
+  for (const phase of ['gathering', 'drafting', 'exploring', 'generating', 'awaiting-verdict', 'some-future-phase']) {
+    expect(sessionPhaseRunStatus(phase), phase).toBe('active');
+  }
 });

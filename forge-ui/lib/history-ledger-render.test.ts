@@ -503,3 +503,38 @@ test('the SAME row renders DIFFERENT visible relative-time text for a DIFFERENT 
 
   expect(rowMarkup(soon, 'a')).not.toBe(rowMarkup(later, 'a'));
 });
+
+// ---------------------------------------------------------------------------
+// W7-B1 (home-sessions-33) — ONE vocabulary on data-run-status. A session
+// row's own status.json phase (an OPEN per-runner vocabulary, D12 — a
+// deliberate design the ROW keeps verbatim) no longer leaks raw into the
+// CLOSED data-run-status DOM contract: the attribute carries the mapped
+// run-vocab value, and the raw phase rides its own data-session-phase.
+// ---------------------------------------------------------------------------
+
+test('W7-B1 (home-sessions-33): a session row maps its phase onto the run vocabulary for data-run-status and carries the raw phase on data-session-phase', () => {
+  const html = render({ rows: [row({ id: 's1', linkKind: 'session', status: 'gathering', narrative: null, narrativeKinds: [] })] });
+  const markup = rowMarkup(html, 's1');
+  expect(markup).toContain('data-run-status="active"');
+  expect(markup).toContain('data-session-phase="gathering"');
+  // The visible chip still shows the operator the REAL phase, verbatim.
+  expect(html).toContain('gathering');
+});
+
+test('W7-B1: a session row at a done-terminal phase reads complete; a stopped-terminal phase reads failed — never an in-flight claim for a finished session', () => {
+  const done = rowMarkup(render({ rows: [row({ id: 'd', linkKind: 'session', status: 'committed', narrative: null, narrativeKinds: [] })] }), 'd');
+  expect(done).toContain('data-run-status="complete"');
+  expect(done).toContain('data-session-phase="committed"');
+  const stopped = rowMarkup(render({ rows: [row({ id: 'x', linkKind: 'session', status: 'cancelled', narrative: null, narrativeKinds: [] })] }), 'x');
+  expect(stopped).toContain('data-run-status="failed"');
+  expect(stopped).toContain('data-session-phase="cancelled"');
+});
+
+test('W7-B1: non-session rows are byte-untouched — no data-session-phase, status verbatim', () => {
+  const flow = rowMarkup(render({ rows: [row({ id: 'f', status: 'gated' })] }), 'f');
+  expect(flow).toContain('data-run-status="gated"');
+  expect(flow).not.toContain('data-session-phase');
+  const standalone = rowMarkup(render({ rows: [row({ id: 's', linkKind: 'standalone', status: 'done' })] }), 's');
+  expect(standalone).toContain('data-run-status="done"');
+  expect(standalone).not.toContain('data-session-phase');
+});
