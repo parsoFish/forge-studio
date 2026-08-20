@@ -281,12 +281,17 @@ inventory rather than one shared page-level contract:
   `app/library/page.tsx`'s). Root:
   `main[data-page="home"][data-page-ready][data-live-count][data-attention-
   count][data-hex-count]`. Header actions: `[data-action="onboard-project-
-  cta"]` (`href="/projects/new"`, always) and `[data-action="watch-live-run"]`
-  — W6-IA-4 sweep finding C1#2: this USED to hardcode `href="/flows/forge-
-  develop"` unconditionally; `home-view.ts`'s `deriveWatchLiveRunHref(runs)`
-  now derives it from an ACTUAL live run (`active` beats `gated`; no
-  active/gated run at all falls back to `/flows`, never a fabricated specific
-  flow). **W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment):**
+  cta"]` (`href="/projects/new"`, always) and the live-run CTA — W6-IA-4
+  sweep finding C1#2: this USED to hardcode `href="/flows/forge-develop"`
+  unconditionally; `home-view.ts` derives it from an ACTUAL live run
+  (`active` beats `gated`). **W7-B1 (home-sessions-15):
+  `deriveWatchLiveRun(runs)` also says WHETHER the target is live** — with a
+  real active/gated run the button is the primary
+  `[data-action="watch-live-run"][data-live="true"]` "Watch live run";
+  otherwise it renders as a plain secondary
+  `[data-action="browse-flows"][data-live="false"]` "Browse flows"
+  (`href="/flows"`) — the same destination the old fallback silently used,
+  now labelled as what it is, never a "live" promise the click cannot keep. **W7-A3 (flows-01/23, projects-16 — ADR-031 wave-7 amendment):**
   `section[data-section="scheduler"]` mounts the shared **SchedulerCard**
   (`components/SchedulerCard.tsx`, its own `useSchedulerStatus()` read on a
   slow visible-only poll — Home itself adds no fetch/interval/endpoint):
@@ -315,11 +320,13 @@ inventory rather than one shared page-level contract:
   start it again") — never reported as "stopped". The same component is mounted on `/flows` (index + monitor), the
   project roadmap tab, and inline as a `strip` wherever an enqueue outcome
   needs "start it?". Three sections:
-  - `section[data-section="attention-strip"]` — present ONLY when
-    `[...buildHomeAttention(attention), ...buildKbAttention(kbs)]` returns ≥1
-    row (a real condition, never rendered on the mere existence of a project
-    or KB). Every row carries `data-attention-kind="gate"|"kb"` (forge-2am) so
-    the two sources are told apart in the DOM. **Gate rows**
+  - `section[data-section="attention-strip"]` — **W7-B1 (home-sessions-01/02):
+    the project-gate strip, NAMED on screen** (visible `h2` "Projects needing
+    attention" — it used to carry only an aria-label, invisible to a sighted
+    operator, and the KB rows used to blend into the same list; those now
+    live in their own `kbs-needing-attention` section, below). Present ONLY
+    when `buildHomeAttention(attention)` returns ≥1 row (a real condition,
+    never rendered on the mere existence of a project). **Gate rows**
     (`buildHomeAttention`) are a real
     `a[data-attention-item][data-attention-kind="gate"][data-attention-project][data-attention-status]`
     whose `href` is `/projects/<id>` (the owning project's own page) and whose
@@ -331,20 +338,31 @@ inventory rather than one shared page-level contract:
     finding C1#3 — was a hardcoded `data-status="retrying"` for EVERY gate
     row, regardless of `item.status`): `gated -> retrying` (awaiting review —
     the routine, recoverable-in-progress case), `flagged -> failed` (review
-    actually flagged something — a real defect, not a routine wait), mirroring
-    `KB_ATTENTION_STATUS_FRAME`'s own established errors→failed/warn→retrying
-    pattern; the `data-attention-status` ATTRIBUTE always carries the real,
+    actually flagged something — a real defect, not a routine wait); the
+    `data-attention-status` ATTRIBUTE always carries the real,
     unmapped value — the frame is consulted ONLY for the dot's own
-    `data-status`. **KB rows** (`buildKbAttention`, forge-2am) are
+    `data-status`.
+  - `section[data-section="kbs-needing-attention"]` — **W7-B1: the KB-lint
+    strip, split out of the attention strip with a visibly DIFFERENT
+    treatment** (visible `h2` "Knowledge bases needing attention"; rows carry
+    a `badge-kb` chip + a severity accent border — fail=red, warn=amber,
+    unknown=neutral (the lint run itself threw; never overstated as a warn
+    finding) — instead of the gate rows'
+    ember border + status-dot, so "things an agent is running" and
+    "knowledge that needs fixing" stop reading as one list —
+    home-sessions-02). Present ONLY when `buildKbAttention(kbs)` returns ≥1
+    row. **KB rows** (`buildKbAttention`, forge-2am) keep their full attribute
+    contract unchanged:
     `a[data-attention-item][data-attention-kind="kb"][data-attention-kb][data-attention-status]`
-    with `href="/knowledge?id=<id>"` (the row's React `key` is `kb-<id>`-shaped
-    but a `key` is React-internal bookkeeping, never rendered to the DOM — the
-    row carries no `id` attribute at all; find it via `data-attention-kb`
-    instead); `data-attention-status`
-    is `fail|warn|unknown` (never `gated|flagged`, the gate-row vocabulary) —
-    `unknown` means the KB's own lint run threw (`lint.error` present), an
-    HONEST "the server cannot attest" signal, never a default. The row also
-    carries the KB's own lint summary verbatim:
+    — now also `[data-action="kb-drain-link"]`, and the row's trailing text
+    SAYS where the click goes ("Drain to green →"); `href` deep-links to
+    `/knowledge?id=<id>&tab=health`, where the drain lives (the row's React
+    `key` is `kb-<id>`-shaped but a `key` is React-internal bookkeeping,
+    never rendered to the DOM — find the row via `data-attention-kb`).
+    `data-attention-status` is `fail|warn|unknown` (never `gated|flagged`,
+    the gate-row vocabulary) — `unknown` means the KB's own lint run threw
+    (`lint.error` present), an HONEST "the server cannot attest" signal,
+    never a default. The row also carries the KB's own lint summary verbatim:
     `data-attention-lint-errors`, `data-attention-lint-flags`,
     `data-attention-checks-run`, `data-attention-checks-total` — the last two
     surface the n/a-invariant (only SOME of forge's brain-lint checks actually
@@ -354,15 +372,26 @@ inventory rather than one shared page-level contract:
     the operator honestly says "N of M checks actually ran", never implying a
     full clean sweep. A KB with `lint === null` (no data yet) or an all-zero
     clean lint renders NO row at all — absence is honest, a fabricated "clean"
-    row is not.
+    row is not. `data-attention-count` on the Home root counts gate + KB rows
+    together (both strips), unchanged.
   - `section[data-section="constellation"][data-hex-count]` — one
     `a.home-hex[data-hex-kind][data-hex-id][data-hex-status]` per flow/agent/
     project/KB (`data-hex-kind` is `flow|agent|project|kb`), href routing to
     the owning surface (`/flows/<id>`, `/agents/<id>`, `/projects/<id>`,
     `/knowledge?id=<id>`). Status (`active|gated|idle`) is ALWAYS derived —
     never a `.status` field the wire types don't carry (`home-view.ts`'s own
-    declared-data-fails-open discipline); a KB has no live-status source at
-    all and is always `idle`. Empty state (a genuinely empty fleet ONLY — a
+    declared-data-fails-open discipline). **W7-B1 (home-sessions-14): the
+    in-flight sessions index feeds hex status alongside the flow-run model**
+    — a `working` session lights its agent (via `session-kind-meta.ts`'s
+    yaml-parity-pinned kind→agent map), its anchor project, or (via the
+    `.kb-<id>` seeding anchor) its KB as `active`; a needs-you session
+    (awaiting-operator/crashed/stalled) marks them `gated`; `active` beats
+    `gated` (deriveFlowStatus's own precedence). The header's "N live" count
+    derives from the hexes, so 13 in-flight sessions can never again read
+    "0 live / all idle". A KB with no `.kb-<id>`-anchored session stays
+    `idle` (a project-BOUND KB's sessions anchor under the real project and
+    light that hex instead — never double-attributed). Empty state (a
+    genuinely empty fleet ONLY — a
     failed bridge read renders the shared `[data-component="fetch-error"]`
     in place of every Home section, root `data-fetch-status="error"`, W7-A1 /
     home-sessions-30):
@@ -370,7 +399,8 @@ inventory rather than one shared page-level contract:
     carries a real `[data-action="constellation-empty-cta"]`
     (`href="/projects/new"`) alongside the "Nothing registered yet." text —
     was terminal, dead-end text with no way forward.
-  - `section[data-section="activity"][data-recent-runs-unresolved=<n>]` wraps
+  - `section[data-section="activity"][data-recent-runs-unresolved=<n>]
+    [data-ledger-shown=<n>][data-ledger-total=<n>]` wraps
     a shared `HistoryLedger`
     (`components/studio/HistoryLedger.tsx`, below) — W6-IA-4: now the MERGED
     everything-ledger, interleaving the flow-run rows (`deriveFlowLedgerRows`,
@@ -388,12 +418,25 @@ inventory rather than one shared page-level contract:
     (`lib/history-ledger.ts`) off the row's OWN existing `linkKind` field —
     `undefined` (every flow-ledger.ts row) -> `flow`; any agent-sourced
     `linkKind` (`flow-node`/`standalone`/`session`) -> `agent` — plus a
-    visible `[data-ledger-kind-badge]` chip.
-  - `section[data-section="active-sessions"][data-active-session-count]
-    [data-needs-you-count]` (W6-B11, the IA-4 marked slot) — the aggregate
-    in-flight-sessions strip, rendered ONLY when at least one session is
-    in flight (the same "never on mere existence" rule the attention strip
-    above follows). Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
+    visible `[data-ledger-kind-badge]` chip. **W7-B1 (home-sessions-25): the
+    30-row cap is PAGING now** — the merged list is derived uncapped, the
+    section renders a growing slice (`data-ledger-shown` of
+    `data-ledger-total`), and a truncated ledger renders a visible
+    "showing X of N" + `button[data-action="ledger-show-more"]` (grows the
+    slice by `HOME_LEDGER_LIMIT`) instead of truncating silently.
+  - `section[data-section="sessions-needing-you"][data-active-session-count]
+    [data-needs-you-count][data-session-cards-shown]` (W6-B11, the IA-4
+    marked slot; **W7-B1 renamed from `active-sessions`** — the goal pack's
+    named-strip contract, with a visible `h2` "Sessions needing you") — the
+    aggregate in-flight-sessions strip. **W7-B1 (home-sessions-31): rendered
+    in EVERY state** — the section owns Home's only link to `/sessions`
+    (navigation, not data), so at zero sessions it keeps the header + the
+    `view-all-sessions` link and renders
+    `[data-component="sessions-strip-empty"]` ("Nothing in flight right
+    now." + `a[data-action="start-a-session"] href="/sessions"`) instead of
+    unmounting; an UNSETTLED zero (Home's first load still in flight)
+    renders `[data-component="sessions-strip-loading"]` instead — never the
+    settled empty claim. Data: `lib/use-studio-home-data.ts`'s SEVENTH read,
     `fetchStudioSessions()` (`?active=1` default — operator-locked,
     in-flight sessions ONLY, never terminal history), folded into the same
     `loadAll` `Promise.all` and refetched on the SAME debounced
@@ -405,13 +448,20 @@ inventory rather than one shared page-level contract:
     `needsYouCount`/`totalCount` are counted over the FULL set, not just the
     4-card slice, so the header stays honest once needs-you sessions exceed
     the card budget. Header: an "N need you" pill (present only when
-    `needsYouCount>0`) plus `a[data-action="view-all-sessions"]
+    `needsYouCount>0`), **W7-B1 (home-sessions-32): a "showing X of N" note
+    whenever the cards are a slice (`data-session-cards-shown` carries X) —
+    plus a trailing `a[data-action="sessions-strip-more"]` "+N more →" card
+    in the grid — so the pill's number and the visible cards reconcile on
+    screen** — plus `a[data-action="view-all-sessions"]
     href="/sessions"` reading "all sessions (N) →". Each card (W7-A2 shape):
     `div[data-session-card][data-session-kind][data-session-id]
     [data-session-phase][data-needs-you][data-session-state]` wrapping an
     `a[data-action="open-session"]` link to the session's own `href` (the
     SAME `/sessions/<kind>/<sessionId>?project=<p>` shell URL the wire row
-    carries — the card body: kind, project, phase, and a
+    carries — the card body: the KIND'S DECLARED TITLE (W7-B1
+    home-sessions-20, `sessionKindTitle` — `lib/session-kind-meta.ts`, the
+    yaml-parity-pinned client mirror; the raw registry id stays on
+    `data-session-kind`), project, phase, and a
     `span[data-session-state-chip]` lifecycle sentence, `describeLifecycle`)
     plus, OUTSIDE the link (never nested-interactive), a
     `button[data-action="cancel-session"]` for every non-terminal card (the
@@ -424,9 +474,13 @@ inventory rather than one shared page-level contract:
     bridge's real `killed` answer as DISTINCT sentences — "Cancelled at
     phase <p> — the agent turn was stopped." vs "Marked cancelled at phase
     <p> — no live agent turn was found to stop…"; held in page state so it
-    survives the refetch that drops the card); a needs-you card additionally renders a `.status-dot
-    [data-status="retrying"]` visual indicator (styling only — the DOM
-    contract attribute is `data-needs-you`, never the dot's own frame value).
+    survives the refetch that drops the card); a needs-you card additionally
+    renders the shared `[data-needs-you-chip]` (W7-B1 home-sessions-03 —
+    `NeedsYouChip`, `components/studio/SessionsIndex.tsx`: visible "needs
+    you" text, `aria-label="needs you"`, and a `.status-dot
+    [data-status="needs-you"]` carrying its OWN dedicated token — the old
+    bare dot borrowed `data-status="retrying"`, a run state, so one
+    data-status value meant three different things on one screen).
   Journey coverage: `scripts/journeys/home.mjs`'s `home-landing` beat (seeds
   a real instructions session via the harness's existing
   `writeInstrStatus`/`cleanInstructionsSession` helpers, `HOME_SESSION_SID`)
@@ -448,10 +502,43 @@ inventory rather than one shared page-level contract:
   updatedAt, href}`, sorted needs-you-first-then-newest and capped to the
   newest 200 (`SESSION_INDEX_MAX_ROWS`) by `sortAndCapSessionIndexRows`).
   Root: `main[data-page="sessions-index"][data-page-ready]
-  [data-session-count]`. Non-empty state: `section[data-section=
-  "sessions-table"][data-session-count]` wrapping a table — one
+  [data-session-count]` (`data-session-count` on the ROOT = the full
+  unfiltered set). **W7-B1 (home-sessions-12): the page stays LIVE** — the
+  same `cycle-list-changed` bridge-WS signal Home refetches on, through the
+  SAME `createDebouncedRefreshRuns` debounce (one subscribe, mount-only, no
+  page-level poll — `app/sessions/page.tsx`). **W7-B1 (crosscut-13 /
+  home-sessions-19): `section[data-section="sessions-kickoff"]` renders in
+  BOTH the populated and the empty state** (only a FAILED read omits it) —
+  one `a[data-action="kickoff-<kind>"]` per entry of
+  `lib/session-kind-meta.ts`'s `KICKOFF_ENTRIES`: the six generic kickoff
+  kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
+  kb-cleanup/authoring/**community-refresh**) plus architect's bespoke
+  native entry (`/architect/new` — ADR-043 amendment §4), labels = the
+  descriptors' own titles. **W7-B1 (home-sessions-07): a filter bar**,
+  `section[data-section="sessions-filters"]` (rendered only with rows
+  present): `select[data-field="filter-kind"|"filter-project"|"filter-state"]`
+  (options = the values actually present in the set, first-seen order —
+  `lib/sessions-index-filter.ts`; kind options labelled by descriptor
+  title) + `button[data-action="filter-needs-you"]` (aria-pressed) +
+  `button[data-action="clear-filters"]` (only while a filter is active) and
+  a visible "X of N" count. Filtering only REMOVES rows — never re-sorts.
+  Non-empty state: `section[data-section=
+  "sessions-table"][data-session-count][data-filter-kind][data-filter-project]
+  [data-filter-state][data-filter-needs-you]` (the section's
+  `data-session-count` = the FILTERED count; the `data-filter-*` attrs
+  mirror the live filter state, `""`/`"false"` = no constraint) wrapping a
+  table — one
   `tr[data-session-kind][data-session-phase][data-needs-you][data-session-state]`
-  per session, columns kind/project/phase(+needs-you dot)/**state**
+  per session; a filter combination matching nothing renders
+  `[data-component="sessions-filter-empty"]` naming the total — never the
+  zero-state. Columns: **kind** (W7-B1 home-sessions-20/community-21: the
+  descriptor's own authored title via `sessionKindTitle`, wrapped in an
+  `a[data-action="open-session"]` row-level link — the raw registry id
+  stays on the `<tr>`'s `data-session-kind`)/project/phase (+ the shared
+  `[data-needs-you-chip]` when `needsYou` — W7-B1 home-sessions-03/24,
+  community-24: visible "needs you" text, `aria-label`, and a `.status-dot
+  [data-status="needs-you"]` — its own vocabulary token, never the borrowed
+  `retrying`)/**state**
   (`span[data-session-state-chip]`, W7-A2 — the bridge-derived lifecycle
   sentence from `lib/session-lifecycle-client.ts`'s `describeLifecycle`: a
   `crashed` row shows the runner's own error text, `title` = the full
@@ -482,12 +569,10 @@ inventory rather than one shared page-level contract:
   on a failed read: W7-A1 adds `data-fetch-status` on the root and the
   shared `[data-component="fetch-error"]` body on failure, see "Shared —
   failed-read state" above; home-sessions-29):
-  `section[data-section="sessions-empty"]`, "No sessions in flight" plus one
-  kickoff CTA per `a[data-action="kickoff-<kind>"]` for the 5 generic
-  kickoff kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
-  kb-cleanup/authoring) plus architect's bespoke native entry
-  (`/architect/new` — ADR-043 amendment §4, architect never gets a generic
-  kickoff row). Split: `components/studio/SessionsIndex.tsx`'s
+  `section[data-section="sessions-empty"]`, "No sessions in flight" — the
+  kickoff CTAs live in the always-rendered `sessions-kickoff` section above
+  it (W7-B1; the empty state's copy points there). Split:
+  `components/studio/SessionsIndex.tsx`'s
   `SessionsIndexBody` is the pure, props-driven presentational component
   (render-tested via `lib/sessions-index-render.test.ts`, the same
   `renderToStaticMarkup` + `next/navigation` mock pattern as
@@ -632,7 +717,10 @@ inventory rather than one shared page-level contract:
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
   WI hexes additionally carry `data-wi-cost-usd`; a fanned-out dev node's
   own aggregate carries `data-fanout-phase` rather than
-  `data-hex-kind="phase"`. A single **flowLineage** run threads across
+  `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
+  same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
+  dev-phase cost/model/retries are never attributed to a single work item
+  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop` →
   `forge-reflect`) — each renders only its own slice of nodes, so
   switching `/flows/<flowId>` changes which hexes appear. MONITOR also
@@ -756,18 +844,75 @@ inventory rather than one shared page-level contract:
   build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
   breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
   / planning session (`a[data-crumb="session"]`) / PLAN with
-  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`. `type=verdict&mode=gate`
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`.
+  **W7-B7 request honesty:** every optional artifact GET is decided by
+  `lib/artifact-request-plan.ts` from the run's own `artifactsReady` — an
+  artifact the run declares absent renders the honest empty state with NO
+  guaranteed-404 probe (only an unknown/orphan run probes its type's primary
+  directly). The structured plan.json / PLAN.md branches were DELETED
+  (artifact-plan-19: nothing ever produced either file; PLAN.html is the one
+  cycle plan artifact, always view-only — the interactive plan gate is the
+  architect session's). The filename chip links the RAW artifact file when
+  that FILE resolved (`a[data-action="open-raw-artifact"]`, artifact-plan-26;
+  for `type=pr` the type can resolve via `run.prUrl` alone, so the chip links
+  only when pr-description.md itself parsed — never a guaranteed 404, W7-B7
+  review r1). The
+  verdict GATE is armed by the queue state alone (gated ⇒ armed, round-2
+  send-backs included; active/complete/failed ⇒ view — artifact-plan-11/-14),
+  and a missing verdict.json in view mode renders the SAME shared empty state
+  as every other type (artifact-plan-12 — never a blank page).
+  `type=reflection` is the exception (W7-B7 review r1): ReflectionGate is the
+  type's own surface and renders its honest states itself — a live gate's
+  Stage-2 questions are never buried under the generic EmptyState, and a
+  never-reflected run shows the gate's own "No reflection questions filed"
+  note (artifact-plan-13 — never a fabricated "closes clean"). `type=pr`
+  renders the
+  `[data-section="pr-hero"][data-pr-url]` card — the parsed pr-description.md
+  merged with the run's own `prUrl` (derived from its `reviewer.pr-opened`
+  event; `lib/artifact-pr-view.ts` adds the number from the URL and claims
+  `merged`/`open` ONLY where the run status supports it); a cycle with neither
+  pr-description.md nor a recorded `prUrl` (e.g. `reviewer.pr-open-failed`)
+  resolves `empty` — demo.json alone never yields a blank pr body (W7-B7
+  review r1). `type=demo` view
+  mode renders the DEMO.md narrative (`[data-section="demo-narrative"]
+  iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison.
+  `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
-  rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
-  `[data-section="review-findings"][data-findings-count]` with per-row
-  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`
-  — then `[data-section="demo-comparison"]` /
+  rendered in BOTH verdict modes) —
+  `[data-section="review-findings"][data-findings-state="present|absent|error"]
+  [data-findings-count]` with per-row
+  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`;
+  a known-absent artifact renders the explicit `data-findings-state="absent"`
+  one-liner (artifact-plan-16 — fetched only when the flow's own
+  review-findings producer node completed, same rule as the run page; the
+  absence claim itself is made only off that declaration or an authoritative
+  404 — a transient fetch failure renders `data-findings-state="error"`
+  instead, W7-B7 review r1) —
+  then the review-shape summary
+  (`[data-section="review-summary"][data-region-count][data-blocking-count]`
+  with `a[data-action="jump-to-blocking"]` when a blocker exists), then
+  `[data-section="demo-comparison"]` /
   `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
-  the verdict form —
+  the per-region cards — each `[data-demo-region][data-region-comment-count]
+  [data-region-collapsed]` with a `[data-action="toggle-region"]` header
+  (regions collapse by default only on walls of > 12 regions, unless they
+  carry comments — `lib/demo-review-view.ts`, artifact-plan-31); every
+  authored comment row carries `[data-action="edit-comment"]` +
+  `[data-action="delete-comment"]` (delete is how a NON-blocking comment is
+  cleared — artifact-plan-15; editing renders `[data-comment-editing="true"]`
+  with `[data-field="comment-edit-body"]` + `[data-action="save-comment-edit"]`),
+  resolve stays blocking-only — plus the verdict form (position:sticky so the
+  control never sits 14,000px down) —
   `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
   (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
   is `approve | send-back`), submit button
-  `[data-action="approve-and-merge"|"send-back"]`. View-mode verdict renders
+  `[data-action="approve-and-merge"|"send-back"]`. Every verdict surface
+  (GateBar's caller, DemoReviewSurface, ReviewVerdictForm) resolves its
+  initiative id through the ONE rule in `lib/initiative-id.ts`
+  (artifact-plan-18/-25; the bridge's gate route recovers the same way —
+  defence in depth), and the demo-gate GateBar's wire body carries the
+  `rationale` + synthesized send-back `acceptanceCriteria` the bridge
+  requires (artifact-plan-V01 — `lib/gate-verdict-body.ts`). View-mode verdict renders
   the stamp with `[data-verdict-decision="approve|send-back"]` (mapped from the
   on-disk VerdictRecord via `verdictRecordToDoc` — R4-08-F3 fixed the raw-shape
   passthrough that rendered every verdict "Approved"). `type=reflection&mode=view`
@@ -778,7 +923,9 @@ inventory rather than one shared page-level contract:
   fieldset — options render `[data-option-label][data-option-selected]`, a
   freeform question a `[data-question-freeform]` textarea; below the list a
   `[data-field="freeform"]` notes box and a `[data-action="submit-reflection"]`
-  button gated on all-answered; once submitted (or `answered`)
+  button gated on all-answered — while disabled it carries a `title` naming
+  the reason and a sibling `[data-reflect-answered-count]` "N of M answered"
+  line (W7-B7 artifact-plan-24); once submitted (or `answered`)
   `[data-section="reflect-done"]`. **R4-09-F3 automated mode:** when the reflector
   self-answered (every question inferred), the gate renders a read-only view —
   `[data-section="reflect-questions"][data-reflect-automated="true"]`, each
@@ -1192,17 +1339,25 @@ inventory rather than one shared page-level contract:
     not exist** (a session with no execution log yet). A fabricated `0.00`
     would be a false claim about the run; the attribute's absence is the honest
     signal. Callers must treat "absent" and `"0.00"` as different facts.
-  - **`data-run-status` carries the target's OWN vocabulary, verbatim, and it
-    differs per link kind** — flow-node rows use `RunPhaseStatus`
-    (`pending|active|complete|retrying|failed`), standalone rows use
-    `running|done|failed|suppressed|budget-exceeded`, and session rows carry
-    that session's own `status.json` phase string. **There is deliberately no
-    mapping onto one vocabulary**: there is no honest `RunPhaseStatus` for
-    `suppressed` or for `interviewing`, and inventing one would be a false
-    claim about the target. Session status is intentionally OPEN because a
-    session's phase is closed per runner but open across the four-and-growing
-    runners this surface aggregates; the closed vocabularies are enforced at
-    runtime by `agent-ledger.ts`'s wire validator, not by the type.
+  - **`data-run-status` carries a CLOSED vocabulary per link kind** —
+    flow-node rows use `RunPhaseStatus`
+    (`pending|active|complete|retrying|failed`, verbatim), standalone rows
+    use `running|done|failed|suppressed|budget-exceeded` (verbatim — there
+    is no honest `RunPhaseStatus` for `suppressed`, so it is never mapped).
+    **W7-B1 (home-sessions-33): SESSION rows no longer leak their raw
+    `status.json` phase into this attribute** — the phase is an OPEN
+    per-runner vocabulary (closed per runner, open across the
+    four-and-growing runners this surface aggregates; `LedgerRow.status`
+    still carries it verbatim, D12 untouched), so `HistoryLedger` maps it AT
+    THE DOM BOUNDARY via `sessionPhaseRunStatus` (`lib/history-ledger.ts`):
+    done-terminal phases (`SESSION_DONE_PHASES` — the SAME set
+    `describeLifecycle`'s "Done —" terminal copy reads) → `complete`,
+    stopped-terminal (`SESSION_STOPPED_PHASES`) → `failed`, anything else →
+    `active`. The RAW phase always rides alongside on the row's own
+    **`data-session-phase`** (session rows only), and the visible chip still
+    shows it verbatim — nothing is lost, the closed attribute just stops
+    carrying eight vocabularies. The closed wire vocabularies are enforced
+    at runtime by `agent-ledger.ts`'s wire validator, not by the type.
   - **Three fetch outcomes render three distinguishable states**, because a
     failed fetch and an empty history are different operator facts:
     `[data-component="history-ledger-loading"]` before the first response,
@@ -1875,7 +2030,18 @@ inventory rather than one shared page-level contract:
   (below). Artifact pane:
   `[data-section="session-artifact"][data-artifact-kind][data-artifact-label]`
   (the label comes from `studio/session-kinds.yaml` over the wire, never a
-  client-side table). Fail-closed state:
+  client-side table). **W7-B1 (sessions-kinds-07, S1): the page threads
+  `project`/`sessionId` into `SessionArtifactPane`** (generation-gallery
+  "view →" links need both — they were never passed, so the demo itself was
+  unopenable from the demo session's OWN page) **and wires
+  `onFinalizeGeneration` for a live demo session** (kind `demo`, project
+  known, non-terminal): the SAME `demoBuilderLock` POST the project-page
+  panel uses, then a shell+summary refetch; a failed lock renders
+  `[data-section="finalize-error"]` above the pane. A terminal (locked/
+  abandoned) session keeps `[data-action="finalize-generation"]` disabled —
+  the pane's honest absent-handler state — while "view →" still works.
+  Pinned by `scripts/session-artifact-threading.test.ts` (call-site) on top
+  of the pane's existing behaviour tests. Fail-closed state:
   `[data-session-error][data-session-error-kind]` — a checkpoint stage outside
   the kind's declared `stages` surfaces the server's message naming the
   offending value and the allowed set, never a defaulted render. **D10
@@ -2286,9 +2452,19 @@ inventory rather than one shared page-level contract:
   handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
   (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 adds the `selector:"none"` case).**
-  `app/sessions/[kind]/new/page.tsx`. Kind context
-  card (agent slug + `SKILL.md` path, produced artifact label, session
-  directory shape) + a project select (`[data-field="kickoff-project"]`,
+  `app/sessions/[kind]/new/page.tsx`. **W7-B1 (sessions-kinds-05,
+  home-sessions-19):** the per-kind form specs live in
+  `lib/session-kind-meta.ts` (`KICKOFF_SPECS` — one module beside the kind
+  titles and the shared `KICKOFF_ENTRIES` list, parity-pinned against
+  `studio/session-kinds.yaml` by `lib/session-kind-meta.test.ts`), ending
+  the page-vs-index two-list drift; and the context card
+  (`KickoffContextCard`, `components/studio/session/`, render-pinned by
+  `lib/kickoff-context-render.test.ts`) now LEADS with the kind's
+  plain-English `blurb` (`[data-kickoff-blurb]` — what the session does and
+  produces) and a way back out (`a[data-action="kickoff-back"]
+  href="/sessions"`), with the agent slug + `SKILL.md` path + session
+  directory demoted to one `[data-kickoff-provenance]` line — demoted, not
+  deleted. Then a project select (`[data-field="kickoff-project"]`,
   datalist-backed, mirroring `NewIdeaBox`/`AuthoringLauncher`'s own
   convention), or, for `kb-cleanup` only, a KB select
   (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
@@ -3152,7 +3328,15 @@ The shared status vocabularies:
   (`STATUS_COLOR` + `WI_STATUS_GLOW`) so a colour change happens in exactly
   one place. Yellow = retrying (transient error, still recovering); red =
   terminal failure only — sibling units stay in their own state
-  independently.
+  independently. **W7-B1 (home-sessions-03, community-24): the
+  `.status-dot` CSS additionally recognises a sixth, session-only token —
+  `data-status="needs-you"`** (steady ember, no pulse; `globals.css`) — so
+  "a session is waiting on the OPERATOR" stops borrowing `retrying` (a run
+  state) and one `data-status` value keeps one meaning. Rendered only
+  inside the shared `[data-needs-you-chip]` (visible "needs you" text +
+  `aria-label`, `NeedsYouChip` in `components/studio/SessionsIndex.tsx`) on
+  `/sessions` rows and Home session cards; it is NOT part of the
+  pipeline/WI vocabulary and never appears on a run/WI/phase element.
 - **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
 - **Roadmap initiative status** (`RoadmapCanvas.tsx`) — `pending |

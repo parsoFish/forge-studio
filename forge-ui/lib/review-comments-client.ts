@@ -60,6 +60,23 @@ export async function resolveReviewComment(
   return post(`/api/review-comments/${encodeURIComponent(cycleId)}/resolve`, { commentId }, cycleId);
 }
 
+/** W7-B7 (artifact-plan-15): rewrite an authored comment (body and/or blocking). */
+export async function editReviewComment(
+  cycleId: string,
+  commentId: string,
+  patch: { body?: string; blocking?: boolean },
+): Promise<ReviewCommentsResponse | { error: string }> {
+  return post(`/api/review-comments/${encodeURIComponent(cycleId)}/edit`, { commentId, ...patch }, cycleId);
+}
+
+/** W7-B7 (artifact-plan-15): delete a comment — the only way to clear a non-blocking one. */
+export async function deleteReviewComment(
+  cycleId: string,
+  commentId: string,
+): Promise<ReviewCommentsResponse | { error: string }> {
+  return post(`/api/review-comments/${encodeURIComponent(cycleId)}/delete`, { commentId }, cycleId);
+}
+
 /** Fetch the F4 single DEMO.md (raw markdown) for a cycle, or '' if absent. */
 export async function fetchDemoMarkdown(cycleId: string): Promise<string> {
   try {

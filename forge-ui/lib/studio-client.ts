@@ -201,6 +201,13 @@ export type Run = {
   /** 2.10: the merged cycle's reflection was lost (cause) — mirrors orchestrator/run-model.ts. */
   reflectionLost?: string;
   reflectionLostNote?: string;
+  /**
+   * W7-B7 (artifact-plan-17): the run's pull-request URL, derived server-side
+   * from its own `reviewer.pr-opened` event — mirrors
+   * orchestrator/run-model.ts's `Run.prUrl`. Absent when the cycle never
+   * opened a PR; never fabricated.
+   */
+  prUrl?: string;
   workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   /**
    * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
@@ -974,6 +981,9 @@ export function parseRun(raw: unknown): Run {
     // trigger/reflectionLost above — project is parsed and served, must not
     // be silently dropped here (GateBar depends on it reaching the client).
     ...(r.project !== undefined ? { project: r.project } : {}),
+    // W7-B7 (artifact-plan-17): same guard — the PR artifact page's link
+    // depends on prUrl reaching the client.
+    ...(r.prUrl !== undefined ? { prUrl: r.prUrl } : {}),
   };
 }
 

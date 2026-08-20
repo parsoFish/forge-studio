@@ -49,6 +49,8 @@ import {
   writeReviewComments,
   appendReviewComment,
   resolveComment,
+  editComment,
+  deleteComment,
   deriveVerdictFromComments,
   reviewCommentsPath,
   isSafeCycleId,
@@ -2694,6 +2696,42 @@ async function handleHttp(
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
     const sidecar = readReviewComments(ctx.logsRoot, cycleId);
     sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
+    return;
+  }
+  // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
+  // non-blocking comment has no resolve affordance, so delete is the only way
+  // to clear it; edit fixes a typo'd concern without losing its anchor id.
+  // Same lock + derive-on-every-mutate shape as append/resolve.
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/edit')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
+      const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
+      if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
+      if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+      );
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/delete')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
     return;
   }
   if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {

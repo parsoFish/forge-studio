@@ -21,7 +21,7 @@ function run(over: Partial<Run>): Run {
   };
 }
 
-test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict gate = no verdict yet on a gated/active run', () => {
+test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict gate = the queue state alone (gated)', () => {
   expect(inferArtifactMode('plan', run({ status: 'gated', artifactsReady: { plan: 'gate' } }))).toBe('gate');
   expect(inferArtifactMode('plan', run({ status: 'complete', artifactsReady: { plan: 'view' } }))).toBe('view');
   expect(inferArtifactMode('workitems', run({ artifactsReady: { 'work-items': 'gate' } }))).toBe('gate');
@@ -29,6 +29,17 @@ test('inferArtifactMode: artifactsReady gate/view drives plan/demo/pr; verdict g
   expect(inferArtifactMode('verdict', run({ status: 'complete', artifactsReady: { verdict: 'view' } }))).toBe('view');
   expect(inferArtifactMode('verdict', run({ status: 'complete' }))).toBe('view');
   expect(inferArtifactMode('plan', null)).toBe('view');
+});
+
+// W7-B7 (artifact-plan-11/-14): verdict-gate arming, both directions.
+test('verdict gate: ROUND 2 stays armed — a gated run with a prior send-back verdict.json still awaits the operator', () => {
+  expect(inferArtifactMode('verdict', run({ status: 'gated', artifactsReady: { verdict: 'view' } }))).toBe('gate');
+});
+
+test('verdict gate: an ACTIVE run does not arm it (agents still working — nothing awaits the operator), and failed/planned never do', () => {
+  expect(inferArtifactMode('verdict', run({ status: 'active' }))).toBe('view');
+  expect(inferArtifactMode('verdict', run({ status: 'failed' }))).toBe('view');
+  expect(inferArtifactMode('verdict', run({ status: 'planned' }))).toBe('view');
 });
 
 test('?mode=gate on a run that is NOT gated for that artifact → view (artifact-plan-05)', () => {
@@ -140,9 +151,15 @@ test('GateBar is keyed on the run\'s initiative id (never the raw ?run= handle, 
   expect(el, 'the raw URL handle must not reach postGate — it 400s at INIT_ID_RE').not.toMatch(/runId=\{runId\}/);
 });
 
-test('gateInitiativeId resolves exactly as ReviewVerdictForm does (run?.initiativeId ?? runId)', () => {
+test('ONE id-resolution rule: gateInitiativeId rides lib/initiative-id.ts and every verdict surface receives it', () => {
+  // W7-B7 (artifact-plan-18/25) strengthened the A3 invariant this pin used
+  // to encode (`run?.initiativeId ?? runId`): the raw fallback still 400s for
+  // an orphan cycle-id handle, so the page now resolves through the SHARED
+  // `effectiveInitiativeId` — and BOTH verdict surfaces (DemoReviewSurface +
+  // ReviewVerdictForm) receive that same resolved handle.
   const src = readFileSync(ARTIFACT_PAGE_PATH, 'utf8');
-  expect(src).toMatch(/const gateInitiativeId = run\?\.initiativeId \?\? runId;/);
-  // The verdict form's own prop is the pinned precedent this must match.
-  expect(src).toMatch(/initiativeId=\{run\?\.initiativeId \?\? runId\}/);
+  expect(src).toMatch(/const gateInitiativeId = effectiveInitiativeId\(run\?\.initiativeId \?\? runId, artifactRunId\);/);
+  expect(src, 'no verdict surface may re-derive its own id rule').not.toMatch(/initiativeId=\{run\?\.initiativeId \?\? runId\}/);
+  const surfaces = src.match(/initiativeId=\{gateInitiativeId\}/g) ?? [];
+  expect(surfaces.length, 'DemoReviewSurface + ReviewVerdictForm both take the one resolved id').toBeGreaterThanOrEqual(2);
 });

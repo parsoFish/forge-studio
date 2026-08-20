@@ -56,7 +56,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { formatWhen, ledgerRowKind } from '@/lib/history-ledger';
+import { formatWhen, ledgerRowKind, sessionPhaseRunStatus } from '@/lib/history-ledger';
 import type { LedgerRow } from '@/lib/history-ledger';
 
 export type HistoryLedgerProps = {
@@ -137,7 +137,14 @@ export function HistoryLedger({ rows, nowMs, showKindChip, pageSize, filterable 
             key={row.id}
             data-ledger-row="true"
             data-run-id={row.id}
-            data-run-status={row.status}
+            // W7-B1 (home-sessions-33): a SESSION row's `status` is its own
+            // raw status.json phase (an open per-runner vocabulary, D12) —
+            // that raw phase now rides its own data-session-phase, and the
+            // CLOSED data-run-status contract carries the mapped run-vocab
+            // value (`sessionPhaseRunStatus`). Every other row kind renders
+            // its status verbatim, byte-identical to before.
+            data-run-status={row.linkKind === 'session' ? sessionPhaseRunStatus(row.status) : row.status}
+            {...(row.linkKind === 'session' ? { 'data-session-phase': row.status } : {})}
             data-run-when={row.when}
             {...(row.costUsd !== null ? { 'data-ledger-cost-usd': row.costUsd.toFixed(2) } : {})}
             {...(row.narrative !== null ? { 'data-ledger-narrative': row.narrative } : {})}

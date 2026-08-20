@@ -22,3 +22,18 @@
 # honest "no demo yet" empty state when it is absent (projects-21 is about
 # that empty state's missing links, not the fetch).
 /api/artifact/*/demo.json
+
+# DEMO.md (W7-B7, artifact-plan-32): the human-readable demo NARRATIVE rides
+# the same capture as demo.json but is not guaranteed alongside it on every
+# frozen cycle; the artifact page fetches it only AFTER demo.json resolved
+# (view mode) or inside the review gate (which falls back to a generated
+# summary). An absent narrative degrades to the structured evidence alone —
+# the page is honest about it, so the probe is legitimately optional.
+/api/artifact/*/DEMO.md
+
+# reflection.json (W7-B7, artifact-plan-13): fetched ONLY when the run's own
+# artifactsReady declares reflection (reflector EVENTS exist). A reflector
+# that crashed mid-write leaves events but no summary json (the reflectionLost
+# class) — the page renders the shared "not yet produced" empty state, so the
+# probe is legitimately optional. Runs that never reflected fire NO request.
+/api/artifact/*/reflection.json
