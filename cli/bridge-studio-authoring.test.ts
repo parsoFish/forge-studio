@@ -104,6 +104,9 @@ before(async () => {
   writeSkillFixture('editable-skill');
   writeSkillFixture('unused-skill');
   writeSkillFixture('bound-skill');
+  // W7-B4 review finding 1: a plain library skill that NO other test consumes,
+  // so the agent-route kind-confusion pin below always meets a live package.
+  writeSkillFixture('kind-confusion-skill');
 
   // An agent that binds `bound-skill` (blocks its DELETE) — a studio agent
   // with a runtime block, like the real roster carries.
@@ -127,6 +130,15 @@ before(async () => {
   writeHookFixture('approved-hook');
   writeHookFixture('unbound-hook');
   writeHookFixture('carried-hook');
+  // W7-B4 review finding 4 fixtures: a hook whose script leaf is GONE and a
+  // hook whose yaml no longer parses. Both still render in the library (D-4
+  // "visible, never silent"), so both must be removable from Studio.
+  writeHookFixture('scriptless-hook');
+  rmSync(join(forgeRoot, 'studio', 'hooks', 'scriptless-hook', 'scripts'), { recursive: true, force: true });
+  mkdirSync(join(forgeRoot, 'studio', 'hooks', 'malformed-hook'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', 'malformed-hook', 'hook.yaml'), 'name: broken\n\ton: [\n', 'utf8');
+  // W7-B4 review finding 9 fixture.
+  writeHookFixture('emptied-script-hook');
 
   // An agent carrying `carried-hook` (blocks its DELETE).
   mkdirSync(join(forgeRoot, 'skills', 'hook-carrier'), { recursive: true });
@@ -191,6 +203,36 @@ before(async () => {
     'utf8',
   );
 
+  // W7-B4 review findings 6/7 fixtures: `trigger-target-flow` is named by
+  // `trigger-source-flow`'s flow-complete trigger (its delete must 409), and
+  // `broken-flow` is an AUTHORED flow whose yaml no longer parses (its delete
+  // must still work — a corrupted flow that cannot be removed from Studio is
+  // stuck forever).
+  for (const fid of ['trigger-target-flow', 'trigger-source-flow']) {
+    mkdirSync(join(forgeRoot, 'studio', 'flows', fid), { recursive: true });
+    writeFileSync(
+      join(forgeRoot, 'studio', 'flows', fid, 'flow.yaml'),
+      yaml.dump({
+        id: fid,
+        name: fid,
+        version: 1,
+        goal: 'trigger reference fixture',
+        project: null,
+        kb: null,
+        costCeilingUsd: 2,
+        origin: 'studio',
+        nodes: [{ id: 'work', agent: 'binder-agent' }],
+        edges: [],
+        triggers: fid === 'trigger-source-flow'
+          ? [{ on: 'flow-complete', target: { kind: 'flow', ref: 'trigger-target-flow' } }]
+          : [],
+      }),
+      'utf8',
+    );
+  }
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'broken-flow'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'flows', 'broken-flow', 'flow.yaml'), 'id: broken-flow\n\tnope: [\n', 'utf8');
+
   // A flow that references `flow-used-agent` (blocks that agent's DELETE).
   writeSkillFixtureAgent('flow-used-agent');
   mkdirSync(join(forgeRoot, 'studio', 'flows', 'referencing-flow'), { recursive: true });
@@ -216,6 +258,7 @@ before(async () => {
   writeSkillFixtureAgent('unused-agent');
   writeSkillFixtureAgent('kind-bound-agent');
   writeSkillFixtureAgent('existing-agent');
+  writeSkillFixtureAgent('fail-closed-agent');
 
   // A session-kind descriptor referencing kind-bound-agent (blocks DELETE).
   // The real file is a bare top-level YAML SEQUENCE (session-kinds.ts).
@@ -616,6 +659,48 @@ test('DELETE /api/studio/agents/:slug — session-kind-referenced 409', async ()
   assert.ok(existsSync(join(forgeRoot, 'skills', 'kind-bound-agent', 'SKILL.md')));
 });
 
+// W7-B4 review finding 1 (kind confusion): skills and agents share
+// skills/<id>/SKILL.md, so the AGENT delete route can address a plain
+// composable skill by slug. The skills route refuses the mirror case
+// (isStudioAgent -> 404) and refuses composed skills (usedBy -> 409); without
+// the same two guards here, DELETE /api/studio/agents/<a-skill> matched no
+// flow node and no session kind (both only ever reference AGENTS), fell
+// through to rmSync, and deleted a skill that agents still compose.
+test('DELETE /api/studio/agents/:slug refuses a plain library skill (404, not deleted) — kind confusion', async () => {
+  const res = await send('DELETE', '/api/studio/agents/kind-confusion-skill');
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error?: string };
+  assert.match(body.error ?? '', /library skill/);
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'kind-confusion-skill', 'SKILL.md')));
+});
+
+test('DELETE /api/studio/agents/:slug cannot bypass the skills route usedBy guard', async () => {
+  // bound-skill is composed by binder-agent: the skills route 409s it. The
+  // agent route must never be the back door that deletes it anyway.
+  const res = await send('DELETE', '/api/studio/agents/bound-skill');
+  assert.ok(res.status === 404 || res.status === 409, `expected refusal, got ${res.status}`);
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'bound-skill', 'SKILL.md')));
+});
+
+// W7-B4 review finding 5 (fail-open guard): sessionKindAgentRefs chose a
+// TOLERANT scan so a malformed sibling descriptor could not unblock a guarded
+// delete — but its catch around yaml.load returned the EMPTY map on an
+// unparseable FILE, which unblocks the delete for EVERY session-kind-driving
+// agent. A parse failure is "I cannot prove this agent is unreferenced", and
+// that must refuse, not proceed.
+test('DELETE /api/studio/agents/:slug refuses when session-kinds.yaml cannot be parsed (fail-closed)', async () => {
+  const kindsPath = join(forgeRoot, 'studio', 'session-kinds.yaml');
+  const good = readFileSync(kindsPath, 'utf8');
+  writeFileSync(kindsPath, '- id: broken\n\tagent: kind-bound-agent\n', 'utf8'); // tab => YAML parse error
+  try {
+    const res = await send('DELETE', '/api/studio/agents/fail-closed-agent');
+    assert.ok(res.status >= 400, `expected a refusal, got ${res.status}`);
+    assert.ok(existsSync(join(forgeRoot, 'skills', 'fail-closed-agent', 'SKILL.md')));
+  } finally {
+    writeFileSync(kindsPath, good, 'utf8');
+  }
+});
+
 test('DELETE /api/studio/agents/:slug — unknown 404, traversal 400', async () => {
   assert.equal((await send('DELETE', '/api/studio/agents/no-such-agent')).status, 404);
   assert.equal((await send('DELETE', '/api/studio/agents/..%2Fescape')).status, 400);
@@ -633,6 +718,29 @@ test('PUT /api/studio/flows/:id with create:true on an EXISTING id ⇒ 409 (flow
     edges: [],
   });
   assert.equal(res.status, 409);
+});
+
+// W7-B4 review finding 10: materialisation is a real side effect on the
+// roster (it copies packages into skills/), but it ran BEFORE validation, the
+// edit-lock and the no-op check — so a save the server went on to REJECT still
+// mutated skills/. Must run only once the save is actually going to land.
+// (Placed before the flows-09 test below, which is what legitimately
+// materialises plan/dev/review.)
+test('a REJECTED flow save materialises nothing into skills/ (side effect must follow the gates)', async () => {
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'plan')), false);
+  const res = await send('PUT', '/api/studio/flows/never-lands', {
+    create: true,
+    name: 'Never Lands',
+    goal: 'references starters but does not validate',
+    nodes: [{ id: 'a', agent: 'plan' }],
+    edges: [{ from: 'a', to: 'no-such-node' }], // dangling edge => error finding
+    triggers: [],
+  });
+  assert.equal(res.status, 400);
+  for (const slug of ['plan', 'dev', 'review']) {
+    assert.equal(existsSync(join(forgeRoot, 'skills', slug)), false, `skills/${slug} must NOT exist after a rejected save`);
+  }
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'flows', 'never-lands')), false);
 });
 
 test('saving the STARTER canvas as a new flow materialises the starter agents and validates (flows-09)', async () => {
@@ -716,6 +824,28 @@ test('DELETE /api/studio/flows/:id — seed 403, authored 200, unknown 404', asy
   assert.equal((await send('DELETE', '/api/studio/flows/no-such-flow')).status, 404);
 });
 
+// W7-B4 review finding 6: every OTHER delete in this surface refuses while
+// something still points at the object (skills->usedBy, hooks->carriedBy,
+// agents->flows+kinds, templates->usedBy). Flow DELETE had no inbound-trigger
+// check, so deleting a flow left a sibling's triggers[].target.ref dangling —
+// that sibling's next save then fails validation and studio lint errors.
+test('DELETE /api/studio/flows/:id — 409 while another flow triggers on it', async () => {
+  const res = await send('DELETE', '/api/studio/flows/trigger-target-flow');
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error?: string };
+  assert.match(body.error ?? '', /trigger-source-flow/);
+  assert.ok(existsSync(join(forgeRoot, 'studio', 'flows', 'trigger-target-flow', 'flow.yaml')));
+});
+
+// W7-B4 review finding 7: the seed/origin check required a successful parse,
+// so a corrupted authored flow.yaml answered 500 and could never be deleted
+// from Studio — only by hand on disk.
+test('DELETE /api/studio/flows/:id — a malformed authored flow is still deletable', async () => {
+  const res = await send('DELETE', '/api/studio/flows/broken-flow');
+  assert.equal(res.status, 200);
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'flows', 'broken-flow')), false);
+});
+
 test('DELETE /api/studio/flows/:id — an active run locks deletion (423)', async () => {
   // Plant an in-flight manifest claiming tpl-user (flowId stamped via flow_id).
   writeFileSync(
@@ -747,4 +877,46 @@ test('DELETE /api/studio/flows/:id — an active run locks deletion (423)', asyn
   const res = await send('DELETE', '/api/studio/flows/tpl-user');
   assert.equal(res.status, 423);
   rmSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-B4-DEL-LOCK.md'), { force: true });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B4 review findings 4 + 9 — hook repair/removal and silent-swallow
+// ---------------------------------------------------------------------------
+
+// Finding 4: locateHook answered 404 for ANY hook whose hook.yaml is malformed
+// or whose declared script leaf is missing, because hookScriptIsContained
+// returns false when loadHookDefinition throws. The library deliberately
+// RENDERS those entries, so Edit and Delete both failed "unknown hook" and the
+// only recovery was manual filesystem surgery. DELETE needs the yaml-dir
+// identity guard only — it removes the directory and touches no script path.
+test('DELETE /api/studio/hooks/:id removes a hook whose script leaf is missing', async () => {
+  const res = await send('DELETE', '/api/studio/hooks/scriptless-hook');
+  assert.equal(res.status, 200);
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'scriptless-hook')), false);
+});
+
+test('DELETE /api/studio/hooks/:id removes a hook whose hook.yaml is malformed', async () => {
+  const res = await send('DELETE', '/api/studio/hooks/malformed-hook');
+  assert.equal(res.status, 200);
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'malformed-hook')), false);
+});
+
+// Finding 9: `scriptBody` was read as `typeof x === 'string' && x` — an
+// operator who cleared the editor sent '' , which collapsed to undefined, so
+// the write was SKIPPED and the route still answered ok:true. The old script
+// stayed on disk while the UI showed a successful save. An explicitly-sent
+// empty value is a request the route cannot honour, so it must refuse.
+test('PUT /api/studio/hooks/:id refuses an explicitly emptied scriptBody instead of silently keeping the old one', async () => {
+  const scriptPath = join(forgeRoot, 'studio', 'hooks', 'emptied-script-hook', 'scripts', 'run.sh');
+  const before = readFileSync(scriptPath, 'utf8');
+  const res = await send('PUT', '/api/studio/hooks/emptied-script-hook', { scriptBody: '   ' });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error?: string };
+  assert.match(body.error ?? '', /scriptBody/);
+  assert.equal(readFileSync(scriptPath, 'utf8'), before);
+});
+
+test('PUT /api/studio/hooks/:id refuses an explicitly emptied name', async () => {
+  const res = await send('PUT', '/api/studio/hooks/emptied-script-hook', { name: '  ' });
+  assert.equal(res.status, 400);
 });

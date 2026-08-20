@@ -37,7 +37,9 @@ import {
   serializeAgentDefinition,
   serializeFlowDefinition,
   listFlowIds,
+  isStudioAgent,
 } from '../orchestrator/studio/registry.ts';
+import { listSkillLibrary } from '../orchestrator/studio/skill-library.ts';
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from '../orchestrator/studio/registry.ts';
 import type { CommunityRegistryItem } from '../orchestrator/studio/types.ts';
@@ -401,12 +403,23 @@ function spawnPreflightFix(
 /**
  * Which session-kind descriptors reference each agent slug (the DELETE
  * guard's second reference source, beside flow nodes). Deliberately a
- * TOLERANT scan rather than the strict `loadSessionKinds` parse: for a
- * refusal guard, over-collecting references from a descriptor that would
- * fail the strict parse is the fail-closed direction (a strict throw here
- * would let a malformed sibling descriptor unblock a guarded delete).
- * A missing file is genuinely "no session kinds" — an empty map.
+ * TOLERANT scan of the descriptor ROWS rather than the strict
+ * `loadSessionKinds` parse: for a refusal guard, over-collecting references
+ * from a row that would fail the strict parse is the fail-closed direction
+ * (a strict throw per-row would let a malformed sibling descriptor unblock a
+ * guarded delete). A missing file is genuinely "no session kinds" — an empty
+ * map.
+ *
+ * W7-B4 review finding 5: tolerance stops at the FILE. The previous `catch {
+ * return refs }` around `yaml.load` inverted this function's whole rationale
+ * — an unparseable file (one stray tab) produced an EMPTY map, so the caller
+ * read "no session kind references this agent" and deleted it, breaking
+ * every kind that dispatched it. An unreadable/unparseable descriptor file
+ * means the guard CANNOT prove the agent is unreferenced, so it throws and
+ * the caller refuses.
  */
+export class SessionKindsUnreadableError extends Error {}
+
 function sessionKindAgentRefs(forgeRoot: string): Map<string, string[]> {
   const refs = new Map<string, string[]>();
   const file = join(forgeRoot, 'studio', 'session-kinds.yaml');
@@ -414,8 +427,10 @@ function sessionKindAgentRefs(forgeRoot: string): Map<string, string[]> {
   let parsed: unknown;
   try {
     parsed = yaml.load(readFileSync(file, 'utf8'));
-  } catch {
-    return refs; // unparseable file: validateSessionKinds owns surfacing that
+  } catch (err) {
+    throw new SessionKindsUnreadableError(
+      `studio/session-kinds.yaml could not be parsed (${err instanceof Error ? err.message : String(err)}) — fix it before deleting agents, since it cannot be checked for references`,
+    );
   }
   if (!Array.isArray(parsed)) return refs;
   for (const row of parsed) {
@@ -468,7 +483,10 @@ function flowEditableProjection(def: FlowDefinition): string {
  * only when skills/<slug> does not already exist (an operator's own agent of
  * the same name always wins — nothing is ever overwritten).
  */
-function materializeReferencedStarterAgents(forgeRoot: string, nodes: unknown[]): string[] {
+function planStarterAgentMaterialisation(
+  forgeRoot: string,
+  nodes: unknown[],
+): { def: AgentDefinition; destPath: string }[] {
   const wanted = new Set<string>();
   for (const raw of nodes) {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) continue;
@@ -476,13 +494,33 @@ function materializeReferencedStarterAgents(forgeRoot: string, nodes: unknown[])
     if (typeof agent === 'string' && agent) wanted.add(agent);
   }
   if (wanted.size === 0) return [];
-  const materialized: string[] = [];
+  const planned: { def: AgentDefinition; destPath: string }[] = [];
   for (const starter of listStarterAgents(forgeRoot)) {
     if (!wanted.has(starter.slug)) continue;
     const guard = resolveGuardedPath(toSkillsDir(forgeRoot), [starter.slug]);
     if (!guard.ok || guard.exists) continue; // existing roster agent wins
-    cpSync(join(forgeRoot, 'studio', 'starters', 'agents', starter.slug), guard.realPath, { recursive: true });
-    materialized.push(starter.slug);
+    planned.push({ def: starter, destPath: guard.realPath });
+  }
+  return planned;
+}
+
+/**
+ * W7-B4 review finding 10 — APPLY the plan above. Split from the planning
+ * pass because materialisation is a real, persistent mutation of the roster
+ * (it copies whole packages into skills/), and it used to run BEFORE
+ * validation, the edit-lock and the no-op check: a save that the server then
+ * answered 400/423, or that changed nothing at all, still left new agents in
+ * skills/. Planning is pure and can therefore still happen early enough to
+ * inform validation; only the copy waits until the save is certain to land.
+ */
+function applyStarterAgentMaterialisation(
+  forgeRoot: string,
+  planned: { def: AgentDefinition; destPath: string }[],
+): string[] {
+  const materialized: string[] = [];
+  for (const { def, destPath } of planned) {
+    cpSync(join(forgeRoot, 'studio', 'starters', 'agents', def.slug), destPath, { recursive: true });
+    materialized.push(def.slug);
   }
   return materialized;
 }
@@ -644,14 +682,25 @@ export async function handleStudioWriteRoutes(
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
 
-  // W7-B3 review F3 (guard-symmetry): DELETE is admitted into this function
-  // ONLY for the registry-item route below. Every pre-existing write arm
-  // (agents/:slug, projects/:id, flows/:slug, ...) dispatches on its URL match
-  // alone with no `method ===` test — an unscoped DELETE would fall into a
-  // PUT write handler and act. Any other DELETE falls through (404) exactly
-  // as it did before W7-B3 added the method to the top gate.
+  // W7-B3 review F3 (guard-symmetry), WIDENED at the W7-B4 merge: DELETE is
+  // admitted into this function ONLY for the three routes that actually
+  // implement it — the community registry item (W7-B3) and the agent/flow
+  // deletes (W7-B4). Every OTHER write arm (projects/:id, save-repo,
+  // preflight/*, ...) dispatches on its URL match alone with no `method ===`
+  // test, so an unscoped DELETE would fall into a PUT handler and act; those
+  // still fall through here (404), exactly as before W7-B3 added the method
+  // to the top gate.
+  //
+  // This list is load-bearing and must grow with every new DELETE arm: W7-B3
+  // wrote it as `!registryItemMatch` when the registry item was the only
+  // DELETE route, and merging W7-B4 (which added two more) silently disabled
+  // BOTH of them — the auto-merge was clean, and only the acceptance suite
+  // caught it. Adding a DELETE arm below without adding its match here is a
+  // route that answers 404 forever.
   const registryItemMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
-  if (method === 'DELETE' && !registryItemMatch) return false;
+  const agentDeleteMatch = url.match(/^\/api\/studio\/agents\/([^/]+)$/);
+  const flowDeleteMatch = url.match(/^\/api\/studio\/flows\/([^/]+)$/);
+  if (method === 'DELETE' && !registryItemMatch && !agentDeleteMatch && !flowDeleteMatch) return false;
 
   // ---- W7-B3 (community-23): community registry CRUD ----------------------
   if (method === 'POST' && url === '/api/studio/community/registry/items') {
@@ -894,6 +943,32 @@ export async function handleStudioWriteRoutes(
           sendJson(res, 404, { error: `unknown agent "${slug}"` }, origin);
           return true;
         }
+        // W7-B4 review finding 1 (kind confusion) — skills and agents share
+        // skills/<id>/SKILL.md, so this route can address a plain composable
+        // SKILL by slug. Neither guard below fires for one (flow nodes and
+        // session kinds only ever reference AGENTS), so without this check a
+        // skill fell straight through to the rmSync — deleting a package the
+        // skills route deliberately refuses, and breaking every agent that
+        // composes it at next spawn. Mirror of the skills route's own
+        // isStudioAgent refusal (cli/bridge-studio-skills.ts), pointing the
+        // operator at the surface that owns the object.
+        if (!isStudioAgent(skillMdPath)) {
+          sendJson(res, 404, {
+            error: `"${slug}" is a library skill, not a studio agent — delete it from the library (/skills/${slug})`,
+          }, origin);
+          return true;
+        }
+        // Defence in depth: even for a real agent, never delete one that
+        // something still composes. Same `usedBy` derivation the library
+        // listing renders — one source of truth, no second scan.
+        const composedBy = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === slug)?.usedBy ?? [];
+        if (composedBy.length > 0) {
+          sendJson(res, 409, {
+            error: `agent "${slug}" is still composed by ${composedBy.length} agent(s): ${composedBy.join(', ')} — unbind it from their builders first`,
+            usedBy: composedBy,
+          }, origin);
+          return true;
+        }
         const referencingFlows: string[] = [];
         for (const flowId of listFlowIds(ctx.forgeRoot)) {
           const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [flowId, 'flow.yaml']);
@@ -913,7 +988,15 @@ export async function handleStudioWriteRoutes(
           }, origin);
           return true;
         }
-        const kindRefs = sessionKindAgentRefs(ctx.forgeRoot).get(slug) ?? [];
+        let kindRefs: string[];
+        try {
+          kindRefs = sessionKindAgentRefs(ctx.forgeRoot).get(slug) ?? [];
+        } catch (err) {
+          // Fail CLOSED: the reference set is unknown, so the delete is refused
+          // with the actionable reason rather than proceeding blind.
+          sendJson(res, 409, { error: sanitizeError(err) }, origin);
+          return true;
+        }
         if (kindRefs.length > 0) {
           sendJson(res, 409, {
             error: `agent "${slug}" drives the session kind(s): ${kindRefs.join(', ')} (studio/session-kinds.yaml) — retire the descriptor first`,
@@ -1682,14 +1765,25 @@ export async function handleStudioWriteRoutes(
           sendJson(res, 404, { error: `unknown flow "${id}"` }, origin);
           return true;
         }
-        let def: FlowDefinition;
+        // W7-B4 review finding 7: the seed refusal must not DEPEND on a
+        // successful parse. A corrupted authored flow.yaml used to answer 500
+        // here, leaving the flow permanently undeletable from Studio (hand
+        // surgery on disk was the only exit) — while the library listing kept
+        // rendering it. On a parse failure we fall back to a raw-text seed
+        // probe: a file that still declares `origin: seed` is refused exactly
+        // as a parsed seed would be, and anything else is treated as authored
+        // and deletable. Deleting is the recovery action for a broken flow.
+        let def: FlowDefinition | null = null;
         try {
           def = loadFlowDefinition(flowYamlPath);
-        } catch (err) {
-          sendJson(res, 500, { error: sanitizeError(err) }, origin);
-          return true;
+        } catch {
+          const raw = readFileSync(flowYamlPath, 'utf8');
+          if (/^\s*origin:\s*['"]?seed['"]?\s*$/m.test(raw)) {
+            sendJson(res, 403, { error: `flow "${id}" is a shipped seed (origin: seed) — the OOTB pipeline cannot be deleted from Studio` }, origin);
+            return true;
+          }
         }
-        if (def.origin === 'seed') {
+        if (def && def.origin === 'seed') {
           sendJson(res, 403, { error: `flow "${id}" is a shipped seed (origin: seed) — the OOTB pipeline cannot be deleted from Studio` }, origin);
           return true;
         }
@@ -1698,6 +1792,34 @@ export async function handleStudioWriteRoutes(
         );
         if (activeDel) {
           sendJson(res, 423, { error: 'flow locked — a run is in flight', runId: activeDel.id }, origin);
+          return true;
+        }
+        // W7-B4 review finding 6 (dangling reference) — refuse while a SIBLING
+        // flow triggers on this one. Every other delete on this surface has a
+        // referenced-by guard; without this, `triggers[].target.ref` was left
+        // pointing at nothing, which fails that sibling's next save and errors
+        // studio lint. A malformed sibling is studio-lint's finding, not a
+        // reason to block (or unblock) this delete — same rule the agent
+        // delete's flow scan uses.
+        const triggeringFlows: string[] = [];
+        for (const otherId of listFlowIds(ctx.forgeRoot)) {
+          if (otherId === id) continue;
+          const g = resolveGuardedPath(flowsBase, [otherId, 'flow.yaml']);
+          if (!g.ok || !g.exists) continue;
+          try {
+            const otherDef = loadFlowDefinition(g.realPath);
+            if (otherDef.triggers.some((t) => t.target?.kind === 'flow' && t.target.ref === id)) {
+              triggeringFlows.push(otherId);
+            }
+          } catch {
+            // malformed sibling: studio lint's finding, not this route's
+          }
+        }
+        if (triggeringFlows.length > 0) {
+          sendJson(res, 409, {
+            error: `flow "${id}" is the trigger target of ${triggeringFlows.length} flow(s): ${triggeringFlows.join(', ')} — retarget or remove those triggers first`,
+            referencedBy: triggeringFlows,
+          }, origin);
           return true;
         }
         rmSync(dirname(flowYamlPath), { recursive: true, force: true });
@@ -1740,10 +1862,13 @@ export async function handleStudioWriteRoutes(
       }
 
       // W7-B4 (flows-09): a save referencing STARTER agents materialises them
-      // into the roster first, so the seeded plan→dev→review canvas actually
-      // validates (agent-ref) on a fresh install. Closed slug set; an
-      // existing skills/<slug> always wins. Runs BEFORE the agents map below.
-      const materializedAgents = materializeReferencedStarterAgents(
+      // into the roster, so the seeded plan→dev→review canvas actually
+      // validates (agent-ref) on a fresh install. Closed slug set; an existing
+      // skills/<slug> always wins. Only the PLAN is computed here (pure) — the
+      // copy itself runs after every gate below (review finding 10); the
+      // planned definitions are folded into the agents map so validation still
+      // sees the agents this save is about to create.
+      const plannedStarterAgents = planStarterAgentMaterialisation(
         ctx.forgeRoot,
         Array.isArray(b['nodes']) ? (b['nodes'] as unknown[]) : [],
       );
@@ -1801,6 +1926,12 @@ export async function handleStudioWriteRoutes(
         // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
       }
       const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
+      // Fold in the starters this save would materialise, so the agent-ref
+      // check passes on the strength of the PLAN rather than of a side effect
+      // that has already been committed to disk.
+      for (const { def } of plannedStarterAgents) {
+        if (!agentsMap.has(def.slug)) agentsMap.set(def.slug, def);
+      }
 
       // 7. Validate — reject on any error-level finding. `flowProjectOf`
       // resolves the TARGET flow's project (R2-04) so the external-trigger
@@ -1875,6 +2006,10 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 200, { ok: true, id, version: existing.version, noop: true, findings: flagFindings }, origin);
         return true;
       }
+
+      // Every gate has passed and this save WILL land — only now is the roster
+      // mutated (review finding 10).
+      const materializedAgents = applyStarterAgentMaterialisation(ctx.forgeRoot, plannedStarterAgents);
 
       // 9. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);

@@ -72,7 +72,7 @@ cli/bridge-studio-writes.ts execFileSync 3
 cli/bridge-studio-writes.ts existsSync 15
 cli/bridge-studio-writes.ts mkdirSync 8
 cli/bridge-studio-writes.ts openSync 1
-cli/bridge-studio-writes.ts readFileSync 3
+cli/bridge-studio-writes.ts readFileSync 4
 cli/bridge-studio-writes.ts realpathSync 3
 cli/bridge-studio-writes.ts renameSync 1
 cli/bridge-studio-writes.ts rmSync 2

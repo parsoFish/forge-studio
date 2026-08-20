@@ -766,7 +766,13 @@ inventory rather than one shared page-level contract:
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
-  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **W7-B4 flow
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. The save button
+  additionally carries **`[data-save-state="saving"|"idle"]`** (W7-B4 review
+  finding 11) — the in-flight state used to be visible only as the button's
+  `disabled` prop, so the `flows-author` journey guessed with a fixed
+  `sleep(1500)` and could read the flow file BEFORE a slow save landed,
+  false-passing the no-op assertion. Automation must wait on this attribute
+  returning to `idle`, never on a timer. **W7-B4 flow
   lifecycle (flows-09/10/11/12/13/27):** a `/flows/new` save carries
   `create: true` so a name colliding with an existing flow **409s** instead
   of silently overwriting it (flows-13); a save referencing the STARTER
@@ -774,7 +780,13 @@ inventory rather than one shared page-level contract:
   `studio/starters/agents/` into `skills/` so the very first canvas is
   saveable on a fresh install (flows-09; closed slug set, an existing roster
   agent always wins; `forge studio lint`'s `starter-flow/agent-unresolvable`
-  check pins the invariant). A failed save renders the bridge's per-node
+  check pins the invariant) — the materialisation itself runs only AFTER
+  validation, the edit-lock and the no-op check, so a REJECTED save never
+  mutates `skills/` (W7-B4 review finding 10). The BUILD header's Delete
+  control mirrors the bridge's own rule — offered whenever `origin !== 'seed'`,
+  the exact condition the server enforces with its 403 (review finding 12) —
+  and a flow that is the trigger target of another flow refuses deletion with
+  a **409** naming the referring flows (review finding 6). A failed save renders the bridge's per-node
   findings in `[data-component="flow-save-findings"][data-finding-count]`
   with per-row `[data-finding-node][data-finding-check]` (flows-10 — no more
   bare "validation failed"). The PUT merge carries `kickoff:` through, and a

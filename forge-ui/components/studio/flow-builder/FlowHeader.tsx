@@ -290,6 +290,11 @@ export function FlowHeader({
           onClick={() => void handleSave()}
           disabled={saving}
           data-action="save-flow"
+          // W7-B4 review finding 11: the save's in-flight state is load-bearing
+          // for automation and was visible only as `disabled` — so the journey
+          // had to guess with a fixed sleep. Mirrored to data-* per the CWC
+          // convention, the gate can wait on the real condition.
+          data-save-state={saving ? 'saving' : 'idle'}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

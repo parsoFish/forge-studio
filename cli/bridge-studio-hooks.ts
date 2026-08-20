@@ -194,6 +194,7 @@ function decodeIdSegment(raw: string): string {
 function locateHook(
   forgeRoot: string,
   id: string,
+  opts: { requireScript?: boolean } = {},
 ): { ok: true; yamlPath: string } | { ok: false; status: number; error: string } {
   try {
     hookYamlPath(id, forgeRoot);
@@ -202,7 +203,17 @@ function locateHook(
   }
   const yamlGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'hook.yaml']);
   if (!yamlGuard.ok || !yamlGuard.exists) return { ok: false, status: 404, error: `unknown hook "${id}"` };
-  if (!hookScriptIsContained(forgeRoot, id)) return { ok: false, status: 404, error: `unknown hook "${id}"` };
+  // W7-B4 review finding 4: `hookScriptIsContained` is a SCRIPT-path oracle —
+  // it returns false both for a genuinely escaping script AND for any hook
+  // whose hook.yaml fails to parse or whose declared script leaf is simply
+  // missing. Routes that touch the script path need it; DELETE does NOT (it
+  // removes the guarded directory and never resolves `script:`), and running
+  // it there made every broken hook permanently unremovable from Studio while
+  // the library kept rendering it. `requireScript: false` is that exemption,
+  // never a relaxation for a route that goes on to use the script path.
+  if (opts.requireScript !== false && !hookScriptIsContained(forgeRoot, id)) {
+    return { ok: false, status: 404, error: `unknown hook "${id}"` };
+  }
   return { ok: true, yamlPath: yamlGuard.realPath };
 }
 
@@ -494,6 +505,20 @@ export async function handleStudioHooksRoutes(
         }
       }
 
+      // W7-B4 review finding 9: an ABSENT field means "leave it alone"; a
+      // field that is PRESENT but empty is a request the route cannot honour.
+      // Both used to collapse to the same `&& value` falsy test, so clearing
+      // the editor answered ok:true and kept the old bytes — a save the
+      // operator watched succeed and which changed nothing.
+      for (const key of ['name', 'description', 'scriptBody'] as const) {
+        if (key in b && (typeof b[key] !== 'string' || !(b[key] as string).trim())) {
+          sendJson(res, 400, {
+            error: `"${key}" was sent empty — send a non-empty value to change it, or omit the field to leave it unchanged`,
+          }, origin);
+          return true;
+        }
+      }
+
       const def = loadHookDefinition(id, ctx.forgeRoot);
 
       const name = typeof b['name'] === 'string' && b['name'].trim() ? b['name'].trim() : def.name;
@@ -552,7 +577,9 @@ export async function handleStudioHooksRoutes(
     try {
       let id: string;
       try { id = decodeIdSegment(putMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
-      const located = locateHook(ctx.forgeRoot, id);
+      // requireScript:false — removal must stay possible for a hook whose yaml
+      // is malformed or whose script leaf is gone (review finding 4).
+      const located = locateHook(ctx.forgeRoot, id, { requireScript: false });
       if (!located.ok) { sendJson(res, located.status, { error: located.error }, origin); return true; }
 
       const entry = listHookLibrary(ctx.forgeRoot).find((e) => e.id === id);

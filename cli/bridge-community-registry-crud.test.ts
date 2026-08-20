@@ -247,8 +247,30 @@ test('CRUD-11: PUT carries the existing row\'s stars/starsDisplay/upstreamUpdate
 // handleStudioWriteRoutes for the registry route must NOT let a DELETE fall
 // into the pre-existing method-less write arms (agents/:slug, projects/:id,
 // flows/:slug all dispatch on URL alone and would treat it as their PUT).
-test('CRUD-12: DELETE on a non-registry write route falls through to 404 — never executes that route\'s PUT/write handler', async () => {
-  const res = await fetch(`${url}/api/studio/agents/some-agent`, { method: 'DELETE', headers: CSRF });
-  assert.equal(res.status, 404, `a DELETE outside the registry route must fall through exactly as before W7-B3 (got ${res.status})`);
-  assert.equal(existsSync(join(forgeRoot, 'studio', 'agents', 'some-agent')), false, 'and must write nothing');
+test('CRUD-12: DELETE on a write route with NO delete handler falls through to 404 — never executes that route\'s PUT/write handler', async () => {
+  // W7-B3 wrote this pin against /api/studio/agents/:slug, back when the
+  // community registry item was the only DELETE arm in the module. W7-B4 gave
+  // agents and flows REAL delete handlers, so that URL no longer tests
+  // fall-through — it tests those handlers. Retargeted at a route that still
+  // has no DELETE arm (projects/:id explicitly excludes it), which is what the
+  // guard-symmetry invariant was always about: a DELETE must never drop into a
+  // PUT handler and act.
+  const res = await fetch(`${url}/api/studio/projects/some-project`, { method: 'DELETE', headers: CSRF });
+  assert.equal(res.status, 404, `a DELETE on a route with no delete arm must fall through (got ${res.status})`);
+  assert.equal(existsSync(join(forgeRoot, 'projects', 'some-project')), false, 'and must write nothing');
+});
+
+test('CRUD-12b: the routes that DO implement DELETE are admitted by the top gate (the scoping list must grow with them)', async () => {
+  // The companion to CRUD-12. The top-of-function DELETE gate is an explicit
+  // allowlist of routes; merging W7-B4 into a main that only knew the registry
+  // item silently disabled BOTH new delete routes (clean auto-merge, green
+  // types, 404 forever). This pin fails if that list is ever narrowed again:
+  // an admitted-but-unknown target answers the HANDLER's 404/400, never the
+  // bare fall-through 404 with no body.
+  for (const target of ['/api/studio/agents/no-such-agent', '/api/studio/flows/no-such-flow']) {
+    const res = await fetch(`${url}${target}`, { method: 'DELETE', headers: CSRF });
+    assert.ok(res.status === 404 || res.status === 400, `${target} answered ${res.status}`);
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    assert.ok(body?.error, `${target} must answer its handler's JSON error, proving the route ran`);
+  }
 });

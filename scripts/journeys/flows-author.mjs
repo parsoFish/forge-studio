@@ -310,8 +310,16 @@ export const journey = defineJourney({
                 null, { timeout: 15000 },
               ).catch(() => {});
               await page.locator('[data-action="save-flow"]').click();
-              // A no-op save answers fast — settle briefly, then read the file.
-              await sleep(1500);
+              // W7-B4 review finding 11: wait on the REAL condition, never a
+              // fixed sleep. The old `sleep(1500)` could read the file before a
+              // slow (genuinely non-noop) save had landed — the assertion below
+              // would then see the pre-save version and FALSE-PASS the very
+              // regression it exists to catch. `data-save-state` goes
+              // 'saving' → 'idle' around the request.
+              await page.waitForFunction(
+                () => document.querySelector('[data-action="save-flow"]')?.getAttribute('data-save-state') === 'idle',
+                null, { timeout: 15000 },
+              );
               const savedAfterNoop = readSavedFlow(J3_FLOW);
               check(savedAfterNoop.version === vBeforeReload,
                 `J3: an UNCHANGED save is a no-op — the version does not bump and the file is not rewritten (v${vBeforeReload} → v${savedAfterNoop.version}; W7-B4 flows-12)`);

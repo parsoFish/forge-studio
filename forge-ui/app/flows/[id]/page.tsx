@@ -20,6 +20,7 @@ import { PhaseDrawer } from '@/components/studio/PhaseDrawer';
 import { EventTail } from '@/components/studio/EventTail';
 import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
 import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
+import { builderSnapshot, savedNodesCarryPositions } from '@/lib/flow-builder-dirty';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
 import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
@@ -44,22 +45,6 @@ import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 /** W7-B4 (flows-27): a stable, key-sorted serialisation of the builder's
  *  editable state — header fields + canvas nodes/edges — used to detect
  *  unsaved edits before they are silently discarded on a tab switch. */
-function builderSnapshot(header: FlowHeaderState, nodes: unknown[], edges: unknown[]): string {
-  const canonical = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(canonical);
-    if (value !== null && typeof value === 'object') {
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .filter(([, v]) => v !== undefined)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([k, v]) => [k, canonical(v)]),
-      );
-    }
-    return value;
-  };
-  return JSON.stringify(canonical({ header, nodes, edges }));
-}
-
 function pickDefaultRun(runs: Run[]): Run | null {
   // Priority: gated → active → first complete → first planned
   const gated    = runs.find((r) => r.status === 'gated');
@@ -169,6 +154,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // W7-B4 (flows-27): the last SAVED builder snapshot — the dirty test's
   // baseline. Set on load and on every successful save.
   const savedSnapshotRef = useRef<string | null>(null);
+  // W7-B4 review finding 3: positions join the dirty comparison only when the
+  // SAVED file actually carried them (see lib/flow-builder-dirty.ts). Seed
+  // flows ship without any, so the autolayout x/y the canvas always emits must
+  // not read as an operator edit.
+  const savedHasPositionsRef = useRef<boolean>(false);
   // W7-B4 (flows-11): a failed delete's error, shown in the BUILD tab.
   const [flowActionError, setFlowActionError] = useState<string | null>(null);
 
@@ -347,7 +337,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         };
         setHeaderState(header);
         // W7-B4 (flows-27): the freshly-loaded state is the clean baseline.
-        savedSnapshotRef.current = builderSnapshot(header, flowDef.nodes ?? [], flowDef.edges ?? []);
+        savedHasPositionsRef.current = savedNodesCarryPositions(flowDef.nodes ?? []);
+        savedSnapshotRef.current = builderSnapshot(
+          header, flowDef.nodes ?? [], flowDef.edges ?? [], savedHasPositionsRef.current,
+        );
       }
     } catch (err) {
       // W7-FIX-A1 (A1-02): the builder's definition/palette read threw — the
@@ -400,7 +393,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     }
     if (result.ok) {
       // W7-B4 (flows-27): a successful save resets the dirty baseline.
-      savedSnapshotRef.current = builderSnapshot(headerState, nodes, edges);
+      savedHasPositionsRef.current = savedNodesCarryPositions(nodes);
+      savedSnapshotRef.current = builderSnapshot(headerState, nodes, edges, savedHasPositionsRef.current);
     }
     // New flow saved → navigate to its real route so subsequent edits target it.
     if (result.ok && isNew) {
@@ -414,7 +408,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const builderHasUnsavedEdits = useCallback((): boolean => {
     const canvas = canvasRef.current;
     if (!canvas || savedSnapshotRef.current === null) return false;
-    const current = builderSnapshot(headerState, rfNodesToFlow(canvas.getNodes()), rfEdgesToFlow(canvas.getEdges()));
+    const current = builderSnapshot(
+      headerState, rfNodesToFlow(canvas.getNodes()), rfEdgesToFlow(canvas.getEdges()), savedHasPositionsRef.current,
+    );
     return current !== savedSnapshotRef.current;
   }, [headerState]);
 
@@ -596,7 +592,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 router.push(`/flows/${encodeURIComponent(newId)}`);
               }
             }}
-            canDelete={!isNew && buildFlow?.origin === 'studio'}
+            // W7-B4 review finding 12: mirror the BRIDGE's rule exactly. The
+            // server refuses only `origin: 'seed'` (403); gating the button on
+            // `=== 'studio'` made a flow with any other origin string
+            // undeletable in the UI while the API would happily delete it.
+            canDelete={!isNew && buildFlow !== null && buildFlow.origin !== 'seed'}
             onDelete={() => void handleDeleteFlow()}
           />
           {flowActionError && (

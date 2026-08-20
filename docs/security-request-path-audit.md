@@ -1477,6 +1477,18 @@ new baseline.
 | `cli/bridge-studio-writes.ts` agents DELETE `:slug` / flows DELETE `:id` | `rmSync` ×2, `readFileSync` (`originalRaw` fast-path read) | URL `:slug` / `:id` | guarded `[read]` | Both deletes remove `dirname(pathGuard.realPath)` where `pathGuard` is the route's existing `resolveGuardedPath` over the slug/id segment; the `originalRaw` read only ever passes `pathGuard.realPath`. Agents DELETE is 409-refused while any flow node or session-kind descriptor references the slug (traversal 400 executed by the pinned wire test); flows DELETE refuses seeds (403) and in-flight runs (423) before any fs mutation. |
 | `cli/bridge-studio-writes.ts` catalog probe (`existsSync(catalogPathEarly)`) | `existsSync` | none | guarded `[read]` | Constant `join(forgeRoot, 'studio', 'catalog.yaml')` — no request data in the path; counted here only because the ratchet keys on per-file sink totals. |
 
+**W7-B4 review round — one new sink.** Review finding 7 (a corrupted authored
+flow.yaml answered 500 and could never be deleted from Studio) adds a single
+`readFileSync` to the flow DELETE arm of `cli/bridge-studio-writes.ts`
+(`readFileSync(flowYamlPath, 'utf8')`, `cli/bridge-studio-writes.ts` sink count
+3 -> 4). Class: **guarded `[read]`**. `flowYamlPath` is `pathGuard.realPath`
+from `resolveGuardedPath(resolve(forgeRoot,'studio','flows'), [id, 'flow.yaml'])`
+— the same realpath-identity guard the rest of that route already runs, with
+the request-derived `id` as its OWN segment and a `SLUG_RE` shape gate ahead of
+it. The read happens only after `pathGuard.exists`, and its result is used for
+a single regex seed-probe (`/^\s*origin:\s*seed\s*$/m`) whose only outcome is
+a 403 — no bytes are returned to the caller.
+
 **Merge reconciliation (W7-B4 x main post-W7-B6 #188).** Merging `parsoFish/main`
 into this lane put BOTH branches' newly-audited sites in the same module:
 `cli/bridge-studio-writes.ts` `existsSync` grew 14 -> 15. The 15th site is not a
