@@ -48,6 +48,7 @@ import { dirname, join, relative } from 'node:path';
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
@@ -273,21 +274,16 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
       `runAgent: agent "${def.slug}" declares unknown loopStrategy ${JSON.stringify(loopStrategy)} (expected 'ralph' or 'one-shot')`,
     );
   }
-  // R6-04 (WI-2), round 7 (T1 ruling): a ceiling that cannot be enforced must
-  // be REFUSED, never silently accepted. `options.maxBudgetUsd` is only ever
-  // set on the one-shot spawn path (runOneShotSpawn, below) — the legacy
-  // invocation path (loopStrategy undefined; 14 of 19 real dispatchable
-  // roster agents) has no budget concept at all, so an accepted ceiling
-  // there would be validated, recorded, and shown in the UI while enforcing
-  // nothing. The SECOND enforcement layer (defense-in-depth): the bridge
-  // route (cli/ui-bridge.ts) refuses this too, but `forge agent dispatch
-  // --cost-ceiling-usd` never passes through that route at all, so this
-  // check must also live here.
-  if (ctx.kickoffCeilingUsd !== undefined && loopStrategy !== 'one-shot') {
-    throw new Error(
-      `runAgent: ceiling not enforceable for this agent's loop strategy (agent "${def.slug}" declares ${JSON.stringify(loopStrategy)} — an operator cost ceiling can only be enforced for loopStrategy: 'one-shot')`,
-    );
-  }
+  // W7-B5 (agents-21) RETIRES R6-04's "refuse a ceiling for any non-one-shot
+  // agent" guard: the legacy invocation path now ENFORCES the ceiling for
+  // real — `runInvocationSpawn` threads it to the adapter's
+  // `maxBudgetUsdPerIteration`, which `createClaudeAgent` hands the SDK as
+  // `options.maxBudgetUsd` (loops/ralph/claude-agent.ts:228), and one
+  // invocation-path run is exactly ONE iteration, so a per-iteration cap IS
+  // the run ceiling. 'ralph' needs no ceiling guard of its own here — the
+  // loopStrategy check above already rejects a standalone ralph dispatch
+  // outright (there is no run to cap). Pinned by run-agent-w7b5.test.ts;
+  // the R6-04 refusal pins were amended in the same commit.
 
   // Step 1: derive the spec from the studio SKILL.md (ADR-027).
   const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));
@@ -319,14 +315,23 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
 
-  logger.emit({
+  const startEvent = logger.emit({
     initiative_id: initiativeId,
     phase: 'orchestrator',
     skill: def.slug,
     event_type: 'start',
     input_refs: inputRefs,
     output_refs: [],
-    metadata: { agent_phase: def.phase, agent_slug: def.slug },
+    metadata: {
+      agent_phase: def.phase,
+      agent_slug: def.slug,
+      // W7-B5 (agents-31): the ceiling in force is a fact known at START
+      // time — recording it only on the terminal `end` event left every
+      // failed/still-running run claiming "no ceiling was recorded" about a
+      // ceiling that was submitted and enforced. The end event keeps its
+      // copy (terminal provenance, unchanged).
+      ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
+    },
   });
 
   const startedAt = Date.now();
@@ -356,10 +361,41 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // never happens. "Pre-spawn" is exact — immediately before the real spawn.
   assertConnectionsReady(def, ctx);
 
-  const spawned =
-    loopStrategy === 'one-shot'
-      ? await runOneShotSpawn(def, ctx, spec)
-      : await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs);
+  // W7-B5 (agents-23): per-turn transcript events for the SELF lifecycle —
+  // a standalone run used to leave only start+end lines, so an operator who
+  // spent real money had no record of what the agent did. Both spawn shapes
+  // ride the SAME shared sink (`makeToolEventSink`, the dev-loop/PM/
+  // interactive-session machinery — one sampler, one vocabulary): the
+  // legacy path hands the sink's callbacks to the adapter; the one-shot
+  // path derives tool details from its own observed stream below.
+  const turnSink = makeToolEventSink(logger, {
+    initiativeId,
+    parentEventId: startEvent.event_id,
+    phase: 'orchestrator',
+    skill: def.slug,
+  });
+
+  let spawned: RunAgentResult;
+  if (loopStrategy === 'one-shot') {
+    let toolSeq = 0;
+    const callerOnMessage = ctx.onMessage;
+    const observedCtx: RunContext = {
+      ...ctx,
+      onMessage: (msg) => {
+        callerOnMessage?.(msg);
+        const m = msg as { type?: string; message?: unknown };
+        if (m?.type !== 'assistant') return;
+        const details = extractLiveToolDetails(m.message, toolSeq);
+        for (const detail of details) turnSink.onToolUse(detail);
+        toolSeq += details.length;
+      },
+    };
+    spawned = await runOneShotSpawn(def, observedCtx, spec);
+    turnSink.flushIteration(1);
+  } else {
+    spawned = await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs, turnSink);
+    turnSink.flushIteration(1);
+  }
 
   // Report + log the end event.
   const durationMs = spawned.durationMs ?? Date.now() - startedAt;
@@ -493,6 +529,7 @@ async function runInvocationSpawn(
   logger: EventLogger,
   initiativeId: string,
   inputRefs: string[],
+  turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
   // Resolve the adapter + build the agent invocation.
   const sdkId = resolveSdkId(spec.sdk, (event) => {
@@ -508,10 +545,24 @@ async function runInvocationSpawn(
     });
   });
   const adapter = getAdapter(sdkId);
+  // W7-B5 (agents-21): the run ceiling, ENFORCED on this path via the
+  // adapter's per-iteration budget — one invocation-path run is exactly ONE
+  // iteration (`iteration: 1` below), so a per-iteration cap IS the run
+  // ceiling. Same precedence rule as the one-shot path: an explicit operator
+  // ceiling WINS over the agent's own declared budget (`??`, not max/min).
+  const invocationBudgetUsd =
+    ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
   const agent = adapter.createAgent({
     model: modelForSpec(spec),
     allowedTools: [...spec.allowedTools],
     disallowedTools: [...spec.disallowedTools],
+    ...(def.budgets.maxTurns !== undefined ? { maxTurnsPerIteration: def.budgets.maxTurns } : {}),
+    ...(invocationBudgetUsd !== undefined ? { maxBudgetUsdPerIteration: invocationBudgetUsd } : {}),
+    // W7-B5 (agents-23): the adapter's own live telemetry hooks feed the
+    // shared per-turn sink, so a standalone legacy-path run leaves a real
+    // transcript (tool calls + file changes + heartbeats), not just
+    // start/end lines.
+    ...(turnSink !== undefined ? { onToolUse: turnSink.onToolUse, onHeartbeat: turnSink.onHeartbeat } : {}),
     // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
     // optional — the closure always supplies one, so the cast is sound.
     queryFn: (ctx.queryFn ?? pinnedStreamQuery) as QueryFn,

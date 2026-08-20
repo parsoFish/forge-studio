@@ -164,17 +164,20 @@ export type AgentCapabilityDescriptor = {
    */
   materials: string[];
   /**
-   * R6-04 WI-3 — true iff `runtime.loopStrategy === 'one-shot'` (EXACT
-   * match; a truthy check, substring match, or case-insensitive compare all
-   * miscount here). Only the one-shot spawn path
-   * (`orchestrator/run-agent.ts` runOneShotSpawn) understands
-   * `options.maxBudgetUsd` — every other loop strategy (the legacy
-   * invocation path, `loopStrategy: 'ralph'`, or no loopStrategy declared at
-   * all) has no budget concept, so `POST /api/agents/:slug/run` already
-   * refuses an operator-supplied `costCeilingUsd` for those agents (R6-04
-   * WI-2's fail-closed guard). This FACT lets the kickoff UI disable the
-   * ceiling field up front instead of letting an operator type a value
-   * destined for a 400.
+   * ⚑ AMENDED W7-B5 (agents-21) — true iff the standalone spawn path can
+   * enforce a per-run ceiling: loopStrategy absent (the legacy invocation
+   * path) OR exactly 'one-shot'. Both real spawn shapes now enforce — the
+   * one-shot stream via `options.maxBudgetUsd` (runOneShotSpawn) and the
+   * legacy invocation path via the adapter's `maxBudgetUsdPerIteration`
+   * (one invocation run == one iteration, so the per-iteration cap IS the
+   * run ceiling — `orchestrator/run-agent.ts` runInvocationSpawn). 'ralph'
+   * stays false for a stronger reason than enforceability: `runAgent`
+   * refuses a standalone ralph dispatch outright (loops are
+   * orchestrator-band), so there is no run to cap at all; an UNKNOWN
+   * declared strategy also stays false (runAgent refuses it too). R6-04's
+   * original derivation was `=== 'one-shot'`, from when the legacy path had
+   * no budget wiring — see derive-cost-ceiling-enforceable.test.ts's
+   * amended pins.
    */
   costCeilingEnforceable: boolean;
   /**
@@ -238,7 +241,8 @@ export function agentCapabilityDescriptor(def: AgentDefinition, root: string = F
       : [],
     // Exact match only — see the field's own doc comment above for why a
     // truthy/substring check is the wrong shape here.
-    costCeilingEnforceable: def.runtime.loopStrategy === 'one-shot',
+    costCeilingEnforceable:
+      def.runtime.loopStrategy === undefined || def.runtime.loopStrategy === 'one-shot',
     // Omit the key entirely when absent (never `allowedTiers: undefined`) —
     // same discipline as PhaseAgentSpec.allowedTiers, so a fixed-strategy
     // descriptor's literal deep-equal stays byte-identical.

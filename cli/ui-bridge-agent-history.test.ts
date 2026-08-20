@@ -805,14 +805,26 @@ for (const evilSlug of TRAVERSAL_SLUGS) {
     // answer (e.g. a non-empty rows array, a different status, an
     // additional field) — the old battery's two assertions (no-500,
     // no-substring) could not see this class of divergence at all.
-    const baseline = await getJson('/api/agents/well-formed-unknown-baseline-slug/history');
+    // ⚑ AMENDED W7-B5 (agents-02): the route now validates the slug SHAPE
+    // (SAFE_AGENT_SLUG_RE, the same validator POST /run always applied) and
+    // 400s anything failing it — the walkthrough found the 200-for-anything
+    // answer hid a client bug firing `GET /api/agents//history` on every
+    // mount. INDISTINGUISHABILITY is preserved WITHIN the invalid-shape
+    // class: every traversal shape must be BYTE-IDENTICAL (status + body
+    // structure) to a harmless shape-invalid baseline — a traversal probe
+    // still learns nothing an underscore typo wouldn't. Valid-shaped
+    // unknown slugs keep their 200-empty answer (pinned elsewhere in this
+    // file), and the sentinel/forgeRoot leak checks below are unchanged.
+    const invalidBaseline = await fetch(`${url}/api/agents/${encodeURIComponent('Bad_Slug')}/history`);
+    const invalidBaselineBody = await invalidBaseline.json() as Record<string, unknown>;
+    assert.equal(invalidBaseline.status, 400, 'sanity: the harmless shape-invalid baseline is a 400');
     const res = await fetch(`${url}/api/agents/${encodeURIComponent(evilSlug)}/history`);
-    assert.equal(res.status, 200, `evil slug ${JSON.stringify(evilSlug)} must resolve 200, exactly like an ordinary unknown slug (baseline was ${baseline.status})`);
-    const body = await res.json();
+    assert.equal(res.status, 400, `evil slug ${JSON.stringify(evilSlug)} must resolve 400, exactly like any other shape-invalid slug`);
+    const body = await res.json() as Record<string, unknown>;
     assert.deepEqual(
-      canonicalize(body),
-      canonicalize(baseline.body),
-      `evil slug ${JSON.stringify(evilSlug)} produced a response that DIFFERS from the well-formed-unknown baseline: ${JSON.stringify(body)} vs ${JSON.stringify(baseline.body)}`,
+      Object.keys(canonicalize(body) as Record<string, unknown>),
+      Object.keys(canonicalize(invalidBaselineBody) as Record<string, unknown>),
+      `evil slug ${JSON.stringify(evilSlug)} produced a response SHAPE that differs from the shape-invalid baseline`,
     );
     // Belt-and-suspenders (ROUND 1's own proofs, kept — not redundant: they
     // give a MORE SPECIFIC failure message than a generic deepEqual diff
@@ -840,14 +852,19 @@ test("D5 (ROUND 4, RAW WIRE): the bare '..' slug — sent as genuinely UN-NORMAL
   // test passes with that handler deleted (see the task report's mutation
   // proof) precisely because the real route already answers this request
   // correctly on its own.
-  const baseline = await getJson('/api/agents/well-formed-unknown-baseline-slug/history');
+  // ⚑ AMENDED W7-B5 (agents-02): the raw '..' slug fails SAFE_AGENT_SLUG_RE
+  // like every other shape-invalid slug → the SAME 400 class (see the
+  // amended battery above). It still travels through the REAL
+  // /api/agents/:slug/history route — no literal `/api/history` handler.
+  const invalidBaseline = await fetch(`${url}/api/agents/${encodeURIComponent('Bad_Slug')}/history`);
+  const invalidBaselineBody = await invalidBaseline.json() as Record<string, unknown>;
   const raw = await rawGet('/api/agents/../history');
-  assert.equal(raw.status, 200, `raw un-normalized '..' slug must resolve 200 via the REAL /api/agents/:slug/history route, exactly like an ordinary unknown slug (baseline was ${baseline.status})`);
-  const body: unknown = JSON.parse(raw.text);
+  assert.equal(raw.status, 400, "raw un-normalized '..' slug must resolve 400 via the REAL /api/agents/:slug/history route, exactly like any other shape-invalid slug");
+  const body = JSON.parse(raw.text) as Record<string, unknown>;
   assert.deepEqual(
-    canonicalize(body),
-    canonicalize(baseline.body),
-    `raw wire '..' slug produced a response that DIFFERS from the well-formed-unknown baseline: ${JSON.stringify(body)} vs ${JSON.stringify(baseline.body)}`,
+    Object.keys(canonicalize(body) as Record<string, unknown>),
+    Object.keys(canonicalize(invalidBaselineBody) as Record<string, unknown>),
+    "raw wire '..' slug produced a response SHAPE that differs from the shape-invalid baseline",
   );
   // Belt-and-suspenders (same shape as the fetch-driven battery above).
   assert.notEqual(raw.status, 500, "must not 500 for the raw wire '..' slug");
