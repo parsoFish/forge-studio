@@ -172,7 +172,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-new-flow',
         title: 'String plan/dev/review into a flow (new-flow builder)',
-        narration: 'From the flows index\'s "+ New Flow" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`.',
+        narration: 'From the flows index\'s "+ New Flow" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`. Saving again without touching anything is a no-op: the bridge detects nothing changed and rewrites nothing (the same preservation that keeps a seed flow\'s kickoff declaration and comments alive through a builder save). The authored flow also carries a Delete control — a shipped seed never does.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── J3: STRING THE THREE AGENTS INTO A FLOW (new-flow builder) ────────────
@@ -288,6 +288,10 @@ export const journey = defineJourney({
 
               // Reload + save again (no move): the dragged position survives the reload
               // (proves persisted x/y are honoured on load, not recomputed by autolayout).
+              // W7-B4 (flows-12): an unchanged save is now a NO-OP — the bridge
+              // detects that nothing the builder can edit differs and rewrites
+              // NOTHING (version unchanged, file bytes unchanged; this is the same
+              // preservation that keeps a seed flow's kickoff + comments alive).
               const vBeforeReload = readSavedFlow(J3_FLOW).version;
               await page.goto(watch.uiUrl + `/flows/${J3_FLOW}`, { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
@@ -306,10 +310,20 @@ export const journey = defineJourney({
                 null, { timeout: 15000 },
               ).catch(() => {});
               await page.locator('[data-action="save-flow"]').click();
-              await waitForFlowVersion(J3_FLOW, vBeforeReload + 1, 15000);
-              const xReload = readSavedFlow(J3_FLOW).nodes.find((n) => n.id === dragId)?.x ?? -9999;
+              // A no-op save answers fast — settle briefly, then read the file.
+              await sleep(1500);
+              const savedAfterNoop = readSavedFlow(J3_FLOW);
+              check(savedAfterNoop.version === vBeforeReload,
+                `J3: an UNCHANGED save is a no-op — the version does not bump and the file is not rewritten (v${vBeforeReload} → v${savedAfterNoop.version}; W7-B4 flows-12)`);
+              const xReload = savedAfterNoop.nodes.find((n) => n.id === dragId)?.x ?? -9999;
               check(Math.abs(xReload - xDrag) < 30, `J3: node position PERSISTS across reload (x ${xDrag} → ${xReload})`);
-              await frame(page, 'j3-2-flow-persisted', 'J3 — node positions persist across reload (authored flow is durable)');
+              // W7-B4 (flows-11): an AUTHORED flow's BUILD header offers Delete
+              // (two-step confirm); the shipped seeds never render the control
+              // (pinned in lib/flow-authoring-view.test.ts) — the authoring loop
+              // finally closes.
+              check(await page.locator('[data-action="delete-flow"]').count() > 0,
+                'J3: the authored flow carries a Delete control in the BUILD header (W7-B4 flows-11)');
+              await frame(page, 'j3-2-flow-persisted', 'J3 — node positions persist across reload; an unchanged save rewrites nothing');
 
         },
       },

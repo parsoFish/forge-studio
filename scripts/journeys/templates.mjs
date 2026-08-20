@@ -96,7 +96,9 @@ export const journey = defineJourney({
         'The templates library unifies three previously-siloed on-disk sources — ' +
         'planning artifact templates, demo-output elements, and project scaffolds — ' +
         'into one browsable registry, with per-category counts that always equal ' +
-        'the rendered card count in each section.',
+        'the rendered card count in each section. Since W7-B4 the shelf is no longer ' +
+        'read-only: "+ New template" opens a real builder for the two single-file ' +
+        'categories (scaffolds stay repo-curated).',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         // ── TPL-0: the /templates library (three categories, one registry) ──────
@@ -134,6 +136,10 @@ export const journey = defineJourney({
         check(cardCounts.planning === counts.planning, `TPL-0: the planning section renders one card per counted entry (${cardCounts.planning} vs ${counts.planning})`);
         check(cardCounts.demoOutput === counts.demoOutput, `TPL-0: the demo-output section renders one card per counted entry (${cardCounts.demoOutput} vs ${counts.demoOutput})`);
         check(cardCounts.projectScaffold === counts.projectScaffold, `TPL-0: the project-scaffold section renders one card per counted entry (${cardCounts.projectScaffold} vs ${counts.projectScaffold})`);
+        // W7-B4 (library-17/01): templates are authorable — the index carries
+        // the create CTA routing to the real builder.
+        check(await page.evaluate(() => document.querySelector('[data-action="new-template"]')?.getAttribute('href') ?? '') === '/templates/new',
+          'TPL-0: "+ New template" CTA routes to /templates/new (W7-B4 library-17)');
 
         await frame(page, 'tpl-0-library', 'Part 2 (templates) — the /templates library: three categories, one registry', { key: true });
       },
@@ -184,7 +190,10 @@ export const journey = defineJourney({
         'graph, never hand-maintained — the architect→project-manager edge in ' +
         'forge-architect is the only place "plan" is produced and consumed, and the ' +
         'page cross-checks its own declared producer/consumer against that edge, ' +
-        'reporting the endpoints as verified.',
+        'reporting the endpoints as verified. W7-B4 adds the missing lifecycle: ' +
+        'Edit, Duplicate and Delete — and because "plan" is used by a real flow ' +
+        'edge, Delete renders disabled with the reason, the same guard the bridge ' +
+        'enforces.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         // ── TPL-2: a planning template's detail page (definition + used-by) ──────
@@ -213,8 +222,19 @@ export const journey = defineJourney({
           `TPL-2: the exact used-by entries match the derivation (dom=[${usedByEntriesDom.join(', ')}], real=[${derivedUsage.join(', ')}])`);
         check(await page.locator('[data-template-preview="doc"]').count() > 0, 'TPL-2: the preview block renders data-template-preview="doc" (artifact kind: file)');
 
+        // W7-B4 (library-17): single-file templates carry Edit / Duplicate /
+        // Delete. "plan" is used by a real flow edge, so Delete renders
+        // DISABLED with the reason — the same guard the bridge enforces.
+        check(await page.locator('[data-component="library-item-actions"][data-kind="template"]').count() > 0,
+          'TPL-2: the Edit/Duplicate/Delete action bar renders (W7-B4 library-17 — templates are no longer read-only)');
+        check(await page.locator('[data-action="edit-template"]').count() > 0, 'TPL-2: Edit is offered');
+        check(await page.locator('[data-action="duplicate-template"]').count() > 0, 'TPL-2: Duplicate is offered');
+        check(await page.locator('[data-action="delete-template"][disabled]').count() > 0
+           && await page.locator('[data-component="delete-blocked"]').count() > 0,
+          'TPL-2: Delete on a flow-used template is disabled WITH the visible reason (guarded, never silent)');
+
         await caption(page, 'Plan\'s used-by is derived from the real flow graph — not declared — and cross-checked here against an independent recompute off studio/flows/*/flow.yaml.');
-        await frame(page, 'tpl-2-detail-planning', "Part 2 (templates) — a planning template's detail page: definition + derived used-by", { key: true });
+        await frame(page, 'tpl-2-detail-planning', "Part 2 (templates) — a planning template's detail page: definition, derived used-by, edit/duplicate/delete lifecycle", { key: true });
       },
     },
     {
@@ -255,6 +275,12 @@ export const journey = defineJourney({
         const activeAfterClick = await page.evaluate(() => document.querySelector('[data-component="file-package"]')?.getAttribute('data-active-file'));
         check(activeAfterClick === tabPath, `TPL-3: clicking [data-file-tab] sets data-active-file (got "${activeAfterClick}", want "${tabPath}")`);
         check(await page.locator('[data-template-preview="scaffold"]').count() > 0, 'TPL-3: the preview block renders data-template-preview="scaffold"');
+
+        // W7-B4 (library-17): a scaffold is a whole directory tree — read-only
+        // WITH the reason stated, never a silently-absent affordance.
+        check(await page.locator('[data-component="library-item-actions"]').count() === 0
+           && await page.locator('[data-component="template-readonly"]').count() > 0,
+          'TPL-3: a project scaffold renders NO edit/delete bar — an explicit read-only note explains why (W7-B4 library-17)');
 
         await frame(page, 'tpl-3-detail-scaffold', 'Part 2 (templates) — a project-scaffold detail page: the real file tree, tabbed', { key: true });
       },

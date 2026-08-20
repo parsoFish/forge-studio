@@ -523,24 +523,27 @@ inventory rather than one shared page-level contract:
   (`[data-action="browse-<name>"]`, routing to that kind's own full library
   page), and — where the kind supports authoring — a create CTA reusing that
   page's OWN `data-action` name (`[data-action="new-skill"]` → `/skills/new`,
-  `[data-action="new-hook"]` → `/hooks/new`). Connections and Templates carry
-  NO create CTA (curation happens by PR to `studio/catalog.yaml` for
-  Connections; Templates has no `/templates/new` route — registry-scanned,
-  not authored here); Community carries `[data-action="browse-community"]`
-  only, never a create CTA (installs route through the owning pipeline's own
-  page). Each shelf shows up to `LIBRARY_SHELF_CARD_LIMIT` (6) cards — a
-  PREVIEW, not a second copy of the full list page — reusing each source
-  page's own pure badge-derivation function (`skillBadges`/`hookBadges`/
-  `connectionBadges`/`templateBadges`) rather than re-deriving anything; a
-  card's `data-card-type` (`skill`/`hook`/`connection`/`template`/
-  `community-item`) and its detail-route `href` match that kind's own full
-  library page exactly. A final `section[data-section="kb-crosslink"]` carries
-  one small `[data-action="kb-crosslink"]` card (`href="/knowledge"`) — Library
-  no longer creates or lists knowledge bases at all (KBs moved to the
-  Knowledge pillar, sweep finding C4#1 below); `KbCard`
-  (`LibraryCard.tsx`) itself is now unused in the live product (its own
-  render-test coverage, `lib/library-card-render.test.ts`, is unaffected —
-  the component itself is unchanged, just no longer wired into any page).
+  `[data-action="new-hook"]` → `/hooks/new`, and — W7-B4, library-17 —
+  `[data-action="new-template"]` → `/templates/new`). Connections carry NO
+  create CTA (curation happens by PR to `studio/catalog.yaml`); Community
+  carries `[data-action="browse-community"]` only, never a create CTA
+  (installs route through the owning pipeline's own page). Each shelf shows
+  up to `LIBRARY_SHELF_CARD_LIMIT` (6) cards — a PREVIEW, not a second copy
+  of the full list page — reusing each source page's own pure
+  badge-derivation function (`skillBadges`/`hookBadges`/`connectionBadges`/
+  `templateBadges`) rather than re-deriving anything; a card's
+  `data-card-type` (`skill`/`hook`/`connection`/`template`/`community-item`)
+  and its detail-route `href` match that kind's own full library page
+  exactly. Every skill card (shelf AND `/skills`) additionally renders a
+  HUMAN-VISIBLE install marker,
+  `[data-component="install-state"][data-installed="true"|"false"]`
+  (W7-B4 library-04 — the `data-skill-installed` attribute finally has a
+  visible counterpart; one derivation, `installStateOf`). The old
+  `section[data-section="kb-crosslink"]` card is REMOVED (W7-B4 library-02,
+  operator note 9 — the pillar nav already carries Knowledge; the card
+  duplicated it); `KbCard` (`LibraryCard.tsx`) itself stays unused in the
+  live product (its own render-test coverage,
+  `lib/library-card-render.test.ts`, is unaffected).
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
   — see the Global nav entry above (W6-IA-5) for the current six-pillar
   set/order/hrefs and active-state rules.
@@ -675,7 +678,29 @@ inventory rather than one shared page-level contract:
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
-  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. The palette's
+  `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **W7-B4 flow
+  lifecycle (flows-09/10/11/12/13/27):** a `/flows/new` save carries
+  `create: true` so a name colliding with an existing flow **409s** instead
+  of silently overwriting it (flows-13); a save referencing the STARTER
+  agents (plan/dev/review — the seeded canvas) **materialises** them from
+  `studio/starters/agents/` into `skills/` so the very first canvas is
+  saveable on a fresh install (flows-09; closed slug set, an existing roster
+  agent always wins; `forge studio lint`'s `starter-flow/agent-unresolvable`
+  check pins the invariant). A failed save renders the bridge's per-node
+  findings in `[data-component="flow-save-findings"][data-finding-count]`
+  with per-row `[data-finding-node][data-finding-check]` (flows-10 — no more
+  bare "validation failed"). The PUT merge carries `kickoff:` through, and a
+  save that changes NOTHING the builder can edit is a **no-op** (`noop:
+  true`, version unchanged, file bytes — comments included — untouched;
+  flows-12). An authored (`origin: studio`) flow's BUILD header renders
+  `[data-action="delete-flow"]` (two-step:
+  `[data-action="confirm-delete-flow"|"cancel-delete-flow"]` → `DELETE
+  /api/studio/flows/:id`; a shipped seed renders NO control and the bridge
+  403s it; an in-flight flow 423s — flows-11); a failed delete renders
+  `[data-component="flow-action-error"]`. Leaving the BUILD tab (tab switch
+  or the flow selector) with unsaved header/canvas edits asks first
+  (flows-27 — a `window.confirm`, baselined against the last loaded/saved
+  snapshot). The palette's
   agent chips (`AgentPalette.tsx`) carry
   `[data-palette-chip][data-chip-ref][data-chip-placeable]` — an interactive
   agent (per the F1 capability descriptor) renders greyed-out and
@@ -838,6 +863,29 @@ inventory rather than one shared page-level contract:
   the verdict is not blocked and trust is `needs-review`;
   `[data-action="override-hook-block"]` + `[data-field="override-reason"]` only
   when it IS blocked — approval can never launder a blocked verdict.
+  **W7-B4 (library-08/09) — hooks carry the edit/delete/revoke half of
+  CRUD.** The detail page mounts the shared action bar
+  (`[data-component="library-item-actions"][data-kind="hook"]`,
+  `[data-action="edit-hook"|"delete-hook"]` + two-step confirm
+  `[data-action="confirm-delete-hook"|"cancel-delete-hook"]`); a hook still
+  carried by agents renders Delete DISABLED with
+  `[data-component="delete-blocked"]` naming them (the bridge's own 409 +
+  `carriedBy` guard). Edit opens `[data-component="hook-edit-form"]`
+  (`[data-field="hook-edit-name"|"hook-edit-description"|"hook-edit-on"|
+  "hook-edit-matcher"|"hook-edit-script"]`,
+  `[data-action="save-hook-edit"|"cancel-hook-edit"]` → `PUT
+  /api/studio/hooks/:id`) — editing an approved hook honestly drops it back
+  to needs-review (the pinned hashes no longer match; an edit never launders
+  trust either). A RESOLVED hook (trust `approved` or `overridden`) renders
+  `[data-section="approval-record"][data-hook-trust]`
+  (`components/studio/ApprovalRecordPanel.tsx`) — the recorded resolution
+  (badge + `approvedAt` + `[data-field="override-reason-recorded"]` for an
+  override) instead of nothing (library-09), plus the inverse act
+  `[data-action="revoke-hook-approval"]` → `POST
+  /api/studio/hooks/:id/revoke-approval` (409 when nothing is approved; the
+  revocation is RECORDED in the ledger's `revoked` list — an audit trail,
+  never a silent erase; `revokeHookApproval`,
+  `orchestrator/studio/hook-scan.ts`).
 - **`/connections`, `/connections/[id]`** (R3-04-F2/F3) — the connections
   pillar: curated tools/MCP servers read from `studio/catalog.yaml`'s
   `tools:`/`mcps:` sections (D2: kind is structural — `tool`|`mcp` — never a
@@ -1117,6 +1165,32 @@ inventory rather than one shared page-level contract:
   [data-run-dispatchable="false"]` with no run button — it keeps its bespoke
   session page. `/agents/new` shows the curated starter picker first
   (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
+  **W7-B4 agent lifecycle (agents-09/18/22/28).** The save from `/agents/new`
+  carries `create: true` — a name normalising to an existing slug **409s**
+  (`agent "<slug>" already exists…`) instead of silently overwriting that
+  agent (agents-28), and a brand-new mint synthesises `phase: <slug>` so a
+  Studio-made agent is genuinely dispatchable (agents-18 — `deriveAgentSpec`
+  hard-requires `phase`; an EXISTING agent's phase, including
+  deliberately-absent, is preserved verbatim). A saved agent's save bar
+  mounts the shared action bar (`[data-component="library-item-actions"]
+  [data-kind="agent"]`, no Edit control — the page IS the editor):
+  `[data-action="duplicate-agent"]` routes to `/agents/new?duplicate=<slug>`
+  (the builder prefills from the source with the slug cleared and the name
+  marked "(copy)" — `duplicateAgentState`, `lib/agent-authoring-view.ts`);
+  `[data-action="delete-agent"]` is two-step (`confirm-delete-agent`/
+  `cancel-delete-agent` → `DELETE /api/studio/agents/:slug`) and renders
+  DISABLED with `[data-component="delete-blocked"]` naming the referencing
+  flows while any flow node still uses the agent — the bridge's own guard
+  (409 + `referencedBy`; session-kind descriptors guard the same way,
+  scanned from `studio/session-kinds.yaml`). The RunPanel's session-entry
+  href for an interactive agent is DERIVED from the ONE client kickoff-kind
+  table (`lib/kickoff-kinds.ts` — the same table
+  `/sessions/[kind]/new` itself is driven by; `architect` keeps its bespoke
+  `/architect/new`), replacing the frozen one-entry per-slug map that told
+  every real interactive agent "no reachable session entry point yet"
+  (agents-22); an agent genuinely absent from the table still renders the
+  explicit `[data-component="session-entry-missing"]` state — no fabricated
+  hrefs.
   **R2-09 additions.** The agent picker carries `[data-agent-select]` with a
   per-option `[data-agent-option="<slug>"]` (`"new"` for the new-agent
   sentinel), so a journey can switch agents by structured state instead of by
@@ -2960,7 +3034,23 @@ inventory rather than one shared page-level contract:
   Approval never restores `runtime`/`allowed-tools` (D4) — an installed
   community skill is a plain composable skill forever, quarantined
   permanently; making it a runnable agent is a separate, explicit act in the
-  Agent Builder.
+  Agent Builder. **W7-B4 (library-05) — skills carry the edit/delete half of
+  CRUD.** The ready state mounts the shared action bar
+  `[data-component="library-item-actions"][data-kind="skill"]`
+  (`components/studio/LibraryItemActions.tsx`, render-pinned in
+  `lib/library-authoring-render.test.ts`): `[data-action="edit-skill"]`
+  (aria-pressed mirrors the open editor) toggles
+  `[data-component="skill-edit-form"]` (`[data-field="skill-edit-name"|
+  "skill-edit-description"|"skill-edit-body"]`,
+  `[data-action="save-skill-edit"|"cancel-skill-edit"]` → `PUT
+  /api/studio/skills/:id` — display name/description/body only, never the id;
+  editing an installed skill honestly drops it to needs-review via the
+  existing hash-drift pipeline); `[data-action="delete-skill"]` is two-step
+  (`[data-action="confirm-delete-skill"|"cancel-delete-skill"]` → `DELETE
+  /api/studio/skills/:id`) and, for a skill still composed by agents, renders
+  DISABLED with `[data-component="delete-blocked"]` naming them — the same
+  guard the bridge enforces (409 + `usedBy`). A failed action's bridge error
+  renders verbatim in `[data-component="library-action-error"]`.
 - **`/templates` + `/templates/[id]` — the templates library (R3-06).** One
   registry unifying three previously-siloed on-disk sources into a single
   browsable library: `studio/artifact-templates/*.md` (category `planning`,
@@ -3010,7 +3100,29 @@ inventory rather than one shared page-level contract:
   template's package renders through the SAME `FilePackage` component
   `/skills/[id]` uses — `[data-component="file-package"][data-file-count][data-active-file]`,
   per-tab `[data-file-tab][data-file-path]` — the whole scaffold's file tree,
-  tabbed, kind-agnostic reuse (shared with R2-10-F3).
+  tabbed, kind-agnostic reuse (shared with R2-10-F3). **W7-B4 (library-17 /
+  library-01) — templates are AUTHORABLE.** The two single-file categories
+  (`planning` → `studio/artifact-templates/<id>.md`, `demo-output` →
+  `studio/demo-elements/<id>.md`) gained the full write half: `POST
+  /api/studio/templates` (`{category, id, content}` — or `duplicateOf` to
+  clone with the frontmatter id rewritten; content is validated by the REAL
+  category loader in a private staging dir before anything lands, frontmatter
+  `id` must equal the route id, 409 on any existing id), `PUT
+  /api/studio/templates/:id` (`{content}` — an invalid edit 400s and leaves
+  the file untouched), `DELETE /api/studio/templates/:id` (409 naming
+  `usedBy` while anything real still uses it). `/templates/new`
+  (`main[data-page="template-builder"]`, `[data-section="template-new"]`,
+  `[data-field="template-category"|"template-id"|"template-content"]`,
+  `[data-action="create-template"]`) seeds a valid per-category scaffold.
+  `/templates/[id]` mounts the shared action bar
+  (`[data-component="library-item-actions"][data-kind="template"]`,
+  `[data-action="edit-template"|"duplicate-template"|"delete-template"]` +
+  two-step confirm) with `[data-component="template-editor"]`
+  (`[data-field="template-content"]`,
+  `[data-action="save-template"|"cancel-template-edit"]`) for edits; a
+  `project-scaffold` template renders NO action bar and instead
+  `[data-component="template-readonly"]` stating why (a whole directory tree
+  is not authorable as a single file — repo-curated).
 - **Trigger provenance — named by R2-08-F4, now PARTLY ATTACHED (amended
   R6-01, 2026-08-07).** `GET /api/runs` / `GET /api/runs/<id>` surface an
   optional `run.trigger: {kind, source, scope}` — derived, never stored; a run
