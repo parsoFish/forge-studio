@@ -277,6 +277,16 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
 // ---------------------------------------------------------------------------
 
 /**
+ * W7-B6 (projects-28): "run demo-design" is signalled ONLY when the save
+ * genuinely CHANGED demoProcess — presence-as-change tripped the banner on
+ * every save because the client always sends the field. Pure decision rule,
+ * exported for its direct pin (ADR-042: cli/ is not surface-capped).
+ */
+export function demoProcessChanged(incoming: unknown, stored: unknown): boolean {
+  return Array.isArray(incoming) && JSON.stringify(incoming) !== JSON.stringify(stored ?? null);
+}
+
+/**
  * Handle Forge Studio write (PUT) routes.
  *
  * Returns true iff the route was handled (even on error). Returns false for
@@ -1169,11 +1179,14 @@ export async function handleStudioWriteRoutes(
       let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
       try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
-      // F5: when demoProcess was in the save body, signal that the demo-design
+      // F5: when demoProcess CHANGED in this save, signal that the demo-design
       // skill should be run to generate per-project demo machinery. The UI
       // surfaces this as data-demo-design-state="needed" on the project page
       // so the operator can trigger: `forge run skill demo-design --project <id>`.
-      const demoDesignNeeded = Array.isArray(b['demoProcess']);
+      // W7-B6 (projects-28): the client always sends demoProcess, so mere
+      // PRESENCE tripped the banner after every save (a north-star-only edit
+      // included) — compare against what was stored instead.
+      const demoDesignNeeded = demoProcessChanged(b['demoProcess'], existingRaw['demoProcess']);
 
       sendJson(res, 200, { ok: true, id, ...(save ? { save } : {}), ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
     } catch (err) {

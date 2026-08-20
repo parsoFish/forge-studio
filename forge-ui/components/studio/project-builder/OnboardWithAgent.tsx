@@ -31,6 +31,21 @@ import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib
  * active`), so a nav-away-and-back (or a reload) shows the SAME live/
  * terminal state instead of forgetting a still-running dispatch.
  */
+/**
+ * W7-B6 (projects-25): the launch button's whole enablement, as ONE pure
+ * rule — `busy` (the dispatch round-trip) OR a LIVE run for this project
+ * disables it, each with its label + stated reason. Exported for its direct
+ * render-independent pin (the running state is only reachable through the
+ * poll effect, which a static render can't drive).
+ */
+export function onboardLaunchState(busy: boolean, runState: string): { disabled: boolean; label: string; reason: string | null } {
+  if (busy) return { disabled: true, label: 'Dispatching…', reason: null };
+  if (runState === 'running') {
+    return { disabled: true, label: 'Onboarding running…', reason: 'an onboarding run is already in flight for this project' };
+  }
+  return { disabled: false, label: 'Run onboarding agent', reason: null };
+}
+
 export function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -104,13 +119,18 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
         Run the onboarding agent to drive this project to contract-green (declares the gate,
         converges preflight, disposes advisory clauses).
       </p>
+      {/* W7-B6 (projects-25): the button stays disabled for as long as a run
+          for THIS project is live — `busy` only covered the dispatch
+          round-trip, so a second click could dispatch a concurrent
+          onboarding agent at the same project. */}
       <button
         className="btn btn-primary"
         data-action="run-onboarding-agent"
         onClick={() => void onRun()}
-        disabled={busy}
+        disabled={onboardLaunchState(busy, runState).disabled}
+        {...(onboardLaunchState(busy, runState).reason ? { 'data-disabled-reason': onboardLaunchState(busy, runState).reason as string, title: onboardLaunchState(busy, runState).reason as string } : {})}
       >
-        {busy ? 'Dispatching…' : 'Run onboarding agent'}
+        {onboardLaunchState(busy, runState).label}
       </button>
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (

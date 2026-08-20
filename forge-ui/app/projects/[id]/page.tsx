@@ -39,6 +39,7 @@ import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
+import { OpenSessionsPanel } from '@/components/studio/project-builder/OpenSessionsPanel';
 import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
@@ -312,6 +313,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       setDirty(false);
       setKbTouched(false);
       void loadPreflight({ cancelled: false });
+      // W7-B6 (projects-26): a successful save refreshes the page's OWN
+      // roster too — the header project switcher kept showing the old name
+      // until a manual reload (loadData leaves the operator's just-saved
+      // fields untouched: dirty is false, and it re-hydrates from the roster
+      // that now carries exactly what was saved).
+      void loadData({ cancelled: false });
       // F5: surface demo-design trigger when demoProcess was in the save.
       if (result.demoDesignNeeded) setDemoDesignNeeded(true);
     }
@@ -334,7 +341,23 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   function markDirty() { setDirty(true); }
 
+  // W7-B6 (projects-05): unsaved edits are no longer discarded silently.
+  // beforeunload covers tab close / reload / full navigations; the project
+  // switcher below confirms in-app. (Next's client-side <Link> navigations
+  // in the top nav bypass beforeunload — the honest residual, noted in the
+  // PR; the two loss paths the walkthrough reproduced are covered.)
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   function handleProjectSelect(newId: string) {
+    if (dirty && !window.confirm('You have unsaved changes — switch project and discard them?')) return;
     router.push(`/projects/${encodeURIComponent(newId)}`);
   }
 
@@ -611,6 +634,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             />
 
             <OnboardWithAgent projectId={id} />
+
+            {/* W7-B6 (projects-19): this project's open sessions with resume
+                links — the page no longer only mints new ones. */}
+            <OpenSessionsPanel projectId={id} />
             {/* W7-B6 (orch-02 / projects-20): the bottom "Run a flow" select
                 (UsedByFlows) is REMOVED — kick-off now lives in the
                 above-the-fold Start-work action group under the tab bar. */}
@@ -720,10 +747,19 @@ function CreateFromTemplate() {
           {appTypes.length === 0 && <option value="">(no templates found)</option>}
           {appTypes.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <div style={{ marginTop: 14 }}>
-          <button className="btn btn-primary" data-action="create-project" disabled={!canSubmit || creating} onClick={() => void onCreate()}>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            className="btn btn-primary"
+            data-action="create-project"
+            disabled={!canSubmit || creating}
+            {...(!canSubmit ? { 'data-disabled-reason': 'Name, north star, and app type are required.', title: 'Name, north star, and app type are required.' } : {})}
+            onClick={() => void onCreate()}
+          >
             {creating ? 'Creating…' : 'Create project'}
           </button>
+          {/* W7-B6 (crosscut-25): the disabled CTA explains itself, like the
+              onboard form beside it already did. */}
+          {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, north star, and app type are required.</span>}
         </div>
         {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 8 }}>{error}</p>}
       </div>
@@ -803,9 +839,10 @@ function ProjectOnboardForm() {
             <>
               Register a code project so a flow can build it. You only need a name, the command that
               proves a change is good (the quality gate), and a one-line north star. Everything else has
-              a sensible default. The repo path must point at an <strong>existing git repository</strong>
-              {' '}(clone or symlink it under <code>projects/</code> first); onboarding scaffolds the
-              contract files and <code>git init</code>s the dir if it is not already a repo.
+              a sensible default. The repo path must point at an <strong>existing directory</strong>
+              {' '}(clone it under <code>projects/</code> first — a symlink is rejected); onboarding
+              scaffolds the contract files and <code>git init</code>s the dir if it is not already
+              its own repo.
             </>
           }
         />
