@@ -13,9 +13,12 @@
  * caller that KNOWS the artifact is absent passes `absentNote` and gets an
  * explicit one-liner (`data-findings-state="absent"`); callers that merely
  * haven't fetched yet keep passing null alone and render nothing, as before.
+ * Review r1: a caller whose FETCH failed passes `errorNote` instead and gets
+ * the explicit error one-liner (`data-findings-state="error"`) — a transient
+ * failure must never render the fabricated claim that the review did not run.
  *
  * DOM-as-metrics: [data-section="review-findings"][data-findings-count]
- * [data-findings-state="present|absent"], per-row
+ * [data-findings-state="present|absent|error"], per-row
  * [data-finding][data-finding-severity][data-finding-category].
  */
 
@@ -44,8 +47,27 @@ const SEVERITY_COLOURS: Record<string, string> = {
 
 const SEVERITY_ORDER = ['blocker', 'major', 'minor', 'info'];
 
-export function ReviewFindingsPanel({ doc, absentNote = false }: { doc: ReviewFindingsDoc | null; absentNote?: boolean }) {
+export function ReviewFindingsPanel({ doc, absentNote = false, errorNote = false }: { doc: ReviewFindingsDoc | null; absentNote?: boolean; errorNote?: boolean }) {
   if (!doc) {
+    // Review r1: error beats absence — a failed fetch says NOTHING about
+    // whether the artifact exists, so the fabricated "did not run" claim is
+    // replaced by an honest load-failure note.
+    if (errorNote) {
+      return (
+        <div
+          data-section="review-findings"
+          data-findings-state="error"
+          style={{ border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', padding: '10px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+            Adversarial review
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--amber, #d29922)' }}>
+            findings could not be loaded — reload to retry. (This is a fetch failure, not evidence the review never ran.)
+          </span>
+        </div>
+      );
+    }
     if (!absentNote) return null;
     return (
       <div

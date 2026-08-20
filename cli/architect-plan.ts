@@ -282,8 +282,9 @@ function esc(s: string): string {
  * "No GWT blocks parsed" — the plan's primary review evidence, missing at the
  * exact moment the operator is asked to approve. Now recognises, in order:
  *   1. the inline triple  — `**Given** a, **When** b, **Then** c`
- *   2. per-clause prose   — `**Given** …` (bold optional, case-insensitive,
- *                            optional list bullet, trailing `,`/`  ` stripped)
+ *   2. per-clause prose   — `**Given** …` (bold REQUIRED — the GWT-intent
+ *                            signal; case-insensitive, optional list bullet,
+ *                            trailing `,`/`  ` stripped)
  *   3. YAML key style     — `- given: "…"` (unchanged, frozen-fixture compat)
  * Exported for direct tests (cli/ is not surface-capped).
  */
@@ -295,11 +296,14 @@ export function extractGwtBlocks(body: string): Array<{ given: string; when: str
     if (cur.given && cur.when && cur.then) blocks.push(cur as { given: string; when: string; then: string });
     cur = {};
   };
-  // A prose clause line: optional bullet, optional `**`, the keyword, optional
-  // `**`, then the clause text. Trailing hard-break spaces + a trailing comma
-  // (the multi-line prose separator) are stripped from the captured text.
+  // A prose clause line: optional bullet, the BOLD keyword (`**Given**` —
+  // bold is REQUIRED: it is the author's GWT-intent signal; W7-B7 review r1
+  // found that accepting bare keywords fabricated blocks out of ordinary
+  // sentences that merely start with Given/When/Then), an optional colon
+  // inside or after the bold, then the clause text. Trailing hard-break
+  // spaces + a trailing comma (the multi-line prose separator) are stripped.
   const clause = (keyword: string, line: string): string | null => {
-    const m = new RegExp(`^\\s*(?:[-*]\\s+)?(?:\\*\\*)?${keyword}(?:\\*\\*)?[:\\s]\\s*(.+?)\\s*$`, 'i').exec(line);
+    const m = new RegExp(`^\\s*(?:[-*]\\s+)?\\*\\*${keyword}:?\\*\\*[:\\s]\\s*(.+?)\\s*$`, 'i').exec(line);
     if (!m) return null;
     return m[1].replace(/,\s*$/, '').trim();
   };

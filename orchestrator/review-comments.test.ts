@@ -148,6 +148,50 @@ test('editComment: a partial patch leaves the other fields intact', () => {
   assert.equal(edited.comments[0].blocking, false);
 });
 
+// W7-B7 review r1: a stored `ac` is authored against the PRE-edit body, and
+// acForComment PREFERS it — so a body edit that kept the ac would ship the
+// stale acceptance criterion into the send-back fix loop while the operator
+// believes their correction took effect. A body change drops the stored ac
+// (derive-don't-store: the GWT fallback regenerates from the NEW body); a
+// blocking-only patch keeps it (the criterion still matches the body).
+test('editComment: a body change drops a stored ac so the derived AC follows the NEW body', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, {
+    region: 'ac-2', body: 'the label is wrong', blocking: true,
+    ac: { given: 'the demo page', when: 'the label renders', then: 'the label is wrong' },
+  });
+  const id = sidecar.comments[0].id;
+
+  const edited = editComment(sidecar, id, { body: 'the label AND the count are wrong' });
+  assert.equal(edited.comments[0].ac, undefined, 'stored ac dropped on body change');
+  const v = deriveVerdictFromComments(edited.comments);
+  assert.equal(v.kind, 'send-back');
+  if (v.kind !== 'send-back') return;
+  assert.ok(v.acceptanceCriteria[0].then.includes('the count'), 'the derived AC reflects the NEW body, not the stale stored one');
+});
+
+test('editComment: a blocking-only patch keeps the stored ac verbatim', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, {
+    region: 'ac-2', body: 'see AC', blocking: false,
+    ac: { given: 'a current doc', when: 'mdtoc --write runs twice', then: 'the file is byte-identical' },
+  });
+  const id = sidecar.comments[0].id;
+  const edited = editComment(sidecar, id, { blocking: true });
+  assert.deepEqual(edited.comments[0].ac, { given: 'a current doc', when: 'mdtoc --write runs twice', then: 'the file is byte-identical' });
+});
+
+test('editComment: a body patch equal to the current body keeps the stored ac (no-op change)', () => {
+  let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
+  sidecar = appendReviewComment(sidecar, {
+    region: 'ac-2', body: 'same body', blocking: true,
+    ac: { given: 'g', when: 'w', then: 't' },
+  });
+  const id = sidecar.comments[0].id;
+  const edited = editComment(sidecar, id, { body: 'same body' });
+  assert.deepEqual(edited.comments[0].ac, { given: 'g', when: 'w', then: 't' });
+});
+
 test('deleteComment: removes the comment (the only way to clear a non-blocking one) and re-derives approve', () => {
   let sidecar = { cycleId: CID, comments: [] as ReturnType<typeof readReviewComments>['comments'] };
   sidecar = appendReviewComment(sidecar, { region: 'ac-1', body: 'non-blocking note', blocking: false });

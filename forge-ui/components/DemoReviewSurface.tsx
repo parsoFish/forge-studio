@@ -412,7 +412,14 @@ function ReviewRegion({
                   disabled={disabled}
                   onResolve={onResolve}
                   onEdit={onEdit}
-                  onDelete={onDelete}
+                  // W7-B7 review r1: deleting this region's LAST comment
+                  // recomputes defaultOpen to false in a >12-region wall —
+                  // pin the region open first (the operator is inside it) so
+                  // it never snap-collapses mid-interaction.
+                  onDelete={(commentId) => {
+                    setExpandedOverride(true);
+                    onDelete(commentId);
+                  }}
                 />
               ))}
             </ul>

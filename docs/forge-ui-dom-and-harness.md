@@ -768,27 +768,41 @@ inventory rather than one shared page-level contract:
   (artifact-plan-19: nothing ever produced either file; PLAN.html is the one
   cycle plan artifact, always view-only — the interactive plan gate is the
   architect session's). The filename chip links the RAW artifact file when
-  one resolved (`a[data-action="open-raw-artifact"]`, artifact-plan-26). The
+  that FILE resolved (`a[data-action="open-raw-artifact"]`, artifact-plan-26;
+  for `type=pr` the type can resolve via `run.prUrl` alone, so the chip links
+  only when pr-description.md itself parsed — never a guaranteed 404, W7-B7
+  review r1). The
   verdict GATE is armed by the queue state alone (gated ⇒ armed, round-2
   send-backs included; active/complete/failed ⇒ view — artifact-plan-11/-14),
-  and a missing verdict.json / reflection.json in view mode renders the SAME
-  shared empty state as every other type (artifact-plan-12/-13 — never a
-  blank page, never a fabricated "closes clean"). `type=pr` renders the
+  and a missing verdict.json in view mode renders the SAME shared empty state
+  as every other type (artifact-plan-12 — never a blank page).
+  `type=reflection` is the exception (W7-B7 review r1): ReflectionGate is the
+  type's own surface and renders its honest states itself — a live gate's
+  Stage-2 questions are never buried under the generic EmptyState, and a
+  never-reflected run shows the gate's own "No reflection questions filed"
+  note (artifact-plan-13 — never a fabricated "closes clean"). `type=pr`
+  renders the
   `[data-section="pr-hero"][data-pr-url]` card — the parsed pr-description.md
   merged with the run's own `prUrl` (derived from its `reviewer.pr-opened`
   event; `lib/artifact-pr-view.ts` adds the number from the URL and claims
-  `merged`/`open` ONLY where the run status supports it). `type=demo` view
+  `merged`/`open` ONLY where the run status supports it); a cycle with neither
+  pr-description.md nor a recorded `prUrl` (e.g. `reviewer.pr-open-failed`)
+  resolves `empty` — demo.json alone never yields a blank pr body (W7-B7
+  review r1). `type=demo` view
   mode renders the DEMO.md narrative (`[data-section="demo-narrative"]
   iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison.
   `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes) —
-  `[data-section="review-findings"][data-findings-state="present|absent"]
+  `[data-section="review-findings"][data-findings-state="present|absent|error"]
   [data-findings-count]` with per-row
   `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`;
   a known-absent artifact renders the explicit `data-findings-state="absent"`
   one-liner (artifact-plan-16 — fetched only when the flow's own
-  review-findings producer node completed, same rule as the run page) —
+  review-findings producer node completed, same rule as the run page; the
+  absence claim itself is made only off that declaration or an authoritative
+  404 — a transient fetch failure renders `data-findings-state="error"`
+  instead, W7-B7 review r1) —
   then the review-shape summary
   (`[data-section="review-summary"][data-region-count][data-blocking-count]`
   with `a[data-action="jump-to-blocking"]` when a blocker exists), then

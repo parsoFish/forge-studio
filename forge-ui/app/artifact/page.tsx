@@ -205,7 +205,11 @@ async function fetchArtifactDoc(
 
       // artifact-plan-17: a recorded PR URL alone (run.prUrl) still renders a
       // linkable PR card — the render path merges via prDocWithRunLink.
-      if (!demoModel && !prDoc && !run?.prUrl) return { type: 'empty' };
+      // Review r1: demoModel does NOT count toward resolution — the pr render
+      // path shows only the merged hero (prDoc + run.prUrl; demo evidence is
+      // deliberately not duplicated here), so a demo-only cycle whose reviewer
+      // hit pr-open-failed must get the honest EmptyState, not a blank body.
+      if (!prDoc && !run?.prUrl) return { type: 'empty' };
       return { type: 'pr', doc: { demoModel, prDoc } };
     }
 
@@ -250,6 +254,27 @@ async function fetchJsonArtifact<T>(runId: string, filename: string): Promise<T 
     return (await res.json()) as T;
   } catch {
     return null;
+  }
+}
+
+/**
+ * W7-B7 review r1: like fetchJsonArtifact, but absence is claimed ONLY on an
+ * authoritative 404 — a thrown fetch, a non-404 error status, or an unparsable
+ * body is `failed`, never "the artifact does not exist". Callers that turn
+ * null into a rendered ABSENCE CLAIM ("did not run") must use this so a
+ * transient bridge failure cannot fabricate that claim.
+ */
+async function fetchJsonArtifactChecked<T>(
+  runId: string,
+  filename: string,
+): Promise<{ doc: T | null; failed: boolean }> {
+  try {
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
+    if (res.status === 404) return { doc: null, failed: false };
+    if (!res.ok) return { doc: null, failed: true };
+    return { doc: (await res.json()) as T, failed: false };
+  } catch {
+    return { doc: null, failed: true };
   }
 }
 
@@ -417,6 +442,9 @@ function ArtifactPageInner() {
   // run (the producer node never completed, or the file 404'd) — rendered as
   // an explicit one-liner, distinguishable from a clean pass (doc with []).
   const [reviewFindingsAbsent, setReviewFindingsAbsent] = useState(false);
+  // Review r1: a transient findings-fetch failure is an ERROR state, distinct
+  // from the authoritative "did not run" absence claim.
+  const [reviewFindingsError, setReviewFindingsError] = useState(false);
   // W7-B7 (artifact-plan-32): the DEMO.md narrative on the demo-evidence VIEW
   // page (rendered+sanitized srcDoc — same pipeline as the gate surface).
   const [demoMarkdownDoc, setDemoMarkdownDoc] = useState('');
@@ -598,12 +626,17 @@ function ArtifactPageInner() {
       if (type === 'verdict') {
         const flowDef = fetchedRun ? flows.find((f: Flow) => f.id === fetchedRun.flowId) ?? null : null;
         const findingsPossible = fetchedRun === null || shouldFetchReviewFindings(fetchedRun, flowDef);
+        // Review r1: the "did not run" ABSENCE CLAIM is made only off the
+        // flow's own declaration or an authoritative 404 — a transient fetch
+        // failure renders the explicit error note instead (never a fabricated
+        // "no findings artifact was produced" for a cycle that has one).
         const rf = findingsPossible
-          ? await fetchJsonArtifact<ReviewFindingsDoc>(artifactId, 'review-findings.json')
-          : null;
+          ? await fetchJsonArtifactChecked<ReviewFindingsDoc>(artifactId, 'review-findings.json')
+          : { doc: null, failed: false };
         if (!signal.cancelled) {
-          setReviewFindings(rf);
-          setReviewFindingsAbsent(rf === null);
+          setReviewFindings(rf.doc);
+          setReviewFindingsAbsent(rf.doc === null && !rf.failed);
+          setReviewFindingsError(rf.doc === null && rf.failed);
         }
       }
 
@@ -629,6 +662,7 @@ function ArtifactPageInner() {
     setDemoModel(null);
     setReviewFindings(null);
     setReviewFindingsAbsent(false);
+    setReviewFindingsError(false);
     setDemoMarkdownDoc('');
     void load(signal);
     return () => { signal.cancelled = true; };
@@ -810,7 +844,11 @@ function ArtifactPageInner() {
               };
               const linkable =
                 !isArchitect && rawFile !== undefined && bridgeBase !== null &&
-                artifact !== null && artifact.type !== 'empty';
+                artifact !== null && artifact.type !== 'empty' &&
+                // Review r1: resolving the pr TYPE (via run.prUrl alone) does
+                // not imply the pr-description.md FILE exists — only link the
+                // raw file when it actually resolved, never a guaranteed 404.
+                (artifact.type !== 'pr' || artifact.doc.prDoc !== null);
               return linkable ? (
                 <a
                   href={`${bridgeBase}/api/artifact/${encodeURIComponent(artifactRunId)}/${encodeURIComponent(rawFile)}`}
@@ -896,7 +934,7 @@ function ArtifactPageInner() {
                       the critique before deciding. Claims only; never a gate.
                       W7-B7 (artifact-plan-16): an absent artifact renders an
                       explicit "did not run" note, never silent nothing. */}
-                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} />
+                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
                   {demoModel ? (
                     <>
                       {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
@@ -980,12 +1018,16 @@ function ArtifactPageInner() {
               {/* All other types: show empty state when artifact is absent.
                   In gate mode, show a compact placeholder instead of the full empty
                   state so the gate bar (when one exists) remains reachable.
-                  W7-B7: verdict + reflection now get the SAME honest empty state
-                  in view mode — a missing verdict.json rendered a completely
-                  blank page (artifact-plan-12) and a never-run reflection
-                  rendered "✓ None — closes clean" (artifact-plan-13). The
-                  verdict GATE (authoring) keeps its own surface above. */}
-              {!isArchitect && !(type === 'verdict' && isGateMode) && (!artifact || artifact.type === 'empty') && (
+                  W7-B7: verdict now gets the SAME honest empty state in view
+                  mode — a missing verdict.json rendered a completely blank
+                  page (artifact-plan-12). The verdict GATE (authoring) keeps
+                  its own surface above. Review r1: reflection is EXCLUDED —
+                  ReflectionGate below is the type's own surface and renders
+                  its honest states itself ("No reflection questions filed",
+                  artifact-plan-13's honest never-reflected state); the full
+                  "not yet produced ← Back to monitor" EmptyState would bury a
+                  LIVE gate awaiting the operator's Stage-2 answers. */}
+              {!isArchitect && type !== 'reflection' && !(type === 'verdict' && isGateMode) && (!artifact || artifact.type === 'empty') && (
                 isGateMode ? (
                   <div style={{
                     border: '1px solid var(--line)',
@@ -1109,7 +1151,7 @@ function ArtifactPageInner() {
 
               {artifact && artifact.type === 'verdict' && !isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} />
+                  <ReviewFindingsPanel doc={reviewFindings} absentNote={reviewFindingsAbsent} errorNote={reviewFindingsError} />
                   <VerdictRenderer doc={artifact.doc} />
                 </div>
               )}

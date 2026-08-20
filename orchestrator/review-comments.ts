@@ -132,6 +132,11 @@ export function resolveComment(sidecar: ReviewCommentsSidecar, commentId: string
  * W7-B7 (artifact-plan-15): rewrite an authored comment in place (pure).
  * Only `body` and `blocking` are patchable — the id (anchor handle), region,
  * timestamp, and resolved flag are untouched. A no-op if the id is unknown.
+ *
+ * Review r1: a stored `ac` is authored against the PRE-edit body, and
+ * `acForComment` prefers it — so a body CHANGE drops the stored ac
+ * (derive-don't-store: the GWT fallback regenerates from the new body).
+ * A blocking-only patch, or a body patch equal to the current body, keeps it.
  */
 export function editComment(
   sidecar: ReviewCommentsSidecar,
@@ -140,15 +145,16 @@ export function editComment(
 ): ReviewCommentsSidecar {
   return {
     cycleId: sidecar.cycleId,
-    comments: sidecar.comments.map((c) =>
-      c.id === commentId
-        ? {
-            ...c,
-            ...(patch.body !== undefined ? { body: patch.body } : {}),
-            ...(patch.blocking !== undefined ? { blocking: patch.blocking } : {}),
-          }
-        : c,
-    ),
+    comments: sidecar.comments.map((c) => {
+      if (c.id !== commentId) return c;
+      const bodyChanged = patch.body !== undefined && patch.body !== c.body;
+      const { ac, ...withoutAc } = c;
+      return {
+        ...(bodyChanged ? withoutAc : c),
+        ...(patch.body !== undefined ? { body: patch.body } : {}),
+        ...(patch.blocking !== undefined ? { blocking: patch.blocking } : {}),
+      };
+    }),
   };
 }
 

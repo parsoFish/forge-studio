@@ -514,11 +514,23 @@ test('extractGwtBlocks: single-line inline triple (betterado 2026-07-01 shape)',
   });
 });
 
-test('extractGwtBlocks: bare Given/When/Then prose lines (no bold markers) still parse', () => {
-  const body = ['Given a repo with no config,', 'When onboarding runs,', 'Then a default config is written.'].join('\n');
-  const blocks = extractGwtBlocks(body);
-  assert.equal(blocks.length, 1);
-  assert.equal(blocks[0].given, 'a repo with no config');
+// W7-B7 review r1 hardening: bare (unbolded) keyword matching turned ORDINARY
+// prose sentences that happen to start with Given/When/Then into fabricated
+// GWT blocks rendered as review evidence at approval time. The architect's
+// real shapes are BOLD (`**Given** …`) or YAML keys — bold (or the YAML key)
+// is the intent signal, so bare prose must never parse.
+test('extractGwtBlocks: bare Given/When/Then prose sentences do NOT fabricate GWT blocks', () => {
+  const body = [
+    'Given the SDK constraints, we chose approach B.',
+    'When running in CI, the flag is ignored.',
+    'Then the reviewer sees both paths.',
+  ].join('\n');
+  assert.deepEqual(extractGwtBlocks(body), [], 'prose that merely starts with the keywords is not an acceptance criterion');
+});
+
+test('extractGwtBlocks: a bolded Given followed by bare prose lines stays incomplete (no block)', () => {
+  const body = ['**Given** a real criterion opener,', 'When this prose line is unbolded, it is not the WHEN clause.'].join('\n');
+  assert.deepEqual(extractGwtBlocks(body), []);
 });
 
 test('extractGwtBlocks: YAML key style keeps parsing (no regression), and mixed docs collect both', () => {
