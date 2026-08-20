@@ -18,7 +18,11 @@ brainAccess: mandatory
 interactivity: Unattended; operator supplies source identifier + optional category/project target; agent runs to completion without human input.
 allowed-tools: [Read, Write, Edit, Bash]
 disallowed-tools: []
-budgets: {}
+budgets:
+  # W7-B5 (agents-21): default standalone-dispatch cost ceiling (haiku-tier
+  # ingest turns are cheap; $2 is generous headroom). Operator-overridable
+  # per kickoff. See docs/agent-cost-ceilings.md.
+  maxBudgetUsd: 2
 ---
 
 # Brain — Ingest

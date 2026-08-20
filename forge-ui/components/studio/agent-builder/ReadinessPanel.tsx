@@ -22,16 +22,30 @@ export function ReadinessPanel({ state }: Props) {
   return (
     <div className="readiness-panel panel" style={{ padding: '12px 12px 14px' }} data-component="readiness-panel">
       <div className="panel-head" style={{ margin: '-12px -12px 10px', padding: '10px 12px' }}>Readiness</div>
+      {/* W7-B5 (agents-13): pass/fail is DATA + text, not only a CSS class —
+          `data-ok` per row, an aria-label naming the outcome, and a title
+          that always says passed/not-met (with the check's own detail when
+          it has one) so screen readers and the journey harness can tell the
+          two states apart. */}
       <ul className="readiness-list" id="readiness-list" data-ready-count={readyCount}>
         {checks.map((c) => (
           <li
             key={c.key}
             className={`readiness-item${c.ok ? ' ok' : ''}`}
             data-check={c.key}
-            title={c.detail}
+            data-ok={c.ok ? 'true' : 'false'}
+            aria-label={`${c.label}: ${c.ok ? 'passed' : 'not met'}`}
+            title={c.detail ?? (c.ok ? `${c.label} — passed` : `${c.label} — not met`)}
           >
             <span className="ri-dot" />
             {c.label}
+            {/* No visually-hidden pass/fail span here (review round 1): the
+                `aria-label` on this same <li> overrides its entire contents
+                for assistive tech, so a hidden span repeating the outcome is
+                announced to nobody — it only costs a DOM node and a
+                duplicated string per check. The outcome reaches every reader
+                that needs it: aria-label (screen readers), title (pointer),
+                data-ok (journeys + render pins), the CSS class (sighted). */}
           </li>
         ))}
       </ul>

@@ -417,7 +417,7 @@ export const journey = defineJourney({
       {
         id: 'agents-index-roster',
         title: 'Browse the agents index — roster + recent runs',
-        narration: 'Before composing anything, the operator lands on /agents (T2 lane W6-IA-3) — a browsable roster of every agent, mirroring the Library page\'s own agents pillar, plus a cross-agent "recent agent runs" view built by fanning the existing per-agent history route out across the whole roster (there is no aggregate bridge route yet — see lib/agents-index.ts\'s header). This is the entry point StudioNav\'s own /agents/new shortcut skips past entirely: proof the roster itself is reachable and real, and that a card actually navigates into the builder, before any beat below drills into one specific agent.',
+        narration: 'Before composing anything, the operator lands on /agents (T2 lane W6-IA-3) — a browsable roster of every agent, mirroring the Library page\'s own agents pillar, plus a cross-agent "recent agent runs" view served by ONE call to the W7-B5 aggregate route (GET /api/agents/runs/recent — each row carries the RUN-level status/cost plus WHICH agents ran, replacing the old 13-request fan-out that attributed an arbitrary node\'s $0.00 to a $4.79 failed run). This is the entry point StudioNav\'s own /agents/new shortcut skips past entirely: proof the roster itself is reachable and real, and that a card actually navigates into the builder, before any beat below drills into one specific agent.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[W6-IA3] Browse the agents index — roster + recent runs');
@@ -452,6 +452,14 @@ export const journey = defineJourney({
               ).catch(() => {});
               const ledgerMounted = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
               check(ledgerMounted, 'W6-IA3: the recent-agent-runs section mounts the REAL shared HistoryLedger ([data-section="history-ledger"])');
+              // W7-B5 (agents-40): the section publishes its own count + the
+              // fetch bound — a silently-capped list is a lie of omission.
+              const recentSection = await page.evaluate(() => {
+                const el = document.querySelector('[data-section="recent-agent-runs"]');
+                return el ? { count: el.getAttribute('data-count'), limit: el.getAttribute('data-limit') } : null;
+              });
+              check(recentSection !== null && recentSection.count !== null && recentSection.limit !== null,
+                `W7-B5 (agents-40): the recent-agent-runs section carries data-count + data-limit (got ${JSON.stringify(recentSection)})`);
               await frame(page, 'agents-index-0-roster', 'Agents index — the roster + recent-agent-runs sections, before drilling into any one agent');
 
               // The roster's own cards are real navigation, not decoration: click
@@ -1658,7 +1666,7 @@ export const journey = defineJourney({
       {
         id: 'agents-kickoff-run-view',
         title: 'Kickoff — the standalone run view renders the log, cost, and material as a reference',
-        narration: 'Navigating to the new /agents/[id]/run/[runId] route — the log renders the ONE real event this no-spawn seam ever produces for this run (the route\'s own materials-staged bookkeeping; the child dispatch process that would emit start/end/spawn-suppressed never runs at all, agents-kickoff-dispatch\'s own comment), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance honestly reads "not recorded" for the same structural reason — the wire-level proof one beat ago is what proves the ceiling was actually dispatched, not this section.',
+        narration: 'Navigating to the /agents/[id]/run/[runId] route — the log renders the TWO real events this no-spawn seam produces for this run (W7-B5: the route\'s t0 agent-run.dispatched marker — which also records the ceiling at dispatch time, agents-31 — plus its materials-staged bookkeeping; the child dispatch process that would emit start/end/spawn-suppressed never runs at all), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance now reads the REAL $3.5 recorded at dispatch — a failed or still-running run no longer claims "not recorded" about a ceiling that was submitted and enforced.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — the standalone run view');
@@ -1675,21 +1683,24 @@ export const journey = defineJourney({
               check(found === 'true', `agents-kickoff-run-view: the run view finds a real dispatch record for this runId (got "${found}")`);
 
               // NOT a "≥N lines" count — measured: this no-spawn seam produces
-              // EXACTLY ONE event for this run (the route's own synchronous
-              // materials-staged bookkeeping; the child `agent dispatch`
-              // process that would add start/end/spawn-suppressed never
-              // spawns at all, agents-kickoff-dispatch's own comment).
-              // Asserting the SPECIFIC real event (by kind + message) is
-              // stronger than a count and can't silently drift if the seam's
-              // event shape changes.
+              // EXACTLY TWO events for this run (W7-B5: the route's t0
+              // `agent-run.dispatched` marker — agents-20's tail anchor +
+              // agents-31's dispatch-time ceiling record — then its
+              // synchronous materials-staged bookkeeping; the child `agent
+              // dispatch` process that would add start/end/spawn-suppressed
+              // never spawns at all). Asserting the SPECIFIC real events (by
+              // kind + message) is stronger than a count and can't silently
+              // drift if the seam's event shape changes.
               const logLines = page.locator('[data-log-line="true"]');
               const logLineCount = await logLines.count();
-              check(logLineCount === 1,
-                `agents-kickoff-run-view: exactly one real event line renders under this no-spawn seam (got ${logLineCount})`);
-              const firstLineKind = await logLines.first().getAttribute('data-log-kind').catch(() => null);
+              check(logLineCount === 2,
+                `agents-kickoff-run-view: exactly two real event lines render under this no-spawn seam (got ${logLineCount})`);
               const firstLineText = await logLines.first().innerText().catch(() => '');
-              check(firstLineKind === 'out' && firstLineText.includes('agent-run.materials-staged'),
-                `agents-kickoff-run-view: that one line IS the real materials-staged bookkeeping event (data-log-kind="${firstLineKind}", text="${firstLineText}")`);
+              check(firstLineText.includes('agent-run.dispatched'),
+                `agents-kickoff-run-view: the first line IS the t0 dispatched marker (text="${firstLineText}")`);
+              const secondLineText = await logLines.nth(1).innerText().catch(() => '');
+              check(secondLineText.includes('agent-run.materials-staged'),
+                `agents-kickoff-run-view: the second line IS the real materials-staged bookkeeping event (text="${secondLineText}")`);
 
               const costAttr = await page.evaluate(() => document.querySelector('[data-page="agent-run"]')?.getAttribute('data-run-cost') ?? null);
               check(costAttr !== null, `agents-kickoff-run-view: the cost section renders (data-run-cost="${costAttr}")`);
@@ -1710,10 +1721,18 @@ export const journey = defineJourney({
               } catch { /* leave false */ }
               check(apiCarriesNoContent, 'agents-kickoff-run-view: GET /api/agents/runs/:runId itself never carries material bytes, only the {path,kind} reference');
 
+              // W7-B5 (agents-31): the ceiling is recorded AT DISPATCH TIME on
+              // the t0 event, so even this forever-running no-spawn run shows
+              // the real $3.5 that was accepted — the old "not recorded" claim
+              // for a submitted, enforced ceiling was the finding.
               const ceilingSet = await page.evaluate(() =>
                 document.querySelector('[data-component="ceiling-provenance"]')?.getAttribute('data-ceiling-set') ?? null);
-              check(ceilingSet === 'false',
-                `agents-kickoff-run-view: the ceiling provenance honestly reads "not recorded" under the no-spawn seam, not fabricated (got "${ceilingSet}")`);
+              check(ceilingSet === 'true',
+                `agents-kickoff-run-view: the ceiling recorded at dispatch time renders on the run view (data-ceiling-set="${ceilingSet}")`);
+              const ceilingUsdAttr = await page.evaluate(() =>
+                document.querySelector('[data-ceiling-usd]')?.getAttribute('data-ceiling-usd') ?? null);
+              check(ceilingUsdAttr === '3.5',
+                `agents-kickoff-run-view: the rendered ceiling IS the dispatched $3.5 (got "${ceilingUsdAttr}")`);
 
               // ── R6-06 ROUND 2 (amendment 4) — REACHABILITY ────────────────
               // The strongest corpus ground available for this initiative:

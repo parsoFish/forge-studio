@@ -158,10 +158,10 @@ cli/studio-path-guard.ts readdirSync 1
 cli/studio-path-guard.ts readFileSync 1
 cli/studio-path-guard.ts realpathSync 2
 cli/studio-path-guard.ts writeFileSync 1
-cli/ui-bridge.ts existsSync 27
+cli/ui-bridge.ts existsSync 30
 cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
-cli/ui-bridge.ts readdirSync 15
+cli/ui-bridge.ts readdirSync 17
 cli/ui-bridge.ts readFileSync 8
 cli/ui-bridge.ts realpathSync 2
 cli/ui-bridge.ts spawn 2

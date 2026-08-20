@@ -17,7 +17,12 @@ brainAccess: mandatory
 interactivity: Operator-driven; blocks on interview answers and the PLAN-gate verdict.
 allowed-tools: [Read, Grep, Glob, Bash]
 disallowed-tools: []
-budgets: {}
+budgets:
+  # W7-B5 (agents-21): default standalone-dispatch cost ceiling — the most
+  # expensive planner (sonnet; real flow-node runs have reached ~$4.79).
+  # Enforced on the generic dispatch path (orchestrator/run-agent.ts);
+  # operator-overridable per kickoff. See docs/agent-cost-ceilings.md.
+  maxBudgetUsd: 10
 ---
 
 # Architect

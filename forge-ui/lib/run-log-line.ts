@@ -64,18 +64,33 @@ function kindFor(eventType: string): RunLogLine['kind'] {
   return 'out';
 }
 
+/** W7-B5 (agents-19): the structured failure reason a server-side marker
+ *  records (`agent-dispatch.failed` → `metadata.error`) — previously
+ *  UNREACHABLE from this renderer, so a failed run's only visible trace was
+ *  the bare marker name. Appended verbatim to the line body whenever an
+ *  event carries one. */
+function metadataError(event: EventLogEntry): string | null {
+  const err = event.metadata?.['error'];
+  return typeof err === 'string' && err.length > 0 ? err : null;
+}
+
 function textFor(event: EventLogEntry): string {
+  const detail = metadataError(event);
   switch (event.event_type) {
     case 'start':
       return `start · ${event.skill}`;
     case 'end':
       return `end · ${event.skill}${typeof event.cost_usd === 'number' ? ` · $${event.cost_usd.toFixed(4)}` : ''}`;
-    case 'error':
+    case 'error': {
       // The real failure detail is never discarded — no "an error occurred"
       // placeholder even when `message` happens to be present.
-      return event.message ? `error: ${event.message}` : `error (${event.skill})`;
-    default:
-      return event.message ?? `${event.event_type} (${event.skill})`;
+      const base = event.message ? `error: ${event.message}` : `error (${event.skill})`;
+      return detail !== null && detail !== event.message ? `${base} — ${detail}` : base;
+    }
+    default: {
+      const base = event.message ?? `${event.event_type} (${event.skill})`;
+      return detail !== null ? `${base} — ${detail}` : base;
+    }
   }
 }
 

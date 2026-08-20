@@ -10,30 +10,5 @@
   "ci": "main@08ec533d — CI run 32199260116 (github ubuntu, --boot dry-bridge clean checkout) — http://localhost:4124 at 2026-08-19T00:01:47.315Z (replayed from _walkthrough/ci-run-32199260116/crawl.json) (136 routes, 0 unvisited)",
   "host": "main@08ec533d — read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) — http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json) (924 routes, 0 unvisited)"
  },
- "entries": [
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/release-refine/run/<id>",
-   "detail": "404 [bridge]/api/studio/flows/release-refine",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/unknown/run/<id>",
-   "detail": "404 [bridge]/api/studio/flows/unknown",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/flows/unknown/run/INIT-<id>",
-   "detail": "404 [bridge]/api/studio/flows/unknown",
-   "message": "first-party request answered 404"
-  },
-  {
-   "kind": "first-party-4xx",
-   "route": "/projects/gitpulse",
-   "detail": "409 [bridge]/api/studio/projects/gitpulse/contract-stages",
-   "message": "first-party request answered 409"
-  }
- ]
+ "entries": []
 }

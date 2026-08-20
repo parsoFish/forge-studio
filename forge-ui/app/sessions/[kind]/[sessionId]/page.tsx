@@ -10,7 +10,7 @@ import { FetchErrorState } from '@/components/FetchErrorState';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
-import { deriveSessionShellViewState, backToProjectLink } from '@/lib/session-shell-view';
+import { deriveSessionShellViewState, selectStage, backToProjectLink } from '@/lib/session-shell-view';
 import {
   fetchArchitectSessions,
   listInstructionsSessions,
@@ -30,6 +30,7 @@ import { SessionArchitectPanel } from '@/components/studio/session/SessionArchit
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
 import { SessionLifecycleBar } from '@/components/studio/session/SessionLifecycleBar';
+import { StageSelector } from '@/components/studio/session/StageSelector';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
@@ -196,7 +197,21 @@ export default function SessionShellPage({
     return () => clearInterval(poll);
   }, [refreshShell]);
 
-  const viewState = useMemo(() => deriveSessionShellViewState(shellResult), [shellResult]);
+  // W7-B5 (sessions-kinds-34): the operator's stage choice — applied over
+  // the freshly-derived shell state via the pure `selectStage` (which
+  // refuses a stage outside the session's declared set; a refusal falls
+  // back to the derived default rather than fabricating a stage).
+  const [stageOverride, setStageOverride] = useState<string | null>(null);
+  // A different session must never inherit the previous one's stage choice.
+  useEffect(() => { setStageOverride(null); }, [kind, sessionId]);
+  const viewState = useMemo(() => {
+    const base = deriveSessionShellViewState(shellResult);
+    if (base.status === 'ready' && stageOverride !== null && stageOverride !== base.selectedStage) {
+      const switched = selectStage(base, stageOverride);
+      if (switched.ok) return switched.state;
+    }
+    return base;
+  }, [shellResult, stageOverride]);
 
   // W7-B1 (sessions-kinds-07) — the artifact pane is wired for real on this
   // page now: `project`/`sessionId` thread through (generation "view →"
@@ -333,6 +348,17 @@ export default function SessionShellPage({
             lastCancel={lastCancel}
             onCancelled={(outcome) => { setLastCancel(outcome); refreshShell(); refreshSummary(); }}
           />
+          {/* W7-B5 (sessions-kinds-34): the stage selector the DOM contract
+              always advertised (`data-session-selector-visible`) — rendered
+              whenever the session declares more than one stage, switching
+              the transcript AND the artifact pane below via selectStage. */}
+          {viewState.stageSelectorVisible && (
+            <StageSelector
+              stages={viewState.stages}
+              selectedStage={viewState.selectedStage}
+              onSelect={setStageOverride}
+            />
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
             <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>
               {summary && summary.kind === 'architect' ? (

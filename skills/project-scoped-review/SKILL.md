@@ -18,7 +18,11 @@ brainAccess: advisory
 interactivity: Operator-triggered, on demand against one named project. Fully autonomous once launched — asks no questions, never blocks mid-run.
 allowed-tools: [Read, Grep, Glob, Write]
 disallowed-tools: [Edit, MultiEdit, NotebookEdit, Bash, WebFetch, WebSearch]
-budgets: {}
+budgets:
+  # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet
+  # review pass over one project). Operator-overridable per kickoff. See
+  # docs/agent-cost-ceilings.md.
+  maxBudgetUsd: 5
 ---
 
 # Project-Scoped Review

@@ -373,10 +373,28 @@ export function deriveSessionLifecycleFor(args: {
  *  Returns true iff at least one signal was delivered to a process
  *  `isTurnAlive` proved ours; a dead/unowned/absent pid is a no-op `false`. */
 export function killTrackedTurn(logsRoot: string, kind: string, sessionId: string): boolean {
-  const pidRaw = guardedReadFile(logsRoot, [sessionLogDirName(kind, sessionId), 'turn.pid']);
+  return killTrackedPidFile(logsRoot, sessionLogDirName(kind, sessionId), sessionId);
+}
+
+/**
+ * W7-B5 (agents-30): the standalone-run sibling — a generic agent dispatch's
+ * pid lives at `_logs/<runId>/turn.pid` (written by `spawnAgentDispatch`,
+ * cli/ui-bridge.ts) and its ownership mark is the runId itself, which the
+ * child's argv carries as a whole element (`forge agent dispatch <slug>
+ * --run-id <runId>`). Same fail-closed ownership proof as the session path.
+ */
+export function killTrackedRun(logsRoot: string, runId: string): boolean {
+  return killTrackedPidFile(logsRoot, runId, runId);
+}
+
+/** Shared core of the two kill entry points above: read `<logDirName>/
+ *  turn.pid` (guarded), prove ownership via `ownershipMark` in the pid's own
+ *  argv, then SIGTERM group-then-pid. */
+function killTrackedPidFile(logsRoot: string, logDirName: string, ownershipMark: string): boolean {
+  const pidRaw = guardedReadFile(logsRoot, [logDirName, 'turn.pid']);
   if (pidRaw === null || !/^\d+\s*$/.test(pidRaw.trim())) return false;
   const pid = Number.parseInt(pidRaw.trim(), 10);
-  if (!isTurnAlive(pid, sessionId)) return false;
+  if (!isTurnAlive(pid, ownershipMark)) return false;
   let delivered = false;
   try {
     process.kill(-pid, 'SIGTERM');

@@ -39,6 +39,13 @@ export type AgentBuilderState = {
   disallowedTools: string[];
   phase: string;
   capability?: AgentCapabilityDescriptor;
+  /** W7-B5 (agents-21): the agent's own declared default ceiling
+   *  (SKILL budgets.maxBudgetUsd) — seeds the Run panel's field ahead of the
+   *  run-level policy default. Carried through the W7-B4 extraction of this
+   *  type out of app/agents/[id]/page.tsx: B5 added it to the inline type on
+   *  main while B4 was moving that type here, so the merge had to port it
+   *  rather than let either side win. */
+  declaredMaxBudgetUsd?: number;
   costCeilingEnforceable: boolean;
 };
 
@@ -78,6 +85,7 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
     phase: raw.phase ?? '',
     capability: raw.capability,
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
+    declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
   };
 }
 

@@ -17,17 +17,18 @@
  *     UNCHANGED from `LibraryCard.tsx` (D2 — the SAME card `/library`
  *     already renders for its own agents pillar), plus a "+ New agent" CTA
  *     to `/agents/new`.
- *   - `recent-agent-runs` — `HistoryLedger` (`./HistoryLedger.tsx`), reused
- *     UNCHANGED (D2), over the merged, newest-first, bounded ledger
- *     `lib/agents-index.ts` builds by fetching each agent's OWN
- *     already-shipped `GET /api/agents/:slug/history` in parallel — there
- *     is no aggregate "all agents" bridge route yet (out of scope for this
- *     lane; see `lib/agents-index.ts`'s header for the follow-up note).
+ *   - `recent-agent-runs` — the shared `RecentRuns` widget
+ *     (`components/RecentRuns.tsx`, W7-B2's extraction of this very
+ *     section; the KB health tab renders the same one), over the
+ *     newest-first, bounded ledger `lib/agents-index.ts` reads in ONE call
+ *     to `GET /api/agents/runs/recent`. W7-B5 (agents-03/04/39) landed that
+ *     aggregate route: the per-agent fan-out this header used to describe
+ *     is gone, along with the arbitrary-node attribution that published one
+ *     node's $0.00 as a failed run's cost.
  *
  * `ready` / `recentRunsReady` are two INDEPENDENT facts, not one shared
  * "loading" flag — the roster and the runs ledger are two different
- * fetches with different latencies (the runs fetch fans out to N parallel
- * per-agent requests), and collapsing them would either show a stale
+ * fetches with different latencies, and collapsing them would either show a stale
  * "loading" runs ledger after the roster is already interactive, or gate
  * the whole page behind the slower of the two for no reason. Each section
  * renders its own honest loading / empty state independently — never a
@@ -63,11 +64,18 @@ export type AgentsIndexViewProps = {
   recentRunsUnresolved?: number;
   recentRunsTotal?: number;
   onRetryRecentRuns?: () => void;
+  /** W7-B5 (agents-40): the bound the current rows were fetched under —
+   *  published as `data-limit` so a truncated list is never silent. */
+  recentRunsLimit?: number;
+  /** W7-B5 (agents-40): "view all" — refetch under the expanded bound.
+   *  Omitted (or already expanded) renders no affordance. */
+  onShowAllRecentRuns?: (() => void) | null;
 };
 
 export function AgentsIndexView({
   ready, agents, recentRunsReady, recentRuns, nowMs, error = null, onRetry,
   recentRunsUnresolved = 0, recentRunsTotal = 0, onRetryRecentRuns,
+  recentRunsLimit, onShowAllRecentRuns = null,
 }: AgentsIndexViewProps) {
   return (
     <main
@@ -149,7 +157,10 @@ export function AgentsIndexView({
         {/* ===== RECENT AGENT RUNS — the shared RecentRuns widget (W7-B2
             extraction; the KB health tab consumes the same component). The
             section token stays `recent-agent-runs` (this page's established
-            DOM contract). ===== */}
+            DOM contract). W7-B5 (agents-40) threads the fetch bound + the
+            "view all" refetch through the SAME component rather than forking
+            a second copy of the section — a silently-capped list is a lie of
+            omission wherever it renders. ===== */}
         <RecentRuns
           section="recent-agent-runs"
           title="Recent agent runs"
@@ -159,6 +170,8 @@ export function AgentsIndexView({
           unresolved={recentRunsUnresolved}
           total={recentRunsTotal}
           onRetryUnresolved={onRetryRecentRuns}
+          {...(recentRunsLimit !== undefined ? { limit: recentRunsLimit } : {})}
+          onShowAll={onShowAllRecentRuns}
         />
 
       </div>

@@ -36,7 +36,7 @@ import { AgentsIndexView } from '@/components/studio/AgentsIndexView';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { fetchStudioAgents, type Agent } from '@/lib/studio-client';
-import { fetchRecentAgentRunsWithMeta } from '@/lib/agents-index';
+import { fetchRecentAgentRunsWithMeta, RECENT_AGENT_RUNS_LIMIT, RECENT_AGENT_RUNS_EXPANDED_LIMIT } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 
 export default function AgentsIndexPage() {
@@ -49,6 +49,13 @@ export default function AgentsIndexPage() {
   const [recentRunsMeta, setRecentRunsMeta] = useState<{ unresolved: number; total: number }>({ unresolved: 0, total: 0 });
   const [recentRunsKey, setRecentRunsKey] = useState(0);
   const retryRecentRuns = useCallback(() => setRecentRunsKey((k) => k + 1), []);
+  // W7-B5 (agents-40): the section's fetch bound — "View all runs" expands
+  // it to the server route's own hard cap and refetches.
+  const [recentRunsLimit, setRecentRunsLimit] = useState(RECENT_AGENT_RUNS_LIMIT);
+  const showAllRecentRuns = useCallback(() => {
+    setRecentRunsLimit(RECENT_AGENT_RUNS_EXPANDED_LIMIT);
+    setRecentRunsKey((k) => k + 1);
+  }, []);
   // W7-A1 (crosscut-01/-22): a failed roster read is an ERROR state, never
   // "No agents yet"; `loadKey` re-runs the load on Retry + bridge recovery.
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
@@ -82,7 +89,7 @@ export default function AgentsIndexPage() {
     if (!ready) return;
     let cancelled = false;
     async function loadRecentRuns() {
-      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents);
+      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents, recentRunsLimit);
       if (cancelled) return;
       setRecentRuns(rows);
       setRecentRunsMeta({ unresolved, total });
@@ -95,6 +102,7 @@ export default function AgentsIndexPage() {
     // roster was re-read — after an outage the histories refill with the
     // roster instead of freezing at the outage result (W7-FIX-A1 review).
     // `recentRunsKey`: the unresolved-notice Retry re-runs the fan-out alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, agents, recentRunsKey]);
 
   return (
@@ -108,6 +116,8 @@ export default function AgentsIndexPage() {
         recentRunsUnresolved={recentRunsMeta.unresolved}
         recentRunsTotal={recentRunsMeta.total}
         onRetryRecentRuns={retryRecentRuns}
+        recentRunsLimit={recentRunsLimit}
+        onShowAllRecentRuns={recentRunsLimit < RECENT_AGENT_RUNS_EXPANDED_LIMIT ? showAllRecentRuns : null}
         nowMs={Date.now()}
         error={error}
         onRetry={reload}

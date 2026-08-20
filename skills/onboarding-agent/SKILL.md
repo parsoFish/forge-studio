@@ -20,6 +20,10 @@ runtime:
   model: claude-sonnet-4-6
 budgets:
   maxTurns: 60
+  # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet; a
+  # real successful onboarding run cost $0.43 — $5 is generous headroom).
+  # Operator-overridable per kickoff. See docs/agent-cost-ceilings.md.
+  maxBudgetUsd: 5
 allowed-tools: [Read, Grep, Glob, Edit, Write, Bash]
 disallowed-tools: [MultiEdit, NotebookEdit, WebFetch, WebSearch]
 ---

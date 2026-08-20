@@ -32,13 +32,18 @@ import {
   type AgentRunStatus, type AgentFixStatus, type KbDrainStatus,
 } from './studio-client';
 
-/** `AgentRunStatus['state']` plus the one state this module adds: the poll
- *  gave up after `maxAttempts` while the run was still genuinely running. */
-export type PolledRunState = AgentRunStatus['state'] | 'timed-out';
-
-/** Same shape as `AgentRunStatus`, with `state` widened to admit
- *  `'timed-out'`. */
-export type PolledAgentRunStatus = Omit<AgentRunStatus, 'state'> & { state: PolledRunState };
+/**
+ * ⚑ W7-B5 (projects-29): `pollAgentRun` no longer OVERWRITES the run's state
+ * with a fabricated `'timed-out'` token when the poll budget runs out — the
+ * walkthrough caught the onboarding panel declaring a live run "timed-out"
+ * 50s before it finished successfully, because the POLL's exhaustion was
+ * being rendered as the RUN's state. Poll exhaustion is now its own flag
+ * (`pollExhausted`), the last REAL observed state is preserved, and
+ * `pollDisplayState` derives the visible 'timed-out' chip from the flag —
+ * so `data-run-status` stays honest ('running') while `data-poll-state`
+ * says the WATCHER gave up.
+ */
+export type PolledAgentRunStatus = AgentRunStatus & { pollExhausted?: boolean };
 
 /** Both original call sites polled every 2s. */
 export const DEFAULT_POLL_INTERVAL_MS = 2000;
@@ -185,7 +190,10 @@ export function pollAgentRun(runId: string, opts: PollAgentRunOptions): () => vo
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
     onUpdate: (s) => opts.onUpdate(s),
-    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, costUsd: 0, events: 0 }), state: 'timed-out' }),
+    // W7-B5 (projects-29): keep the last REAL state (a run last seen
+    // 'running' is still honestly 'running' — only the WATCHER stopped);
+    // `pollExhausted` is what the UI's 'timed-out' chip derives from.
+    onTimeout: (last) => opts.onUpdate({ ...(last ?? { ok: false, costUsd: 0, events: 0, state: 'unknown' }), pollExhausted: true }),
   });
 }
 
@@ -324,8 +332,12 @@ export function pollPreflightFix(projectId: string, runId: string, opts: PollPre
 
 export type PollDisplayState = 'watching' | 'timed-out' | 'terminal';
 
-export function pollDisplayState(state: { state: string; ok?: boolean; status?: number } | null | undefined): PollDisplayState | null {
+export function pollDisplayState(state: { state: string; ok?: boolean; status?: number; pollExhausted?: boolean } | null | undefined): PollDisplayState | null {
   if (!state) return null;
+  // W7-B5 (projects-29): poll exhaustion is a fact about the WATCHER, not
+  // the run — it wins the display slot (the Re-check affordance keys off
+  // it) while the run's own state stays whatever was last truly observed.
+  if (state.pollExhausted) return 'timed-out';
   // W7-FIX-A1 A1-10: a FAILED read (`ok:false` + 'unknown') is still being
   // watched (the poll continues) — the panel renders the read failure text
   // beside it, never a stopped run.
