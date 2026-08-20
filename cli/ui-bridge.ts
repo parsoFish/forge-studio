@@ -49,6 +49,8 @@ import {
   writeReviewComments,
   appendReviewComment,
   resolveComment,
+  editComment,
+  deleteComment,
   deriveVerdictFromComments,
   reviewCommentsPath,
   isSafeCycleId,
@@ -75,6 +77,7 @@ import {
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
+import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
@@ -128,7 +131,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions, communityRegistryPath } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath, discoverProjects } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -153,10 +156,14 @@ import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
+/** W7-B3 (community-08) — bound on the optional community-refresh kickoff
+ *  brief. Generous for a real "find me skills for X" ask, small enough that
+ *  a pasted document never rides into status.json/the turn prompt. */
+const COMMUNITY_REFRESH_BRIEF_MAX_CHARS = 2000;
 // R6-04 WI-4 — GET /api/agents/runs/<runId>'s `lines` field cap. A fixed
 // cap (not a proportion of the log size) so a runaway log is never served
 // whole; the TAIL (most-recently-written lines) is preserved when capping,
@@ -2377,6 +2384,42 @@ async function handleHttp(
     sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
     return;
   }
+  // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
+  // non-blocking comment has no resolve affordance, so delete is the only way
+  // to clear it; edit fixes a typo'd concern without losing its anchor id.
+  // Same lock + derive-on-every-mutate shape as append/resolve.
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/edit')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
+      const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
+      if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
+      if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
+        editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+      );
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/delete')) {
+    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
+    try {
+      const body = (await readJson(req)) as Record<string, unknown>;
+      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
+      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
   if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
     try {
@@ -3092,6 +3135,41 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * output, so a non-string `modelTier` — `0`, `null`, `{}` — is a real shape
  * that must fail closed with a 400 naming it, not a raw `TypeError`).
  */
+/**
+ * W7-B6 (sessions-kinds-02 / projects-15 / crosscut-21): a kickoff `project`
+ * must name a DISCOVERED project. Every session /start route used to accept
+ * any string — the containment guards tolerate a not-yet-existing segment
+ * (creation mode), so a typo minted `projects/<typo>/_<kind>/<sid>/` and the
+ * phantom then appeared on /projects as a real project card (and, for the
+ * architect, spawned a real agent turn against it). Returns the 404 reason,
+ * or `null` when the project is in the roster. The KB-anchored kinds
+ * (kb-cleanup's `.kb-<id>`, community-refresh's registry anchor) have their
+ * own anchor rules and never pass through this check.
+ */
+function unknownProjectReason(ctx: HttpContext, candidate: unknown): string | null {
+  // NON-STRING shapes and containment-rejected strings (traversal, "..",
+  // separators, control chars — everything `isSafeSegment` refuses) stay
+  // each route's own (pre-existing, PINNED) 400 contracts — they fall
+  // THROUGH this check so those guards keep firing exactly as before. But a
+  // string isSafeSegment ACCEPTS that still fails PROJECT_ID_RE is the
+  // creation-mode GAP (W7-B6 review F1): spaces, interior dots, leading
+  // "_"/"."/"-" all pass the containment guard, so "my project" or
+  // ".hidden" minted a phantom projects/<junk>/ (and, for the architect,
+  // spawned a paid agent turn) straight past the roster check — those are
+  // refused HERE. `invalidGenerationProjectReason` is the ONE project-id
+  // shape rule (length cap THEN charset, value interpolation bounded),
+  // reused rather than re-declared.
+  if (typeof candidate !== 'string') return null;
+  if (isSafeSegment(candidate)) {
+    const invalidShape = invalidGenerationProjectReason(candidate);
+    if (invalidShape !== null) return invalidShape;
+  } else {
+    return null; // the downstream containment guard's own pinned 400 fires
+  }
+  const known = discoverProjects(ctx.projectsRoot, ctx.forgeRoot).some((p) => p.id === candidate);
+  return known ? null : `unknown project "${candidate}" — not in the project roster (onboard it at /projects/new first)`;
+}
+
 function resolveKickoffModelTier(
   agentSlug: string,
   candidate: unknown,
@@ -3286,9 +3364,17 @@ async function handleArchitect(
   // session and kick off the first interview turn.
   if (method === 'POST' && url === '/api/architect/start') {
     try {
-      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string; modelTier?: unknown };
+      const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string; modelTier?: unknown; costCeilingUsd?: unknown };
       if (!body.project || !body.idea) {
         sendJson(res, 400, { error: 'project and idea are required' }, origin);
+        return true;
+      }
+      // W7-B6 (projects-15 / crosscut-21): the most expensive kickoff used to
+      // accept ANY project string — a typo created a phantom project dir AND
+      // spawned a real agent turn against it. Roster check BEFORE anything.
+      const unknownReason = unknownProjectReason(ctx, body.project);
+      if (unknownReason !== null) {
+        sendJson(res, 404, { error: unknownReason }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
@@ -3304,6 +3390,25 @@ async function handleArchitect(
       if (!modelTierResult.ok) {
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
+      }
+      // W7-B6 (projects-14 / sessions-kinds-03): an operator cost ceiling for
+      // the whole architect session — same validation envelope as the agent
+      // dispatch route; enforced by the runner at every turn start (a turn
+      // that would START past the ceiling is refused with the reason in the
+      // session's own error surface — never a silent overrun).
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return true;
+        }
+        costCeilingUsd = v;
       }
       const sessionId = newArchitectSessionId();
       // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
@@ -3324,6 +3429,7 @@ async function handleArchitect(
         idea: body.idea,
         updated_at: new Date().toISOString(),
         ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
       };
       // SEC-04 (bd forge-ebj) — route both leaf writes (`idea.md`, `status.json`)
       // through the guard (leaf included) rather than raw-appending onto the
@@ -3640,6 +3746,13 @@ async function handleInstructions(
       const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // W7-B6 (sessions-kinds-02): roster check — a typo'd project used to
+      // mkdir a phantom projects/<typo>/_instructions/<sid>/ forever.
+      const unknownInstrProject = unknownProjectReason(ctx, body.project);
+      if (unknownInstrProject !== null) {
+        sendJson(res, 404, { error: unknownInstrProject }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE the readAgentInstructionsFile read
@@ -4490,6 +4603,12 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; projectRepoPath?: string; modelTier?: unknown };
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
+      // W7-B6 (sessions-kinds-02): roster check — no phantom project dirs.
+      const unknownPbProject = unknownProjectReason(ctx, body.project);
+      if (unknownPbProject !== null) {
+        sendJson(res, 404, { error: unknownPbProject }, origin);
+        return true;
+      }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
       const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
@@ -4907,6 +5026,15 @@ async function handleDemoBuilder(
         return true;
       }
 
+      // W7-B2 (knowledge-05): a cleanup plan drafted against a KB a drain/
+      // consolidate is actively mutating is stale on arrival — refuse with
+      // the same reason the action group shows.
+      const kbActiveJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      if (kbActiveJob) {
+        sendJson(res, 409, { error: activeJobReason(kbActiveJob), runId: kbActiveJob.runId }, origin);
+        return true;
+      }
+
       // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
       // brain-maintenance SKILL.md envelope (the kb-cleanup session's agent —
       // see studio/session-kinds.yaml's `kb-cleanup` row).
@@ -4964,8 +5092,8 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/studio/community-refresh/start {modelTier?} — W6-CR-3, the
-  // community-refresh session's kickoff route. Unlike EVERY other
+  // POST /api/studio/community-refresh/start {modelTier?, brief?} — W6-CR-3,
+  // the community-refresh session's kickoff route. Unlike EVERY other
   // interactive kind's `/start` route, this one takes NO project/prompt at
   // all: the community registry is forge's own single, forge-wide file, not
   // a per-project artifact, so there is nothing for the operator to select.
@@ -4991,7 +5119,7 @@ async function handleDemoBuilder(
   // path against its own session-scoped `cwd`.
   if (method === 'POST' && url === '/api/studio/community-refresh/start') {
     try {
-      const body = (await readJson(req)) as { modelTier?: unknown };
+      const body = (await readJson(req)) as { modelTier?: unknown; brief?: unknown };
 
       // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
       // community-refresh SKILL.md envelope.
@@ -4999,6 +5127,29 @@ async function handleDemoBuilder(
       if (!modelTierResult.ok) {
         sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
+      }
+
+      // W7-B3 (community-08) — the optional operator brief: a targeted
+      // "find me skills for X" pass instead of a full refresh. Boundary
+      // validation: string only, non-blank after trim, bounded. A blank
+      // brief is a malformed request (never silently a full refresh the
+      // operator did not ask for); absence stores NO key at all.
+      let brief: string | undefined;
+      if (body.brief !== undefined) {
+        if (typeof body.brief !== 'string') {
+          sendJson(res, 400, { error: 'brief must be a string when present' }, origin);
+          return true;
+        }
+        const trimmed = body.brief.trim();
+        if (trimmed.length === 0) {
+          sendJson(res, 400, { error: 'brief must not be blank — omit it entirely for a full refresh' }, origin);
+          return true;
+        }
+        if (trimmed.length > COMMUNITY_REFRESH_BRIEF_MAX_CHARS) {
+          sendJson(res, 400, { error: `brief exceeds the ${COMMUNITY_REFRESH_BRIEF_MAX_CHARS}-character cap (got ${trimmed.length})` }, origin);
+          return true;
+        }
+        brief = trimmed;
       }
 
       const sessionId = newArchitectSessionId();
@@ -5023,6 +5174,7 @@ async function handleDemoBuilder(
           registryPath: communityRegistryPath(ctx.forgeRoot),
           hubsPath: join(ctx.forgeRoot, 'studio', 'community', 'hubs.yaml'),
           ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+          ...(brief !== undefined ? { brief } : {}),
         },
       );
       if (written === null) {
@@ -5052,6 +5204,12 @@ async function handleDemoBuilder(
       const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string; modelTier?: unknown };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // W7-B6 (sessions-kinds-02): roster check — no phantom project dirs.
+      const unknownDemoProject = unknownProjectReason(ctx, body.project);
+      if (unknownDemoProject !== null) {
+        sendJson(res, 404, { error: unknownDemoProject }, origin);
         return true;
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through

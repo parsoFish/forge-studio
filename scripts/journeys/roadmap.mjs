@@ -182,6 +182,32 @@ export const journey = defineJourney({
                   null, { timeout: 20000 },
                 );
               } catch { /* soft: continue to check tab */ }
+              // W7-B6 (operator note 11 / orch-02): the Start-work action group
+              // is the project page's PRIMARY action area — it must sit WITHIN
+              // the first viewport at 1440×1000 (the note's repro: an operator
+              // scrolling from the top never found the kick-off control at the
+              // very bottom). Assert geometry at exactly that viewport, then
+              // restore. Also: the retired bottom "Run a flow" select
+              // ([data-section="run-a-flow"]) must be GONE (projects-20).
+              {
+                const prior = page.viewportSize();
+                await page.setViewportSize({ width: 1440, height: 1000 });
+                await sleep(300);
+                const startWork = await page.evaluate(() => {
+                  const el = document.querySelector('[data-section="start-work"]');
+                  if (!el) return null;
+                  const r = el.getBoundingClientRect();
+                  return { top: r.top, bottom: r.bottom, hasPlan: el.querySelector('[data-action="start-work-plan"]') !== null, hasDevelop: el.querySelector('[data-action="start-work-develop"]') !== null, hasRunFlow: el.querySelector('[data-action="start-work-run-flow"]') !== null, hasArchitect: el.querySelector('[data-action="start-work-architect"]') !== null };
+                });
+                check(startWork !== null, 'W7-B6: [data-section="start-work"] renders on the project page');
+                check(startWork !== null && startWork.bottom <= 1000 && startWork.top >= 0,
+                  `W7-B6 (note 11): the Start-work group sits within the first viewport at 1440×1000 (top ${startWork?.top}, bottom ${startWork?.bottom})`);
+                check(startWork !== null && startWork.hasPlan && startWork.hasDevelop && startWork.hasRunFlow && startWork.hasArchitect,
+                  'W7-B6: Start-work carries all four actions (plan / develop / run-flow / architect)');
+                const inertSelectGone = await page.evaluate(() => document.querySelector('[data-section="run-a-flow"]') === null);
+                check(inertSelectGone, 'W7-B6 (projects-20): the inert bottom "Run a flow" select is gone');
+                if (prior) await page.setViewportSize(prior);
+              }
               // Click the Roadmap tab.
               const roadmapTab = page.locator('button[data-tab="roadmap"]');
               if (await roadmapTab.count() > 0) {
@@ -199,6 +225,23 @@ export const journey = defineJourney({
                 const initCount = await page.evaluate(() =>
                   document.querySelectorAll('[data-roadmap-canvas] [data-roadmap-node]').length);
                 check(initCount >= 1, `roadmap: ≥1 [data-roadmap-node] on the canvas (got ${initCount})`);
+                // W7-B6 (projects-18): "what needs me now" — the actionable
+                // list beside the canvas, with the same actions the drawer
+                // offers. Seeded state: INIT_PLAN is WI-less pending (a plan
+                // row), INIT_DEV is planned + ready (a start row).
+                const actionable = await page.evaluate((ids) => {
+                  const root = document.querySelector('[data-section="roadmap-actionable"]');
+                  if (!root) return null;
+                  return {
+                    count: Number(root.getAttribute('data-actionable-count') ?? '0'),
+                    planRow: root.querySelector(`[data-actionable-row="plan"][data-initiative-id="${ids.plan}"] [data-action="actionable-plan"]`) !== null,
+                    startRow: root.querySelector(`[data-actionable-row="start"][data-initiative-id="${ids.dev}"] [data-action="actionable-start"]`) !== null,
+                  };
+                }, { plan: INIT_PLAN, dev: INIT_DEV });
+                check(actionable !== null && actionable.count >= 2,
+                  `W7-B6 (projects-18): [data-section="roadmap-actionable"] lists the actionable initiatives (got ${JSON.stringify(actionable)})`);
+                check(actionable !== null && actionable.planRow, `W7-B6: the WI-less ${INIT_PLAN} gets a real Plan action in the list`);
+                check(actionable !== null && actionable.startRow, `W7-B6: the planned+ready ${INIT_DEV} gets a real Start-development action in the list`);
                 // W6-RV-2: the canvas still draws one edge per (prerequisite → dependent)
                 // pair (faint at rest, highlighted on selection) — a correctness proof
                 // the serpentine arcs carried ZERO data-* for, carried forward from R4-13.
@@ -242,6 +285,9 @@ export const journey = defineJourney({
                 check(probe === 'settled', `R4-15: the in-flight-session probe settles (got ${probe})`);
                 await page.locator('[data-action="plan-with-architect"]').first().click().catch(() => {});
                 await page.waitForSelector('[data-component="project-architect-entry"] [data-section="new-idea"]', { timeout: 8000 }).catch(() => {});
+                // W7-B6: the project field is a roster SELECT whose prefill
+                // lands once the roster fetch settles — wait for it.
+                await page.waitForSelector('[data-component="project-architect-entry"] [data-section="new-idea"][data-roster-state="ok"]', { timeout: 8000 }).catch(() => {});
                 const revealed = await page.evaluate((project) => {
                   const root = document.querySelector('[data-component="project-architect-entry"]');
                   if (!root) return null;

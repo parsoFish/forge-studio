@@ -80,22 +80,29 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
 import { KB_ID_RE } from '../orchestrator/studio/validate.ts';
+import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import { loadConfig, defaultConfigPath, resolveProjectsDir } from '../orchestrator/config.ts';
+import { loadKbDescriptor } from '../orchestrator/studio/kb-descriptor.ts';
 import {
   applyAutoFixesUntilStable,
   resolutionCounts,
   type AutoFixStableResult,
   type Finding,
 } from './brain-lint.ts';
-import { scopeFindingsToKb, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
-import { enqueueConsolidate } from './bridge-studio-kbs.ts';
+import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
+import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
+import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { isDryBridge } from './dry-bridge.ts';
 
@@ -115,6 +122,18 @@ export const KB_DRAIN_MAX_ROUNDS = 5;
  *  `opts.maxCostUsd`. */
 export const DEFAULT_KB_DRAIN_MAX_COST_USD = 2.0;
 
+/** W7-B2 (knowledge-14/15): while the loop is inside a long agent turn it
+ *  cannot persist a real transition, so it refreshes `status.json`'s
+ *  `updatedAt` on this cadence instead — a liveness heartbeat that lets the
+ *  UI poll distinguish "long turn in flight" from "bridge died mid-drain"
+ *  without any pid bookkeeping (the drain runs in-process on the bridge). */
+export const KB_DRAIN_HEARTBEAT_MS = 10_000;
+
+/** Staleness cutoff for a 'running' status — SINGLE-SOURCED in
+ *  cli/kb-job-state.ts (the active-job derivation shares it); re-exported
+ *  here for this module's own cancel route and its tests. */
+export { KB_DRAIN_STALE_MS };
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -126,6 +145,7 @@ export type KbDrainState =
   | 'no-progress'
   | 'round-cap'
   | 'cost-ceiling'
+  | 'cancelled'
   | 'failed';
 
 export type KbDrainPerFinding = {
@@ -136,6 +156,14 @@ export type KbDrainPerFinding = {
   message: string;
   tier: 'auto' | 'agent' | 'user';
   outcome: 'cleared' | 'not-cleared' | 'needs-you';
+  /** W7-B2 (knowledge-12): the round this entry was recorded in — perFinding
+   *  accumulates across rounds now, so a finished run keeps every round's
+   *  work instead of only the last round's list. */
+  round: number;
+  /** W7-B2 (orch-01): set when this finding's agent fix was GATED — the
+   *  proposed prose edit was reverted and parked as a kb-cleanup draft
+   *  session the operator approves with a diff. */
+  draftSession?: { id: string; project: string };
 };
 
 export type KbDrainStatus = {
@@ -146,6 +174,12 @@ export type KbDrainStatus = {
   costUsd: number;
   updatedAt: string;
   kbId: string;
+  /** W7-B2 (knowledge-14): when the run started — the UI's elapsed ticker. */
+  startedAt: string;
+  /** W7-B2 (knowledge-14): the run's own budget, so the panel can say what
+   *  the ceiling actually is instead of a hardcoded display constant. */
+  maxRounds: number;
+  maxCostUsd: number;
 };
 
 /** Same fresh-lint shape `runBrainLintFullFresh` (cli/kb-lint-summary.ts)
@@ -158,7 +192,7 @@ export type KbDrainLintFn = (forgeRoot: string) => { findings: Finding[] };
  *  injectable for the same reason as `KbDrainLintFn`. */
 export type KbDrainApplyAutoFixesFn = (
   forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean },
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean; extraFindings?: () => Finding[] },
 ) => AutoFixStableResult;
 
 /** Same input as `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), but
@@ -188,6 +222,9 @@ export type KbDrainOpts = {
   applyAutoFixes?: KbDrainApplyAutoFixesFn;
   runFixTurn?: KbDrainRunFixTurnFn;
   persistStatus?: KbDrainPersistFn;
+  /** Liveness-heartbeat cadence (W7-B2); 0 disables (unit tests). Defaults
+   *  to KB_DRAIN_HEARTBEAT_MS. */
+  heartbeatMs?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -283,8 +320,170 @@ function latestKbDrainRun(forgeRoot: string, kbId: string): { runId: string; sta
   return runs.reduce((a, b) => (a.status.updatedAt >= b.status.updatedAt ? a : b));
 }
 
-function initialKbDrainStatus(kbId: string): KbDrainStatus {
-  return { state: 'running', round: 0, counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0, kbId, updatedAt: new Date().toISOString() };
+// ---------------------------------------------------------------------------
+// KB run history (W7-B2, knowledge-20) — every drain / consolidate /
+// kb-cleanup run recorded for one KB, for the RecentRuns widget.
+// ---------------------------------------------------------------------------
+
+export type KbRunRow = {
+  kind: 'drain' | 'consolidate' | 'cleanup';
+  id: string;
+  /** ISO start stamp, or '' when genuinely unknown (never fabricated). */
+  when: string;
+  /** drain: KbDrainState · consolidate: running|done|failed · cleanup: the
+   *  session's own phase, verbatim. */
+  status: string;
+  /** null = the cost genuinely is not recorded (never a fabricated 0). */
+  costUsd: number | null;
+  detail: string | null;
+  /** cleanup only — the session's anchor project, for the deep link. */
+  project?: string;
+};
+
+/** One consolidate run's terminal facts, read from its own events.jsonl
+ *  through the SHARED readers in cli/kb-job-state.ts (W7-B2 code-review
+ *  round) — the same 'end'=done / 'error'=failed definition the active-job
+ *  gate uses, so the RecentRuns status and the gate can never disagree about
+ *  whether a run has finished. */
+function readConsolidateRunRow(forgeRoot: string, runId: string): { status: string; costUsd: number | null; when: string; detail: string | null } {
+  const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
+  let raw: string | null = null;
+  try {
+    // Probe and read on separate lines — the raw-fs-guarded allowlist keys
+    // one audited entry per (file, line, sink).
+    if (existsSync(evPath)) {
+      raw = readFileSync(evPath, 'utf8');
+    }
+  } catch {
+    raw = null;
+  }
+  const events = parseKbRunEvents(raw ?? '');
+  const terminal = terminalKbRunEvent(events);
+  const when = firstKbRunEventTs(events) ?? '';
+  let costUsd: number | null = null;
+  let detail: string | null = null;
+  if (terminal?.status === 'done') {
+    if (typeof terminal.event.cost_usd === 'number') costUsd = terminal.event.cost_usd;
+    const md = terminal.event.metadata ?? {};
+    if (typeof md['clearedCount'] === 'number' && typeof md['total'] === 'number') {
+      detail = `cleared ${md['clearedCount']}/${md['total']}`;
+    }
+  }
+  return { status: terminal?.status ?? 'running', costUsd, when, detail };
+}
+
+/** Best-effort ISO stamp from a session id shaped `2026-08-18T12-54-32-…`
+ *  (the bridge's own session-id convention). '' when it does not parse. */
+function whenFromSessionId(sessionId: string): string {
+  const m = sessionId.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
+}
+
+export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
+  const rows: KbRunRow[] = [];
+
+  // Drain runs — status.json is the record.
+  for (const { runId, status } of findKbDrainRuns(forgeRoot, kbId)) {
+    rows.push({
+      kind: 'drain',
+      id: runId,
+      when: status.startedAt ?? status.updatedAt ?? '',
+      status: status.state,
+      costUsd: typeof status.costUsd === 'number' ? status.costUsd : null,
+      detail: `round ${status.round}/${status.maxRounds ?? KB_DRAIN_MAX_ROUNDS} · auto ${status.counts?.auto ?? 0} · agent ${status.counts?.agent ?? 0} · you ${status.counts?.user ?? 0}`,
+    });
+  }
+
+  // Consolidate runs — `_brainfix-<kbId>-consolidate-*` top-level dirs
+  // (per-finding `__<i>` sub-runs excluded, mirroring the consolidate/active
+  // route's own exclusion in cli/bridge-studio-kbs.ts).
+  const logsRoot = join(forgeRoot, '_logs');
+  let entries: string[] = [];
+  try {
+    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
+  } catch {
+    entries = [];
+  }
+  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
+  for (const name of entries) {
+    if (!name.startsWith(consolidatePrefix)) continue;
+    const runId = name.slice('_brainfix-'.length);
+    if (runId.includes('__')) continue;
+    const r = readConsolidateRunRow(forgeRoot, runId);
+    rows.push({ kind: 'consolidate', id: runId, when: r.when, status: r.status, costUsd: r.costUsd, detail: r.detail });
+  }
+
+  // kb-cleanup sessions — anchored under the KB's own session project
+  // (binding.ref for a project KB, the `.kb-<id>` anchor otherwise).
+  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  let anchor = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
+  if (brainDir) {
+    try {
+      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
+      if (kb.binding.kind === 'project') anchor = kb.binding.ref;
+    } catch {
+      // fall through to the dot anchor
+    }
+  }
+  const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
+  const cleanupDir = join(projectsRoot, anchor, '_kb-cleanup');
+  let sids: string[] = [];
+  try {
+    sids = existsSync(cleanupDir) ? readdirSync(cleanupDir) : [];
+  } catch {
+    sids = [];
+  }
+  for (const sid of sids) {
+    let phase = 'unknown';
+    let sessionKbId: string | null = null;
+    try {
+      const parsed = JSON.parse(readFileSync(join(cleanupDir, sid, 'status.json'), 'utf8')) as { phase?: unknown; kb_id?: unknown };
+      if (typeof parsed.phase === 'string') phase = parsed.phase;
+      if (typeof parsed.kb_id === 'string') sessionKbId = parsed.kb_id;
+    } catch {
+      continue;
+    }
+    // A project anchor can host cleanup sessions for a DIFFERENT kb id
+    // (project-bound KBs share the project dir) — filter on the session's
+    // own kb_id when it carries one.
+    if (sessionKbId !== null && sessionKbId !== kbId) continue;
+    rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
+  }
+
+  return rows.sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+}
+
+function initialKbDrainStatus(
+  kbId: string,
+  maxRounds: number = KB_DRAIN_MAX_ROUNDS,
+  maxCostUsd: number = DEFAULT_KB_DRAIN_MAX_COST_USD,
+): KbDrainStatus {
+  const now = new Date().toISOString();
+  return {
+    state: 'running', round: 0, counts: { auto: 0, agent: 0, user: 0 }, perFinding: [],
+    costUsd: 0, kbId, updatedAt: now, startedAt: now, maxRounds, maxCostUsd,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cancel flag (W7-B2, knowledge-14)
+// ---------------------------------------------------------------------------
+
+function kbDrainCancelPath(forgeRoot: string, runId: string): string {
+  return join(kbDrainLogDir(forgeRoot, runId), 'cancel.json');
+}
+
+/** Ask a live drain run to stop after its current turn. File-based (not
+ *  in-memory) so it works across the enqueueConsolidate queue boundary and
+ *  survives a bridge restart racing the loop. */
+export function requestKbDrainCancel(forgeRoot: string, runId: string): void {
+  mkdirSync(kbDrainLogDir(forgeRoot, runId), { recursive: true });
+  writeFileSync(kbDrainCancelPath(forgeRoot, runId), JSON.stringify({ requestedAt: new Date().toISOString() }) + '\n', 'utf8');
+}
+
+export function isKbDrainCancelRequested(forgeRoot: string, runId: string): boolean {
+  return existsSync(kbDrainCancelPath(forgeRoot, runId));
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +542,12 @@ async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
 // perFinding builders
 // ---------------------------------------------------------------------------
 
-function autoAppliedEntry(item: AutoFixStableResult['applied'][number]): KbDrainPerFinding {
-  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.detail, tier: 'auto', outcome: 'cleared' };
+function autoAppliedEntry(item: AutoFixStableResult['applied'][number], round: number): KbDrainPerFinding {
+  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.detail, tier: 'auto', outcome: 'cleared', round };
 }
 
-function autoSkippedEntry(item: AutoFixStableResult['skipped'][number]): KbDrainPerFinding {
-  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.reason, tier: 'auto', outcome: 'not-cleared' };
+function autoSkippedEntry(item: AutoFixStableResult['skipped'][number], round: number): KbDrainPerFinding {
+  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.reason, tier: 'auto', outcome: 'not-cleared', round };
 }
 
 function findingKey(f: Finding): string {
@@ -365,6 +564,132 @@ function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   if (a.size !== b.size) return false;
   for (const k of a) if (!b.has(k)) return false;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Structural-only gate helpers (W7-B2, orch-01)
+// ---------------------------------------------------------------------------
+
+/** Restore every gated change to its pre-turn content — a created file is
+ *  removed, an edited/deleted file is written back byte-for-byte. Paths are
+ *  snapshot-derived (our OWN walk of the trusted `brainDir`), never
+ *  request/agent text. */
+function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
+  for (const c of changes) {
+    const abs = join(brainDir, c.relPath);
+    if (c.before === null) {
+      rmSync(abs, { force: true });
+      continue;
+    }
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, c.before, 'utf8');
+  }
+}
+
+function newDraftSessionId(): string {
+  const iso = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  return `${iso}-${randomBytes(4).toString('hex')}`;
+}
+
+/**
+ * Park a gated (prose-touching) agent fix as a kb-cleanup DRAFT session the
+ * operator approves with a diff — the EXISTING kb-cleanup session kind
+ * (studio/session-kinds.yaml), minted directly in `awaiting-approval` (no
+ * agent turn needed; the drain already holds the proposal). `status.json`
+ * carries `draft_apply` — `approveKbCleanup` (cli/bridge-studio-kbs.ts)
+ * applies exactly those drafts (contained to this KB's own brain dir)
+ * instead of running a consolidate. Returns null (and the caller records an
+ * honest not-cleared) when the session cannot be written — never a throw
+ * that would fail the whole drain over a parking problem.
+ */
+function mintKbCleanupDraftSession(
+  forgeRoot: string,
+  kbId: string,
+  brainDir: string,
+  finding: { check: string; kind: string; file: string; message: string },
+  proseChanges: readonly KbEditChange[],
+  runId: string,
+  round: number,
+): { id: string; project: string } | null {
+  try {
+    let binding: unknown = { kind: 'unique' };
+    let project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
+    try {
+      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
+      binding = kb.binding;
+      if (kb.binding.kind === 'project') project = kb.binding.ref;
+    } catch {
+      // No/unparseable kb.yaml — the dot-anchor fallback above still works.
+    }
+    const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
+    // The guarded write realpath-walks projectsRoot itself — which may not
+    // exist yet on a fresh install (or an isolated test root).
+    mkdirSync(projectsRoot, { recursive: true });
+    const sessionId = newDraftSessionId();
+
+    const draftApply: Array<{ file: string; draft: string }> = [];
+    const diffs: string[] = [];
+    const draftBodies: string[] = [];
+    for (const c of proseChanges) {
+      if (c.after === null) continue; // a deletion is refused outright, never drafted
+      const relFromRoot = relative(forgeRoot, join(brainDir, c.relPath));
+      draftApply.push({ file: relFromRoot, draft: `drafts/${draftBodies.length}.md` });
+      diffs.push(buildUnifiedDiff(relFromRoot, c.before ?? '', c.after));
+      draftBodies.push(c.after);
+    }
+    if (draftApply.length === 0) return null;
+
+    const written = guardedWriteSessionStatus(projectsRoot, [project, '_kb-cleanup', sessionId], {
+      session_id: sessionId,
+      project,
+      phase: 'awaiting-approval',
+      kb_id: kbId,
+      kb_binding: binding,
+      findings: [{ kind: finding.kind, check: finding.check, file: finding.file, message: finding.message }],
+      draft_apply: draftApply,
+      origin: 'kb-drain',
+      drain_run_id: runId,
+      drain_round: round,
+    });
+    if (written === null) return null;
+
+    // Session dir now exists (guardedWriteSessionStatus created it); drafts/
+    // and plan/ are its own server-minted children. Every write goes through
+    // guardedWriteFile — the LEAF included (raw-fs-guarded's leaf-append
+    // rule), which also creates the parent dir.
+    let draftsOk = true;
+    draftBodies.forEach((body, i) => {
+      const p = guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'drafts', `${i}.md`], body);
+      if (p === null) draftsOk = false;
+    });
+    if (!draftsOk) return null;
+
+    const plan = [
+      '# Drain-gated prose edit',
+      '',
+      'Drain-to-green applies STRUCTURAL fixes only (frontmatter, links, index',
+      "pages). The brain-fix agent's proposed fix for the finding below rewrites",
+      'theme PROSE, so it is parked here for your approval instead of landing',
+      'silently (wave-7 orch-01).',
+      '',
+      `Finding: [${finding.kind}] ${relative(forgeRoot, finding.file)} — ${finding.message}`,
+      `Drain run: ${runId} (round ${round})`,
+      '',
+      ...draftApply.map((d) => `- [${finding.kind}] ${d.file} — drain-gated prose edit awaiting approval (approve replaces the file with ${d.draft})`),
+      '',
+      'Approving this session applies the draft content below verbatim.',
+      '',
+      '```diff',
+      diffs.join('\n\n'),
+      '```',
+      '',
+    ].join('\n');
+    if (guardedWriteFile(projectsRoot, [project, '_kb-cleanup', sessionId, 'plan', 'cleanup-plan.md'], plan) === null) return null;
+
+    return { id: sessionId, project };
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -410,6 +735,7 @@ export async function runKbDrain(
   const persistStatus = opts.persistStatus ?? writeKbDrainStatus;
   const maxRounds = opts.maxRounds ?? KB_DRAIN_MAX_ROUNDS;
   const maxCostUsd = opts.maxCostUsd ?? DEFAULT_KB_DRAIN_MAX_COST_USD;
+  const heartbeatMs = opts.heartbeatMs ?? KB_DRAIN_HEARTBEAT_MS;
 
   const cycleId = `_kb-drain-${runId}`;
 
@@ -425,7 +751,8 @@ export async function runKbDrain(
   // poller could ever resolve out of. `status` is seeded here, BEFORE the
   // try, so the catch block always has a real value to fall back to even if
   // the very first persist inside the try never completed.
-  let status: KbDrainStatus = initialKbDrainStatus(kbId);
+  let status: KbDrainStatus = initialKbDrainStatus(kbId, maxRounds, maxCostUsd);
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   try {
     const logger = createLogger(cycleId, join(forgeRoot, '_logs'));
@@ -433,6 +760,22 @@ export async function runKbDrain(
     const persist = (s: KbDrainStatus): KbDrainStatus => {
       persistStatus(forgeRoot, runId, s);
       return s;
+    };
+
+    /** W7-B2 (knowledge-01): renderable per-transition progress events onto
+     *  the drain's OWN cycle log — the ActivityLog drawer tails these
+     *  (`metadata.kind: 'progress'`, forge-ui/lib/activity-log-view.ts). */
+    const emitProgress = (message: string, metadata: Record<string, unknown> = {}): void => {
+      logger.emit({
+        initiative_id: cycleId,
+        phase: 'reflection',
+        skill: 'kb-drain',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message,
+        metadata: { kind: 'progress', kbId, runId, ...metadata },
+      });
     };
 
     logger.emit({
@@ -448,11 +791,33 @@ export async function runKbDrain(
 
     status = persist(status);
 
+    // W7-B2 (knowledge-14/15): liveness heartbeat — refresh updatedAt while a
+    // long agent turn holds the loop, so pollers (and the cancel route's
+    // stale check) can tell "in flight" from "dead". Guarded on state so a
+    // late tick can never resurrect a terminal status; unref'd so it never
+    // keeps the process alive.
+    if (heartbeatMs > 0) {
+      heartbeat = setInterval(() => {
+        if (status.state !== 'running') return;
+        try {
+          status = persist({ ...status, updatedAt: new Date().toISOString() });
+        } catch {
+          // best-effort — the next real transition persist is the signal.
+        }
+      }, heartbeatMs);
+      heartbeat.unref?.();
+    }
+
     const brainDir = resolveKbBrainDir(forgeRoot, kbId);
     if (!brainDir) {
       throw new Error(`runKbDrain: kb id "${kbId}" does not resolve to any real brain directory`);
     }
     const inKb = (f: Finding): boolean => findingUnderDir(forgeRoot, brainDir, f);
+    // W7-B2 (knowledge-10): ONE lint lens — the same full-scan ∪ own-theme
+    // union buildKbHealth counts from, so the drain can never report green
+    // while the health readout on the same screen still counts flags.
+    const lintKb = (): Finding[] => collectKbFindings(forgeRoot, kbId, lint(forgeRoot).findings);
+    const ownLens = ownThemeFindingsLens(forgeRoot, kbId);
 
     let costUsd = 0;
     let round = 0;
@@ -463,88 +828,172 @@ export async function runKbDrain(
     // fires because SOMETHING genuinely changes every single round — but
     // also never converges, without waiting out the full ROUND-CAP budget.
     const everSeenAfterKeys = new Set<string>();
+    // W7-B2 (knowledge-12): perFinding accumulates across rounds — every
+    // round's work survives to the terminal status, tagged by round.
+    const completed: KbDrainPerFinding[] = [];
+    // W7-B2 (orch-01): findings whose proposed fix was gated into a draft
+    // session this run — never re-dispatched (a second turn would just
+    // propose the same prose edit again).
+    const draftedKeys = new Map<string, { id: string; project: string }>();
+
+    const now = (): string => new Date().toISOString();
+    const base = { kbId, startedAt: status.startedAt, maxRounds, maxCostUsd };
+    const cancelRequested = (): boolean => isKbDrainCancelRequested(forgeRoot, runId);
 
     for (;;) {
+      // Cancel is honored BEFORE any work, not only between agent turns: a run
+      // cancelled while it was still QUEUED (the cancel route's forced branch
+      // stakes the flag for exactly this case) must terminate without touching
+      // a single file — no auto-fix pass, no agent turn.
+      if (cancelRequested()) {
+        emitProgress('kb-drain.cancelled', { round });
+        status = persist({ ...base, state: 'cancelled', round, counts: status.counts, perFinding: [...completed], costUsd, updatedAt: now() });
+        break;
+      }
       round += 1;
+      // Round visible from its START (knowledge-11: no blank round-0 screen).
+      emitProgress(`kb-drain.round-start (round ${round}/${maxRounds})`, { round, maxRounds });
+      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed], costUsd, updatedAt: now() });
 
-      const before = scopeFindingsToKb(forgeRoot, kbId, lint(forgeRoot).findings);
+      const before = lintKb();
       const beforeKeys = progressKeySet(before);
 
-      const autoResult = applyAutoFixes(forgeRoot, { filter: inKb });
+      const autoResult = applyAutoFixes(forgeRoot, { filter: inKb, extraFindings: ownLens });
+      const roundRows: KbDrainPerFinding[] = [
+        ...autoResult.applied.map((x) => autoAppliedEntry(x, round)),
+        ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
+      ];
+      emitProgress(`kb-drain.auto (applied ${autoResult.applied.length}, skipped ${autoResult.skipped.length})`, {
+        round, applied: autoResult.applied.length, skipped: autoResult.skipped.length,
+      });
+      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...roundRows], costUsd, updatedAt: now() });
+
       const agentResidual = autoResult.remaining.filter(
         (f): f is Finding & { check: string; kind: string } =>
-          f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
+          f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string'
+          && !draftedKeys.has(findingKey(f)),
       );
 
-      const perFinding: KbDrainPerFinding[] = [
-        ...autoResult.applied.map(autoAppliedEntry),
-        ...autoResult.skipped.map(autoSkippedEntry),
-      ];
-
       let costCeilingHit = false;
+      let cancelledMidRound = cancelRequested();
       let turnIndex = 0;
       for (const f of agentResidual) {
+        if (cancelledMidRound) break;
         const subRunId = `${runId}__r${round}__${turnIndex}`;
         turnIndex += 1;
-        let outcome: 'cleared' | 'not-cleared' = 'not-cleared';
-        {
-          try {
-            const result = await runFixTurn({
-              runId: subRunId,
-              kbId,
-              file: f.file,
-              check: f.check,
-              kind: f.kind,
-              fixHint: f.fixHint,
-              message: f.message,
-              forgeRoot,
+        emitProgress(`kb-drain.turn-start (${basename(f.file)} · ${f.check} · ${turnIndex}/${agentResidual.length})`, {
+          round, file: f.file, check: f.check, kind: f.kind, turn: turnIndex, turns: agentResidual.length,
+        });
+        // orch-01 STRUCTURAL GATE — snapshot before the turn, classify after.
+        const snapshot = snapshotKbFiles(brainDir);
+        let outcome: KbDrainPerFinding['outcome'] = 'not-cleared';
+        let draftSession: { id: string; project: string } | undefined;
+        try {
+          const result = await runFixTurn({
+            runId: subRunId,
+            kbId,
+            file: f.file,
+            check: f.check,
+            kind: f.kind,
+            fixHint: f.fixHint,
+            message: f.message,
+            forgeRoot,
+          });
+          costUsd += result.costUsd;
+          outcome = result.cleared ? 'cleared' : 'not-cleared';
+        } catch {
+          // One turn failing must not abort the rest of the round's queue —
+          // mirrors runBrainConsolidateNow's per-group catch.
+        }
+        const proseChanges = diffKbSnapshot(brainDir, snapshot).filter((c) => c.klass === 'prose');
+        if (proseChanges.length > 0) {
+          // The prose edit NEVER lands directly: restore, then park the
+          // proposal as an operator-approved kb-cleanup draft.
+          revertProseChanges(brainDir, proseChanges);
+          const minted = mintKbCleanupDraftSession(forgeRoot, kbId, brainDir, f, proseChanges, runId, round);
+          if (minted) {
+            draftSession = minted;
+            draftedKeys.set(findingKey(f), minted);
+            outcome = 'needs-you';
+            emitProgress(`kb-drain.gated (${basename(f.file)} · prose edit parked as draft ${minted.id})`, {
+              round, file: f.file, check: f.check, draftSessionId: minted.id, draftProject: minted.project,
             });
-            costUsd += result.costUsd;
-            outcome = result.cleared ? 'cleared' : 'not-cleared';
-          } catch {
-            // One turn failing must not abort the rest of the round's queue —
-            // mirrors runBrainConsolidateNow's per-group catch.
+          } else {
+            outcome = 'not-cleared';
+            emitProgress(`kb-drain.gated (${basename(f.file)} · prose edit reverted; draft session could NOT be written)`, {
+              round, file: f.file, check: f.check,
+            });
           }
         }
-        perFinding.push({ key: findingKey(f), check: f.check, kind: f.kind, file: f.file, message: f.message, tier: 'agent', outcome });
+        roundRows.push({
+          key: findingKey(f), check: f.check, kind: f.kind, file: f.file, message: f.message,
+          tier: 'agent', outcome, round, ...(draftSession ? { draftSession } : {}),
+        });
+        emitProgress(`kb-drain.turn-end (${basename(f.file)} · ${outcome} · $${costUsd.toFixed(2)})`, {
+          round, file: f.file, check: f.check, outcome, costUsd,
+        });
+        status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...roundRows], costUsd, updatedAt: now() });
         if (costUsd >= maxCostUsd) {
           costCeilingHit = true;
           break;
         }
+        if (cancelRequested()) {
+          cancelledMidRound = true;
+          break;
+        }
       }
 
-      const after = scopeFindingsToKb(forgeRoot, kbId, lint(forgeRoot).findings);
+      const after = lintKb();
       const counts = resolutionCounts(after);
-      for (const f of after) {
-        if (f.resolution !== 'user') continue;
-        perFinding.push({ key: findingKey(f), check: f.check ?? '', kind: f.kind ?? '', file: f.file, message: f.message, tier: 'user', outcome: 'needs-you' });
+      completed.push(...roundRows);
+      const withUserRows = (): KbDrainPerFinding[] => {
+        const rows = [...completed];
+        for (const f of after) {
+          if (f.resolution !== 'user') continue;
+          rows.push({ key: findingKey(f), check: f.check ?? '', kind: f.kind ?? '', file: f.file, message: f.message, tier: 'user', outcome: 'needs-you', round });
+        }
+        return rows;
+      };
+
+      if (cancelledMidRound || cancelRequested()) {
+        emitProgress('kb-drain.cancelled', { round });
+        status = persist({ ...base, state: 'cancelled', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
+        break;
       }
 
       if (costCeilingHit) {
-        status = persist({ state: 'cost-ceiling', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
+        status = persist({ ...base, state: 'cost-ceiling', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
+        break;
+      }
+
+      // orch-01: every remaining agent finding is parked as a draft → the
+      // run is honestly waiting on the OPERATOR, not on more rounds.
+      const remainingAgent = after.filter((f) => f.resolution === 'agent');
+      if (counts.auto === 0 && remainingAgent.length > 0 && remainingAgent.every((f) => draftedKeys.has(findingKey(f)))) {
+        status = persist({ ...base, state: 'needs-you', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
         break;
       }
 
       if (counts.auto === 0 && counts.agent === 0) {
         const terminalState: KbDrainState = counts.user === 0 ? 'green' : 'needs-you';
-        status = persist({ state: terminalState, round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
+        status = persist({ ...base, state: terminalState, round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
         break;
       }
 
       const afterKeys = progressKeySet(after);
       const oscillating = afterKeys.size > 0 && [...afterKeys].every((k) => everSeenAfterKeys.has(k));
       if (setsEqual(beforeKeys, afterKeys) || oscillating) {
-        status = persist({ state: 'no-progress', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
+        status = persist({ ...base, state: 'no-progress', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
         break;
       }
       for (const k of afterKeys) everSeenAfterKeys.add(k);
 
       if (round >= maxRounds) {
-        status = persist({ state: 'round-cap', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
+        status = persist({ ...base, state: 'round-cap', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
         break;
       }
 
-      status = persist({ state: 'running', round, counts, perFinding, costUsd, kbId, updatedAt: new Date().toISOString() });
+      status = persist({ ...base, state: 'running', round, counts, perFinding: [...completed], costUsd, updatedAt: now() });
     }
 
     logger.emit({
@@ -597,6 +1046,8 @@ export async function runKbDrain(
       throw persistErr;
     }
     return failedStatus;
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
   }
 }
 
@@ -621,6 +1072,89 @@ export async function handleStudioKbDrainRoutes(
 ): Promise<boolean> {
   const url = pathOnly(rawUrl);
   const origin = allowedOrigin(req);
+
+  // ---- POST /api/studio/kbs/:id/drain/cancel (W7-B2, knowledge-14) --------
+  // Cancels the ACTIVE run for this kb. A live loop (fresh heartbeat) gets a
+  // cancel-flag it honors between turns (`mode:'requested'`); a run whose
+  // status stopped moving past KB_DRAIN_STALE_MS is DEAD (the in-process
+  // loop is gone — e.g. the bridge restarted mid-drain) and is terminated
+  // directly (`mode:'forced'`), so a wedged 'running' status is always
+  // resolvable from the UI.
+  const cancelMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/drain\/cancel$/);
+  if (cancelMatch && method === 'POST') {
+    try {
+      const kbId = decodeURIComponent(cancelMatch[1]);
+      if (!KB_ID_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
+      if (!active) {
+        sendJson(res, 409, { error: 'no active drain run for this kb' }, origin);
+        return true;
+      }
+      const updatedMs = new Date(active.status.updatedAt).getTime();
+      const stale = !Number.isFinite(updatedMs) || Date.now() - updatedMs > KB_DRAIN_STALE_MS;
+      if (stale) {
+        // BOTH signals, always (W7-B2 code-review round). A stale status is
+        // NOT proof the loop is dead: a drain that sat QUEUED behind another
+        // job on the same per-kbId `enqueueConsolidate` lock never heartbeats
+        // either, so it reads stale while being perfectly alive. Writing only
+        // the terminal status let such a run start late, re-persist 'running'
+        // over the operator's 'cancelled', and execute every agent turn to a
+        // real terminal AFTER the operator was told it had been terminated.
+        // The FLAG is what a late start actually observes (`cancelRequested`).
+        requestKbDrainCancel(ctx.forgeRoot, active.runId);
+        writeKbDrainStatus(ctx.forgeRoot, active.runId, { ...active.status, state: 'cancelled', updatedAt: new Date().toISOString() });
+        sendJson(res, 200, { ok: true, runId: active.runId, mode: 'forced' }, origin);
+        return true;
+      }
+      requestKbDrainCancel(ctx.forgeRoot, active.runId);
+      sendJson(res, 200, { ok: true, runId: active.runId, mode: 'requested' }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- GET /api/studio/kbs/:id/active-job (W7-B2, knowledge-05) -----------
+  // The KB-level "a job is running" fact the action group gates on — the
+  // SAME derivation every mutating route 409s with (kb-job-state.ts).
+  const activeJobMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/active-job$/);
+  if (activeJobMatch && method === 'GET') {
+    try {
+      const kbId = decodeURIComponent(activeJobMatch[1]);
+      if (!KB_ID_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      const job = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      sendJson(res, 200, { ok: true, job, ...(job ? { reason: activeJobReason(job) } : {}) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- GET /api/studio/kbs/:id/runs (W7-B2, knowledge-20) ------------------
+  // Every drain / consolidate / kb-cleanup run recorded for this KB — the
+  // data source for the KB screen's RecentRuns widget. All names are
+  // SERVER-enumerated directory listings (same class as findKbDrainRuns
+  // above); the kbId only ever selects among them, never builds a path tail.
+  const runsMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/runs$/);
+  if (runsMatch && method === 'GET') {
+    try {
+      const kbId = decodeURIComponent(runsMatch[1]);
+      if (!KB_ID_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      sendJson(res, 200, { ok: true, runs: listKbRuns(ctx.forgeRoot, kbId) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
 
   // ---- GET /api/studio/kbs/:id/drain/:runId — must match BEFORE the bare
   // /drain routes below (more specific path). --------------------------------
@@ -669,6 +1203,14 @@ export async function handleStudioKbDrainRoutes(
         sendJson(res, 409, { error: 'a drain run is already active for this kb', runId: active.runId }, origin);
         return true;
       }
+      // W7-B2 (knowledge-05): a live CONSOLIDATE also blocks a new drain —
+      // queueing behind it invisibly is exactly the confusion the action
+      // group exists to end; the 409 carries the same reason the UI shows.
+      const otherJob = deriveKbActiveJob(ctx.forgeRoot, kbId);
+      if (otherJob && otherJob.kind !== 'drain') {
+        sendJson(res, 409, { error: activeJobReason(otherJob), runId: otherJob.runId }, origin);
+        return true;
+      }
 
       // Server-minted, kbId-prefixed — mirrors consolidate's own
       // `${kbId}-consolidate-${Date.now().toString(36)}` runId shape
@@ -682,6 +1224,22 @@ export async function handleStudioKbDrainRoutes(
       // this same snapshot as its own first step, so a caller that invokes it
       // directly (unit tests) still gets a real initial status.
       writeKbDrainStatus(ctx.forgeRoot, runId, initialKbDrainStatus(kbId));
+
+      // W7-B2 (knowledge-13): create the run's event log SYNCHRONOUSLY too —
+      // the UI's one-shot event snapshot fetch fires the instant this route
+      // returns a runId, but the queued job (createLogger inside runKbDrain)
+      // only writes events.jsonl after the dispatch defer + any queue
+      // backlog. Without this the fetch 404s and never retries.
+      createLogger(`_kb-drain-${runId}`, join(ctx.forgeRoot, '_logs')).emit({
+        initiative_id: `_kb-drain-${runId}`,
+        phase: 'reflection',
+        skill: 'kb-drain',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'kb-drain.queued',
+        metadata: { kind: 'progress', kbId, runId },
+      });
 
       enqueueConsolidate(kbId, async () => {
         await runKbDrain(ctx.forgeRoot, kbId, runId);

@@ -117,10 +117,15 @@ export type KickoffKindSpec = {
   /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
    *  route takes neither. */
   selector: 'project' | 'kb' | 'none';
-  /** Only 'authoring' takes a free-text prompt — its `/start` body requires
-   *  one. */
+  /** A free-text prompt field. `authoring`'s `/start` body REQUIRES one
+   *  (`promptRequired: true`); `community-refresh` takes an OPTIONAL brief
+   *  (W7-B3, community-08 — empty means "full refresh", text means a
+   *  targeted "find me skills for X" pass). Every other kind's `/start`
+   *  route needs no operator prose at kickoff (instructions/demo take their
+   *  brief on a LATER turn, via their own panel's briefing step). */
   promptLabel?: string;
   promptPlaceholder?: string;
+  promptRequired?: boolean;
 };
 
 /** The ONE lookup for a kind's kickoff spec — `Object.hasOwn`-guarded
@@ -157,6 +162,7 @@ export const KICKOFF_SPECS: Record<string, KickoffKindSpec> = {
     selector: 'project',
     promptLabel: 'Describe what to build',
     promptPlaceholder: 'Describe what it should do…',
+    promptRequired: true,
   },
   'project-brain': {
     blurb: 'Seeds a per-project brain — explores the repo, stages starter themes, and waits for your review before committing them.',
@@ -169,5 +175,10 @@ export const KICKOFF_SPECS: Record<string, KickoffKindSpec> = {
     agentSlug: 'community-refresh',
     artifactLabel: 'Registry draft',
     selector: 'none',
+    // W7-B3 (community-08): the OPTIONAL focus brief — empty means a full
+    // refresh; text becomes the targeted "find me skills for X" pass.
+    promptLabel: 'Focus (optional)',
+    promptPlaceholder: 'e.g. find me skills for terraform drift detection — leave empty for a full refresh',
+    promptRequired: false,
   },
 };

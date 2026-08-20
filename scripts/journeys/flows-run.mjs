@@ -46,9 +46,12 @@ export const journey = defineJourney({
               await page.goto(watch.uiUrl + '/architect/new', { waitUntil: 'domcontentloaded' });
               await page.waitForSelector('main[data-page="architect-new"][data-page-ready="true"]', { timeout: 30000 });
               await page.waitForSelector('[data-section="new-idea"]', { timeout: 10000 });
-              await caption(page, "One idea. One field. Type it like you'd tell a colleague.");
+              // W7-B6 (crosscut-21): the project field is a SELECT over real
+              // roster ids — wait for the roster to land, then pick, never type.
+              await page.waitForSelector('[data-section="new-idea"][data-roster-state="ok"]', { timeout: 10000 });
+              await caption(page, "One idea. Pick the project, type it like you'd tell a colleague.");
               await sleep(ACT);
-              await page.locator('[data-section="new-idea"] [data-field="project"]').fill(PROJECT);
+              await page.locator('[data-section="new-idea"] [data-field="project"]').selectOption(PROJECT);
               await page.locator('[data-section="new-idea"] [data-field="idea"]').click();
               await page.locator('[data-section="new-idea"] [data-field="idea"]').pressSequentially(IDEA, { delay: 18 });
               await sleep(THINK);
@@ -248,7 +251,9 @@ export const journey = defineJourney({
                   () => document.querySelector('main[data-page="architect-new"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },
                 ).catch(() => {});
-                await caption(p, 'Where it starts — the new-idea box: a project, and what you want built.');
+                await caption(p, 'Where it starts — the new-idea box: a project picker, tier + ceiling, and what you want built.');
+                // W7-B6: the project field is a roster SELECT — pick, don't type.
+                await p.waitForSelector('[data-section="new-idea"][data-roster-state="ok"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-section="new-idea"] [data-field="project"]').scrollIntoViewIfNeeded().catch(() => {});
                 await p.locator('[data-section="new-idea"] [data-field="project"]').hover().catch(() => {});
                 await sleep(THINK);
@@ -1025,6 +1030,21 @@ export const journey = defineJourney({
               await ac2.locator('[data-action="add-comment"]').click();
               await page.waitForSelector('[data-demo-region="ac-2"] [data-comment-id]', { timeout: 8000 });
               check(await ac2.locator('[data-comment-id]').count() > 0, 'the anchored comment renders under its region');
+              // W7-B7 (artifact-plan-15): every authored comment is correctable
+              // and clearable — edit + delete controls render on the row (a
+              // non-blocking comment's ONLY clearing affordance is delete).
+              check(await ac2.locator('[data-action="edit-comment"]').count() > 0, 'W7-B7: the authored comment carries an edit control');
+              check(await ac2.locator('[data-action="delete-comment"]').count() > 0, 'W7-B7: the authored comment carries a delete control');
+              // W7-B7 (artifact-plan-31): the review-shape summary counts the
+              // blocker and offers a jump — the wall is legible before scrolling.
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="review-summary"]')?.getAttribute('data-blocking-count') === '1',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              check(
+                await page.locator('[data-section="review-summary"][data-blocking-count="1"]').count() > 0,
+                'W7-B7: the review-summary strip counts the one blocking comment',
+              );
               // The verdict is DERIVED — a blocking comment flips the bar to send-back.
               await page.waitForFunction(
                 () => document.querySelector('[data-component="verdict-form"]')?.getAttribute('data-form-kind') === 'send-back',

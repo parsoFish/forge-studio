@@ -67,11 +67,33 @@ export function resolveFlowRunDetailFromResponse(status: number, body: unknown):
   return { kind: 'unresolved' };
 }
 
-/** Fetch + resolve one runId's flow run-detail. See header for the sentinel-0 convention. */
-export async function fetchFlowRunDetail(id: string): Promise<FlowRunDetailResolution> {
+/**
+ * Fetch + resolve one runId's flow run-detail. See header for the sentinel-0
+ * convention.
+ *
+ * W7-B7 (bd forge-2w4 — the 3rd home of the 2-state-resolver class): the
+ * wrapper used to call `res.json()` BEFORE the status ever reached the
+ * resolver, so a 404 with a non-JSON body — the ordinary shape of a real
+ * 404 — threw during parse and resolved `unresolved` instead of the
+ * authoritative `not-found`. Status decides FIRST here too, matching the
+ * pure resolver's own contract: a 404 short-circuits without touching the
+ * body; only then is the body parsed (its own failure degrading to `null`,
+ * which the resolver maps honestly per-status). `fetchImpl` is injectable so
+ * the wrapper itself is pinned (the historical "no fetch harness" gap).
+ */
+export async function fetchFlowRunDetail(
+  id: string,
+  fetchImpl: (path: string) => Promise<Pick<Response, 'status' | 'json'>> = bridgeFetch,
+): Promise<FlowRunDetailResolution> {
   try {
-    const res = await bridgeFetch(`/api/runs/${encodeURIComponent(id)}`);
-    const body = await res.json();
+    const res = await fetchImpl(`/api/runs/${encodeURIComponent(id)}`);
+    if (res.status === 404) return resolveFlowRunDetailFromResponse(404, null);
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
     return resolveFlowRunDetailFromResponse(res.status, body);
   } catch {
     return resolveFlowRunDetailFromResponse(0, null);

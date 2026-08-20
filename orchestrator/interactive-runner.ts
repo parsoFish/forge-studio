@@ -106,6 +106,7 @@ import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { resolveSessionModel, type ModelTier } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { loadAgentDefinition } from './studio/registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from './skill-path.ts';
 import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
@@ -460,7 +461,6 @@ async function runAgentStyleStep(args: {
   const agentSpec = deriveAgentSpec(skillPathRelative(descriptor.agent));
   const model = resolveSessionModel(agentSpec, readRequestedModelTier(status));
   const skill = readSkillPrompt(descriptor.agent);
-  const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill);
 
   if (turnSpec.style === 'agent') {
     // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
@@ -470,7 +470,21 @@ async function runAgentStyleStep(args: {
     // empty writeRoots, which `runAgentTurn` correctly reads as "no fence" —
     // matching this phase's pre-existing behaviour (an `agent` step with no
     // declared writes, e.g. a Q&A-only turn, never needed one).
+    //
+    // W7-B3 (sessions-kinds-32 / home-sessions-06): the roots are resolved
+    // BEFORE the prompt is built so the prompt can name the EXACT realpaths
+    // the fence accepts — the old relative "staging" instruction let a live
+    // agent resolve it against the wrong base (beside status.registryPath)
+    // and crash the session with "produced no files".
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots);
+    // W7-B3 (community-13): the turn budget comes from the agent's OWN
+    // SKILL.md `budgets.maxTurns` — the same declared field every unattended
+    // agent already carries (run-agent.ts reads it for one-shot spawns). A
+    // skill that declares none keeps runAgentTurn's own prior 16 default
+    // (maxTurns: undefined → `?? 16` there). Read via the SAME loader that
+    // parsed the frontmatter for deriveAgentSpec — never a second parser.
+    const maxTurns = loadAgentDefinition(skillPath(descriptor.agent)).budgets.maxTurns;
     await runAgentTurn({
       queryFn,
       prompt,
@@ -478,6 +492,7 @@ async function runAgentStyleStep(args: {
       model,
       allowedTools: agentSpec.allowedTools,
       disallowedTools: agentSpec.disallowedTools,
+      ...(maxTurns !== undefined ? { maxTurns } : {}),
       writeRoots,
       bashFence: resolveBashFence(turnSpec),
       onToolUse,
@@ -748,11 +763,21 @@ function readSkillPrompt(agentId: string): string {
 /** A generic, kind-agnostic turn prompt: the skill (single source of the
  *  agent's intent, ADR-024), which phase/step this turn is, where to write,
  *  and the current session status as read-only context. */
+/**
+ * W7-B3 (sessions-kinds-32 / home-sessions-06): `writeRoots` are the SAME
+ * already-realpath-resolved absolute directories `resolveWriteRoots` handed
+ * the fence — the prompt names them verbatim so the instruction and the
+ * enforcement can never disagree. The old relative wording ("the following
+ * sub-directory of your working directory: staging") let a live
+ * community-refresh agent resolve `staging` beside `status.registryPath`,
+ * landing three files in the repo and crashing the session.
+ */
 function buildTurnPrompt(
   descriptor: SessionKindDescriptor,
   phaseRow: TurnSpecPhase,
   status: InteractiveTurnStatus,
   skill: string,
+  writeRoots: readonly string[],
 ): string {
   const writes = phaseRow.writes ?? [];
   return [
@@ -760,8 +785,12 @@ function buildTurnPrompt(
     '',
     `## Your task this turn: the "${phaseRow.phase}" step of the "${descriptor.id}" session`,
     '',
-    writes.length > 0
-      ? `Write your output into the following sub-director${writes.length > 1 ? 'ies' : 'y'} of your working directory: ${writes.join(', ')}`
+    writeRoots.length > 0
+      ? [
+          `Write your output files under ${writeRoots.length > 1 ? 'these exact absolute directories' : 'this exact absolute directory'} (the ${writes.join(', ')} sub-director${writes.length > 1 ? 'ies' : 'y'} of your own session directory):`,
+          ...writeRoots.map((root) => `- ${root}`),
+          'Use these absolute paths exactly as given — a write anywhere else (any other absolute path, or a relative path resolved against some other base) is refused by the tool fence.',
+        ].join('\n')
       : 'Write your output where the skill above instructs.',
     '',
     'Session status (read-only context):',

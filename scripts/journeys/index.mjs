@@ -428,4 +428,8 @@ export const RUN_ORDER = [
   // above), and this beat only reads/renders (no live agent spawn belongs
   // in a gate), so it carries no ordering risk to anything before it.
   ['community', 'community-refresh-kickoff'],
+  // W7-B3 (community-23): registry-CRUD AFFORDANCES only — the beat writes
+  // nothing (arm-then-abort on Remove; the add form is never submitted), so
+  // it is safe dead-last like everything else in this journey.
+  ['community', 'community-registry-crud-affordances'],
 ];

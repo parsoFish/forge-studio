@@ -170,9 +170,12 @@ test('AT-2 (HONESTY): deriveShowcaseStats on a DemoModel with ONLY real checkpoi
   // the retired DEMO.html category out of habit).
   expect(JSON.stringify(stats)).not.toContain('html-summary');
 
-  // The real-kinds model still has zero testEvidence/summary — stats must
-  // report that honestly (0 / null), not fabricate non-zero values.
-  expect(stats.testEvidenceCount).toBe(0);
+  // The real-kinds model carries NO testEvidence block at all — W7-B6
+  // (projects-22) amendment: an ABSENT block is `null` ("not captured"),
+  // distinct from a present-but-empty block's real `0`; the old `0` here
+  // was the exact absent-vs-zero conflation that rendered "TESTS 0" beside
+  // 23 met ACs on gitpulse's showcase.
+  expect(stats.testEvidenceCount).toBeNull();
   expect(stats.prUrl).toBeNull();
   expect(stats.branch).toBeNull();
   expect(stats.commitSha).toBeNull();
@@ -260,4 +263,17 @@ test('AT-4 (CALLER-COUNT, null path): when deriveShowcaseCycleId returns null (n
   // instead of honouring the null signal.
   expect(fetchDemo).not.toHaveBeenCalled();
   expect(result).toEqual({ kind: 'empty' });
+});
+
+// ---------------------------------------------------------------------------
+// W7-B6 review F9 — the cycle-switcher select value never goes blank while
+// the run/artifact links follow the resolved fallback cycle.
+// ---------------------------------------------------------------------------
+
+test('W7-B6 F9: resolveShowcaseSelectValue — an eligible pick wins; a STALE pick (dropped from the eligible list) falls back to the RESOLVED cycle, never a blank control that disagrees with the links', async () => {
+  const { resolveShowcaseSelectValue } = await import('./project-showcase');
+  expect(resolveShowcaseSelectValue('cyc-b', 'cyc-a', ['cyc-a', 'cyc-b'])).toBe('cyc-b');
+  expect(resolveShowcaseSelectValue('cyc-gone', 'cyc-a', ['cyc-a', 'cyc-b'])).toBe('cyc-a');
+  expect(resolveShowcaseSelectValue('', 'cyc-a', ['cyc-a'])).toBe('cyc-a');
+  expect(resolveShowcaseSelectValue('', undefined, [])).toBe('');
 });

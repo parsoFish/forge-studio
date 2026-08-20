@@ -14,8 +14,9 @@
  * with no manual repo surgery.
  */
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
 import { seedProjectBrain, checkProjectBrainSeedContainment } from './project-brain-seed.ts';
@@ -163,31 +164,15 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
   }
 }
 
-/** The marker `scaffoldGreenfieldProject` writes LAST — inside the final
- *  `<projectDir>/.forge/`, only AFTER both atomic renames have landed. Its
- *  presence is the SOLE signal that a project directory is COMPLETE (not a
- *  crashed-create orphan): the pre-create reconcile treats any `projects/<id>`
- *  lacking it as a stale orphan to sweep, and only a project carrying it earns
- *  the "already exists" refusal. */
+/** Provenance marker `scaffoldGreenfieldProject` stages into `.forge/` before
+ *  the atomic rename, so a completed create is identifiable as
+ *  greenfield-made. W7-B6 (projects-35): this marker is NO LONGER a sweep
+ *  signal — the old reconcile inferred "crashed-create orphan" from the
+ *  marker's ABSENCE and `rmSync`'d the directory, which deleted every real
+ *  onboarded / hand-added project (none of which carry it) on a name
+ *  collision. The only dirs the pre-create sweep may touch are the ones that
+ *  positively carry the STAGING name marker (`.staging-<id>-*`). */
 const CREATE_COMPLETE_MARKER = join('.forge', '.create-complete');
-
-/** Sweep a stale brain-seed directory left by a crashed create — but ONLY when
- *  it is a REAL directory. A SYMLINK at `brain/projects/<id>` is a containment
- *  attack surface (SEC-03), never a crash artifact: leave it untouched so the
- *  `checkProjectBrainSeedContainment` guard downstream still REJECTS it (removing
- *  it here would silently launder the attack into a success — the exact
- *  "reorder reopens it one layer down" trap this campaign keeps closing). Absent
- *  / unreadable → no-op. */
-function sweepBrainOrphan(brainDir: string): void {
-  let st;
-  try {
-    st = lstatSync(brainDir);
-  } catch {
-    return; // ENOENT (absent) or unreadable — nothing to sweep
-  }
-  if (st.isSymbolicLink()) return; // leave for the containment guard to reject
-  rmSync(brainDir, { recursive: true, force: true });
-}
 
 /** Sweep this id's stale STAGING leftovers — `.staging-<id>-*` dirs a hard kill
  *  left behind when a create's own unwind catch never ran (reopen-1). Prefix-
@@ -250,29 +235,44 @@ export function scaffoldGreenfieldProject(input: {
   const brainProjectsRoot = resolve(input.forgeRoot, 'brain', 'projects');
   const finalBrainDir = resolve(brainProjectsRoot, id);
 
-  // RECONCILE (pre-create). A `projects/<id>` carrying the completion marker is
-  // a genuinely COMPLETE project → refuse (the unchanged "already exists"
-  // contract). A marker-less `projects/<id>` is a STALE ORPHAN from a crashed
-  // create (a throw between the two renames below, or any pre-fix half-write) →
-  // sweep it plus any real brain orphan, then proceed. This replaces the old
-  // bare `existsSync(projectDir)` throw, which made every retry-after-crash fail
-  // with "already exists".
-  //
-  // Also sweep this id's stale STAGING leftovers first — `.staging-<id>-*` dirs a
-  // hard kill left when a prior create's unwind catch never ran (reopen-1).
+  // REFUSAL, not reconcile (W7-B6, projects-35 — the DATA-LOSS fix). The old
+  // pre-create reconcile inferred "crashed-create orphan" from the completion
+  // marker's ABSENCE and rmSync'd `projects/<id>` + `brain/projects/<id>` —
+  // but every onboarded / hand-added project lacks that marker, so a name
+  // collision silently DELETED a real project and its brain (live-reproduced
+  // against projects/mdtoc). The new contract is fail-safe:
+  //   - ANY existing entry at `projects/<id>` (dir, file, or symlink) → refuse.
+  //     The transactional staging design below never leaves a half-built
+  //     final-path dir (all failures unwind `.staging-*`), so an existing
+  //     entry is either a real project or something a human must remove
+  //     deliberately. Create never deletes it.
+  //   - A REAL `brain/projects/<id>` with no project dir → refuse too: Brain-3
+  //     dirs are REPO-TRACKED, so on a fresh clone a brain legitimately exists
+  //     for a project whose gitignored checkout is absent — sweeping it would
+  //     destroy accumulated project knowledge. (A SYMLINK there is left for
+  //     `checkProjectBrainSeedContainment` below to REJECT — a security event,
+  //     not an existence collision.)
+  //   - The ONLY dirs swept are the ones positively carrying the STAGING name
+  //     marker (`.staging-<id>-*`) — hard-kill leftovers, identifiable by
+  //     construction, never confusable with operator data.
   sweepStagingLeftovers(projectsRoot, id);
   sweepStagingLeftovers(brainProjectsRoot, id);
-  if (existsSync(projectDir)) {
-    if (existsSync(join(projectDir, CREATE_COMPLETE_MARKER))) {
-      throw new Error(`project "${id}" already exists at ${projectDir}`);
-    }
-    rmSync(projectDir, { recursive: true, force: true });
-    sweepBrainOrphan(finalBrainDir);
-  } else {
-    // No project dir, but a brain stub for this id can still be orphaned (a
-    // crash BETWEEN the project rename and the brain rename, or before either)
-    // — sweep a REAL one. A SYMLINK is left for the containment guard below.
-    sweepBrainOrphan(finalBrainDir);
+  let projectEntry = null;
+  try { projectEntry = lstatSync(projectDir); } catch { /* absent — the create path */ }
+  if (projectEntry !== null) {
+    throw new Error(
+      `project "${id}" already exists at ${projectDir} — create never overwrites an existing directory ` +
+        `(onboarded and hand-added projects carry no create marker; remove the directory deliberately if it is truly stale)`,
+    );
+  }
+  let brainEntry = null;
+  try { brainEntry = lstatSync(finalBrainDir); } catch { /* absent — the create path */ }
+  if (brainEntry !== null && !brainEntry.isSymbolicLink()) {
+    throw new Error(
+      `a project brain already exists at ${finalBrainDir} — refusing to replace it. Brain-3 dirs are repo-tracked ` +
+        `and may belong to a real project not checked out on this disk; remove it deliberately if it is truly stale, ` +
+        `or choose another name`,
+    );
   }
 
   // Phase 1 (SEC-03 round 4, T1 ruling) — a PURE containment check for every
@@ -299,6 +299,22 @@ export function scaffoldGreenfieldProject(input: {
   let report;
   try {
     copyTemplate(templateDir, stagingProjectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
+    // W7-B6 (projects-11): the project is its OWN git repository from birth —
+    // `git init` + a first commit of the scaffold, run INSIDE the staging dir
+    // (a git repo is position-independent, so the rename below carries it).
+    // Done explicitly rather than probed: staging sits inside the forge work
+    // tree, where an is-inside-work-tree probe lies (the projects-11 defect on
+    // the onboard path). Identity flags are passed per-invocation so an
+    // unattended host with no global git identity still commits. A git
+    // failure THROWS into the unwind below — a repo-less "green" scaffold
+    // would silently inherit forge's own repo, the exact defect this closes.
+    execFileSync('git', ['init', '-q'], { cwd: stagingProjectDir, stdio: 'ignore' });
+    execFileSync('git', ['add', '-A'], { cwd: stagingProjectDir, stdio: 'ignore' });
+    execFileSync(
+      'git',
+      ['-c', 'user.name=forge', '-c', 'user.email=forge@localhost', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', `chore: scaffold ${id} from ${manifest.appType} template`],
+      { cwd: stagingProjectDir, stdio: 'ignore' },
+    );
     // The CENTRAL Brain-3 stub (kb.yaml + profile.md + themes/README.md) is the
     // only forge-owned artifact not in the template. Seeded into the STAGING
     // dir; its CONTENT is still keyed to `id` (kb id, binding ref) so a rename
@@ -326,8 +342,8 @@ export function scaffoldGreenfieldProject(input: {
     // UNWIND: any staged failure — INCLUDING a rename ENOTEMPTY from a losing
     // concurrent same-id create — leaves NOTHING of THIS create's staging behind.
     // `rmSync` recursive+force no-ops on an absent dir. (A brain already renamed
-    // before a project-rename throw becomes a brain-without-project, swept by the
-    // next create's reconcile — the disclosed two-root residual below.)
+    // before a project-rename throw becomes a brain-without-project — the
+    // disclosed two-root residual below.)
     rmSync(stagingProjectDir, { recursive: true, force: true });
     rmSync(stagingBrainDir, { recursive: true, force: true });
     throw err;
@@ -335,13 +351,15 @@ export function scaffoldGreenfieldProject(input: {
 
   // DISCLOSED RESIDUAL (accepted, not silently swallowed): `projectsRoot` and
   // `brain/projects/` are SEPARATE filesystem roots, so the two `renameSync`
-  // calls are NOT one transaction. A crash AFTER the brain rename but BEFORE the
-  // project rename leaves a `brain/projects/<id>` with no matching project —
-  // RECONCILABLE (the next create for that id sweeps a brain-without-project).
-  // Because the marker now rides in the project staging dir, `projects/<id>` is
-  // NEVER marker-less on the final path, so a concurrent reconcile can never
-  // mis-sweep a live create. This narrow between-renames brain-orphan window is
-  // the residual this design accepts in exchange for closing the orphan class.
+  // calls are NOT one transaction. A crash AFTER the brain rename but BEFORE
+  // the project rename leaves a `brain/projects/<id>` with no matching project.
+  // W7-B6 (projects-35): that leftover is now REFUSED on retry (never swept —
+  // a repo-tracked Brain-3 for a not-checked-out project is byte-identical in
+  // shape, and deleting it destroys real knowledge); the refusal message names
+  // the brain path so the operator can remove a genuinely stale one
+  // deliberately. Fail-safe-and-manual beats automatic-and-occasionally-
+  // catastrophic here — this narrow between-renames window is the residual
+  // this design accepts in exchange for closing the data-loss class.
 
   return {
     id,

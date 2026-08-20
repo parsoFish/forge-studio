@@ -210,3 +210,29 @@ describe('formatActivityCostTicker', () => {
     expect(formatActivityCostTicker({ costUsd: 0.18, tokensTotal: 41300, elapsedMs: 192_000 })).toBe('$0.18 · 41.3k tok · 3m 12s');
   });
 });
+
+// ---------------------------------------------------------------------------
+// W7-B2 (knowledge-01) — metadata.kind:'progress' rows render (the kb-drain
+// loop's own per-transition events); plain kind-less log rows still don't.
+// ---------------------------------------------------------------------------
+
+it('W7-B2: a log event with metadata.kind "progress" renders a progress row with the transition tag', () => {
+  const rows = toActivityRows([
+    {
+      event_id: 'p1', event_type: 'log',
+      message: 'kb-drain.turn-start (brain-read-policy.md · checkStaleness · 1/3)',
+      metadata: { kind: 'progress', file: '/x/brain-read-policy.md' },
+    } as never,
+  ]);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].kind).toBe('progress');
+  expect(rows[0].tag).toBe('turn-start');
+  expect(rows[0].text).toContain('brain-read-policy.md');
+});
+
+it('W7-B2: a plain kind-less log row still renders NOTHING (progress is opt-in per event)', () => {
+  const rows = toActivityRows([
+    { event_id: 'l1', event_type: 'log', message: 'some operator-facing line', metadata: {} } as never,
+  ]);
+  expect(rows).toHaveLength(0);
+});

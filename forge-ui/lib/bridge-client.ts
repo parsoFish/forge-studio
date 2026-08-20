@@ -878,6 +878,10 @@ export async function architectFileUrl(relative: string): Promise<string> {
 export async function startArchitect(input: {
   project: string;
   idea: string;
+  /** ADR-043 §3: operator-chosen tier (validated server-side vs the architect SKILL envelope). */
+  modelTier?: string;
+  /** W7-B6 (projects-14): session cost ceiling (USD) — enforced by the runner at every turn start. */
+  costCeilingUsd?: number;
 }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
   const r = await bridgePost('/api/architect/start', input);
   if (!r.ok) return { ok: false, error: r.error };
@@ -1230,9 +1234,14 @@ export async function startCommunityRefresh(input: {
   /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
    *  own doc; validated against community-refresh's own SKILL.md envelope. */
   modelTier?: string;
+  /** W7-B3 (community-08) — optional operator focus ("find me skills for X").
+   *  Omitted entirely when absent: the agent reads no-brief as a full
+   *  refresh. */
+  brief?: string;
 }): Promise<{ ok: boolean; sessionId?: string; project?: string; error?: string }> {
   const r = await bridgePost('/api/studio/community-refresh/start', {
     ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+    ...(input.brief ? { brief: input.brief } : {}),
   });
   if (!r.ok) return { ok: false, error: r.error };
   return {

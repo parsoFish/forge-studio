@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { startInstructions } from '@/lib/bridge-client';
+import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 
 /**
  * Standing-instructions panel, bound to the project's **AGENTS.md** as the single
@@ -28,6 +29,23 @@ export function Instructions({
   const router = useRouter();
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // W7-B6 (projects-19): the launcher offers RESUME when an instructions
+  // session is already open for this project — it used to mint a new
+  // briefing session on every click, forever. Advisory (a failed read keeps
+  // the plain launch; the server-side picture still shows on /sessions).
+  const [openSession, setOpenSession] = useState<SessionIndexRow | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioSessions()
+      .then((all) => {
+        if (cancelled) return;
+        setOpenSession(all.find((r) => r.kind === 'instructions' && r.project === project && !r.terminal) ?? null);
+      })
+      .catch(() => { /* advisory — keep the plain launch */ });
+    return () => {
+      cancelled = true;
+    };
+  }, [project]);
 
   const fileBound = source === 'AGENTS.md' || source === 'CLAUDE.md';
   const fileName = fileBound ? source : 'AGENTS.md';
@@ -50,7 +68,31 @@ export function Instructions({
     }
   }
 
-  const launchBtn = (
+  // W7-B6 (projects-19): with a session already open, RESUME is the primary
+  // action; starting another is the explicit secondary — never a silent mint.
+  const launchBtn = openSession !== null ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+      <button
+        type="button"
+        className="btn btn-primary"
+        data-action="resume-instructions"
+        data-session-id={openSession.sessionId}
+        onClick={() => router.push(openSession.href)}
+      >
+        ↩ Resume the open instructions session ({openSession.phase})
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm"
+        data-action="launch-instructions"
+        onClick={() => void onLaunch()}
+        disabled={launching}
+        style={{ opacity: launching ? 0.6 : 1 }}
+      >
+        {launching ? 'Starting…' : 'start another'}
+      </button>
+    </div>
+  ) : (
     <button
       type="button"
       className="btn btn-primary"

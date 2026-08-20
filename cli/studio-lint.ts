@@ -467,6 +467,24 @@ export function runStudioLint(root: string): StudioLintResult {
     }
   }
 
+  // W7-B3 (community-01 / sessions-kinds-32): studio/community/staging/ is
+  // NEVER a legitimate location — it is the debris of the pre-fence era,
+  // when a community-refresh agent resolved its relative "staging/"
+  // instruction beside registryPath and dumped its draft into the repo.
+  // Drafts live under the session's own dir; the fence (W7-A2) plus the
+  // absolute-path prompt (W7-B3) prevent new debris — this check tells the
+  // operator to delete what already leaked (it is untracked, so no code
+  // change can remove it from their checkout).
+  const strayStaging = join(root, 'studio', 'community', 'staging');
+  if (existsSync(strayStaging)) {
+    findings.push({
+      level: 'error',
+      object: 'studio:community-registry',
+      check: 'community/stray-staging',
+      message: `"${strayStaging}" exists — pre-fence community-refresh debris (an agent draft that escaped its session dir). Delete the directory; drafts belong under the session's own staging/ and are committed only via the approve verdict.`,
+    });
+  }
+
   // ------------------------------------------------------------------
   // 4. Projects (auto-discovered from disk — B1; no projects.yaml registry)
   //

@@ -37,6 +37,10 @@ import { InstallStateBadge } from '@/components/studio/LibraryHub';
 
 const BADGE_STYLE: Record<string, React.CSSProperties> = {
   community: { color: 'var(--c-kb, #4ade80)', borderColor: 'rgba(74,222,128,.4)', background: 'rgba(74,222,128,.08)' },
+  // W7-B3 (library-21): locally-authored (forge-authoring provenance) is its
+  // own honest badge, never COMMUNITY; a registry-only reference row says so.
+  authored: { color: 'var(--c-agent, #60a5fa)', borderColor: 'rgba(96,165,250,.4)', background: 'rgba(96,165,250,.08)' },
+  reference: { color: 'var(--faint)', borderColor: 'var(--line-2)', background: 'rgba(255,255,255,.03)' },
   draft: { color: 'var(--c-artifact, #fbbf24)', borderColor: 'rgba(251,191,36,.4)', background: 'rgba(251,191,36,.08)' },
   'needs-review': { color: '#f87171', borderColor: 'rgba(248,113,113,.4)', background: 'rgba(248,113,113,.08)' },
 };

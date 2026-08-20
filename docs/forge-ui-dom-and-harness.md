@@ -720,7 +720,10 @@ inventory rather than one shared page-level contract:
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
   WI hexes additionally carry `data-wi-cost-usd`; a fanned-out dev node's
   own aggregate carries `data-fanout-phase` rather than
-  `data-hex-kind="phase"`. A single **flowLineage** run threads across
+  `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
+  same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
+  dev-phase cost/model/retries are never attributed to a single work item
+  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop` →
   `forge-reflect`) — each renders only its own slice of nodes, so
   switching `/flows/<flowId>` changes which hexes appear. MONITOR also
@@ -866,18 +869,75 @@ inventory rather than one shared page-level contract:
   build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
   breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
   / planning session (`a[data-crumb="session"]`) / PLAN with
-  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`. `type=verdict&mode=gate`
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`.
+  **W7-B7 request honesty:** every optional artifact GET is decided by
+  `lib/artifact-request-plan.ts` from the run's own `artifactsReady` — an
+  artifact the run declares absent renders the honest empty state with NO
+  guaranteed-404 probe (only an unknown/orphan run probes its type's primary
+  directly). The structured plan.json / PLAN.md branches were DELETED
+  (artifact-plan-19: nothing ever produced either file; PLAN.html is the one
+  cycle plan artifact, always view-only — the interactive plan gate is the
+  architect session's). The filename chip links the RAW artifact file when
+  that FILE resolved (`a[data-action="open-raw-artifact"]`, artifact-plan-26;
+  for `type=pr` the type can resolve via `run.prUrl` alone, so the chip links
+  only when pr-description.md itself parsed — never a guaranteed 404, W7-B7
+  review r1). The
+  verdict GATE is armed by the queue state alone (gated ⇒ armed, round-2
+  send-backs included; active/complete/failed ⇒ view — artifact-plan-11/-14),
+  and a missing verdict.json in view mode renders the SAME shared empty state
+  as every other type (artifact-plan-12 — never a blank page).
+  `type=reflection` is the exception (W7-B7 review r1): ReflectionGate is the
+  type's own surface and renders its honest states itself — a live gate's
+  Stage-2 questions are never buried under the generic EmptyState, and a
+  never-reflected run shows the gate's own "No reflection questions filed"
+  note (artifact-plan-13 — never a fabricated "closes clean"). `type=pr`
+  renders the
+  `[data-section="pr-hero"][data-pr-url]` card — the parsed pr-description.md
+  merged with the run's own `prUrl` (derived from its `reviewer.pr-opened`
+  event; `lib/artifact-pr-view.ts` adds the number from the URL and claims
+  `merged`/`open` ONLY where the run status supports it); a cycle with neither
+  pr-description.md nor a recorded `prUrl` (e.g. `reviewer.pr-open-failed`)
+  resolves `empty` — demo.json alone never yields a blank pr body (W7-B7
+  review r1). `type=demo` view
+  mode renders the DEMO.md narrative (`[data-section="demo-narrative"]
+  iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison.
+  `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
-  rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
-  `[data-section="review-findings"][data-findings-count]` with per-row
-  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`
-  — then `[data-section="demo-comparison"]` /
+  rendered in BOTH verdict modes) —
+  `[data-section="review-findings"][data-findings-state="present|absent|error"]
+  [data-findings-count]` with per-row
+  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`;
+  a known-absent artifact renders the explicit `data-findings-state="absent"`
+  one-liner (artifact-plan-16 — fetched only when the flow's own
+  review-findings producer node completed, same rule as the run page; the
+  absence claim itself is made only off that declaration or an authoritative
+  404 — a transient fetch failure renders `data-findings-state="error"`
+  instead, W7-B7 review r1) —
+  then the review-shape summary
+  (`[data-section="review-summary"][data-region-count][data-blocking-count]`
+  with `a[data-action="jump-to-blocking"]` when a blocker exists), then
+  `[data-section="demo-comparison"]` /
   `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
-  the verdict form —
+  the per-region cards — each `[data-demo-region][data-region-comment-count]
+  [data-region-collapsed]` with a `[data-action="toggle-region"]` header
+  (regions collapse by default only on walls of > 12 regions, unless they
+  carry comments — `lib/demo-review-view.ts`, artifact-plan-31); every
+  authored comment row carries `[data-action="edit-comment"]` +
+  `[data-action="delete-comment"]` (delete is how a NON-blocking comment is
+  cleared — artifact-plan-15; editing renders `[data-comment-editing="true"]`
+  with `[data-field="comment-edit-body"]` + `[data-action="save-comment-edit"]`),
+  resolve stays blocking-only — plus the verdict form (position:sticky so the
+  control never sits 14,000px down) —
   `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
   (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
   is `approve | send-back`), submit button
-  `[data-action="approve-and-merge"|"send-back"]`. View-mode verdict renders
+  `[data-action="approve-and-merge"|"send-back"]`. Every verdict surface
+  (GateBar's caller, DemoReviewSurface, ReviewVerdictForm) resolves its
+  initiative id through the ONE rule in `lib/initiative-id.ts`
+  (artifact-plan-18/-25; the bridge's gate route recovers the same way —
+  defence in depth), and the demo-gate GateBar's wire body carries the
+  `rationale` + synthesized send-back `acceptanceCriteria` the bridge
+  requires (artifact-plan-V01 — `lib/gate-verdict-body.ts`). View-mode verdict renders
   the stamp with `[data-verdict-decision="approve|send-back"]` (mapped from the
   on-disk VerdictRecord via `verdictRecordToDoc` — R4-08-F3 fixed the raw-shape
   passthrough that rendered every verdict "Approved"). `type=reflection&mode=view`
@@ -888,7 +948,9 @@ inventory rather than one shared page-level contract:
   fieldset — options render `[data-option-label][data-option-selected]`, a
   freeform question a `[data-question-freeform]` textarea; below the list a
   `[data-field="freeform"]` notes box and a `[data-action="submit-reflection"]`
-  button gated on all-answered; once submitted (or `answered`)
+  button gated on all-answered — while disabled it carries a `title` naming
+  the reason and a sibling `[data-reflect-answered-count]` "N of M answered"
+  line (W7-B7 artifact-plan-24); once submitted (or `answered`)
   `[data-section="reflect-done"]`. **R4-09-F3 automated mode:** when the reflector
   self-answered (every question inferred), the gate renders a read-only view —
   `[data-section="reflect-questions"][data-reflect-automated="true"]`, each
@@ -910,10 +972,16 @@ inventory rather than one shared page-level contract:
   `[data-card-type="hook"][data-hook-id][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-carried-by-count]`.
   `data-hook-carried-by-count` is DERIVED from every real agent's
   `composition.hooks` and the derivation names its own scan, so an empty count
-  reads "scanned N, found none" and never "unknown". There is deliberately **no
-  Local/Community split and no install affordance** — unlike `/skills`, there is
-  no community-hook source to back either, and fabricating the distinction would
-  be inventing data; the install entry point is R3-07's.
+  reads "scanned N, found none" and never "unknown". **W7-B3 (library-11)
+  retires the old "no Local/Community split" carve-out** — the community
+  index DOES carry hook items (vendored packages), and `/hooks` now unions
+  the ones not yet installed under their own heading,
+  `section[data-section="community-hooks"][data-count]`, per card
+  `a[data-card-type="community-hook"][data-hook-id][data-install-state]`
+  linking to `/community/hook/<id>` (where install and the pre-install scan
+  live — this page still owns NO install affordance itself). The facts come
+  from the community index route (executed per item); a failed community
+  fetch renders nothing extra and never blanks the local list.
   `[data-action="new-hook"]` links to
   `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
   (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,
@@ -1029,28 +1097,85 @@ inventory rather than one shared page-level contract:
   anywhere on this surface; install ROUTES to whichever pipeline owns the
   kind (R3-01-F4 skills, R3-03-F2 hooks, R3-04-F2 connections) and the trust
   decision (if the kind has one) happens only on that pipeline's own owning
-  page. There is deliberately **no create/edit/approve route under
-  `/community` anywhere** — curation of what's browsable stays forge-dev-owned
-  (a PR to `studio/catalog.yaml` / a vendored package under
-  `studio/community/`), mirroring `/connections`'s own D1 negative AC.
+  page. **W7-B3 (community-23) amends the old "no create/edit route"
+  negative AC**: registry CURATION (add / edit / remove of
+  `studio/community/registry.yaml` rows — what is browsable, never what is
+  trusted) now lives in Studio — `[data-action="add-registry-item"]` (a real
+  `<a href="/community/new">` in the header slot) plus per-row controls on
+  the detail page (below). Trust decisions still never live here; the
+  registry file is repo-tracked, Studio writes it and the operator commits
+  via their normal git flow (see `docs/community-registry-writes.md`).
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
   [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
-  [data-sort-key="name"|"stars"|"updated"|"source"][data-sort-dir="asc"|"desc"]`,
-  a search field `[data-field="community-search"]`, kind-filter buttons
-  `[data-action="filter-kind"][data-kind]`, and
+  [data-hub-filter="all"|<hubId>]
+  [data-sort-key="name"|"stars"|"updated"|"source"][data-sort-dir="asc"|"desc"]
+  [data-registry-dirty="true"|"false"|"null"][data-last-refresh]`
+  (`data-registry-dirty` is git's own three-state answer about uncommitted
+  changes to the registry file — `"null"` = git did not answer, never a
+  fabricated clean; `data-last-refresh` = the registry's own
+  `meta.lastRefresh` or `"never"`), a search field
+  `[data-field="community-search"]` (W7-B3, community-05: matches name,
+  desc, id, hub label, signals attribution and upstream URL), kind-filter
+  buttons `[data-action="filter-kind"][data-kind]`, and
   `[data-component="fetch-error"]` when the bridge is unreachable (never
   rendered the same as a genuinely empty index — the same discipline
-  `/connections` and `/skills` already hold). `[data-component="hub-strip"]`
-  renders every real hub from `studio/community/hubs.yaml`, per hub
-  `[data-hub-id][data-hub-kinds][data-hub-item-count]` — the count is DERIVED
-  per request, never declared, so a real hub with nothing indexed from it yet
-  renders a genuine `"0"` rather than being dropped from the strip (the
-  honest-zero case). Per card: `[data-card-type="community-item"]
+  `/connections` and `/skills` already hold).
+
+  **Registry state strip (W7-B3, community-16/-03).**
+  `section[data-section="refresh-registry-state"][data-in-flight-count]`:
+  `[data-component="registry-last-refresh"]` states the registry-level
+  freshness (`meta.lastRefresh` — `null` honestly reads "never refreshed —
+  every row is still the hand-curated seed");
+  `[data-component="registry-dirty"]` renders ONLY when git reports
+  uncommitted changes to the repo-tracked registry file, naming the commit
+  step; `[data-action="open-refresh-session"][data-session-state]` links
+  every in-flight community-refresh session, and
+  `[data-action="open-last-refresh-session"]` the most recent terminal one
+  when nothing is in flight — the sessions this browser kicks off are
+  findable again from the browser itself.
+
+  `[data-component="hub-strip"]` renders every real hub from
+  `studio/community/hubs.yaml`. **W7-B3 (community-17): a hub chip is a
+  FILTER on the local index**, `button[data-action="filter-hub"][data-hub-id]
+  [data-hub-kinds][data-hub-item-count]
+  [data-hub-declared-only="true"|"false"]` — click filters (mirrored to the
+  root's `data-hub-filter`), click again clears; the outbound site link
+  survives as a secondary `a[data-action="open-hub-site"][data-hub-id]`. The
+  count is DERIVED per request, never declared; a real hub with nothing
+  indexed from it yet keeps `data-hub-item-count="0"` and reads "declared —
+  nothing indexed" (`data-hub-declared-only="true"`) — never dropped, and
+  never presented as a browsable source. Per card:
+  `[data-card-type="community-item"]
   [data-item-id][data-item-kind][data-item-hub][data-install-state]
   [data-has-signals="true"|"false"]` — `data-item-hub` is simply ABSENT for an
   unaffiliated item (the rendered label is the spec-literal "unaffiliated",
   never invented as an attribute value), and `data-has-signals="false"`
   renders "no signals published" rather than a fabricated zero.
+  `data-install-state` vocabulary (W7-B3 adds the fifth token):
+  `not-installed | draft-pending-approval | needs-review | installed |
+  present-unmanaged` — `present-unmanaged` (library-31) = the id is occupied
+  by a local skill with NO community-install provenance: neither installed
+  nor installable here, and `/skills` + `/community` now agree on it.
+
+  **`/community/new` (W7-B3, community-23)** — the registry item form,
+  `main[data-page="community-registry-form"][data-form-mode="add"|"edit"]
+  [data-page-ready]`; fields `[data-field="registry-id"|"registry-kind"|
+  "registry-name"|"registry-desc"|"registry-category"|"registry-source-url"|
+  "registry-provenance"|"registry-tier"|"registry-attributed-to"]`; submit
+  `[data-action="submit-registry-item"]` (add) /
+  `[data-action="save-registry-item"]` (edit, reached via `?edit=<id>`),
+  disabled until the required fields are filled. `registry-kind` is a FIXED
+  read-only "skill" (W7-B3 review F1): the CRUD surface admits only skills —
+  the index sources hooks from vendored packages and mcp/tool from the
+  catalog, so any other kind would be written and then invisible; the bridge
+  400s them with the same explanation. There is deliberately NO
+  star-count/starsDisplay input — `stars`, `starsDisplay` and
+  `upstreamUpdatedAt` are SERVER-OWNED fetch facts (W7-B3 review F4/F5):
+  the bridge ignores any body value, a create starts them `null`, an edit
+  carries the existing row's values forward, and only
+  `fetchedAt: null` / `fetchedBy: "operator"` reset (the honesty stamp), so
+  a hand-curated row reads "seed — never verified" until a refresh pass
+  checks it. Errors surface as `[data-component="registry-form-error"]`.
 
   **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
   (a real `<a href="/sessions/community-refresh/new">`, rendered via
@@ -1082,7 +1207,13 @@ inventory rather than one shared page-level contract:
   never `upstreamUpdatedAt` (a different claim: upstream's own change date,
   not forge's own last-verified date) — a null value in EITHER sorts LAST
   regardless of direction, never a fabricated zero/epoch. `source` groups by
-  the item's hub label, then breaks ties by name.
+  the item's hub label, then breaks ties by name. **W7-B3 (community-04):
+  the `updated` key's operator-facing label is "Last checked"**
+  (`COMMUNITY_SORT_LABELS`, community-view.ts) — the fact it actually sorts
+  on; the detail page's Hub &amp; signals list renders BOTH claims as their
+  own rows, `[data-field="upstream-updated"]` (`upstreamUpdatedAt` or "not
+  recorded") and `[data-field="last-checked"]` (`fetchedAt` or "never —
+  hand-curated seed row").
 
   Each card additionally carries `[data-fetched-at]` — the item's real ISO
   `fetchedAt`, structurally ABSENT (never an empty string) when null — and a
@@ -1124,14 +1255,38 @@ inventory rather than one shared page-level contract:
   the exact pinned version, the SAME vocabulary `/connections/[id]`'s own
   InstallSection uses, never a second one; `system-provided`/`external` have
   no version to pin and render no `data-install-version` at all — structural
-  absence, not an empty attribute. This is separate from, and precedes, the
-  ONE mutating affordance: `[data-action="install-community-item"]
-  [data-install-routed-to="skill-draft"|"hook-needs-approval"|"connection-install"]`
-  — **structurally ABSENT, not disabled,** whenever the route cannot
-  complete: a non-vendored skill/hook with no server-resolved install path
-  renders no button at all, and an already-present item renders "\<state\>
-  already — continue at \<owning page\>" instead of a second control. The
-  install outcome renders `[data-component="install-outcome"]` — for
+  absence, not an empty attribute.
+
+  **The install decision (W7-B3, community-09/-18/-19, library-31)** is the
+  ONE pure verdict `installActionForItem` (community-view.ts) computes,
+  mirrored onto `[data-section="install"][data-install-action="install"|
+  "install-confirm"|"open-owning"|"present-unmanaged"|"browse-upstream"|
+  "none-system"]` — every item either installs, routes to the page that owns
+  it, or says exactly why not:
+  - `install` — a vendored skill/hook: the direct
+    `[data-action="install-community-item"][data-install-routed-to=
+    "skill-draft"|"hook-needs-approval"]` button (draft/approval pipeline
+    owns trust, unchanged);
+  - `install-confirm` — an npm connection: the SAME button is a TWO-STEP
+    confirm (`[data-confirming="true"|"false"]`; first click arms and
+    renders `[data-component="install-confirm-notice"]` naming the exact
+    `npm install <package>@<version>` child process, second click fires;
+    `[data-action="install-community-item-abort"]` disarms) — a real
+    networked child process never fires on one click (community-19);
+  - `open-owning` — any already-present item, connections on EVERY install
+    method included (community-18): `[data-action="open-owning-page"]` links
+    `/skills/<id>`, `/hooks/<id>` or `/connections/<id>`;
+  - `present-unmanaged` — the id is occupied by an UNMANAGED local skill
+    (library-31): `[data-component="present-unmanaged"]` explains and links
+    the owning library page; no install control renders;
+  - `browse-upstream` — a non-vendored skill/hook (its source hub publishes
+    a page, not a package — community-09) or an external-method connection:
+    `a[data-action="browse-upstream"]` carries the REAL upstream URL;
+  - `none-system` — a system-provided tool the probe reports absent:
+    honest "install it on the host" copy, no dead button.
+  The empty PACKAGE section is GONE for items with no files (community-10) —
+  `[data-component="file-package"]` renders only when the package exists.
+  The install outcome renders `[data-component="install-outcome"]` — for
   skill/hook, the text states "Installed as a draft." (or "Already
   installed.") and links to the owning page where its approval gate (if any)
   lives; for a connection under this harness's no-spawn suppression, a
@@ -1142,6 +1297,16 @@ inventory rather than one shared page-level contract:
   the same signal `[data-page="community-detail"]`'s own `data-install-state`
   independently confirms by staying `"not-installed"` after a suppressed
   attempt). Action errors surface as `[data-component="community-action-error"]`.
+
+  **Registry-row curation (W7-B3, community-23).** A detail page whose item
+  originates from `studio/community/registry.yaml` renders
+  `[data-section="registry-row-actions"]`: `a[data-action="edit-registry-item"]`
+  (→ `/community/new?edit=<id>`) and a two-step
+  `[data-action="remove-registry-item"][data-confirming]` +
+  `[data-action="remove-registry-item-abort"]`; a completed remove routes
+  back to `/community`. Vendored packages and catalog connections are not
+  registry rows and never render these controls. Remove errors surface as
+  `[data-component="registry-remove-error"]`.
 
 - **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
   did not exist before. `StudioNav`'s "Agents" nav item now points straight
@@ -1167,7 +1332,7 @@ inventory rather than one shared page-level contract:
     monitor and `/agents/[id]`'s own per-agent ledger use (reused
     UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
     and restated for `/agents/[id]` below is **not restated a third time
-    here**). `[data-component="recent-agent-runs-loading"]` before this
+    here**). `[data-component="recent-runs-loading"]` before this
     fetch resolves. The section root carries
     `data-recent-runs-unresolved=<n>` (W7-FIX-A1 A1-09): how many per-agent
     history reads came back `'unresolved'` (failed / unreachable — neither
@@ -1606,6 +1771,45 @@ inventory rather than one shared page-level contract:
   link to `/projects` (W6-SW-3 sweep C2#3; consolidated onto the shared
   contract by W7-A4). `/projects/new` (the onboarding form) fires NO
   per-project fetch (W7-A4, projects-04).
+  **W7-B6 (operator note 11 / orch-02, projects-18/-19/-20, 2026-08-21):**
+  the PRIMARY action group `[data-section="start-work"]` renders directly
+  under the tab bar on BOTH tabs (within the first viewport at 1440×1000 —
+  the `roadmap` journey asserts the geometry) with four REAL actions:
+  `[data-action="start-work-plan"]` (planInitiative on the first
+  unplanned-ready initiative), `[data-action="start-work-develop"]`
+  (startDevelopment for every planned+ready one),
+  `[data-action="start-work-run-flow"]` (a two-select picker —
+  `[data-field="start-work-flow"]` + `[data-field="start-work-initiative"]`
+  — posting `POST /api/flows/:id/run`; success links the run via
+  `[data-action="start-work-open-run"]`), and
+  `[data-action="start-work-architect"]` (a link carrying the project ID).
+  Disabled actions carry `data-disabled-reason` + a visible hint
+  (crosscut-25); outcomes land on `[data-start-work-outcome="ok"|"error"]`.
+  Ids whose develop dispatch already came back ok THIS SESSION are excluded
+  from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
+  review F7 — the queue keeps them `pending` until the scheduler claims, so
+  a refetched roadmap would otherwise re-arm the button with the same ids;
+  all-dispatched reads "development already enqueued" as the reason).
+  The old bottom-of-page `[data-section="run-a-flow"]` select (whose chosen
+  flow rode a `?flow=` nothing read) is REMOVED. The Roadmap tab additionally
+  renders `[data-section="roadmap-actionable"][data-actionable-count]` — the
+  "what needs me now" list beside the canvas: one
+  `[data-actionable-row="plan"|"start"|"failed"][data-initiative-id]` per
+  actionable initiative with `[data-action="actionable-plan"|
+  "actionable-start"|"actionable-view-run"]` (the failed row's run link
+  carries the CYCLE id). The editor aside gains
+  `[data-section="project-open-sessions"][data-open-session-count]` — this
+  project's non-terminal sessions with `[data-action="resume-open-session"]`
+  links (projects-19) — and the Instructions panel offers
+  `[data-action="resume-instructions"]` as the primary when one is already
+  open (the plain `[data-action="launch-instructions"]` becomes the explicit
+  "start another"). Unsaved edits are guarded (projects-05): a `beforeunload`
+  prompt while `data-dirty="true"` plus a confirm on the header project
+  switcher; a successful save also refreshes the page's own roster
+  (projects-26). The onboarding-agent launcher stays disabled while its run
+  is live (`onboardLaunchState`, projects-25). The completed-at badge on a
+  roadmap card is `[data-badge="completed-at"][data-badge-status]` — status
+  colour, `✕` for failed (projects-33).
   Roadmap renders `RoadmapCanvas.tsx` (**W6-RV-2**, replacing `RoadmapDag.tsx`
   — R4-13's dependency-depth **column** layout, itself the replacement for
   the retired `SerpentineTimeline` time-ordered spine): a **completion-time
@@ -1837,8 +2041,14 @@ inventory rather than one shared page-level contract:
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]`
   whose `href` carries the FULL `cycleId` AS-IS to
   `/flows/forge-develop/run/<cycleId>` (the shared flow run-detail surface —
-  a completed `cycleId` resolves there as a `runId`); `data-ledger-cost-usd`
-  is omitted (a `Cycle` carries no cost). An empty ledger honestly renders
+  a completed `cycleId` resolves there as a `runId`). **W7-B6
+  (projects-27):** `data-run-when` falls back to the timestamp the `cycleId`
+  ITSELF embeds (`cycleIdEmbeddedIso`) when the payload carries no
+  `startedAt` (it never does today), and `data-ledger-cost-usd` carries the
+  per-cycle total from `GET /api/cost/<cycleId>` (fetched by the page,
+  `costByCycleId`); a cycle whose cost read failed/404'd — or whose rotated
+  log yields an empty summary — stays the honest em dash, never `$0.00`. An
+  empty ledger honestly renders
   `[data-component="history-ledger-empty"]`, never a fabricated row.
 - **`/projects/[id]/showcase` — the demo showcase (R4-14, 2026-08-10).** A
   per-project **standing** demo page — "show someone the project" — distinct
@@ -1886,6 +2096,20 @@ inventory rather than one shared page-level contract:
   (`demo-showcase-refresh` beat — ported from the mockup's
   `run-agent-demo-runner` story's own closing claim, "the showcase never goes
   stale — merges refresh it automatically"; see `scripts/journeys/story-registry.mjs`).
+  **W7-B6 (projects-21/-22, 2026-08-21) — no longer a dead end:**
+  `[data-section="showcase-cycle-nav"][data-eligible-count]` renders above
+  the stats with `[data-field="showcase-cycle"]` — a picker over EVERY
+  eligible cycle (`listShowcaseCycleIds`, newest first; `loadShowcase`
+  honours a picked id only when it is genuinely eligible) — plus
+  `[data-action="showcase-open-run"]` (`/flows/forge-develop/run/<cycleId>`)
+  and `[data-action="showcase-open-artifact"]`
+  (`/artifact?run=<cycleId>&type=demo`); the PR link stays a stats-strip
+  tile when the model carries one. The `no-demo` empty state offers
+  `[data-action="showcase-capture-demo"]` (the demo-builder kickoff for this
+  project). The TESTS tile (`[data-tile="tests"]`) renders ONLY when the
+  model genuinely carries a `testEvidence` block —
+  `deriveShowcaseStats.testEvidenceCount` is `null` for an absent block
+  ("not captured" ≠ "zero tests").
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it
@@ -1903,8 +2127,15 @@ inventory rather than one shared page-level contract:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
-  **W7-A2 lifecycle bar (every kind — architect/project-brain and the
-  panel-less community-refresh included):**
+  **W7-B3 (sessions-kinds-06 / community-14): `community-refresh` joined
+  `GENERIC_PANEL_KINDS`** — its declared approve/reject verdict (the
+  `awaiting-review` row in `studio/session-kinds.yaml`) and activity drawer
+  render through the SAME generic `SessionInteractivePanel` as every other
+  turnSpec kind; parity with the registry is pinned by
+  `forge-ui/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
+  except the two bespoke-panel kinds must be in the set, so a newly declared
+  kind can never render a blank page again).
+  **W7-A2 lifecycle bar (every kind — architect/project-brain included):**
   `div[data-section="session-lifecycle"][data-lifecycle-state="working"|
   "awaiting-operator"|"crashed"|"stalled"|"terminal"][data-needs-you]
   [data-cancellable]` (`components/studio/session/SessionLifecycleBar.tsx`),
@@ -1923,7 +2154,12 @@ inventory rather than one shared page-level contract:
   the bar keeps rendering `div[data-cancel-outcome="killed"|"unconfirmed"]`
   (W7-FIX-A2 W7A2-02 — the cancel's real outcome, held in page state; the
   `terminal` headline is `describeLifecycle('terminal', …, phase)`, the
-  same sentence the `/sessions` chip renders, W7A2-10). The shell payload
+  same sentence the `/sessions` chip renders, W7A2-10). **W7-B3
+  (community-01)**: a session with nothing left to run here — `crashed`,
+  `stalled` or `terminal` — additionally renders
+  `a[data-action="start-new-session"]` linking `/sessions/<kind>/new` (the
+  way forward from a dead refresh is one click, never a dead end); a
+  healthy `working`/`awaiting-operator` session never renders it. The shell payload
   carries a REQUIRED bridge-derived `transcript` boolean (W7A2-04: a
   `turnSpec` kind rides the generic spine, which never writes transcript
   turns → `false`; a legacy-runner kind → `true`) and the transcript
@@ -2049,7 +2285,40 @@ inventory rather than one shared page-level contract:
   the retired `/dashboard` launcher —
   `[data-page="architect-new"][data-page-ready]` wrapping
   `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
-  `/sessions/architect/<sid>`.
+  `/sessions/architect/<sid>`. **W7-B6 (projects-14/-15, sessions-kinds-03/
+  -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
+  architect kickoff form, rendered by BOTH `/architect/new` and
+  `/sessions/architect/new` (the two entries converge — no more bounce link).
+  Contract: `[data-section="new-idea"][data-new-idea-ready]
+  [data-roster-state="loading"|"ok"|"error"]`; the project field
+  (`[data-field="project"]`) is a **SELECT over real roster IDS** (label
+  `name (id)`) — an unknown `?project=` prefill surfaces
+  `[data-unknown-project="<id>"]` and is never submitted
+  (`reconcileProjectPrefill`, `lib/kickoff-form.ts` — the ONE rule, shared
+  with the generic `/sessions/[kind]/new` select since the W7-B6 review
+  round); the SKILL-declared
+  model-tier envelope renders via the shared `KickoffModelTierPicker`
+  (architect is `strategy:fixed` today, so it states the tier that will
+  run); `[data-field="cost-ceiling-usd"]` rides to
+  `POST /api/architect/start` as `costCeilingUsd` (validated client-side by
+  `kickoffCeilingInvalidReason` — `lib/kickoff-form.ts`, a parity-tested
+  mirror of `MAX_KICKOFF_COST_CEILING_USD` so an over-cap value disables
+  Start with the reason instead of round-tripping a 400 (review F8) — and
+  server-side like the agent
+  dispatch route's; persisted into the session status; ENFORCED by
+  `runArchitectTurn` at every turn start — a turn that would start at/past
+  the ceiling refuses with the reason in the session's error surface); a
+  disabled Start explains itself (`data-disabled-reason` +
+  `[data-section="start-architect-hint"]`). Server side, every
+  project-taking session `/start` route (architect / instructions /
+  project-brain / demo-builder) 404s an unknown project
+  (`unknownProjectReason` vs `discoverProjects`) BEFORE any write — and,
+  since the W7-B6 review round (F1), refuses any string that fails
+  `PROJECT_ID_RE` outright (the creation-mode containment guards tolerate
+  spaces/dots/leading `_`/`.`/`-`, so "my project" or ".hidden" used to slip
+  past the roster check) — a typo
+  can no longer mint a phantom `projects/<typo>/` (sessions-kinds-02,
+  projects-15).
   **R4-19-F2, retired W6-B8** — the kb-cleanup kind. Its bespoke
   `SessionCleanupPanel` (a status block + one explicit approve act, gated on
   phase AND a resolvable `kbId`) is DELETED — `kb-cleanup` now renders the
@@ -2059,9 +2328,11 @@ inventory rather than one shared page-level contract:
   plan's own content (status banner, per-action state, raw text); the panel
   only ever owned the approve control and the phase-gated status line, both
   now generic. The launcher that starts this session lives on `/knowledge`
-  (see the KB maintenance panel entry, below) —
-  `[data-action="start-kb-cleanup"]`, POSTing
-  `POST /api/studio/kbs/:id/cleanup/start`.
+  (see the KB action group entry, below) —
+  `[data-action="start-kb-cleanup"]`, which routes to the kickoff form
+  `/sessions/kb-cleanup/new?kb=<kbId>`; that form makes the
+  `POST /api/studio/kbs/:id/cleanup/start` (knowledge-33 — the launcher
+  itself stopped POSTing on click).
   **W6-B9 — the instructions kind.** Its bespoke `SessionInstructionsPanel`
   (interview form via the shared `ArchitectQuestionForm`, `InstructionsVerdict`'s
   draft-preview + approve/revise/reject gate, `SessionBriefing`'s pre-interview
@@ -2401,20 +2672,43 @@ inventory rather than one shared page-level contract:
   produces) and a way back out (`a[data-action="kickoff-back"]
   href="/sessions"`), with the agent slug + `SKILL.md` path + session
   directory demoted to one `[data-kickoff-provenance]` line — demoted, not
-  deleted. Then a project select (`[data-field="kickoff-project"]`,
-  datalist-backed, mirroring `NewIdeaBox`/`AuthoringLauncher`'s own
-  convention), or, for `kb-cleanup` only, a KB select
+  deleted. Then a project select (`[data-field="kickoff-project"]` — a
+  REAL `<select>` over roster ids since W7-B6, sessions-kinds-02; the old
+  datalist accepted any typo and minted phantom project dirs; a `?project=`
+  prefill is reconciled against the loaded roster (`reconcileProjectPrefill`,
+  `lib/kickoff-form.ts`, W7-B6 review F2 — shared with `NewIdeaBox`): a miss
+  surfaces `[data-unknown-project="<value>"]` and never rides a submit; a
+  disabled Start explains itself via `data-disabled-reason` +
+  `[data-section="start-session-hint"]`, crosscut-25), or, for `kb-cleanup`
+  only, a KB select
   (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
   `community-refresh` only, **no selector section renders at all**
   (`[data-section="kickoff-selector"]` is absent from the DOM, not merely
   empty — the community registry is forge's own single, forge-wide file,
   not a per-project/per-KB artifact) — plus a
-  free-text prompt field for the ONE kind whose `/start` body requires one
-  (`authoring` — `[data-field="kickoff-prompt"]`; every other kickoff kind
-  takes its brief on a LATER turn instead, not at kickoff — instructions'
+  free-text prompt field (`[data-field="kickoff-prompt"]`) for the two kinds
+  that take one: `authoring`, whose `/start` body REQUIRES it (Start stays
+  disabled until filled), and — W7-B3 (community-08) — `community-refresh`,
+  whose "Focus (optional)" brief is OPTIONAL: empty = a full refresh, text =
+  a targeted "find me skills for X" pass, sent as `{brief}` to
+  `POST /api/studio/community-refresh/start` (string, non-blank, ≤ 2000
+  chars; stored on `status.json` for the SKILL's targeted-pass contract) —
+  Start stays enabled either way. Every other kickoff kind takes its brief
+  on a LATER turn instead, not at kickoff — instructions'
   own `briefing` phase, W6-B9, now takes it via the generic
   `SessionInteractivePanel`'s `question-form` affordance, above, rather than
-  a bespoke panel step) + a model-tier picker
+  a bespoke panel step. W7-B3 honesty fixes on this screen (community-12/
+  -22): the model-tier picker PRE-SELECTS the envelope's cheapest tier — the
+  same default the server applies when the request omits `modelTier` — so
+  the checked radio always names what will actually run; the
+  session-directory preview names the REAL anchor
+  (`projects/.community-registry/…` for `selector:"none"`, via
+  `lib/kickoff-view.ts`'s `sessionDirPreview`), never a `<forge-anchor>`
+  placeholder; the `?initiative=` context card renders ONLY for a run the
+  bridge resolves (`[data-section="kickoff-initiative-context"]`), an
+  unknown ref reads `[data-section="kickoff-initiative-ignored"]`, and a
+  `?project=` prefill on a forge-wide kind states it is ignored
+  (`[data-section="kickoff-project-ignored"]`) + a model-tier picker
   (`KickoffModelTierPicker.tsx`, `forge-ui/components/studio/session/`),
   `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"]`,
   rendered from `agentCapabilityDescriptor.allowedTiers` — fetched via
@@ -2697,10 +2991,11 @@ inventory rather than one shared page-level contract:
     used to share. Render-tested directly (a pure leaf component, no fetch,
     no `next/navigation` hooks): `lib/knowledge-empty-state-render.test.ts`;
     the page's own wiring is pinned by source-text assertions in
-    `lib/knowledge-page-empty-state-wiring.test.ts` (mirrors
-    `lib/knowledge-page-kb-maintenance.test.ts`'s established
+    `lib/knowledge-page-empty-state-wiring.test.ts` (the established
     brace-matching/source-text technique — `useSearchParams` +
-    effect-gated `currentId` never resolve under `renderToStaticMarkup`).
+    effect-gated `currentId` never resolve under `renderToStaticMarkup` —
+    also used by `lib/knowledge-page-fail-closed-wiring.test.ts` and
+    W7-B2's `lib/knowledge-page-node-resolve-wiring.test.ts`).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
@@ -2717,14 +3012,24 @@ inventory rather than one shared page-level contract:
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
     like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
     the pre-existing graph + reader body, re-anchored under this branch
-    unchanged; **Health** hosts `KbDrainPanel` + `GuidancePanel` +
-    `KbHealth` (moved under this branch, F1 — no longer rendered
+    unchanged; **Health** hosts (in order, W7-B2) `KbActionGroup` (the ONE
+    action group — see "KB action group" below) + `KbDrainPanel` (now a pure
+    observer of the active-or-latest run) + `GuidancePanel` + `KbHealth` +
+    the shared `RecentRuns` widget (`data-section="kb-recent-runs"`) —
+    (moved under this branch, F1 — no longer rendered
     unconditionally; W6-B13 replaced `LintResolutionPanel` with
     `KbDrainPanel` in this slot — see "KB drain-to-green panel" below);
     **Ingest Activity** is the new read-only `IngestActivityPanel` (see
     below). Journey: `knowledge-explore-tabs`.
   - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]
-    [data-fetch-status]` — the root status folds BOTH the roster read AND the
+    [data-fetch-status][data-health-ready]` — `data-health-ready="true"` is
+    present iff the selected KB's `health` payload has actually arrived
+    (W7-B2): `data-page-ready` settles on the roster + detail reads alone, so
+    the Health tab's own content lags it. Automation that reads health must
+    wait on `data-health-ready`, not `data-page-ready`
+    (`scripts/journeys/knowledge.mjs`'s `kb-maintain` health beat does). The
+    attribute is ABSENT (not `"false"`) while health is unresolved. The root
+    status itself folds BOTH the roster read AND the
     selected KB's detail read (W7-FIX-A1 A1-07: `kbsError || kbDetailError`);
     a failed KB-detail read renders `[data-section="kb-detail-error"]` wrapping
     the shared `[data-component="fetch-error"]` + Retry (which drops the cached
@@ -2829,34 +3134,50 @@ inventory rather than one shared page-level contract:
       its own session kind — `kb-cleanup` (see "KB maintenance panel" below
       and "Cleanup plan" above) — never folded into Consolidate itself, which
       stays a direct dispatch-and-poll, not a chat session.
-  - **KB maintenance panel:**
-    `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
-    that same root once a consolidate run reaches a terminal (`'cleared'` |
-    `'not-cleared'` | `'failed'` | `'running'` — absent before the first
-    run, reset to `''` the moment a new one starts). Actions:
-    `[data-action="kb-index"]` (index refresh — **`kb-lint` was REMOVED here
-    W6-B13**: it duplicated the Health tab's `KbDrainPanel`, whose live
-    status IS the scan result now, since every drain round re-lints the KB —
-    sweep finding C4#7),
-    **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
-    `op=consolidate`)**, **`[data-action="start-kb-cleanup"]` (R4-19-F2 — the
-    kb-cleanup LAUNCHER, closing the reachability gap
-    `brain/cycles/themes/new-session-kind-needs-ui-wiring.md` documents)**,
-    `[data-action="kb-delete"]` (guarded: `cycles` and
-    `forge-dev` are server-refused, 403). `start-kb-cleanup` calls
-    `startKbCleanup(kbId)` (`POST /api/studio/kbs/:id/cleanup/start`) and, on
-    success, navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>`
-    using the **`project` the route itself returns**, never one re-derived
-    from `kbId` — a non-project-bound KB anchors its session under a
+  - **KB action group (W7-B2 — replaces the old `kb-maintenance` panel):**
+    `[data-component="kb-action-group"][data-active-job="drain"|"consolidate"
+    |"none"]` — the ONE place every KB-mutating action lives
+    (knowledge-05/32: the old header buttons, the maintenance panel, and the
+    drain panel's own dispatch button all converged here). Mutually gated by
+    the KB-level active-job fact: `GET /api/studio/kbs/:id/active-job`
+    (`cli/kb-job-state.ts`'s `deriveKbActiveJob` — the SAME derivation every
+    mutating bridge route 409s with), any running job disables the rest and
+    `[data-component="kb-action-gate-reason"]` shows the server's own
+    wording. Actions (each with inline explanatory copy, knowledge-32/33):
+    `[data-action="drain-to-green"]` (primary — dispatch moved HERE from
+    `KbDrainPanel`, which is now a pure observer),
+    `[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
+    `op=consolidate`; `[data-action="re-check"]` appears on a timed-out
+    watch), `[data-action="start-kb-cleanup"]` (R4-19-F2 — the kb-cleanup
+    LAUNCHER), `[data-action="kb-index"]` (per-KB index repair + the global
+    meta-index rebuild, knowledge-06 — reports BOTH halves; **`kb-lint` was
+    REMOVED W6-B13**: it duplicated `KbDrainPanel`, whose live status IS the
+    scan result, sweep finding C4#7), and — in
+    `[data-section="kb-danger-zone"]` — `[data-action="kb-delete"]` with a
+    TYPED-ID confirm (knowledge-24: arm → `[data-field="kb-delete-confirm"]`
+    must equal the kb id → `[data-action="kb-delete-confirm"]` /
+    `[data-action="kb-delete-cancel"]`; `cycles` and `forge-dev` stay
+    server-refused, 403). `[data-action="goto-kb-runs"]` cross-links the
+    run-history widget below. Results/errors render persistently in
+    `[data-component="kb-action-result"]` (carrying `[data-consolidate-state]`
+    + `[data-poll-state]` when a consolidate has run; the hidden
+    `[data-component="kb-action-consolidate-state"]` div carries them while
+    no textual result is shown). `start-kb-cleanup` does NOT POST on click
+    (knowledge-33): it routes to the ONE kickoff form,
+    `/sessions/kb-cleanup/new?kb=<kbId>`, and the FORM makes the
+    `POST /api/studio/kbs/:id/cleanup/start` (model choice included) and
+    navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>` using the
+    **`project` the route itself returns**, never one re-derived from
+    `kbId` — a non-project-bound KB anchors its session under a
     server-minted `.kb-<id>` scratch project
     (`KB_SEEDING_ANCHOR_PREFIX`, `cli/ui-bridge.ts`), so building the URL
-    from `kbId` instead would 404 for every such KB. A failure surfaces
-    verbatim in the SAME `[data-component="kb-maintenance-result"]` span the
-    other three ops already use, never swallowed. Consolidate is genuinely
+    from `kbId` instead would 404 for every such KB. A start failure
+    surfaces verbatim on the kickoff form, never swallowed. Render-tested:
+    `lib/kb-action-group-render.test.ts`. Consolidate is genuinely
     asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
     dispatches, reads the returned `runId`, and polls
     `getAgentFixStatus` (bounded, 40 × 250ms) to a real terminal before the
-    button's own `[data-component="kb-maintenance-result"]` label and
+    group's own `[data-component="kb-action-result"]` label and
     `[data-consolidate-state]` update — never a static "session started"
     message. The terminal state is computed CI-safely: findings scoped to
     the KB (`resolveKbBrainDir`-identity-matched, both `brain/<id>` and the
@@ -2870,23 +3191,40 @@ inventory rather than one shared page-level contract:
     NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
     (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
     computes the real `cleared`/`total` count the terminal event carries.
-  - **KB drain-to-green panel (Health tab, W6-B13).** `KbDrainPanel.tsx`
-    replaces `LintResolutionPanel.tsx` (deleted) — ONE button drives every
-    auto- and agent-tier lint finding to a fixed point, entirely server-side
-    (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`, W6-B12): the component
-    is a pure OBSERVER of `_logs/_kb-drain-<runId>/status.json`, never the
-    owner of the run. Root: `#kb-drain-panel[data-component="kb-drain-panel"]
-    [data-drain-state][data-drain-round][data-drain-run-id]`.
+  - **KB drain-to-green panel (Health tab, W6-B13; reshaped W7-B2).**
+    `KbDrainPanel.tsx` replaces `LintResolutionPanel.tsx` (deleted) — the
+    drain drives every auto- and agent-tier lint finding to a fixed point,
+    entirely server-side (`cli/bridge-studio-kb-drain.ts`'s `runKbDrain`,
+    W6-B12): the component is a pure OBSERVER of
+    `_logs/_kb-drain-<runId>/status.json`, never the owner of the run —
+    W7-B2 moved the DISPATCH button into `KbActionGroup` above it. Root:
+    `#kb-drain-panel[data-component="kb-drain-panel"]
+    [data-drain-state][data-drain-round][data-drain-run-id]` (+
+    `data-drain-read-error=<msg>` whenever the latest status read failed).
     `data-drain-state` is one of the server's own `KbDrainState` values
     (`'running'|'green'|'needs-you'|'no-progress'|'round-cap'|'cost-ceiling'
-    |'failed'`) plus three UI-only values: `'idle'` (no run has ever been
-    dispatched for this kb), `'attaching'` (the mount-time reattach GET is
-    still in flight), and `'timed-out'` (this browser's bounded poll gave up
-    watching — the run itself keeps going server-side; see below). Actions:
-    `[data-action="drain-to-green"]` (`POST .../drain`, 409-safe — see
-    below) and `[data-action="recheck-drain"]` (only rendered in
-    `'timed-out'`; restarts the poll for the SAME `runId` without a fresh
-    dispatch).
+    |'cancelled'|'failed'` — `'cancelled'` added W7-B2, knowledge-14) plus
+    four UI-only values: `'idle'` (no run has ever been dispatched for this
+    kb), `'attaching'` (the mount-time reattach GET is still in flight),
+    `'timed-out'` (this browser's bounded poll gave up watching — the run
+    itself keeps going server-side; see below), and `'unreadable'` (W7-B2 —
+    the bridge ANSWERED the status read with a 4xx, e.g. "unknown drain
+    run": the poll STOPS, the chip says "status unreadable" and
+    `[data-component="drain-read-error"]` carries the bridge's own error
+    text — never a fabricated `'running'`; derivation is the pure
+    `deriveDrainDisplayState`, `lib/kb-drain-view.ts`). Actions:
+    `[data-action="cancel-drain"]` (running only — two-step Stop:
+    `data-cancel-armed="true|false"`, with `[data-action="cancel-drain-keep"]`
+    to disarm; `POST .../drain/cancel` answers `mode:'requested'` for a live
+    loop — honored between turns — or `mode:'forced'` for a dead one, and
+    409s when no run is active), `[data-action="recheck-drain"]` (rendered
+    in `'timed-out'` and `'unreadable'`; restarts the poll for the SAME
+    `runId` without a fresh dispatch), and per-finding
+    `[data-action="open-drain-draft"]` links to the kb-cleanup DRAFT
+    sessions the structural-only gate parks prose edits into (orch-01).
+    While running, `[data-component="drain-elapsed"]` ticks a real elapsed
+    label off the status's own `startedAt`, alongside "round N of M" from
+    the run's real `maxRounds` budget (knowledge-14).
     - **Reattach-on-mount, not assume-fresh.** On every mount (including a
       tab round-trip away from and back to Health — `KbDrainPanel` is
       rendered only under `tab === 'health'`, so switching tabs unmounts/
@@ -2898,22 +3236,34 @@ inventory rather than one shared page-level contract:
       back to Health → assert the SAME run id/state).
     - **The poll.** `lib/agent-dispatch.ts`'s `pollKbDrain` (built on the
       SAME generic `pollUntilTerminal` core `pollAgentRun` now also uses) —
-      bounded, immediate-then-interval, with an EXPLICIT `'timed-out'`
-      status once the poll ceiling is hit while still `'running'` — never a
-      silent freeze. A drain run is driven by `enqueueConsolidate`
+      bounded, immediate-then-interval, and PROGRESS-AWARE (W7-B2,
+      knowledge-15): the drain persists per transition and heartbeats
+      `updatedAt` every ~10s while a turn is in flight, and every observed
+      change resets the poll ceiling (`progressKey`), so `'timed-out'` now
+      means "the status file stopped moving for the whole budget," never
+      "the run was merely long" — and never a silent freeze. A failed READ
+      follows the A1-10 line (W7-B2): transport blips / 5xx keep watching
+      (bounded); a bridge-ANSWERED 4xx stops the poll and the panel derives
+      `'unreadable'`. A drain run is driven by `enqueueConsolidate`
       server-side, not by this poll, so `'timed-out'` here means only "this
       browser stopped watching," never "the run stopped" — the re-check
       button restarts watching the SAME run, no new dispatch.
-    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`)
-      posts `{}`; a 409 ("already active") is recovered by immediately
+    - **Dispatch, and the 409 race.** `dispatchKbDrain` (`studio-client.ts`,
+      invoked from `KbActionGroup` since W7-B2) posts `{}`; a 409 ("already
+      active") is recovered by immediately
       calling `fetchActiveOrLatestKbDrain` rather than trusting anything off
       the 409 response body (the shared `studioPost` helper drops the body
       on any non-2xx across this whole module) — so a double-click race
       attaches to the REAL active run instead of surfacing a dead-end error.
     - **Progress + terminal rendering.** `[data-drain-section="progress"]`
-      lists this round's auto+agent-tier `perFinding` rows —
+      lists the run's accumulated `perFinding` rows GROUPED BY ROUND
+      (W7-B2, knowledge-08/12): one `[data-drain-round-group=<n>]` header
+      per round, each row
       `[data-drain-finding][data-drain-finding-tier="auto"|"agent"|"user"]
-      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]`.
+      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]
+      [data-drain-finding-file=<path>]` naming the file and rule; a row the
+      structural-only gate parked as a prose DRAFT carries its
+      `[data-action="open-drain-draft"]` session link (orch-01).
       Every terminal state gets honest, state-specific copy
       (`lib/kb-drain-view.ts`'s `drainStateCopy` — pure, unit-tested):
       `'green'` shows `[data-component="drain-green"]`; `'no-progress'` /
@@ -2966,10 +3316,10 @@ inventory rather than one shared page-level contract:
       `data-drain-state` vocabulary value, `data-drain-round`,
       `data-drain-run-id`, the per-finding `data-drain-finding-tier`/
       `-outcome` rows, the needs-you `data-user-index`/`-total` block +
-      the C9#3 exhausted-completion state, the `timed-out` re-check
-      affordance, and the full drain-to-green button disabled matrix
-      (dispatching/running/attaching → disabled; every terminal state →
-      enabled). The container's own wiring (`.tsx` only — no jsdom in this
+      the C9#3 exhausted-completion state, and the `timed-out`/`unreadable`
+      re-check affordance (the drain-to-green button and its disabled
+      matrix moved to `KbActionGroup` W7-B2 — pinned in
+      `lib/kb-action-group-render.test.ts` instead). The container's own wiring (`.tsx` only — no jsdom in this
       repo, see `RunPanel.tsx`'s own header) is verified by `tsc`/
       `next build` plus pure-logic unit coverage: `lib/kb-drain-view.test.ts`
       (state copy, tier splitting, the C9#3 walkthrough-completion logic),
@@ -2981,7 +3331,25 @@ inventory rather than one shared page-level contract:
       `lib/studio-client.test.ts` (`dispatchKbDrain`/`fetchKbDrainRun`/
       `fetchActiveOrLatestKbDrain` wire contracts). Journey:
       `knowledge-lint-index` (renamed in spirit from the old lint/index
-      beat — the file's own `id` is unchanged for RUN_ORDER stability).
+      beat — the file's own `id` is unchanged for RUN_ORDER stability; the
+      W7-B2 beat additionally asserts per-finding rows + round groups, the
+      cancel endpoint's 409-on-terminal honesty, and the RecentRuns ledger).
+  - **KB recent runs (Health tab, W7-B2 — knowledge-20):**
+    `[data-section="kb-recent-runs"]` wraps the SHARED
+    `components/RecentRuns.tsx` widget (extracted from
+    `AgentsIndexView.tsx`'s recent-agent-runs section; `/agents` consumes
+    the same component under its established
+    `data-section="recent-agent-runs"` token) over
+    `GET /api/studio/kbs/:id/runs` (`lib/kb-runs.ts`) — every drain /
+    consolidate / kb-cleanup run this KB has ever had, as the standard
+    `[data-section="history-ledger"][data-ledger-count]` row contract
+    documented under `/flows/[id]`. Loading renders
+    `[data-component="recent-runs-loading"]`; a failed rows read renders
+    the shared failure state (W7-A1 discipline), never an honest-looking
+    empty ledger; the section root carries `data-recent-runs-unresolved`
+    (0 for single-source consumers like this one). Render-tested:
+    `lib/recent-runs-render.test.ts`; rows derivation:
+    `lib/kb-runs.test.ts`.
   - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
     (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
     KB's own dir by the same identity-matched `resolveKbBrainDir` walk

@@ -630,17 +630,28 @@ export function deriveArtifacts(
     artifacts['demo'] = mode;
   }
 
-  // verdict: <initiativeId>.verdict-response.md in any queue dir (walk up)
-  // R4-11-F1: `merged` included — a confirmed-merge manifest sits there
-  // briefly between closure's two terminal moves (→merged, then merged→done
-  // in the same sweep), and the verdict response written at approval time
-  // still needs to resolve during that window.
-  const verdictFile = `${initiativeId}.verdict-response.md`;
-  const queueRoot = join(resolve(root), '_queue');
-  for (const state of ['done', 'merged', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
-    if (existsSync(join(queueRoot, state, verdictFile))) {
-      artifacts['verdict'] = 'view';
-      break;
+  // verdict: the cycle's own artifacts/verdict.json — the durable artifact
+  // `writeVerdictJson` writes on every operator approve/send-back (ADR-027)
+  // and the file the /artifact viewer itself renders. W7-B7 (artifact-plan-11):
+  // this used to be detected ONLY via `<initiativeId>.verdict-response.md` in
+  // a queue dir — a file nothing writes any more — so the verdict trail chip
+  // read "Not yet produced" on every run, merged ones included.
+  if (existsSync(join(artifactsDir, 'verdict.json'))) {
+    artifacts['verdict'] = 'view';
+  } else {
+    // Legacy fallback: <initiativeId>.verdict-response.md in any queue dir
+    // (walk up) so frozen pre-ADR-027 logs still resolve.
+    // R4-11-F1: `merged` included — a confirmed-merge manifest sits there
+    // briefly between closure's two terminal moves (→merged, then merged→done
+    // in the same sweep), and the verdict response written at approval time
+    // still needs to resolve during that window.
+    const verdictFile = `${initiativeId}.verdict-response.md`;
+    const queueRoot = join(resolve(root), '_queue');
+    for (const state of ['done', 'merged', 'failed', 'ready-for-review', 'pending', 'in-flight']) {
+      if (existsSync(join(queueRoot, state, verdictFile))) {
+        artifacts['verdict'] = 'view';
+        break;
+      }
     }
   }
 
@@ -650,6 +661,28 @@ export function deriveArtifacts(
   }
 
   return artifacts;
+}
+
+// ---------------------------------------------------------------------------
+// PR link derivation
+// ---------------------------------------------------------------------------
+
+/**
+ * W7-B7 (artifact-plan-17): the run's PR URL, derived from its own
+ * `reviewer.pr-opened` event (`openPrInline` records `metadata.url` verbatim
+ * when `gh pr create` succeeds). Latest wins — a requeue that re-opened the
+ * PR names the live one. Honestly absent (`undefined`) when no such event
+ * exists or the recorded url is not a string (`reviewer.pr-open-failed`
+ * writes `url: null`). Derive-don't-store: nothing new is persisted.
+ */
+export function findPrUrl(events: readonly EventLogEntry[]): string | undefined {
+  let url: string | undefined;
+  for (const e of events) {
+    if (e.message !== 'reviewer.pr-opened') continue;
+    const u = e.metadata?.url;
+    if (typeof u === 'string' && u.length > 0) url = u;
+  }
+  return url;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,13 +5,16 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
+import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
+import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
+import { reconcileProjectPrefill } from '@/lib/kickoff-form';
 import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
+import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/kickoff-view';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -66,8 +69,13 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // never used to look anything up — sessions here are project-scoped).
   const prefillProject = searchParams.get('project') ?? '';
   const prefillInitiative = searchParams.get('initiative');
+  // W7-B2 (knowledge-33): the KB screen's "Cleanup plan" button deep-links
+  // here with its KB pre-selected — ONE kickoff surface, same options.
+  const prefillKb = searchParams.get('kb') ?? '';
 
-  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+  // W7-B6 (sessions-kinds-02): real roster IDS (+ display names) — the field
+  // below is a SELECT over them, never free text a typo could submit.
+  const [knownProjects, setKnownProjects] = useState<{ id: string; name: string }[]>([]);
   const [kbs, setKbs] = useState<Kb[]>([]);
   // W7-A2 (home-sessions-22, sessions-kinds-28) — every in-flight session
   // (the SAME `GET /api/studio/sessions?active=1` read /sessions and Home
@@ -78,12 +86,25 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   const [capability, setCapability] = useState<AgentCapability | null>(null);
   const [ready, setReady] = useState(false);
 
-  const [project, setProject] = useState(prefillProject);
-  const [kbId, setKbId] = useState('');
+  // W7-B6 review F2: NEVER seed the select from the raw prefill — the field
+  // is a select over roster ids, so an unvalidated prefill (a deleted
+  // project, a pre-B6 NAME-based link) rendered a BLANK select while Start
+  // stayed enabled and submitted the invisible stale value. The prefill is
+  // reconciled against the loaded roster below (shared rule with NewIdeaBox:
+  // lib/kickoff-form.ts) — a miss surfaces `data-unknown-project` instead.
+  const [project, setProject] = useState('');
+  const [unknownPrefill, setUnknownPrefill] = useState<string | null>(null);
+  // The `?kb=` prefill (main, W7-B2) is kept as-is: the KB select is seeded
+  // directly from it.
+  const [kbId, setKbId] = useState(prefillKb);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // W7-B3 (community-22): the "?initiative=" context card renders ONLY for a
+  // run the bridge actually knows — arbitrary query text was echoed back as
+  // if it were a real object. null = nothing to validate / not resolved.
+  const [initiativeKnown, setInitiativeKnown] = useState<boolean | null>(null);
 
   const spec = kickoffSpecFor(kind);
 
@@ -109,10 +130,24 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     ])
       .then(([projects, cap, kbList, sessions]) => {
         if (cancelled) return;
-        setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort());
+        const list = projects
+          .map((p) => ({ id: p.id, name: p.name ?? p.id }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        setKnownProjects(list);
+        // Review F2: the ?project= prefill seeds the select ONLY when it
+        // names a real roster id; a miss becomes an honest notice.
+        const reconciled = reconcileProjectPrefill(prefillProject, list.map((p) => p.id));
+        if (reconciled.project) setProject(reconciled.project);
+        setUnknownPrefill(reconciled.unknownPrefill);
         setCapability(cap);
         setKbs(kbList);
         setActiveSessions(sessions);
+        // W7-B3 (community-12) / W7-B2 (knowledge-26): pre-select the tier the
+        // agent will ACTUALLY run on when nothing is chosen — the cheapest of
+        // the SKILL envelope, the SAME default the server applies (both lanes
+        // converged on this; `defaultKickoffTier` is the tested, shared
+        // helper). Never overrides a choice the operator already made.
+        setModelTier((prev) => prev || defaultKickoffTier(allowedTiersFromCapability(cap)));
       })
       .catch((err) => {
         // W6-B6 post-merge review (LOW): the prior `.catch(() => [])` on
@@ -131,14 +166,47 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind]);
 
+  // W7-B3 (community-22): resolve the "?initiative=" ref against the bridge
+  // before rendering it as context — an unknown id is flagged as ignored,
+  // never echoed back as a real object.
+  useEffect(() => {
+    if (!prefillInitiative) {
+      setInitiativeKnown(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRun(prefillInitiative)
+      .then((run) => {
+        if (!cancelled) setInitiativeKnown(run !== null);
+      })
+      .catch(() => {
+        // A failed read is not "unknown initiative" — leave it unresolved
+        // (no card, no ignored-flag) rather than asserting either way.
+        if (!cancelled) setInitiativeKnown(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prefillInitiative]);
+
   // Shared with KickoffModelTierPicker's own internal derivation — ONE rule
   // for "this agent has a real operator-choosable tier range", not two
   // independently-computed copies that could drift.
   const isRangeTier = allowedTiersFromCapability(capability).length > 0;
 
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
-  const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
+  // W7-B3 (community-08): a prompt field is only a Start-gate when the kind
+  // REQUIRES it (authoring) — community-refresh's focus brief is optional.
+  const promptFilled = spec?.promptLabel && spec.promptRequired ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
+  // W7-B6 (crosscut-25): why Start is disabled, stated next to the button.
+  const kickoffDisabledReason = submitting || canSubmit
+    ? null
+    : !selectorFilled
+      ? spec?.selector === 'kb' ? 'select a knowledge base' : 'select a project'
+      : !promptFilled
+        ? `${spec?.promptLabel ?? 'a prompt'} is required`
+        : null;
 
   // W7-A2 — the in-flight sessions of THIS kind on the SAME target. The
   // target is the session's anchor project exactly as the bridge indexes it:
@@ -215,7 +283,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           result = await startProjectBrain({ project: project.trim(), modelTier: tier });
           break;
         case 'community-refresh':
-          result = await startCommunityRefresh({ modelTier: tier });
+          result = await startCommunityRefresh({ modelTier: tier, brief: briefFromPrompt(prompt) });
           break;
         case 'kb-cleanup': {
           const r = await startKbCleanup(kbId.trim(), tier);
@@ -237,14 +305,23 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   }
 
   if (kind === 'architect') {
+    // W7-B6 (sessions-kinds-03): the two architect entries CONVERGE on the
+    // one form (`NewIdeaBox` — roster select + tier + ceiling); this page no
+    // longer bounces the operator through a link to /architect/new.
     return (
-      <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New planning session">
-        <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6 }}>
-          Architect sessions start at its own native entry — this generic kickoff never duplicates it.
+      <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
+        <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: '0 0 16px' }}>
+          Describe the idea; forge reads the project and the brain, asks only what it can&apos;t
+          resolve itself, then drafts a plan for your approval. Same form as{' '}
+          <Link href="/architect/new" style={{ color: 'var(--dim)' }}>/architect/new</Link>.
         </p>
-        <Link href="/architect/new" className="btn btn-primary" style={{ display: 'inline-block', marginTop: 6 }}>
-          Go to /architect/new →
-        </Link>
+        <div style={{ maxWidth: 560 }}>
+          <NewIdeaBox
+            key={prefillProject}
+            initialProject={prefillProject}
+            onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
+          />
+        </div>
       </StudioArchitectShell>
     );
   }
@@ -273,13 +350,25 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         <KickoffContextCard
           kind={kind}
           spec={spec}
-          sessionDirHint={
-            spec.selector === 'none'
-              ? `projects/<forge-anchor>/_${kind}/<sessionId>`
-              : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`
-          }
-          initiative={prefillInitiative}
+          // W7-B3 (community-12): the REAL anchor for community-refresh —
+          // never the literal `<forge-anchor>` placeholder; other kinds keep
+          // their honest placeholders (kickoff-view.sessionDirPreview).
+          sessionDirHint={sessionDirPreview(kind, spec.selector, project)}
+          // W7-B3 (community-22): only a run the bridge actually knows renders
+          // as context — an unknown ref shows the "ignored" notice below.
+          initiative={initiativeKnown === true ? prefillInitiative : null}
         />
+        {prefillInitiative && initiativeKnown === false && (
+          <div data-section="kickoff-initiative-ignored" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 8 }}>
+            The <span style={monoInline}>?initiative=</span> reference in this URL matches no known run — ignored.
+          </div>
+        )}
+        {spec.selector === 'none' && prefillProject && (
+          <div data-section="kickoff-project-ignored" style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 8 }}>
+            The <span style={monoInline}>?project=</span> parameter is ignored — this session kind is forge-wide,
+            not project-scoped.
+          </div>
+        )}
       </div>
 
       {spec.selector !== 'none' && (
@@ -299,19 +388,29 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           ) : (
             <>
               <div style={rowLabel}>Project</div>
-              <input
-                list="forge-kickoff-known-projects"
+              {/* Review F2 — same honest notice as NewIdeaBox: a prefill the
+                  roster does not know is surfaced, never silently submitted. */}
+              {unknownPrefill && (
+                <div data-unknown-project={unknownPrefill} style={{ color: 'var(--red, #f87171)', fontSize: 12, marginBottom: 8 }}>
+                  Project &quot;{unknownPrefill}&quot; is not in the roster — pick a real project below (or onboard it first).
+                </div>
+              )}
+              {/* W7-B6 (sessions-kinds-02): a SELECT over the roster ids the
+                  page already fetched — free text minted phantom
+                  projects/<typo>/ dirs (the server now 404s unknowns too). */}
+              <select
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
-                placeholder="a project"
                 data-field="kickoff-project"
                 style={inputStyle}
-              />
-              <datalist id="forge-kickoff-known-projects">
+              >
+                <option value="">select a project…</option>
                 {knownProjects.map((p) => (
-                  <option key={p} value={p} />
+                  <option key={p.id} value={p.id}>
+                    {p.name === p.id ? p.id : `${p.name} (${p.id})`}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </>
           )}
         </div>
@@ -372,10 +471,18 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         data-confirming={hasExisting && confirmingAnother}
         disabled={!canSubmit}
         onClick={() => void onSubmit()}
+        {...(kickoffDisabledReason ? { 'data-disabled-reason': kickoffDisabledReason, title: kickoffDisabledReason } : {})}
         style={{ opacity: canSubmit ? 1 : 0.5 }}
       >
         {submitting ? 'Starting…' : hasExisting ? (confirmingAnother ? 'Yes, start another' : 'Start another session') : 'Start session'}
       </button>
+      {/* W7-B6 (crosscut-25): the disabled primary CTA explains itself, like
+          the create surfaces that already did. */}
+      {kickoffDisabledReason && (
+        <span data-section="start-session-hint" style={{ marginLeft: 10, fontSize: 11.5, color: 'var(--faint)' }}>
+          {kickoffDisabledReason}
+        </span>
+      )}
       {hasExisting && confirmingAnother && !submitting && (
         <button
           type="button"
@@ -414,6 +521,7 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--line)', borderRadius: 10, padding: 16, background: 'var(--bg-2)', maxWidth: 560,
 };
 const rowLabel: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 };
+const monoInline: React.CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', color: 'var(--dim)' };
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)',
   border: '1px solid var(--line)', borderRadius: 6, padding: '8px 10px', fontSize: 13,

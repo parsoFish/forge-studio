@@ -100,6 +100,12 @@ export interface SkillLibraryEntry {
   hub?: string; // catalog metadata — unpopulated until a hub source exists
   error?: string; // malformed on-disk skill — surfaced, never swallowed (AT-7)
   path?: string;
+  /** W7-B3 (community-25): true for a registry-only community row with NO
+   *  local bytes — a browse-only catalog REFERENCE. Nothing exists to trust,
+   *  compose, or bind, so a reference is never palette-visible and every
+   *  surface renders it as "browse upstream", never as a ready local skill.
+   *  Absent (never false) for anything that exists on disk. */
+  reference?: boolean;
 }
 
 export interface PackageFile {
@@ -125,6 +131,15 @@ export interface InstallInput {
 export interface InstallResult {
   alreadyInstalled: boolean;
 }
+
+/** W7-B3 (library-31) — thrown by `installSkillPackage` when `skills/<id>`
+ *  is occupied by a local skill with NO community-install provenance
+ *  (present-unmanaged): the package was never installed, so an
+ *  `alreadyInstalled` answer would be a laundered false success, and an
+ *  overwrite would destroy an unrelated file. A NAMED class so route
+ *  callers can map it to 409 (id collision) without string-matching the
+ *  message — the same explicit-error-contract shape ADR-042 blesses. */
+export class SkillIdOccupiedError extends Error {}
 
 /** Lint finding shape shared with `orchestrator/studio/validate.ts` — reused,
  *  not re-invented, so `forge studio lint` renders every finding uniformly. */
@@ -367,6 +382,10 @@ export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
         description: existing.description ?? cs.desc,
       });
     } else {
+      // W7-B3 (community-25): no local bytes = a browse-only REFERENCE.
+      // The old `paletteVisible: true` advertised a composable skill that
+      // structurally cannot be composed (there is nothing on disk), the
+      // exact opposite of what /community says about the same id.
       byId.set(cs.id, {
         id: cs.id,
         name: cs.name,
@@ -374,12 +393,13 @@ export function listSkillLibrary(forgeRoot: string): SkillLibraryEntry[] {
         source: 'community',
         installed: false,
         trust: 'ready',
-        paletteVisible: true,
+        paletteVisible: false,
         usedBy: usage.get(cs.id) ?? [],
         provenance: null,
         category: cs.category,
         tier: cs.tier,
         stars: cs.stars,
+        reference: true,
       });
     }
   }
@@ -562,7 +582,21 @@ export function installSkillPackage(input: InstallInput): InstallResult {
   // returns null for a symlinked/aliased id (per-segment realpath identity
   // mismatch), so control falls through to the write-phase guard, which refuses
   // (throws) rather than reporting a false 'already installed'.
-  if (guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read') !== null) {
+  //
+  // W7-B3 (library-31): `alreadyInstalled` is only honest when THIS package
+  // was actually installed before — i.e. the occupying SKILL.md carries a
+  // community-install provenance block. An UNRELATED local skill that merely
+  // shares the id refuses loudly (the same fact routeCommunityInstall's own
+  // collision pre-check names), never a laundered false success. The victim
+  // file is read-only here — byte-identical either way.
+  const occupied = guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read');
+  if (occupied !== null) {
+    const { data } = matter(readFileSync(occupied, 'utf8'), {});
+    if (extractProvenance((data ?? {}) as Record<string, unknown>) === null) {
+      throw new SkillIdOccupiedError(
+        `installSkillPackage: skills/${id} is occupied by a local skill with no community-install provenance (present-unmanaged) — refusing to claim alreadyInstalled for a package that was never installed`,
+      );
+    }
     return { alreadyInstalled: true };
   }
 

@@ -43,6 +43,7 @@ import {
   skillTrustState,
   scanSkillPackage,
   installSkillPackage,
+  SkillIdOccupiedError,
   approveSkillDraft,
   repinSkillPackage,
   lintSkillTrust,
@@ -261,6 +262,35 @@ describe('listSkillLibrary — union + source discrimination', () => {
     const ghost = entries.find((e) => e.id === 'ghost-skill');
     assert.ok(ghost, 'catalog-only entry must appear');
     assert.equal(ghost!.installed, false);
+  });
+
+  // W7-B3 (community-25): a registry-only community row has NO local bytes —
+  // nothing exists to trust, compose, or bind. Reporting it palette-visible
+  // (composable) while /community says the same object cannot even be
+  // installed was two surfaces contradicting each other about one id. It is
+  // a browse-only REFERENCE: `reference: true`, never palette-visible.
+  it('W7-B3: a registry-only community skill (no disk package) is a browse-only reference — reference:true, paletteVisible:false', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root, [
+      { id: 'browse-only', name: 'Browse Only', provenance: 'someone', source: 'https://z', category: 'meta' },
+    ]);
+
+    const entry = listSkillLibrary(root).find((e) => e.id === 'browse-only');
+    assert.ok(entry, 'the reference entry must still appear (browseable)');
+    assert.equal(entry!.reference, true, 'no local bytes = a reference, stated as a real field');
+    assert.equal(entry!.paletteVisible, false, 'nothing composable exists — it must never surface in the agent-builder palette');
+    assert.equal(entry!.installed, false);
+  });
+
+  it('W7-B3: a community id that IS on disk carries no reference flag (the filesystem entry is the real thing)', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root, [
+      { id: 'handoff', name: 'Handoff', provenance: 'obra/superpowers', source: 'https://x', category: 'memory' },
+    ]);
+    writeSkillMd(root, 'handoff', { name: 'Handoff (local copy)', description: 'compress session' });
+    const entry = listSkillLibrary(root).find((e) => e.id === 'handoff');
+    assert.ok(entry);
+    assert.notEqual(entry!.reference, true, 'an on-disk skill is never a browse-only reference');
   });
 
   it('AT-5: studio agents (SKILL.md WITH runtime:) are NOT in the skill library', () => {
@@ -600,6 +630,32 @@ describe('installSkillPackage', () => {
     assert.equal(result.alreadyInstalled, true);
     const after = readFileSync(skillPath('reinstall-me', root), 'utf8');
     assert.equal(after, before, 'existing directory must remain byte-identical, no overwrite');
+  });
+
+  // W7-B3 (library-31): the occupied-destination short-circuit must tell a
+  // MANAGED occupancy (this package installed earlier — provenance block
+  // present, honest alreadyInstalled) apart from an UNRELATED local skill
+  // that merely shares the id. The old {alreadyInstalled:true} for the
+  // latter was a laundered false success the /community badge could never
+  // clear.
+  it('W7-B3: an id occupied by an UNRELATED local skill (no provenance) THROWS a refusal and leaves the victim byte-identical — never a false alreadyInstalled', () => {
+    const root = makeForgeRoot();
+    const dir = join(root, 'skills', 'occupied-id');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      skillPath('occupied-id', root),
+      matter.stringify('\n# Local\n\nHand-authored, unrelated.\n', { name: 'My Local Skill', description: 'hand-authored', library: true }),
+      'utf8',
+    );
+    const before = readFileSync(skillPath('occupied-id', root), 'utf8');
+    const packageDir = makePackageDir();
+    assert.throws(
+      () => installSkillPackage({ forgeRoot: root, id: 'occupied-id', packageDir, upstream: { source: 'https://x' } }),
+      (err: unknown) =>
+        err instanceof SkillIdOccupiedError && /unmanaged|provenance/i.test((err as Error).message),
+      'an unrelated occupancy must refuse loudly via the NAMED SkillIdOccupiedError (route callers map it to 409 without string-matching), naming why',
+    );
+    assert.equal(readFileSync(skillPath('occupied-id', root), 'utf8'), before, 'the unrelated local skill must stay byte-identical');
   });
 
   it('AT-25: unbound on land — no agent definition composition.skills mentions the new id', () => {
