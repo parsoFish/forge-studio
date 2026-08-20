@@ -29,7 +29,7 @@ import {
 import { pollKbDrain, pollAgentFix, pollDisplayState, type PolledKbDrainStatus } from '@/lib/agent-dispatch';
 import {
   drainStateCopy, findingsByTier, resolveUserTierStep, isKbDrainTerminal,
-  findingRounds, formatDrainElapsed,
+  findingRounds, formatDrainElapsed, deriveDrainDisplayState,
   KB_DRAIN_MAX_ROUNDS_DISPLAY, type KbDrainDisplayState,
 } from '@/lib/kb-drain-view';
 import { ActivityLog } from '@/components/studio/ActivityLog';
@@ -124,7 +124,11 @@ export function KbDrainPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, kbId, pollNonce]);
 
-  const displayState: KbDrainDisplayState = status?.state ?? (attaching ? 'attaching' : 'idle');
+  // W7-B2: the ONE display-state derivation (lib/kb-drain-view.ts) — a
+  // bridge-ANSWERED 4xx failed read derives 'unreadable' (the poll stopped;
+  // never a fabricated 'running'); transport blips / 5xx keep 'running'
+  // while the poll is genuinely still watching.
+  const displayState: KbDrainDisplayState = deriveDrainDisplayState(status, attaching);
 
   // Report state up + tick the elapsed clock while running.
   useEffect(() => {
@@ -393,7 +397,7 @@ export function KbDrainPanelView({
           </>
         )}
 
-        {displayState === 'timed-out' && (
+        {(displayState === 'timed-out' || displayState === 'unreadable') && (
           <button data-action="recheck-drain" style={btn} onClick={onRecheck}>Re-check</button>
         )}
 

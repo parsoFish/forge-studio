@@ -1535,17 +1535,26 @@ export type KbDrainStatus = {
   startedAt?: string;
   maxRounds?: number;
   maxCostUsd?: number;
+  /** HTTP status of a FAILED read — CLIENT-ONLY (set by
+   *  {@link failedKbDrainStatus}; never present in a server-written
+   *  status.json). The drain vocab has no 'unknown' token, so a failed read
+   *  fabricates `state:'running'`; this field is how `pollKbDrain` and the
+   *  panel's display derivation tell a bridge-ANSWERED 4xx (a terminal fact
+   *  — "unknown drain run") apart from a transport blip / 5xx (transient,
+   *  keep watching). Mirrors `isStillWatching`'s A1-10 rule. */
+  status?: number;
 };
 
 /** W7-A1: the failed-read shape for a drain-status poll — `ok:false` plus the
  *  bridge's OWN error text (a 404's "unknown drain run", a transport failure's
  *  "bridge unreachable (…)") — never a fabricated terminal state, and never a
  *  neutral string when the server said something specific. */
-function failedKbDrainStatus(runId: string | null, error: string): KbDrainStatus {
+function failedKbDrainStatus(runId: string | null, error: string, status?: number): KbDrainStatus {
   return {
     ok: false, runId, state: 'running', round: 0,
     counts: { auto: 0, agent: 0, user: 0 }, perFinding: [], costUsd: 0,
     updatedAt: new Date(0).toISOString(), error,
+    ...(status !== undefined ? { status } : {}),
   };
 }
 
@@ -1565,7 +1574,7 @@ export async function fetchKbDrainRun(id: string, runId: string): Promise<KbDrai
   const r = await studioGet<KbDrainStatus>(
     `/api/studio/kbs/${encodeURIComponent(id)}/drain/${encodeURIComponent(runId)}`,
   );
-  return r.ok ? r.data : failedKbDrainStatus(runId, r.error);
+  return r.ok ? r.data : failedKbDrainStatus(runId, r.error, r.status);
 }
 
 /** Reattach to the active-or-latest drain run for a kb:
@@ -1576,7 +1585,7 @@ export async function fetchActiveOrLatestKbDrain(id: string): Promise<KbDrainSta
   const r = await studioGet<KbDrainStatus>(
     `/api/studio/kbs/${encodeURIComponent(id)}/drain`,
   );
-  return r.ok ? r.data : failedKbDrainStatus(null, r.error);
+  return r.ok ? r.data : failedKbDrainStatus(null, r.error, r.status);
 }
 
 /** W7-B2 (knowledge-14): cancel the ACTIVE drain run for a kb.

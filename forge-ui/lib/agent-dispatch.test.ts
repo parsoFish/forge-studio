@@ -227,6 +227,30 @@ test('pollKbDrain: reaching maxAttempts while still "running" emits an explicit 
   stop();
 });
 
+test('pollKbDrain: a bridge-ANSWERED 4xx failed read (ok:false, status:404 — "unknown drain run") STOPS the poll — a not-found is a fact about the run, not a blip (W7-B2, the drain vocab\'s missing-unknown gap)', async () => {
+  const fetchStatus = vi.fn().mockResolvedValue(drainStatus({ ok: false, state: 'running', status: 404, error: 'unknown drain run' }));
+  const onUpdate = vi.fn();
+  const stop = pollKbDrain('forge-dev', 'kb-drain-1', { fetchStatus, onUpdate, intervalMs: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(fetchStatus).toHaveBeenCalledTimes(1); // never polled again
+  // the errored status IS delivered — the panel derives 'unreadable' from it
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false, status: 404, error: 'unknown drain run' }));
+  stop();
+});
+
+test('pollKbDrain: a transport / 5xx failed read keeps watching (bounded) — one blipped read never renders a live run as stopped', async () => {
+  const blip = drainStatus({ ok: false, state: 'running', status: 502, error: 'bridge faltered' });
+  const fetchStatus = vi.fn().mockResolvedValueOnce(blip).mockResolvedValue(drainStatus({ state: 'green' }));
+  const onUpdate = vi.fn();
+  const stop = pollKbDrain('forge-dev', 'kb-drain-1', { fetchStatus, onUpdate, intervalMs: 50 });
+  await vi.waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(60);
+  expect(fetchStatus.mock.calls.length).toBeGreaterThanOrEqual(2); // kept watching through the blip
+  expect(onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'green' }));
+  stop();
+});
+
 test('pollKbDrain: the returned cleanup function stops all future polling', async () => {
   const fetchStatus = vi.fn().mockResolvedValue(drainStatus());
   const onUpdate = vi.fn();

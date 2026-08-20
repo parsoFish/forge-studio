@@ -13,6 +13,7 @@ import {
   resolveUserTierStep,
   findingRounds,
   formatDrainElapsed,
+  deriveDrainDisplayState,
   KB_DRAIN_MAX_ROUNDS_DISPLAY,
 } from './kb-drain-view';
 import type { KbDrainPerFinding } from './studio-client';
@@ -22,13 +23,17 @@ import type { KbDrainPerFinding } from './studio-client';
 // ---------------------------------------------------------------------------
 
 test('isKbDrainTerminal: every real server terminal state is terminal', () => {
-  for (const s of ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed'] as const) {
+  for (const s of ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed'] as const) {
     expect(isKbDrainTerminal(s)).toBe(true);
   }
 });
 
 test('isKbDrainTerminal: "timed-out" (the UI-only watch-exhaustion state) is terminal', () => {
   expect(isKbDrainTerminal('timed-out')).toBe(true);
+});
+
+test('isKbDrainTerminal: "unreadable" (a bridge-ANSWERED failed status read — W7-B2) is terminal: nothing changes without an explicit re-check or fresh dispatch', () => {
+  expect(isKbDrainTerminal('unreadable')).toBe(true);
 });
 
 test('isKbDrainTerminal: "running"/"attaching"/"idle" are NOT terminal', () => {
@@ -42,7 +47,7 @@ test('isKbDrainTerminal: "running"/"attaching"/"idle" are NOT terminal', () => {
 // ---------------------------------------------------------------------------
 
 test('drainStateCopy: every state produces a non-empty label and detail', () => {
-  const states = ['idle', 'attaching', 'running', 'green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'failed', 'timed-out'] as const;
+  const states = ['idle', 'attaching', 'running', 'green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out', 'unreadable'] as const;
   for (const s of states) {
     const copy = drainStateCopy(s, 0.42);
     expect(copy.label.length).toBeGreaterThan(0);
@@ -66,6 +71,47 @@ test('drainStateCopy: "timed-out" explicitly says the run keeps going server-sid
 
 test('drainStateCopy: "failed" points at the activity log rather than inventing an error string it does not have', () => {
   expect(drainStateCopy('failed', 0).detail.toLowerCase()).toContain('activity log');
+});
+
+// ---------------------------------------------------------------------------
+// deriveDrainDisplayState (W7-B2 — the ledger's deferred "pollKbDrain
+// 'unknown' vocab" item): the drain wire vocab has no 'unknown' token, so
+// studio-client's failedKbDrainStatus fabricates state:'running' for EVERY
+// failed read. The display derivation must tell the two failure classes
+// apart: a bridge-ANSWERED 4xx ("unknown drain run") is a terminal fact →
+// 'unreadable'; a transport failure / 5xx is a transient blip the poll keeps
+// watching through → the status passes through as-is.
+// ---------------------------------------------------------------------------
+
+test('deriveDrainDisplayState: null status derives attaching/idle from the attach flag', () => {
+  expect(deriveDrainDisplayState(null, true)).toBe('attaching');
+  expect(deriveDrainDisplayState(null, false)).toBe('idle');
+});
+
+test('deriveDrainDisplayState: a bridge-ANSWERED 4xx failed read derives "unreadable" — never the fabricated "running"', () => {
+  expect(deriveDrainDisplayState({ ok: false, state: 'running', status: 404 }, false)).toBe('unreadable');
+  expect(deriveDrainDisplayState({ ok: false, state: 'running', status: 410 }, false)).toBe('unreadable');
+});
+
+test('deriveDrainDisplayState: transport / 5xx failed reads pass through as "running" (the poll is still watching, bounded)', () => {
+  expect(deriveDrainDisplayState({ ok: false, state: 'running' }, false)).toBe('running');
+  expect(deriveDrainDisplayState({ ok: false, state: 'running', status: 502 }, false)).toBe('running');
+});
+
+test('deriveDrainDisplayState: healthy statuses pass through untouched — including every server terminal', () => {
+  for (const s of ['running', 'green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out'] as const) {
+    expect(deriveDrainDisplayState({ ok: true, state: s }, false)).toBe(s);
+  }
+});
+
+test('drainStateCopy: "unreadable" says the status READ failed — never a claim about the run itself (it may be long gone), and names the way out (re-check / re-run)', () => {
+  const copy = drainStateCopy('unreadable', 0);
+  expect(copy.label.toLowerCase()).toContain('unreadable');
+  const detail = copy.detail.toLowerCase();
+  expect(detail).toContain('read');
+  expect(detail).toMatch(/re-check|re-run/);
+  // it must NOT claim the run is running or stopped — the one honest fact is the failed read
+  expect(detail).not.toContain('still running');
 });
 
 // ---------------------------------------------------------------------------

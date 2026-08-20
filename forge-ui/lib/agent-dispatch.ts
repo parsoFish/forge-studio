@@ -221,7 +221,15 @@ export function pollKbDrain(kbId: string, runId: string, opts: PollKbDrainOption
   const fetchStatus = opts.fetchStatus ?? fetchKbDrainRun;
   return pollUntilTerminal<KbDrainStatus>({
     fetchStatus: () => fetchStatus(kbId, runId),
-    isRunning: (s) => s.state === 'running',
+    // W7-B2 (the drain vocab's missing-'unknown' gap): a failed read arrives
+    // as a FABRICATED `state:'running'` (`failedKbDrainStatus` — the wire
+    // vocab has no 'unknown'), so the A1-10 rule is applied here on `ok` +
+    // the read's HTTP status instead: keep watching a genuine 'running' or a
+    // transient failure (transport / 5xx); STOP on a bridge-ANSWERED 4xx —
+    // "unknown drain run" is a fact about the run, not a blip, and polling
+    // it for the whole budget would render a not-found as a live run. The
+    // panel derives 'unreadable' from the delivered status.
+    isRunning: (s) => s.state === 'running' && (s.ok !== false || s.status === undefined || s.status >= 500),
     intervalMs: opts.intervalMs,
     maxAttempts: opts.maxAttempts,
     // W7-B2 (knowledge-15): the drain persists per transition AND heartbeats

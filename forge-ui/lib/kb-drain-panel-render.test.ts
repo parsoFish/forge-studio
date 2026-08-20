@@ -79,7 +79,7 @@ function tagContaining(html: string, marker: string): string {
 
 const ALL_DISPLAY_STATES: KbDrainDisplayState[] = [
   'idle', 'attaching', 'running', 'green', 'needs-you', 'no-progress',
-  'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out',
+  'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out', 'unreadable',
 ];
 
 test('root [data-component="kb-drain-panel"][data-drain-state] renders EVERY display-state value verbatim — the full vocabulary, not just a subset', () => {
@@ -304,11 +304,22 @@ test('needs-you section is ABSENT for every non-needs-you state, even with a use
 // timed-out — the explicit re-check affordance (never silent).
 // ---------------------------------------------------------------------------
 
-test('timed-out: [data-action="recheck-drain"] renders ONLY in the timed-out state', () => {
+test('timed-out/unreadable: [data-action="recheck-drain"] renders ONLY in the two watch-lost states (timed-out, unreadable — W7-B2)', () => {
   expect(render({ displayState: 'timed-out' })).toContain('data-action="recheck-drain"');
-  for (const s of ALL_DISPLAY_STATES.filter((s) => s !== 'timed-out')) {
+  expect(render({ displayState: 'unreadable' })).toContain('data-action="recheck-drain"');
+  for (const s of ALL_DISPLAY_STATES.filter((s) => s !== 'timed-out' && s !== 'unreadable')) {
     expect(render({ displayState: s }), `state=${s}`).not.toContain('data-action="recheck-drain"');
   }
+});
+
+test('unreadable (W7-B2): a bridge-ANSWERED failed read renders the honest "status unreadable" chip + the bridge\'s own error text — and never the "still watching" suffix (the poll has stopped)', () => {
+  const html = render({ displayState: 'unreadable', readError: 'unknown drain run "forge-dev-drain-9"' });
+  expect(html.toLowerCase()).toContain('status unreadable');
+  expect(html).toContain('data-component="drain-read-error"');
+  expect(html).toContain('unknown drain run');
+  expect(html).not.toContain('still watching');
+  // no Stop control — there is nothing verifiably live to stop
+  expect(html).not.toContain('data-action="cancel-drain"');
 });
 
 test('timed-out: the state copy explicitly says the run keeps going server-side (never implies it stopped)', () => {

@@ -218,64 +218,79 @@ function KnowledgePageInner() {
     return () => { signal.cancelled = true; };
   }, [loadKey]);
 
-  // ── Resolve active KB id (from URL params → first KB) ────────────────────
-  // Priority: ?node= (or its ?theme= alias, RULING 1) drives KB resolution
-  //           via resolve-node endpoint.
-  //           ?id= selects a KB directly.
-  //           Falls back to first KB in list.
+  // ── Resolve ?node=/?theme= → owning KB (W7-B2, knowledge-30) ─────────────
+  // Deliberately its OWN effect, keyed on the URL params ALONE: the roster
+  // load (allKbs / kbListReady) used to re-run the ONE combined selection
+  // effect below mid-flight — its cleanup cancelled the first resolve-node
+  // fetch and the re-run issued a second, identical one. The id-less resolve
+  // needs nothing from the roster, so roster churn must never touch it.
+  // ?node= takes priority; ?theme= is a thin alias onto the SAME machinery
+  // when ?node= is absent — no parallel selection effect (RULING 1).
   useEffect(() => {
-    // ?node= takes priority; ?theme= is a thin alias onto the SAME machinery
-    // when ?node= is absent — no parallel selection effect (RULING 1).
     const pendingParam = nodeParam || themeParam;
-    if (pendingParam) {
-      // Resolve which KB owns this node, then set it as active. Store the
-      // slug so the detail-load effect can select it. This path is
-      // pre-existing/unconditionally-trusted (unaffected by W6-P4) — always
-      // confirmed the instant currentId is set here.
-      pendingNodeRef.current = pendingParam;
-      pendingIsThemeRef.current = !nodeParam && !!themeParam;
-      setIdConfirmed(true);
-      if (idParam) {
-        // Both ?id= and ?node=/?theme= given: the id still goes through the
-        // roster check (W7-FIX-A4 / W7A4-07 — the not-found path applies
-        // whether or not a node is queued); a validated id just queues the
-        // node selection.
-        const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
-        if (resolution.source === 'fallback') {
-          pendingNodeRef.current = null;
-          pendingIsThemeRef.current = false;
-          setNotFound({ kind: 'knowledge base', id: idParam });
-          setReady(true);
-          return;
-        }
+    // With ?id= present the roster-keyed effect below owns selection (the id
+    // still goes through the roster check; the node is only QUEUED there).
+    if (!pendingParam || idParam) return;
+    // Store the slug so the detail-load effect can select it. This path is
+    // pre-existing/unconditionally-trusted (unaffected by W6-P4) — always
+    // confirmed the instant currentId is set here.
+    pendingNodeRef.current = pendingParam;
+    pendingIsThemeRef.current = !nodeParam && !!themeParam;
+    setIdConfirmed(true);
+    const signal = { cancelled: false };
+    resolveKbNode(pendingParam).then((result) => {
+      if (signal.cancelled) return;
+      if (result?.kbId) {
         setNotFound(null);
-        setIdConfirmed(resolution.source !== 'url-optimistic');
-        setCurrentId(idParam);
-        return;
-      }
-      // Only ?node=/?theme= given: call resolve-node to find the owning KB.
-      const signal = { cancelled: false };
-      resolveKbNode(pendingParam).then((result) => {
-        if (signal.cancelled) return;
-        if (result?.kbId) {
-          setNotFound(null);
-          setCurrentId(result.kbId);
-        } else {
-          // W7-A4 (knowledge-30): no KB owns this node — say so; never fall
-          // back to the first KB with nothing selected.
-          pendingNodeRef.current = null;
-          pendingIsThemeRef.current = false;
-          setNotFound({ kind: 'theme', id: pendingParam });
-          setReady(true);
-        }
-      }).catch(() => {
-        if (signal.cancelled) return;
+        setCurrentId(result.kbId);
+      } else {
+        // W7-A4 (knowledge-30): no KB owns this node — say so; never fall
+        // back to the first KB with nothing selected.
         pendingNodeRef.current = null;
         pendingIsThemeRef.current = false;
         setNotFound({ kind: 'theme', id: pendingParam });
         setReady(true);
-      });
-      return () => { signal.cancelled = true; };
+      }
+    }).catch(() => {
+      if (signal.cancelled) return;
+      pendingNodeRef.current = null;
+      pendingIsThemeRef.current = false;
+      setNotFound({ kind: 'theme', id: pendingParam });
+      setReady(true);
+    });
+    return () => { signal.cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idParam, nodeParam, themeParam]);
+
+  // ── Resolve active KB id (from URL params → first KB) ────────────────────
+  // Priority: ?node= (or its ?theme= alias) — handled by the effect ABOVE
+  //           when no ?id= accompanies it.
+  //           ?id= selects a KB directly (and queues any ?node= given too).
+  //           Falls back to first KB in list.
+  useEffect(() => {
+    const pendingParam = nodeParam || themeParam;
+    if (pendingParam) {
+      // Node-only deep link: the resolve-node effect above owns this case.
+      if (!idParam) return;
+      // Both ?id= and ?node=/?theme= given: the id still goes through the
+      // roster check (W7-FIX-A4 / W7A4-07 — the not-found path applies
+      // whether or not a node is queued); a validated id just queues the
+      // node selection.
+      pendingNodeRef.current = pendingParam;
+      pendingIsThemeRef.current = !nodeParam && !!themeParam;
+      setIdConfirmed(true);
+      const resolution = resolveActiveKbId(idParam, allKbs, kbListReady);
+      if (resolution.source === 'fallback') {
+        pendingNodeRef.current = null;
+        pendingIsThemeRef.current = false;
+        setNotFound({ kind: 'knowledge base', id: idParam });
+        setReady(true);
+        return;
+      }
+      setNotFound(null);
+      setIdConfirmed(resolution.source !== 'url-optimistic');
+      setCurrentId(idParam);
+      return;
     }
     if (idParam) {
       // W6-P4 review fix #4: the DECISION is a pure function
