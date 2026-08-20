@@ -29,6 +29,7 @@ import {
 import type { Flow, Kb, FlowTrigger, ShippedTriggerKind, WebhookEventName } from '@/lib/studio-client';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
+import { FlowSaveFindings, type FlowSaveFinding } from './FlowSaveFindings';
 
 export type FlowHeaderState = {
   name: string;
@@ -47,14 +48,21 @@ type Props = {
   onChange: (next: FlowHeaderState) => void;
   /** Current saved version */
   version?: number;
-  /** Triggered by Save; parent provides nodes/edges to include in the PUT body */
-  onSave: () => Promise<{ ok: boolean; version?: number; error?: string }>;
+  /** Triggered by Save; parent provides nodes/edges to include in the PUT
+   *  body. W7-B4 (flows-10): the failure shape carries the bridge's per-node
+   *  `findings` — rendered below the header, never thrown away. */
+  onSave: () => Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[] }>;
   /** All flows (for the flow selector) */
   flows: Flow[];
   /** Called when the user selects a different flow from the dropdown */
   onFlowSelect: (id: string) => void;
   /** True when authoring a brand-new (unsaved) flow */
   isNew?: boolean;
+  /** W7-B4 (flows-11): true only for a deletable (authored, non-seed) flow —
+   *  a shipped seed renders NO delete control at all. */
+  canDelete?: boolean;
+  /** Fires after the two-step confirm; the parent owns the DELETE + redirect. */
+  onDelete?: () => void;
 };
 
 export function FlowHeader({
@@ -66,8 +74,15 @@ export function FlowHeader({
   flows,
   onFlowSelect,
   isNew = false,
+  canDelete = false,
+  onDelete,
 }: Props): JSX.Element {
   const [kbs, setKbs] = useState<Kb[]>([]);
+  // W7-B4 (flows-10): the last failed save's validation findings — cleared
+  // by any subsequent successful save.
+  const [saveFindings, setSaveFindings] = useState<FlowSaveFinding[]>([]);
+  // W7-B4 (flows-11): two-step delete confirm.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Load KBs (the flow's optional knowledge base). Projects bind at run-launch (B2).
   useEffect(() => {
@@ -82,7 +97,15 @@ export function FlowHeader({
   const goalSet = state.goal.trim().length > 0;
 
   // Unified save feedback (X1) — the hook maps a 423/in-flight error to `locked`.
-  const { saving, save: handleSave, ...saveFb } = useSaveState(onSave);
+  // The wrapper captures the failure path's `findings` (flows-10) so the
+  // per-node detail renders below instead of evaporating into "validation
+  // failed".
+  const { saving, save: handleSave, ...saveFb } = useSaveState(async () => {
+    const r = await onSave();
+    const failedFindings = !r.ok && Array.isArray(r.findings) ? (r.findings as FlowSaveFinding[]) : [];
+    setSaveFindings(failedFindings.filter((f) => typeof f?.message === 'string'));
+    return r;
+  });
 
   // R2-04-F4/forge-zyc: the operator chooses a trigger kind (data-field=
   // "trigger-kind", all 7 SHIPPED_TRIGGER_KINDS — flow-complete,
@@ -286,7 +309,52 @@ export function FlowHeader({
         >
           {saving ? 'Saving…' : 'Save Flow'}
         </button>
+
+        {/* W7-B4 (flows-11): delete for an authored flow — a shipped seed
+            renders NO control at all. Two-step confirm; the parent owns the
+            DELETE call + redirect. */}
+        {canDelete && !confirmingDelete && (
+          <button
+            type="button"
+            className="btn"
+            data-action="delete-flow"
+            onClick={() => setConfirmingDelete(true)}
+            style={{ fontSize: 12, color: '#f87171' }}
+          >
+            Delete flow
+          </button>
+        )}
+        {canDelete && confirmingDelete && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: '#f87171' }}>Delete &quot;{flowId}&quot; permanently?</span>
+            <button
+              type="button"
+              className="btn"
+              data-action="confirm-delete-flow"
+              onClick={() => { setConfirmingDelete(false); onDelete?.(); }}
+              style={{ fontSize: 12, background: '#7f1d1d', color: '#fff' }}
+            >
+              Yes, delete
+            </button>
+            <button
+              type="button"
+              className="btn"
+              data-action="cancel-delete-flow"
+              onClick={() => setConfirmingDelete(false)}
+              style={{ fontSize: 12 }}
+            >
+              Cancel
+            </button>
+          </span>
+        )}
       </div>
+
+      {/* W7-B4 (flows-10): the last failed save's per-node findings. */}
+      {saveFindings.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <FlowSaveFindings findings={saveFindings} />
+        </div>
+      )}
 
       {/* Goal row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>

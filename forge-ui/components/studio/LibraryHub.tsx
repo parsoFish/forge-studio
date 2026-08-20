@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { SkillLibraryEntry } from '@/lib/skill-client';
-import { groupSkillLibrary, skillBadges } from '@/lib/skill-library-view';
+import { groupSkillLibrary, skillBadges, installStateOf } from '@/lib/skill-library-view';
 import type { HookLibraryEntry } from '@/lib/hook-client';
 import { hookBadges } from '@/lib/hook-library-view';
 import type { ConnectionWire } from '@/lib/connection-client';
@@ -122,8 +122,9 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
         ))}
       </ShelfSection>
 
-      {/* ===== TEMPLATES ===== — no create CTA: no /templates/new route
-          exists (templates are registry-scanned, not authored here). */}
+      {/* ===== TEMPLATES ===== — authorable since W7-B4 (library-17/01):
+          planning + demo-output templates are single-file packages created
+          at /templates/new (scaffolds stay repo-curated). */}
       <ShelfSection
         section="templates"
         tint="artifact"
@@ -135,6 +136,7 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
         loadingText="Loading templates…"
         browseHref="/templates"
         browseAction="browse-templates"
+        create={{ href: '/templates/new', action: 'new-template', label: '+ New template' }}
       >
         {templates.entries.slice(0, LIBRARY_SHELF_CARD_LIMIT).map((entry) => (
           <ShelfTemplateCard key={entry.id} entry={entry} />
@@ -161,23 +163,8 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
         ))}
       </ShelfSection>
 
-      {/* ===== KB CROSS-LINK ===== — Library no longer creates or lists
-          knowledge bases; Knowledge owns that now (sweep finding C4#1). */}
-      <section data-section="kb-crosslink" style={{ marginTop: 8 }}>
-        <Link
-          href="/knowledge"
-          data-action="kb-crosslink"
-          className="lib-card"
-          style={{ display: 'block', maxWidth: 420 }}
-        >
-          <div className="card-top">
-            <span className="card-name">Knowledge bases</span>
-          </div>
-          <p className="card-body">
-            KBs live on the Knowledge pillar now — browse, create, and maintain brains there.
-          </p>
-        </Link>
-      </section>
+      {/* KB cross-link card REMOVED (W7-B4, library-02 — operator note 9):
+          the pillar nav already carries Knowledge; the card duplicated it. */}
     </StudioPage>
   );
 }
@@ -287,9 +274,28 @@ function ShelfSkillCard({ entry }: { entry: SkillLibraryEntry }) {
       <div className="card-top">
         <span className="card-name">{entry.name || entry.id}</span>
         {badges.map((b) => <span key={b} className="badge">{b}</span>)}
+        <InstallStateBadge entry={entry} />
       </div>
       <p className="card-body">{entry.description || 'No description.'}</p>
     </Link>
+  );
+}
+
+/** W7-B4 (library-04): the DOM-as-metrics `data-skill-installed` attribute
+ *  finally gets its HUMAN-VISIBLE counterpart — one badge, derived from the
+ *  same `installStateOf` the /skills page uses (never re-derived). */
+export function InstallStateBadge({ entry }: { entry: SkillLibraryEntry }) {
+  const state = installStateOf(entry);
+  const installed = state === 'installed';
+  return (
+    <span
+      className="badge"
+      data-component="install-state"
+      data-installed={installed ? 'true' : 'false'}
+      style={installed ? { color: 'var(--sage, #7cb87c)' } : { color: 'var(--faint)', fontStyle: 'italic' }}
+    >
+      {installed ? 'installed' : 'not installed'}
+    </span>
   );
 }
 

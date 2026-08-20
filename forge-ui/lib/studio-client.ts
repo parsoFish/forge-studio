@@ -822,24 +822,32 @@ async function studioReadOr404<T>(path: string): Promise<T | null> {
 }
 
 async function studioSend(
-  method: 'PUT' | 'POST',
+  method: 'PUT' | 'POST' | 'DELETE',
   path: string,
-  body: unknown,
+  body?: unknown,
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   try {
     const res = await bridgeFetch(path, {
       method,
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string } & Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}` };
+    // W7-B4 (flows-10): the failure body rides along — the bridge's 400
+    // carries per-node validation `findings` the caller must not lose.
+    if (!res.ok) return { ok: false, error: data.error ?? data.message ?? `HTTP ${res.status}`, data };
     // A 2xx is success; an explicit `ok: false` overrides. A 2xx that omits `ok`
     // (e.g. the lint maintenance op) is success — not a silent failure.
     return { ok: typeof data.ok === 'boolean' ? data.ok : true, data };
   } catch (err) {
     return { ok: false, error: String(err) };
   }
+}
+
+async function studioDelete(
+  path: string,
+): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
+  return studioSend('DELETE', path);
 }
 
 async function studioPut(
@@ -1349,14 +1357,28 @@ export async function fetchStudioCatalog(): Promise<Catalog> {
   return body.catalog ?? {};
 }
 
-/** Save (PUT) an agent definition by slug. */
+/** Save (PUT) an agent definition by slug. The FAILURE path carries the
+ *  bridge's validation `findings` too (W7-B4 — same rule as saveFlow). */
 export async function saveAgent(
   slug: string,
   body: Record<string, unknown>,
 ): Promise<{ ok: boolean; error?: string; findings?: unknown[] }> {
   const r = await studioPut(`/api/studio/agents/${encodeURIComponent(slug)}`, body);
-  if (!r.ok) return { ok: false, error: r.error };
+  if (!r.ok) {
+    return {
+      ok: false,
+      error: r.error,
+      ...(Array.isArray(r.data?.findings) ? { findings: r.data!.findings as unknown[] } : {}),
+    };
+  }
   return { ok: true, findings: Array.isArray(r.data?.findings) ? r.data!.findings : [] };
+}
+
+/** W7-B4 (agents-09) — delete an agent. The bridge refuses (409, naming the
+ *  referrers) while a flow node or session-kind descriptor still uses it. */
+export async function deleteAgent(slug: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await studioDelete(`/api/studio/agents/${encodeURIComponent(slug)}`);
+  return { ok: r.ok, error: r.error };
 }
 
 /** Save (PUT) a project's config fields. */
@@ -1792,18 +1814,36 @@ export async function fetchFlow(id: string): Promise<Flow | null> {
   };
 }
 
-/** Save (PUT) a flow definition by id. Bumps version server-side. */
+/** Save (PUT) a flow definition by id. Bumps version server-side (a no-op
+ *  save is answered `noop: true` and bumps nothing). W7-B4 (flows-10): the
+ *  FAILURE path carries the bridge's per-node validation `findings` — the
+ *  client used to throw them away, leaving only the words "validation
+ *  failed". Pass `create: true` in the body for the /flows/new path so a
+ *  duplicate id 409s instead of silently overwriting (flows-13). */
 export async function saveFlow(
   id: string,
   body: Record<string, unknown>,
 ): Promise<{ ok: boolean; version?: number; error?: string; findings?: unknown[] }> {
   const r = await studioPut(`/api/studio/flows/${encodeURIComponent(id)}`, body);
-  if (!r.ok) return { ok: false, error: r.error };
+  if (!r.ok) {
+    return {
+      ok: false,
+      error: r.error,
+      ...(Array.isArray(r.data?.findings) ? { findings: r.data!.findings as unknown[] } : {}),
+    };
+  }
   return {
     ok: true,
     version: typeof r.data?.version === 'number' ? (r.data.version as number) : undefined,
     findings: Array.isArray(r.data?.findings) ? (r.data!.findings as unknown[]) : [],
   };
+}
+
+/** W7-B4 (flows-11) — delete an authored flow. The bridge refuses a shipped
+ *  seed (403) and an in-flight flow (423). */
+export async function deleteFlow(id: string): Promise<{ ok: boolean; error?: string }> {
+  const r = await studioDelete(`/api/studio/flows/${encodeURIComponent(id)}`);
+  return { ok: r.ok, error: r.error };
 }
 
 export type ClauseResolution = 'auto' | 'agent' | 'user';

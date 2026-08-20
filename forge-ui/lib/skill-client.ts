@@ -225,3 +225,38 @@ export async function approveSkill(id: string): Promise<{ ok: boolean; error?: s
   const r = await skillClientPost(`/api/studio/skills/${encodeURIComponent(id)}/approve`, {});
   return { ok: r.ok, error: r.error };
 }
+
+async function skillClientSend(
+  method: 'PUT' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await bridgeFetch(path, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    return { ok: typeof data.ok === 'boolean' ? data.ok : true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/** W7-B4 (library-05) — edit a skill's display name / description / body.
+ *  The id (directory) never changes; editing an installed skill honestly
+ *  drops it to needs-review via the existing hash-drift pipeline. */
+export async function updateSkill(
+  id: string,
+  input: Partial<{ name: string; description: string; body: string }>,
+): Promise<{ ok: boolean; error?: string }> {
+  return skillClientSend('PUT', `/api/studio/skills/${encodeURIComponent(id)}`, input);
+}
+
+/** W7-B4 (library-05) — delete a skill package. The bridge refuses (409,
+ *  naming them) while any agent still composes it. */
+export async function deleteSkill(id: string): Promise<{ ok: boolean; error?: string }> {
+  return skillClientSend('DELETE', `/api/studio/skills/${encodeURIComponent(id)}`);
+}

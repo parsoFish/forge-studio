@@ -108,6 +108,9 @@ export type HookDetailView = {
   runnable: boolean;
   files: HookDetail['files'];
   scan: HookScanPanel;
+  /** W7-B4 (library-09): the recorded approval — present iff a live ledger
+   *  entry exists; the resolved-state panel renders it. */
+  approval?: HookDetail['approval'];
 };
 
 export function buildHookDetailView(detail: HookDetail): HookDetailView {
@@ -126,5 +129,6 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     runnable: detail.runnable,
     files: detail.files,
     scan: buildHookScanPanel(detail.scan),
+    ...(detail.approval !== undefined ? { approval: detail.approval } : {}),
   };
 }

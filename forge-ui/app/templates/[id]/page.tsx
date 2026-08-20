@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FilePackage } from '@/components/studio/FilePackage';
-import { fetchTemplate, type TemplateDetail } from '@/lib/template-client';
+import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
+import { TemplateEditor } from '@/components/studio/TemplateEditor';
+import {
+  fetchTemplate,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  type TemplateDetail,
+} from '@/lib/template-client';
 import { templateBadges, previewClassFor } from '@/lib/template-library-view';
 
 // ---------------------------------------------------------------------------
@@ -33,11 +41,20 @@ const BADGE_STYLE: Record<string, React.CSSProperties> = {
 
 export default function TemplateDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = (params?.id as string) ?? '';
 
   const [state, setState] = useState<PageState>('loading');
   const [detail, setDetail] = useState<TemplateDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // W7-B4 (library-17): edit / duplicate / delete state. Only the two
+  // single-file categories are writable; scaffolds render the reason.
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   const load = useCallback(async (templateId: string) => {
     setState('loading');
@@ -61,6 +78,59 @@ export default function TemplateDetailPage() {
   useEffect(() => {
     if (id) void load(id);
   }, [id, load]);
+
+  // ---- W7-B4 (library-17): authoring actions -----------------------------
+
+  const writable = detail !== null && detail.category !== 'project-scaffold';
+
+  function toggleEdit() {
+    if (!editing && detail) {
+      setEditContent(detail.files[0]?.body ?? '');
+      setActionError(null);
+    }
+    setEditing((v) => !v);
+  }
+
+  async function handleSaveEdit() {
+    setSavingEdit(true);
+    setActionError(null);
+    const r = await updateTemplate(id, editContent);
+    setSavingEdit(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'save failed');
+      return;
+    }
+    setEditing(false);
+    void load(id);
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setActionError(null);
+    const r = await deleteTemplate(id);
+    setDeleting(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'delete failed');
+      return;
+    }
+    router.push('/templates');
+  }
+
+  async function handleDuplicate() {
+    if (!detail || detail.category === 'project-scaffold') return;
+    const suggested = `${id}-copy`;
+    const newId = window.prompt('Id for the duplicate (lowercase-kebab):', suggested);
+    if (!newId) return;
+    setDuplicating(true);
+    setActionError(null);
+    const r = await createTemplate({ category: detail.category, id: newId.trim(), duplicateOf: id });
+    setDuplicating(false);
+    if (!r.ok) {
+      setActionError(r.error ?? 'duplicate failed');
+      return;
+    }
+    router.push(`/templates/${encodeURIComponent(newId.trim())}`);
+  }
 
   const categoryAttr = state === 'ready' ? detail!.category : undefined;
   const endpointsVerifiedAttr =
@@ -99,7 +169,60 @@ export default function TemplateDetailPage() {
           </div>
         )}
 
-        {state === 'ready' && detail && <TemplateDetailBody detail={detail} />}
+        {state === 'ready' && detail && (
+          <>
+            {/* W7-B4 (library-17): templates gain create/edit/duplicate/
+                delete. Scaffolds are whole directory trees — read-only,
+                WITH the reason shown, never a silently-absent affordance. */}
+            <div style={{ marginTop: 16 }}>
+              {writable ? (
+                <LibraryItemActions
+                  kind="template"
+                  id={id}
+                  editing={editing}
+                  onToggleEdit={toggleEdit}
+                  onDelete={() => void handleDelete()}
+                  deleting={deleting}
+                  deleteBlockReason={
+                    detail.usedBy.length > 0
+                      ? `still used by: ${detail.usedBy.join(', ')} — detach those first`
+                      : null
+                  }
+                  error={actionError}
+                  extra={
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      data-action="duplicate-template"
+                      onClick={() => void handleDuplicate()}
+                      disabled={duplicating}
+                    >
+                      {duplicating ? 'Duplicating…' : 'Duplicate'}
+                    </button>
+                  }
+                />
+              ) : (
+                <p data-component="template-readonly" style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
+                  Project scaffolds are whole directory trees curated in the repo
+                  (studio/starters/projects) — not editable as a single file from Studio.
+                </p>
+              )}
+            </div>
+            {editing && writable && (
+              <div style={{ marginTop: 14 }}>
+                <TemplateEditor
+                  content={editContent}
+                  onChange={setEditContent}
+                  onSave={() => void handleSaveEdit()}
+                  onCancel={toggleEdit}
+                  saving={savingEdit}
+                  error={actionError}
+                />
+              </div>
+            )}
+            <TemplateDetailBody detail={detail} />
+          </>
+        )}
       </div>
     </main>
   );
