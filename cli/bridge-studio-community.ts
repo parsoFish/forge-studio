@@ -59,7 +59,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
@@ -74,6 +74,7 @@ import {
   communityItem,
   buildConnectionItem,
   readVendoredPackage,
+  COMMUNITY_KINDS,
   type CommunityKind,
   type CommunityItem,
 } from '../orchestrator/studio/community-index.ts';
@@ -84,7 +85,7 @@ import type { HookPermissionManifest } from '../orchestrator/studio/hook-library
 import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
-import { communitySkillsFromRegistry } from '../orchestrator/studio/registry.ts';
+import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../orchestrator/studio/registry.ts';
 import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
 import type { CommunitySkill } from '../orchestrator/studio/types.ts';
 
@@ -157,6 +158,38 @@ function buildWireCtx(forgeRoot: string): WireCtx {
   const communitySkills = communitySkillsFromRegistry(forgeRoot);
   const connections = catalogExists ? listConnections(forgeRoot) : [];
   return { communitySkills, connections };
+}
+
+/**
+ * W7-B3 (community-16 / community-03) — the registry-level `meta` block on
+ * the list payload:
+ *   - `lastRefresh`: the commitRegistryDraft stamp, straight from
+ *     studio/community/registry.yaml's own `meta.lastRefresh` — never
+ *     re-derived from item rows. A missing registry file is the honest
+ *     fresh-root `null`.
+ *   - `registryDirty`: whether the repo-tracked registry file carries
+ *     uncommitted changes (Studio writes it on approve; the operator commits
+ *     via their normal git flow — the page must say when that commit is
+ *     still pending). THREE-state: true/false only when git itself answered;
+ *     `null` when the forge root is not a git repo or git is unavailable —
+ *     an unknown must never render as a fabricated "clean".
+ * Fixed argv, fixed path — nothing request-derived reaches the child.
+ */
+function communityIndexMeta(forgeRoot: string): { lastRefresh: string | null; registryDirty: boolean | null } {
+  const registryPath = communityRegistryPath(forgeRoot);
+  const lastRefresh = existsSync(registryPath) ? loadCommunityRegistry(registryPath).lastRefresh : null;
+  let registryDirty: boolean | null = null;
+  try {
+    const out = execFileSync('git', ['status', '--porcelain', '--', 'studio/community/registry.yaml'], {
+      cwd: forgeRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    registryDirty = out.trim().length > 0;
+  } catch {
+    registryDirty = null;
+  }
+  return { lastRefresh, registryDirty };
 }
 
 function originFor(item: CommunityItem): string {
@@ -294,7 +327,7 @@ function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): Hoo
 // resolveConnectionOrRespond.
 // ---------------------------------------------------------------------------
 
-function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
+export function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
   let id: string;
   try {
     id = decodeURIComponent(rawIdSegment);
@@ -504,17 +537,50 @@ export async function handleStudioCommunityRoutes(
   // ---- GET /api/studio/community — hubs + cross-kind items (D1) -----------
   if (method === 'GET' && url === '/api/studio/community') {
     try {
+      // W7-B3 review F7: `?kind=<k>` narrows the BUILD, not just the response
+      // — a hooks-only consumer (the /hooks community shelf) must not pay one
+      // probeConnection child process per catalog connection to render
+      // vendored hook rows. No param = the full index, unchanged. Hub counts
+      // stay derived from the SAME (here: filtered) item computation.
+      const kindParam = new URL(rawUrl, 'http://forge.local').searchParams.get('kind');
+      if (kindParam !== null && !(COMMUNITY_KINDS as readonly string[]).includes(kindParam)) {
+        sendJson(res, 400, { error: `unknown community kind "${kindParam}" — expected one of ${COMMUNITY_KINDS.join(', ')}` }, origin);
+        return true;
+      }
       // Computed ONCE (T2 round 5/6 probe-budget fix): every connection item
       // in `rawItems` was already probed exactly once inside this single
       // listCommunityIndex call. Hub counts and wire items are BOTH derived
       // from this SAME computation — never a second, independent
       // hubsWithCounts()/listCommunityIndex() call re-entering the same
       // probes a second (and third) time.
-      const rawItems = listCommunityIndex(ctx.forgeRoot);
+      const rawItems = listCommunityIndex(ctx.forgeRoot, kindParam === null ? undefined : [kindParam as CommunityKind]);
       const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
       const wctx = buildWireCtx(ctx.forgeRoot);
       const items = rawItems.map((item) => toWireItemSafe(item, wctx));
-      sendJson(res, 200, { hubs, items }, origin);
+      sendJson(res, 200, { hubs, items, meta: communityIndexMeta(ctx.forgeRoot) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- GET /api/studio/community/registry/items/:id — the RAW registry row
+  // (W7-B3, community-23: the edit form pre-fills from the row's own fields —
+  // category/tier/signals — which the browse wire projection does not carry).
+  // Matched BEFORE the 2-segment detail route cannot collide: this is 3
+  // segments after /community/.
+  const registryRowMatch = url.match(/^\/api\/studio\/community\/registry\/items\/([^/]+)$/);
+  if (method === 'GET' && registryRowMatch) {
+    try {
+      const id = decodeIdOrRespond(registryRowMatch[1], res, origin);
+      if (id === null) return true;
+      const registryPath = communityRegistryPath(ctx.forgeRoot);
+      const row = existsSync(registryPath) ? loadCommunityRegistry(registryPath).items.find((i) => i.id === id) : undefined;
+      if (!row) {
+        sendJson(res, 404, { error: `no registry item with id "${id}"` }, origin);
+        return true;
+      }
+      sendJson(res, 200, { item: row }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

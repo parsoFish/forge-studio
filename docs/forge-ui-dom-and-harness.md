@@ -947,10 +947,16 @@ inventory rather than one shared page-level contract:
   `[data-card-type="hook"][data-hook-id][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-carried-by-count]`.
   `data-hook-carried-by-count` is DERIVED from every real agent's
   `composition.hooks` and the derivation names its own scan, so an empty count
-  reads "scanned N, found none" and never "unknown". There is deliberately **no
-  Local/Community split and no install affordance** — unlike `/skills`, there is
-  no community-hook source to back either, and fabricating the distinction would
-  be inventing data; the install entry point is R3-07's.
+  reads "scanned N, found none" and never "unknown". **W7-B3 (library-11)
+  retires the old "no Local/Community split" carve-out** — the community
+  index DOES carry hook items (vendored packages), and `/hooks` now unions
+  the ones not yet installed under their own heading,
+  `section[data-section="community-hooks"][data-count]`, per card
+  `a[data-card-type="community-hook"][data-hook-id][data-install-state]`
+  linking to `/community/hook/<id>` (where install and the pre-install scan
+  live — this page still owns NO install affordance itself). The facts come
+  from the community index route (executed per item); a failed community
+  fetch renders nothing extra and never blanks the local list.
   `[data-action="new-hook"]` links to
   `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
   (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,
@@ -1043,28 +1049,85 @@ inventory rather than one shared page-level contract:
   anywhere on this surface; install ROUTES to whichever pipeline owns the
   kind (R3-01-F4 skills, R3-03-F2 hooks, R3-04-F2 connections) and the trust
   decision (if the kind has one) happens only on that pipeline's own owning
-  page. There is deliberately **no create/edit/approve route under
-  `/community` anywhere** — curation of what's browsable stays forge-dev-owned
-  (a PR to `studio/catalog.yaml` / a vendored package under
-  `studio/community/`), mirroring `/connections`'s own D1 negative AC.
+  page. **W7-B3 (community-23) amends the old "no create/edit route"
+  negative AC**: registry CURATION (add / edit / remove of
+  `studio/community/registry.yaml` rows — what is browsable, never what is
+  trusted) now lives in Studio — `[data-action="add-registry-item"]` (a real
+  `<a href="/community/new">` in the header slot) plus per-row controls on
+  the detail page (below). Trust decisions still never live here; the
+  registry file is repo-tracked, Studio writes it and the operator commits
+  via their normal git flow (see `docs/community-registry-writes.md`).
   Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
   [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]
-  [data-sort-key="name"|"stars"|"updated"|"source"][data-sort-dir="asc"|"desc"]`,
-  a search field `[data-field="community-search"]`, kind-filter buttons
-  `[data-action="filter-kind"][data-kind]`, and
+  [data-hub-filter="all"|<hubId>]
+  [data-sort-key="name"|"stars"|"updated"|"source"][data-sort-dir="asc"|"desc"]
+  [data-registry-dirty="true"|"false"|"null"][data-last-refresh]`
+  (`data-registry-dirty` is git's own three-state answer about uncommitted
+  changes to the registry file — `"null"` = git did not answer, never a
+  fabricated clean; `data-last-refresh` = the registry's own
+  `meta.lastRefresh` or `"never"`), a search field
+  `[data-field="community-search"]` (W7-B3, community-05: matches name,
+  desc, id, hub label, signals attribution and upstream URL), kind-filter
+  buttons `[data-action="filter-kind"][data-kind]`, and
   `[data-component="fetch-error"]` when the bridge is unreachable (never
   rendered the same as a genuinely empty index — the same discipline
-  `/connections` and `/skills` already hold). `[data-component="hub-strip"]`
-  renders every real hub from `studio/community/hubs.yaml`, per hub
-  `[data-hub-id][data-hub-kinds][data-hub-item-count]` — the count is DERIVED
-  per request, never declared, so a real hub with nothing indexed from it yet
-  renders a genuine `"0"` rather than being dropped from the strip (the
-  honest-zero case). Per card: `[data-card-type="community-item"]
+  `/connections` and `/skills` already hold).
+
+  **Registry state strip (W7-B3, community-16/-03).**
+  `section[data-section="refresh-registry-state"][data-in-flight-count]`:
+  `[data-component="registry-last-refresh"]` states the registry-level
+  freshness (`meta.lastRefresh` — `null` honestly reads "never refreshed —
+  every row is still the hand-curated seed");
+  `[data-component="registry-dirty"]` renders ONLY when git reports
+  uncommitted changes to the repo-tracked registry file, naming the commit
+  step; `[data-action="open-refresh-session"][data-session-state]` links
+  every in-flight community-refresh session, and
+  `[data-action="open-last-refresh-session"]` the most recent terminal one
+  when nothing is in flight — the sessions this browser kicks off are
+  findable again from the browser itself.
+
+  `[data-component="hub-strip"]` renders every real hub from
+  `studio/community/hubs.yaml`. **W7-B3 (community-17): a hub chip is a
+  FILTER on the local index**, `button[data-action="filter-hub"][data-hub-id]
+  [data-hub-kinds][data-hub-item-count]
+  [data-hub-declared-only="true"|"false"]` — click filters (mirrored to the
+  root's `data-hub-filter`), click again clears; the outbound site link
+  survives as a secondary `a[data-action="open-hub-site"][data-hub-id]`. The
+  count is DERIVED per request, never declared; a real hub with nothing
+  indexed from it yet keeps `data-hub-item-count="0"` and reads "declared —
+  nothing indexed" (`data-hub-declared-only="true"`) — never dropped, and
+  never presented as a browsable source. Per card:
+  `[data-card-type="community-item"]
   [data-item-id][data-item-kind][data-item-hub][data-install-state]
   [data-has-signals="true"|"false"]` — `data-item-hub` is simply ABSENT for an
   unaffiliated item (the rendered label is the spec-literal "unaffiliated",
   never invented as an attribute value), and `data-has-signals="false"`
   renders "no signals published" rather than a fabricated zero.
+  `data-install-state` vocabulary (W7-B3 adds the fifth token):
+  `not-installed | draft-pending-approval | needs-review | installed |
+  present-unmanaged` — `present-unmanaged` (library-31) = the id is occupied
+  by a local skill with NO community-install provenance: neither installed
+  nor installable here, and `/skills` + `/community` now agree on it.
+
+  **`/community/new` (W7-B3, community-23)** — the registry item form,
+  `main[data-page="community-registry-form"][data-form-mode="add"|"edit"]
+  [data-page-ready]`; fields `[data-field="registry-id"|"registry-kind"|
+  "registry-name"|"registry-desc"|"registry-category"|"registry-source-url"|
+  "registry-provenance"|"registry-tier"|"registry-attributed-to"]`; submit
+  `[data-action="submit-registry-item"]` (add) /
+  `[data-action="save-registry-item"]` (edit, reached via `?edit=<id>`),
+  disabled until the required fields are filled. `registry-kind` is a FIXED
+  read-only "skill" (W7-B3 review F1): the CRUD surface admits only skills —
+  the index sources hooks from vendored packages and mcp/tool from the
+  catalog, so any other kind would be written and then invisible; the bridge
+  400s them with the same explanation. There is deliberately NO
+  star-count/starsDisplay input — `stars`, `starsDisplay` and
+  `upstreamUpdatedAt` are SERVER-OWNED fetch facts (W7-B3 review F4/F5):
+  the bridge ignores any body value, a create starts them `null`, an edit
+  carries the existing row's values forward, and only
+  `fetchedAt: null` / `fetchedBy: "operator"` reset (the honesty stamp), so
+  a hand-curated row reads "seed — never verified" until a refresh pass
+  checks it. Errors surface as `[data-component="registry-form-error"]`.
 
   **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
   (a real `<a href="/sessions/community-refresh/new">`, rendered via
@@ -1096,7 +1159,13 @@ inventory rather than one shared page-level contract:
   never `upstreamUpdatedAt` (a different claim: upstream's own change date,
   not forge's own last-verified date) — a null value in EITHER sorts LAST
   regardless of direction, never a fabricated zero/epoch. `source` groups by
-  the item's hub label, then breaks ties by name.
+  the item's hub label, then breaks ties by name. **W7-B3 (community-04):
+  the `updated` key's operator-facing label is "Last checked"**
+  (`COMMUNITY_SORT_LABELS`, community-view.ts) — the fact it actually sorts
+  on; the detail page's Hub &amp; signals list renders BOTH claims as their
+  own rows, `[data-field="upstream-updated"]` (`upstreamUpdatedAt` or "not
+  recorded") and `[data-field="last-checked"]` (`fetchedAt` or "never —
+  hand-curated seed row").
 
   Each card additionally carries `[data-fetched-at]` — the item's real ISO
   `fetchedAt`, structurally ABSENT (never an empty string) when null — and a
@@ -1138,14 +1207,38 @@ inventory rather than one shared page-level contract:
   the exact pinned version, the SAME vocabulary `/connections/[id]`'s own
   InstallSection uses, never a second one; `system-provided`/`external` have
   no version to pin and render no `data-install-version` at all — structural
-  absence, not an empty attribute. This is separate from, and precedes, the
-  ONE mutating affordance: `[data-action="install-community-item"]
-  [data-install-routed-to="skill-draft"|"hook-needs-approval"|"connection-install"]`
-  — **structurally ABSENT, not disabled,** whenever the route cannot
-  complete: a non-vendored skill/hook with no server-resolved install path
-  renders no button at all, and an already-present item renders "\<state\>
-  already — continue at \<owning page\>" instead of a second control. The
-  install outcome renders `[data-component="install-outcome"]` — for
+  absence, not an empty attribute.
+
+  **The install decision (W7-B3, community-09/-18/-19, library-31)** is the
+  ONE pure verdict `installActionForItem` (community-view.ts) computes,
+  mirrored onto `[data-section="install"][data-install-action="install"|
+  "install-confirm"|"open-owning"|"present-unmanaged"|"browse-upstream"|
+  "none-system"]` — every item either installs, routes to the page that owns
+  it, or says exactly why not:
+  - `install` — a vendored skill/hook: the direct
+    `[data-action="install-community-item"][data-install-routed-to=
+    "skill-draft"|"hook-needs-approval"]` button (draft/approval pipeline
+    owns trust, unchanged);
+  - `install-confirm` — an npm connection: the SAME button is a TWO-STEP
+    confirm (`[data-confirming="true"|"false"]`; first click arms and
+    renders `[data-component="install-confirm-notice"]` naming the exact
+    `npm install <package>@<version>` child process, second click fires;
+    `[data-action="install-community-item-abort"]` disarms) — a real
+    networked child process never fires on one click (community-19);
+  - `open-owning` — any already-present item, connections on EVERY install
+    method included (community-18): `[data-action="open-owning-page"]` links
+    `/skills/<id>`, `/hooks/<id>` or `/connections/<id>`;
+  - `present-unmanaged` — the id is occupied by an UNMANAGED local skill
+    (library-31): `[data-component="present-unmanaged"]` explains and links
+    the owning library page; no install control renders;
+  - `browse-upstream` — a non-vendored skill/hook (its source hub publishes
+    a page, not a package — community-09) or an external-method connection:
+    `a[data-action="browse-upstream"]` carries the REAL upstream URL;
+  - `none-system` — a system-provided tool the probe reports absent:
+    honest "install it on the host" copy, no dead button.
+  The empty PACKAGE section is GONE for items with no files (community-10) —
+  `[data-component="file-package"]` renders only when the package exists.
+  The install outcome renders `[data-component="install-outcome"]` — for
   skill/hook, the text states "Installed as a draft." (or "Already
   installed.") and links to the owning page where its approval gate (if any)
   lives; for a connection under this harness's no-spawn suppression, a
@@ -1156,6 +1249,16 @@ inventory rather than one shared page-level contract:
   the same signal `[data-page="community-detail"]`'s own `data-install-state`
   independently confirms by staying `"not-installed"` after a suppressed
   attempt). Action errors surface as `[data-component="community-action-error"]`.
+
+  **Registry-row curation (W7-B3, community-23).** A detail page whose item
+  originates from `studio/community/registry.yaml` renders
+  `[data-section="registry-row-actions"]`: `a[data-action="edit-registry-item"]`
+  (→ `/community/new?edit=<id>`) and a two-step
+  `[data-action="remove-registry-item"][data-confirming]` +
+  `[data-action="remove-registry-item-abort"]`; a completed remove routes
+  back to `/community`. Vendored packages and catalog connections are not
+  registry rows and never render these controls. Remove errors surface as
+  `[data-component="registry-remove-error"]`.
 
 - **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
   did not exist before. `StudioNav`'s "Agents" nav item now points straight
@@ -1890,8 +1993,15 @@ inventory rather than one shared page-level contract:
   `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
   with `[data-session-turn-count]` reflecting the turns actually RENDERED
   (i.e. the selected stage's), never a total that disagrees with the DOM.
-  **W7-A2 lifecycle bar (every kind — architect/project-brain and the
-  panel-less community-refresh included):**
+  **W7-B3 (sessions-kinds-06 / community-14): `community-refresh` joined
+  `GENERIC_PANEL_KINDS`** — its declared approve/reject verdict (the
+  `awaiting-review` row in `studio/session-kinds.yaml`) and activity drawer
+  render through the SAME generic `SessionInteractivePanel` as every other
+  turnSpec kind; parity with the registry is pinned by
+  `forge-ui/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
+  except the two bespoke-panel kinds must be in the set, so a newly declared
+  kind can never render a blank page again).
+  **W7-A2 lifecycle bar (every kind — architect/project-brain included):**
   `div[data-section="session-lifecycle"][data-lifecycle-state="working"|
   "awaiting-operator"|"crashed"|"stalled"|"terminal"][data-needs-you]
   [data-cancellable]` (`components/studio/session/SessionLifecycleBar.tsx`),
@@ -1910,7 +2020,12 @@ inventory rather than one shared page-level contract:
   the bar keeps rendering `div[data-cancel-outcome="killed"|"unconfirmed"]`
   (W7-FIX-A2 W7A2-02 — the cancel's real outcome, held in page state; the
   `terminal` headline is `describeLifecycle('terminal', …, phase)`, the
-  same sentence the `/sessions` chip renders, W7A2-10). The shell payload
+  same sentence the `/sessions` chip renders, W7A2-10). **W7-B3
+  (community-01)**: a session with nothing left to run here — `crashed`,
+  `stalled` or `terminal` — additionally renders
+  `a[data-action="start-new-session"]` linking `/sessions/<kind>/new` (the
+  way forward from a dead refresh is one click, never a dead end); a
+  healthy `working`/`awaiting-operator` session never renders it. The shell payload
   carries a REQUIRED bridge-derived `transcript` boolean (W7A2-04: a
   `turnSpec` kind rides the generic spine, which never writes transcript
   turns → `false`; a legacy-runner kind → `true`) and the transcript
@@ -2396,12 +2511,29 @@ inventory rather than one shared page-level contract:
   (`[data-section="kickoff-selector"]` is absent from the DOM, not merely
   empty — the community registry is forge's own single, forge-wide file,
   not a per-project/per-KB artifact) — plus a
-  free-text prompt field for the ONE kind whose `/start` body requires one
-  (`authoring` — `[data-field="kickoff-prompt"]`; every other kickoff kind
-  takes its brief on a LATER turn instead, not at kickoff — instructions'
+  free-text prompt field (`[data-field="kickoff-prompt"]`) for the two kinds
+  that take one: `authoring`, whose `/start` body REQUIRES it (Start stays
+  disabled until filled), and — W7-B3 (community-08) — `community-refresh`,
+  whose "Focus (optional)" brief is OPTIONAL: empty = a full refresh, text =
+  a targeted "find me skills for X" pass, sent as `{brief}` to
+  `POST /api/studio/community-refresh/start` (string, non-blank, ≤ 2000
+  chars; stored on `status.json` for the SKILL's targeted-pass contract) —
+  Start stays enabled either way. Every other kickoff kind takes its brief
+  on a LATER turn instead, not at kickoff — instructions'
   own `briefing` phase, W6-B9, now takes it via the generic
   `SessionInteractivePanel`'s `question-form` affordance, above, rather than
-  a bespoke panel step) + a model-tier picker
+  a bespoke panel step. W7-B3 honesty fixes on this screen (community-12/
+  -22): the model-tier picker PRE-SELECTS the envelope's cheapest tier — the
+  same default the server applies when the request omits `modelTier` — so
+  the checked radio always names what will actually run; the
+  session-directory preview names the REAL anchor
+  (`projects/.community-registry/…` for `selector:"none"`, via
+  `lib/kickoff-view.ts`'s `sessionDirPreview`), never a `<forge-anchor>`
+  placeholder; the `?initiative=` context card renders ONLY for a run the
+  bridge resolves (`[data-section="kickoff-initiative-context"]`), an
+  unknown ref reads `[data-section="kickoff-initiative-ignored"]`, and a
+  `?project=` prefill on a forge-wide kind states it is ignored
+  (`[data-section="kickoff-project-ignored"]`) + a model-tier picker
   (`KickoffModelTierPicker.tsx`, `forge-ui/components/studio/session/`),
   `[data-section="kickoff-model-tier"][data-model-tier-picker="range"|"fixed"]`,
   rendered from `agentCapabilityDescriptor.allowedTiers` — fetched via

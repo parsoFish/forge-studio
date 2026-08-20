@@ -128,10 +128,9 @@ import {
 } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import yaml from 'js-yaml';
 
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
-import { loadCommunityRegistry } from './studio/registry.ts';
+import { loadCommunityRegistry, serializeCommunityRegistry } from './studio/registry.ts';
 import type { CommunityRegistryItem } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -526,30 +525,6 @@ function loadCommunityRefreshEvidence(evidencePath: string): CommunityRefreshEvi
   return out;
 }
 
-/** Renders one `CommunityRegistryItem` back to the plain-object shape
- *  `js-yaml` dumps — optional fields (`desc`/`tier`) are OMITTED (never
- *  written as `null`/`undefined`) when absent, mirroring
- *  `serializeFlowDefinition`'s own "spread in only when defined" discipline
- *  (`orchestrator/studio/registry.ts`) rather than trusting `yaml.dump` to
- *  drop `undefined` values on its own. */
-function serializeCommunityRegistryItem(item: CommunityRegistryItem): Record<string, unknown> {
-  const out: Record<string, unknown> = { id: item.id, kind: item.kind, name: item.name };
-  if (item.desc !== undefined) out.desc = item.desc;
-  out.category = item.category;
-  out.sourceUrl = item.sourceUrl;
-  out.provenance = item.provenance;
-  if (item.tier !== undefined) out.tier = item.tier;
-  out.signals = {
-    stars: item.signals.stars,
-    starsDisplay: item.signals.starsDisplay,
-    attributedTo: item.signals.attributedTo,
-  };
-  out.upstreamUpdatedAt = item.upstreamUpdatedAt;
-  out.fetchedAt = item.fetchedAt;
-  out.fetchedBy = item.fetchedBy;
-  return out;
-}
-
 export function commitRegistryDraft(ctx: FinalizerContext): string[] {
   const { sessionDir, forgeRoot } = ctx;
 
@@ -634,11 +609,9 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
     return liveItem;
   });
 
-  const outDoc = {
-    meta: { schemaVersion: draft.schemaVersion, lastRefresh: now },
-    items: stampedItems.map(serializeCommunityRegistryItem),
-  };
-  const serialized = yaml.dump(outDoc, { lineWidth: 100, quotingType: '"', forceQuotes: false });
+  // W7-B3: the ONE registry serializer, shared with the Studio CRUD routes
+  // (orchestrator/studio/registry.ts) — never a second dump shape to drift.
+  const serialized = serializeCommunityRegistry({ schemaVersion: draft.schemaVersion, lastRefresh: now, items: stampedItems });
 
   // ---- Phase 3: write. Guarded destination, temp+rename (atomic). -------
   const destPath = registryGuard.realPath;

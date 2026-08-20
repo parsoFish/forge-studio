@@ -153,3 +153,45 @@ test('AT-5: a non-string modelTier -> 400, no session dir created', async () => 
   const res = await start({ modelTier: 42 });
   assert.equal(res.status, 400);
 });
+
+// ---------------------------------------------------------------------------
+// W7-B3 (community-08) — the optional operator brief: "find me skills for X"
+// rides the kickoff body into status.json, where the generic turn prompt
+// inlines it for the SKILL's targeted-search contract. Validated at the
+// boundary: string only, non-blank after trim, bounded length.
+// ---------------------------------------------------------------------------
+
+test('AT-6: a brief is trimmed and persisted into status.json verbatim', async () => {
+  const res = await start({ brief: '  find me skills for terraform drift detection  ' });
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const status = JSON.parse(readFileSync(join(sessionDirFor(body.sessionId), 'status.json'), 'utf8')) as { brief?: string };
+  assert.equal(status.brief, 'find me skills for terraform drift detection');
+});
+
+test('AT-7: no brief -> status.json carries NO brief key at all (full refresh is the absence of a brief, never an empty string)', async () => {
+  const res = await start({});
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const status = JSON.parse(readFileSync(join(sessionDirFor(body.sessionId), 'status.json'), 'utf8')) as Record<string, unknown>;
+  assert.ok(!('brief' in status), 'an omitted brief must not materialise as any key');
+});
+
+test('AT-8: a non-string brief -> 400', async () => {
+  const res = await start({ brief: ['skills'] });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /brief/);
+});
+
+test('AT-9: a whitespace-only brief -> 400 (never silently dropped into a full refresh the operator did not ask for)', async () => {
+  const res = await start({ brief: '   ' });
+  assert.equal(res.status, 400);
+});
+
+test('AT-10: an over-long brief (> 2000 chars) -> 400 naming the cap', async () => {
+  const res = await start({ brief: 'x'.repeat(2001) });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /2000/);
+});

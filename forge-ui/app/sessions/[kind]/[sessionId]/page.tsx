@@ -38,7 +38,12 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
  *  ONLY kind left on its own panel, permanently (ADR-043 amendment §4: its
  *  branching council/interview control flow has no linear phase-table seam
  *  a generic ladder could express). */
-const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring', 'instructions']);
+/** W7-B3 (sessions-kinds-06 / community-14): community-refresh joined — its
+ *  approve/reject verdict (studio/session-kinds.yaml `awaiting-review` row)
+ *  was unreachable with NO panel at all. Parity with the registry is pinned
+ *  by lib/generic-panel-kinds.test.ts: every turnSpec-declared kind must be
+ *  here, so the next declared kind can never render a blank page. */
+const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring', 'instructions', 'community-refresh']);
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces

@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+// (useState is also used by InstallSection's npm-confirm arm state.)
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
@@ -9,6 +10,7 @@ import { FilePackage } from '@/components/studio/FilePackage';
 import {
   fetchCommunityItemDetail,
   installCommunityItem,
+  deleteRegistryItem,
   COMMUNITY_KINDS,
   type CommunityItemDetail,
   type CommunitySkillDetail,
@@ -18,7 +20,7 @@ import {
   type CommunityInstallOutcome,
   type HookScanReport,
 } from '@/lib/community-client';
-import { installStateLabel, signalsLabel, hubLabel } from '@/lib/community-view';
+import { installStateLabel, signalsLabel, hubLabel, installActionForItem } from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
 // Community item detail — /community/[kind]/[id] (R3-07-F1). The pre-install
@@ -204,7 +206,17 @@ function CommunityDetailBody({
 
       <HubSignalsSection item={item} />
 
-      {hasFiles(item) && (
+      {/* W7-B3 (community-23): registry-sourced rows are operator-curatable —
+          edit routes to the form, remove is a two-step confirm. Vendored
+          packages / catalog connections are NOT registry rows (their origin
+          names their own file) and get no such controls here. */}
+      {item.origin === 'studio/community/registry.yaml' && <RegistryRowActions item={item} />}
+
+      {/* W7-B3 (community-10): a package section renders only when a package
+          EXISTS — a non-vendored item structurally has no files, and an
+          empty section contradicting the install copy two paragraphs later
+          was noise, not honesty. */}
+      {hasFiles(item) && item.files.length > 0 && (
         <section>
           <SectionLabel>Package</SectionLabel>
           <FilePackage files={item.files} />
@@ -253,6 +265,14 @@ function HubSignalsSection({ item }: { item: CommunityItemDetail }) {
         </dd>
         <dt>signals</dt>
         <dd>{signalsLabel(item.signals)}</dd>
+        {/* W7-B3 (community-04): the two DIFFERENT "updated" claims, each
+            named for what it is — the upstream project's own last change vs
+            when forge last verified this row. Parsed over the wire since
+            W6-CR-2 but never rendered anywhere. */}
+        <dt>upstream updated</dt>
+        <dd data-field="upstream-updated">{item.upstreamUpdatedAt ?? 'not recorded'}</dd>
+        <dt>last checked by forge</dt>
+        <dd data-field="last-checked">{item.fetchedAt ?? 'never — hand-curated seed row'}</dd>
         <dt>origin</dt>
         <dd>{item.origin}</dd>
         <dt>upstream</dt>
@@ -371,22 +391,27 @@ function InstallSection({
   installOutcome: CommunityInstallOutcome | null;
   onInstall: () => void;
 }) {
-  // W6-SW-3 (sweep C5#1): for a connection-kind item (mcp/tool), routing is
-  // only real when forge actually installs it (install.method === 'npm') —
-  // 'system-provided'/'external' are explicitly "forge does not install
-  // this" per the text rendered just above (mirrors /connections/[id]'s
-  // `installable` gate). Non-connection kinds (skill/hook) keep the
-  // pre-existing vendored-on-disk check.
-  const canRoute = isConnectionDetail(item)
-    ? item.install.method !== 'system-provided' && item.install.method !== 'external'
-    : item.vendored;
-  const alreadyPresent = item.installState !== 'not-installed';
+  // W7-B3 (community-19): a REAL npm install (network, up to 120s, a child
+  // process) never fires on one click — the first click arms an explicit
+  // confirm naming exactly what will run; the second fires it.
+  const [confirmingInstall, setConfirmingInstall] = useState(false);
+  // W7-B3 (community-09/-18, library-31): the ONE pure decision — every item
+  // installs, routes to its owning page, or says exactly why not.
+  const action = installActionForItem({
+    kind: item.kind,
+    id: item.id,
+    vendored: item.vendored,
+    installState: item.installState,
+    upstream: item.upstream,
+    installMethod: isConnectionDetail(item) ? item.install.method : null,
+  });
   const owningHref = owningHrefFor(item);
   const routedTo = routedToForKind(item.kind);
 
   return (
     <section
       data-section="install"
+      data-install-action={action.action}
       {...(isConnectionDetail(item) ? { 'data-install-method': item.install.method } : {})}
       style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
     >
@@ -421,27 +446,42 @@ function InstallSection({
         </div>
       )}
 
-      {!canRoute && isConnectionDetail(item) && (
+      {action.action === 'none-system' && (
         <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
-          Nothing to install from this page — see the install method above.
+          Nothing to install from this page — this is a system-provided tool the probe reports absent; install
+          it on the host itself.
         </p>
       )}
 
-      {!canRoute && !isConnectionDetail(item) && (
-        <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
-          This {item.kind} is a curated catalog reference with no vendored package on disk yet — install cannot
-          be driven from this page.
+      {action.action === 'browse-upstream' && (
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: 0 }}>
+          {isConnectionDetail(item)
+            ? 'Forge does not install this — it is distributed externally.'
+            : `This ${item.kind} has no installable package reference — its source hub publishes it as a page, not a package.`}{' '}
+          Browse it at{' '}
+          <a href={action.href} target="_blank" rel="noreferrer" data-action="browse-upstream">
+            {action.href}
+          </a>
+          .
         </p>
       )}
 
-      {canRoute && alreadyPresent && (
+      {action.action === 'present-unmanaged' && (
+        <p style={{ fontSize: 13, color: 'var(--dim)', margin: 0 }} data-component="present-unmanaged">
+          A local {item.kind} already occupies this id, and it was not installed through the community
+          pipeline — installing here would touch a file that merely shares the name. Manage the local copy at{' '}
+          <Link href={action.href}>{action.href}</Link>.
+        </p>
+      )}
+
+      {action.action === 'open-owning' && (
         <p style={{ fontSize: 13, color: 'var(--text)', margin: 0 }}>
-          {installStateLabel(item.installState)} already — continue at{' '}
-          <Link href={owningHref}>{owningHref}</Link>.
+          {installStateLabel(item.installState)} — continue at{' '}
+          <Link href={owningHref} data-action="open-owning-page">{owningHref}</Link>.
         </p>
       )}
 
-      {canRoute && !alreadyPresent && (
+      {action.action === 'install' && (
         <div>
           <button
             type="button"
@@ -453,6 +493,47 @@ function InstallSection({
           >
             {installing ? 'Installing…' : 'Install'}
           </button>
+        </div>
+      )}
+
+      {action.action === 'install-confirm' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {confirmingInstall && isConnectionDetail(item) && item.install.method === 'npm' && (
+            <p data-component="install-confirm-notice" style={{ fontSize: 12.5, color: 'var(--ember)', margin: 0 }}>
+              This runs a real <code>npm install {item.install.package}@{item.install.version}</code> child
+              process on the bridge host (network, up to 120s). Confirm to proceed.
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-action="install-community-item"
+              data-install-routed-to={routedTo}
+              data-confirming={confirmingInstall ? 'true' : 'false'}
+              onClick={() => {
+                if (!confirmingInstall) {
+                  setConfirmingInstall(true);
+                  return;
+                }
+                setConfirmingInstall(false);
+                onInstall();
+              }}
+              disabled={installing}
+            >
+              {installing ? 'Installing…' : confirmingInstall ? 'Yes, run npm install' : 'Install…'}
+            </button>
+            {confirmingInstall && !installing && (
+              <button
+                type="button"
+                data-action="install-community-item-abort"
+                className="btn"
+                onClick={() => setConfirmingInstall(false)}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -483,6 +564,69 @@ function InstallSection({
             </span>
           )}
         </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RegistryRowActions — W7-B3 (community-23): edit / remove for a row whose
+// origin IS the registry file. Remove is a two-step confirm; success routes
+// back to /community (the row no longer exists to render).
+// ---------------------------------------------------------------------------
+
+function RegistryRowActions({ item }: { item: CommunityItemDetail }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onRemove(): Promise<void> {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setRemoving(true);
+    setError(null);
+    const r = await deleteRegistryItem(item.id);
+    setRemoving(false);
+    if (!r.ok) {
+      setError(r.error ?? 'the bridge refused the delete');
+      return;
+    }
+    router.push('/community');
+  }
+
+  return (
+    <section data-section="registry-row-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Link href={`/community/new?edit=${encodeURIComponent(item.id)}`} data-action="edit-registry-item" className="btn btn-sm">
+        Edit registry entry
+      </Link>
+      <button
+        type="button"
+        className="btn btn-sm"
+        data-action="remove-registry-item"
+        data-confirming={confirming ? 'true' : 'false'}
+        onClick={() => void onRemove()}
+        disabled={removing}
+        style={{ color: '#f87171', borderColor: 'rgba(248,113,113,.4)' }}
+      >
+        {removing ? 'Removing…' : confirming ? 'Yes, remove from the registry' : 'Remove…'}
+      </button>
+      {confirming && !removing && (
+        <button
+          type="button"
+          data-action="remove-registry-item-abort"
+          onClick={() => setConfirming(false)}
+          style={{ fontSize: 12, background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          keep it
+        </button>
+      )}
+      {error && (
+        <span data-component="registry-remove-error" style={{ fontSize: 12, color: '#f87171' }}>
+          {error}
+        </span>
       )}
     </section>
   );
