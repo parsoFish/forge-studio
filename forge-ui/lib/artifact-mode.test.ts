@@ -151,9 +151,15 @@ test('GateBar is keyed on the run\'s initiative id (never the raw ?run= handle, 
   expect(el, 'the raw URL handle must not reach postGate — it 400s at INIT_ID_RE').not.toMatch(/runId=\{runId\}/);
 });
 
-test('gateInitiativeId resolves exactly as ReviewVerdictForm does (run?.initiativeId ?? runId)', () => {
+test('ONE id-resolution rule: gateInitiativeId rides lib/initiative-id.ts and every verdict surface receives it', () => {
+  // W7-B7 (artifact-plan-18/25) strengthened the A3 invariant this pin used
+  // to encode (`run?.initiativeId ?? runId`): the raw fallback still 400s for
+  // an orphan cycle-id handle, so the page now resolves through the SHARED
+  // `effectiveInitiativeId` — and BOTH verdict surfaces (DemoReviewSurface +
+  // ReviewVerdictForm) receive that same resolved handle.
   const src = readFileSync(ARTIFACT_PAGE_PATH, 'utf8');
-  expect(src).toMatch(/const gateInitiativeId = run\?\.initiativeId \?\? runId;/);
-  // The verdict form's own prop is the pinned precedent this must match.
-  expect(src).toMatch(/initiativeId=\{run\?\.initiativeId \?\? runId\}/);
+  expect(src).toMatch(/const gateInitiativeId = effectiveInitiativeId\(run\?\.initiativeId \?\? runId, artifactRunId\);/);
+  expect(src, 'no verdict surface may re-derive its own id rule').not.toMatch(/initiativeId=\{run\?\.initiativeId \?\? runId\}/);
+  const surfaces = src.match(/initiativeId=\{gateInitiativeId\}/g) ?? [];
+  expect(surfaces.length, 'DemoReviewSurface + ReviewVerdictForm both take the one resolved id').toBeGreaterThanOrEqual(2);
 });

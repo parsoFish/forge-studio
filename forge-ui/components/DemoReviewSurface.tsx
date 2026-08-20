@@ -22,10 +22,14 @@ import {
   fetchDemoMarkdown,
   addReviewComment,
   resolveReviewComment,
+  editReviewComment,
+  deleteReviewComment,
   isResponse,
   type ReviewComment,
   type DerivedVerdict,
 } from '@/lib/review-comments-client';
+import { regionDefaultOpen, summarizeReview } from '@/lib/demo-review-view';
+import { effectiveInitiativeId } from '@/lib/initiative-id';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
 import { BeforeAfterSlider, JsonDiffView } from './review/evidence';
 
@@ -86,12 +90,43 @@ export function DemoReviewSurface({
     [cycleId, refresh],
   );
 
+  // W7-B7 (artifact-plan-15): edit + delete for authored comments — a
+  // non-blocking comment has no resolve affordance, so delete is the only
+  // way to clear it; edit fixes a typo'd concern without losing its anchor.
+  const onEdit = useCallback(
+    async (commentId: string, patch: { body?: string; blocking?: boolean }) => {
+      const r = await editReviewComment(cycleId, commentId, patch);
+      if (isResponse(r)) refresh(r);
+      else setError(r.error);
+    },
+    [cycleId, refresh],
+  );
+
+  const onDelete = useCallback(
+    async (commentId: string) => {
+      const r = await deleteReviewComment(cycleId, commentId);
+      if (isResponse(r)) refresh(r);
+      else setError(r.error);
+    },
+    [cycleId, refresh],
+  );
+
   const regions = useMemo(() => buildRegions(model, cycleId), [model, cycleId]);
   const blockerCount = comments.filter((c) => c.blocking && !c.resolved).length;
+
+  // W7-B7 (artifact-plan-31): the wall summary — regions/comments/blocking +
+  // a jump to the first blocking region, so the review's shape is visible
+  // before any scrolling.
+  const summary = useMemo(
+    () => summarizeReview(regions.map((r) => r.id), comments),
+    [regions, comments],
+  );
 
   // The verdict route validates the INIT-YYYY-MM-DD-slug id. When the run object
   // didn't carry one, `initiativeId` can arrive as the full cycleId
   // (`<timestamp>_<initiativeId>`) — recover the real id so the POST never 400s.
+  // W7-B7 (artifact-plan-25): the rule now lives in lib/initiative-id.ts, ONE
+  // resolution shared with GateBar's caller + ReviewVerdictForm.
   const verdictInitiativeId = effectiveInitiativeId(initiativeId, cycleId);
 
   async function onSubmit(): Promise<void> {
@@ -131,23 +166,61 @@ export function DemoReviewSurface({
         />
       </section>
 
-      {/* Per-region evidence + anchored comment threads. */}
+      {/* W7-B7 (artifact-plan-31): the review's shape, before any scrolling —
+          region/comment/blocking counts + a jump to the first blocker. */}
+      <div
+        data-section="review-summary"
+        data-region-count={summary.regions}
+        data-blocking-count={summary.blocking}
+        style={{
+          display: 'flex', alignItems: 'baseline', gap: 14, fontSize: 12, color: '#8b949e',
+          border: '1px solid #21262d', borderRadius: 8, padding: '8px 14px', background: '#0d1117',
+        }}
+      >
+        <span>{summary.regions} region{summary.regions === 1 ? '' : 's'}</span>
+        <span>{summary.comments} comment{summary.comments === 1 ? '' : 's'}</span>
+        <span style={{ color: summary.blocking > 0 ? '#d29922' : '#3fb950' }}>
+          {summary.blocking > 0 ? `${summary.blocking} blocking` : 'no blockers'}
+        </span>
+        {summary.firstBlockingRegion && (
+          <a
+            href={`#region-${summary.firstBlockingRegion}`}
+            data-action="jump-to-blocking"
+            style={{ color: '#d29922', marginLeft: 'auto' }}
+          >
+            jump to first blocker ↓
+          </a>
+        )}
+      </div>
+
+      {/* Per-region evidence + anchored comment threads. Large reviews
+          collapse by default (lib/demo-review-view.ts) — never a 14,000px
+          wall of always-open regions. */}
       <section data-section="demo-regions" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {regions.map((r) => (
-          <ReviewRegion
-            key={r.id}
-            region={r}
-            comments={comments.filter((c) => c.region === r.id)}
-            disabled={submitted !== null}
-            onAdd={onAddComment}
-            onResolve={onResolve}
-          />
-        ))}
+        {regions.map((r) => {
+          const regionComments = comments.filter((c) => c.region === r.id);
+          return (
+            <ReviewRegion
+              key={r.id}
+              region={r}
+              comments={regionComments}
+              defaultOpen={regionDefaultOpen(regions.length, regionComments.length)}
+              disabled={submitted !== null}
+              onAdd={onAddComment}
+              onResolve={onResolve}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          );
+        })}
       </section>
 
       {error && <div style={{ fontSize: 12, color: '#f85149' }}>{error}</div>}
 
-      {/* Derived verdict — preserves the verdict-form data-* contract. */}
+      {/* Derived verdict — preserves the verdict-form data-* contract.
+          W7-B7 (artifact-plan-31): STICKY, like the plan/demo GateBar's fixed
+          shell — the verdict control stays reachable while scrolling the
+          regions instead of sitting 14,000px down in normal flow. */}
       <div
         data-component="verdict-form"
         data-form-state={formState}
@@ -155,13 +228,20 @@ export function DemoReviewSurface({
         data-initiative-id={verdictInitiativeId}
         data-ac-count={blockerCount}
         data-submit-error={error ?? ''}
-        style={{ border: `1px solid ${derived.kind === 'send-back' ? '#9e6a03' : '#238636'}`, borderRadius: 10, padding: 16, background: '#0d1117' }}
+        style={{
+          border: `1px solid ${derived.kind === 'send-back' ? '#9e6a03' : '#238636'}`,
+          borderRadius: 10, padding: 16, background: '#0d1117',
+          position: 'sticky', bottom: 12, zIndex: 40,
+          boxShadow: '0 -6px 24px rgba(0,0,0,.45)',
+        }}
       >
         {submitted ? (
           <div style={{ fontSize: 13, color: submitted === 'approve' ? '#3fb950' : '#d29922' }}>
+            {/* W7-B7 copy: the unifier was retired (R4-01-F4) — the fix loop
+                re-dispatches the DEVELOP agent in the same cycle. */}
             {submitted === 'approve'
               ? 'Approved — merged. The reflector closes out the cycle.'
-              : 'Sent back — the unifier drains the work items in the SAME cycle (no new cycle).'}
+              : 'Sent back — the fix loop reruns the develop agent on these criteria in the SAME cycle (no new cycle).'}
           </div>
         ) : (
           <>
@@ -171,7 +251,7 @@ export function DemoReviewSurface({
               ) : (
                 <>
                   <strong style={{ color: '#d29922' }}>{blockerCount}</strong> blocking comment{blockerCount === 1 ? '' : 's'} ⇒ <strong>send back</strong>.
-                  Each becomes an acceptance criterion the unifier runs in place:
+                  Each becomes an acceptance criterion the fix loop runs in place:
                   <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', fontSize: 12, color: '#8b949e', fontFamily: 'inherit' }}>{derived.rationale}</pre>
                 </>
               )}
@@ -263,108 +343,212 @@ function CheckpointEvidence({ cp }: { cp: DemoModelCheckpoint }): JSX.Element {
 function ReviewRegion({
   region,
   comments,
+  defaultOpen,
   disabled,
   onAdd,
   onResolve,
+  onEdit,
+  onDelete,
 }: {
   region: Region;
   comments: ReviewComment[];
+  /** W7-B7 (artifact-plan-31): large reviews collapse regions by default. */
+  defaultOpen: boolean;
   disabled: boolean;
   onAdd: (region: string, body: string, blocking: boolean) => void;
   onResolve: (commentId: string) => void;
+  onEdit: (commentId: string, patch: { body?: string; blocking?: boolean }) => void;
+  onDelete: (commentId: string) => void;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState('');
   const [blocking, setBlocking] = useState(true);
+  // null = follow the default (a region gaining its first comment auto-opens);
+  // true/false = the operator's explicit toggle wins.
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
+  const expanded = expandedOverride ?? defaultOpen;
 
   return (
     <div
+      id={`region-${region.id}`}
       data-demo-region={region.id}
       data-region-comment-count={comments.length}
+      data-region-collapsed={expanded ? 'false' : 'true'}
       style={{ border: '1px solid #21262d', borderRadius: 8, padding: 14, background: '#0b0f14' }}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>{region.title}</div>
-      {region.render()}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: expanded ? 10 : 0 }}>
+        <button
+          data-action="toggle-region"
+          onClick={() => setExpandedOverride(!expanded)}
+          aria-expanded={expanded}
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer', flex: 1, textAlign: 'left',
+            fontSize: 12, fontWeight: 600, color: '#8b949e', textTransform: 'uppercase', letterSpacing: 0.5,
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 10, width: 10 }}>{expanded ? '▾' : '▸'}</span>
+          {region.title}
+        </button>
+        {comments.length > 0 && (
+          <span style={{ fontSize: 11, color: comments.some((c) => c.blocking && !c.resolved) ? '#d29922' : '#8b949e' }}>
+            {comments.length} comment{comments.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <>
+          {region.render()}
 
-      {/* Existing comments. */}
-      {comments.length > 0 && (
-        <ul data-section="region-comments" style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {comments.map((c) => (
-            <li
-              key={c.id}
-              data-comment-id={c.id}
-              data-comment-blocking={c.blocking ? 'true' : 'false'}
-              data-comment-resolved={c.resolved ? 'true' : 'false'}
-              style={{
-                fontSize: 12, color: '#c9d1d9', borderLeft: `3px solid ${c.resolved ? '#2ea043' : c.blocking ? '#d29922' : '#30363d'}`,
-                padding: '4px 10px', background: '#0d1117', borderRadius: '0 4px 4px 0',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}
-            >
-              <span style={{ flex: 1 }}>
-                {c.blocking && <span style={{ color: '#d29922', fontWeight: 600 }}>[blocking] </span>}
-                {c.body}
-              </span>
-              {c.blocking && !c.resolved && !disabled && (
-                <button data-action="resolve-comment" onClick={() => onResolve(c.id)} style={miniBtn}>resolve</button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+          {/* Existing comments — every authored comment is editable and
+              deletable (W7-B7, artifact-plan-15: delete is the ONLY way to
+              clear a non-blocking comment); resolve stays for blockers. */}
+          {comments.length > 0 && (
+            <ul data-section="region-comments" style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {comments.map((c) => (
+                <CommentRow
+                  key={c.id}
+                  comment={c}
+                  disabled={disabled}
+                  onResolve={onResolve}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              ))}
+            </ul>
+          )}
 
-      {/* Add-comment affordance. */}
-      {!disabled && (
-        open ? (
-          <div data-comment-form data-region={region.id} style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <textarea
-              data-field="comment-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="What needs fixing here? (a blocking comment becomes an acceptance criterion the unifier runs)"
-              rows={2}
-              style={inputStyle}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8b949e' }}>
-              <input data-field="comment-blocking" type="checkbox" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} />
-              blocking (must be addressed before merge)
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                data-action="add-comment"
-                disabled={!body.trim()}
-                onClick={() => { onAdd(region.id, body.trim(), blocking); setBody(''); setOpen(false); }}
-                style={{ ...miniBtn, background: '#1f6feb', borderColor: '#1f6feb', opacity: body.trim() ? 1 : 0.5 }}
-              >
-                add comment
+          {/* Add-comment affordance. */}
+          {!disabled && (
+            open ? (
+              <div data-comment-form data-region={region.id} style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <textarea
+                  data-field="comment-body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="What needs fixing here? (a blocking comment becomes an acceptance criterion the fix loop runs)"
+                  rows={2}
+                  style={inputStyle}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8b949e' }}>
+                  <input data-field="comment-blocking" type="checkbox" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} />
+                  blocking (must be addressed before merge)
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    data-action="add-comment"
+                    disabled={!body.trim()}
+                    onClick={() => { onAdd(region.id, body.trim(), blocking); setBody(''); setOpen(false); }}
+                    style={{ ...miniBtn, background: '#1f6feb', borderColor: '#1f6feb', opacity: body.trim() ? 1 : 0.5 }}
+                  >
+                    add comment
+                  </button>
+                  <button onClick={() => { setOpen(false); setBody(''); }} style={miniBtn}>cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button data-action="comment-region" data-region={region.id} onClick={() => setOpen(true)} style={{ ...miniBtn, marginTop: 10 }}>
+                + comment
               </button>
-              <button onClick={() => { setOpen(false); setBody(''); }} style={miniBtn}>cancel</button>
-            </div>
-          </div>
-        ) : (
-          <button data-action="comment-region" data-region={region.id} onClick={() => setOpen(true)} style={{ ...miniBtn, marginTop: 10 }}>
-            + comment
-          </button>
-        )
+            )
+          )}
+        </>
       )}
     </div>
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>{children}</div>;
+/**
+ * One anchored comment row: resolve (blocking only) + edit + delete.
+ * W7-B7 (artifact-plan-15): before this, a non-blocking comment rendered with
+ * NO controls at all and persisted forever.
+ */
+function CommentRow({
+  comment: c,
+  disabled,
+  onResolve,
+  onEdit,
+  onDelete,
+}: {
+  comment: ReviewComment;
+  disabled: boolean;
+  onResolve: (commentId: string) => void;
+  onEdit: (commentId: string, patch: { body?: string; blocking?: boolean }) => void;
+  onDelete: (commentId: string) => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(c.body);
+  const [draftBlocking, setDraftBlocking] = useState(c.blocking);
+
+  if (editing && !disabled) {
+    return (
+      <li
+        data-comment-id={c.id}
+        data-comment-blocking={c.blocking ? 'true' : 'false'}
+        data-comment-resolved={c.resolved ? 'true' : 'false'}
+        data-comment-editing="true"
+        style={{
+          fontSize: 12, color: '#c9d1d9', borderLeft: '3px solid #1f6feb',
+          padding: '6px 10px', background: '#0d1117', borderRadius: '0 4px 4px 0',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}
+      >
+        <textarea
+          data-field="comment-edit-body"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={2}
+          style={inputStyle}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8b949e' }}>
+          <input type="checkbox" checked={draftBlocking} onChange={(e) => setDraftBlocking(e.target.checked)} />
+          blocking (must be addressed before merge)
+        </label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            data-action="save-comment-edit"
+            disabled={!draft.trim()}
+            onClick={() => { onEdit(c.id, { body: draft.trim(), blocking: draftBlocking }); setEditing(false); }}
+            style={{ ...miniBtn, background: '#1f6feb', borderColor: '#1f6feb', opacity: draft.trim() ? 1 : 0.5 }}
+          >
+            save
+          </button>
+          <button onClick={() => { setEditing(false); setDraft(c.body); setDraftBlocking(c.blocking); }} style={miniBtn}>cancel</button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li
+      data-comment-id={c.id}
+      data-comment-blocking={c.blocking ? 'true' : 'false'}
+      data-comment-resolved={c.resolved ? 'true' : 'false'}
+      style={{
+        fontSize: 12, color: '#c9d1d9', borderLeft: `3px solid ${c.resolved ? '#2ea043' : c.blocking ? '#d29922' : '#30363d'}`,
+        padding: '4px 10px', background: '#0d1117', borderRadius: '0 4px 4px 0',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}
+    >
+      <span style={{ flex: 1 }}>
+        {c.blocking && <span style={{ color: '#d29922', fontWeight: 600 }}>[blocking] </span>}
+        {c.body}
+      </span>
+      {!disabled && (
+        <>
+          {c.blocking && !c.resolved && (
+            <button data-action="resolve-comment" onClick={() => onResolve(c.id)} style={miniBtn}>resolve</button>
+          )}
+          <button data-action="edit-comment" onClick={() => { setDraft(c.body); setDraftBlocking(c.blocking); setEditing(true); }} style={miniBtn}>edit</button>
+          <button data-action="delete-comment" onClick={() => onDelete(c.id)} style={miniBtn} title="Remove this comment">delete</button>
+        </>
+      )}
+    </li>
+  );
 }
 
-/**
- * Recover the initiative id for the verdict route. The id is preferred as-is when
- * it already looks like an initiative id; otherwise it's pulled out of the
- * `<timestamp>_<initiativeId>` cycle id (the timestamp segment carries no `_`).
- */
-function effectiveInitiativeId(initiativeId: string, cycleId: string): string {
-  if (/^INIT-/.test(initiativeId)) return initiativeId;
-  const idx = cycleId.indexOf('_');
-  const fromCycle = idx >= 0 ? cycleId.slice(idx + 1) : cycleId;
-  return /^INIT-/.test(fromCycle) ? fromCycle : initiativeId;
+function SectionLabel({ children }: { children: React.ReactNode }): JSX.Element {
+  return <div style={{ fontSize: 12, fontWeight: 600, color: '#8b949e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>{children}</div>;
 }
 
 /** Minimal fallback markdown when no DEMO.md is served yet (keeps the iframe non-empty). */
