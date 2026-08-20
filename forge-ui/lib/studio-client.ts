@@ -1461,7 +1461,10 @@ export async function dispatchAgentFix(
     fixHint: finding.fixHint,
     message: finding.message ?? '',
   });
-  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+  // W7-B4: a failed dispatch never hands back a runId to trust (studioSend
+  // now carries failure bodies for callers that need them — this per-function
+  // guard preserves the old transport-level drop for run ids).
+  return { ok: r.ok, error: r.error, runId: r.ok && typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
 /** W7-FIX-A1 (A1-10): `'unknown'` is BOTH the bridge's own honest "no state
@@ -1555,13 +1558,15 @@ function failedKbDrainStatus(runId: string | null, error: string): KbDrainStatus
 
 /** Dispatch a drain-to-green run: `POST /api/studio/kbs/:id/drain`. A 409
  *  (a run is already active for this kb) surfaces as `{ok:false, error}` —
- *  `studioPost` drops the response body's `runId` on any non-2xx, so a
- *  caller that hits this must recover the ACTUAL active run via
+ *  the failure path NEVER hands back a `runId` to trust (W7-B4: `studioSend`
+ *  now carries failure BODIES for callers that need them, e.g. saveFlow's
+ *  findings, so this per-function guard replaces the old transport-level
+ *  drop), so a caller that hits this must recover the ACTUAL active run via
  *  {@link fetchActiveOrLatestKbDrain} rather than trust anything parsed off
  *  this call's own error path. */
 export async function dispatchKbDrain(id: string): Promise<{ ok: boolean; error?: string; runId?: string }> {
   const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/drain`, {});
-  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+  return { ok: r.ok, error: r.error, runId: r.ok && typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
 /** Poll one specific drain run's status: `GET /api/studio/kbs/:id/drain/:runId`. */
@@ -1632,7 +1637,9 @@ export async function dispatchAgentRun(
     ...(opts?.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
     ...(opts?.materials && opts.materials.length > 0 ? { materials: opts.materials } : {}),
   });
-  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+  // W7-B4: a failed dispatch never hands back a runId to trust (see
+  // dispatchKbDrain's identical guard).
+  return { ok: r.ok, error: r.error, runId: r.ok && typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }
 
 export type AgentRunStatus = {

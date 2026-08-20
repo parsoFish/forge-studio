@@ -23,7 +23,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
