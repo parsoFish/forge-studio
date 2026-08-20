@@ -14,8 +14,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
+import { subscribe } from '@/lib/bridge-client';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { createDebouncedRefreshRuns } from '@/lib/use-studio-home-data';
 import { SessionsIndexBody, type SessionsIndexFetchError, type SessionsLastCancel } from '@/components/studio/SessionsIndex';
 
 export default function SessionsIndexPage() {
@@ -67,6 +69,34 @@ export default function SessionsIndexPage() {
     })();
     return () => { signal.cancelled = true; };
   }, [loadKey]);
+
+  // W7-B1 (home-sessions-12) — the index stays LIVE: the same
+  // `cycle-list-changed` bridge-WS signal Home already refetches on (a
+  // session kickoff/completion is exactly the event that changes the
+  // in-flight set), debounced through the SAME `createDebouncedRefreshRuns`
+  // wrapper (ADR-044 P1) so a burst collapses into at most two round-trips.
+  // No page-level poll, no new transport — one subscribe, mount-only,
+  // mirroring `use-studio-home-data.ts`'s own wiring. A failed refetch
+  // routes into the SAME error state the page already renders (`refresh`).
+  useEffect(() => {
+    const signal = { cancelled: false };
+    const debouncedRefresh = createDebouncedRefreshRuns(() => {
+      if (!signal.cancelled) void refresh();
+    });
+    const sub = subscribe({
+      onMessage: (msg) => {
+        if (signal.cancelled) return;
+        if (msg.type === 'cycle-list-changed') debouncedRefresh();
+      },
+    });
+    return () => {
+      signal.cancelled = true;
+      debouncedRefresh.cancel();
+      sub.close();
+    };
+    // mount-only — `refresh` is a stable useCallback([], above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <SessionsIndexBody
