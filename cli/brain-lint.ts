@@ -1492,17 +1492,32 @@ export type AutoFixStableResult = {
  * the whole auto tier in a single call instead of needing repeat runs.
  *
  * `filter` scopes which findings are eligible (e.g. one kb); defaults to all.
+ *
+ * `extraFindings` (W7-B2, knowledge-10): an additional CLASSIFIED finding
+ * source re-evaluated every round alongside the internal full-scope re-lint —
+ * the per-KB own-theme lens (`ownThemeFindingsLens`, cli/kb-lint-summary.ts)
+ * rides in here so a project/band KB's own auto-tier findings (which the
+ * full-scope scan structurally never surfaces) are visible to the fixed-point
+ * loop. Deduped against the full-scan findings by (check, file, message).
  */
 export function applyAutoFixesUntilStable(
   forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean } = {},
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean; extraFindings?: () => Finding[] } = {},
 ): AutoFixStableResult {
   const maxRounds = opts.maxRounds ?? 12;
   const filter = opts.filter ?? (() => true);
+  const extraFindings = opts.extraFindings ?? (() => []);
+  const identity = (f: Finding): string => `${f.check ?? ''}::${f.file}::${f.message}`;
+  const lintOnce = (): Finding[] => {
+    const base = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
+    const seen = new Set(base.map(identity));
+    const extras = extraFindings().filter((f) => !seen.has(identity(f)));
+    return [...base, ...extras].filter(filter);
+  };
   const applied: AutoFixStableResult['applied'] = [];
   const skipped: AutoFixStableResult['skipped'] = [];
   let rounds = 0;
-  let remaining = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
+  let remaining = lintOnce();
   while (rounds < maxRounds) {
     const auto = remaining.filter((f) => f.resolution === 'auto');
     if (auto.length === 0) break;
@@ -1513,7 +1528,7 @@ export function applyAutoFixesUntilStable(
     // No progress this round (everything skipped, e.g. a dirty worktree blocks a
     // git-mv) → stop rather than spin to the cap.
     if (r.applied.length === 0) break;
-    remaining = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
+    remaining = lintOnce();
   }
   return { applied, skipped, rounds, remaining };
 }

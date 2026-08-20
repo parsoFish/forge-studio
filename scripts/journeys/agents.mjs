@@ -447,7 +447,7 @@ export const journey = defineJourney({
               // history-ledger-render.test.ts + the R6-06 beats below — this beat
               // only proves THIS route actually reuses it.
               await page.waitForFunction(
-                () => document.querySelector('[data-component="recent-agent-runs-loading"]') === null,
+                () => document.querySelector('[data-component="recent-runs-loading"]') === null,
                 null, { timeout: 15000 },
               ).catch(() => {});
               const ledgerMounted = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
