@@ -100,7 +100,7 @@ test('sessionKindAgent returns null for an unknown kind — never a guessed slug
 
 // ---- the ONE kickoff list (home-sessions-19 / crosscut-13) ----------------
 
-test('KICKOFF_ENTRIES carries all six generic kickoff kinds (community-refresh INCLUDED) plus architect\'s bespoke /architect/new entry', () => {
+test('KICKOFF_ENTRIES carries all seven generic kickoff kinds (community-refresh AND onboarding INCLUDED) plus architect\'s bespoke /architect/new entry', () => {
   const byKind = new Map(KICKOFF_ENTRIES.map((e) => [e.kind, e.href]));
   expect(byKind.get('architect')).toBe('/architect/new');
   expect(byKind.get('instructions')).toBe('/sessions/instructions/new');
@@ -109,7 +109,8 @@ test('KICKOFF_ENTRIES carries all six generic kickoff kinds (community-refresh I
   expect(byKind.get('kb-cleanup')).toBe('/sessions/kb-cleanup/new');
   expect(byKind.get('authoring')).toBe('/sessions/authoring/new');
   expect(byKind.get('community-refresh')).toBe('/sessions/community-refresh/new');
-  expect(KICKOFF_ENTRIES.length).toBe(7);
+  expect(byKind.get('onboarding')).toBe('/sessions/onboarding/new');
+  expect(KICKOFF_ENTRIES.length).toBe(8);
 });
 
 test('every KICKOFF_ENTRIES label is the descriptor\'s own declared title — never a second hand-written label', () => {
@@ -118,13 +119,19 @@ test('every KICKOFF_ENTRIES label is the descriptor\'s own declared title — ne
   }
 });
 
-test('onboarding is NOT a generic kickoff kind — it starts from project onboarding, never the generic form', () => {
-  expect(KICKOFF_ENTRIES.some((e) => e.kind === 'onboarding')).toBe(false);
+test('W7-C1 (sessions-kinds-01/crosscut-14): onboarding IS a generic kickoff kind — the onboard-project flow was retired in favour of the session, so /sessions/onboarding/new must be a real kickoff, not a dead end', () => {
+  const entry = KICKOFF_ENTRIES.find((e) => e.kind === 'onboarding');
+  expect(entry).toBeDefined();
+  expect(entry?.href).toBe('/sessions/onboarding/new');
+  const spec = KICKOFF_SPECS['onboarding'];
+  expect(spec).toBeDefined();
+  expect(spec.agentSlug).toBe('onboarding-agent');
+  expect(spec.selector).toBe('project');
 });
 
 // ---- KICKOFF_SPECS (the kickoff page's per-kind form spec) ----------------
 
-test('KICKOFF_SPECS covers exactly the six generic kickoff kinds (architect keeps its bespoke native entry, ADR-043 §4)', () => {
+test('KICKOFF_SPECS covers exactly the seven generic kickoff kinds (architect keeps its bespoke native entry, ADR-043 §4)', () => {
   const specKinds = Object.keys(KICKOFF_SPECS).sort();
   const genericKinds = KICKOFF_ENTRIES.filter((e) => e.kind !== 'architect').map((e) => e.kind).sort();
   expect(specKinds).toEqual(genericKinds);

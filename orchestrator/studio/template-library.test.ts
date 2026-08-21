@@ -257,12 +257,14 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     }
   });
 
-  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (4)', () => {
+  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (2)', () => {
     const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'planning');
     assert.ok(entries.length > 0);
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'studio/flows/*/flow.yaml');
-      assert.equal(e.usedByDerivation.scanned, 4, `expected 4 scanned flow files (forge-architect/forge-develop/forge-reflect/onboard-project) for "${e.id}"`);
+      // W7-C1: forge-reflect + onboard-project retired — the seed set is
+      // exactly forge-architect + forge-develop.
+      assert.equal(e.usedByDerivation.scanned, 2, `expected 2 scanned flow files (forge-architect/forge-develop) for "${e.id}"`);
     }
   });
 

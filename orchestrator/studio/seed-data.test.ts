@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
 
 import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
 import { validateFlow, validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
@@ -19,8 +20,9 @@ import { MATERIAL_KINDS } from './materials.ts';
 const ROOT = process.cwd();
 
 // ---------------------------------------------------------------------------
-// seed flows (forge-cycle retired in S8/DEC-3 — see the forge-reflect test below
-// + the forge-develop / forge-architect coverage in flow-runner.test.ts)
+// seed flows (forge-cycle retired in S8/DEC-3; forge-reflect + onboard-project
+// retired in W7-C1 — see the retirement test below + the forge-develop /
+// forge-architect coverage in flow-runner.test.ts)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -213,28 +215,24 @@ test('brain-ingest agent loads and validateAgent returns zero errors', () => {
 });
 
 // ---------------------------------------------------------------------------
-// forge-reflect flow (S8: the third flow that replaces the forge-cycle monolith)
+// W7-C1 (flows-17/flows-20, operator note 10): the vestigial flow wrappers are
+// RETIRED. forge-reflect duplicated the standalone reflect-agent dispatch
+// R4-09-F1 already cut over to (finalize-merged resolves forge-develop's
+// `{on: merged, target: {kind: agent, ref: reflector}}` through the
+// reflection-close band guard — no flow involved); onboard-project duplicated
+// the onboarding SESSION (`POST /api/studio/onboarding/start`, the kept
+// surface). The seed set is exactly forge-architect + forge-develop.
 // ---------------------------------------------------------------------------
 
-test('forge-reflect flow loads and validateFlow returns zero errors', () => {
-  const flowPath = join(ROOT, 'studio/flows/forge-reflect/flow.yaml');
-  const agents = listAgentDefinitions(join(ROOT, 'skills'));
-  const agentMap = new Map(agents.map((a) => [a.slug, a]));
-
-  const flow = loadFlowDefinition(flowPath);
-
-  assert.strictEqual(flow.id, 'forge-reflect');
-  assert.strictEqual(flow.disposable, true, 'forge-reflect must be disposable:true (zero-gate rule)');
-  assert.ok(flow.nodes.some((n) => n.agent === 'reflector'), 'must have a reflector node');
-  assert.strictEqual(flow.edges.length, 0, 'forge-reflect has no edges (single-node, merge-triggered flow)');
-  assert.deepEqual(flow.triggers, [], 'forge-reflect has no flow-engine triggers (merge-triggered via finalize-merged)');
-
-  const findings = validateFlow(flow, agentMap);
-  const errors = findings.filter((f) => f.level === 'error');
+test('W7-C1: the seed flow set is exactly forge-architect + forge-develop (forge-reflect and onboard-project are retired)', () => {
+  const flowsDir = join(ROOT, 'studio/flows');
+  const flowIds = readdirSync(flowsDir)
+    .filter((d) => existsSync(join(flowsDir, d, 'flow.yaml')))
+    .sort();
   assert.deepEqual(
-    errors,
-    [],
-    `forge-reflect flow has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
+    flowIds,
+    ['forge-architect', 'forge-develop'],
+    'studio/flows must contain exactly the two seed flows — the forge-reflect and onboard-project wrappers were retired in W7-C1',
   );
 });
 
@@ -246,7 +244,6 @@ test('seed flows declare their kickoff kind', () => {
   const cases: Array<[string, string]> = [
     ['forge-architect', 'idea'],
     ['forge-develop', 'initiative-select'],
-    ['forge-reflect', 'trigger-only'],
   ];
   for (const [id, kind] of cases) {
     const flow = loadFlowDefinition(join(ROOT, `studio/flows/${id}/flow.yaml`));
