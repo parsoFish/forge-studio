@@ -147,6 +147,8 @@ had fixed it and the row still said otherwise.
 | `orchestrator/project-create.ts` (W7-B6) | `execFileSync('git', init/add/commit)` ×3 | `POST /api/studio/projects/create` body `name` (slugified) | guarded `[read]` | Fixed argv (no request-derived tokens beyond the commit message's already-`SLUG_RE`-validated `id` + allowlisted `appType`); `cwd` is the server-built `.staging-<id>-<rand>` under the config-resolved projectsRoot — `id` passes `SLUG_RE` + `isReservedId` before any path construction, `<rand>` is server entropy. `stdio:'ignore'`, no shell. |
 | `orchestrator/project-create.ts` (W7-B6, projects-35) | `lstatSync` ×2 | same route | guarded `[read]` | Read-only existence probes on `projects/<id>` + `brain/projects/<id>` (fixed roots, `SLUG_RE`-validated id) whose ONLY consequence is a fail-safe REFUSAL — the create never deletes or writes through either probe (the old `rmSync` reconcile these replace was the projects-35 data-loss defect). |
 | `cli/bridge-studio-writes.ts` `scaffoldContractArtifacts` (W7-B6, projects-11; review F4 three-way rule) | `realpathSync` ×3, `execFileSync('git', rev-parse) ×2` | `POST /api/studio/projects` body `repoPath` (via `projectRoot`) | guarded `[read]` | Identity COMPARISONS only, deciding whether to `git init`: probe 1 (`--show-toplevel`, cwd=`projectRoot`) vs realpath(`projectRoot`) detects an own-repo; probe 2 (`--show-toplevel`, cwd=`forgeRoot` — a TRUSTED server-config path, not request-derived) distinguishes "enclosed by forge's own work tree" (init) from "enclosed by the operator's real clone" (skip — never nest a `.git` inside their repo, review F4). Fixed argv, no shell; `projectRoot` was already validated by the caller's `isContainedProjectRepoPath` before this function runs, and nothing is read or written through the realpathed values. |
+| `cli/bridge-studio-writes.ts` `scaffoldContractArtifacts` + `checkContractArtifactContainment` (W7-FIX-B-PROJ, born-contract-green) | `existsSync` ×2, `writeFileSync` ×1 | `POST /api/studio/projects` body `repoPath` (via `projectRoot`) | guarded `[exec]` | The C2 hygiene `.gitignore` written ONLY on the two branches that `git init` a repo from nothing, ONLY when absent (never clobbers an operator file). Both `existsSync` calls are boolean "already there, skip" probes; the write goes through `resolveGuardedPath(projectRoot, ['.gitignore']).realPath`, which rejects a symlinked or dangling leaf (the SEC-03 Finding-B roadmap.md idiom, mirrored — a dangling symlink at `.gitignore` reads absent to `existsSync` but is refused by the guard before the write). Content is server-constant (`SCRATCH_PATHS` + `SCAFFOLD_BUILD_OUTPUT_IGNORES`, both exported by `cli/preflight.ts`); the Phase-1 pure pre-check gained the matching `.gitignore` guard so no write on the route can be attempted before every path it may touch is proven safe. Review round (W7-FIX-B-PROJ F2): the pre-check's `.gitignore` guard is CONDITIONAL on the shared `needsGitInit` predicate — the exact condition under which the scaffold writes the file — so an own-repo / operator-enclosed checkout (whose `.gitignore` is never written, dangling symlink or not) is no longer false-rejected; check/write parity is kept by both sites calling the same predicate. |
+| `cli/preflight.ts` `checkC2` (W7-FIX-B-PROJ review F1) | `lstatSync` ×1 | bridge preflight routes (via the validated project dir) | guarded `[read]` | Boolean "does the dir-shaped scratch path exist as a NON-directory" probe on `join(dir, pathArg)` — `dir` is the route-validated project dir and `pathArg` comes from the server-constant `SCRATCH_PATHS`, never from the request. `lstat` deliberately (not `stat`): a symlink at e.g. `.forge/work-items` is a link object to git, so dir-only ignore patterns never match it and the sentinel-child probe alone would false-PASS C2 while `git add -A` swept the stray entry into the PR. The probe's only consequence is adding the path itself to the `git check-ignore` probe set — a fail-safe strictly toward REFUSAL (C2 violation), never a read/write through the path; a throwing `lstat` (absent path, ancestor-is-a-file) falls back to the sentinel child alone. Pinned by `cli/preflight.test.ts` (stray-FILE red pin, symlink pin, real-dir green-lock). |
 
 ### Fixed in this sweep
 
@@ -1551,3 +1553,24 @@ route has carried since W6-B14. `check-request-path-sinks.mjs` delta (1 file,
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta —
 `scripts/request-path-sinks.baseline.txt` now records `cli/bridge-studio-kbs.ts`
 `mkdirSync` at 9.
+
+### W7 FIX-B-KB — the shared lenient theme parser (`cli/theme-frontmatter.ts`, one relocated `[read]`-class sink)
+
+The one lenient theme-frontmatter parser moved out of `cli/brain-lint.ts`'s
+private `parseTheme` into the new leaf module `cli/theme-frontmatter.ts`, so
+the lint checks and the deterministic fixers (`cli/brain-fix-auto.ts`) share a
+single parse derivation (they used to disagree: the fixer's strict copy
+refused unquoted-colon themes the lint fallback accepted, so consolidate could
+never clear the finding it was dispatched for). `check-request-path-sinks.mjs`
+delta: `cli/theme-frontmatter.ts` `readFileSync` 0 → 1, with the SAME sink
+count DROPPING in both former hosts (`cli/brain-lint.ts` `readFileSync` 5 → 4,
+`cli/brain-fix-auto.ts` `readFileSync` 4 → 3) — a relocation, net −1, not new
+surface:
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/theme-frontmatter.ts` (`parseThemeFile`) | `readFileSync` | none directly — `file` is always a server-enumerated theme path: `readThemeFiles`/`listOwnThemeFiles` walks (the latter through `guardedReadDir` over `resolveKbBrainDir`), or a lint Finding's own `file` (constructed from those same walks), or `op=fix-agent`'s body path which the route validates absolute-under-`brain/` before dispatch | accidentally-safe (unchanged) | Byte-identical read+parse logic relocated from `cli/brain-lint.ts:241-294`; neither module is in `check-raw-fs-guarded.mjs`'s scanned-module list (shared helpers, not request handlers), and every caller's path provenance is unchanged by the move. The parse now always passes gray-matter an options object — cache-bypass, a correctness fix (poisoned-cache empty frontmatter), no fs-surface change. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` records the relocation (and the two
+tightened rows).

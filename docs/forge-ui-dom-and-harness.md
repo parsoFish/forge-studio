@@ -3369,7 +3369,11 @@ inventory rather than one shared page-level contract:
     `data-cancel-armed="true|false"`, with `[data-action="cancel-drain-keep"]`
     to disarm; `POST .../drain/cancel` answers `mode:'requested'` for a live
     loop — honored between turns — or `mode:'forced'` for a dead one, and
-    409s when no run is active), `[data-action="recheck-drain"]` (rendered
+    409s when no run is active; the 409 refuses honestly (W7 FIX-B-KB,
+    knowledge-14): when the latest run is already terminal the body names
+    it — `{error, runId, state}` — and only a KB with no drain history at
+    all gets the bare "no active drain run" reason, with no fabricated
+    `runId`), `[data-action="recheck-drain"]` (rendered
     in `'timed-out'` and `'unreadable'`; restarts the poll for the SAME
     `runId` without a fresh dispatch), and per-finding
     `[data-action="open-drain-draft"]` links to the kb-cleanup DRAFT

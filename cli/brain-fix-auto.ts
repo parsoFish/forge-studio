@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 
 import matter from 'gray-matter';
 import type { Finding } from './brain-lint.ts';
+import { parseThemeFile } from './theme-frontmatter.ts';
 
 const CATEGORY_TO_INDEX_FILE: Record<string, string> = {
   pattern: 'patterns.md',
@@ -43,13 +44,13 @@ export type AutoFixResult = {
 
 type ParsedTheme = { data: Record<string, unknown>; content: string };
 
+/** The SAME lenient parse the lint checks use (cli/theme-frontmatter.ts,
+ *  W7 FIX-B-KB) — a strict copy here made the fixer refuse ("theme
+ *  unparseable") the very unquoted-colon theme lint had just flagged as
+ *  missing its index link, so consolidate could never clear the finding. */
 function parseTheme(file: string): ParsedTheme | null {
-  try {
-    const { data, content } = matter(readFileSync(file, 'utf8'));
-    return { data: data as Record<string, unknown>, content };
-  } catch {
-    return null;
-  }
+  const parsed = parseThemeFile(file);
+  return parsed ? { data: parsed.data as Record<string, unknown>, content: parsed.content } : null;
 }
 
 /** True when the git worktree at forgeRoot has no staged/unstaged changes. */
@@ -62,12 +63,36 @@ function worktreeClean(forgeRoot: string): boolean {
   }
 }
 
-/** The category index path for a theme's category, or null. */
-function categoryIndexPath(forgeRoot: string, category: string): string | null {
+/**
+ * The category index file the CHECKER for this theme's LOCATION actually
+ * reads — fixer/checker symmetry (W7 FIX-B-KB). Forge sub-wiki themes
+ * (brain/cycles, brain/forge-dev) route by category, exactly as the
+ * full-scope `checkIndexSync` does (a mis-categorized forge theme is
+ * `fixMisRouted`'s job, not this one's). EVERY other location — a project
+ * brain at brain/projects/<id>/, a top-level scratch/flow/band KB at
+ * brain/<id>/ — keeps its category indexes IN ITS OWN TREE
+ * (`lintThemeFiles`' per-KB branch + `checkProjectBrainIndexes`), so the
+ * fixer must write there. The old derivation used the global category map
+ * unconditionally, which appended a scratch KB's link into the REAL
+ * brain/cycles/patterns.md (a dangling `./themes/<slug>.md` reference into
+ * Brain 2) while the KB's own finding never cleared.
+ *
+ * Returns null for a theme outside brain/ entirely — never write anywhere.
+ */
+function categoryIndexPathFor(forgeRoot: string, themeFile: string, category: string): string | null {
   const file = CATEGORY_TO_INDEX_FILE[category];
-  const sub = CATEGORY_TO_BRAIN_SUBDIR[category];
-  if (!file || !sub) return null;
-  return join(forgeRoot, 'brain', sub, file);
+  if (!file) return null;
+  const brainRoot = join(forgeRoot, 'brain');
+  const rel = relative(brainRoot, themeFile).replace(/\\/g, '/');
+  if (rel.startsWith('..')) return null;
+  const parts = rel.split('/').filter(Boolean);
+  const top = parts[0] ?? '';
+  if (top === 'cycles' || top === 'forge-dev') {
+    const sub = CATEGORY_TO_BRAIN_SUBDIR[category];
+    return sub ? join(brainRoot, sub, file) : null;
+  }
+  if (top === 'projects') return parts.length >= 2 ? join(brainRoot, 'projects', parts[1], file) : null;
+  return top ? join(brainRoot, top, file) : null;
 }
 
 /** The canonical link line for a theme in its category index. */
@@ -120,7 +145,7 @@ function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; deta
   const parsed = parseTheme(themeFile);
   if (!parsed) return { ok: false, detail: 'theme unparseable' };
   const category = String(parsed.data.category ?? '');
-  const indexPath = categoryIndexPath(forgeRoot, category);
+  const indexPath = categoryIndexPathFor(forgeRoot, themeFile, category);
   if (!indexPath || !existsSync(indexPath)) return { ok: false, detail: `no category index for "${category}"` };
   const r = ensureLinkedAt(indexPath, themeFile);
   if (!r.ok || r.detail === 'already linked') return r;
@@ -131,7 +156,7 @@ function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; deta
 function dedupeLinks(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
   const parsed = parseTheme(themeFile);
   if (!parsed) return { ok: false, detail: 'theme unparseable' };
-  const indexPath = categoryIndexPath(forgeRoot, String(parsed.data.category ?? ''));
+  const indexPath = categoryIndexPathFor(forgeRoot, themeFile, String(parsed.data.category ?? ''));
   if (!indexPath || !existsSync(indexPath)) return { ok: false, detail: 'no category index' };
   const slug = basename(themeFile, '.md');
   const needle = `themes/${slug}.md`;
@@ -153,8 +178,12 @@ function dedupeLinks(forgeRoot: string, themeFile: string): { ok: boolean; detai
 function fixDates(themeFile: string, kind: string): { ok: boolean; detail: string } {
   const raw = (() => { try { return readFileSync(themeFile, 'utf8'); } catch { return null; } })();
   if (raw === null) return { ok: false, detail: 'unreadable' };
+  // `{}` — no-cache parse; see parseTheme above (W7 FIX-B-KB). Extra
+  // load-bearing here: a poisoned cache hit would hand back `content`
+  // STILL CARRYING the frontmatter block, and matter.stringify below would
+  // then write a second frontmatter block on top of it.
   let parsed;
-  try { parsed = matter(raw); } catch { return { ok: false, detail: 'unparseable frontmatter — agent-tier' }; }
+  try { parsed = matter(raw, {}); } catch { return { ok: false, detail: 'unparseable frontmatter — agent-tier' }; }
   const data = parsed.data as Record<string, unknown>;
   let mtimeIso: string;
   try { mtimeIso = new Date(statSync(themeFile).mtimeMs).toISOString(); } catch { mtimeIso = new Date(0).toISOString(); }

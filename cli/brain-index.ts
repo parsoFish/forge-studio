@@ -165,7 +165,9 @@ function readProjectDescription(profilePath: string): string {
   if (!existsSync(profilePath)) return '';
   try {
     const raw = readFileSync(profilePath, 'utf8');
-    const { data, content } = matter(raw);
+    // `{}` bypasses gray-matter's parse cache (poisoning class documented in
+    // cli/theme-frontmatter.ts module header).
+    const { data, content } = matter(raw, {});
     // Prefer the first non-heading, non-empty paragraph as the "one-paragraph hook".
     const lines = content
       .split('\n')

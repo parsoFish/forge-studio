@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runBrainLint, applyAutoFixesUntilStable } from './brain-lint.ts';
+import { runBrainLint, applyAutoFixesUntilStable, lintThemeFiles, classify } from './brain-lint.ts';
 import { applyAutoFixes } from './brain-fix-auto.ts';
 
 function brain(): string {
@@ -147,6 +147,105 @@ test('applyAutoFixes: ignores non-auto findings (agent/user untouched)', () => {
     applyAutoFixes(root, runBrainLint({ cwd: root, scope: 'full' }).findings);
     // the broken wikilink (agent) is still there — not auto-fixed.
     assert.ok(lintKinds(root).includes('links.broken-wikilink'), 'agent-tier finding left for the agent');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W7 FIX-B-KB — the index-link fixers must write into the theme's OWN tree.
+//
+// ensureLinked/dedupeLinks used to derive the index file from the GLOBAL
+// category→sub-wiki map (pattern → brain/cycles/patterns.md) regardless of
+// where the theme lives, so auto-fixing an `index.not-listed` finding for a
+// project/scratch KB theme appended a dangling link into the real
+// brain/cycles/patterns.md — the journey's tree-dirtying leak (a scratch KB
+// slug relinked into Brain 2), and a finding that never cleared (the per-KB
+// checker looks at the KB's own index, so the fixed-point loop spun).
+// ---------------------------------------------------------------------------
+
+test('applyAutoFixes: index.not-listed for a PROJECT-brain theme links the KB\'s OWN patterns.md — brain/cycles/patterns.md stays byte-identical (W7 FIX-B-KB)', () => {
+  const root = brain();
+  try {
+    const kbDir = join(root, 'brain', 'projects', 'pkb');
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    writeFileSync(join(kbDir, 'patterns.md'), '# pkb — Patterns\n\n## Theme pages\n');
+    const themeFile = join(kbDir, 'themes', 'own-lesson.md');
+    writeFileSync(themeFile, theme({ title: 'Own lesson', description: 'a project lesson', category: 'pattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }));
+
+    // The finding exactly as the per-KB own-theme lens produces it.
+    const notListed = lintThemeFiles(root, [themeFile]).map(classify).find((f) => f.kind === 'index.not-listed');
+    assert.ok(notListed, 'precondition: the own-theme lens flags the missing link');
+
+    const cyclesBefore = readFileSync(join(root, 'brain', 'cycles', 'patterns.md'), 'utf8');
+    const res = applyAutoFixes(root, [notListed]);
+    assert.equal(res.applied.length, 1, JSON.stringify(res));
+    assert.ok(
+      readFileSync(join(kbDir, 'patterns.md'), 'utf8').includes('(./themes/own-lesson.md)'),
+      'the link must land in the KB\'s OWN patterns.md',
+    );
+    assert.equal(
+      readFileSync(join(root, 'brain', 'cycles', 'patterns.md'), 'utf8'),
+      cyclesBefore,
+      'brain/cycles/patterns.md must be untouched — the fixer may never write outside the theme\'s own tree',
+    );
+    // And the fix actually CLEARS the per-KB finding (fixer/checker symmetry).
+    assert.ok(
+      !lintThemeFiles(root, [themeFile]).map(classify).some((f) => f.kind === 'index.not-listed'),
+      're-lint through the same lens must show the finding cleared',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('applyAutoFixes: index.not-listed for a top-level scratch KB theme links the scratch KB\'s own index (W7 FIX-B-KB)', () => {
+  const root = brain();
+  try {
+    const kbDir = join(root, 'brain', 'scratch-kb');
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    writeFileSync(join(kbDir, 'patterns.md'), '# scratch-kb — Patterns\n\n## Theme pages\n');
+    const themeFile = join(kbDir, 'themes', 'scratch-lesson.md');
+    writeFileSync(themeFile, theme({ title: 'Scratch lesson', description: 'a scratch lesson', category: 'pattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }));
+
+    const notListed = lintThemeFiles(root, [themeFile]).map(classify).find((f) => f.kind === 'index.not-listed');
+    assert.ok(notListed, 'precondition: the own-theme lens flags the missing link');
+
+    const cyclesBefore = readFileSync(join(root, 'brain', 'cycles', 'patterns.md'), 'utf8');
+    const res = applyAutoFixes(root, [notListed]);
+    assert.equal(res.applied.length, 1, JSON.stringify(res));
+    assert.ok(
+      readFileSync(join(kbDir, 'patterns.md'), 'utf8').includes('(./themes/scratch-lesson.md)'),
+      'the link must land in the scratch KB\'s own patterns.md',
+    );
+    assert.equal(readFileSync(join(root, 'brain', 'cycles', 'patterns.md'), 'utf8'), cyclesBefore, 'brain/cycles untouched');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('applyAutoFixes: index.duplicate for a project-brain theme dedupes the KB\'s OWN index (W7 FIX-B-KB)', () => {
+  const root = brain();
+  try {
+    const kbDir = join(root, 'brain', 'projects', 'pkb2');
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    const themeFile = join(kbDir, 'themes', 'dup-lesson.md');
+    writeFileSync(themeFile, theme({ title: 'Dup lesson', description: 'd', category: 'pattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }));
+    writeFileSync(join(kbDir, 'patterns.md'), [
+      '# pkb2 — Patterns', '', '## Theme pages', '',
+      '- [`dup-lesson`](./themes/dup-lesson.md) — d',
+      '- [`dup-lesson`](./themes/dup-lesson.md) — d',
+      '',
+    ].join('\n'));
+
+    const dup = lintThemeFiles(root, [themeFile]).map(classify).find((f) => f.kind === 'index.duplicate');
+    assert.ok(dup, 'precondition: the own-theme lens flags the duplicate');
+
+    const res = applyAutoFixes(root, [dup]);
+    assert.equal(res.applied.length, 1, JSON.stringify(res));
+    const body = readFileSync(join(kbDir, 'patterns.md'), 'utf8');
+    const hits = body.split('\n').filter((l) => l.includes('themes/dup-lesson.md')).length;
+    assert.equal(hits, 1, `exactly one link line must survive in the KB's own index, got ${hits}:\n${body}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

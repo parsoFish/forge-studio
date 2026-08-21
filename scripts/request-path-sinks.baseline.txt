@@ -3,7 +3,7 @@ cli/architect-plan.ts mkdirSync 2
 cli/architect-plan.ts renameSync 1
 cli/brain-fix-auto.ts execFileSync 2
 cli/brain-fix-auto.ts existsSync 4
-cli/brain-fix-auto.ts readFileSync 4
+cli/brain-fix-auto.ts readFileSync 3
 cli/brain-fix-auto.ts statSync 1
 cli/brain-fix-auto.ts writeFileSync 3
 cli/brain-index.ts existsSync 10
@@ -13,7 +13,7 @@ cli/brain-index.ts statSync 2
 cli/brain-index.ts writeFileSync 1
 cli/brain-lint.ts existsSync 21
 cli/brain-lint.ts readdirSync 10
-cli/brain-lint.ts readFileSync 5
+cli/brain-lint.ts readFileSync 4
 cli/brain-lint.ts statSync 1
 cli/bridge-recovery.ts execFileSync 4
 cli/bridge-recovery.ts existsSync 8
@@ -69,7 +69,7 @@ cli/bridge-studio-templates.ts rmSync 2
 cli/bridge-studio-templates.ts writeFileSync 3
 cli/bridge-studio-writes.ts cpSync 1
 cli/bridge-studio-writes.ts execFileSync 3
-cli/bridge-studio-writes.ts existsSync 15
+cli/bridge-studio-writes.ts existsSync 17
 cli/bridge-studio-writes.ts mkdirSync 8
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 4
@@ -78,7 +78,7 @@ cli/bridge-studio-writes.ts renameSync 1
 cli/bridge-studio-writes.ts rmSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts unlinkSync 1
-cli/bridge-studio-writes.ts writeFileSync 7
+cli/bridge-studio-writes.ts writeFileSync 8
 cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
@@ -139,6 +139,7 @@ cli/preflight-fix-auto.ts readFileSync 1
 cli/preflight-fix-auto.ts writeFileSync 3
 cli/preflight.ts execFileSync 1
 cli/preflight.ts existsSync 15
+cli/preflight.ts lstatSync 1
 cli/preflight.ts readdirSync 1
 cli/preflight.ts readFileSync 7
 cli/preflight.ts spawnSync 3
@@ -158,6 +159,7 @@ cli/studio-path-guard.ts readdirSync 1
 cli/studio-path-guard.ts readFileSync 1
 cli/studio-path-guard.ts realpathSync 2
 cli/studio-path-guard.ts writeFileSync 1
+cli/theme-frontmatter.ts readFileSync 1
 cli/ui-bridge.ts existsSync 30
 cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
