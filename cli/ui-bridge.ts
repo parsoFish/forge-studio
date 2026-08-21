@@ -1943,13 +1943,25 @@ async function handleHttp(
       sendJson(res, 400, { error: 'invalid cycleId' }, origin);
       return;
     }
+    // W7-C3 (bd forge-0u4) — the FILENAME dimension gets the same charset
+    // gate the cycleId carries: every slash-separated segment must be
+    // charset-clean and never `..`. The guard below already refuses the
+    // traversal/symlink shapes on its own; this cheap first layer is pinned
+    // SEPARATELY (its 400 names the filename; the guard's refusal stays a
+    // 404) so neither layer is credited for the other's rejections —
+    // cli/sec04-cycleid-containment.test.ts.
+    const filenameSegments = filename.split('/');
+    if (filenameSegments.some((seg) => !/^[A-Za-z0-9._-]+$/.test(seg) || seg.includes('..'))) {
+      sendJson(res, 400, { error: 'invalid filename' }, origin);
+      return;
+    }
     // SEC-04 (bd forge-ebj) — the lexical `startsWith(safeBase)` above was
     // blind to a SYMLINKED leaf: `artifacts/<filename>` real-located inside a
     // genuine cycle dir but pointing out of root passed it and readFileSync
     // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
-    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filename.split('/')]);
+    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
     if (body === null) {
       sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return;
