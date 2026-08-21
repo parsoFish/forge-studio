@@ -2390,4 +2390,30 @@ describe('W7-C2 — revise verdict vocabulary + real-yaml three-way gates', () =
     const findings = validateSessionKinds(REPO_ROOT).filter((f) => f.level === 'error');
     assert.deepEqual(findings, [], `expected zero errors, got: ${JSON.stringify(findings, null, 2)}`);
   });
+
+  // W7-C2 T1 review — the generic revise handler derives the phase to send a
+  // session back to with `phases.find((p) => p.step === 'agent' && p.next ===
+  // affordance.phase)`. `find` takes the FIRST match, and nothing (lint or
+  // test) enforced that there IS only one: a second agent-step row landing on
+  // the same verdict phase would silently pick whichever the yaml happened to
+  // list first — the revise would re-run the wrong turn, with no signal at
+  // all. Pinned against the SHIPPED yaml, for every revise-declaring row.
+  it('C2-K6: every revise-declaring verdict row in the REAL yaml has EXACTLY ONE agent-step producer landing on it', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    let checked = 0;
+    for (const d of descs) {
+      const rows = d.turnSpec?.phases ?? d.panel?.phases ?? [];
+      for (const row of rows) {
+        if (!(row.verdicts ?? []).includes('revise')) continue;
+        const producers = rows.filter((p) => p.step === 'agent' && p.next === row.phase);
+        assert.equal(
+          producers.length,
+          1,
+          `session kind "${d.id}" phase "${row.phase}" declares a "revise" verdict but has ${producers.length} agent-step producer rows landing on it (${producers.map((p) => p.phase).join(', ') || 'none'}) — the revise handler's phases.find() would pick the first silently`,
+        );
+        checked += 1;
+      }
+    }
+    assert.equal(checked, 5, `all five revise-declaring kinds must be covered, checked ${checked}`);
+  });
 });

@@ -38,6 +38,8 @@ import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { verdictWasAccepted } from './bridge-studio-affordances.ts';
+import { VERDICT_VALUES } from '../orchestrator/studio/session-kinds.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
@@ -368,4 +370,114 @@ test('C2-FIN-1: a successful authoring finalize persists finalized {kind, id} on
   const status = readStatus(sessionDir);
   assert.deepEqual(status.finalized, { kind: 'skill', id: 'c2-finalized-skill' });
   assert.equal(readPhase(sessionDir), 'committed');
+});
+
+// ===========================================================================
+// W7-C2 T1 review — the fix round's own pins. Each of these encodes a defect
+// the shipped suite could not see (the review's A2/A3/A5/A6/A8 + F1/F2).
+// ===========================================================================
+
+test('C2-FIX-A2-1: a verdicts.json this route cannot parse REFUSES the next verdict (409) and leaves the file byte-identical — never truncated to a single record', async () => {
+  const project = 'c2fixa2';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
+  // A partial write from a killed bridge mid-writeFileSync: two real records,
+  // truncated. The OLD writer read this as "not an array" -> [] and the next
+  // accepted verdict silently destroyed the whole history, 200 OK.
+  const corrupt = '[\n  {\n    "at": "2026-08-21T10:00:00.000Z",\n    "verdict": "revise"\n  },\n  {\n    "at": "2026';
+  writeFileSync(join(sessionDir, 'verdicts.json'), corrupt, 'utf8');
+
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
+    project, verdict: 'approve', notes: 'ship it',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 409, `expected the append to be REFUSED, got ${res.status}: ${text}`);
+  assert.match(JSON.parse(text).error as string, /verdicts\.json/);
+  assert.equal(readFileSync(join(sessionDir, 'verdicts.json'), 'utf8'), corrupt, 'the unreadable history must be left exactly as found');
+  assert.equal(readPhase(sessionDir), 'awaiting-verdict', 'the verdict is refused BEFORE the phase write — nothing half-applied');
+});
+
+test('C2-FIX-A5-1: TWO revise rounds each record their OWN feedback — round 1\'s rationale survives round 2 (feedback.md only ever holds the newest)', async () => {
+  const project = 'c2fixa5';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
+
+  const first = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
+    project, verdict: 'revise', feedback: 'Make the button blue.',
+  });
+  assert.equal(first.status, 200, await first.text());
+  // back to the gate for round 2 (the drafting turn would do this for real)
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-verdict', round: 3, prompt: '' }), 'utf8');
+  const second = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), {
+    project, verdict: 'revise', feedback: 'Actually make it red.',
+  });
+  assert.equal(second.status, 200, await second.text());
+
+  const records = readVerdicts(sessionDir);
+  assert.equal(records.length, 2, 'both rounds are recorded');
+  assert.equal(records[0].feedback, 'Make the button blue.');
+  assert.equal(records[1].feedback, 'Actually make it red.');
+  assert.equal(
+    readFileSync(join(sessionDir, 'feedback.md'), 'utf8'),
+    'Actually make it red.',
+    'feedback.md is the CURRENT pending note only — which is exactly why it could never be the durable per-round record',
+  );
+});
+
+test('C2-FIX-A6-1: verdictWasAccepted refuses a handler that never responded — Node\'s default statusCode 200 is not an answer', () => {
+  assert.equal(verdictWasAccepted({ headersSent: true, statusCode: 200 }), true);
+  assert.equal(verdictWasAccepted({ headersSent: true, statusCode: 204 }), true);
+  assert.equal(verdictWasAccepted({ headersSent: true, statusCode: 409 }), false);
+  assert.equal(
+    verdictWasAccepted({ headersSent: false, statusCode: 200 }),
+    false,
+    'a handler that returned WITHOUT responding must record NOTHING — the old res.statusCode-only gate recorded a verdict that never happened',
+  );
+});
+
+test('C2-FIX-A8-1: the verdict vocabulary comes from VERDICT_VALUES — an out-of-vocabulary value 400s naming the SSOT set verbatim', async () => {
+  const project = 'c2fixa8';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 2, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), { project, verdict: 'defer' });
+  assert.equal(res.status, 400);
+  const { error } = (await res.json()) as { error: string };
+  for (const value of VERDICT_VALUES) {
+    assert.ok(error.includes(value.id), `the 400 must name every VERDICT_VALUES member (missing "${value.id}"): ${error}`);
+  }
+  assert.equal(existsSync(join(sessionDir, 'verdicts.json')), false);
+});
+
+test('C2-FIX-A3-1: an answer is bound to its question by ID — a missing, unknown, or text-mismatched questionId 400s, and the accepted round records the id', async () => {
+  const project = 'c2fixa3';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  writeFileSync(join(sessionDir, 'questions.json'), JSON.stringify([
+    { question: 'Which gate?', options: [] },
+    { question: 'Which gate?', options: [] },
+  ]), 'utf8');
+  const url = affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form');
+
+  const noId = await postJson(url, { project, answers: [{ question: 'Which gate?', answer: 'npm test' }] });
+  const noIdText = await noId.text();
+  assert.equal(noId.status, 400, noIdText);
+  assert.match((JSON.parse(noIdText) as { error: string }).error, /questionId/);
+
+  const unknownId = await postJson(url, { project, answers: [{ questionId: 'q9', question: 'Which gate?', answer: 'npm test' }] });
+  assert.equal(unknownId.status, 400, await unknownId.text());
+
+  const mismatch = await postJson(url, { project, answers: [{ questionId: 'q1', question: 'A different question', answer: 'npm test' }] });
+  assert.equal(mismatch.status, 400, await mismatch.text());
+
+  const ok = await postJson(url, {
+    project,
+    answers: [
+      { questionId: 'q1', question: 'Which gate?', answer: 'npm test' },
+      { questionId: 'q2', question: 'Which gate?', answer: 'npm run lint' },
+    ],
+  });
+  assert.equal(ok.status, 200, await ok.text());
+  const rounds = JSON.parse(readFileSync(join(sessionDir, 'answers.json'), 'utf8')) as Array<{ answers: Array<{ questionId?: string; answer: string }> }>;
+  assert.deepEqual(rounds[0].answers.map((a) => a.questionId), ['q1', 'q2'], 'the durable record binds by id — two identically-worded questions stay distinguishable');
+  assert.deepEqual(rounds[0].answers.map((a) => a.answer), ['npm test', 'npm run lint']);
 });
