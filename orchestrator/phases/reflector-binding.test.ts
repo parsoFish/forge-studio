@@ -86,7 +86,7 @@ test('REFLECTOR_DISALLOWED_TOOLS matches spec disallowedTools', () => {
 // ---------------------------------------------------------------------------
 
 function makeFakeBrainCwd(): { dir: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-reflector-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'reflector-test-'));
   // brain/INDEX.md is what loadBrainIndex reads — create a minimal one.
   mkdirSync(join(dir, 'brain'), { recursive: true });
   writeFileSync(

@@ -56,7 +56,7 @@ function uniqueCycleId(suffix: string): string {
 
 function setupHarness(opts: { suffix: string }): Harness {
   const cycleId = uniqueCycleId(opts.suffix);
-  const tmp = mkdtempSync(join(tmpdir(), 'forge-reflector-test-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'reflector-test-'));
   // Write a minimal valid manifest into the tempdir. parseManifest needs
   // initiative_id, project, created_at, iteration_budget, cost_budget_usd.
   const manifestPath = join(tmp, 'manifest.md');

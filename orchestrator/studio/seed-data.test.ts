@@ -20,9 +20,9 @@ import { MATERIAL_KINDS } from './materials.ts';
 const ROOT = process.cwd();
 
 // ---------------------------------------------------------------------------
-// seed flows (forge-cycle retired in S8/DEC-3; forge-reflect + onboard-project
-// retired in W7-C1 — see the retirement test below + the forge-develop /
-// forge-architect coverage in flow-runner.test.ts)
+// seed flows (forge-cycle retired in S8/DEC-3; the reflect + onboard flow
+// wrappers retired in W7-C1 — see the retirement test below + the
+// forge-develop / forge-architect coverage in flow-runner.test.ts)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -216,15 +216,16 @@ test('brain-ingest agent loads and validateAgent returns zero errors', () => {
 
 // ---------------------------------------------------------------------------
 // W7-C1 (flows-17/flows-20, operator note 10): the vestigial flow wrappers are
-// RETIRED. forge-reflect duplicated the standalone reflect-agent dispatch
-// R4-09-F1 already cut over to (finalize-merged resolves forge-develop's
-// `{on: merged, target: {kind: agent, ref: reflector}}` through the
-// reflection-close band guard — no flow involved); onboard-project duplicated
-// the onboarding SESSION (`POST /api/studio/onboarding/start`, the kept
-// surface). The seed set is exactly forge-architect + forge-develop.
+// RETIRED. The reflect wrapper duplicated the standalone reflect-agent
+// dispatch R4-09-F1 already cut over to (finalize-merged resolves
+// forge-develop's `{on: merged, target: {kind: agent, ref: reflector}}`
+// through the reflection-close band guard — no flow involved); the onboard
+// wrapper duplicated the onboarding SESSION (`POST /api/studio/onboarding/
+// start`, the kept surface). The seed set is exactly forge-architect +
+// forge-develop.
 // ---------------------------------------------------------------------------
 
-test('W7-C1: the seed flow set is exactly forge-architect + forge-develop (forge-reflect and onboard-project are retired)', () => {
+test('W7-C1: the seed flow set is exactly forge-architect + forge-develop (the reflect and onboard flow wrappers are retired)', () => {
   const flowsDir = join(ROOT, 'studio/flows');
   const flowIds = readdirSync(flowsDir)
     .filter((d) => existsSync(join(flowsDir, d, 'flow.yaml')))
@@ -232,7 +233,7 @@ test('W7-C1: the seed flow set is exactly forge-architect + forge-develop (forge
   assert.deepEqual(
     flowIds,
     ['forge-architect', 'forge-develop'],
-    'studio/flows must contain exactly the two seed flows — the forge-reflect and onboard-project wrappers were retired in W7-C1',
+    'studio/flows must contain exactly the two seed flows — the reflect and onboard flow wrappers were retired in W7-C1',
   );
 });
 
@@ -255,7 +256,7 @@ test('forge-develop declares the merged→reflect-agent trigger (single source f
   const flow = loadFlowDefinition(join(ROOT, 'studio/flows/forge-develop/flow.yaml'));
   // R4-09-F1 standalone-reflect cutover: the shipped merge dispatch targets the
   // reflect AGENT (resolved via its reflection-close band hook), not the
-  // single-node forge-reflect flow wrapper. ADR-041 target shape, no schema
+  // single-node reflect flow wrapper (retired in W7-C1). ADR-041 target shape, no schema
   // change (was {on, flow} pre-R2-04; kind:flow→kind:agent at R4-09-F1).
   assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }]);
 });

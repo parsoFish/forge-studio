@@ -231,7 +231,7 @@ export type BridgeOptions = {
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /**
    * D — injectable for tests; defaults to the real `rerunReflector` from
-   * orchestrator/forge-reflect-rerun.ts. Fired (non-blocking) when operator
+   * orchestrator/reflector-rerun.ts. Fired (non-blocking) when operator
    * reflection feedback is submitted, and at startup for any cycle whose
    * feedback out-dates its last reflector.end.
    */
@@ -293,7 +293,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // real helper; the POST handler + startup reconcile both call this.
   const rerunReflectorFn: RerunReflectorFn =
     opts.rerunReflector ??
-    ((input) => import('../orchestrator/forge-reflect-rerun.ts').then((m) => m.rerunReflector(input)));
+    ((input) => import('../orchestrator/reflector-rerun.ts').then((m) => m.rerunReflector(input)));
   // Recover feedback that landed while the bridge was down (or whose live rerun
   // was lost to a restart): re-run the reflector for any cycle whose RECENT
   // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
@@ -5961,7 +5961,7 @@ async function handleDemoBuilder(
 // The reflector emits `_logs/<cycleId>/user-questions.json` (StructuredQuestion[])
 // as its Stage-2 file handoff; the operator's answers land in
 // `user-feedback.md`. The /reflect/<cycleId> page renders the questions and
-// POSTs the answers here — converting the `/forge-reflect` slash command into
+// POSTs the answers here — converting the old reflect slash command into
 // an in-UI page, consistent with the in-UI architect + review moments.
 async function handleReflect(
   req: IncomingMessage,

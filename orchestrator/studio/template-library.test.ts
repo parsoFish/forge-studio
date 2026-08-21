@@ -262,8 +262,8 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     assert.ok(entries.length > 0);
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'studio/flows/*/flow.yaml');
-      // W7-C1: forge-reflect + onboard-project retired — the seed set is
-      // exactly forge-architect + forge-develop.
+      // W7-C1: the reflect + onboard flow wrappers retired — the seed set
+      // is exactly forge-architect + forge-develop.
       assert.equal(e.usedByDerivation.scanned, 2, `expected 2 scanned flow files (forge-architect/forge-develop) for "${e.id}"`);
     }
   });

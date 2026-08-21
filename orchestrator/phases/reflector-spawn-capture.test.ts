@@ -63,7 +63,7 @@ const CYCLE_ID = 'SPAWN-CAPTURE-TEST-reflector-fixture';
 const INITIATIVE_ID = 'INIT-2026-01-01-spawn-capture';
 
 test('runReflector: pins the exact {prompt, options} spawn call (characterization)', async () => {
-  const tmp = mkdtempSync(join(tmpdir(), 'forge-reflector-spawn-capture-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'reflector-spawn-capture-'));
   const cycleLogDir = resolve(FORGE_ROOT, '_logs', CYCLE_ID);
   try {
     const manifestPath = join(tmp, 'manifest.md');

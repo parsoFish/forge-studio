@@ -33,7 +33,7 @@ const init = (over: Partial<StartWorkInitiative>): StartWorkInitiative => ({
 const FLOWS = [
   { id: 'forge-develop', name: 'Develop', kickoff: { kind: 'initiative-select' } },
   { id: 'forge-architect', name: 'Architect', kickoff: { kind: 'idea' } },
-  { id: 'forge-reflect', name: 'Reflect', kickoff: { kind: 'trigger-only' } },
+  { id: 'retro-notes', name: 'Retro Notes', kickoff: { kind: 'trigger-only' } },
 ];
 
 test('deriveStartWorkState: buckets by planned/ready; idea + trigger-only flows are NOT runnable', () => {

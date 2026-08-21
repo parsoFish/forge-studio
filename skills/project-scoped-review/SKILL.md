@@ -218,7 +218,7 @@ should run to close it.
 - **Not a planner.** No Brain 1 (`brain/forge-dev/`), no Brain 2
   (`brain/cycles/`). Advisory reads of the target project's own Brain 3 only.
 - **Not wired into any flow.** Launched directly by the operator against a
-  named project, not dispatched by another phase and not a node on
-  `forge-architect` / `forge-develop` / `forge-reflect`. No invocation module
-  exists for it — it is registered for the composable roster (discoverability
-  + a future generic on-demand launcher), not for in-cycle dispatch.
+  named project (the agent page's Run panel — pick the project there), not
+  dispatched by another phase and not a node on `forge-architect` /
+  `forge-develop`. No invocation module exists for it — it is registered for
+  the composable roster, not for in-cycle dispatch.

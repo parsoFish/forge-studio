@@ -303,16 +303,6 @@
       ]
     },
     {
-      "id": "forge-reflect",
-      "nodes": [
-        {
-          "id": "reflect",
-          "agent": "reflector",
-          "resolvedKind": "agent"
-        }
-      ]
-    },
-    {
       "id": "onboard-project",
       "nodes": [
         {

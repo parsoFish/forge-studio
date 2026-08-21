@@ -177,7 +177,8 @@ export type InitiativeManifest = {
    * associates the run with this flow so it surfaces under `/flows/<flow_id>` in
    * the monitor. S8/DEC-3 retired the forge-cycle monolith + its implicit
    * default: every NEW manifest names a flow (architect → forge-architect,
-   * develop → forge-develop, reflect → forge-reflect), and runCycle
+   * develop → forge-develop; W7-C1 retired the reflect flow wrapper —
+   * reflection is a standalone post-merge agent run), and runCycle
    * throws on a missing/unknown flow_id (no fallback). Only historical `done/`
    * manifests may lack it; they are never re-run.
    */

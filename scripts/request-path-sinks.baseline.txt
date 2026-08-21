@@ -257,8 +257,8 @@ orchestrator/flow-run-requests.ts rmSync 5
 orchestrator/flow-run-requests.ts writeFileSync 1
 orchestrator/flow-runner.ts existsSync 1
 orchestrator/flow-runner.ts readFileSync 5
-orchestrator/forge-reflect-rerun.ts existsSync 3
-orchestrator/forge-reflect-rerun.ts readFileSync 3
+orchestrator/reflector-rerun.ts existsSync 3
+orchestrator/reflector-rerun.ts readFileSync 3
 orchestrator/gate-fix-loop.ts existsSync 1
 orchestrator/gate-fix-loop.ts readFileSync 3
 orchestrator/gate-recipes.ts existsSync 1

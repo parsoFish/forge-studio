@@ -819,8 +819,8 @@ describe('flow-runner trigger firing', () => {
     assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when triggers is empty');
   });
 
-  it('flow with trigger {on:flow-complete, target:forge-reflect} → enqueueFlowRun called on terminal success', async () => {
-    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } }]);
+  it('flow with trigger {on:flow-complete, target:retro-flow} → enqueueFlowRun called on terminal success', async () => {
+    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'retro-flow' } }]);
     const enqueueCalls: Array<{ flowId: string; opts: { origin: string; triggeredBy: string } }> = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -839,13 +839,13 @@ describe('flow-runner trigger firing', () => {
     await runFlow({ flow, input, logger, deps });
 
     assert.equal(enqueueCalls.length, 1, 'enqueueFlowRun must be called exactly once');
-    assert.equal(enqueueCalls[0].flowId, 'forge-reflect');
+    assert.equal(enqueueCalls[0].flowId, 'retro-flow');
     assert.equal(enqueueCalls[0].opts.origin, 'trigger');
     assert.equal(enqueueCalls[0].opts.triggeredBy, 'trigger-test');
   });
 
   it('flow with trigger → enqueueFlowRun NOT called on executor failure (triggers fire only on terminal success)', async () => {
-    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } }]);
+    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'retro-flow' } }]);
     const enqueueCalls: string[] = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -871,7 +871,7 @@ describe('flow-runner trigger firing', () => {
 
   it('flow with multiple triggers → enqueueFlowRun called for each flow-complete trigger', async () => {
     const flow = makeTriggerFlow([
-      { on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } },
+      { on: 'flow-complete', target: { kind: 'flow', ref: 'retro-flow' } },
       { on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' } },
     ]);
     const enqueueCalls: string[] = [];
@@ -891,7 +891,7 @@ describe('flow-runner trigger firing', () => {
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.deepEqual(enqueueCalls.sort(), ['forge-reflect', 'other-flow'].sort());
+    assert.deepEqual(enqueueCalls.sort(), ['retro-flow', 'other-flow'].sort());
   });
 
   // -------------------------------------------------------------------------
@@ -1126,7 +1126,7 @@ describe('flow-runner trigger firing', () => {
 
 // ---------------------------------------------------------------------------
 // Test 7: a single-node flow with an unknown (non-phase) agent → graceful skip.
-// (M3-5 behaviour; previously fixtured on the forge-reflect seed, retired in
+// (M3-5 behaviour; previously fixtured on the retro-flow seed, retired in
 // the spine cleanup — now a SYNTHETIC flow so it depends on no shippable flow.)
 // ---------------------------------------------------------------------------
 

@@ -123,7 +123,7 @@ test("FlowCard: the gated/failed 'needs you'/'failed' chips also reflect lineage
   const flow = makeFlow({ id: 'forge-develop' });
   const runs = [
     makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'forge-develop'], status: 'gated' }),
-    makeRun({ id: 'r2', flowId: 'forge-reflect', flowLineage: ['forge-reflect', 'forge-develop'], status: 'failed' }),
+    makeRun({ id: 'r2', flowId: 'other-flow', flowLineage: ['other-flow', 'forge-develop'], status: 'failed' }),
   ];
   const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
   expect(html).toContain('1 needs you');

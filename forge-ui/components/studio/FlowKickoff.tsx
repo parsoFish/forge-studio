@@ -21,7 +21,8 @@ export type { KickoffCandidate } from '@/lib/kickoff-candidates';
  *   - `initiative-select`→ NOT launched here — points to the roadmap, where the
  *                          operator picks a planned initiative ("Start development").
  *   - `trigger-only`     → no launcher — the flow runs only when its declared
- *                          FlowTrigger fires (e.g. forge-reflect on merge).
+ *                          FlowTrigger fires (an authorable kind; no seed
+ *                          flow declares it since W7-C1).
  *   - (none)             → the generic "Start Run" (authored flows): W7-A3
  *                          (flows-02) an INITIATIVE PICKER that POSTs a real
  *                          initiative to `/api/flows/:id/run` (enqueueFlowRun

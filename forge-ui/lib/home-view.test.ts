@@ -172,7 +172,7 @@ test('deriveFlowStatus: removing the run drops the flow back to "idle"', () => {
 test('deriveFlowStatus: flowLineage path — a threaded run whose flowId is elsewhere still lights up f1', () => {
   // Kills an impl that only checks run.flowId and ignores flowLineage, which
   // would leave a threaded spine run's traversed flows permanently 'idle'.
-  const runs = [makeRun({ id: 'r1', flowId: 'x', flowLineage: ['forge-architect', 'f1', 'forge-reflect'], status: 'active' })];
+  const runs = [makeRun({ id: 'r1', flowId: 'x', flowLineage: ['forge-architect', 'f1'], status: 'active' })];
   expect(deriveFlowStatus('f1', runs)).toBe('active');
 });
 

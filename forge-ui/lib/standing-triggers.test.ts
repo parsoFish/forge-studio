@@ -16,8 +16,8 @@
  *
  * ...i.e. today exactly ONE real standing trigger targets an agent
  * (`reflector`, `on: 'merged'`, no `projects:` key so `projects: null` on
- * the wire, `sourceFlowId: 'forge-develop'`). `forge-architect` and
- * `forge-reflect` both declare `triggers: []`.
+ * the wire, `sourceFlowId: 'forge-develop'`). `forge-architect` declares
+ * `triggers: []`.
  *
  * ASSUMED EXPORTS from `./standing-triggers.ts`:
  *

@@ -88,10 +88,10 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 1 — Agentic self-reflection (unattended)
 
-> **Scope: the WHOLE initiative, not just the closing cycle (DEC-2).** The three flows
-> (forge-architect → forge-develop → forge-reflect) thread ONE `cycle_id`, so
-> `events.jsonl` holds the architect/PM decompose, the dev-loop build, the unifier, and
-> the review for the entire initiative. Reflect across all of it.
+> **Scope: the WHOLE initiative, not just the closing cycle (DEC-2).** The spine
+> (forge-architect → forge-develop → this post-merge reflect run) threads ONE
+> `cycle_id`, so `events.jsonl` holds the architect/PM decompose, the dev-loop build,
+> and the review for the entire initiative. Reflect across all of it.
 
 1. **Brain query first.**
 2. Read the full event log. Compute: iterations per WI/feature/initiative; cost by phase/skill/model; wedge events, recovery events, brain-gap counts, send-back rounds.
