@@ -5,7 +5,7 @@ import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   FORGE_ROOT, PROJECT, ACT, WORK, caption, OOTB_SKILL_IDS, cleanSkillArtifacts,
   SK_EDIT_SLUG, SK_EDIT_PATH, stashRealSkill, restoreRealSkill,
-  SK_NEW_SLUG, SK_NEW_NAME, SK_CLIP_SLUG, SK_CLIP_NAME, waitForFile,
+  SK_NEW_SLUG, SK_NEW_NAME, SK_NEW_DESC, SK_CLIP_SLUG, SK_CLIP_NAME, waitForFile,
   DEMO_DESIGN_SKILL_DIR, writeDemoDesignSkill,
   demoEvent, demoBurst, cleanDemoBuilderSession,
   SK_INSTALL_ID, SK_INSTALL_DIR, cleanSkillInstallArtifacts,
@@ -351,7 +351,7 @@ export const journey = defineJourney({
                 const descEl = page.locator('[data-field="skill-description"]');
                 await descEl.click().catch(() => {});
                 await descEl.fill('').catch(() => {});
-                await descEl.pressSequentially('Review an API surface for contract-breaking changes before merge.', { delay: 8 }).catch(() => {});
+                await descEl.pressSequentially(SK_NEW_DESC, { delay: 8 }).catch(() => {});
                 await page.locator('[data-field="skill-body"]').fill(CLIP_SK_BODY).catch(() => {});
               };
               const createEnabled = (ms) => page.waitForFunction(() => {
