@@ -178,17 +178,15 @@
  * here avoids a second write path onto a file another journey already owns
  * stashing.
  *
- * flows-onboard (R4-18, batch E) drives its own `onboard-project` OOTB flow.
- * flows-onboard-monitor / flows-onboard-kickoff are read-only browse beats
- * (no seed/cleanup of their own). flows-onboard-gate is the one beat with a
- * seed — its own scratch preflight-RED fixture (`os.tmpdir()`, never inside
- * this repo), its own `_queue/ready-for-review/<id>.md` manifest and its own
- * `_logs/<cycleId>/`, all local ids disjoint from every other journey's
- * (never J4, J5, SK_ or HK_ ids, etc.) — created via a REAL `runFlow()` call (the
- * production `orchestrator/flow-runner.ts`, not a hand-authored event log)
- * and swept inside that one beat's own try/finally, plus a crash-safe
- * leading sweep mirroring hooks-security/connections-readiness-block's own
- * create-and-destroy-its-own-throwaway-fixture precedent.
+ * flows-onboard (reworked W7-C1 — flows-20/sessions-kinds-01/crosscut-14)
+ * drives the CONSOLIDATED flows pillar + the onboarding SESSION (the
+ * `onboard-project` OOTB flow wrapper was retired; the session is the one
+ * surface). flows-onboard-monitor / flows-onboard-kickoff are read-only
+ * browse beats (no seed/cleanup of their own). flows-onboard-gate is the
+ * one beat with residue — the staged onboarding session its Start click
+ * genuinely creates (`projects/<PROJECT>/_onboarding/<sid>/` + its `_logs/`
+ * dir; the dry bridge keeps the REAL session bookkeeping and suppresses
+ * only the agent dispatch) — swept inside that beat's own finally.
  */
 import { journey as home } from './home.mjs';
 import { journey as sessionsIndex } from './sessions-index.mjs';

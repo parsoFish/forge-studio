@@ -413,12 +413,13 @@ export function writePlan(sid, round) {
     // _queue/done/INIT-2026-07-11-exclude-path-filter.md (gitpulse).
     `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 10', 'cost_budget_usd: 4', 'phase: pending',
     'origin: architect',
-    // S9/DEC-3: the RUN demonstration drives the 3-stage spine. The manifest names
+    // S9/DEC-3: the RUN demonstration drives the threaded spine. The manifest names
     // forge-develop (the build flow the hand-off repoints onto); the seeded events
     // span architect→pm→dev[fanOut]→unifier→review→reflect under ONE cycle_id, so
-    // run-model derives a flowLineage of [forge-architect, forge-develop,
-    // forge-reflect] (DEC-2). Under Model B each flow's monitor renders its OWN
-    // slice, and the threaded run surfaces under all three.
+    // run-model derives a flowLineage of [forge-architect, forge-develop] (DEC-2;
+    // W7-C1 — reflection is a standalone agent run, not a flow, so the reflect
+    // phase adds no lineage entry). Under Model B each flow's monitor renders its
+    // OWN slice, and the threaded run surfaces under both.
     'flow_id: forge-develop',
     // Real develop dispatch stamps the manifest's cycle_id (enqueue-develop-run);
     // without it the bridge's applyReviewVerdict falls back to the initiative id

@@ -1423,34 +1423,34 @@ export const journey = defineJourney({
               ], WORK);
               await sleep(ACT);
               await frame(page, 'r5-0b-reflected', 'R5 — feedback captured; reflector folds it into the brain', { key: true });
-              // Model B: the reflect node lives on the forge-reflect flow; the threaded run
-              // surfaces there via flowLineage (it ran a reflection phase).
-              // W7-FIX-A3: openStudioMonitor selects the RAIL card (never the
-              // ledger row — that click navigated to the run-detail page once
-              // COMPLETE collapsed, which is exactly how the reflect hex + the
-              // history ledger came to read "absent" at the wave-A gate).
-              await openStudioMonitor(page, watch, 'forge-reflect');
+              // W7-C1 (flows-17): the reflect flow wrapper is RETIRED — reflection
+              // is the standalone reflector AGENT run finalize-merged dispatches
+              // (forge-develop's `{on: merged, target: {kind: agent, ref:
+              // reflector}}`). The reflect evidence now lives on the artifact
+              // reflection view (driven above) + the DEVELOP monitor: the
+              // reflection-ready banner and the run rail finally reading
+              // complete. W7-FIX-A3: openStudioMonitor selects the RAIL card
+              // (never the ledger row — that click navigated to the run-detail
+              // page once COMPLETE collapsed).
+              await openStudioMonitor(page, watch);
               check(
                 await page.locator(`[data-run-group] [data-run-id="${CYCLE_ID}"]`).count() > 0,
-                'W7-FIX-A3: the selected cycle\'s card is rendered in the reflect monitor\'s RAIL (a collapsed COMPLETE group keeps the selection visible)',
+                'W7-FIX-A3: the selected cycle\'s card is rendered in the develop monitor\'s RAIL (a collapsed COMPLETE group keeps the selection visible)',
               );
               check(
-                await page.locator('[data-page="flow-monitor"][data-flow-id="forge-reflect"]').count() > 0,
-                'W7-FIX-A3: selecting the run in the rail stays on the forge-reflect monitor (never navigates to the run-detail page)',
+                await page.locator('[data-page="flow-monitor"][data-flow-id="forge-develop"]').count() > 0,
+                'W7-FIX-A3: selecting the run in the rail stays on the forge-develop monitor (never navigates to the run-detail page)',
               );
-              await caption(page, 'And on the Forge Reflect flow — the reflect step that fired automatically on merge.');
-              await frame(page, 'r5-1-reflect-flow', 'The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge', { key: true });
-              try {
-                await page.waitForFunction(
-                  () => document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') === 'complete',
-                  null, { timeout: 12000 },
-                );
-                check(true, 'reflection node greened after tuning feedback (/flows/forge-reflect slice)');
-              } catch {
-                const reflStatus = await page.evaluate(() =>
-                  document.querySelector('[data-mon-node][data-node-id="reflect"]')?.getAttribute('data-status') ?? '(absent)');
-                check(false, `reflection node greened after tuning feedback (got "${reflStatus}")`);
-              }
+              // W7-C1: the monitor's reflection surface is the persistent,
+              // server-derived artifactsReady.reflection banner — the same
+              // affordance the clip below clicks through.
+              await page.waitForSelector('[data-banner="reflection-ready"]', { timeout: 12000 }).catch(() => {});
+              check(
+                await page.locator('[data-banner="reflection-ready"] [data-action="review-reflection"]').count() > 0,
+                'W7-C1: the develop monitor surfaces the "Review reflection" banner once the standalone reflector run has written the reflection (no flow hex — reflection is an agent run, not a flow node)',
+              );
+              await caption(page, 'Reflection fired automatically on merge — as a standalone agent run; its review link sits right on the completed run.');
+              await frame(page, 'r5-1-reflect-flow', 'The completed run on the develop monitor — reflection ran standalone on merge, its review link on the banner', { key: true });
               // With reflection.end now emitted, the run model's reconciler lets the
               // done/-based 'complete' stand — the payoff the approve-merge beat deferred.
               try {
@@ -1533,17 +1533,18 @@ export const journey = defineJourney({
               await caption(page, 'The history ledger — every archived run of this flow, its narrative machine-readable, not just a human string.');
               await frame(page, 'r6-05-history-ledger', 'R6-05 — the flow monitor\'s history ledger: the just-archived run\'s own row, its narrative kinds pinned as structured data', { key: true });
 
-              // CHAPTER CLIP 5 — run-reflect-complete: starts on the forge-reflect monitor,
-              // selects the SAME CYCLE_ID's run card, then clicks the "Review reflection"
-              // affordance the monitor surfaces once the persistent, server-derived
-              // artifactsReady.reflection flag is set — a real client-side navigation, not a
-              // mutation. Submission already happened for real on the shared page earlier in
-              // this beat (user-feedback.md is now on disk), so landing on the reflection view
-              // is a pure GET that reads the ALREADY-answered state straight back — no second
-              // submit, no duplicated cycle/reflection events. It then re-drives the
-              // forge-reflect monitor (also a pure GET re-read) to hold on the reflect hex
-              // green + the run rail already reading complete.
-              await recordClip(browser, watch, 'run-reflect-complete', '/flows/forge-reflect',
+              // CHAPTER CLIP 5 — run-reflect-complete: starts on the forge-develop monitor
+              // (W7-C1: the reflect flow wrapper is retired — the run's own flow is where
+              // reflection surfaces), selects the SAME CYCLE_ID's run card, then clicks the
+              // "Review reflection" affordance the monitor surfaces once the persistent,
+              // server-derived artifactsReady.reflection flag is set — a real client-side
+              // navigation, not a mutation. Submission already happened for real on the
+              // shared page earlier in this beat (user-feedback.md is now on disk), so
+              // landing on the reflection view is a pure GET that reads the ALREADY-answered
+              // state straight back — no second submit, no duplicated cycle/reflection
+              // events. It then re-drives the develop monitor (also a pure GET re-read) to
+              // hold on the run rail already reading complete.
+              await recordClip(browser, watch, 'run-reflect-complete', '/flows/forge-develop',
                 async (p) => {
                   await p.waitForFunction(
                     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
@@ -1563,13 +1564,13 @@ export const journey = defineJourney({
                   await p.waitForSelector('[data-section="reflect-done"]', { timeout: 10000 }).catch(() => {});
                   await sleep(WORK);
                   await sleep(READ);
-                  await p.goto(watch.uiUrl + '/flows/forge-reflect', { waitUntil: 'domcontentloaded' });
+                  await p.goto(watch.uiUrl + '/flows/forge-develop', { waitUntil: 'domcontentloaded' });
                   await p.waitForFunction(
                     () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                     null, { timeout: 15000 },
                   ).catch(() => {});
                   await selectRailRun(p, CYCLE_ID);
-                  await caption(p, 'The reflect hex greens on its own flow — and the run rail finally reads complete.');
+                  await caption(p, 'The lesson banked by the standalone reflect run — and the run rail finally reads complete.');
                   await sleep(WORK);
                   await sleep(READ);
                 },

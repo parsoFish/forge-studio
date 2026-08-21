@@ -1802,9 +1802,9 @@ export const journey = defineJourney({
 
               // Measured against the live seed (studio/flows/forge-develop/flow.yaml):
               // exactly ONE trigger targets an agent at all today, and it targets
-              // reflector — forge-architect and forge-reflect both declare
-              // `triggers: []`. Give the panel a moment to fetch GET /api/triggers
-              // and render before reading the final count.
+              // reflector — forge-architect declares `triggers: []` (W7-C1: the
+              // seed set is two flows). Give the panel a moment to fetch
+              // GET /api/triggers and render before reading the final count.
               const rows = page.locator('[data-standing-trigger]');
               try {
                 await page.waitForFunction(

@@ -338,7 +338,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-build',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag four agents onto a blank canvas by HTML5 drag-and-drop, wire three edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag four agents onto a blank canvas by HTML5 drag-and-drop, wire three edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → a target flow, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
@@ -554,17 +554,20 @@ export const journey = defineJourney({
               // the UI genuinely CAN author; trigger authoring is proven directly by
               // the chip assertion below, not folded into that compare.
 
-              // R2-04-F4: author a "merged" trigger via the kind selector. Target
-              // forge-reflect — the real production trigger this scratch flow is
-              // modeled on (forge-develop's own `on: merged → forge-reflect`).
+              // R2-04-F4: author a "merged" trigger via the kind selector.
+              // Target forge-architect — a real flow in the target dropdown.
+              // (The production merged trigger targets the reflect AGENT
+              // directly — forge-develop's `{on: merged, target: {kind:
+              // agent, ref: reflector}}`; flow-target authoring here proves
+              // the same declaration surface for flow-shaped targets.)
               await page.locator('[data-field="trigger-kind"]').selectOption('merged').catch(() => {});
-              await page.locator('[data-field="trigger-target"]').selectOption('forge-reflect').catch(() => {});
+              await page.locator('[data-field="trigger-target"]').selectOption('forge-architect').catch(() => {});
               await page.locator('[data-action="add-trigger"]').click().catch(() => {});
               const mergedChip = page.locator('[data-trigger-chip][data-trigger-kind="merged"]');
               await mergedChip.waitFor({ timeout: 5000 }).catch(() => {});
               const mergedChipPresent = (await mergedChip.count()) > 0;
               check(mergedChipPresent, 'author-from-scratch: authoring a "merged" trigger via the kind selector adds [data-trigger-chip][data-trigger-kind="merged"] (closes the formerly-unauthorable gap)');
-              await frame(page, 'a2-3b-trigger-merged', 'A2 — a "merged" trigger authored via the kind selector: on merged → Reflect');
+              await frame(page, 'a2-3b-trigger-merged', 'A2 — a "merged" trigger authored via the kind selector: on merged → a target flow');
 
               // Cron client-side validation, checked transiently and NEVER saved:
               // this scratch flow's `project` is null (B2 — a flow binds to a

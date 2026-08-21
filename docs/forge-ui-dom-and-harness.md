@@ -671,7 +671,22 @@ inventory rather than one shared page-level contract:
   (the SAME card `/library`'s old flows shelf used to render, before W6-IA-4
   retired that shelf — same `data-card-type="flow"` contract, byte-identical
   rendering, including its live
-  `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`).
+  `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`, plus
+  W7-C1 `data-flow-queued-count` (flows-19: `planned` runs — always present,
+  `"0"` when none — with an "N queued" chip when non-zero). W7-C1 (flows-18):
+  each declared-trigger badge (`[data-trigger-badge="<kind>"]`) reads
+  **`on <kind>`** ("on merged"), never the bare uppercased kind that read as
+  a run status; the full `trigger: <kind> → <target>` stays on its `title`.
+  W7-C1 (flows-19): with flows present the body renders a client-side name/
+  goal filter, `input[data-field="flows-filter"]`, and the grid carries
+  `data-flow-visible-count` mirroring the post-filter card count (a no-match
+  filter renders `[data-component="flows-filter-empty"]`). W7-C1
+  (flows-19/32): below the grid the page mounts the SHARED `RecentRuns`
+  section as `[data-section="flow-recent-runs"]` (`data-count`/`data-limit`,
+  same contract as `recent-agent-runs`), fed by ONE
+  `GET /api/agents/runs/recent` aggregate read with `kind=all` — flow runs
+  AND standalone agent dispatches, so KB/agent work started elsewhere is
+  visible from the flows pillar.
   The page subscribes to the bridge's `cycle-list-changed` event and
   re-fetches runs on it (the same `loadAll`/`refreshRuns` split
   `lib/use-studio-home-data.ts` now uses for Home, W6-IA-4) so those
@@ -724,13 +739,22 @@ inventory rather than one shared page-level contract:
   same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
   dev-phase cost/model/retries are never attributed to a single work item
   (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
-  chained flow definitions (`forge-architect` → `forge-develop` →
-  `forge-reflect`) — each renders only its own slice of nodes, so
+  chained flow definitions (`forge-architect` → `forge-develop`; W7-C1
+  retired the reflect flow wrapper — reflection is a standalone post-merge
+  agent run) — each renders only its own slice of nodes, so
   switching `/flows/<flowId>` changes which hexes appear. MONITOR also
   carries the **history ledger** (R6-05, `HistoryLedger.tsx`):
   `[data-section="history-ledger"][data-ledger-count]`, with an explicit
   `[data-component="history-ledger-empty"]` when a flow has no runs (never a
-  fabricated placeholder row). Each row is a real anchor —
+  fabricated placeholder row). W7-C1 (flows-21): the primary ledger is
+  scoped to runs whose manifest `flowId` IS this flow; lineage-only runs
+  (traversed this flow as part of another flow) render under a labelled
+  second group, `[data-section="history-ledger-lineage"][data-count]`, whose
+  rows open under their own flow. `data-can-start` on
+  `main[data-page="flow-monitor"]` is derived from the kickoff kind
+  (`canStartFlow`, W7-C1 flows-25): `"false"` for a missing flow OR a
+  `trigger-only` kickoff (no launch surface), `"true"` otherwise — no longer
+  "the flow exists". Each row is a real anchor —
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
   [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]` — whose
   `href` is its `/flows/[id]/run/[runId]` detail page. Notes on the vocabulary,
@@ -1391,6 +1415,15 @@ inventory rather than one shared page-level contract:
     row contract itself is pinned elsewhere, this beat only proves the
     route reuses it).
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
+  **W7-C1 (agents-27):** the "Used in Flows" panel
+  (`[data-component="used-in-flows"]`) additionally renders a
+  dispatch-provenance line, `[data-dispatch-note="true"]`, for an agent
+  dispatched OUTSIDE the flow graph — derived from the agent's SKILL-declared
+  `phase` by `lib/agent-dispatch-provenance.ts` (`release-finalize` → the
+  approve→merge finalization chain; `audit` → operator-triggered from the
+  Run panel; `reflection` → forge-develop's `on: merged` standing trigger) —
+  so release-finalizer / project-scoped-review / reflector no longer read as
+  orphans; absent for every other phase (never fabricated);
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
   the capability drop zones
@@ -2770,7 +2803,15 @@ inventory rather than one shared page-level contract:
   handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
   (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 adds the `selector:"none"` case).**
-  `app/sessions/[kind]/new/page.tsx`. **W7-B1 (sessions-kinds-05,
+  `app/sessions/[kind]/new/page.tsx`. **W7-C1 (sessions-kinds-01,
+  crosscut-14, flows-20):** `onboarding` is a generic kickoff kind here too
+  (`data-kickoff-kind="onboarding"`, project select → `POST
+  /api/studio/onboarding/start`; the agent is `strategy:fixed`, so the tier
+  picker renders its read-only chip) — the route was previously a dead end
+  («has no kickoff entry») while the broken `onboard-project` flow wrapper
+  duplicated the surface; W7-C1 retired the flow and made the SESSION the
+  one entry, linked from `/sessions` as `[data-action="kickoff-onboarding"]`
+  like every other kind. **W7-B1 (sessions-kinds-05,
   home-sessions-19):** the per-kind form specs live in
   `lib/session-kind-meta.ts` (`KICKOFF_SPECS` — one module beside the kind
   titles and the shared `KICKOFF_ENTRIES` list, parity-pinned against

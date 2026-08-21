@@ -111,9 +111,11 @@ git -C projects/<id> check-ignore secrets.env   # must print: secrets.env
 A **flow** is the agent pipeline that builds your project (plan → dev → review →
 …). You can reuse a shipped flow or author your own:
 
-- **Reuse:** the out-of-the-box palette ships the three spine flows —
-  `forge-architect` (interview → decompose), `forge-develop` (build → review →
-  merge), and `forge-reflect` (capture the brain). Point one at your project from Studio.
+- **Reuse:** the out-of-the-box palette ships the two spine flows —
+  `forge-architect` (interview → decompose) and `forge-develop` (build →
+  review → merge; on merge it automatically dispatches the standalone
+  reflector agent run, which captures the brain). Point one at your project
+  from Studio.
 - **Author:** Studio → Flows → New, composing agents from the library (or build
   your own agents from the starter library first). `forge studio lint` validates
   every flow/agent definition.

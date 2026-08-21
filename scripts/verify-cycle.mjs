@@ -20,9 +20,12 @@
  *      items). `forge serve --once` runs dev → demo → adversarial-review →
  *      verdict, parking at ready-for-review (the VERDICT GATE). Approve via
  *      /api/verdict; the bridge merges the PR and fires finalize.
- *   3. forge-reflect — finalize (in the bridge process) runs the reflector, which
- *      writes the central project brain. The harness WAITS for `reflector.end`
- *      before teardown (the prior harness killed the bridge mid-reflect).
+ *   3. reflect — finalize (in the bridge process) dispatches the standalone
+ *      reflector AGENT run (W7-C1: no flow wrapper — forge-develop's
+ *      `{on: merged, target: {kind: agent, ref: reflector}}` declaration,
+ *      resolved through the reflection-close band guard), which writes the
+ *      central project brain. The harness WAITS for `reflector.end` before
+ *      teardown (the prior harness killed the bridge mid-reflect).
  *
  * The gate assertions (ADR 022 §1 + S9):
  *   1. the cycle reached merge (finalStatus `done` / manifest in _queue/done/);
