@@ -28,36 +28,69 @@
  *     real; only the agent dispatch is dry-bridge-suppressed, the same seam
  *     every kickoff beat relies on) and the operator lands on the generic
  *     session panel with data-session-kind="onboarding". Self-contained:
- *     removes its own session dir + run log in a finally.
+ *     removes its own session dir + run log in a finally, and a crash-safe
+ *     leading sweep (via the tmpdir marker below) removes a PRIOR
+ *     interrupted run's residue first.
  */
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { FORGE_ROOT, PROJECT, caption } from '../lib/journey-fixtures.mjs';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Session/run residue swept by the gate beat's finally (and a crash-safe
-// leading sweep of a PRIOR interrupted run of this same beat, recognised by
-// the marker the beat records here).
+// Session/run residue swept by the gate beat's finally, PLUS a crash-safe
+// leading sweep: the sid is server-minted (not deterministic like the old
+// flow-shaped fixture ids), so as soon as it is known the beat records it in
+// a fixed marker file; the next run's leading sweep reads the marker and
+// removes a PRIOR interrupted run's residue. The one honest gap: a crash in
+// the window between the Start POST and the sid landing in the URL leaves
+// one staged session dir unrecorded (visible under the project's sessions,
+// harmless, manually removable).
+const FOB_MARKER = join(tmpdir(), 'forge-journey-flows-onboard-marker.json');
 let FOB_SESSION_ID = null;
 
-function cleanOnboardSession() {
-  if (!FOB_SESSION_ID) return;
+function sweepOnboardResidue(sessionId) {
   try {
-    rmSync(join(FORGE_ROOT, 'projects', PROJECT, '_onboarding', FOB_SESSION_ID), { recursive: true, force: true });
+    rmSync(join(FORGE_ROOT, 'projects', PROJECT, '_onboarding', sessionId), { recursive: true, force: true });
   } catch { /* best-effort */ }
-  // The dispatch run log dir (runId is minted server-side; find it by the
-  // session id the status.json threads into its argv/marker — sweep any
-  // _logs dir whose name embeds this session id).
+  // The dispatch run log dir (runId is minted server-side; sweep any _logs
+  // dir whose name embeds this session id).
   try {
     const logsRoot = join(FORGE_ROOT, '_logs');
     if (existsSync(logsRoot)) {
       for (const d of readdirSync(logsRoot)) {
-        if (d.includes(FOB_SESSION_ID)) {
+        if (d.includes(sessionId)) {
           rmSync(join(logsRoot, d), { recursive: true, force: true });
         }
       }
     }
   } catch { /* best-effort */ }
+}
+
+/** Crash-safe leading sweep: residue of a PRIOR interrupted run of this
+ *  same beat, recognised by the marker it recorded. */
+function sweepPriorInterruptedRun() {
+  try {
+    if (!existsSync(FOB_MARKER)) return;
+    const prior = JSON.parse(readFileSync(FOB_MARKER, 'utf8'));
+    // Same-project guard: only sweep residue this journey's own PROJECT owns.
+    if (prior && typeof prior.sessionId === 'string' && prior.project === PROJECT) {
+      sweepOnboardResidue(prior.sessionId);
+    }
+    rmSync(FOB_MARKER, { force: true });
+  } catch { /* best-effort */ }
+}
+
+function recordOnboardMarker(sessionId) {
+  try {
+    writeFileSync(FOB_MARKER, JSON.stringify({ project: PROJECT, sessionId, at: new Date().toISOString() }));
+  } catch { /* best-effort */ }
+}
+
+function cleanOnboardSession() {
+  if (!FOB_SESSION_ID) return;
+  sweepOnboardResidue(FOB_SESSION_ID);
+  try { rmSync(FOB_MARKER, { force: true }); } catch { /* best-effort */ }
   FOB_SESSION_ID = null;
 }
 
@@ -204,6 +237,8 @@ export const journey = defineJourney({
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.3] Start → a real staged onboarding session');
+        // Crash-safe leading sweep of a PRIOR interrupted run's residue.
+        sweepPriorInterruptedRun();
         try {
           await page.goto(watch.uiUrl + '/sessions/onboarding/new', { waitUntil: 'domcontentloaded' });
           await page.waitForSelector('select[data-field="kickoff-project"]', { timeout: 15000 }).catch(() => {});
@@ -219,6 +254,7 @@ export const journey = defineJourney({
           const url = page.url();
           const m = url.match(/\/sessions\/onboarding\/([^/?]+)/);
           FOB_SESSION_ID = m && m[1] !== 'new' ? decodeURIComponent(m[1]) : null;
+          if (FOB_SESSION_ID !== null) recordOnboardMarker(FOB_SESSION_ID);
           check(FOB_SESSION_ID !== null,
             `FOB.3: Start navigates onto the session page (/sessions/onboarding/<sid>, got ${url})`);
 

@@ -42,14 +42,18 @@ test('dispatchProvenanceNote: audit phase names the operator-triggered Run panel
   expect(note).toMatch(/[Oo]perator/);
 });
 
-test('dispatchProvenanceNote: reflection phase names the on: merged standing trigger', () => {
-  const note = dispatchProvenanceNote('reflection');
+test('dispatchProvenanceNote: reflector phase (the SKILL frontmatter value — NOT the event-log phase "reflection", which brain-fix/project-brain-builder also declare) names the on: merged standing trigger', () => {
+  const note = dispatchProvenanceNote('reflector');
   expect(note).toBeTruthy();
   expect(note).toContain('merged');
 });
 
 test('dispatchProvenanceNote: unknown/absent phase -> null (never a fabricated provenance)', () => {
   expect(dispatchProvenanceNote('developer')).toBe(null);
+  // 'reflection' is the EVENT-LOG phase name (and brain-fix /
+  // project-brain-builder's declared SKILL phase) — it must NOT resolve to
+  // the reflector's note (the code-review MAJOR this pins).
+  expect(dispatchProvenanceNote('reflection')).toBe(null);
   expect(dispatchProvenanceNote(undefined)).toBe(null);
 });
 

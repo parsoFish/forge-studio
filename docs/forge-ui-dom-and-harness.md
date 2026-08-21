@@ -1421,7 +1421,8 @@ inventory rather than one shared page-level contract:
   dispatched OUTSIDE the flow graph — derived from the agent's SKILL-declared
   `phase` by `lib/agent-dispatch-provenance.ts` (`release-finalize` → the
   approve→merge finalization chain; `audit` → operator-triggered from the
-  Run panel; `reflection` → forge-develop's `on: merged` standing trigger) —
+  Run panel; `reflector` — the SKILL frontmatter phase, not the event-log
+  name `reflection` — → forge-develop's `on: merged` standing trigger) —
   so release-finalizer / project-scoped-review / reflector no longer read as
   orphans; absent for every other phase (never fabricated);
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by

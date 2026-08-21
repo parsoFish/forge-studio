@@ -24,8 +24,14 @@ const NOTE_BY_PHASE: Record<string, string> = {
     'Operator-triggered utility — run it on demand from this page (pick the target project in the Run panel).',
   // orchestrator/finalize-merged.ts — forge-develop's {on: merged} standing
   // trigger, resolved through the reflection-close band guard (R4-09-F1;
-  // the flow wrapper was retired in W7-C1).
-  reflection:
+  // the flow wrapper was retired in W7-C1). NOTE the key is the SKILL
+  // frontmatter phase `reflector` (skills/reflector/SKILL.md), NOT the
+  // event-log phase name 'reflection' (run-model's CANONICAL_PHASE_OVERRIDES
+  // documents that split) — 'reflection' is ALSO the declared phase of
+  // brain-fix / project-brain-builder, which must never inherit this note.
+  // Parity-pinned against the real skills/ roster in
+  // agent-dispatch-provenance.test.ts.
+  reflector:
     'Dispatched standalone after every confirmed merge, via forge-develop’s "on: merged" standing trigger (see Standing triggers below) — and runnable on demand from this page.',
 };
 

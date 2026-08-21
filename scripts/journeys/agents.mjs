@@ -1840,6 +1840,16 @@ export const journey = defineJourney({
                 check(scopeCount === 'all',
                   `agents-kickoff-standing-triggers: forge-develop declares no 'projects:' key (unscoped) — data-trigger-scope-count must read "all", distinct from a scoped-to-nothing "0" (got "${scopeCount}")`);
               }
+
+              // W7-C1 (agents-27) journey pin: the dispatch-provenance note
+              // renders on the LIVE reflector page — derived from the SKILL
+              // frontmatter phase `reflector` (the code-review round caught
+              // the map keyed on the event-log name 'reflection', which made
+              // this note silently never render; this end-to-end assert is
+              // the regression pin the unit probes couldn't be).
+              const dispatchNote = await page.locator('[data-component="used-in-flows"] [data-dispatch-note="true"]').count();
+              check(dispatchNote === 1,
+                `agents-kickoff-standing-triggers (agents-27): the reflector page renders the dispatch-provenance note ([data-dispatch-note="true"] under used-in-flows) — got ${dispatchNote}`);
               await frame(page, 'ak-8-standing-triggers', 'Kickoff — reflector\'s page lists the standing trigger that already targets it (forge-develop, on: merged)');
         },
       },

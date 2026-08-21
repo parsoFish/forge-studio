@@ -186,7 +186,10 @@
  * one beat with residue — the staged onboarding session its Start click
  * genuinely creates (`projects/<PROJECT>/_onboarding/<sid>/` + its `_logs/`
  * dir; the dry bridge keeps the REAL session bookkeeping and suppresses
- * only the agent dispatch) — swept inside that beat's own finally.
+ * only the agent dispatch) — swept inside that beat's own finally, plus a
+ * crash-safe leading sweep keyed on the sid marker the beat records in
+ * tmpdir (the sid is server-minted, so a marker is the only way a next run
+ * can recognise a prior interrupted run's residue).
  */
 import { journey as home } from './home.mjs';
 import { journey as sessionsIndex } from './sessions-index.mjs';
