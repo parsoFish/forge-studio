@@ -301,21 +301,6 @@
           "resolvedKind": "review"
         }
       ]
-    },
-    {
-      "id": "onboard-project",
-      "nodes": [
-        {
-          "id": "onboard",
-          "agent": "onboarding-agent",
-          "resolvedKind": "agent"
-        },
-        {
-          "id": "contract-check",
-          "agent": "contract-check",
-          "resolvedKind": "agent"
-        }
-      ]
     }
   ]
 }

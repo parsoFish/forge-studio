@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 
 import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects, loadKbDescriptor } from './registry.ts';
-import { validateFlow, validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
+import { validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
 import { resolveProjectsDir } from '../config.ts';
 import { MODEL_BY_TIER } from '../phase-agent.ts';
 import { MATERIAL_KINDS } from './materials.ts';
