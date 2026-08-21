@@ -2330,12 +2330,22 @@ inventory rather than one shared page-level contract:
   renders in EVERY phase (not only terminal); a `.kb-<id>` anchor resolves to
   `/knowledge?id=<id>` ("Back to Knowledge base <id>"), `.community-registry`
   to `/community`, a real project to `/projects/<id>`.
+  **W7-C2 T1 review (P0-3) — the transcript pane's own fail-closed state:
+  `[data-transcript-error]`.** A malformed transcript source (a truncated
+  `verdicts.json`, an unknown stage in a checkpoint) used to 409 the WHOLE
+  session GET, which made the page unrenderable — so the operator could not
+  approve, reject or revise their way out of the very state that produced
+  it. The refusal is now SCOPED: the payload's `transcriptError` carries the
+  verbatim reason, `turns` is EMPTY (never partial, never fabricated), and
+  the rest of the shell — affordances included — still renders. A journey
+  asserting an empty transcript must distinguish the two:
+  `[data-transcript-error]` present means REFUSED, absent means quiet.
   Per turn:
   `[data-turn-index][data-turn-role="agent"|"operator"][data-turn-stage][data-turn-source]`
   — `data-turn-source` names the checkpoint file the turn was DERIVED from
   (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`,
-  `feedback.md`), because no chat transcript exists on disk and none is
-  invented. **W6-B9 reviewer fix** — a `source="questions.json"` turn's
+  `feedback.md`, `verdicts.json#<record position>`), because no chat
+  transcript exists on disk and none is invented. **W6-B9 reviewer fix** — a `source="questions.json"` turn's
   `text` is a joined multi-question blob (`deriveSessionTranscript` joins
   every real question on a blank line, no per-question boundary on the
   wire); `SessionTranscript.tsx` splits that SAME turn's rendering (display-
@@ -2512,7 +2522,10 @@ inventory rather than one shared page-level contract:
   toggle a line diff against the current file
   (`[data-draft-diff-state="rendered"|"too-large"]`, per-row
   `[data-diff-row="same"|"add"|"del"]` — `lib/text-diff.ts`'s pure
-  `lineDiff`).** `ArchitectQuestionForm` (`components/
+  `lineDiff`). **W7-C2 T1 review (A10): the SELECTED view is marked
+  `[data-view-selected="true"]` (full opacity, `disabled` because it is the
+  view you are already in); the alternative is `[data-view-selected="false"]`,
+  dimmed and clickable** — the pair used to render exactly inverted.** `ArchitectQuestionForm` (`components/
   ArchitectQuestionForm.tsx`) keeps its `onSubmitAnswers`/`sectionName`/
   `heading` parameterisation — and since W7-C2 the generic
   `SessionInteractivePanel` is its second real consumer (the per-question
@@ -2730,7 +2743,22 @@ inventory rather than one shared page-level contract:
   `[data-question-index]`/`[data-option-label]`/`[data-question-freetext]`
   fieldsets) and posts the REAL question text with each answer — the durable
   answers.json record keeps the questions, never the old hardcoded
-  `"Operator response"` placeholder.** Without questions on the wire it
+  `"Operator response"` placeholder. **W7-C2 T1 review (A3): each answer
+  also carries its question's `questionId`** — the bridge derives one per
+  pending question from its POSITION in the round's questions.json
+  (`q1`, `q2`, … — `pendingQuestionId`, `cli/bridge-studio-sessions.ts`) and
+  the write route re-derives the same ids to cross-check, refusing an answer
+  whose id is unknown or whose text does not match that id's question.
+  Answers bound by TEXT alone mis-bind the moment a round repeats or rewords
+  a question. **W7-C2 T1 review (A16) — DECLARED BEHAVIOUR: with questions
+  on the wire the operator must answer EVERY question before Submit enables**
+  (`[data-questions-answered="true"|"false"]` on
+  `[data-section="session-interview"]`; the button is `disabled` until then).
+  This is a deliberate change from the retired single box, which accepted a
+  partial reply, and it matches the architect interview's own long-standing
+  rule — `ArchitectQuestionForm` is literally the same component. Journeys
+  MUST fill every `[data-question-freetext]` (or select an option per
+  question) before clicking `[data-action="submit-answers"]`.** Without questions on the wire it
   stays a free-text answer field (`[data-field="session-answer"]`)
   and `[data-action="submit-answers"]` — with its own briefing copy
   ("Brief the agent (optional)" / "Start →") when `affordance.phase` is
@@ -2762,16 +2790,31 @@ inventory rather than one shared page-level contract:
   feedback, writes it to the session's feedback.md, and re-runs the
   drafting phase). Every verdict affordance also renders a rationale field,
   `[data-field="session-verdict-notes"]`, posted as the optional `notes`
-  body field; the bridge appends `{at, verdict, notes?}` to the session's
-  `verdicts.json` after every ACCEPTED verdict and the transcript renders
-  each record as an operator turn. A disabled Approve now says why:
+  body field; the bridge appends `{at, verdict, notes?, feedback?}` to the
+  session's `verdicts.json` after every ACCEPTED verdict and the transcript
+  renders each record as an operator turn, ordered by `at`. **W7-C2 T1
+  review (P0-2): a revise record carries its OWN `feedback` words** —
+  feedback.md is transient (each revise overwrites it, and the consuming
+  agent turn deletes it, `orchestrator/interactive-runner.ts`), so it can
+  only ever hold the newest round; the durable per-round rationale lives on
+  the record. **W7-C2 T1 review (P0-3): an unparseable `verdicts.json`
+  refuses the next verdict (409) rather than truncating the history**, and
+  the session GET stays renderable — see `[data-transcript-error]` below. A disabled Approve now says why:
   `[data-requires-hint]` names the unmet `meta.requires` field (or a
   non-slug authoring id — the client mirror of the write route's own 400,
   library-22). A committed session with a persisted `finalized` pointer
   renders `[data-section="session-finalized"]` +
   `[data-action="open-finalized"]` — the PERMANENT link to the object the
   session produced (skill/hook detail page, or /community for a
-  community-refresh commit; sessions-kinds-36).** Plus TWO artifact-driven
+  community-refresh commit; sessions-kinds-36). **W7-C2 T1 review (P0-4):
+  ALL FIVE finalizing kinds now write the pointer** (instructions →
+  `{kind:'agents-md', id:<project>}` → `/projects/<project>`; demo →
+  `{kind:'demo', id:<project>}` → `/projects/<project>/showcase`;
+  kb-cleanup → `{kind:'kb', id:<kb_id>}` → `/knowledge`), and the pointer's
+  LIVENESS is DERIVED server-side on every read:
+  `[data-finalized-exists="true"|"false"]`. A pointer at a deleted or
+  renamed object renders the honest record WITHOUT
+  `[data-action="open-finalized"]` — never a dead link.** Plus TWO artifact-driven
   additions, both
   keyed off `artifact.kind` (never `kind`): for `demo` (a real
   `generation-gallery` with at least one generation), a generation picker

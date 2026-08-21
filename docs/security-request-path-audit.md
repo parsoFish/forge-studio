@@ -1590,3 +1590,21 @@ have. `check-request-path-sinks.mjs` delta: `orchestrator/interactive-runner.ts`
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta —
 `scripts/request-path-sinks.baseline.txt` now records
 `orchestrator/interactive-runner.ts` `readFileSync` at 2.
+
+### W7-C2 T1 review (P0-2 / finding A5) — the revise feedback becomes CONSUME-ONCE (`orchestrator/interactive-runner.ts`, one new `[write]`-class sink, guarded)
+
+`readOperatorFeedback` (the row immediately above) runs on EVERY `step: agent`
+turn, not only the one a revise triggered, and nothing cleared `feedback.md`
+after it had been folded into a prompt — so round 1's corrections kept riding
+round 2's and round 3's prompts, silently steering turns the operator never
+aimed. The fix deletes the file once a turn has actually consumed it, which
+adds one delete sink. `check-request-path-sinks.mjs` delta:
+`orchestrator/interactive-runner.ts` `rmSync` 0 → 1.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/interactive-runner.ts` (`clearOperatorFeedback`) | `rmSync` | none directly — the SAME `resolveGuardedPath(sessionDir, ['feedback.md'])` choke point `readOperatorFeedback` uses one line earlier, on the SAME already-resolved session directory (derived upstream through `resolveGuardedPath(projectRoot, [kindDir, sessionId])`, the SEC-04 containment segment) | guarded `[write]` | The delete only ever targets `guarded.realPath` from a per-segment identity walk that has already returned `ok && exists`; an escaping symlinked `feedback.md` resolves outside the session dir, `guarded.ok` is false, and NOTHING is unlinked — the escape can never be followed to an out-of-root delete. Runs strictly AFTER `runAgentTurn` resolves, so a turn that threw leaves the note in place for the retry, and is skipped entirely when no feedback was read (`operatorFeedback === null`). A failed unlink is logged, never swallowed: an unconsumed note WILL re-steer the next turn and the operator must be able to see why. Pinned by `orchestrator/interactive-runner.test.ts`'s C2-FIX-A5-2 (turn 1 carries the words and the file is gone; turn 2's prompt does not carry them). |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records
+`orchestrator/interactive-runner.ts` `rmSync` at 1.

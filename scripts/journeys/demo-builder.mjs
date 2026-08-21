@@ -3,7 +3,7 @@ import {
   ACT, THINK, WORK, caption, PROJECT,
   writeDemoStatus, demoEvent, demoBurst,
   patchDemoProcess, restoreProjectJson, writeDemoArtifacts, writeDemoLock,
-  writeDemoGeneration, cleanDemoBuilderSession,
+  writeDemoGeneration, cleanDemoBuilderSession, readDemoVerdicts,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -207,6 +207,45 @@ export const journey = defineJourney({
         check(await picker.count() > 0, 'DB-3: the generation picker renders, sourced from the real generation-gallery artifact already on the wire');
         await picker.selectOption('1').catch(() => {});
         await frame(page, 'demo-3-review', 'The generic verdict gate — approve (with the generation picker) or reject', { key: true });
+
+        // ── REAL revise round-trip (W7-C2 T1 review, A14) ──────────────────
+        // The revise SEND path had zero end-to-end coverage: 12 new DOM-contract
+        // rows landed with only a render check on `verdict-revise`. This drives
+        // the whole loop for real — open the feedback box, send it, and prove
+        // the bridge applied it (phase back to the agent's own `generating`
+        // row, and the round's OWN words on the durable verdict record) —
+        // then puts the session back on the review gate to approve.
+        await page.locator('[data-action="verdict-revise"]').click();
+        await page.waitForSelector('[data-section="session-revise"]', { timeout: 10000 });
+        check(await page.locator('[data-action="verdict-revise-send"]').count() > 0,
+          'DB-3: opening Request changes reveals the feedback box and its send button');
+        const reviseText = 'Use the real capture screenshots, not the placeholder tiles.';
+        await page.locator('[data-field="session-revise-feedback"]').fill(reviseText);
+        await page.locator('[data-action="verdict-revise-send"]').click();
+        const revised = await page.waitForFunction(
+          () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'generating',
+          null, { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+        check(revised, 'DB-3: sending a revision sends the session back to its own agent phase (generating) — the regenerate loop, for real');
+        let demoVerdicts = null;
+        for (let i = 0; i < 40 && demoVerdicts === null; i++) {
+          demoVerdicts = readDemoVerdicts(demoSid);
+          if (demoVerdicts === null) await sleep(250);
+        }
+        check(
+          Array.isArray(demoVerdicts) && demoVerdicts.length === 1
+            && demoVerdicts[0].verdict === 'revise' && demoVerdicts[0].feedback === reviseText,
+          `DB-3: the revise is recorded with THIS round's own words on verdicts.json (got ${JSON.stringify(demoVerdicts)})`,
+        );
+        // Back to the review gate to approve (the agent's next generation).
+        writeDemoStatus(demoSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'awaiting-review',
+          null, { timeout: 15000 },
+        ).catch(() => {});
+        await page.waitForSelector('[data-action="verdict-approve"]', { timeout: 10000 });
+        // Re-pick the generation: the panel remounted on the phase round-trip.
+        await picker.selectOption('1').catch(() => {});
 
         // REAL POST: exercises handleDemoVerdict for real — the SAME route
         // the bespoke /api/demo-builder/lock parity test targets.

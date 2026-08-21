@@ -283,6 +283,7 @@ orchestrator/interactive-runner.ts lstatSync 1
 orchestrator/interactive-runner.ts mkdirSync 2
 orchestrator/interactive-runner.ts readdirSync 1
 orchestrator/interactive-runner.ts readFileSync 2
+orchestrator/interactive-runner.ts rmSync 1
 orchestrator/interactive-session.ts existsSync 2
 orchestrator/interactive-session.ts mkdirSync 4
 orchestrator/interactive-session.ts readFileSync 3
