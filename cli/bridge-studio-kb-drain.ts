@@ -1090,6 +1090,20 @@ export async function handleStudioKbDrainRoutes(
       }
       const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
       if (!active) {
+        // W7 FIX-B-KB (knowledge-14): refuse HONESTLY — when the latest run
+        // is already terminal, SAY so (state + runId), so the operator
+        // learns why there is nothing to cancel rather than a bare
+        // "no active run". No run at all keeps the bare reason (and no
+        // fabricated runId).
+        const latest = latestKbDrainRun(ctx.forgeRoot, kbId);
+        if (latest) {
+          sendJson(res, 409, {
+            error: `no active drain run for this kb — the latest run "${latest.runId}" is already terminal (state "${latest.status.state}")`,
+            runId: latest.runId,
+            state: latest.status.state,
+          }, origin);
+          return true;
+        }
         sendJson(res, 409, { error: 'no active drain run for this kb' }, origin);
         return true;
       }
