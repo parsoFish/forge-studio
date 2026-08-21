@@ -32,6 +32,7 @@ import { SessionInteractivePanel } from '@/components/studio/session/SessionInte
 import { SessionLifecycleBar } from '@/components/studio/session/SessionLifecycleBar';
 import { StageSelector } from '@/components/studio/session/StageSelector';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
+import { makeCoalescedRefresh } from '@/lib/coalesce-refresh';
 
 /** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
  *  added `kb-cleanup`/`authoring`; W6-B9 adds `instructions`, deleting its
@@ -106,20 +107,24 @@ export default function SessionShellPage({
   const [summary, setSummary] = useState<KindSummary | null>(null);
   const [themes, setThemes] = useState<Array<{ name: string; content: string }>>([]);
 
-  const refreshSummary = useCallback(() => {
+  // W7-C3 (home-sessions-27): every caller below (WS list-changed burst,
+  // poll, cancel/finalize handlers, the panel's onChanged) funnels through
+  // ONE coalesced refresher per source — answering a demo question used to
+  // fire four identical GET /api/demo-builder/sessions.
+  const refreshSummaryNow = useCallback(() => {
     const settle = (next: KindSummary | null) => {
       setSummary(next);
     };
     if (kind === 'architect') {
-      fetchArchitectSessions()
+      return fetchArchitectSessions()
         .then((list) => settle(toArchitectSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
         .catch(() => {});
     } else if (kind === 'instructions') {
-      listInstructionsSessions()
+      return listInstructionsSessions()
         .then((list) => settle(toInstructionsSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
         .catch(() => {});
     } else if (kind === 'project-brain') {
-      fetchProjectBrainSessions()
+      return fetchProjectBrainSessions()
         .then((list) => settle(toProjectBrainSummary(list.find((s) => s.session_id === sessionId) ?? null)))
         .catch(() => {});
     } else if (kind === 'demo') {
@@ -136,14 +141,17 @@ export default function SessionShellPage({
       // per-kind list endpoint `DemoBuilderPanel`/the legacy `/demo/[sid]`
       // redirect already use — can resolve it, exactly like the three kinds
       // above.
-      listDemoSessions()
+      return listDemoSessions()
         .then((list) => settle(toDemoSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
         .catch(() => {});
     }
     // Every other kind (kb-cleanup / authoring / community-refresh /
     // onboarding) has no per-kind list route — the shell route alone carries
     // the page, resolving the project itself (W7-A2).
+    return Promise.resolve();
   }, [kind, sessionId]);
+
+  const refreshSummary = useMemo(() => makeCoalescedRefresh(refreshSummaryNow), [refreshSummaryNow]);
 
   useEffect(() => {
     refreshSummary();
@@ -187,9 +195,12 @@ export default function SessionShellPage({
   const shellProject = shellResult?.ok ? shellResult.payload.project : null;
   const project = summary?.data.project ?? queryProject ?? shellProject;
   const projectHint = summary?.data.project ?? queryProject ?? null;
-  const refreshShell = useCallback(() => {
-    void fetchSessionShell(kind, sessionId, projectHint).then(setShellResult);
-  }, [kind, sessionId, projectHint]);
+  // W7-C3 (home-sessions-27): same coalescing for the shell read — the
+  // cancel/finalize handlers and the panel's onChanged all share one slot.
+  const refreshShell = useMemo(
+    () => makeCoalescedRefresh(() => fetchSessionShell(kind, sessionId, projectHint).then(setShellResult)),
+    [kind, sessionId, projectHint],
+  );
 
   useEffect(() => {
     refreshShell();

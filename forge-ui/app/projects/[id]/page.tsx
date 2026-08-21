@@ -29,6 +29,8 @@ import { PageLoadError } from '@/components/PageLoadError';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { PageHeader } from '@/components/StudioPage';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
@@ -395,6 +397,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // W6-SW-3 (sweep C2#3): loadData leaves `project` null when the URL `id`
   // isn't in fetchStudioProjects() (a stale/bad :id route param) — without
   // this branch the return below rendered the full editable editor with a
+  // W7-C3 (crosscut-06): per-route tab title (before the early returns).
+  useDocumentTitle(name || id, 'Projects');
+
   // blank name/northStar/etc, no honest "not found" state. W7-A4
   // (crosscut-27): that state is the ONE shared NotFound.
   // W7-FIX-A1 (A1-02): the read FAILED — the project may well exist. The
@@ -427,11 +432,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18/19): one h1 (the visible identity is the name
+          input, so it is sr-only) + the shared breadcrumb trail. */}
+      <h1 className="sr-only">{name || id} — project</h1>
+      <div style={{ padding: '12px 28px 0' }}>
+        <Breadcrumbs items={[{ label: 'Projects', href: '/projects' }, { label: name || id }]} />
+      </div>
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14,
-        padding: '18px 28px 14px',
-            borderBottom: '1px solid var(--line)',
+        padding: '4px 28px 14px',
+        borderBottom: '1px solid var(--line)',
         background: 'var(--bg-2)',
       }}>
         <select

@@ -12,6 +12,7 @@ import type { LedgerRow } from '@/lib/history-ledger';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from '@/lib/fetch-error-scope';
+import { useDocumentTitle } from '@/lib/document-title';
 import {
   fetchStudioFlows,
   fetchRuns,
@@ -154,6 +155,9 @@ export default function FlowsIndexPage() {
       sub.close();
     };
   }, []);
+
+  // W7-C3 (crosscut-06): per-route tab title.
+  useDocumentTitle('Flows');
 
   return (
     <main

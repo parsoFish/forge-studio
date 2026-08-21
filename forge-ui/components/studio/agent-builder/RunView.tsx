@@ -67,7 +67,9 @@ export type RunViewProps = {
 
 export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputRefs, errorText, trigger }: RunViewProps) {
   return (
-    <div
+    // W7-C3 (agents-35): <main>, not <div> — the run page had no <main>
+    // landmark at all; every other route roots its [data-page] on one.
+    <main
       data-page="agent-run"
       data-run-id={runId}
       data-run-state={state}
@@ -76,6 +78,8 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
       data-page-ready="true"
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
     >
+      {/* W7-C3 (crosscut-18): the page's ONE h1. */}
+      <h1 style={{ margin: 0, fontSize: 15 }}>Agent run {runId}</h1>
       {!found ? (
         <RunNotFound runId={runId} />
       ) : (
@@ -112,7 +116,7 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
           <RunOutputsSection outputRefs={outputRefs} />
         </>
       )}
-    </div>
+    </main>
   );
 }
 

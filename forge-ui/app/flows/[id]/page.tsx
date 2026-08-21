@@ -27,6 +27,8 @@ import { deriveKickoffCandidates, canStartFlow } from '@/lib/kickoff-candidates'
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
+import { useDocumentTitle } from '@/lib/document-title';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -516,6 +518,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // below (JSX + data-* mirrors) uses `view.*`, never the raw state, so a
   // flow switch never paints the previous flow's run model.
   const view = resolveFlowViewState(id, { flow, runs, activeRun, ready });
+  // W7-C3 (crosscut-06): per-route tab title.
+  useDocumentTitle(view.flow?.name ?? id, 'Flows');
 
   // ---- empty states ----
 
@@ -573,6 +577,14 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18): one h1 per page. The monitor's visible identity
+          is the flow SELECTOR and the builder's is the name input, so the
+          heading is visually hidden but real for AT/outline tooling. */}
+      <h1 className="sr-only">{view.flow?.name ?? id} — flow {tab === 'build' ? 'builder' : 'monitor'}</h1>
+      {/* W7-C3 (crosscut-19): the shared trail on the flow monitor/builder. */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <Breadcrumbs items={[{ label: 'Flows', href: '/flows' }, { label: view.flow?.name ?? id }]} />
+      </div>
 
       {/* BUILD tab: FlowHeader replaces the static flow strip */}
       {tab === 'build' ? (

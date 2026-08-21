@@ -75,6 +75,8 @@ import {
 import { sessionEntryHrefForAgent } from '@/lib/session-kind-meta';
 import { deleteAgent } from '@/lib/studio-client';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
+import { useDocumentTitle } from '@/lib/document-title';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -572,6 +574,10 @@ export default function AgentBuilderPage() {
   // reproduce).
   const historyRows = historyResolution?.kind === 'found' ? historyResolution.rows : [];
 
+  // W7-C3 (crosscut-06): per-route tab title (before the early returns —
+  // rules of hooks).
+  useDocumentTitle(state.name || (isNew ? 'New agent' : slugParam), 'Agents');
+
   // ---- render ----
   // W7-A4 (crosscut-02 / agents-10 / crosscut-27): unknown slug → the ONE
   // shared not-found treatment with a way back to the roster.
@@ -604,6 +610,13 @@ export default function AgentBuilderPage() {
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18/agents-35): one h1 per page — the builder's
+          visible identity is the name input, so the heading is sr-only. */}
+      <h1 className="sr-only">Agent builder — {state.name || (isNew ? 'new agent' : state.slug)}</h1>
+      {/* W7-C3 (crosscut-19): the shared trail on the agent builder. */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <Breadcrumbs items={[{ label: 'Agents', href: '/agents' }, { label: state.name || (isNew ? 'new agent' : state.slug) }]} />
+      </div>
 
       <div className="workbench">
 

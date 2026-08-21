@@ -1,5 +1,9 @@
+'use client';
+
 import type { CSSProperties, ReactNode } from 'react';
 import { StudioNav } from './StudioNav';
+import { Breadcrumbs, type Crumb } from './Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 /**
  * The ONE Studio page shell (R6-03-F3, batch-F ruling 46).
@@ -74,13 +78,21 @@ export type StudioPageProps = PageHeaderProps & {
   padding?: string;
   /** Optional sub-nav rendered between the header and the body. */
   subnav?: ReactNode;
+  /** W7-C3 (crosscut-06): the browser-tab title. When omitted and `title` is
+   *  a plain string, that string is used — so every shell route gets a
+   *  distinct tab for free; pass this only when `title` is a ReactNode. */
+  docTitle?: string;
+  /** W7-C3 (crosscut-19): detail pages pass their trail; rendered as the
+   *  shared semantic `Breadcrumbs` above the header. */
+  breadcrumbs?: readonly Crumb[];
   children?: ReactNode;
 };
 
 export function StudioPage({
   dataPage, ready, data, section, maxWidth = 1080, padding = '32px 28px 64px',
-  eyebrow, title, lede, actions, subnav, children,
+  eyebrow, title, lede, actions, subnav, docTitle, breadcrumbs, children,
 }: StudioPageProps) {
+  useDocumentTitle(docTitle ?? (typeof title === 'string' ? title : undefined));
   const mainData: Record<string, string | number> = {};
   if (data) {
     for (const [k, v] of Object.entries(data)) {
@@ -99,6 +111,7 @@ export function StudioPage({
     >
       <StudioNav />
       <div {...(section ? { 'data-section': section } : {})} style={wrapStyle}>
+        {breadcrumbs && breadcrumbs.length > 0 ? <Breadcrumbs items={breadcrumbs} /> : null}
         <PageHeader eyebrow={eyebrow} title={title} lede={lede} actions={actions} />
         {subnav ?? null}
         {children}

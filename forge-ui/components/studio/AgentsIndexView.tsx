@@ -86,6 +86,9 @@ export function AgentsIndexView({
       style={{ minHeight: '100vh', background: 'var(--bg)' }}
     >
       <div className="page-wrap" style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 28px 64px' }}>
+        {/* W7-C3 (crosscut-18/agents-35): one h1 per page — the roster's
+            visible identity is the badge row, so the heading is sr-only. */}
+        <h1 className="sr-only">Agents</h1>
 
         {/* ===== AGENT ROSTER ===== */}
         <section

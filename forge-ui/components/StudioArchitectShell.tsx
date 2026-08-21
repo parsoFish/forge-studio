@@ -1,9 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { StudioNav } from '@/components/StudioNav';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 /**
  * Native Studio chrome for the architect surfaces (M7-4, ADR-031). Replaces the
@@ -11,6 +12,11 @@ import { StudioNav } from '@/components/StudioNav';
  * lives inside Studio (StudioNav + the `data-page` DOM-as-metrics root) just
  * like /artifact and the flow monitor. Page-specific page attributes
  * (data-session-id, data-architect-phase) flow through `mainData`.
+ *
+ * W7-C3: the trail is the shared semantic `Breadcrumbs` (crosscut-19 — the old
+ * unlabelled div was one of the three ad-hoc patterns it replaces), the page
+ * heading is a real `<h1>` (crosscut-18), and the shell derives the per-route
+ * tab title (crosscut-06).
  */
 export function StudioArchitectShell({
   dataPage,
@@ -31,6 +37,7 @@ export function StudioArchitectShell({
   maxWidth?: number;
   children: ReactNode;
 }): JSX.Element {
+  useDocumentTitle(idLabel, title);
   return (
     <main
       data-page={dataPage}
@@ -40,40 +47,22 @@ export function StudioArchitectShell({
     >
       <StudioNav />
 
-      <div style={{ maxWidth, margin: '0 auto', padding: '0 28px 56px' }}>
-        {/* Breadcrumb — keeps the operator inside Studio chrome (no /dashboard link). */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 12.5,
-            color: 'var(--faint)',
-            padding: '18px 0 0',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          <Link href="/" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
-            Forge Studio
-          </Link>
-          <span style={{ color: 'var(--line-2)' }}>/</span>
-          <span style={{ color: 'var(--c-artifact, var(--ember))' }}>{title}</span>
-          {idLabel ? (
-            <>
-              <span style={{ color: 'var(--line-2)' }}>/</span>
-              <span style={{ color: 'var(--dim)' }}>{idLabel}</span>
-            </>
-          ) : null}
-        </div>
+      <div style={{ maxWidth, margin: '0 auto', padding: '18px 28px 56px' }}>
+        <Breadcrumbs
+          items={[
+            { label: 'Forge Studio', href: '/' },
+            ...(idLabel ? [{ label: title }, { label: idLabel }] : [{ label: title }]),
+          ]}
+        />
 
         <div
           style={{
-            padding: '24px 0 20px',
+            padding: '10px 0 20px',
             borderBottom: '1px solid var(--line)',
             marginBottom: 28,
           }}
         >
-          <div
+          <h1
             style={{
               fontFamily: 'var(--font-display)',
               fontSize: 26,
@@ -81,10 +70,11 @@ export function StudioArchitectShell({
               lineHeight: 1.2,
               color: 'var(--text)',
               letterSpacing: '-0.01em',
+              margin: 0,
             }}
           >
             {title}
-          </div>
+          </h1>
         </div>
 
         {children}

@@ -44,6 +44,7 @@ import { useParams } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
+import { useDocumentTitle } from '@/lib/document-title';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
 import { fetchFlowRunDetail, fetchReviewFindings, shouldFetchReviewFindings, resolveRunPageState, type FlowRunDetailResolution, type FlowsListRead } from '@/lib/flow-run-detail-client';
 import { fetchNodeLog } from '@/lib/flow-node-log';
@@ -111,6 +112,14 @@ export default function FlowRunPage() {
     void load(signal);
     return () => { signal.cancelled = true; };
   }, [load]);
+
+  // W7-C3 (crosscut-06): per-route tab title — the run's initiative once
+  // resolved, the raw run id until then.
+  useDocumentTitle(
+    resolution?.kind === 'found' ? (resolution.run.initiative || runId) : runId,
+    flowId,
+    'Runs',
+  );
 
   // Toggle a row's expand state; fetch that node's own raw log on first
   // expand only — a node already cached in `nodeLogLines` is never

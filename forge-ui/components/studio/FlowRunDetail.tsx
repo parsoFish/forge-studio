@@ -144,7 +144,8 @@ export function FlowRunDetail({
         )}
       </nav>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h2>
+        {/* W7-C3 (crosscut-18/agents-35): the page's ONE h1 — was an h2. */}
+        <h1 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h1>
         <div style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
           {run?.id ?? runId} · flow {flowId || '—'}
         </div>

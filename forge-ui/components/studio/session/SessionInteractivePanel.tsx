@@ -6,6 +6,7 @@ import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayl
 import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import type { EventLogEntry } from '@/lib/bridge-client';
+import { modelChipLabel } from '@/lib/model-chip';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -513,9 +514,10 @@ function ProvenanceStrip({ phase, modelTier }: { phase: string; modelTier: strin
           color: 'var(--dim)', whiteSpace: 'nowrap',
         }}
       >
-        {/* W7-A2 (sessions-kinds-31) — a null tier is honestly "not recorded",
-            never the literal word "default" (not a tier the picker offers). */}
-        model: {modelTier ?? 'not recorded'}
+        {/* W7-A2/W7-C3 (sessions-kinds-31) — a null tier is honestly "not
+            recorded", never the literal word "default" (not a tier the picker
+            offers). One rule, unit-pinned: lib/model-chip.ts. */}
+        model: {modelChipLabel(modelTier)}
       </span>
     </div>
   );

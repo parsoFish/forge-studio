@@ -614,6 +614,21 @@ html { scroll-behavior: smooth; }
 }
 .skip-link:focus { top: 12px; }
 
+/* W7-C3 (crosscut-18): visually-hidden utility — for the one-h1-per-page rule
+   on surfaces whose visible identity is an interactive control (the flow
+   monitor's flow selector, the agent builder's name input). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ══════════════════════════════════════════════════════════════
    Agent builder (M2-5) — 3-col workbench styles
    ══════════════════════════════════════════════════════════════ */
