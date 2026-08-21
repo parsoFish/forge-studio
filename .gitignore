@@ -45,6 +45,11 @@ _queue/failed/*
 # real brain/projects/<id> dirs above it, which ARE forge-owned central
 # content per ADR 035).
 brain/projects/home-fixture-lint-kb/
+# scripts/journeys/stand-up-create.mjs's own scratch KB fixture (A1.3,
+# W7-FIX-B-UI) — same directly-verified lint-flag shape as the home fixture
+# above, on its own slug so the two journeys never collide. Swept by the
+# beat's own cleanSuLintKb() (leading sweep + finally); never committed.
+brain/projects/sucreate-fixture-lint-kb/
 
 # R3-04 connections install root — installed npm packages for curated
 # tools/MCPs (probeConnection/installConnection, orchestrator/studio/
