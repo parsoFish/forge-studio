@@ -721,20 +721,35 @@ export const journey = defineJourney({
 
         // A cross-section, not a full crawl (e2e-deadpaths crawls every route):
         // both shared shells plus a detail page of each kind that owns a trail.
+        // W7-C3 review (A-H5): these are the values the routes REALLY render
+        // — `/flows` is `flows-index` and `/agents` is `agents-index`, not the
+        // pillar names. Cross-checked against the app sources by
+        // scripts/crosscut-chrome-beat.test.ts, because a wrong value here
+        // only ever showed up as a 20s dead wait plus a check failure.
         const ROUTES = [
           { path: '/', page: 'home', crumbs: false },
-          { path: '/flows', page: 'flows', crumbs: false },
+          { path: '/flows', page: 'flows-index', crumbs: false },
           { path: '/flows/forge-develop', page: 'flow-monitor', crumbs: true },
           { path: '/knowledge', page: 'knowledge', crumbs: true },
-          { path: '/agents', page: 'agents', crumbs: false },
+          { path: '/agents', page: 'agents-index', crumbs: false },
         ];
+
+        // The readiness wait's outcome is a CHECK, never swallowed: a route
+        // that never renders its [data-page] must fail loudly and by name,
+        // not silently hand every assertion below a blank page.
+        const waitForPage = async (route) => {
+          const ready = await page.waitForFunction(
+            (p) => document.querySelector(`[data-page="${p}"]`) !== null,
+            route.page, { timeout: 20000 },
+          ).then(() => true, () => false);
+          check(ready, `HOME.4: ${route.path} rendered [data-page="${route.page}"] within 20s`);
+          return ready;
+        };
 
         const titles = [];
         for (const route of ROUTES) {
           await page.goto(watch.uiUrl + route.path, { waitUntil: 'domcontentloaded' });
-          await page.waitForFunction(
-            (p) => document.querySelector(`[data-page="${p}"]`) !== null,
-            route.page, { timeout: 20000 }).catch(() => {});
+          if (!await waitForPage(route)) continue;
 
           const chrome = await page.evaluate(() => {
             const main = document.querySelector('main');
@@ -784,9 +799,7 @@ export const journey = defineJourney({
         await page.setViewportSize({ width: 740, height: 900 });
         for (const route of ROUTES) {
           await page.goto(watch.uiUrl + route.path, { waitUntil: 'domcontentloaded' });
-          await page.waitForFunction(
-            (p) => document.querySelector(`[data-page="${p}"]`) !== null,
-            route.page, { timeout: 20000 }).catch(() => {});
+          if (!await waitForPage(route)) continue;
           const overflow = await page.evaluate(() =>
             document.documentElement.scrollWidth - document.documentElement.clientWidth);
           check(overflow <= 0,
@@ -795,12 +808,10 @@ export const journey = defineJourney({
         if (prevViewport) await page.setViewportSize(prevViewport);
 
         await page.goto(watch.uiUrl + '/flows/forge-develop', { waitUntil: 'domcontentloaded' });
-        await page.waitForFunction(
-          () => document.querySelector('[data-page="flow-monitor"]') !== null,
-          null, { timeout: 20000 }).catch(() => {});
+        await waitForPage({ path: '/flows/forge-develop', page: 'flow-monitor' });
         // Focus the skip link so the frame captures it visible — it is
         // deliberately off-screen until focused.
-        await page.keyboard.press('Tab').catch(() => {});
+        await page.keyboard.press('Tab');
         await frame(page, 'home-4-crosscut-chrome',
           'Cross-cutting chrome — a per-route tab title, a breadcrumb trail back to the index, and the skip link revealed on its first tab stop',
           { key: true });
