@@ -4,7 +4,7 @@ import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   PROJECT, DATE, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
   cleanOnboardedProject,
-  writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft, cleanInstructionsSession,
+  writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft, readInstrAnswers, cleanInstructionsSession,
   writePbStatus, seedStagedBrain, cleanSeededBrain,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
@@ -529,19 +529,19 @@ export const journey = defineJourney({
               await instrBurst(instrSid, ['Glob', 'Read', 'Grep', 'Bash']);
               writeInstrQuestions(instrSid);
               writeInstrStatus(instrSid, { phase: 'awaiting-answers', round: 1 });
-              // W6-B9: instructions now renders the GENERIC SessionInteractivePanel
-              // (its bespoke SessionInstructionsPanel/ArchitectQuestionForm pairing
-              // is retired) — the operator's affordance is the single-box
-              // `question-form` section, not a per-question fieldset list.
+              // W7-C2: instructions renders the GENERIC SessionInteractivePanel,
+              // and at `awaiting-answers` the bridge attaches the PENDING
+              // questions to the question-form affordance (meta.questions), so
+              // the panel reuses ArchitectQuestionForm and renders ONE fieldset
+              // PER QUESTION — the single flattened `[data-field="session-answer"]`
+              // box is NOT rendered on this path (C2-UI-4 pins that negative).
               await page.waitForSelector('[data-affordance-kind="question-form"]', { timeout: 15000 }).catch(() => {});
               check(await page.locator('[data-affordance-kind="question-form"]').count() > 0, 'AI-1: interview returns a question-form affordance');
               // R2-10: at least one turn, derived from a REAL checkpoint file —
               // questions.json contributes a pending AGENT turn while phase is
-              // exactly 'awaiting-answers' (never invented). The bespoke
-              // per-question ArchitectQuestionForm fieldset list is retired
-              // (the generic panel renders one free-text box), but the
+              // exactly 'awaiting-answers' (never invented). The
               // transcript pane (SessionTranscript.tsx, W6-B9 reviewer fix)
-              // now splits a questions.json turn's joined text back into one
+              // splits a questions.json turn's joined text back into one
               // [data-transcript-question-index] element PER real question — a
               // structural proof, not a text-substring sniff.
               await page.waitForFunction(
@@ -556,11 +556,49 @@ export const journey = defineJourney({
                 `AI-1: transcript derives a real turn from questions.json (got ${JSON.stringify(instrTurn0)})`);
               await countAtLeast(page, '[data-turn-index="0"] [data-transcript-question-index]', 2, 'AI-1: ≥2 instructions questions — structurally distinct [data-transcript-question-index] entries in the transcript pane');
               await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
-              // answer → draft → verdict — the generic single free-text box
-              // (data-action="submit-answers" is the ONE action name shared with
-              // the retired bespoke form, so this line is unchanged).
-              await page.locator('[data-field="session-answer"]').fill('Humans + agents, npm test.').catch(() => {});
-              await page.locator('[data-action="submit-answers"]').click().catch(() => {});
+              // answer → draft → verdict. W7-C2 T1 review (P0-1): this beat used
+              // to fill `[data-field="session-answer"]` — a box this phase does
+              // NOT render — and click a submit that ArchitectQuestionForm keeps
+              // `disabled` until every question is answered, with BOTH throws
+              // swallowed by `.catch(() => {})`. No POST was made, no check
+              // failed, and the fixture force-wrote the next phase on the very
+              // next line: a silently passing no-op. It now drives the REAL
+              // per-question form and asserts the round-trip. No swallows here —
+              // if a selector rots, the beat fails loudly.
+              check(await page.locator('[data-field="session-answer"]').count() === 0,
+                'AI-1: with pending questions attached, the panel renders the per-question form — NOT the single flattened answer box');
+              await page.waitForSelector('[data-section="session-interview"]', { timeout: 15000 });
+              await countAtLeast(page, '[data-section="session-interview"] [data-question-index]', 2,
+                'AI-1: one interview fieldset per REAL pending question (meta.questions on the wire)');
+              // Submit stays disabled until EVERY question resolves (declared in
+              // docs/forge-ui-dom-and-harness.md) — answer both, in the operator's
+              // own words, via the per-question free-text override.
+              await page.locator('[data-question-freetext="0"]').fill('Humans + agents.');
+              await page.locator('[data-question-freetext="1"]').fill('npm test.');
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="session-interview"]')?.getAttribute('data-questions-answered') === 'true',
+                null, { timeout: 8000 },
+              );
+              await page.locator('[data-section="session-interview"] [data-action="submit-answers"]').click();
+              // The REAL POST landed iff the bridge wrote answers.json — and it
+              // must carry the REAL question text bound to its server-derived
+              // questionId (sessions-kinds-19), never the old hardcoded
+              // 'Operator response' placeholder.
+              let instrAnswers = null;
+              for (let i = 0; i < 40 && instrAnswers === null; i++) {
+                instrAnswers = readInstrAnswers(instrSid);
+                if (instrAnswers === null) await sleep(250);
+              }
+              const instrRound1 = Array.isArray(instrAnswers) ? instrAnswers[0] : null;
+              check(
+                instrRound1 !== null
+                  && Array.isArray(instrRound1.answers)
+                  && instrRound1.answers.length === 2
+                  && instrRound1.answers[0].questionId === 'q1'
+                  && instrRound1.answers[0].question === 'Who is the primary audience for AGENTS.md?'
+                  && instrRound1.answers[0].answer === 'Humans + agents.',
+                `AI-1: submitting the interview POSTs each answer with its REAL question text + questionId into answers.json (got ${JSON.stringify(instrRound1)})`,
+              );
               await sleep(ACT);
               writeInstrStatus(instrSid, { phase: 'drafting', round: 2 });
               instrEvent(instrSid, 'start', 'instructions turn (phase=drafting) — rolling in answers');
@@ -704,7 +742,11 @@ export const journey = defineJourney({
               seedStagedBrain(pbSid);
               await page.waitForSelector('main[data-page="session"][data-session-phase="awaiting-review"]', { timeout: 10000 }).catch(() => {});
               check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
-              await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
+              // W7-C2 (sessions-kinds-22): the panel's duplicate per-theme
+              // accordion is gone — the artifact pane's FilePackage tabs are
+              // the ONE theme viewer now, so the theme count is asserted
+              // there.
+              await countAtLeast(page, '[data-section="session-artifact"] [data-file-tab]', 3, 'AI-2: ≥3 seed themes drafted (artifact pane tabs — the one viewer)');
               // R2-10: the artifact pane — project-brain's declared renderer is
               // brain-structure, which renders its file tabs through the SHARED
               // FilePackage component (never a second tab-strip) — the "reused,

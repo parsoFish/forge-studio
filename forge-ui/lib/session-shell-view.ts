@@ -124,6 +124,18 @@ export type SessionShellReadyState = {
    *  session-lifecycle-client.ts), carried through UNCHANGED across a
    *  `selectStage` switch — a session-level fact, like `terminal`. */
   lifecycle: SessionLifecycle;
+  /** W7-C2 (sessions-kinds-36) — the payload's own persisted pointer at
+   *  the object a committed session produced, carried through verbatim
+   *  (session-level, like `terminal`); null for a session that produced
+   *  nothing. */
+  finalized: { kind: string; id: string; exists: boolean } | null;
+  /** W7-C2 T1 review (P0-3) — the payload's own scoped transcript-derivation
+   *  error (server-derived, see session-client.ts), carried through verbatim
+   *  and UNCHANGED across a `selectStage` switch: a session-level fact about
+   *  the whole derivation, not a per-stage one. Non-null means
+   *  `turnsForStage` is empty because the derivation REFUSED, not because
+   *  the stage is quiet — the transcript pane says which. */
+  transcriptError: string | null;
   dataAttrs: SessionShellDataAttrs;
 };
 
@@ -205,6 +217,8 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     terminal: payload.terminal,
     transcript: payload.transcript,
     lifecycle: payload.lifecycle,
+    finalized: payload.finalized,
+    transcriptError: payload.transcriptError,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
       stage,

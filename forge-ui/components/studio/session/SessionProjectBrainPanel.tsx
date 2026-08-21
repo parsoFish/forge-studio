@@ -8,14 +8,28 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // SessionProjectBrainPanel — the project-brain kind's live interactive
-// affordance, carried over UNCHANGED from `/project-brain/[sessionId]`
-// (R2-10 PR2, WI-7): the back-to-project button, the briefing form, the
-// analyzing/committing status text, the theme review + approve/abandon, and
-// the committed/abandoned terminal states. Every `data-action`/`data-section`
-// name below is byte-identical to the retired page's. Unlike the architect/
-// instructions kinds, project-brain never showed a StageHex/activity-log —
-// that fidelity is preserved here rather than forced onto it for visual
-// uniformity (see the T3 report's design-choices note).
+// affordance (carried from `/project-brain/[sessionId]`, R2-10 PR2, WI-7):
+// the briefing form, the analyzing/committing status text, the theme-review
+// verdict, and the committed/abandoned terminal states. Unlike the
+// architect/instructions kinds, project-brain never showed a StageHex/
+// activity-log — that fidelity is preserved here rather than forced onto it
+// for visual uniformity.
+//
+// W7-C2 (sessions-kinds-21/22):
+//   - the panel's own back-to-project link and its per-theme <details>
+//     accordion are GONE — the generic session shell already renders the one
+//     back link (page.tsx's `backTo`) and the artifact pane (brain-structure
+//     renderer) owns file browsing; two viewers with two selection states on
+//     one screen was pure overlap. The theme COUNT stays (the review copy
+//     needs it).
+//   - Abandon is a two-step confirm (`abandon-brain` arms it,
+//     `confirm-abandon-brain` fires, `cancel-abandon-brain` backs out) and
+//     is styled as the QUIET action; Approve + commit is the primary. The
+//     old styling had it backwards in practice — primaryBtn leaned on
+//     `var(--accent)`, a token globals.css never defines (finding
+//     sessions-kinds-V02), so the PRIMARY rendered transparent while the
+//     destructive ghost rendered filled. Both buttons now use the shared
+//     .btn classes every other Studio control uses.
 // ---------------------------------------------------------------------------
 
 export function SessionProjectBrainPanel({
@@ -30,6 +44,7 @@ export function SessionProjectBrainPanel({
   const router = useRouter();
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmingAbandon, setConfirmingAbandon] = useState(false);
 
   const startAnalysis = useCallback(async () => {
     setBusy(true);
@@ -49,19 +64,12 @@ export function SessionProjectBrainPanel({
     setBusy(true);
     await projectBrainAbandon({ project: session.project, sessionId: session.session_id });
     setBusy(false);
+    setConfirmingAbandon(false);
     onRefresh();
   }, [session.project, session.session_id, onRefresh]);
 
   return (
     <div>
-      <button
-        data-action="back-to-project"
-        onClick={() => router.push(`/projects/${encodeURIComponent(session.project)}`)}
-        style={backBtn}
-      >
-        ← {session.project}
-      </button>
-
       {session.phase === 'briefing' && (
         <div data-section="brain-briefing" style={{ marginTop: 12 }}>
           <p style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>
@@ -76,7 +84,7 @@ export function SessionProjectBrainPanel({
             placeholder="Focus / guidance (optional)"
             style={textarea}
           />
-          <button data-action="start-brain-analysis" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void startAnalysis()} style={primaryBtn}>
+          <button data-action="start-brain-analysis" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void startAnalysis()} className="btn btn-primary">
             {busy ? 'Starting…' : 'Start analysis →'}
           </button>
         </div>
@@ -90,24 +98,28 @@ export function SessionProjectBrainPanel({
 
       {session.phase === 'awaiting-review' && (
         <div data-section="brain-review" data-theme-count={themes.length} style={{ marginTop: 12 }}>
-          <p style={{ fontSize: 13, color: 'var(--dim)' }}>{themes.length} draft theme(s). Review, then approve to commit into the central brain.</p>
-          {themes.map((t) => (
-            <details
-              key={t.name}
-              data-theme-name={t.name}
-              style={{ marginBottom: 10, border: '1px solid var(--line)', borderRadius: 6, padding: '8px 12px', background: 'var(--panel)' }}
-            >
-              <summary style={{ cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{t.name}</summary>
-              <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, color: 'var(--dim)', marginTop: 8 }}>{t.content}</pre>
-            </details>
-          ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button data-action="approve-brain" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void approve()} style={primaryBtn}>
+          <p style={{ fontSize: 13, color: 'var(--dim)' }}>
+            {themes.length} draft theme(s) — review them in the artifact pane on the right, then approve to commit into the central brain.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button data-action="approve-brain" {...disabledAttrs(busy ? 'Working…' : confirmingAbandon ? 'Resolve the abandon confirmation first' : null)} onClick={() => void approve()} className="btn btn-primary">
               {busy ? 'Committing…' : 'Approve + commit'}
             </button>
-            <button data-action="abandon-brain" disabled={busy} onClick={() => void abandon()} style={ghostBtn}>
-              Abandon
-            </button>
+            {!confirmingAbandon ? (
+              <button data-action="abandon-brain" disabled={busy} onClick={() => setConfirmingAbandon(true)} style={quietDangerBtn}>
+                Abandon…
+              </button>
+            ) : (
+              <span data-section="brain-abandon-confirm" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--red)' }}>Discard the drafted themes?</span>
+                <button data-action="confirm-abandon-brain" disabled={busy} onClick={() => void abandon()} style={dangerBtn}>
+                  {busy ? 'Abandoning…' : 'Confirm abandon'}
+                </button>
+                <button data-action="cancel-abandon-brain" disabled={busy} onClick={() => setConfirmingAbandon(false)} className="btn">
+                  Keep reviewing
+                </button>
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -143,8 +155,13 @@ export function SessionProjectBrainPanel({
   );
 }
 
-const backBtn: React.CSSProperties = { fontSize: 12, background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', padding: 0 };
-const primaryBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none', borderRadius: 5, cursor: 'pointer' };
-const ghostBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer' };
-const linkBtn: React.CSSProperties = { fontSize: 13, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline', padding: 0 };
+// W7-C2 (sessions-kinds-21 root cause, sessions-kinds-V02): the old
+// primaryBtn/linkBtn leaned on `var(--accent)` — a token globals.css never
+// defines, so the PRIMARY button rendered transparent while the destructive
+// ghost rendered filled. Primary actions now use the shared .btn classes;
+// the two abandon-flow styles below are deliberately QUIET (border-only)
+// and danger-tinted respectively.
+const quietDangerBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'none', color: 'var(--dim)', border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer' };
+const dangerBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'none', color: 'var(--red, #f87171)', border: '1px solid var(--red, #f87171)', borderRadius: 5, cursor: 'pointer' };
+const linkBtn: React.CSSProperties = { fontSize: 13, background: 'none', border: 'none', color: 'var(--ember, #ff9e4a)', cursor: 'pointer', textDecoration: 'underline', padding: 0 };
 const textarea: React.CSSProperties = { width: '100%', maxWidth: 560, margin: '10px 0', fontSize: 13, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 8, resize: 'vertical', display: 'block' };

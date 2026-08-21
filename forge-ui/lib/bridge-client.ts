@@ -819,6 +819,18 @@ export type ArchitectPhase =
   | 'rejected';
 
 export type ArchitectQuestion = {
+  /** W7-C2 T1 review (A3, finding sessions-kinds-19) — the correlation
+   *  handle, posted back with this question's answer so the durable record
+   *  binds by ID, not by question TEXT. The GENERIC session interview always
+   *  carries one (the bridge derives it from the question's position in
+   *  questions.json — `pendingQuestionId`, cli/bridge-studio-sessions.ts,
+   *  and `parsePendingQuestionsMeta` REQUIRES it). Architect's own bespoke
+   *  interview wire (`/api/architect/...`) declares no ids at all, so this
+   *  is optional at the TYPE level and simply absent there — not a
+   *  fallback: a question with no declared id has nothing honest to send,
+   *  and the generic route only demands one where a real question list
+   *  exists to correlate against. */
+  id?: string;
   question: string;
   header: string;
   /** Options may be absent when the architect poses an open-ended question. */

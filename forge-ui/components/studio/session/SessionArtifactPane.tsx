@@ -1,11 +1,26 @@
 'use client';
 
+import { useState } from 'react';
+
 import { FilePackage } from '@/components/studio/FilePackage';
 import { DependencyDag } from '@/components/studio/DependencyDag';
 import { GenerationGallery } from '@/components/studio/GenerationGallery';
 import { ContractBuildout } from '@/components/studio/ContractBuildout';
 import { roadmapDraftView, markdownDraftView, cleanupPlanView, type SessionArtifactView, type CleanupPlanView, sessionArtifactView } from '@/lib/session-artifact-view';
+import { lineDiff, type DiffRow } from '@/lib/text-diff';
 import type { SessionArtifactPayload, RoadmapDraftRow, CleanupPlanAction, CleanupActionState } from '@/lib/session-client';
+
+/** W7-C2 (sessions-kinds-30) — the verdict context for a markdown-draft
+ *  artifact: where approving will WRITE (`targetPath`, absolute), and the
+ *  CURRENT on-disk content when the session is editing an existing file
+ *  (`current`; null in init mode — nothing to diff against). Threaded by
+ *  the page from the per-kind summary that already carries both fields
+ *  (InstructionsSessionSummary.currentInstructions/projectRepoPath) —
+ *  declared-but-unconsumed wire data until now. */
+export type MarkdownDraftContext = {
+  targetPath: string;
+  current: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // SessionArtifactPane — the RIGHT-hand "living artifact" pane of the shared
@@ -83,12 +98,16 @@ export function SessionArtifactPane({
   sessionId,
   activeStage,
   onFinalizeGeneration,
+  draftContext,
 }: {
   artifact: SessionArtifactPayload;
   project?: string;
   sessionId?: string;
   activeStage?: string;
   onFinalizeGeneration?: (generationNumber: number) => void;
+  /** W7-C2 — markdown-draft only; every other kind ignores it (same
+   *  optional-passthrough convention as `project`/`sessionId` above). */
+  draftContext?: MarkdownDraftContext;
 }): JSX.Element {
   let view: SessionArtifactView | null = null;
   let dispatchError: string | null = null;
@@ -131,7 +150,7 @@ export function SessionArtifactPane({
         ) : view.kind === 'roadmap-draft' ? (
           <RoadmapDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'roadmap-draft' }>} />
         ) : view.kind === 'markdown-draft' ? (
-          <MarkdownDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>} />
+          <MarkdownDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>} draftContext={draftContext} />
         ) : view.kind === 'brain-structure' ? (
           <BrainStructureBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'brain-structure' }>} />
         ) : view.kind === 'generation-gallery' ? (
@@ -213,7 +232,17 @@ function RoadmapDraftBody({ artifact }: { artifact: Extract<SessionArtifactPaylo
   );
 }
 
-function MarkdownDraftBody({ artifact }: { artifact: Extract<SessionArtifactPayload, { kind: 'markdown-draft' }> }): JSX.Element {
+function MarkdownDraftBody({
+  artifact,
+  draftContext,
+}: {
+  artifact: Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>;
+  draftContext?: MarkdownDraftContext;
+}): JSX.Element {
+  // W7-C2 (sessions-kinds-30) — the draft-vs-current toggle. Hook order is
+  // stable: declared before any early return, and inert (never read) for
+  // the no-draft/empty states below.
+  const [showDiff, setShowDiff] = useState(false);
   const view = markdownDraftView(artifact);
   if (view.state === 'no-draft') {
     return <EmptyNote data-markdown-draft-state="no-draft" text="No draft yet — the agent has not written AGENTS.draft.md." />;
@@ -221,7 +250,13 @@ function MarkdownDraftBody({ artifact }: { artifact: Extract<SessionArtifactPayl
   if (view.state === 'empty-draft') {
     return <EmptyNote data-markdown-draft-state="empty-draft" text="The draft file exists but is currently empty." />;
   }
-  return (
+  // W7-C2 (sessions-kinds-30) — the verdict context: name the destination
+  // an approve will write, and offer a diff against the CURRENT file when
+  // the session is editing one (draftContext.current !== null). Sourced
+  // from summary fields already on the wire — absent context renders the
+  // draft exactly as before.
+  const canDiff = draftContext !== undefined && draftContext.current !== null;
+  const body = (
     <pre
       data-markdown-draft-state="has-content"
       style={{
@@ -236,6 +271,83 @@ function MarkdownDraftBody({ artifact }: { artifact: Extract<SessionArtifactPayl
     >
       {view.body}
     </pre>
+  );
+  if (draftContext === undefined) return body;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div
+        data-draft-target={draftContext.targetPath}
+        style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
+      >
+        Approving writes <code>{draftContext.targetPath}</code>
+        {draftContext.current === null ? ' (new file)' : ' (replaces the current file)'}
+      </div>
+      {/* W7-C2 T1 review (A10) — the selected view reads as SELECTED. The
+          pair used to render the ACTIVE button `disabled` AND at
+          `opacity: 0.6` while the inactive one sat enabled at full
+          opacity — exactly inverted, so the view you were looking at
+          looked like the unavailable one. The active button stays
+          `disabled` (clicking the view you are already in is a no-op) but
+          now carries full opacity, `aria-pressed` and
+          `data-view-selected` — one segmented control, one honest
+          selected state. */}
+      {canDiff && (
+        <div role="group" style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            className="btn"
+            data-action="draft-view-draft"
+            data-view-selected={showDiff ? 'false' : 'true'}
+            aria-pressed={!showDiff}
+            disabled={!showDiff}
+            onClick={() => setShowDiff(false)}
+            style={{ fontSize: 11.5, opacity: showDiff ? 0.6 : 1 }}
+          >
+            Draft
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-action="draft-view-diff"
+            data-view-selected={showDiff ? 'true' : 'false'}
+            aria-pressed={showDiff}
+            disabled={showDiff}
+            onClick={() => setShowDiff(true)}
+            style={{ fontSize: 11.5, opacity: showDiff ? 1 : 0.6 }}
+          >
+            Diff vs current
+          </button>
+        </div>
+      )}
+      {canDiff && showDiff ? <DraftDiffBody current={draftContext.current as string} draft={view.body ?? ''} /> : body}
+    </div>
+  );
+}
+
+/** W7-C2 — the diff view: lineDiff rows with +/- gutters; a null result
+ *  (over the size cap) renders an honest note, never a hung tab. */
+function DraftDiffBody({ current, draft }: { current: string; draft: string }): JSX.Element {
+  const rows = lineDiff(current, draft);
+  if (rows === null) {
+    return <EmptyNote data-draft-diff-state="too-large" text="These files are too large to diff here — review the draft directly." />;
+  }
+  const rowStyle = (row: DiffRow): React.CSSProperties =>
+    row.type === 'add'
+      ? { background: 'rgba(74, 222, 128, 0.10)', color: 'var(--text)' }
+      : row.type === 'del'
+        ? { background: 'rgba(248, 113, 113, 0.10)', color: 'var(--dim)', textDecoration: 'line-through' }
+        : { color: 'var(--text)' };
+  return (
+    <div data-draft-diff-state="rendered" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.5, overflowX: 'auto' }}>
+      {rows.map((row, i) => (
+        <div key={i} data-diff-row={row.type} style={{ display: 'flex', gap: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', ...rowStyle(row) }}>
+          <span aria-hidden="true" style={{ width: 12, flexShrink: 0, textAlign: 'center', color: row.type === 'add' ? 'var(--green)' : row.type === 'del' ? 'var(--red)' : 'var(--faint)' }}>
+            {row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' '}
+          </span>
+          <span>{row.text || ' '}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

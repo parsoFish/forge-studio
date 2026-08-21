@@ -157,6 +157,14 @@ export type DemoBuilderStatus = {
    * unchanged default behavior (`DEMO_BUILDER_MODEL`).
    */
   modelTier?: ModelTier;
+  /**
+   * W7-C2 (sessions-kinds-36) — the permanent pointer at what this session
+   * produced, written once at lock success and read back by the
+   * session-shell route on every GET (`finalized` on the wire). `demo` names
+   * the project whose `.forge/demo/demo.lock.json` was written. Absent until
+   * the session locks.
+   */
+  finalized?: { kind: string; id: string };
 };
 
 export type RunDemoBuilderTurnInput = {
@@ -548,7 +556,16 @@ function runLockStep(args: {
   writeFileSync(join(histDir, 'DEMO.html'), readFileSync(demoPath, 'utf8'));
   writeFileSync(join(histDir, 'meta.json'), `${JSON.stringify(lock, null, 2)}\n`);
 
-  writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'locked' });
+  // W7-C2 T1 review (P0-4, sessions-kinds-36) — the permanent "what this
+  // session produced" pointer (see instructions-runner's own note for why
+  // all five finalizing kinds now write one). A locked demo IS the project's
+  // .forge/demo/demo.lock.json, so the pointer names the PROJECT; the shell
+  // route derives whether that lock is still on disk.
+  writeDemoStatus(input.projectRoot, input.sessionId, {
+    ...status,
+    phase: 'locked',
+    finalized: { kind: 'demo', id: status.project },
+  });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',

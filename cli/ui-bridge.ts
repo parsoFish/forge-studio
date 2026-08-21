@@ -83,7 +83,7 @@ import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
-import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES } from './bridge-studio-affordances.ts';
+import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import { deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
@@ -2020,15 +2020,22 @@ async function handleHttp(
   // affordance write route immediately below: that route's regex matches
   // any `/api/studio/sessions/:kind/:sid/<segment>` and would swallow the
   // literal `cancel` segment as an affordance id (409 "not available").
+  // W7-C2 T1 review (A12) — ONE per-kind live-refresh mapping, shared by the
+  // cancel route and the generic affordance WRITE route below (which used to
+  // keep its own inline instructions/demo pair). A kind with no
+  // `*-list-changed` message in the bridge's WS vocabulary (authoring /
+  // kb-cleanup / community-refresh) honestly no-ops here; those surfaces
+  // refresh on the session shell's own poll.
+  const broadcastKindChanged = (kind: string): void => {
+    if (kind === 'architect') ctx.broadcastArchitectChanged();
+    else if (kind === 'instructions') ctx.broadcastInstructionsChanged();
+    else if (kind === 'demo') ctx.broadcastDemoChanged();
+    else if (kind === 'project-brain') ctx.broadcastProjectBrainChanged();
+  };
   if (await handleSessionCancelRoute(req, res, {
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
-    broadcastKindChanged: (kind) => {
-      if (kind === 'architect') ctx.broadcastArchitectChanged();
-      else if (kind === 'instructions') ctx.broadcastInstructionsChanged();
-      else if (kind === 'demo') ctx.broadcastDemoChanged();
-      else if (kind === 'project-brain') ctx.broadcastProjectBrainChanged();
-    },
+    broadcastKindChanged,
   }, url, method)) return;
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
@@ -2039,8 +2046,10 @@ async function handleHttp(
     forgeRoot: ctx.forgeRoot,
     logsRoot: ctx.logsRoot,
     spawnAgentTurn,
-    broadcastInstructionsChanged: ctx.broadcastInstructionsChanged,
-    broadcastDemoChanged: ctx.broadcastDemoChanged,
+    // W7-C2 T1 review (A12) — the SAME per-kind mapping the cancel route
+    // above is injected with, so there is exactly one place that knows which
+    // kinds have a list-changed WS event.
+    broadcastKindChanged,
   }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   // W6-B6 fix — the per-slug capability route, resolved against the
@@ -3045,11 +3054,21 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
 // sessions.ts) — bridge-studio-*.ts modules never import FROM ui-bridge.ts
 // (see that file's own header for the reasoning), so this stays exported and
 // passed by reference at the wiring call site, never imported directly.
-export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
+  // W7-C2 T1 review (A7) — this helper no longer swallows. Its outcome is
+  // REPORTED to the caller (`SpawnTurnOutcome`, cli/bridge-studio-
+  // affordances.ts) so a route can refuse to claim `{ok:true, phase:
+  // 'analyzing'}` for a turn that never started; a session left in a working
+  // phase with no log dir can never be derived as `stalled`
+  // (cli/bridge-studio-lifecycle.ts), so a swallowed failure showed the
+  // operator `working` forever with `needsYou:false`. A DELIBERATE no-spawn
+  // (FORGE_ARCHITECT_NO_SPAWN / the dry bridge) is `ok` with
+  // `spawned:false` — not a failure. Callers that genuinely have nothing to
+  // do with the outcome ignore the return value exactly as before.
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return { ok: true, spawned: false };
   if (!isSafeRunId(sessionId)) {
     console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
-    return;
+    return { ok: false, error: 'unsafe sessionId (path-traversal risk) — refusing to spawn' };
   }
   const { argvPrefix, logPrefix } = SPAWN_AGENT_SPECS[agentId];
   try {
@@ -3072,7 +3091,13 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
     if (typeof proc.pid === 'number') {
       guardedWriteFile(join(forgeRoot, '_logs'), [`_${logPrefix}-${sessionId}`, 'turn.pid'], `${proc.pid}\n`);
     }
-  } catch { /* best-effort */ }
+    return { ok: true, spawned: true };
+  } catch (err) {
+    // W7-C2 T1 review (A7) — surfaced, never swallowed: logged here for the
+    // bridge operator AND returned so the route can answer honestly.
+    console.error(`spawnAgentTurn: failed to start the ${agentId} turn for session ${sessionId}:`, err);
+    return { ok: false, error: sanitizeError(err) };
+  }
 }
 
 /** Studio agent slug shape (skill dir names): lowercase alnum + hyphen, no
@@ -4448,7 +4473,17 @@ async function handleInstructions(
       if (body.kind === 'approve') {
         wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'finalizing' });
       } else if (body.kind === 'revise') {
-        const wroteFeedback = guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback ?? '');
+        // W7-C2 T1 review (A12) — parity with the generic route: an EMPTY
+        // revise is refused here too. `body.feedback ?? ''` used to accept
+        // one, so the bespoke surface re-ran the drafting turn with no
+        // guidance (which regenerates the same draft) where the generic
+        // route 400s — two routes onto the same on-disk state disagreeing
+        // about the same rule.
+        if (typeof body.feedback !== 'string' || body.feedback.trim().length === 0) {
+          sendJson(res, 400, { error: `feedback is required for kind "revise" — say what to change, got ${JSON.stringify(body.feedback)}` }, origin);
+          return true;
+        }
+        const wroteFeedback = guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback);
         wrote = wroteFeedback === null ? null : guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'drafting' });
       } else {
         wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'rejected' });

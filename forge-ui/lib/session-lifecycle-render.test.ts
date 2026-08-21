@@ -84,6 +84,9 @@ const BASE_PAYLOAD = {
   phase: 'generating', stages: ['demo'], defaultStage: 'demo', turns: [],
   artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: [] },
   affordances: [], modelTier: null, terminal: false, transcript: true,
+  // W7-C2 — REQUIRED on every wire payload (null = produced nothing).
+  finalized: null,
+  transcriptError: null,
 };
 
 test('parseSessionShellPayload: a payload WITHOUT lifecycle throws naming the field (never defaulted to working)', () => {

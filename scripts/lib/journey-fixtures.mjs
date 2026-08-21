@@ -1193,6 +1193,20 @@ export function writeInstrQuestions(sid) {
     ] },
   ], null, 2));
 }
+/** W7-C2 T1 review (P0-1) — read the answers.json the REAL bridge wrote when
+ *  the AI-1 beat submitted the per-question interview form. The beat's POST
+ *  is the only thing that ever creates this file, so its presence (and its
+ *  question text + questionId) is the structural proof the submit actually
+ *  landed — the old beat swallowed both its fill and its click and then
+ *  force-wrote the next phase, so it passed while doing nothing at all.
+ *  Returns null until the bridge has written it. */
+export function readInstrAnswers(sid) {
+  try {
+    return JSON.parse(readFileSync(join(instrDir(sid), 'answers.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
 export function writeInstrDraft(sid) {
   mkdirSync(instrDir(sid), { recursive: true });
   writeFileSync(join(instrDir(sid), 'AGENTS.draft.md'),
@@ -1279,6 +1293,19 @@ export function cleanSeededBrain(bsid) {
 // (FORGE_ARCHITECT_NO_SPAWN=1) — clicking a real action button only flips
 // status.json.phase server-side; the harness hand-writes every artifact.
 export function demoDir(sid) { return join(projectRoot, '_demo', sid); }
+/** W7-C2 T1 review (A14) — read the verdicts.json / feedback.md the REAL
+ *  bridge wrote when the demo journey sent a `revise`. The revise SEND path
+ *  had no end-to-end coverage at all: the DOM contract gained
+ *  `verdict-revise` / `session-revise` / `session-revise-feedback` /
+ *  `verdict-revise-send`, but only the render of the FIRST was ever asserted.
+ *  Returns null until the bridge has written the file. */
+export function readDemoVerdicts(sid) {
+  try {
+    return JSON.parse(readFileSync(join(demoDir(sid), 'verdicts.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
 export function writeDemoStatus(sid, patch) {
   const dir = demoDir(sid);
   mkdirSync(dir, { recursive: true });

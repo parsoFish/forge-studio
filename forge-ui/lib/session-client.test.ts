@@ -203,6 +203,13 @@ const WELL_FORMED_PAYLOAD = {
   // W7-A2 — REQUIRED on every wire payload (never omitted): the bridge's
   // derived lifecycle; awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true },
+  // W7-C2 (sessions-kinds-36) — REQUIRED on every wire payload: the
+  // persisted {kind, id} pointer at whatever object a committed session
+  // produced; null IS the honest value for a session that produced nothing.
+  finalized: null as { kind: string; id: string; exists: boolean } | null,
+  // W7-C2 T1 review (P0-3) — REQUIRED, like `finalized`: null is the honest
+  // "the transcript derived cleanly" value.
+  transcriptError: null as string | null,
 };
 
 // ===========================================================================
@@ -473,6 +480,8 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     terminal: false,
     transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
+    finalized: null,
+    transcriptError: null,
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -492,6 +501,8 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     terminal: false,
     transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
+    finalized: null,
+    transcriptError: null,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
 });
@@ -1130,3 +1141,80 @@ test('R4-19-F2 AT-124 (real-capture END-TO-END seam — the ONE test proving ser
 // generic write route reads `status.kb_id` server-side, never off this wire
 // field). AT-125/AT-126, which used to pin its present/absent round-trip,
 // are deleted with it.
+
+// ===========================================================================
+// W7-C2 — `finalized` (sessions-kinds-36) + affordance meta.questions
+// (sessions-kinds-17/19, bead forge-lzv)
+// ===========================================================================
+
+test('C2-CL-1: parseSessionShellPayload — a MISSING "finalized" key throws (required; null is the honest empty value, absence is not)', () => {
+  const { finalized: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/finalized/);
+});
+
+test('C2-CL-2: parseSessionShellPayload — finalized {kind, id, exists} round-trips verbatim; a wrong-shaped value throws', () => {
+  // W7-C2 T1 review (P0-4) — `exists` (the server-derived liveness of the
+  // pointed-at object) is REQUIRED on the same terms as kind/id: a payload
+  // without it throws rather than letting the panel emit a link it has no
+  // evidence for.
+  const payload = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill', id: 'pr-diff-summary', exists: true } });
+  expect(payload.finalized).toEqual({ kind: 'skill', id: 'pr-diff-summary', exists: true });
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill', id: 'gone', exists: false } }).finalized)
+    .toEqual({ kind: 'skill', id: 'gone', exists: false });
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: null }).finalized).toBeNull();
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: 'pr-diff-summary' })).toThrow(/finalized/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill' } })).toThrow(/finalized/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill', id: 'pr-diff-summary' } })).toThrow(/finalized/);
+});
+
+test('C2-CL-3: parseSessionAffordance — meta.questions rides through when well-formed (question text + options), and a malformed questions shape degrades that ONE sub-field to absent (meta is advisory display data)', () => {
+  const raw = {
+    id: 'awaiting-answers-question-form',
+    kind: 'question-form',
+    phase: 'awaiting-answers',
+    meta: {
+      questions: [
+        { id: 'q1', question: 'Which toolchain?', header: 'Toolchain', options: [{ label: 'Node + npm', description: 'package.json driven' }] },
+        { id: 'q2', question: 'Quality gate command?', options: [] },
+      ],
+    },
+  };
+  const parsed = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, affordances: [raw] });
+  const meta = parsed.affordances[0].meta;
+  expect(meta?.questions).toHaveLength(2);
+  expect(meta?.questions?.[0].id).toBe('q1');
+  expect(meta?.questions?.[0].question).toBe('Which toolchain?');
+  expect(meta?.questions?.[0].options).toEqual([{ label: 'Node + npm', description: 'package.json driven' }]);
+  expect(meta?.questions?.[1].options).toEqual([]);
+
+  const malformed = { ...raw, meta: { questions: [{ notAQuestion: true }] } };
+  const parsedMalformed = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, affordances: [malformed] });
+  expect(parsedMalformed.affordances[0].meta?.questions).toBeUndefined();
+});
+
+// W7-C2 T1 review (A3, finding sessions-kinds-19) — the correlation id is
+// REQUIRED on every pending question. Without it the panel could only post
+// the question TEXT back, which mis-binds the moment a round repeats or
+// rewords a question; an entry missing it degrades the whole field (the
+// panel then falls back to the free-text box) rather than silently posting
+// answers that bind by text.
+test('C2-FIX-A3-2: parseSessionAffordance — a pending question with NO id degrades the whole questions field to absent', () => {
+  const raw = {
+    id: 'awaiting-answers-question-form',
+    kind: 'question-form',
+    phase: 'awaiting-answers',
+    meta: { questions: [{ id: 'q1', question: 'Has an id', options: [] }, { question: 'Has none', options: [] }] },
+  };
+  const parsed = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, affordances: [raw] });
+  expect(parsed.affordances[0].meta?.questions).toBeUndefined();
+});
+
+// W7-C2 T1 review (P0-3) — the scoped transcript error.
+test('C2-FIX-P03-2: parseSessionShellPayload — "transcriptError" is REQUIRED (string or null); a missing key throws, a string rides through verbatim', () => {
+  const { transcriptError: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/transcriptError/);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptError: null }).transcriptError).toBeNull();
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, turns: [], transcriptError: 'verdicts.json is not valid JSON — x' }).transcriptError)
+    .toBe('verdicts.json is not valid JSON — x');
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptError: 42 })).toThrow(/transcriptError/);
+});

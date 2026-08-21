@@ -1546,6 +1546,46 @@ test('P4: with status.prompt present, the actual prompt string handed to queryFn
 });
 
 // ===========================================================================
+// W7-C2 T1 review (P0-2 / finding A5) — feedback.md is CONSUME-ONCE.
+//
+// `readOperatorFeedback` runs on EVERY `step: agent` turn, not only the one a
+// revise triggered, and nothing used to clear the file: round 1's corrections
+// kept riding round 2's and round 3's prompts, silently steering turns the
+// operator never aimed. Proven on the real generic spine below.
+// ===========================================================================
+
+test('C2-FIX-A5-2: an agent turn folds feedback.md into its prompt and then CONSUMES it — the next turn is not re-steered by the previous round\'s words', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  const FEEDBACK = 'Make the button blue, marker-a5c0de';
+  writeFileSync(join(sessionDir, 'feedback.md'), FEEDBACK, 'utf8');
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const prompts: string[] = [];
+  const queryFn: QueryFn = (params) => {
+    prompts.push(params.prompt);
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  assert.ok(prompts[0].includes(FEEDBACK), `turn 1 must actually carry the operator's words: ${JSON.stringify(prompts[0])}`);
+  assert.equal(existsSync(join(sessionDir, 'feedback.md')), false, 'the note is consumed once it has been folded into a prompt');
+
+  // A SECOND turn from the same phase (the shape a redraft takes) must not
+  // re-inject the already-applied round.
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+  assert.equal(prompts.length, 2);
+  assert.ok(!prompts[1].includes(FEEDBACK), `turn 2 must NOT be re-steered by round 1's words: ${JSON.stringify(prompts[1])}`);
+});
+
+// ===========================================================================
 // R4-19-F2 — the REAL "kb-cleanup" descriptor (brain-maintenance), loaded
 // from the REAL, checked-in studio/session-kinds.yaml (REPO_ROOT — already
 // defined above by the R4-21 phase 2 block), never a hand-built fixture.
