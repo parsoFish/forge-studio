@@ -54,6 +54,14 @@
      var(--accent); the token was never defined, so those CTAs silently
      rendered transparent/recessive. Aliased to the real brand token. */
   --accent: var(--ember);
+  /* W7-C3 review (A-M7): the foreground for text painted ON --accent.
+     Defining --accent painted #fff on #ff9e4a = 2.05:1 — the a11y commit
+     made two primary CTAs WORSE than the dangling token had (invalid at
+     computed-value time, so the label had sat on --panel at ~15:1). White on
+     a mid-orange fill is the classic AA failure; the pairing is a token now
+     so a new CTA cannot re-derive it wrong. #1b1206 on #ff9e4a = 9.9:1.
+     Pinned by lib/a11y-tokens.test.ts, which computes it. */
+  --accent-fg: #1b1206;
   --steel: #5cc8ff;
   --violet: #b78cff;
   --green: #4ade80;

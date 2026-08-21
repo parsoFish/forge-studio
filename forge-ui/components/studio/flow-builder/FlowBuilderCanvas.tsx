@@ -253,7 +253,7 @@ function FlowNodeComponent({ id, data, selected }: NodeProps<FlowNodeData>): JSX
       <div style={{
         marginTop: 5,
         fontSize: 10,
-        color: 'var(--faint, #5b6779)',
+        color: 'var(--faint)',
         fontFamily: 'var(--font-mono, monospace)',
         whiteSpace: 'nowrap',
         overflow: 'hidden',

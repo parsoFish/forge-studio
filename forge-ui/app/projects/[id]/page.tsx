@@ -1318,8 +1318,14 @@ function RoadmapView({
               disabled={eligible.length === 0 || batchStarting}
               onClick={() => void startEligible()}
               style={{
-                fontSize: 11, fontWeight: 600, color: '#fff',
-                background: eligible.length === 0 ? 'var(--faint)' : '#238636',
+                // W7-C3 review (A-M8): --faint is a TEXT token; painting it as
+                // a background under #fff was 3.24:1 (and got WORSE, from
+                // 5.74:1, when the AA fix lightened --faint). The disabled
+                // state is the standard recessive pairing instead — --faint
+                // text on --panel-2, the 4.92:1 the token test already pins.
+                fontSize: 11, fontWeight: 600,
+                color: eligible.length === 0 ? 'var(--faint)' : '#fff',
+                background: eligible.length === 0 ? 'var(--panel-2)' : '#238636',
                 border: '1px solid var(--line)', borderRadius: 6, padding: '4px 12px',
             cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
                 opacity: batchStarting ? 0.6 : 1,

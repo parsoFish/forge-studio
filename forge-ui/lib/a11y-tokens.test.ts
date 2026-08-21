@@ -20,8 +20,20 @@
  * RUN: cd forge-ui && npx vitest run lib/a11y-tokens.test.ts
  */
 import { test, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+
+/** Every .tsx below `dir` — the rendered surface the enumerations sweep. */
+function tsxFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry === '.next') continue;
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) out.push(...tsxFiles(p));
+    else if (entry.endsWith('.tsx')) out.push(p);
+  }
+  return out;
+}
 
 const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8');
 
@@ -29,6 +41,24 @@ function token(name: string): string {
   const m = css.match(new RegExp(`${name}:\\s*([^;]+);`));
   if (!m) throw new Error(`token ${name} not defined in globals.css`);
   return m[1].trim();
+}
+
+/**
+ * The literal colour a token resolves to, following `var()` aliases.
+ * W7-C3 review (A-M7): `--accent` is an ALIAS (`var(--ember)`), and the
+ * shipped suite only asserted it was defined — so it computed no contrast at
+ * all for the one token whose definition introduced a 2.05:1 pairing in the
+ * same commit. Resolving the alias is what lets the pins below bite.
+ */
+function colorOf(name: string, depth = 4): string {
+  const raw = token(name);
+  const alias = raw.match(/var\((--[a-z0-9-]+)/i)?.[1];
+  if (alias) {
+    if (depth <= 0) throw new Error(`token ${name} aliases in a cycle`);
+    return colorOf(alias, depth - 1);
+  }
+  if (!/^#[0-9a-fA-F]{3,8}$/.test(raw)) throw new Error(`token ${name} is not a literal colour: ${raw}`);
+  return raw;
 }
 
 function hexLuminance(hex: string): number {
@@ -46,24 +76,64 @@ function contrast(a: string, b: string): number {
 }
 
 test('crosscut-24: --faint meets AA (>=4.5:1) on every surface it is painted on', () => {
-  const faint = token('--faint');
-  for (const surface of ['--bg', '--panel', '--panel-2']) {
-    const r = contrast(faint, token(surface));
-    expect(r, `--faint (${faint}) on ${surface} (${token(surface)}) = ${r.toFixed(3)}:1`).toBeGreaterThanOrEqual(4.5);
+  const faint = colorOf('--faint');
+  // --bg-2 added by the W7-C3 review: a real surface the shipped pin missed.
+  for (const surface of ['--bg', '--bg-2', '--panel', '--panel-2']) {
+    const r = contrast(faint, colorOf(surface));
+    expect(r, `--faint (${faint}) on ${surface} (${colorOf(surface)}) = ${r.toFixed(3)}:1`).toBeGreaterThanOrEqual(4.5);
   }
 });
 
 test('sessions-kinds-V02: --accent is a defined token (primary CTAs paint var(--accent))', () => {
-  // Either a literal color or an alias of another defined token.
-  const accent = token('--accent');
-  expect(accent.length).toBeGreaterThan(0);
-  if (accent.startsWith('var(')) {
-    const inner = accent.match(/var\((--[a-z0-9-]+)/i)?.[1];
-    expect(inner, `--accent aliases ${inner} which must itself be defined`).toBeTruthy();
-    expect(() => token(inner as string)).not.toThrow();
-  } else {
-    expect(accent).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+  expect(() => colorOf('--accent'), '--accent must resolve to a literal colour').not.toThrow();
+});
+
+test('A-M7: --accent MEETS AA both ways it is used — as link text, and as a CTA fill', () => {
+  const accent = colorOf('--accent');
+  // 1. As text: `color: var(--accent)` on the dark surfaces.
+  for (const surface of ['--bg', '--bg-2', '--panel', '--panel-2']) {
+    const r = contrast(accent, colorOf(surface));
+    expect(r, `--accent (${accent}) as text on ${surface} = ${r.toFixed(3)}:1`).toBeGreaterThanOrEqual(4.5);
   }
+  // 2. As a FILL: the label painted on it. Defining --accent put #fff on
+  // #ff9e4a = 2.05:1 — below even the 3:1 large-text floor — so the a11y
+  // commit made two primary CTAs worse than the dangling token had. The
+  // pairing is a token now, and this is the assertion that would have caught
+  // it: the shipped suite only checked --accent was DEFINED.
+  const onAccent = contrast(colorOf('--accent-fg'), accent);
+  expect(onAccent, `--accent-fg (${colorOf('--accent-fg')}) on --accent (${accent}) = ${onAccent.toFixed(3)}:1`)
+    .toBeGreaterThanOrEqual(4.5);
+});
+
+test('A-M7/A-M8: no component paints #fff on a --accent or --faint fill', () => {
+  // The gate for the class, not the two instances: --accent and --faint are
+  // mid-tone tokens, so a white label on either fails AA. Enumerated over the
+  // rendered surface so a NEW CTA cannot re-derive the pairing by hand.
+  const offenders: string[] = [];
+  for (const file of tsxFiles(resolve(__dirname, '../app')).concat(tsxFiles(resolve(__dirname, '../components')))) {
+    const src = readFileSync(file, 'utf8');
+    for (const m of src.matchAll(/background:\s*(?:[^;\n]*?)var\(--(accent|faint)\)[^;\n]*/g)) {
+      // The same style object / inline style — look at the surrounding braces.
+      const from = src.lastIndexOf('{', m.index!);
+      const to = src.indexOf('}', m.index! + m[0].length);
+      const block = src.slice(from, to === -1 ? src.length : to);
+      if (/color:\s*'#fff'|color:\s*'#ffffff'/i.test(block)) {
+        offenders.push(`${file.split('/forge-ui/')[1]}:${src.slice(0, m.index!).split('\n').length} (--${m[1]} fill)`);
+      }
+    }
+  }
+  expect(offenders, `white label on a mid-tone token fill: ${offenders.join(', ')}`).toEqual([]);
+});
+
+test('crosscut-24: the pre-AA --faint literal survives nowhere as a fallback', () => {
+  // `var(--faint, #5b6779)` is inert while the token is defined, but it is
+  // the 2.78-3.37:1 value the AA fix removed — any context where the custom
+  // property fails to resolve reintroduces exactly the violation.
+  const offenders: string[] = [];
+  for (const file of tsxFiles(resolve(__dirname, '../app')).concat(tsxFiles(resolve(__dirname, '../components')))) {
+    if (/#5b6779/i.test(readFileSync(file, 'utf8'))) offenders.push(file.split('/forge-ui/')[1]);
+  }
+  expect(offenders, `the pre-AA --faint literal is still hardcoded in: ${offenders.join(', ')}`).toEqual([]);
 });
 
 test('crosscut-17: a GLOBAL :focus-visible rule exists (not scoped to .btn/.chip/.tab/a)', () => {

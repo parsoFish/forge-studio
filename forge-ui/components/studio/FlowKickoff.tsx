@@ -72,7 +72,7 @@ const launchButtonStyle: React.CSSProperties = {
   fontSize: 12,
   padding: '3px 12px',
   background: 'var(--accent)',
-  color: '#fff',
+  color: 'var(--accent-fg)',
   border: 'none',
   borderRadius: 4,
   cursor: 'pointer',

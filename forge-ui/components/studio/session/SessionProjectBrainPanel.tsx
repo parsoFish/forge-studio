@@ -143,7 +143,7 @@ export function SessionProjectBrainPanel({
 }
 
 const backBtn: React.CSSProperties = { fontSize: 12, background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', padding: 0 };
-const primaryBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer' };
+const primaryBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none', borderRadius: 5, cursor: 'pointer' };
 const ghostBtn: React.CSSProperties = { fontSize: 13, padding: '6px 16px', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer' };
 const linkBtn: React.CSSProperties = { fontSize: 13, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline', padding: 0 };
 const textarea: React.CSSProperties = { width: '100%', maxWidth: 560, margin: '10px 0', fontSize: 13, fontFamily: 'var(--font-mono)', background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line-2)', borderRadius: 5, padding: 8, resize: 'vertical', display: 'block' };
