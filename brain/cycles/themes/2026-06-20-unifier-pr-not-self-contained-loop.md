@@ -1,6 +1,6 @@
 ---
 title: unifier.gate.pr-not-self-contained repeat-fire — 23 fires, 2 delivery-gate failures, 41% of cycle cost
-description: The unifier's pr-not-self-contained gate fired 23 times across two failed unifier runs (demo.json / pr-description absent or incomplete); two delivery gate failures blocked PR opening; third unifier run succeeded in 0 iters. Pattern: missing demo.json or pr-description causes a spin loop capped only by the UWI iteration budget, not by early termination.
+description: "The unifier's pr-not-self-contained gate fired 23 times across two failed unifier runs (demo.json / pr-description absent or incomplete); two delivery gate failures blocked PR opening; third unifier run succeeded in 0 iters. Pattern: missing demo.json or pr-description causes a spin loop capped only by the UWI iteration budget, not by early termination."
 category: antipattern
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
