@@ -282,15 +282,26 @@ function MarkdownDraftBody({
         Approving writes <code>{draftContext.targetPath}</code>
         {draftContext.current === null ? ' (new file)' : ' (replaces the current file)'}
       </div>
+      {/* W7-C2 T1 review (A10) — the selected view reads as SELECTED. The
+          pair used to render the ACTIVE button `disabled` AND at
+          `opacity: 0.6` while the inactive one sat enabled at full
+          opacity — exactly inverted, so the view you were looking at
+          looked like the unavailable one. The active button stays
+          `disabled` (clicking the view you are already in is a no-op) but
+          now carries full opacity, `aria-pressed` and
+          `data-view-selected` — one segmented control, one honest
+          selected state. */}
       {canDiff && (
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div role="group" style={{ display: 'flex', gap: 6 }}>
           <button
             type="button"
             className="btn"
             data-action="draft-view-draft"
+            data-view-selected={showDiff ? 'false' : 'true'}
+            aria-pressed={!showDiff}
             disabled={!showDiff}
             onClick={() => setShowDiff(false)}
-            style={{ fontSize: 11.5, opacity: showDiff ? 1 : 0.6 }}
+            style={{ fontSize: 11.5, opacity: showDiff ? 0.6 : 1 }}
           >
             Draft
           </button>
@@ -298,9 +309,11 @@ function MarkdownDraftBody({
             type="button"
             className="btn"
             data-action="draft-view-diff"
+            data-view-selected={showDiff ? 'true' : 'false'}
+            aria-pressed={showDiff}
             disabled={showDiff}
             onClick={() => setShowDiff(true)}
-            style={{ fontSize: 11.5, opacity: showDiff ? 0.6 : 1 }}
+            style={{ fontSize: 11.5, opacity: showDiff ? 1 : 0.6 }}
           >
             Diff vs current
           </button>

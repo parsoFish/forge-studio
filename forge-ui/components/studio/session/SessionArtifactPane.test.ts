@@ -55,3 +55,23 @@ test('C2-PANE-3: without draftContext the markdown-draft body renders exactly as
   expect(html).not.toContain('data-draft-target');
   expect(html).not.toContain('data-action="draft-view-diff"');
 });
+
+// W7-C2 T1 review (A10) — the toggle used to render the ACTIVE view's button
+// `disabled` AND at opacity 0.6 while the INACTIVE one sat enabled at full
+// opacity: exactly inverted, so the view you were looking at read as the
+// unavailable one.
+test('C2-FIX-A10-1: the selected view reads as SELECTED — the active button is marked selected at full opacity, the other one is the dimmed, clickable alternative', () => {
+  const html = render({ draftContext: { targetPath: '/p/AGENTS.md', current: '# old\n' } });
+  // Initial render: Draft is the active view.
+  const draftBtn = html.slice(html.indexOf('data-action="draft-view-draft"'));
+  const draftBtnEnd = draftBtn.slice(0, draftBtn.indexOf('</button>'));
+  const diffBtn = html.slice(html.indexOf('data-action="draft-view-diff"'));
+  const diffBtnEnd = diffBtn.slice(0, diffBtn.indexOf('</button>'));
+
+  expect(draftBtnEnd).toContain('data-view-selected="true"');
+  expect(draftBtnEnd).toContain('opacity:1');
+  expect(draftBtnEnd).not.toContain('opacity:0.6');
+
+  expect(diffBtnEnd).toContain('data-view-selected="false"');
+  expect(diffBtnEnd).toContain('opacity:0.6');
+});

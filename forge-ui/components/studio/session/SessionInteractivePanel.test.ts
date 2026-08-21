@@ -539,16 +539,67 @@ test('C2-UI-7: a committed session with finalized {kind, id} renders a PERMANENT
     phase: 'committed',
     affordances: [],
     terminal: true,
-    finalized: { kind: 'skill', id: 'pr-diff-summary' },
+    finalized: { kind: 'skill', id: 'pr-diff-summary', exists: true },
   } as never);
   expect(html).toContain('data-action="open-finalized"');
   expect(html).toContain('/skills/pr-diff-summary');
 });
 
 test('C2-UI-8: finalized kind "hook" links to /hooks/<id>; "community-registry" links to /community', () => {
-  const hook = render({ kind: 'authoring', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'hook', id: 'auto-lint' } } as never);
+  const hook = render({ kind: 'authoring', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'hook', id: 'auto-lint', exists: true } } as never);
   expect(hook).toContain('/hooks/auto-lint');
-  const community = render({ kind: 'community-refresh', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'community-registry', id: 'registry' } } as never);
+  const community = render({ kind: 'community-refresh', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'community-registry', id: 'registry', exists: true } } as never);
   expect(community).toContain('data-action="open-finalized"');
   expect(community).toContain('/community');
+});
+
+// ===========================================================================
+// W7-C2 T1 review — the fix round's own DOM pins.
+// ===========================================================================
+
+test('C2-FIX-P04-2: a finalized pointer at an object that is GONE renders the honest record with NO link — never a dead /skills/<id>', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'committed',
+    affordances: [],
+    terminal: true,
+    finalized: { kind: 'skill', id: 'deleted-skill', exists: false },
+  } as never);
+  expect(html).toContain('data-section="session-finalized"');
+  expect(html).toContain('data-finalized-exists="false"');
+  expect(html).not.toContain('data-action="open-finalized"');
+  expect(html).not.toContain('/skills/deleted-skill');
+});
+
+test('C2-FIX-P04-3: the three kinds whose producers used to write NO pointer each render their own permanent link', () => {
+  const agents = render({ kind: 'instructions', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'agents-md', id: 'demo-project', exists: true } } as never);
+  expect(agents).toContain('data-action="open-finalized"');
+  expect(agents).toContain('/projects/demo-project');
+
+  const demo = render({ kind: 'demo', phase: 'locked', affordances: [], terminal: true, finalized: { kind: 'demo', id: 'demo-project', exists: true } } as never);
+  expect(demo).toContain('/projects/demo-project/showcase');
+
+  const kb = render({ kind: 'kb-cleanup', phase: 'applied', affordances: [], terminal: true, finalized: { kind: 'kb', id: 'forge-dev', exists: true } } as never);
+  expect(kb).toContain('data-action="open-finalized"');
+  expect(kb).toContain('/knowledge');
+});
+
+test('C2-FIX-A3-3: the per-question interview form carries each question\'s correlation id through to its fieldset', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-answers',
+    project: 'demo-project',
+    affordances: [{
+      id: 'awaiting-answers-question-form',
+      kind: 'question-form',
+      phase: 'awaiting-answers',
+      meta: { questions: [{ id: 'q1', question: 'Same text?', options: [] }, { id: 'q2', question: 'Same text?', options: [] }] },
+    }],
+  });
+  // Two identically-worded questions still render as two distinct controls —
+  // the id, not the text, is what binds each answer server-side.
+  expect(html).toContain('data-question-index="0"');
+  expect(html).toContain('data-question-index="1"');
+  expect(html).toContain('data-question-freetext="0"');
+  expect(html).toContain('data-question-freetext="1"');
 });

@@ -360,7 +360,7 @@ export default function SessionShellPage({
             />
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
-            <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage}>
+            <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage} error={viewState.transcriptError}>
               {summary && summary.kind === 'architect' ? (
                 <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
               ) : summary && summary.kind === 'project-brain' ? (

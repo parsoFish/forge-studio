@@ -19,8 +19,14 @@ export type DiffRow = {
   text: string;
 };
 
-/** n*m ceiling for the LCS table — 4M cells ≈ a few ms and ~16-32MB
- *  transiently; AGENTS.md-scale files (hundreds of lines) sit far below. */
+/** Cell ceiling for the LCS table — 4M cells ≈ a few ms and ~16-32MB
+ *  transiently; AGENTS.md-scale files (hundreds of lines) sit far below.
+ *
+ *  W7-C2 T1 review (A9) — the cap is measured against the ALLOCATION,
+ *  `(n+1) * (m+1)`, not against `n * m`. The old `n * m` form had a hole at
+ *  either extreme: with `n === 0` the product is 0 for ANY m, so
+ *  `lineDiff('', 'x\n'.repeat(50_000_000))` allocated an uncapped
+ *  `1 * (m+1)` Uint32Array while the guard read "0 cells". */
 const MAX_LCS_CELLS = 4_000_000;
 
 function toLines(text: string): string[] {
@@ -39,7 +45,7 @@ export function lineDiff(oldText: string, newText: string): DiffRow[] | null {
   const newLines = toLines(newText);
   const n = oldLines.length;
   const m = newLines.length;
-  if (n * m > MAX_LCS_CELLS) return null;
+  if ((n + 1) * (m + 1) > MAX_LCS_CELLS) return null;
 
   // LCS length table — (n+1) x (m+1), rolled as a flat typed array.
   const width = m + 1;

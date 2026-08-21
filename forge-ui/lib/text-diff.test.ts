@@ -8,7 +8,7 @@
  * RUN: npx vitest run lib/text-diff.test.ts   (from forge-ui/)
  */
 
-import { test, expect } from 'vitest';
+import { test, expect, describe, it } from 'vitest';
 
 import { lineDiff } from './text-diff';
 
@@ -68,4 +68,25 @@ test('C2-DIFF-8: oversized inputs fail SOFT — null (caller renders an honest "
   const big = Array.from({ length: 3000 }, (_, i) => `line ${i}`).join('\n');
   const alsoBig = Array.from({ length: 3000 }, (_, i) => `LINE ${i}`).join('\n');
   expect(lineDiff(big, alsoBig)).toBeNull();
+});
+
+// W7-C2 T1 review (A9) — the size cap had a hole at either extreme: it was
+// measured against `n * m` while the allocation is `(n+1) * (m+1)`, so with
+// one side EMPTY the product is 0 for any m and the cap never fired.
+describe('W7-C2 T1 review — the size cap measures the ALLOCATION, not n*m', () => {
+  it('C2-FIX-A9-1: an empty old side against a huge new side is capped (the n === 0 hole)', () => {
+    const huge = 'x\n'.repeat(5_000_000);
+    expect(lineDiff('', huge)).toBeNull();
+  });
+
+  it('C2-FIX-A9-2: a huge old side against an empty new side is capped too (the mirror hole)', () => {
+    const huge = 'x\n'.repeat(5_000_000);
+    expect(lineDiff(huge, '')).toBeNull();
+  });
+
+  it('C2-FIX-A9-3: ordinary AGENTS.md-scale inputs still diff (the cap did not become over-eager)', () => {
+    const rows = lineDiff('a\nb\nc', 'a\nB\nc');
+    expect(rows).not.toBeNull();
+    expect(rows!.map((r) => r.type)).toEqual(['same', 'del', 'add', 'same']);
+  });
 });

@@ -237,7 +237,7 @@ export function SessionInteractivePanel({
    *  state — the durable sibling of `onPackageFinalized`'s one-shot
    *  redirect. Optional so a DOM-pin test that predates it still renders;
    *  the real page always passes the payload's value (null included). */
-  finalized?: { kind: string; id: string } | null;
+  finalized?: { kind: string; id: string; exists: boolean } | null;
 }): JSX.Element {
   const [answerText, setAnswerText] = useState('');
   const [pickedGeneration, setPickedGeneration] = useState<string>('');
@@ -361,7 +361,7 @@ export function SessionInteractivePanel({
                   project={project ?? ''}
                   sessionId={sessionId}
                   round={0}
-                  questions={pendingQuestions.map((q) => ({ question: q.question, header: q.header ?? '', options: q.options }))}
+                  questions={pendingQuestions.map((q) => ({ id: q.id, question: q.question, header: q.header ?? '', options: q.options }))}
                   sectionName="session-interview"
                   heading="Interview"
                   onSubmitAnswers={async ({ answers }) => {
@@ -683,23 +683,45 @@ const CLIENT_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
  *  not `useRouter()` — same renderToStaticMarkup constraint the header
  *  documents for `onPackageFinalized`. An unrecognised kind renders the
  *  honest text without a link, never a guessed href. */
-function FinalizedLink({ finalized }: { finalized: { kind: string; id: string } | null }): JSX.Element | null {
+function FinalizedLink({ finalized }: { finalized: { kind: string; id: string; exists: boolean } | null }): JSX.Element | null {
   if (finalized === null) return null;
   const href =
     finalized.kind === 'skill' ? `/skills/${encodeURIComponent(finalized.id)}`
     : finalized.kind === 'hook' ? `/hooks/${encodeURIComponent(finalized.id)}`
     : finalized.kind === 'community-registry' ? '/community'
+    // W7-C2 T1 review (P0-4) — the three kinds whose producers previously
+    // wrote no pointer at all (instructions' AGENTS.md, demo's lock,
+    // kb-cleanup's KB). Each names the object's own home page.
+    : finalized.kind === 'agents-md' ? `/projects/${encodeURIComponent(finalized.id)}`
+    : finalized.kind === 'demo' ? `/projects/${encodeURIComponent(finalized.id)}/showcase`
+    : finalized.kind === 'kb' ? '/knowledge'
     : null;
-  const label = finalized.kind === 'community-registry' ? 'Committed to the community registry' : `Committed as ${finalized.kind} "${finalized.id}"`;
-  if (href === null) {
+  const label =
+    finalized.kind === 'community-registry' ? 'Committed to the community registry'
+    : finalized.kind === 'agents-md' ? `AGENTS.md committed to "${finalized.id}"`
+    : finalized.kind === 'demo' ? `Demo locked for "${finalized.id}"`
+    : finalized.kind === 'kb' ? `Cleanup applied to knowledge base "${finalized.id}"`
+    : `Committed as ${finalized.kind} "${finalized.id}"`;
+  // W7-C2 T1 review (P0-4) — `exists` is DERIVED server-side on every read
+  // (cli/bridge-studio-sessions.ts's `finalizedObjectExists`). A pointer at
+  // an object that has since been deleted or renamed renders the honest
+  // record WITHOUT a link — this used to emit `/skills/<id>` with no
+  // existence check at all, so a stale pointer left the operator a dead link
+  // forever. An unrecognised kind takes the same no-link branch (never a
+  // guessed href).
+  if (href === null || !finalized.exists) {
     return (
-      <div data-section="session-finalized" style={{ fontSize: 12.5, color: 'var(--dim)', padding: '4px 0 10px' }}>
-        {label}.
+      <div
+        data-section="session-finalized"
+        data-finalized-exists={finalized.exists ? 'true' : 'false'}
+        style={{ fontSize: 12.5, color: 'var(--dim)', padding: '4px 0 10px' }}
+      >
+        {finalized.exists ? `${label}.` : `${label} — no longer present.`}
       </div>
     );
   }
   return (
-    <div data-section="session-finalized" style={{ fontSize: 12.5, padding: '4px 0 10px' }}>
+    <div data-section="session-finalized" data-finalized-exists="true" style={{ fontSize: 12.5, padding: '4px 0 10px' }}>
       <a data-action="open-finalized" href={href} style={{ color: 'var(--ember, #ff9e4a)', textDecoration: 'none' }}>
         {label} →
       </a>

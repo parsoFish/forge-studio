@@ -17,7 +17,7 @@ import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-clien
 export type QuestionFormSubmitFn = (input: {
   project: string;
   sessionId: string;
-  answers: { question: string; answer: string }[];
+  answers: { questionId?: string; question: string; answer: string }[];
 }) => Promise<{ ok: boolean; error?: string }>;
 
 /**
@@ -76,7 +76,15 @@ export function ArchitectQuestionForm({
     setError(null);
     setSubmitting(true);
     try {
-      const answers = questions.map((q, i) => ({ question: q.question, answer: resolvedAnswer(i) }));
+      // W7-C2 T1 review (A3) — each answer carries its question's own id when
+      // the question declares one, so the server binds answer -> question by
+      // ID and refuses a mismatch, instead of correlating by text (which
+      // mis-binds the moment a round repeats or rewords a question).
+      const answers = questions.map((q, i) => ({
+        ...(q.id !== undefined ? { questionId: q.id } : {}),
+        question: q.question,
+        answer: resolvedAnswer(i),
+      }));
       const res = await onSubmitAnswers({ project, sessionId, answers });
       if (!res.ok) setError(res.error ?? 'failed to submit answers');
     } finally {

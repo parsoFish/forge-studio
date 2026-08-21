@@ -633,6 +633,15 @@ export type SessionAffordanceKind = (typeof SESSION_AFFORDANCE_KINDS)[number];
  *  back with each answer — never a placeholder), an optional short header,
  *  and the recommended options. */
 export type SessionPendingQuestion = {
+  /** W7-C2 T1 review (A3, finding sessions-kinds-19) — the correlation
+   *  handle the panel posts back with this question's answer. Derived
+   *  server-side from the question's POSITION in the round's questions.json
+   *  (`pendingQuestionId`, cli/bridge-studio-sessions.ts): answers no longer
+   *  correlate by TEXT alone, so a duplicated or edited question can no
+   *  longer mis-bind an answer in the durable record. REQUIRED — an entry
+   *  without it degrades the whole `questions` field (see
+   *  `parsePendingQuestionsMeta`). */
+  id: string;
   question: string;
   header?: string;
   options: { label: string; description: string }[];
@@ -720,6 +729,7 @@ function parsePendingQuestionsMeta(raw: unknown): SessionPendingQuestion[] | und
   const questions: SessionPendingQuestion[] = [];
   for (const entry of raw) {
     if (!isPlainObject(entry) || typeof entry['question'] !== 'string') return undefined;
+    if (typeof entry['id'] !== 'string' || entry['id'].length === 0) return undefined;
     const optionsRaw = entry['options'];
     if (optionsRaw !== undefined && !Array.isArray(optionsRaw)) return undefined;
     const options: { label: string; description: string }[] = [];
@@ -728,6 +738,7 @@ function parsePendingQuestionsMeta(raw: unknown): SessionPendingQuestion[] | und
       options.push({ label: o['label'], description: o['description'] });
     }
     questions.push({
+      id: entry['id'],
       question: entry['question'],
       ...(typeof entry['header'] === 'string' ? { header: entry['header'] } : {}),
       options,
@@ -820,8 +831,21 @@ export type SessionShellPayload = {
    * page keeps a PERMANENT link — never a one-shot redirect lost on reload.
    * REQUIRED like `modelTier`: `null` IS the honest value for a session
    * that produced nothing, never an omitted key.
+   *
+   * W7-C2 T1 review (P0-4) — `exists` is DERIVED server-side on every read
+   * (never stored): whether the pointed-at object is still on disk. A
+   * deleted or renamed object renders the honest label with no link instead
+   * of a dead one.
    */
-  finalized: { kind: string; id: string } | null;
+  finalized: { kind: string; id: string; exists: boolean } | null;
+  /**
+   * W7-C2 T1 review (P0-3) — the transcript derivation's own fail-closed
+   * error, SCOPED to the transcript pane. `null` when the derivation
+   * succeeded; a verbatim message (naming the offending file/value) when a
+   * source was malformed, in which case `turns` is EMPTY — never partial,
+   * never fabricated. REQUIRED like `finalized`: a missing key throws.
+   */
+  transcriptError: string | null;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -907,16 +931,34 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // W7-C2 — REQUIRED like "modelTier": null is the honest empty value, a
   // missing key or any shape other than {kind: string, id: string} throws.
   if (!('finalized' in raw)) {
-    throw new Error('missing "finalized" — expected {kind, id} or null, never an omitted key');
+    throw new Error('missing "finalized" — expected {kind, id, exists} or null, never an omitted key');
   }
   const finalizedRaw = raw['finalized'];
-  let finalized: { kind: string; id: string } | null = null;
+  let finalized: { kind: string; id: string; exists: boolean } | null = null;
   if (finalizedRaw !== null) {
-    if (!isPlainObject(finalizedRaw) || typeof finalizedRaw['kind'] !== 'string' || typeof finalizedRaw['id'] !== 'string') {
-      throw new Error(`missing or invalid "finalized": expected {kind: string, id: string} or null, got ${JSON.stringify(finalizedRaw)}`);
+    if (
+      !isPlainObject(finalizedRaw)
+      || typeof finalizedRaw['kind'] !== 'string'
+      || typeof finalizedRaw['id'] !== 'string'
+      || typeof finalizedRaw['exists'] !== 'boolean'
+    ) {
+      throw new Error(`missing or invalid "finalized": expected {kind: string, id: string, exists: boolean} or null, got ${JSON.stringify(finalizedRaw)}`);
     }
-    finalized = { kind: finalizedRaw['kind'], id: finalizedRaw['id'] };
+    finalized = { kind: finalizedRaw['kind'], id: finalizedRaw['id'], exists: finalizedRaw['exists'] };
   }
+
+  // W7-C2 T1 review (P0-3) — REQUIRED like "finalized": null is the honest
+  // "the transcript derived cleanly" value; a string is the verbatim
+  // fail-closed reason. Never absence-tolerant — an omitted key would let a
+  // silently-empty transcript read as a healthy one.
+  if (!('transcriptError' in raw)) {
+    throw new Error('missing "transcriptError" — expected a string or null, never an omitted key');
+  }
+  const transcriptErrorRaw = raw['transcriptError'];
+  if (transcriptErrorRaw !== null && typeof transcriptErrorRaw !== 'string') {
+    throw new Error(`missing or invalid "transcriptError": expected a string or null, got ${JSON.stringify(transcriptErrorRaw)}`);
+  }
+  const transcriptError = transcriptErrorRaw;
 
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
@@ -926,6 +968,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     transcript,
     lifecycle,
     finalized,
+    transcriptError,
   };
 }
 
