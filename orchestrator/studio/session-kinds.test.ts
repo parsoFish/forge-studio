@@ -159,6 +159,7 @@ import {
   loadSessionKinds,
   validateSessionKinds,
   FINALIZER_IDS,
+  VERDICT_VALUES,
   deriveSessionAffordances,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
@@ -2314,5 +2315,63 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
 
     const architect = byId(descs, 'architect');
     assert.deepEqual(deriveSessionAffordances(architect, architect.defaultStage), [], 'architect has neither table — must derive [] regardless of phase');
+  });
+});
+
+// ===========================================================================
+// W7-C2 (sessions-kinds-09/23, library-24, beads forge-4ei/forge-lzv) — the
+// 'revise' verdict joins the frozen vocabulary, and every DRAFT kind's
+// operator gate declares the full three-way branch its runner actually
+// supports (instructions/demo always had a bespoke revise path; authoring/
+// kb-cleanup/community-refresh gain the generic one). authoring + kb-cleanup
+// additionally gain a `rejected` terminal row — reusing the token
+// instructions/community-refresh already ship, never a new vocab value.
+// ===========================================================================
+
+describe('W7-C2 — revise verdict vocabulary + real-yaml three-way gates', () => {
+  it('C2-K1: VERDICT_VALUES contains exactly approve|reject|revise', () => {
+    const ids = VERDICT_VALUES.map((v) => v.id).sort();
+    assert.deepEqual(ids, ['approve', 'reject', 'revise']);
+  });
+
+  it('C2-K2: the REAL yaml declares [approve, revise, reject] on every draft kind\'s operator gate', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    const gate = (kindId: string, phase: string): readonly string[] | undefined => {
+      const d = descs.find((x) => x.id === kindId);
+      assert.ok(d, `descriptor "${kindId}" must exist`);
+      const rows = d!.turnSpec?.phases ?? d!.panel?.phases;
+      assert.ok(rows, `descriptor "${kindId}" must carry a phase table`);
+      return rows!.find((p) => p.phase === phase)?.verdicts;
+    };
+    assert.deepEqual(gate('instructions', 'awaiting-verdict'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('demo', 'awaiting-review'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('authoring', 'awaiting-review'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('kb-cleanup', 'awaiting-approval'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('community-refresh', 'awaiting-review'), ['approve', 'revise', 'reject']);
+  });
+
+  it('C2-K3: authoring + kb-cleanup gain a `rejected` terminal row (reject now has somewhere honest to land)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    for (const kindId of ['authoring', 'kb-cleanup']) {
+      const d = descs.find((x) => x.id === kindId);
+      const row = d!.turnSpec!.phases.find((p) => p.phase === 'rejected');
+      assert.ok(row, `${kindId} must declare a "rejected" phase row`);
+      assert.equal(row!.step, 'terminal', `${kindId}'s rejected row must be terminal`);
+    }
+  });
+
+  it('C2-K4: deriveSessionAffordances threads the three-way meta.verdicts onto the wire (authoring awaiting-review)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    const authoring = descs.find((x) => x.id === 'authoring')!;
+    const affordances = deriveSessionAffordances(authoring, 'awaiting-review');
+    const verdict = affordances.find((a) => a.kind === 'verdict');
+    assert.ok(verdict, 'awaiting-review must derive a verdict affordance');
+    assert.deepEqual(verdict!.meta?.verdicts, ['approve', 'revise', 'reject']);
+    assert.deepEqual(verdict!.meta?.requires, ['id'], 'requires stays declared (approve-scoped enforcement is the write route\'s job)');
+  });
+
+  it('C2-K5: validateSessionKinds(REPO_ROOT) stays at zero error-level findings with the revise rows in place', () => {
+    const findings = validateSessionKinds(REPO_ROOT).filter((f) => f.level === 'error');
+    assert.deepEqual(findings, [], `expected zero errors, got: ${JSON.stringify(findings, null, 2)}`);
   });
 });

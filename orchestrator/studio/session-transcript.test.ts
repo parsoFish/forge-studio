@@ -2127,3 +2127,72 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
     );
   });
 });
+
+// ===========================================================================
+// W7-C2 (sessions-kinds-29) — verdicts.json: the durable rationale record.
+// Every operator verdict (approve/reject/revise) appends {at, verdict,
+// notes?} to the session dir's verdicts.json (written by the generic
+// affordance write route, cli/bridge-studio-affordances.ts, only after a
+// 2xx); deriveSessionTranscript renders each record as an OPERATOR turn so a
+// reject is never invisible in the record. Fail-closed like answers.json: a
+// malformed verdicts.json errors, never fabricates or drops turns silently.
+// The revise verdict's WORDS stay in feedback.md (its own pre-existing turn)
+// — the revise record renders as the bare decision, no duplicated text.
+// ===========================================================================
+
+describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
+  it('C2-V1: a reject record with notes renders one operator turn carrying the verdict AND the rationale', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-1-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'reject', notes: 'Too broad — split the roadmap first.' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'rejected' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(verdictTurns.length, 1);
+    assert.equal(verdictTurns[0].role, 'operator');
+    assert.match(verdictTurns[0].text, /reject/i);
+    assert.match(verdictTurns[0].text, /Too broad — split the roadmap first\./);
+  });
+
+  it('C2-V2: a revise record renders the decision turn WITHOUT duplicating feedback.md (whose own turn still renders)', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-2-');
+    writeFileSync(join(sessionDir, 'feedback.md'), 'Tighten the intro section.');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'revise' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'drafting' }));
+    const feedbackTurns = turns.filter((t) => t.source === 'feedback.md');
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(feedbackTurns.length, 1, 'feedback.md keeps its own turn');
+    assert.equal(verdictTurns.length, 1);
+    assert.match(verdictTurns[0].text, /revise/i);
+    assert.ok(!verdictTurns[0].text.includes('Tighten the intro section.'), 'the revise record must not duplicate the feedback text');
+  });
+
+  it('C2-V3: approve without notes renders the bare decision', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-3-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'approve' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(verdictTurns.length, 1);
+    assert.match(verdictTurns[0].text, /approve/i);
+  });
+
+  it('C2-V4: a malformed verdicts.json (non-array) fails CLOSED — {ok:false} naming the file, never fabricated turns', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-4-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify({ verdict: 'approve' }));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /verdicts\.json/);
+  });
+
+  it('C2-V5: a record whose "verdict" is not a string fails CLOSED', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-5-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([{ at: 'x', verdict: 42 }]));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /verdicts\.json/);
+  });
+});

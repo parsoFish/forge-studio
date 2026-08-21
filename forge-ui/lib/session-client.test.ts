@@ -203,6 +203,10 @@ const WELL_FORMED_PAYLOAD = {
   // W7-A2 — REQUIRED on every wire payload (never omitted): the bridge's
   // derived lifecycle; awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true },
+  // W7-C2 (sessions-kinds-36) — REQUIRED on every wire payload: the
+  // persisted {kind, id} pointer at whatever object a committed session
+  // produced; null IS the honest value for a session that produced nothing.
+  finalized: null as { kind: string; id: string } | null,
 };
 
 // ===========================================================================
@@ -1130,3 +1134,45 @@ test('R4-19-F2 AT-124 (real-capture END-TO-END seam — the ONE test proving ser
 // generic write route reads `status.kb_id` server-side, never off this wire
 // field). AT-125/AT-126, which used to pin its present/absent round-trip,
 // are deleted with it.
+
+// ===========================================================================
+// W7-C2 — `finalized` (sessions-kinds-36) + affordance meta.questions
+// (sessions-kinds-17/19, bead forge-lzv)
+// ===========================================================================
+
+test('C2-CL-1: parseSessionShellPayload — a MISSING "finalized" key throws (required; null is the honest empty value, absence is not)', () => {
+  const { finalized: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/finalized/);
+});
+
+test('C2-CL-2: parseSessionShellPayload — finalized {kind, id} round-trips verbatim; a wrong-shaped value throws', () => {
+  const payload = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill', id: 'pr-diff-summary' } });
+  expect(payload.finalized).toEqual({ kind: 'skill', id: 'pr-diff-summary' });
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: null }).finalized).toBeNull();
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: 'pr-diff-summary' })).toThrow(/finalized/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, finalized: { kind: 'skill' } })).toThrow(/finalized/);
+});
+
+test('C2-CL-3: parseSessionAffordance — meta.questions rides through when well-formed (question text + options), and a malformed questions shape degrades that ONE sub-field to absent (meta is advisory display data)', () => {
+  const raw = {
+    id: 'awaiting-answers-question-form',
+    kind: 'question-form',
+    phase: 'awaiting-answers',
+    meta: {
+      questions: [
+        { question: 'Which toolchain?', header: 'Toolchain', options: [{ label: 'Node + npm', description: 'package.json driven' }] },
+        { question: 'Quality gate command?', options: [] },
+      ],
+    },
+  };
+  const parsed = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, affordances: [raw] });
+  const meta = parsed.affordances[0].meta;
+  expect(meta?.questions).toHaveLength(2);
+  expect(meta?.questions?.[0].question).toBe('Which toolchain?');
+  expect(meta?.questions?.[0].options).toEqual([{ label: 'Node + npm', description: 'package.json driven' }]);
+  expect(meta?.questions?.[1].options).toEqual([]);
+
+  const malformed = { ...raw, meta: { questions: [{ notAQuestion: true }] } };
+  const parsedMalformed = parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, affordances: [malformed] });
+  expect(parsedMalformed.affordances[0].meta?.questions).toBeUndefined();
+});

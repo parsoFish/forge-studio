@@ -452,3 +452,103 @@ test('terminal:true hides the ActivityLog drawer — a settled session is not "w
   });
   expect(html).not.toContain('data-component="activity-drawer"');
 });
+
+// ===========================================================================
+// W7-C2 — revise verdict + rationale + per-question form + requires hint +
+// finalized link (sessions-kinds-09/17/23/29/36, library-22/24, beads
+// forge-4ei / forge-lzv)
+// ===========================================================================
+
+test('C2-UI-1: meta.verdicts [approve, revise, reject] renders all three actions — revise included', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-verdict',
+    affordances: [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict', meta: { verdicts: ['approve', 'revise', 'reject'] } }],
+  });
+  expect(html).toContain('data-action="verdict-approve"');
+  expect(html).toContain('data-action="verdict-revise"');
+  expect(html).toContain('data-action="verdict-reject"');
+});
+
+test('C2-UI-2: meta.verdicts [approve] renders NO revise action (still driven by the wire list only)', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-verdict',
+    affordances: [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict', meta: { verdicts: ['approve'] } }],
+  });
+  expect(html).not.toContain('data-action="verdict-revise"');
+});
+
+test('C2-UI-3: every verdict affordance offers a notes field — the rationale recorded with the decision (sessions-kinds-29)', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-verdict',
+    affordances: [{ id: 'awaiting-verdict-verdict', kind: 'verdict', phase: 'awaiting-verdict', meta: { verdicts: ['approve', 'reject'] } }],
+  });
+  expect(html).toContain('data-field="session-verdict-notes"');
+});
+
+test('C2-UI-4: meta.questions renders one control per question (the real question text), never the single flattened box', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'awaiting-answers',
+    affordances: [{
+      id: 'awaiting-answers-question-form',
+      kind: 'question-form',
+      phase: 'awaiting-answers',
+      meta: {
+        questions: [
+          { question: 'What language and build toolchain does this project use?', header: 'Toolchain', options: [{ label: 'Node + npm', description: 'package.json driven' }] },
+          { question: 'What is the single quality-gate command?', header: 'Gate', options: [] },
+        ],
+      },
+    } as never],
+  });
+  expect(html).toContain('data-section="session-interview"');
+  expect(html).toContain('What language and build toolchain does this project use?');
+  expect(html).toContain('What is the single quality-gate command?');
+  expect(html).toContain('Node + npm');
+  expect(html).not.toContain('data-field="session-answer"');
+});
+
+test('C2-UI-5: the briefing phase keeps the free-text box but with its own honest copy (not "Answer" to no question)', () => {
+  const html = render({
+    kind: 'instructions',
+    phase: 'briefing',
+    affordances: [{ id: 'briefing-question-form', kind: 'question-form', phase: 'briefing' }],
+  });
+  expect(html).toContain('data-field="session-answer"');
+  expect(html).toContain('Brief the agent');
+});
+
+test('C2-UI-6: an unmet requires field renders an inline hint naming what Approve needs (sessions-kinds-23)', () => {
+  const files = [{ path: 'SKILL.md', body: '# skill' }];
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    artifact: { kind: 'file-package', label: 'Package', files },
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve'], requires: ['id'] } }],
+  });
+  expect(html).toContain('data-requires-hint');
+  expect(html).toMatch(/[Ee]nter .*id.* to enable Approve|id .*to enable Approve/);
+});
+
+test('C2-UI-7: a committed session with finalized {kind, id} renders a PERMANENT link to the object it produced (sessions-kinds-36)', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'committed',
+    affordances: [],
+    terminal: true,
+    finalized: { kind: 'skill', id: 'pr-diff-summary' },
+  } as never);
+  expect(html).toContain('data-action="open-finalized"');
+  expect(html).toContain('/skills/pr-diff-summary');
+});
+
+test('C2-UI-8: finalized kind "hook" links to /hooks/<id>; "community-registry" links to /community', () => {
+  const hook = render({ kind: 'authoring', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'hook', id: 'auto-lint' } } as never);
+  expect(hook).toContain('/hooks/auto-lint');
+  const community = render({ kind: 'community-refresh', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'community-registry', id: 'registry' } } as never);
+  expect(community).toContain('data-action="open-finalized"');
+  expect(community).toContain('/community');
+});

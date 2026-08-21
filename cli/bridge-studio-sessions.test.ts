@@ -1470,3 +1470,89 @@ test('isPseudoProjectAnchor: the community-refresh anchor (".community-registry"
 test('isPseudoProjectAnchor: ANY leading-"." value is a pseudo-anchor, including one this file has never heard of — matches discoverProjects\' own categorical dot-dir filter', () => {
   assert.equal(isPseudoProjectAnchor('.some-future-anchor'), true);
 });
+
+// ===========================================================================
+// W7-C2 (sessions-kinds-17/19, bead forge-lzv) — the shell route attaches the
+// PENDING interview questions (questions.json, parsed structurally) onto the
+// question-form affordance's meta at phase 'awaiting-answers', so the panel
+// can render one control per question and post the REAL question text back —
+// never the literal placeholder "Operator response" into the durable record.
+// Plus (sessions-kinds-36): the payload carries `finalized` — the persisted
+// {kind, id} pointer at whatever object a committed session produced — as a
+// REQUIRED field whose honest empty value is null.
+// ===========================================================================
+
+test('C2-SHELL-1: awaiting-answers + questions.json -> the question-form affordance carries meta.questions (text + options)', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2q1';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
+  writeFileSync(join(dir, 'questions.json'), JSON.stringify([
+    { question: 'What language and build toolchain does this project use?', header: 'Toolchain', options: [{ label: 'Node + npm', description: 'package.json driven' }] },
+    { question: 'What is the single quality-gate command?', header: 'Gate', options: [] },
+  ]), 'utf8');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    affordances: Array<{ kind: string; phase: string; meta?: { questions?: Array<{ question: string; options: Array<{ label: string; description: string }> }> } }>;
+  };
+  const qf = body.affordances.find((a) => a.kind === 'question-form');
+  assert.ok(qf, 'awaiting-answers must derive a question-form affordance');
+  assert.ok(qf!.meta?.questions, 'the pending questions must ride the affordance meta');
+  assert.equal(qf!.meta!.questions!.length, 2);
+  assert.equal(qf!.meta!.questions![0].question, 'What language and build toolchain does this project use?');
+  assert.deepEqual(qf!.meta!.questions![0].options, [{ label: 'Node + npm', description: 'package.json driven' }]);
+  assert.deepEqual(qf!.meta!.questions![1].options, []);
+});
+
+test('C2-SHELL-2: a stale questions.json OUTSIDE awaiting-answers attaches nothing (mirrors the transcript pending rule)', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2q2';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-verdict', round: 2 }), 'utf8');
+  writeFileSync(join(dir, 'AGENTS.draft.md'), '# AGENTS.md\n', 'utf8');
+  writeFileSync(join(dir, 'questions.json'), JSON.stringify([{ question: 'Stale leftover?' }]), 'utf8');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { affordances: Array<{ kind: string; meta?: Record<string, unknown> }> };
+  const verdict = body.affordances.find((a) => a.kind === 'verdict');
+  assert.ok(verdict, 'awaiting-verdict derives a verdict affordance');
+  for (const a of body.affordances) {
+    assert.equal(a.meta && 'questions' in a.meta, false, `no affordance may carry stale questions (got ${JSON.stringify(a)})`);
+  }
+});
+
+test('C2-SHELL-3: `finalized` is ALWAYS on the wire — null when the session produced nothing, the persisted {kind,id} verbatim when it did', async () => {
+  const bare = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${REAL_INSTRUCTIONS_SESSION}?project=demoproj`);
+  assert.equal(bare.status, 200);
+  const bareBody = (await bare.json()) as Record<string, unknown>;
+  assert.ok('finalized' in bareBody, 'the key must always be present');
+  assert.equal(bareBody.finalized, null);
+
+  const sessionId = '2026-08-21T09-00-00-c2fin';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sessionId, project: 'demoproj', phase: 'committed',
+    finalized: { kind: 'skill', id: 'c2-authored-skill' },
+  }), 'utf8');
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { finalized: { kind: string; id: string } | null };
+  assert.deepEqual(body.finalized, { kind: 'skill', id: 'c2-authored-skill' });
+});
+
+test('C2-SHELL-4: a malformed status.finalized (wrong shape) collapses to null — never echoed raw', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2finbad';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sessionId, project: 'demoproj', phase: 'committed', finalized: 'c2-authored-skill',
+  }), 'utf8');
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { finalized: unknown };
+  assert.equal(body.finalized, null);
+});
