@@ -155,11 +155,11 @@ export type Run = {
   prUrl?: string;
   /**
    * S9 (DEC-2/DEC-3): the seed flows this run traversed (derived from its phases ∩
-   * each flow's nodes). A threaded spine run carries [forge-architect, forge-develop,
-   * carries both spine flows so each flow's monitor renders its own slice
-   * (the reflect flow wrapper was retired in W7-C1 — reflection is a
-   * standalone agent run, not a flow). A single-flow run carries just its
-   * own flow id.
+   * each flow's nodes). A threaded spine run carries [forge-architect,
+   * forge-develop] so each flow's monitor renders its own slice (the reflect
+   * flow wrapper was retired in W7-C1 — reflection is a standalone agent
+   * run, not a flow, so it adds no lineage entry). A single-flow run carries
+   * just its own flow id.
    */
   flowLineage: string[];
   /**
