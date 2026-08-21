@@ -267,6 +267,40 @@ test('(RED) GET /api/artifact with a symlinked leaf inside a real artifacts dir 
   assert.ok(is4xx(r.status), `a symlinked artifact leaf must be rejected 4xx — got ${r.status}: ${r.body}`);
 });
 
+// W7-C3 (forge-0u4): the FILENAME dimension gets its own charset gate, pinned
+// SEPARATELY from the per-segment guard so neither is credited for the other's
+// rejections: a charset-invalid filename is a 400 naming the filename (the
+// gate's own refusal, before any fs access), while a well-formed but absent
+// artifact stays the guard path's 404. The guard alone already refuses the
+// traversal/symlink shapes (tests above); this layer is the cheap first gate
+// the audit found unenumerated on this route's second dimension.
+test('W7-C3 (forge-0u4): a charset-invalid artifact FILENAME is refused 400 by the gate itself, not laundered into the guard\'s 404', async () => {
+  const cid = 'artifact-charset-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  writeFileSync(join(logsRoot, cid, 'artifacts', 'ok.txt'), 'fine');
+
+  // '..' as a filename segment: the gate's own 400, never a guard consult.
+  const dotdot = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/%2E%2E%2Fok.txt` });
+  assert.equal(dotdot.status, 400, `a ".." filename segment must be the charset gate's 400 — got ${dotdot.status}: ${dotdot.body}`);
+  assert.match(dotdot.body, /invalid filename/, 'the refusal names the filename dimension, not a generic not-found');
+
+  // A shell-metacharacter filename: same gate, same 400.
+  const weird = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/a%7Cb.txt` });
+  assert.equal(weird.status, 400, `a charset-invalid filename must be 400 — got ${weird.status}: ${weird.body}`);
+  assert.match(weird.body, /invalid filename/);
+
+  // An empty segment (doubled slash) is refused too.
+  const empty = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}//ok.txt` });
+  assert.equal(empty.status, 400, `an empty filename segment must be 400 — got ${empty.status}: ${empty.body}`);
+
+  // GREEN twins: a valid nested filename still serves; an absent one is the
+  // guard path's own 404 (distinct from the gate's 400).
+  const ok = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/ok.txt` });
+  assert.equal(ok.status, 200, `a well-formed filename must still serve — got ${ok.status}: ${ok.body}`);
+  const absent = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/missing.txt` });
+  assert.equal(absent.status, 404, `a well-formed absent filename stays the guard's 404 — got ${absent.status}: ${absent.body}`);
+});
+
 // ===========================================================================
 // GET /api/work-item/<cycleId>/<wiId>
 // ===========================================================================

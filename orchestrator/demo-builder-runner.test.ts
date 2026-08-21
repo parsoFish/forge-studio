@@ -843,3 +843,19 @@ test('R4-16 AT-48: finalizing a per-element generation 2 after a composed genera
   assert.notEqual(lock.demo_skill, DEMO_SKILL_REL_PATH, "demo_skill must NOT pair generation 2's DEMO.html with generation 1's stale composer skill");
   assert.equal(lock.demo_skill, '.forge/skills/demo/cli-capture/SKILL.md', "demo_skill must name generation 2's OWN skillRelPath");
 });
+
+test("W7-C3 (sessions-kinds-26): every event row carries phase 'demo' — never the retired 'unifier'", async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+
+  const events = readFileSync(join(logsRoot, `_demo-${sessionId}`, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  assert.ok(events.length > 0, 'the turn emitted events');
+  for (const e of events) {
+    assert.equal(e.phase, 'demo', `event ${e.event_type} "${e.message}" filed under phase "${e.phase}" — demo sessions must not bill the retired unifier phase`);
+  }
+});

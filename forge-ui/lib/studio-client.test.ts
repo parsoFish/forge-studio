@@ -878,6 +878,18 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
   }
 });
 
+test("W7-C3 (forge-cv9): the client Run type admits every server-producible origin — 'triggered' included", () => {
+  // orchestrator/run-model.ts types origin 'architect'|'human-directed'|'triggered'
+  // (R2-08-F4 made 'triggered' a real, producible value); the client type was
+  // narrower, so any consumer switching on origin either failed to compile
+  // against real data or was written to handle only two cases. The annotation
+  // below is the TYPE-level half (gate-enforced by the forge-ui tests tsc
+  // project, forge-opj); the runtime half proves parseRun carries the value.
+  const origin: Run['origin'] = 'triggered';
+  const parsed = parseRun({ id: 'CYCLE-triggered-origin', origin });
+  expect(parsed.origin).toBe('triggered');
+});
+
 // ---------------------------------------------------------------------------
 // AT-F1-1 (R4-12-F1, rule 38 — wire-contract + caller-count) —
 // `fetchContractStages(id)`: the FIRST client function to fetch

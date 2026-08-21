@@ -398,3 +398,24 @@ test('R3-05-F3: edit-mode revision does not duplicate the composed-seeds footer 
   assert.equal(footerCount, 1, `exactly one footer after an edit-mode revision, got ${footerCount}`);
   rmSync(seedsRoot, { recursive: true, force: true });
 });
+
+test("W7-C3 (sessions-kinds-25): every event row carries phase 'instructions' — never 'architect'", async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const queryFn = makeQueryFn({
+    interview: {
+      done: false,
+      questions: [{ question: 'Anything off-limits?', header: 'Off-limits', options: [] }],
+    },
+  });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  const events = readFileSync(join(logsRoot, `_instructions-${sessionId}`, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  assert.ok(events.length > 0, 'the turn emitted events');
+  for (const e of events) {
+    assert.equal(e.phase, 'instructions', `event ${e.event_type} "${e.message}" filed under phase "${e.phase}" — instructions work must not be attributed to the architect phase`);
+  }
+});
