@@ -3869,8 +3869,10 @@ The shared status vocabularies:
 - **Pipeline/WI 5-state** — `pending | active | complete | retrying |
   failed`. Was `forge-ui/lib/wi-status.ts` (now **deleted**); the type is
   inlined in [`forge-ui/lib/status-colors.ts`](./forge-ui/lib/status-colors.ts)
-  (`WiStatus`) alongside [`forge-ui/lib/phases.ts`](./forge-ui/lib/phases.ts)
-  (`PhaseStatus`) — same 5 values, one shared palette
+  (`WiStatus`) alongside its `PhaseStatus` twin (the `forge-ui/lib/phases.ts`
+  mirror that once held it is **deleted** — the spine's phase derivation lives
+  in [`orchestrator/run-model-derive.ts`](./orchestrator/run-model-derive.ts))
+  — same 5 values, one shared palette
   (`STATUS_COLOR` + `WI_STATUS_GLOW`) so a colour change happens in exactly
   one place. Yellow = retrying (transient error, still recovering); red =
   terminal failure only — sibling units stay in their own state

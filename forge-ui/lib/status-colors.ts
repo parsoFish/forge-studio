@@ -2,7 +2,7 @@
  * Single source for the agent-flow status palette.
  *
  * Forge's pipeline / WI units share one 5-state vocabulary
- * (`wi-status.ts` + `phases.ts`); other status domains (cycle lifecycle,
+ * (`wi-status.ts` + `phases.ts`, both since deleted); other status domains (cycle lifecycle,
  * architect phase) map onto the same semantic tones. Before this module the
  * hex values were re-spelled across AgentGraphCanvas, the three per-phase
  * hexes, and page.tsx — and had already drifted (pending grey was `#475059`

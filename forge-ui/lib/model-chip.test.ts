@@ -24,6 +24,15 @@ test('a session with no recorded tier says "not recorded" — never "default"', 
   expect(modelChipLabel(null)).not.toMatch(/default/);
 });
 
+test('W7-C3 review: a BLANK tier is unrecorded too — never a blank chip', () => {
+  // `?? 'not recorded'` does not catch '', so a status.json with a blank
+  // tier rendered "model: " with nothing after it — worse than either honest
+  // answer. Whitespace is the same non-answer.
+  for (const blank of ['', '   ', '\t', undefined]) {
+    expect(modelChipLabel(blank), `${JSON.stringify(blank)} must read as unrecorded`).toBe('not recorded');
+  }
+});
+
 test('SessionInteractivePanel renders the chip through modelChipLabel (source pin)', () => {
   const src = readFileSync(resolve(__dirname, '../components/studio/session/SessionInteractivePanel.tsx'), 'utf8');
   expect(src).toMatch(/modelChipLabel/);
