@@ -7,7 +7,39 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-22
+
+**Wave 7, "Close the loops."** The operator's first week of daily-driving
+Studio became a 338-finding register, sixteen initiatives across four waves,
+and PRs #173–#199 plus this gate round. Judged against one question per
+initiative: *does the operator get from "start" to "done" without a terminal?*
+The full close-out — exit criteria with their evidence, the 262-of-262
+route-coverage accounting, and fourteen lessons — is in
+[`docs/roadmaps/README.md`](docs/roadmaps/README.md) under "Wave 7 — Close the
+loops". This section also carries the accumulated unreleased work that shipped
+alongside it (0.7.0 was tagged without its own section).
+
 ### Added
+
+- **The walkthrough harness is a standing gate** (`scripts/ui-walkthrough/`):
+  a deterministic crawl with console/4xx/page-ready assertions and a
+  per-environment coverage floor, plus the ten-cluster explorer fan-out that
+  spends real tokens where a path can only be validated by running it.
+- **`e2e-deadpaths` runs in CI** as its own job — it had been carrying
+  structural a11y assertions that nothing executed.
+- **`scripts/check-disabled-reason.mjs`** in CI with an empty allowlist: every
+  disabled primary CTA names why, inputs included.
+- **`forge-ui/tsconfig.tests.json`** — the first tsc project to typecheck
+  forge-ui's own tests; it found five real type errors on arrival.
+- **Session lifecycle**: cancel/abandon for every session kind; a runner crash
+  reads `crashed` with its stderr; stall detection.
+- **The scheduler is a first-class Studio object again** — status plus
+  start/pause/stop on Home and the Flows pillar.
+- **Library authoring** — skills, hooks, templates and connection config gain
+  create/edit/delete.
+- **Per-question interview forms**, and a `revise` verdict on every draft kind.
+- **Per-route tab titles, breadcrumbs, skip-link landmarks and focus-visible**,
+  with an `--accent` token that is actually contrast-checked.
 
 - **Brain-maintenance agent (R4-19-F2).** `forge brain lint` gains two
   judgment-tier checks — `duplicate-theme` and `dangling-edge` (which found 2
@@ -24,6 +56,21 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   cannot attest, instead of client-side inference).
 
 ### Changed
+
+- **The Reflect flow is retired**; the reflector runs as a post-merge agent run
+  and on demand. **Onboarding is a session kind**, not a flow.
+- The flow **RunRail collapses its COMPLETE group** past 10 runs, and the
+  **history ledger pages** 15 rows at a time. Both are deliberate; the
+  walkthrough crawler now expands progressive disclosure before harvesting
+  links, because hiding links from an operator's eye also hides them from a
+  crawler.
+- A session row carries the **mapped** run status on `data-run-status` and its
+  raw runner phase on `data-session-phase`.
+- `expectedRoutes.host` re-recorded 924 → 715 after the one-id rule collapsed a
+  duplicate cycle id-space — 262 of the 266 unreached routes are bare-id
+  `/artifact` duplicates still reachable under the canonical id.
+- `npm run lint` honours `.gitignore`, so it no longer reds on local notes that
+  CI never sees.
 
 - **Runner prompts re-authored onto `SKILL.md` (R4-23, ADR-024).** The four
   legacy interactive runners (instructions-creator, demo-builder,
@@ -50,6 +97,31 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
   `agentCapabilityDescriptor` predicate.
 
 ### Fixed
+
+- **An agent whose last standalone run died could never be run again.** The run
+  panel reattached to it, believed it `running` forever, and disabled the whole
+  form with no reason on any control.
+- **Studio's own shipped `basic` starter flow could never run**: a starter
+  materialised by a flow save carried no `phase`, so dispatch failed while the
+  readiness panel showed green.
+- **Every project onboarded through the standard form could never be saved** —
+  `git init` with no first commit left an unborn HEAD and every Studio write
+  500'd.
+- **Approve was permanently disabled for every community-refresh registry
+  draft** — a package-shape gate applied to a kind whose package can never have
+  that shape.
+- **A session's file tabs snapped back to the first file every poll tick**, so
+  no file but the first could be read on the review that gates an irreversible
+  commit.
+- `/projects/<unknown-id>` fired three per-project reads and 404'd all three
+  before rendering the honest NotFound.
+- A frozen cycle whose `pr-description.md` sits at the cycle-log root
+  advertised a PR tab that 404'd — the run model and the route that serves what
+  it declares had disagreed.
+- `check-kb-ingest-affordance` reported false violations on any tree with a git
+  worktree under `.claude/`.
+- `ui:journey` leaked every standalone run its kickoff arc dispatched, and
+  never swept its three history-ledger fixtures at all.
 
 - **Request-path containment hardening (SEC).** The projects-root-fold ratchet
   rule now detects aliased/renamed/receiver-qualified callees, roots discovered

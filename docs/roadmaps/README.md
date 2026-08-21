@@ -692,7 +692,7 @@ closeout; version 0.8.0.
 | Skills / hooks / templates editable + deletable; KB card gone from Library | W7-B4 | `/skills/<id>`, `/hooks/<id>`, `/templates/<id>` edit routes; `/library` | `grep -n "Knowledge" forge-ui/app/library/page.tsx` |
 | Bridge outage shows a banner and recovers without reload | W7-A1 | shared `BridgeStatus` on every pillar; walkthrough crosscut probe (bridge-blocked intercept) | `grep -n "studioGet" forge-ui/lib/studio-client.ts` |
 | Reflect flow gone; reflector runs post-merge as an agent run | W7-C1 | `studio/flows/` (no `forge-reflect`), `orchestrator/finalize-merged.ts` trigger | `grep -rln forge-reflect orchestrator cli forge-ui scripts studio` |
-| Walkthrough re-run: zero S1 across the ten clusters | Wave D | `scripts/ui-walkthrough/` fan-out | (W7-A0) |
+| Walkthrough re-run: zero S1 across the ten clusters | Wave D | `scripts/ui-walkthrough/` fan-out | **NOT met as first measured — 14 open S1 reported, 4 distinct confirmed by hostile re-verification, all 4 fixed and pinned; see the close-out below** |
 
 #### Pre-authorised park-points
 
@@ -723,6 +723,180 @@ closeout; version 0.8.0.
   UI cannot delete** (flows, agents, hooks, installed-skills/hook-approvals
   yaml, phantom project dirs) — W7-B4/B6 close that, and until then the
   harness's own teardown list is authoritative.
+
+#### Close-out (2026-08-22) — what landed, what the gate found, and what is still open
+
+**Landed:** PRs **#173–#199** across waves A · A-fix · B · B-fix · C, plus this
+Wave D gate round. Beads `forge-bzt.1`–`.16` closed with the epic. Version
+**0.8.0**.
+
+**The three standing harnesses, on the closed tree:**
+
+- `ui:journey` — **1370/1370 checks, 153 beats, 17 journeys**, `all DOM-as-metrics assertions passed`
+- `ui:deadpaths` — **exit 0**, both passes clean across 31 routes (now its own CI job)
+- `ui:walkthrough:gate` — **PASS: 703 routes · 0 unvisited · 0 new failures · 0 known · 0 stale**
+- `npm test` **5599/5599** · forge-ui **2226/2226** · six checkers green · `studio lint` 0 err · `brain lint` 0 err
+
+**Exit criteria — measured, not attributed.** Every row was re-derived on the
+live tree at the gate.
+
+| Criterion | Evidence |
+|---|---|
+| A plan can be approved from Studio, showing the approved plan + its initiative | `flows-run` 159/159 — the plan gate, its verdict write and the initiative link all drive green |
+| A pending initiative can be started from Studio and a run appears | scheduler card + `flows-run` beats; `INIT-2026-08-18-add-version-flag` is the standing vehicle |
+| Every session kind can be cancelled from its page and from `/sessions` | `sessions-index`: every in-flight row offers cancel; the re-gate confirmed cancel really stops a live turn |
+| A crashed session reads `crashed` with its stderr | `sessions-index`: the crashed fixture renders `data-session-state="crashed"` with the runner's own message, derived from `stderr.log` at read time |
+| Home strips are labelled and visually distinct | `home` + `sessions-index-home-strip` beats |
+| Drain-to-green streams per-finding progress; prose changes are draft-gated | `knowledge` 122/122 — **but see `forge-aa3` and `forge-d8l` below: the streaming half is not closed, and the drain deleted a valid brain edge** |
+| Community refresh completes and its verdict is reachable | `community` 157/157; **Approve was permanently disabled for every registry draft until this gate fixed it (`community-14`)** |
+| Skills / hooks / templates editable + deletable; KB card gone from Library | `skills` / `hooks` journeys; `/library` renders shelves only |
+| Bridge outage shows a banner and recovers without reload | `checkHonestPillarRead` on every pillar beat |
+| Reflect flow gone; reflector runs post-merge as an agent run | `/flows/forge-reflect` absent from the 703-route crawl; `flows-author` topological parity passes without it |
+| **Walkthrough re-run: zero S1 across the ten clusters** | **NOT met as first measured — see below.** The re-run reported 14 open S1; hostile re-verification confirmed 5 (4 distinct) and downgraded 9; all 4 distinct were fixed red-first and pinned. Zero *confirmed* S1 remain, but a second full fan-out was not run to re-measure. |
+
+**`expectedRoutes.host` re-recorded 924 → 715, and here is the whole of the
+difference.** The August baseline crawled the app under a **duplicate
+id-space**: every cycle was addressable both as `<timestamp>_<INIT-id>` and as
+the bare `<INIT-id>`, and each address emitted its own six
+`/artifact?run=…&type=…` routes. W7-A4's one-id rule collapsed that. Of the 266
+routes the new crawl does not reach, **262 are those bare-id duplicates and
+every one — 262 of 262 — is still reachable under the canonical timestamped
+id**; the other four are `/flows/forge-reflect` and `/flows/onboard-project`
+(retired by W7-C1) and two swept demo sessions. Sixty-six routes were *added*,
+including a new `type=verdict` artifact family. Nothing was lost; a duplicate
+was removed. `entries` stayed at **0 → 0** across the regeneration — the
+re-record was done only after the tree was clean, because a baseline written
+one pass earlier would have blessed four real first-party 4xx as "known".
+
+**The close-out verification (the number that matters).** The ten-cluster
+explorer fan-out re-ran against the closed tree and gave every one of the 338
+register ids a verdict reproduced on the live tree: **241 CLOSED · 38 PARTIAL ·
+25 NOT CLOSED · 6 UNVERIFIABLE**, plus 48 new findings. Operator note 9 is
+fully closed; note 8 (library authoring) is the weakest area, with 17 NOT
+CLOSED and 14 new findings still open.
+
+**What the gate itself found.** Wave D was not a formality. It opened with five
+failing harness signals and closed with twelve fixes — five in shipped product
+code, one destructive-drain revert, and six in harnesses that were measuring
+the wrong thing.
+
+Product defects fixed at the gate:
+
+1. **An agent whose last standalone run died could never be run again.**
+   `RunPanel` reattaches to the latest standalone run of any status (W7-B5
+   agents-26); `runState` fabricated `'running'` for a reattached id with no
+   status yet; `controlsDisabled` then disabled the *entire* run form, and
+   `pollAgentRun`'s timeout deliberately keeps the last real state, so the lock
+   never lifted. Fixed as one pure derivation (`forge-ui/lib/run-panel-gating.ts`).
+2. **`/projects/<unknown-id>` fired three per-project reads and 404'd all
+   three** before rendering the honest NotFound — W7-A4 wrote that rule for
+   `new` but not for an id the roster does not have.
+3. **A deriver and its own route disagreed about where a frozen cycle's PR
+   description lives**, so a 2026-06 cycle advertised a PR tab that 404'd.
+   Fixed as parity *up*, one exact filename, through the same containment guard.
+4. **`agents-44` (W7-B4)** — `applyStarterAgentMaterialisation` copied a
+   starter package verbatim and never stamped `phase`, so **Studio's own
+   shipped `basic` plan→dev→review starter flow could never run**, standalone
+   or in a flow, while the readiness panel showed it green. The sibling PUT
+   path in the *same commit* did the synthesis correctly. This is the exact
+   defect `agents-18` closed, reopened on a sibling path.
+5. **`projects-37` (W7-B6)** — `git init` with no first commit left an unborn
+   HEAD, so `ensureStudioBranch` fatally branched from a nonexistent `main` and
+   **every project onboarded through the standard form could never be saved,
+   not one edit, ever**. The W7-B6 tests asserted only that `git init` ran,
+   which is exactly why it shipped unpinned.
+6. **`community-14` (W7-B3)** — the generic panel's shape gate was applied
+   unconditionally, so **Approve was permanently disabled for every
+   community-refresh registry draft**, whose staging package is
+   `registry.yaml`+`evidence.*` by design. The server accepted the verdict
+   fine; the block was entirely client-side.
+7. **`sessions-kinds-R09`** — `FilePackage`'s effect was keyed on array
+   *identity* and the session shell re-parses a fresh graph every 3s, so tabs
+   snapped back to file #1 and no file but the first could be read on the
+   review that gates an irreversible commit.
+
+**And one the teardown found, which is the worst kind.** The explorer's real
+drain-to-green run edited a tracked brain theme and **deleted a
+`related_themes` edge as dangling — to a target that exists, in the same
+directory, since 2026-06-21**. Restoring the edge and re-running `forge brain
+lint` gives 0 errors and no flag: proof the edge was valid and the drain
+destroyed knowledge silently. Reverted; filed as **`forge-d8l` (P1)**. W7-B2's
+contract — structural fixes may auto-apply, prose lands as a draft the operator
+approves with a diff — **does not cover edge deletion, and should.**
+
+**Still open, filed with a verified root cause, a minimal fix and a repro
+script:** `forge-a4e` (deleting a hook leaves its approval standing, so
+re-creating that id yields an already-approved hook) · `forge-vvp` (binding a
+library hook has no runtime effect — nothing in production dispatches hooks;
+effort L, a real capability gap) · `forge-6gu` (the drain's per-finding outcome
+is the agent's self-report, never re-derived from the round's own post-fix
+lint) · `forge-dgj` (agent history matched by bare node id across flows — the
+twin of the bug W7-B5 fixed in the sibling aggregate route and left standing
+here) · `forge-ewl` (retiring a flow erases its agents' history) · `forge-7pa`
+(the quality gate is accepted hard-green without running; a scaffolded
+project's `npm test` silently runs forge's own suite) · `forge-chm` (Start Run
+silently repoints another flow's queued initiatives) · `forge-aa3` (the drain
+emits progress events onto a tail nothing arms) · `forge-3cz` (a one-shot spawn
+never produces an output ref) · `forge-720` (journeys leak standalone runs that
+derive `running` forever).
+
+#### Lessons
+
+1. **Land-before-review is a race that eats work.** Wave B's #191 merged four
+   minutes into its review worker's turn and killed the worktree mid-edit; the
+   round had to be redone off main as #193. Review rounds are applied *before*
+   the landing chain reaches the PR.
+2. **A merge gate must verify `state == MERGED` before deleting a branch.** The
+   pre-patch version silently CLOSED #188/#190/#193.
+3. **Union is the wrong default for a shrink-only baseline.** Take main's file
+   verbatim; only genuinely additive allowlists get unioned, and their rows get
+   remapped from a real checker run.
+4. **A line-keyed guard allowlist rots silently on merge.** Remap by pairing
+   sink kind *and order* from a `--json` run — never by arithmetic on the file.
+5. **Tests written OVER a sibling suite delete it invisibly.** W7-B4 overwrote
+   a 22-test finalize suite; only an assertion count per file caught it.
+6. **An assertion that runs can still measure the wrong instant.**
+   `/library`'s "bare tab title" failure was `e2e-deadpaths` reading
+   `document.title` before the passive effect that sets it — and it indicted a
+   fix that had actually landed. Running is necessary, not sufficient.
+7. **A UX affordance that hides links costs a link crawler its coverage,
+   silently.** W7-B5's `pageSize={15}` cut the crawl from 924 reachable routes
+   to 657. The first attempted fix — forcing the RunRail's collapsed group open
+   via `localStorage` — expanded the rail (2 → 60 cards, measured) and bought
+   **zero** routes, because rail cards are `<div onClick>`, not anchors: *a
+   harness override that changes what the crawl sees without changing what it
+   can reach is decoration.* The crawler now expands progressive disclosure
+   before harvesting.
+8. **The lost coverage was hiding live defects.** Two of the product fixes
+   above were found the moment the crawler could reach those routes again. A
+   coverage regression is not a cosmetic metric.
+9. **A cleanup function defined and never called is worse than none** — it
+   reads as done. `cleanAllR6_06LedgerFixtures()` had no call sites, so a
+   `_queue/done/` fixture for `mdtoc` survived ten beats into a different
+   journey and inflated a global count there.
+10. **Assert identity, not a count.** Two gate failures were beats pinning a
+    total that any sibling fixture could move. What a beat owns is what it
+    seeded; that is what it should pin.
+11. **A defense-in-depth checker and its test-local mirror drift.**
+    `check-kb-ingest-affordance.mjs` did not skip `.claude/worktrees/` while
+    its in-test copy did — green on CI, red on any developer tree with a parked
+    lane worktree.
+12. **A verifier brief that does not demand a runnable repro produces
+    agreement, not verification.** The fan-out's cluster verifiers returned 146
+    verdicts and refuted exactly one. A second, hostile pass — default position
+    "the finding is wrong", CONFIRMED requires a script the agent wrote, ran and
+    pasted the output of — confirmed 5 of 14 and **downgraded 9**, every
+    downgrade backed by a repro showing an in-Studio workaround. The wave-7 plan
+    had predicted this exact remedy; it is now measured.
+13. **A gate whose remediation lives in a doc cannot be handed to an agent
+    barred from docs.** The fix round left `check-request-path-sinks` red
+    because the worker grew a sink surface it was not allowed to document. The
+    hole was in the brief, not the worker.
+14. **"The fix ships its own defect" recurred twice more** (9th and 10th
+    instances this campaign): `agents-44` reopened `agents-18` on a sibling
+    write path added in the *same commit*, and `community-14` replaced one S1
+    dead control (no panel at all) with another (a permanently-disabled
+    Approve) by reusing a shape gate without auditing whether it applied.
 
 ---
 
