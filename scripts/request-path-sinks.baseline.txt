@@ -139,6 +139,7 @@ cli/preflight-fix-auto.ts readFileSync 1
 cli/preflight-fix-auto.ts writeFileSync 3
 cli/preflight.ts execFileSync 1
 cli/preflight.ts existsSync 15
+cli/preflight.ts lstatSync 1
 cli/preflight.ts readdirSync 1
 cli/preflight.ts readFileSync 7
 cli/preflight.ts spawnSync 3

@@ -29,7 +29,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { scaffoldContractArtifacts } from './bridge-studio-writes.ts';
-import { runPreflight, SCRATCH_PATHS } from './preflight.ts';
+import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
 
 test('AT-B6-5 (RED, projects-11) onboarding a dir INSIDE an enclosing git work tree still git-inits the project itself', () => {
   const enclosing = mkdtempSync(join(tmpdir(), 'onboard-gitinit-'));
@@ -112,6 +112,12 @@ test('W7-FIX-B-PROJ (RED, gate A0) a repo THIS call inits gets a C2-covering .gi
     const gi = readFileSync(join(projectRoot, '.gitignore'), 'utf8');
     for (const p of SCRATCH_PATHS) {
       assert.ok(gi.includes(p), `.gitignore must cover the C2 scratch path ${p}`);
+    }
+    // W7-FIX-B-PROJ review F4: the build-output globs are single-sourced
+    // from preflight.ts (beside BUILD_ARTIFACT_HINTS) — the scaffold and the
+    // ARTIFACTS advisory/auto-fix must never drift apart.
+    for (const g of SCAFFOLD_BUILD_OUTPUT_IGNORES) {
+      assert.ok(gi.includes(g), `.gitignore must cover the shared build-output glob ${g}`);
     }
     // The whole point: C2 green at birth against the project's OWN repo.
     const r = runPreflight(projectRoot, { forgeRoot: enclosing });

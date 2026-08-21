@@ -54,7 +54,7 @@ import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '../orchestrator/project-brain-seed.ts';
 import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { runPreflight, SCRATCH_PATHS } from './preflight.ts';
+import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { cachedListRuns } from './run-list-cache.ts';
@@ -85,7 +85,13 @@ import { decodeIdOrRespond } from './bridge-studio-community.ts';
  */
 class ScaffoldContainmentError extends Error {}
 
-/** One of `scaffoldContractArtifacts`'s two file targets. */
+/** One of `contractArtifactTargets`'s two markdown targets (`roadmap.md`,
+ *  `<artifactRoot>/brain/profile.md`). The scaffold's third, CONDITIONAL
+ *  write target — the C2 hygiene `.gitignore`, written only on the branches
+ *  that create the repo (`needsGitInit`) — is not one of these: its write
+ *  condition depends on the git-init decision, so it is guarded inline at
+ *  its write site and mirrored by the same `needsGitInit` predicate in the
+ *  pre-check. */
 type ContractArtifactTarget = {
   /** Segments passed to `resolveGuardedPath(projectRoot, segments)`. */
   segments: readonly string[];
@@ -97,12 +103,22 @@ type ContractArtifactTarget = {
 };
 
 /**
- * SINGLE SOURCE OF TRUTH for `scaffoldContractArtifacts`'s two write
- * targets (`roadmap.md`, `<artifactRoot>/brain/profile.md`) beneath
+ * SINGLE SOURCE OF TRUTH for `scaffoldContractArtifacts`'s two UNCONDITIONAL
+ * write targets (`roadmap.md`, `<artifactRoot>/brain/profile.md`) beneath
  * `projectRoot`. Both `scaffoldContractArtifacts` itself (the write) and
  * `checkContractArtifactContainment` (the pure Phase-1 pre-check on `POST
  * /api/studio/projects`, below) compute their target paths from THIS
  * function — one path set, not two that could drift apart (SEC-03 round 4).
+ *
+ * W7-FIX-B-PROJ: the scaffold has a THIRD write target this function does
+ * NOT own — the C2 hygiene `.gitignore`, written ONLY when the scaffold
+ * itself creates the repo. Its write condition is the `needsGitInit`
+ * three-way git probe (a side-effecting decision this pure path-set function
+ * must not absorb), so check/write parity for it is kept by both sites
+ * calling the SAME `needsGitInit` predicate instead. Anyone enumerating the
+ * route's full write set (docs/security-request-path-audit.md defers to
+ * these comments): `.forge/project.json` + the two targets below + the
+ * conditional `.gitignore`.
  */
 function contractArtifactTargets(projectRoot: string): { roadmap: ContractArtifactTarget; profile: ContractArtifactTarget } {
   // `readArtifactRoot` already rejects an absolute value, a backslash, or a
@@ -125,10 +141,49 @@ function contractArtifactTargets(projectRoot: string): { roadmap: ContractArtifa
 }
 
 /**
+ * The three-way git-init decision (W7-B6 + review F4) — SHARED between
+ * `scaffoldContractArtifacts` (which acts on it: `git init` + the C2
+ * `.gitignore`) and `checkContractArtifactContainment` (which must guard
+ * exactly the writes that decision implies — review F2's check/write
+ * parity). Pure probe: reads git state, writes nothing.
+ *
+ *   - projectRoot IS its own work-tree root  → false (own repo governs);
+ *   - enclosed by FORGE's own work tree      → true  (the gitignored
+ *     projects/ case — the project must not inherit forge);
+ *   - enclosed by any OTHER repo             → false (the operator's real
+ *     repo governs; never nest a .git inside it);
+ *   - in no repo at all                      → true.
+ */
+function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
+  try {
+    const toplevel = realpathSync(
+      execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim(),
+    );
+    if (toplevel === realpathSync(projectRoot)) return false; // already its own repo
+    let forgeToplevel: string | null = null;
+    try {
+      forgeToplevel = realpathSync(
+        execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: forgeRoot, encoding: 'utf8' }).trim(),
+      );
+    } catch {
+      forgeToplevel = null; // forge root not in a repo (test fixtures) — the enclosing repo cannot be forge's
+    }
+    return forgeToplevel !== null && toplevel === forgeToplevel;
+  } catch {
+    return true; // not in any repo at all
+  }
+}
+
+/**
  * PURE containment pre-check (SEC-03 round 4, T1's two-phase
  * check-then-write ruling) for every path `POST /api/studio/projects`
  * writes beneath `projectRoot`: `.forge/project.json` (this route's own
- * write) plus `scaffoldContractArtifacts`'s two targets (`roadmap.md`,
+ * write), the C2 hygiene `.gitignore` (W7-FIX-B-PROJ — but ONLY when the
+ * scaffold's `needsGitInit` decision says the repo would be created by this
+ * onboard, the sole condition under which the scaffold writes it; review F2:
+ * guarding it unconditionally false-rejected own-repo checkouts carrying a
+ * dangling-symlink `.gitignore` the route was never going to touch), plus
+ * `scaffoldContractArtifacts`'s two unconditional targets (`roadmap.md`,
  * `<artifactRoot>/brain/profile.md`), computed via the SAME
  * `contractArtifactTargets` `scaffoldContractArtifacts` itself uses. Zero
  * side effects: no `mkdirSync`, no `writeFileSync`.
@@ -145,7 +200,7 @@ function contractArtifactTargets(projectRoot: string): { roadmap: ContractArtifa
  * class the write-time guards throw, so one catch clause at the call site
  * covers both.
  */
-function checkContractArtifactContainment(projectRoot: string): void {
+function checkContractArtifactContainment(projectRoot: string, forgeRoot: string): void {
   if (!existsSync(projectRoot)) return;
 
   const forgeJsonPath = join(projectRoot, '.forge', 'project.json');
@@ -156,8 +211,13 @@ function checkContractArtifactContainment(projectRoot: string): void {
 
   // W7-FIX-B-PROJ: `.gitignore` joined the scaffold's write set (the C2
   // hygiene file written when scaffoldContractArtifacts creates the repo) —
-  // the pure pre-check must cover EVERY path the route may write.
-  if (!existsSync(join(projectRoot, '.gitignore'))) {
+  // the pure pre-check must cover EVERY path the route may write. Review F2:
+  // and ONLY those — the scaffold writes `.gitignore` solely on the
+  // `needsGitInit` branches, so the guard mirrors the SAME predicate; an
+  // own-repo / operator-enclosed checkout's `.gitignore` (dangling symlink
+  // or not) is never written and therefore never guarded (the Finding-B
+  // rule below: guard the paths you WRITE, not the paths you merely probe).
+  if (needsGitInit(projectRoot, forgeRoot) && !existsSync(join(projectRoot, '.gitignore'))) {
     const guard = resolveGuardedPath(projectRoot, ['.gitignore']);
     if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking .gitignore');
   }
@@ -236,27 +296,10 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
   //   - enclosed by any OTHER repo                       → skip (the
   //     operator's real repo governs; never nest a .git inside it);
   //   - in no repo at all                                → init.
-  let needsInit: boolean;
-  try {
-    const toplevel = realpathSync(
-      execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: projectRoot, encoding: 'utf8' }).trim(),
-    );
-    if (toplevel === realpathSync(projectRoot)) {
-      needsInit = false; // already its own repo
-    } else {
-      let forgeToplevel: string | null = null;
-      try {
-        forgeToplevel = realpathSync(
-          execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: forgeRoot, encoding: 'utf8' }).trim(),
-        );
-      } catch {
-        forgeToplevel = null; // forge root not in a repo (test fixtures) — the enclosing repo cannot be forge's
-      }
-      needsInit = forgeToplevel !== null && toplevel === forgeToplevel;
-    }
-  } catch {
-    needsInit = true; // not in any repo at all — init below
-  }
+  // The probe itself is `needsGitInit` above — SHARED with the pure
+  // pre-check so the `.gitignore` guard and the `.gitignore` write can never
+  // disagree about when the write happens (review F2).
+  const needsInit = needsGitInit(projectRoot, forgeRoot);
   if (needsInit) {
     try {
       execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
@@ -270,8 +313,10 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
     // scratch path at birth, parking the create-from-nothing form on a
     // failing checklist. The scaffold that creates the repo also closes C2:
     // write the hygiene .gitignore (scratch paths single-sourced from
-    // SCRATCH_PATHS; node_modules + the generic build outputs cover the
-    // ARTIFACTS companion for the common shapes). ONLY when absent — an
+    // SCRATCH_PATHS; deps + generic build outputs single-sourced from
+    // SCAFFOLD_BUILD_OUTPUT_IGNORES beside BUILD_ARTIFACT_HINTS, review F4,
+    // covering the ARTIFACTS companion for the common shapes). ONLY when
+    // absent — an
     // operator file is never clobbered — and ONLY on the two branches that
     // create the repo from nothing; an existing repo's hygiene gaps surface
     // through the honest resolution panel + auto-fix instead. Written even
@@ -283,7 +328,7 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
       writeFileSync(
         giGuard.realPath,
         '# scaffolded by forge onboarding — C2 scratch hygiene + build outputs\n' +
-          'node_modules/\ndist/\nbuild/\nout/\ncoverage/\n' +
+          `${SCAFFOLD_BUILD_OUTPUT_IGNORES.join('\n')}\n` +
           `# forge scratch (C2)\n${SCRATCH_PATHS.join('\n')}\n`,
         'utf8',
       );
@@ -1446,7 +1491,9 @@ export async function handleStudioWriteRoutes(
       // PURE containment checks — zero side effects on anything
       // request-derived — for EVERY path this route (and the two helpers it
       // calls) will write: `.forge/project.json`, `roadmap.md`,
-      // `<artifactRoot>/brain/profile.md` beneath `projectRoot`
+      // `<artifactRoot>/brain/profile.md`, plus — only when the scaffold's
+      // `needsGitInit` decision means it would CREATE the repo — the C2
+      // hygiene `.gitignore`, all beneath `projectRoot`
       // (`checkContractArtifactContainment`), and the
       // `brain/projects/<id>/**` targets `seedProjectBrain` owns
       // (`checkProjectBrainSeedContainment`). A rejection from either check
@@ -1468,7 +1515,7 @@ export async function handleStudioWriteRoutes(
       // safe, so `seedProjectBrain` can be restored to writing where it
       // always made most sense — after the project directory exists.
       try {
-        checkContractArtifactContainment(projectRoot);
+        checkContractArtifactContainment(projectRoot, ctx.forgeRoot);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
