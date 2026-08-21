@@ -212,7 +212,7 @@ export type Run = {
   /**
    * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
    * A threaded spine run carries [forge-architect, forge-develop] so it
-   * surfaces under all three flow monitors (each rendering its own slice). A single-flow
+   * surfaces under both flow monitors (each rendering its own slice). A single-flow
    * run carries just its own flow id.
    */
   flowLineage: string[];
