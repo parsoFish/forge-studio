@@ -233,7 +233,7 @@ export function DemoTimeline({
                 {/* Connector */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 36, flexShrink: 0 }}>
                   <div style={{
-                    width: 26, height: 28, clipPath: 'var(--hex-clip)',
+ width: 26, height: 28, clipPath: 'var(--hex-clip)',
                     background: step.kind === 'capture' ? 'linear-gradient(135deg, rgba(92,200,255,.5), rgba(92,200,255,.25))'
                                : step.kind === 'verify' ? 'linear-gradient(135deg, rgba(74,222,128,.5), rgba(74,222,128,.25))'
                                : 'linear-gradient(135deg, rgba(251,191,36,.5), rgba(251,191,36,.25))',
@@ -271,8 +271,8 @@ export function DemoTimeline({
                       style={{
                         background: 'var(--bg-2)', border: `1px solid ${composed ? 'var(--line-2)' : 'var(--line)'}`,
                         borderRadius: 'var(--radius-sm)', color: composed ? 'var(--text)' : 'var(--dim)',
-                        fontFamily: 'var(--font-display)', fontSize: 11.5, fontWeight: 600,
-                        padding: '3px 8px', cursor: 'pointer', outline: 'none', maxWidth: 240,
+ fontFamily: 'var(--font-display)', fontSize: 11.5, fontWeight: 600,
+                        padding: '3px 8px', cursor: 'pointer', maxWidth: 240,
                       }}
                     >
                       <option value="">— free text —</option>

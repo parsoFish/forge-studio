@@ -104,11 +104,12 @@ export default function ConnectionLibraryPage() {
         <input
           type="text"
           data-field="connection-search"
+          aria-label="Search connections"
           placeholder="Search connections by name or description…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={{
-            width: '100%',
+ width: '100%',
             maxWidth: 420,
             marginBottom: 24,
             background: 'var(--bg-2)',
@@ -117,7 +118,6 @@ export default function ConnectionLibraryPage() {
             color: 'var(--text)',
             fontSize: 13,
             padding: '8px 11px',
-            outline: 'none',
             boxSizing: 'border-box',
           }}
         />

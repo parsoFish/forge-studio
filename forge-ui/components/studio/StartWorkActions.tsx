@@ -116,7 +116,7 @@ export function StartWorkActions({
   const hint: React.CSSProperties = { fontSize: 10.5, color: 'var(--faint)' };
   const selectStyle: React.CSSProperties = {
     background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
-    color: 'var(--text)', fontSize: 11.5, padding: '4px 8px', outline: 'none', maxWidth: 220,
+    color: 'var(--text)', fontSize: 11.5, padding: '4px 8px', maxWidth: 220,
   };
 
   return (

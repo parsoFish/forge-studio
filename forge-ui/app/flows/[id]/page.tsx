@@ -634,7 +634,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           <div
             style={{
               background: 'var(--panel)',
-              borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
               padding: '14px 24px 0',
               flexShrink: 0,
             }}
@@ -660,7 +660,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                     data-field="monitor-flow-selector"
                     value={id}
                     onChange={(e) => { if (e.target.value !== id) router.push(`/flows/${encodeURIComponent(e.target.value)}`); }}
-                    style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', outline: 'none' }}
+                    style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer' }}
                   >
                     {candidates.map((f) => (
                       <option key={f.id} value={f.id}>{f.name}{flowsWithRuns.has(f.id) ? '' : ' (no runs)'}</option>
@@ -750,13 +750,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Hint caption */}
               <p
                 style={{
-                  margin: 0,
+ margin: 0,
                   padding: '7px 20px 6px',
                   fontSize: 12,
                   color: 'var(--faint)',
                   fontStyle: 'italic',
                   background: 'var(--panel)',
-                  borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
                   flexShrink: 0,
                 }}
               >
@@ -822,7 +822,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                     gap: 10,
                     padding: '8px 20px',
                     background: 'rgba(255,80,80,0.06)',
-                    borderBottom: '1px solid rgba(255,80,80,0.2)',
+            borderBottom: '1px solid rgba(255,80,80,0.2)',
                     flexShrink: 0,
                   }}
                 >
@@ -838,7 +838,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                       color: '#fff',
                       border: 'none',
                       borderRadius: 4,
-                      cursor: 'pointer',
+            cursor: 'pointer',
                     }}
                   >
                     Resume
@@ -944,7 +944,7 @@ function GatedBanner({
     <div
       style={{
         background: 'rgba(255,158,74,0.08)',
-        borderBottom: '1px solid rgba(255,158,74,0.3)',
+            borderBottom: '1px solid rgba(255,158,74,0.3)',
         padding: '7px 18px',
         fontSize: 12,
         color: 'var(--ember)',
@@ -969,7 +969,7 @@ function GatedBanner({
               border: 'none',
               color: 'var(--ember)',
               textDecoration: 'underline',
-              cursor: 'pointer',
+            cursor: 'pointer',
               fontSize: 12,
               padding: 0,
             }}

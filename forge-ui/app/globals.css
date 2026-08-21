@@ -40,11 +40,20 @@
   /* text */
   --text: #e9eef6;
   --dim: #93a0b4;
-  --faint: #5b6779;
+  /* W7-C3 (crosscut-24): the metadata-text layer (table headers, run ids,
+     eyebrows, timestamps — mostly 9.5–11px) paints with --faint on --panel-2;
+     the old #5b6779 scored 2.78–3.37:1, under the WCAG AA 4.5:1 floor for
+     small text. #8290a4 = 4.92:1 on --panel-2 (worst surface), 5.96:1 on
+     --bg. Pinned by lib/a11y-tokens.test.ts — computed from THIS file. */
+  --faint: #8290a4;
 
   /* accents */
   --ember: #ff9e4a;
   --ember-hot: #ff6b35;
+  /* W7-C3 (sessions-kinds-V02): ten components paint primary actions with
+     var(--accent); the token was never defined, so those CTAs silently
+     rendered transparent/recessive. Aliased to the real brand token. */
+  --accent: var(--ember);
   --steel: #5cc8ff;
   --violet: #b78cff;
   --green: #4ade80;
@@ -268,7 +277,9 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-body);
   font-size: 13px;
   padding: 8px 11px;
-  outline: none;
+  /* W7-C3 (crosscut-17): the outline is deliberately NOT suppressed here —
+     the global :focus-visible ring is the keyboard indicator; the
+     border-color change below is only a visual accent. */
   transition: border-color 0.12s;
 }
 .input:focus, textarea.input:focus { border-color: var(--ember); }
@@ -576,7 +587,32 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
 /* ---------- cross-file polish ---------- */
 html { scroll-behavior: smooth; }
 ::selection { background: rgba(255,158,74,.25); color: inherit; }
-:is(.btn,.chip,.tab,a):focus-visible { outline: 2px solid var(--ember, #FF9E4A); outline-offset: 2px; }
+/* W7-C3 (crosscut-17, WCAG 2.4.7): ONE global keyboard-focus ring. The old
+   rule scoped :focus-visible to :is(.btn,.chip,.tab,a), so every native
+   <input>/<select>/<textarea> (whose outline the input rules also killed)
+   changed NOTHING on keyboard focus. :focus-visible only fires for keyboard
+   navigation, so mouse clicks stay ring-free. */
+:focus-visible { outline: 2px solid var(--ember, #FF9E4A); outline-offset: 2px; }
+
+/* W7-C3 (crosscut-18): skip-to-content link — the first tab stop on every
+   route (rendered by components/SkipLink.tsx in the root layout). Visually
+   hidden until keyboard-focused. */
+.skip-link {
+  position: fixed;
+  top: -48px;
+  left: 12px;
+  z-index: 300;
+  padding: 8px 14px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--ember);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: top 0.12s;
+}
+.skip-link:focus { top: 12px; }
 
 /* ══════════════════════════════════════════════════════════════
    Agent builder (M2-5) — 3-col workbench styles
@@ -688,7 +724,6 @@ html { scroll-behavior: smooth; }
   font-weight: 600;
   padding: 6px 28px 6px 10px;
   cursor: pointer;
-  outline: none;
 }
 .agent-select-wrap::after {
   content: '▾';
@@ -720,7 +755,6 @@ html { scroll-behavior: smooth; }
   font-size: 20px;
   font-weight: 700;
   padding: 2px 4px;
-  outline: none;
   flex: 1;
   transition: border-color 0.15s;
 }

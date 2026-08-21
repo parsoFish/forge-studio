@@ -127,6 +127,7 @@ export function CatalogPalette({ catalog, usedIds, onAddToZone }: Props) {
         <input
           className="input"
           type="search"
+          aria-label="Search the component library"
           placeholder="Search skills, tools, guards…"
           autoComplete="off"
           value={search}

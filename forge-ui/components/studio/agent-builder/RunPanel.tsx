@@ -361,6 +361,7 @@ export function RunPanel({
       <select
         className="input"
         data-run-project
+        aria-label="Run against project"
         value={project}
         onChange={(e) => setProject(e.target.value)}
         disabled={controlsDisabled}
@@ -375,6 +376,7 @@ export function RunPanel({
       <textarea
         className="input"
         data-run-inputs
+        aria-label="Run inputs (one per line, key: value)"
         rows={2}
         placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
         value={inputsText}
@@ -384,12 +386,13 @@ export function RunPanel({
       />
 
       <div data-component="cost-ceiling" style={{ marginBottom: 8 }}>
-        <label className="field-label" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+        <label className="field-label" htmlFor="run-cost-ceiling" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
           Cost ceiling (USD)
         </label>
         <div data-ceiling-enforceable={costCeilingEnforceable ? 'true' : 'false'}>
           <input
             className="input"
+            id="run-cost-ceiling"
             type="number"
             data-run-cost-ceiling
             min={0}
@@ -412,11 +415,12 @@ export function RunPanel({
         data-materials-declared={declaredMaterialKinds.join(',')}
         style={{ marginBottom: 8 }}
       >
-        <label className="field-label" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+        <label className="field-label" htmlFor="run-materials-input" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
           Attach materials{declaredMaterialKinds.length > 0 ? ` (${declaredMaterialKinds.join(', ')})` : ' (none declared)'}
         </label>
         <input
           type="file"
+          id="run-materials-input"
           data-run-materials-input
           multiple
           onChange={(e) => void onMaterialsChange(e)}

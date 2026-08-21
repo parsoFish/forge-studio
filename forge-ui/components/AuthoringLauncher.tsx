@@ -71,6 +71,7 @@ export function AuthoringLauncher({
         value={project}
         onChange={(e) => setProject(e.target.value)}
         placeholder="a project (session scratch space — not what this belongs to)"
+        aria-label="Session scratch project"
         data-field="authoring-launcher-project"
         style={inputStyle}
       />
@@ -83,6 +84,7 @@ export function AuthoringLauncher({
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder="Describe what it should do…"
+        aria-label="Describe what it should do"
         rows={3}
         data-field="authoring-launcher-prompt"
         style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}

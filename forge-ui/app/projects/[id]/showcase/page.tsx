@@ -170,7 +170,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
           fontSize: 12.5,
           color: 'var(--faint)',
           padding: '10px 0 0',
-          fontFamily: 'var(--font-mono)',
+ fontFamily: 'var(--font-mono)',
         }}>
           <Link href="/" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Forge Studio</Link>
           <span style={{ color: 'var(--line-2)' }}>/</span>
@@ -183,13 +183,13 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
 
         <div style={{ padding: '18px 0 20px', borderBottom: '1px solid var(--line)', marginBottom: 24 }}>
           <h1 style={{
-            fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
             fontSize: 26,
             fontWeight: 700,
             lineHeight: 1.2,
             color: 'var(--text)',
             letterSpacing: '-0.01em',
-            margin: '0 0 6px',
+ margin: '0 0 6px',
           }}>
             Demo showcase
           </h1>
@@ -219,7 +219,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
                 onChange={(e) => setPickedCycleId(e.target.value)}
                 style={{
                   background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text)', fontSize: 12, padding: '5px 8px', outline: 'none', maxWidth: 380,
+                  color: 'var(--text)', fontSize: 12, padding: '5px 8px', maxWidth: 380,
                 }}
               >
                 {eligibleCycles.map((c) => (
@@ -280,18 +280,18 @@ function ShowcaseStatsStrip({ stats }: { stats: ShowcaseStats }) {
   };
   const labelStyle: React.CSSProperties = {
     fontSize: 10.5,
-    fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '.08em',
     color: 'var(--faint)',
-    marginBottom: 3,
+            marginBottom: 3,
   };
   const valueStyle: React.CSSProperties = {
     fontSize: 16,
     fontWeight: 700,
     color: 'var(--text)',
-    fontFamily: 'var(--font-mono)',
+ fontFamily: 'var(--font-mono)',
   };
 
   return (
@@ -376,7 +376,7 @@ function ShowcaseEmptyState({ projectId, reason }: { projectId: string; reason: 
       }}
     >
       <div style={{
-        width: 72,
+ width: 72,
         height: 80,
         clipPath: 'var(--hex-clip)',
         background: 'var(--panel-2)',

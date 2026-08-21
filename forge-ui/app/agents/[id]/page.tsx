@@ -646,6 +646,7 @@ export default function AgentBuilderPage() {
                 <input
                   className="agent-name-input"
                   type="text"
+                  aria-label="Agent name"
                   placeholder="Agent name…"
                   spellCheck={false}
                   value={state.name}

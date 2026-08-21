@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import { DEFAULT_BRIDGE_PORT } from '@/lib/bridge-port';
 import { BridgeStatus } from '@/components/BridgeStatus';
+import { SkipLink } from '@/components/SkipLink';
 
 export const metadata = {
   title: 'forge',
@@ -49,6 +50,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script
           dangerouslySetInnerHTML={{ __html: `window.__FORGE_BRIDGE_PORT__=${DEFAULT_BRIDGE_PORT};` }}
         />
+        {/* W7-C3 (crosscut-18): the skip-to-content link is the first tab
+            stop on every route — see components/SkipLink.tsx. */}
+        <SkipLink />
         <BridgeStatus />
         {children}
       </body>

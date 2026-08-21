@@ -55,9 +55,9 @@ export function KbBind({
         value={kb ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         style={{
-          width: '100%', background: 'var(--panel)', border: '1px solid var(--line-2)',
+ width: '100%', background: 'var(--panel)', border: '1px solid var(--line-2)',
           borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)',
-          fontSize: 12.5, padding: '6px 10px', cursor: 'pointer', outline: 'none', marginBottom: 8,
+          fontSize: 12.5, padding: '6px 10px', cursor: 'pointer', marginBottom: 8,
         }}
       >
         <option value="">— bind a knowledge base —</option>

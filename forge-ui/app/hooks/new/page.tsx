@@ -64,7 +64,7 @@ export default function HookBuilderPage() {
   }
 
   const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--dim)', display: 'block', marginBottom: 5 };
-  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
+  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', boxSizing: 'border-box' };
 
   return (
     <StudioPage
@@ -116,13 +116,13 @@ export default function HookBuilderPage() {
             <label style={labelStyle}>Permissions</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
-                <span style={{ fontSize: 11, color: 'var(--faint)', display: 'block', marginBottom: 4 }}>env vars (comma-separated)</span>
-                <input data-field="hook-permissions-env" style={inputStyle} value={permEnv}
+                <label htmlFor="hk-perm-env" style={{ fontSize: 11, color: 'var(--faint)', display: 'block', marginBottom: 4 }}>env vars (comma-separated)</label>
+                <input id="hk-perm-env" data-field="hook-permissions-env" style={inputStyle} value={permEnv}
                   placeholder="e.g. GH_TOKEN, MY_API_KEY" onChange={(e) => setPermEnv(e.target.value)} />
               </div>
               <div>
-                <span style={{ fontSize: 11, color: 'var(--faint)', display: 'block', marginBottom: 4 }}>path prefixes (comma-separated)</span>
-                <input data-field="hook-permissions-read" style={inputStyle} value={permRead}
+                <label htmlFor="hk-perm-read" style={{ fontSize: 11, color: 'var(--faint)', display: 'block', marginBottom: 4 }}>path prefixes (comma-separated)</label>
+                <input id="hk-perm-read" data-field="hook-permissions-read" style={inputStyle} value={permRead}
                   placeholder="e.g. ./projects" onChange={(e) => setPermRead(e.target.value)} />
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--dim)' }}>

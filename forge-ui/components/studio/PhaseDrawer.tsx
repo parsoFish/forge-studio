@@ -89,6 +89,15 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
         data-drawer-node={nodeId ?? ''}
         data-hex-kind={hexKind}
         data-wi-id={isWi ? (wiId ?? '') : ''}
+        // W7-C3 (crosscut-16): closed, the drawer was parked off-canvas by a
+        // bare `right: -540` — still in the tab order (its ✕ was tab stop
+        // #141, focus vanished off-screen) and read to screen readers as an
+        // empty phase panel on every flow monitor. `visibility: hidden` (a
+        // discrete transition — it flips AFTER the slide-out completes)
+        // removes it from both; `aria-hidden` + the `inert` attribute (React
+        // 18 renders the empty-string form) are the explicit a11y statement.
+        aria-hidden={!isOpen}
+        {...(isOpen ? {} : ({ inert: '' } as Record<string, string>))}
         style={{
           position: 'fixed',
           top: 0,
@@ -101,7 +110,8 @@ export function PhaseDrawer({ nodeId, run, flow, onClose, hexKind = 'phase', wiI
           zIndex: 200,
           display: 'flex',
           flexDirection: 'column',
-          transition: 'right 0.22s cubic-bezier(0.22,1,0.36,1)',
+          visibility: isOpen ? 'visible' : 'hidden',
+          transition: 'right 0.22s cubic-bezier(0.22,1,0.36,1), visibility 0.22s',
           overflow: 'hidden',
         }}
       >

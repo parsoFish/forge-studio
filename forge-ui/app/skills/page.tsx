@@ -141,13 +141,14 @@ export default function SkillLibraryPage() {
         <input
           type="text"
           data-field="skill-search"
+          aria-label="Search skills"
           placeholder="Search skills by name or description…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={{
-            width: '100%', maxWidth: 420, marginBottom: 24, background: 'var(--bg-2)',
+ width: '100%', maxWidth: 420, marginBottom: 24, background: 'var(--bg-2)',
             border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', color: 'var(--text)',
-            fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box',
+            fontSize: 13, padding: '8px 11px', boxSizing: 'border-box',
           }}
         />
 

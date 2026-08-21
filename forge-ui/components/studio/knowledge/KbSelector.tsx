@@ -50,8 +50,8 @@ export function KbSelector({ kbs, currentId }: Props) {
         style={{
           background: 'var(--panel)', border: '1px solid var(--line-2)',
           borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-          fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500,
-          padding: '6px 10px', outline: 'none', cursor: 'pointer',
+ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500,
+          padding: '6px 10px', cursor: 'pointer',
         }}
       >
         {isEmpty ? (
