@@ -84,7 +84,7 @@
  * rather than guessing one.
  */
 
-import { readFileSync, readdirSync, lstatSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
@@ -477,7 +477,8 @@ async function runAgentStyleStep(args: {
     // agent resolve it against the wrong base (beside status.registryPath)
     // and crash the session with "produced no files".
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
-    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots);
+    const operatorFeedback = readOperatorFeedback(sessionDir);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback);
     // W7-B3 (community-13): the turn budget comes from the agent's OWN
     // SKILL.md `budgets.maxTurns` — the same declared field every unattended
     // agent already carries (run-agent.ts reads it for one-shot spawns). A
@@ -501,6 +502,16 @@ async function runAgentStyleStep(args: {
       onThinking,
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
     });
+    // W7-C2 T1 review (P0-2, finding A5) — CONSUME-ONCE. `readOperatorFeedback`
+    // runs on EVERY `step: agent` turn, not only the one a revise triggered,
+    // and nothing used to clear feedback.md — so round 1's corrections kept
+    // riding round 2's and round 3's prompts, silently steering turns the
+    // operator never aimed. The words are not lost by this delete: the revise
+    // that wrote them also recorded them on its own verdicts.json record
+    // (cli/bridge-studio-affordances.ts), which is what the transcript renders
+    // per round. Deleted only AFTER the turn actually folded them into a
+    // prompt — a turn that threw leaves the note in place for the retry.
+    if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else if (turnSpec.style === 'structured') {
     // No schema registry exists yet — SCHEMA_IDS ships empty (R4-22 WI-1's
     // own deliberately-green gap-pin, orchestrator/studio/session-kinds.ts).
@@ -778,6 +789,7 @@ function buildTurnPrompt(
   status: InteractiveTurnStatus,
   skill: string,
   writeRoots: readonly string[],
+  feedback: string | null,
 ): string {
   const writes = phaseRow.writes ?? [];
   return [
@@ -792,12 +804,54 @@ function buildTurnPrompt(
           'Use these absolute paths exactly as given — a write anywhere else (any other absolute path, or a relative path resolved against some other base) is refused by the tool fence.',
         ].join('\n')
       : 'Write your output where the skill above instructs.',
+    // W7-C2 (revise verdict, sessions-kinds-09/23) — the operator's revision
+    // feedback, when the generic affordance route sent this session back to
+    // its drafting phase: mirrored from instructions-runner.ts's /
+    // demo-builder-runner.ts's own feedback.md sections, so the generic
+    // spine's revise turn actually carries the words that triggered it.
+    ...(feedback !== null ? ['', 'Operator revision feedback on the previous draft (apply it):', feedback] : []),
     '',
     'Session status (read-only context):',
     '```json',
     JSON.stringify(status, null, 2),
     '```',
   ].join('\n');
+}
+
+/** Read `feedback.md` (the operator's revise-verdict notes) from the session
+ *  dir through the SAME containment choke point every other session-dir
+ *  read here uses — an escaping symlink collapses to null == absent, same
+ *  as `readFeedback` in instructions-runner.ts / demo-builder-runner.ts.
+ *  Trimmed content, or null when absent/empty. */
+function readOperatorFeedback(sessionDir: string): string | null {
+  const guarded = resolveGuardedPath(sessionDir, ['feedback.md']);
+  if (!guarded.ok || !guarded.exists) return null;
+  try {
+    const body = readFileSync(guarded.realPath, 'utf8').trim();
+    return body.length > 0 ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Delete `feedback.md` once a turn has folded it into its prompt (W7-C2 T1
+ *  review, P0-2 / finding A5) — through the SAME containment choke point the
+ *  read above uses, so an escaping symlink is never followed to an outside
+ *  unlink. A failure is REPORTED, never swallowed: the turn itself already
+ *  ran, so this must not throw the session away, but a note that survives
+ *  its own consumption WILL re-steer the next turn and the operator needs to
+ *  be able to see why. */
+function clearOperatorFeedback(sessionDir: string): void {
+  const guarded = resolveGuardedPath(sessionDir, ['feedback.md']);
+  if (!guarded.ok || !guarded.exists) return;
+  try {
+    rmSync(guarded.realPath);
+  } catch (err) {
+    console.error(
+      `interactive-runner: failed to clear feedback.md in ${sessionDir} after consuming it — the SAME operator feedback will be re-injected into the next turn's prompt:`,
+      err,
+    );
+  }
 }
 
 // W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates

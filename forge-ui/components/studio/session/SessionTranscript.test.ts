@@ -87,3 +87,28 @@ test('an empty turns[] renders the honest emptyMessage, never a stray [data-tran
   expect(html).toContain('No turns recorded yet.');
   expect(html).not.toContain('data-transcript-question-index');
 });
+
+// W7-C2 T1 review (P0-3) — the SCOPED fail-closed transcript error. A corrupt
+// verdicts.json used to 409 the entire session GET, so the page could not
+// render at all and the operator lost the very verdict controls they needed
+// to get out of that state. The refusal now lives in this pane.
+test('C2-FIX-P03-3: a transcript-derivation error renders as an explicit, verbatim error state — never the quiet "no turns yet" copy', () => {
+  const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+    turns: [],
+    emptyMessage: 'Nothing recorded in the instructions stage yet.',
+    error: 'verdicts.json is not valid JSON — Unexpected end of JSON input',
+  }));
+  expect(html).toContain('data-transcript-error');
+  expect(html).toContain('verdicts.json is not valid JSON');
+  expect(html).not.toContain('Nothing recorded in the instructions stage yet.');
+});
+
+test('C2-FIX-P03-4: with no error, an empty transcript keeps its ordinary empty copy (the error state is not over-eager)', () => {
+  const html = renderToStaticMarkup(React.createElement(SessionTranscript, {
+    turns: [],
+    emptyMessage: 'Nothing recorded in the instructions stage yet.',
+    error: null,
+  }));
+  expect(html).not.toContain('data-transcript-error');
+  expect(html).toContain('Nothing recorded in the instructions stage yet.');
+});

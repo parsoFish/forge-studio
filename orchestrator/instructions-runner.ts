@@ -108,6 +108,14 @@ export type InstructionsStatus = {
    * ⇒ unchanged default behavior (`INSTRUCTIONS_MODEL`).
    */
   modelTier?: ModelTier;
+  /**
+   * W7-C2 (sessions-kinds-36) — the permanent pointer at what this session
+   * produced, written once at finalize success and read back by the
+   * session-shell route on every GET (`finalized` on the wire). `agents-md`
+   * names the project whose AGENTS.md was committed. Absent until the
+   * session commits.
+   */
+  finalized?: { kind: string; id: string };
 };
 
 /** The draft AGENTS.md the runner writes between turns, pending operator verdict. */
@@ -517,7 +525,20 @@ function runFinalizeStep(args: {
     () => writeFileSync(agentsPath, content.endsWith('\n') ? content : `${content}\n`),
     ['AGENTS.md'],
   );
-  writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
+  // W7-C2 T1 review (P0-4, sessions-kinds-36) — the permanent "what this
+  // session produced" pointer. It was declared REQUIRED on the session-shell
+  // payload and rendered by `FinalizedLink` (forge-ui), but only 2 of the 5
+  // finalizing kinds ever WROTE it — a field surfaced everywhere and
+  // produced by 40% of its producers is declared-data-fails-open. What an
+  // instructions session produces is the project's own AGENTS.md, so the
+  // pointer names the PROJECT (the shell route derives whether the file is
+  // still there — `finalizedObjectExists`, cli/bridge-studio-sessions.ts —
+  // rather than trusting the pointer's mere presence).
+  writeInstructionsStatus(input.projectRoot, input.sessionId, {
+    ...status,
+    phase: 'committed',
+    finalized: { kind: 'agents-md', id: status.project },
+  });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',

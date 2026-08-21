@@ -159,6 +159,7 @@ import {
   loadSessionKinds,
   validateSessionKinds,
   FINALIZER_IDS,
+  VERDICT_VALUES,
   deriveSessionAffordances,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
@@ -1021,16 +1022,19 @@ function wellFormedTurnSpec(): Record<string, unknown> {
     bashFence: 'inspect',
     phases: [
       { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
-      // verdicts (W6-B6 post-merge review): the real, live authoring row
-      // declares `verdicts: [approve]` — there is no rejection path for a
-      // drafted package — kept in lockstep here so this literal stays a
-      // truthful mirror of the checked-in yaml, not just the ADR's original
-      // 4-phase shape. requires (W6-B9, reviewer finding on W6-B8): approve
-      // ALSO needs an operator-supplied `id` beyond `verdict` itself — same
-      // lockstep reasoning.
-      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve'], requires: ['id'] },
+      // verdicts (W7-C2, superseding W6-B6's approve-only ruling): the real,
+      // live authoring row now declares the full three-way branch —
+      // `revise` (feedback -> re-run analyzing) and `reject` (-> the
+      // terminal `rejected` row below) joined per sessions-kinds-23 /
+      // library-24 — kept in lockstep here so this literal stays a truthful
+      // mirror of the checked-in yaml. requires (W6-B9; W7-C2 scoped it to
+      // APPROVE): approve ALSO needs an operator-supplied `id` beyond
+      // `verdict` itself — same lockstep reasoning.
+      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'], requires: ['id'] },
       { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
       { phase: 'committed', step: 'terminal' },
+      // W7-C2 — reject's terminal landing row.
+      { phase: 'rejected', step: 'terminal' },
     ],
   };
 }
@@ -1239,10 +1243,12 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
         style: 'agent',
         phases: [
           { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-          // verdicts (W6-B6 post-merge review): approve-only, same reasoning
-          // as the "no next" comment above — no rejection semantics exist
-          // anywhere in this repo for a cleanup plan.
-          { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
+          // verdicts (W7-C2, superseding W6-B6's approve-only ruling): the
+          // full three-way branch — `revise` (feedback -> re-draft) and
+          // `reject` (-> the terminal `rejected` row below) joined per
+          // sessions-kinds-23. The approval gate ("no next" above) is
+          // unchanged.
+          { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
           // W6-B4 adversarial-review fix: `applying` is the atomic-claim
           // marker `approveKbCleanup` (cli/bridge-studio-kbs.ts) writes
           // SYNCHRONOUSLY before its one await, closing a live-reproduced
@@ -1250,9 +1256,11 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
           // always has been) — `approveKbCleanup` is its only writer.
           { phase: 'applying', step: 'terminal' },
           { phase: 'applied', step: 'terminal' },
+          // W7-C2 — reject's terminal landing row.
+          { phase: 'rejected', step: 'terminal' },
         ],
       },
-      `kb-cleanup's real turnSpec must deep-equal its ratified 4-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applying→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
+      `kb-cleanup's real turnSpec must deep-equal its ratified table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applying→applied, plus a direct awaiting-approval→rejected terminal, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
     );
 
     const kbCleanupFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:kb-cleanup');
@@ -1270,7 +1278,8 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
         style: 'agent',
         phases: [
           { phase: 'gathering', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
-          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'reject'] },
+          // W7-C2: `revise` joined approve/reject (feedback -> re-gather).
+          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
           { phase: 'committing', step: 'finalize', finalizer: 'commitRegistryDraft', next: 'committed' },
           { phase: 'committed', step: 'terminal' },
           { phase: 'rejected', step: 'terminal' },
@@ -1493,10 +1502,12 @@ describe('validateSessionKinds — turnSpec.phases graph coherence (AT-R422-13..
     writeAgentSkill(root, 'fixture-agent');
     const turnSpec = wellFormedTurnSpec();
     const phases = turnSpec.phases as Record<string, unknown>[];
-    const idx = phases.findIndex((p) => p.step === 'terminal');
-    // Flip the terminal row to `noop` (not remove it) so no `next` becomes
-    // dangling — this isolates "no terminal phase" from AT-R422-13's gap.
-    phases[idx] = { ...phases[idx], step: 'noop' };
+    // Flip EVERY terminal row to `noop` (not remove them) so no `next`
+    // becomes dangling — this isolates "no terminal phase" from
+    // AT-R422-13's gap. (W7-C2: the fixture now carries TWO terminal rows —
+    // committed AND rejected — so a single findIndex flip would leave a
+    // terminal row standing and vacate this test.)
+    turnSpec.phases = phases.map((p) => (p.step === 'terminal' ? { ...p, step: 'noop' } : p));
     writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
 
     const findings = turnspecFindings(validateSessionKinds(root));
@@ -1623,15 +1634,17 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
     style: 'agent',
     phases: [
       { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-      // verdicts (W6-B6 post-merge review): approve-only, mirroring the
-      // "no next" comment above — no rejection semantics exist anywhere in
-      // this repo for a cleanup plan.
-      { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve'] },
+      // verdicts (W7-C2, superseding W6-B6's approve-only ruling): the full
+      // three-way branch — revise (feedback -> re-draft) + reject (-> the
+      // terminal `rejected` row below), per sessions-kinds-23.
+      { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
       // W6-B4 adversarial-review fix: the atomic-claim marker
       // `approveKbCleanup` writes synchronously before its one await —
       // see session-kinds.yaml's own comment on this row.
       { phase: 'applying', step: 'terminal' },
       { phase: 'applied', step: 'terminal' },
+      // W7-C2 — reject's terminal landing row.
+      { phase: 'rejected', step: 'terminal' },
     ],
   };
 
@@ -2114,7 +2127,9 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
           // dedicated /sessions/demo/<sid> screen actually get one started.
           { phase: 'briefing', step: 'noop', awaits: 'questions' },
           { phase: 'generating', step: 'agent', writes: ['demo'], next: 'awaiting-review' },
-          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
+          // W7-C2 (bead forge-4ei): the three-way branch the runner always
+          // supported is now DECLARED (revise = feedback -> regenerate).
+          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
           { phase: 'locking', step: 'finalize', finalizer: 'recordLockedDemo', next: 'locked' },
           { phase: 'locked', step: 'terminal' },
           { phase: 'abandoned', step: 'terminal' },
@@ -2135,7 +2150,9 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
           { phase: 'interviewing', step: 'agent' },
           { phase: 'awaiting-answers', step: 'noop', awaits: 'questions', next: 'interviewing' },
           { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
-          { phase: 'awaiting-verdict', step: 'noop', awaits: 'verdict' },
+          // W7-C2 (sessions-kinds-09): the runner's real three-way branch,
+          // declared (revise = feedback.md -> drafting).
+          { phase: 'awaiting-verdict', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'] },
           { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
           { phase: 'committed', step: 'terminal' },
           { phase: 'rejected', step: 'terminal' },
@@ -2314,5 +2331,89 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
 
     const architect = byId(descs, 'architect');
     assert.deepEqual(deriveSessionAffordances(architect, architect.defaultStage), [], 'architect has neither table — must derive [] regardless of phase');
+  });
+});
+
+// ===========================================================================
+// W7-C2 (sessions-kinds-09/23, library-24, beads forge-4ei/forge-lzv) — the
+// 'revise' verdict joins the frozen vocabulary, and every DRAFT kind's
+// operator gate declares the full three-way branch its runner actually
+// supports (instructions/demo always had a bespoke revise path; authoring/
+// kb-cleanup/community-refresh gain the generic one). authoring + kb-cleanup
+// additionally gain a `rejected` terminal row — reusing the token
+// instructions/community-refresh already ship, never a new vocab value.
+// ===========================================================================
+
+describe('W7-C2 — revise verdict vocabulary + real-yaml three-way gates', () => {
+  it('C2-K1: VERDICT_VALUES contains exactly approve|reject|revise', () => {
+    const ids = VERDICT_VALUES.map((v) => v.id).sort();
+    assert.deepEqual(ids, ['approve', 'reject', 'revise']);
+  });
+
+  it('C2-K2: the REAL yaml declares [approve, revise, reject] on every draft kind\'s operator gate', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    const gate = (kindId: string, phase: string): readonly string[] | undefined => {
+      const d = descs.find((x) => x.id === kindId);
+      assert.ok(d, `descriptor "${kindId}" must exist`);
+      const rows = d!.turnSpec?.phases ?? d!.panel?.phases;
+      assert.ok(rows, `descriptor "${kindId}" must carry a phase table`);
+      return rows!.find((p) => p.phase === phase)?.verdicts;
+    };
+    assert.deepEqual(gate('instructions', 'awaiting-verdict'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('demo', 'awaiting-review'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('authoring', 'awaiting-review'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('kb-cleanup', 'awaiting-approval'), ['approve', 'revise', 'reject']);
+    assert.deepEqual(gate('community-refresh', 'awaiting-review'), ['approve', 'revise', 'reject']);
+  });
+
+  it('C2-K3: authoring + kb-cleanup gain a `rejected` terminal row (reject now has somewhere honest to land)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    for (const kindId of ['authoring', 'kb-cleanup']) {
+      const d = descs.find((x) => x.id === kindId);
+      const row = d!.turnSpec!.phases.find((p) => p.phase === 'rejected');
+      assert.ok(row, `${kindId} must declare a "rejected" phase row`);
+      assert.equal(row!.step, 'terminal', `${kindId}'s rejected row must be terminal`);
+    }
+  });
+
+  it('C2-K4: deriveSessionAffordances threads the three-way meta.verdicts onto the wire (authoring awaiting-review)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    const authoring = descs.find((x) => x.id === 'authoring')!;
+    const affordances = deriveSessionAffordances(authoring, 'awaiting-review');
+    const verdict = affordances.find((a) => a.kind === 'verdict');
+    assert.ok(verdict, 'awaiting-review must derive a verdict affordance');
+    assert.deepEqual(verdict!.meta?.verdicts, ['approve', 'revise', 'reject']);
+    assert.deepEqual(verdict!.meta?.requires, ['id'], 'requires stays declared (approve-scoped enforcement is the write route\'s job)');
+  });
+
+  it('C2-K5: validateSessionKinds(REPO_ROOT) stays at zero error-level findings with the revise rows in place', () => {
+    const findings = validateSessionKinds(REPO_ROOT).filter((f) => f.level === 'error');
+    assert.deepEqual(findings, [], `expected zero errors, got: ${JSON.stringify(findings, null, 2)}`);
+  });
+
+  // W7-C2 T1 review — the generic revise handler derives the phase to send a
+  // session back to with `phases.find((p) => p.step === 'agent' && p.next ===
+  // affordance.phase)`. `find` takes the FIRST match, and nothing (lint or
+  // test) enforced that there IS only one: a second agent-step row landing on
+  // the same verdict phase would silently pick whichever the yaml happened to
+  // list first — the revise would re-run the wrong turn, with no signal at
+  // all. Pinned against the SHIPPED yaml, for every revise-declaring row.
+  it('C2-K6: every revise-declaring verdict row in the REAL yaml has EXACTLY ONE agent-step producer landing on it', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    let checked = 0;
+    for (const d of descs) {
+      const rows = d.turnSpec?.phases ?? d.panel?.phases ?? [];
+      for (const row of rows) {
+        if (!(row.verdicts ?? []).includes('revise')) continue;
+        const producers = rows.filter((p) => p.step === 'agent' && p.next === row.phase);
+        assert.equal(
+          producers.length,
+          1,
+          `session kind "${d.id}" phase "${row.phase}" declares a "revise" verdict but has ${producers.length} agent-step producer rows landing on it (${producers.map((p) => p.phase).join(', ') || 'none'}) — the revise handler's phases.find() would pick the first silently`,
+        );
+        checked += 1;
+      }
+    }
+    assert.equal(checked, 5, `all five revise-declaring kinds must be covered, checked ${checked}`);
   });
 });

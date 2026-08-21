@@ -134,9 +134,18 @@ const THEMES_DIRNAME = 'themes';
  *  equals this constant; any other phase means questions.json is stale. */
 const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
 
+/** W7-C2 (sessions-kinds-29) — the durable operator-verdict record: the
+ *  generic affordance write route (cli/bridge-studio-affordances.ts) appends
+ *  `{at, verdict, notes?}` here after every ACCEPTED verdict, so a reject/
+ *  approve (and its rationale) is never invisible in the transcript. The
+ *  revise verdict's feedback text is deliberately NOT copied into a record —
+ *  feedback.md already renders its own operator turn; the revise record is
+ *  the bare decision. */
+const VERDICTS_FILENAME = 'verdicts.json';
+
 /** The fixed candidate list every derivation scans, regardless of
  *  descriptor — file-presence-driven, never descriptor.id-driven. */
-const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME, QUESTIONS_FILENAME, FEEDBACK_FILENAME] as const;
+const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME, QUESTIONS_FILENAME, FEEDBACK_FILENAME, VERDICTS_FILENAME] as const;
 
 // ---------------------------------------------------------------------------
 // Traversal choke point — every file read in this module goes through this
@@ -285,6 +294,63 @@ function parseAnswerRoundsJson(raw: string): ParseOutcome<ParsedRound[]> {
 
 type ParsedQuestion = { readonly question: string };
 
+type ParsedVerdictRecord = {
+  readonly at: string;
+  readonly verdict: string;
+  readonly notes?: string;
+  readonly feedback?: string;
+};
+
+/** verdicts.json — fails closed on the same principle as answers.json (a
+ *  malformed verdict record must never surface an invented turn, and must
+ *  never be silently dropped either). Shape: an array of records each
+ *  carrying a string `at` (W7-C2 T1 review, A13 — REQUIRED, and now
+ *  actually READ: the records are ordered by it below, so an
+ *  out-of-sequence file renders chronologically instead of in write order)
+ *  and a string `verdict`; `notes` and `feedback` optional (string when
+ *  present). `feedback` is the revise round's OWN words (W7-C2 T1 review,
+ *  P0-2) — feedback.md holds only the CURRENT pending note and is
+ *  overwritten by each revise, so it could never carry round 1's rationale
+ *  once round 2 landed. */
+function parseVerdictsJson(raw: string): ParseOutcome<ParsedVerdictRecord[]> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, message: `${VERDICTS_FILENAME} is not valid JSON — ${(e as Error).message}` };
+  }
+  if (!Array.isArray(parsed)) {
+    return { ok: false, message: `${VERDICTS_FILENAME} must be a JSON array of verdict records, got ${typeof parsed}` };
+  }
+  const records: ParsedVerdictRecord[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const r = parsed[i];
+    if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must be an object, got ${Array.isArray(r) ? 'array' : typeof r}` };
+    }
+    const rec = r as Record<string, unknown>;
+    if (typeof rec.verdict !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must carry a string "verdict" field` };
+    }
+    if (typeof rec.at !== 'string' || rec.at.length === 0) {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must carry a non-empty string "at" timestamp` };
+    }
+    if ('notes' in rec && rec.notes !== undefined && typeof rec.notes !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] has a non-string "notes" field` };
+    }
+    if ('feedback' in rec && rec.feedback !== undefined && typeof rec.feedback !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] has a non-string "feedback" field` };
+    }
+    records.push({
+      at: rec.at,
+      verdict: rec.verdict,
+      ...(typeof rec.notes === 'string' ? { notes: rec.notes } : {}),
+      ...(typeof rec.feedback === 'string' ? { feedback: rec.feedback } : {}),
+    });
+  }
+  return { ok: true, value: records };
+}
+
 /** questions.json — fails closed on the same principle as answers.json
  *  (not tested by an explicit AT, but "never fabricate" applies equally: a
  *  malformed pending-question file must never surface an invented turn). */
@@ -381,13 +447,54 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     }
   }
 
-  // feedback.md — an honest single operator turn (the revision note between
-  // draft rounds).
+  // feedback.md — an honest single operator turn: the CURRENT, not-yet-
+  // consumed revision note. W7-C2 T1 review (P0-2): this file is transient
+  // by design — each revise overwrites it and the next agent turn CONSUMES
+  // it (orchestrator/interactive-runner.ts deletes it once it has been
+  // folded into a prompt), so it can only ever hold the newest round's
+  // words. The DURABLE per-round record is verdicts.json's own `feedback`
+  // field, rendered below.
   const feedbackBody = safeReadFileInSession(sessionDir, FEEDBACK_FILENAME);
   if (feedbackBody !== null) {
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
     turns.push({ index: index++, role: 'operator', stage: staged.value, text: feedbackBody, source: FEEDBACK_FILENAME });
+  }
+
+  // verdicts.json (W7-C2, sessions-kinds-29) — one operator turn per
+  // recorded decision: "Verdict: <verdict>" plus the rationale when one was
+  // given, plus (W7-C2 T1 review, P0-2) that round's OWN revise words.
+  //
+  // Ordered by `at` (W7-C2 T1 review, A13 — the field was stamped and never
+  // read, so a multi-round file rendered in write order regardless of when
+  // the decisions were actually made). Sorting is LEXICOGRAPHIC, which is
+  // chronological for the ISO-8601 stamps `appendVerdictRecord` writes, and
+  // STABLE, so two records sharing a stamp keep their file order. Cross-
+  // SOURCE chronology is deliberately NOT attempted: idea.md / answers.json /
+  // questions.json / feedback.md carry no timestamps at all, so interleaving
+  // them would mean inventing an order — the verdict block stays a block,
+  // internally chronological, appended after the untimestamped sources.
+  //
+  // `#<n>` in `source` is the record's POSITION IN THE FILE (1-based), not
+  // its display position — it names the durable record a reader can go find.
+  const verdictsRaw = safeReadFileInSession(sessionDir, VERDICTS_FILENAME);
+  if (verdictsRaw !== null) {
+    const parsedV = parseVerdictsJson(verdictsRaw);
+    if (!parsedV.ok) return { ok: false, error: { message: parsedV.message } };
+    const staged = resolveStage(undefined);
+    if (!staged.ok) return { ok: false, error: { message: staged.message } };
+    const ordered = parsedV.value
+      .map((record, position) => ({ record, position }))
+      .sort((a, b) => (a.record.at < b.record.at ? -1 : a.record.at > b.record.at ? 1 : a.position - b.position));
+    for (const { record, position } of ordered) {
+      const headline = record.notes !== undefined && record.notes.length > 0
+        ? `Verdict: ${record.verdict} — ${record.notes}`
+        : `Verdict: ${record.verdict}`;
+      const text = record.feedback !== undefined && record.feedback.length > 0
+        ? `${headline}\n\n${record.feedback}`
+        : headline;
+      turns.push({ index: index++, role: 'operator', stage: staged.value, text, source: `${VERDICTS_FILENAME}#${position + 1}` });
+    }
   }
 
   return { ok: true, turns, sourcesScanned: CANDIDATE_SOURCE_FILES };

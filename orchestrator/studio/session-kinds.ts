@@ -305,10 +305,20 @@ export type VerdictValueRow = { readonly id: string };
  *  'reject']` when the row omits it — see `deriveSessionAffordances`); the
  *  write route validates a posted verdict against the SAME derived
  *  `meta.verdicts`, and the client renders its buttons from the SAME field.
- *  Typed `readonly`, as AWAITS_KINDS. */
+ *  Typed `readonly`, as AWAITS_KINDS.
+ *
+ *  W7-C2 (ADR-043 2026-08-21 amendment; beads forge-4ei, findings
+ *  sessions-kinds-09/23, library-24): `revise` joins the vocabulary — the
+ *  operator's "apply this feedback and draft again" branch every draft
+ *  runner already supports (instructions/demo bespoke routes; the generic
+ *  spine's re-run of the row's own agent phase for authoring / kb-cleanup /
+ *  community-refresh). A row opts in by DECLARING it in `verdicts:`; the
+ *  ADR default for an undeclared row stays `['approve','reject']` — revise
+ *  is never fabricated onto a kind whose runner has no revise turn. */
 export const VERDICT_VALUES: readonly VerdictValueRow[] = Object.freeze([
   Object.freeze({ id: 'approve' }),
   Object.freeze({ id: 'reject' }),
+  Object.freeze({ id: 'revise' }),
 ]);
 export type VerdictValue = (typeof VERDICT_VALUES)[number]['id'];
 

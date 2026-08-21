@@ -1419,7 +1419,10 @@ export const journey = defineJourney({
               writeBandPbStatus(bandSessionId, { phase: 'awaiting-review' });
               const reviewReady = await page.waitForSelector('[data-section="brain-review"]', { timeout: 12000 }).then(() => true).catch(() => false);
               check(reviewReady, 'kb-band-seed: awaiting-review renders after the emulated seeding pass (client poll picked up the disk write)');
-              await countAtLeast(page, '[data-theme-name]', 2, 'kb-band-seed: >=2 staged themes rendered for review');
+              // W7-C2 (sessions-kinds-22): themes render ONCE, in the
+              // artifact pane's FilePackage tabs (the panel's duplicate
+              // accordion is gone).
+              await countAtLeast(page, '[data-section="session-artifact"] [data-file-tab]', 2, 'kb-band-seed: >=2 staged themes rendered for review (artifact pane tabs)');
               await frame(page, 'kb-band-seed-1-review', 'R4-19 — staged themes (emulated authoring, grounded in real review-band findings) awaiting review', { key: true });
 
         },

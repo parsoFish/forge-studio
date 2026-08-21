@@ -33,10 +33,20 @@ import type { SessionTurn } from '@/lib/session-client';
 export function SessionTranscript({
   turns,
   emptyMessage,
+  error = null,
   children,
 }: {
   turns: readonly SessionTurn[];
   emptyMessage: string | null;
+  /** W7-C2 T1 review (P0-3) — the transcript derivation's own fail-closed
+   *  reason, when it refused. The bridge used to 409 the WHOLE session GET
+   *  on a malformed transcript source (a corrupt verdicts.json), which made
+   *  the page unrenderable — so the operator could not approve, reject or
+   *  revise their way out of the very state that produced it. The failure
+   *  is now scoped to THIS pane: `turns` is empty (never partial, never
+   *  fabricated) and the honest reason renders here, while the rest of the
+   *  shell — affordances included — stays live. */
+  error?: string | null;
   children?: ReactNode;
 }): JSX.Element {
   return (
@@ -54,7 +64,15 @@ export function SessionTranscript({
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {turns.length === 0 ? (
+        {error !== null ? (
+          <div
+            data-transcript-error
+            style={{ fontSize: 12.5, color: 'var(--red, #f87171)', lineHeight: 1.55 }}
+          >
+            This session&apos;s transcript could not be derived, so none of it is shown (nothing is
+            partially rendered or guessed): {error}
+          </div>
+        ) : turns.length === 0 ? (
           <div style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic' }}>
             {emptyMessage ?? 'No turns recorded yet.'}
           </div>

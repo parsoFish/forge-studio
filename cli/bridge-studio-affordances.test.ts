@@ -547,7 +547,7 @@ test('TBL-kbcleanup-1: verdict approve at awaiting-approval -> 200, phase -> app
   assert.equal(readPhase(sessionDir), 'applied');
 });
 
-test('TBL-kbcleanup-2: verdict reject at awaiting-approval -> 422 (no rejection path exists for kb-cleanup), phase unchanged', async () => {
+test('TBL-kbcleanup-2: verdict reject at awaiting-approval -> 200, phase -> rejected (W7-C2: the yaml row now declares the three-way gate; the old approve-only 422 is gone)', async () => {
   const kbId = 'w6b4-cleanup-kb-2';
   writeKb(kbId, '{ kind: unique }');
   const project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
@@ -556,14 +556,14 @@ test('TBL-kbcleanup-2: verdict reject at awaiting-approval -> 422 (no rejection 
     session_id: sessionId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [],
   });
   const res = await postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'reject' });
-  const body = (await res.json()) as { error: string };
-  assert.equal(res.status, 422);
-  // W6-B6 post-merge review: the 422 must be driven by the SAME derived
-  // meta.verdicts studio/session-kinds.yaml's "awaiting-approval" row
-  // declares (verdicts: [approve]) — never a hand-kept per-kind table that
-  // could silently drift from it.
-  assert.match(body.error, /allowed: approve/, `expected the allowed set to name "approve" (derived from the yaml row), got: ${body.error}`);
-  assert.equal(readPhase(sessionDir), 'awaiting-approval', 'a refused reject must never advance/mutate the phase');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  // W6-B6 post-merge review discipline unchanged: the gate is still driven
+  // by the SAME derived meta.verdicts the yaml row declares — the row itself
+  // now says [approve, revise, reject] (sessions-kinds-23: a plan the
+  // operator does not want needs an exit), so reject lands on the terminal
+  // `rejected` row rather than 422ing.
+  assert.equal(readPhase(sessionDir), 'rejected');
 });
 
 test('TBL-kbcleanup-3: verdict approve when status.json carries no string kb_id -> 500, named', async () => {
@@ -601,7 +601,7 @@ test('TBL-authoring-1: verdict approve (kind:skill) at awaiting-review -> 200, d
   assert.ok(existsSync(join(forgeRoot, 'skills', 'w6b4-authored-skill', 'SKILL.md')), 'the finalized skill must be installed for real, via runFinalize');
 });
 
-test('TBL-authoring-2: verdict reject at awaiting-review -> 422 (no rejection path exists for authoring), phase unchanged', async () => {
+test('TBL-authoring-2: verdict reject at awaiting-review -> 200, phase -> rejected, nothing landed (W7-C2: the yaml row now declares the three-way gate)', async () => {
   const project = 'tblauthoring2';
   const sessionId = freshSessionId();
   const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
@@ -610,12 +610,15 @@ test('TBL-authoring-2: verdict reject at awaiting-review -> 422 (no rejection pa
   writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
 
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'reject' });
-  const body = (await res.json()) as { error: string };
-  assert.equal(res.status, 422);
-  // W6-B6 post-merge review: same derived-data proof as kb-cleanup above —
-  // authoring's "awaiting-review" row also declares verdicts: [approve].
-  assert.match(body.error, /allowed: approve/, `expected the allowed set to name "approve" (derived from the yaml row), got: ${body.error}`);
-  assert.equal(readPhase(sessionDir), 'awaiting-review');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  // W6-B6 post-merge review discipline unchanged: the gate reads the SAME
+  // derived meta.verdicts the yaml row declares — the row now says
+  // [approve, revise, reject] (sessions-kinds-23 / library-24: a drafted
+  // package the operator does not want needs an exit). Reject terminates;
+  // it must never land anything in either library.
+  assert.equal(readPhase(sessionDir), 'rejected');
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'untouched')), false);
 });
 
 test('TBL-authoring-3: verdict approve with missing "id" -> 400, nothing landed/installed', async () => {

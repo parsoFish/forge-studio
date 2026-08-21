@@ -2127,3 +2127,124 @@ describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2,
     );
   });
 });
+
+// ===========================================================================
+// W7-C2 (sessions-kinds-29) — verdicts.json: the durable rationale record.
+// Every operator verdict (approve/reject/revise) appends {at, verdict,
+// notes?} to the session dir's verdicts.json (written by the generic
+// affordance write route, cli/bridge-studio-affordances.ts, only after a
+// 2xx); deriveSessionTranscript renders each record as an OPERATOR turn so a
+// reject is never invisible in the record. Fail-closed like answers.json: a
+// malformed verdicts.json errors, never fabricates or drops turns silently.
+// W7-C2 T1 review (P0-2): a revise record now carries its OWN `feedback`
+// words, because feedback.md is transient (each revise overwrites it, and the
+// consuming turn deletes it) and could therefore only ever hold the NEWEST
+// round. Records are ordered by their `at` stamp (A13).
+// ===========================================================================
+
+describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
+  it('C2-V1: a reject record with notes renders one operator turn carrying the verdict AND the rationale', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-1-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'reject', notes: 'Too broad — split the roadmap first.' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'rejected' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(verdictTurns.length, 1);
+    assert.equal(verdictTurns[0].role, 'operator');
+    assert.match(verdictTurns[0].text, /reject/i);
+    assert.match(verdictTurns[0].text, /Too broad — split the roadmap first\./);
+  });
+
+  it('C2-V2: a revise record renders the decision turn WITHOUT duplicating feedback.md (whose own turn still renders)', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-2-');
+    writeFileSync(join(sessionDir, 'feedback.md'), 'Tighten the intro section.');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'revise' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'drafting' }));
+    const feedbackTurns = turns.filter((t) => t.source === 'feedback.md');
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(feedbackTurns.length, 1, 'feedback.md keeps its own turn');
+    assert.equal(verdictTurns.length, 1);
+    assert.match(verdictTurns[0].text, /revise/i);
+    assert.ok(!verdictTurns[0].text.includes('Tighten the intro section.'), 'the revise record must not duplicate the feedback text');
+  });
+
+  it('C2-V3: approve without notes renders the bare decision', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-3-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'approve' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(verdictTurns.length, 1);
+    assert.match(verdictTurns[0].text, /approve/i);
+  });
+
+  it('C2-V4: a malformed verdicts.json (non-array) fails CLOSED — {ok:false} naming the file, never fabricated turns', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-4-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify({ verdict: 'approve' }));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /verdicts\.json/);
+  });
+
+  it('C2-V5: a record whose "verdict" is not a string fails CLOSED', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-5-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([{ at: 'x', verdict: 42 }]));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /verdicts\.json/);
+  });
+
+  // W7-C2 T1 review (P0-2 / F1) — the multi-round case the shipped suite
+  // could not see: C2-V1..V5 only ever write ONE record. A revise
+  // OVERWRITES feedback.md, so once round 2 lands, round 1's rationale is
+  // recoverable from nowhere unless the record itself carries it.
+  it('C2-V6: TWO revise rounds each render their OWN words — round 1\'s rationale is still in the transcript after round 2 overwrote feedback.md', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-6-');
+    writeFileSync(join(sessionDir, 'feedback.md'), 'Actually make it red.');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T10:00:00.000Z', verdict: 'revise', feedback: 'Make the button blue.' },
+      { at: '2026-08-21T11:00:00.000Z', verdict: 'revise', feedback: 'Actually make it red.' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'drafting' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.equal(verdictTurns.length, 2);
+    assert.ok(verdictTurns[0].text.includes('Make the button blue.'), `round 1's words must survive: ${verdictTurns[0].text}`);
+    assert.ok(verdictTurns[1].text.includes('Actually make it red.'), `round 2's words must render: ${verdictTurns[1].text}`);
+  });
+
+  // W7-C2 T1 review (A13) — `at` was stamped by the writer and read by
+  // nobody, so records rendered in write order no matter when the decisions
+  // were made.
+  it('C2-V7: verdict turns are ordered by `at`, not by position in the file', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-7-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([
+      { at: '2026-08-21T12:00:00.000Z', verdict: 'approve', notes: 'later' },
+      { at: '2026-08-21T09:00:00.000Z', verdict: 'revise', notes: 'earlier' },
+    ]));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }));
+    const verdictTurns = turns.filter((t) => t.source.startsWith('verdicts.json'));
+    assert.ok(verdictTurns[0].text.includes('earlier'), `the 09:00 decision must render first: ${JSON.stringify(verdictTurns.map((t) => t.text))}`);
+    assert.ok(verdictTurns[1].text.includes('later'));
+    assert.equal(verdictTurns[0].source, 'verdicts.json#2', 'source names the record\'s position IN THE FILE, so a reader can go find it');
+  });
+
+  it('C2-V8: a record with no `at` fails CLOSED — the ordering key is required, never defaulted to write order', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-8-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([{ verdict: 'approve' }]));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'committed' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /"at"/);
+  });
+
+  it('C2-V9: a non-string `feedback` fails CLOSED (same discipline as `notes`)', () => {
+    const sessionDir = makeTmpDir('c2-verdicts-9-');
+    writeFileSync(join(sessionDir, 'verdicts.json'), JSON.stringify([{ at: '2026-08-21T10:00:00.000Z', verdict: 'revise', feedback: 42 }]));
+    const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'drafting' }) as { ok: boolean; error?: { message: string } };
+    assert.equal(result.ok, false);
+    assert.match(result.error!.message, /feedback/);
+  });
+});
