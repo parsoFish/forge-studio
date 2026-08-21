@@ -419,10 +419,12 @@
 # already renders generically for any turnSpec kind's staging/ dir.
 #
 # turnSpec: `gathering` runs the agent (writes the draft package to
-# `staging/`) -> `awaiting-review` (operator verdict; UNLIKE kb-cleanup/
-# authoring, this row allows BOTH `approve` and `reject` — there is a real,
-# meaningful "discard this draft" action here, since a refresh pass may
-# propose changes the operator does not want committed) -> `committing` runs
+# `staging/`) -> `awaiting-review` (operator verdict: `approve`, `revise` and
+# `reject` — there is a real, meaningful "discard this draft" action here,
+# since a refresh pass may propose changes the operator does not want
+# committed. W7-C2 note: this row is no longer the exception it once was —
+# kb-cleanup and authoring both gained the same three-way gate, so the
+# contrast this comment used to draw against them is gone) -> `committing` runs
 # the `commitRegistryDraft` finalizer (orchestrator/interactive-finalizers.ts)
 # -> `committed` (terminal). `rejected` is its OWN terminal row, reached
 # directly from `awaiting-review` by the generic affordance write route

@@ -7,6 +7,15 @@
   // (docs/**/*.md + root *.md) before being added — see the rationale
   // next to each rule. The goal is `npm run lint` green with config
   // tuning, not mass-reflowing hundreds of existing docs.
+  // W7-D: honour .gitignore. The `lint` script globs "docs/**/*.md", which on a
+  // developer tree also sweeps up gitignored local notes (docs/investigations/*
+  // is ignored) — 98 errors here, 0 on CI's clean checkout. A gate that is red
+  // locally and green in CI teaches people to ignore it, and it is the same
+  // shape as the `.claude/worktrees` false-positive this wave fixed in
+  // check-kb-ingest-affordance: a checker must scan the repo, not the working
+  // directory that happens to contain it.
+  "gitignore": true,
+
   "config": {
     "default": true,
 

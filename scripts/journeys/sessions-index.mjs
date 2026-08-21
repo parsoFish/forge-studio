@@ -173,8 +173,15 @@ export const journey = defineJourney({
             } : null;
           });
           check(kickoff !== null, 'SESSIONS-IDX.2 (W7-B1): [data-section="sessions-kickoff"] renders alongside the populated table');
-          check((kickoff?.entries ?? []).length === 7, `SESSIONS-IDX.2 (W7-B1): all seven kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
+          // W7-C1 (sessions-kinds-01/crosscut-14) made `onboarding` a real
+          // generic kickoff kind — the onboard-project FLOW was retired in
+          // favour of the session — so the ONE shared list is eight entries,
+          // pinned at 8 in `forge-ui/lib/session-kind-meta.test.ts`. The
+          // identities matter more than the count: a list that silently swaps
+          // one kind for another keeps the same length.
+          check((kickoff?.entries ?? []).length === 8, `SESSIONS-IDX.2 (W7-B1/C1): all eight kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
           check((kickoff?.entries ?? []).includes('kickoff-community-refresh'), 'SESSIONS-IDX.2 (W7-B1): community-refresh is among them (home-sessions-19)');
+          check((kickoff?.entries ?? []).includes('kickoff-onboarding'), 'SESSIONS-IDX.2 (W7-C1): onboarding is among them too — the retired onboard-project flow\'s replacement is reachable from the sessions index');
 
           // W7-B1 (home-sessions-07) — the filter bar is live state: present
           // with rows, and the table mirrors the (default, all-pass) filter

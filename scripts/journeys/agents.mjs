@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
@@ -203,7 +203,24 @@ function seedR6_06SessionFixture() {
     }) + '\n');
 }
 
-function cleanAllR6_06LedgerFixtures() {
+/**
+ * W7-D1: this existed but was NEVER CALLED — the three R6-06 fixtures were
+ * seeded on every run and swept on none. Two consequences, both measured at
+ * the Wave D gate:
+ *
+ *  · the flow-node fixture is a `_queue/done/` manifest for PROJECT (mdtoc),
+ *    so it is showcase-ELIGIBLE — it silently inflated the demo-showcase
+ *    journey's cycle-picker count from the two cycles that beat seeds to
+ *    four, ten beats later and in a different journey;
+ *  · all three were still on disk days after the run, showing up as REAL
+ *    history on /agents/architect (bead agents-33's whole complaint).
+ *
+ * Now called from the seeding beat's own `finally` AND exported for
+ * e2e-journey.mjs's top-level crash-safe backstop, the same belt-and-braces
+ * `cleanKickoffAgent` gets — a beat that seeds outside its own directory
+ * cannot rely on reaching its own tail.
+ */
+export function cleanAllR6_06LedgerFixtures() {
   cleanR6_06FlowNodeFixture();
   cleanR6_06StandaloneFixture();
   cleanR6_06SessionFixture();
@@ -373,6 +390,25 @@ const KICKOFF_AGENT_NAME = 'Journey Kickoff Agent';
 const KICKOFF_AGENT_SKILL_PATH = join(FORGE_ROOT, 'skills', KICKOFF_AGENT_SLUG, 'SKILL.md');
 export function cleanKickoffAgent() {
   try { rmSync(join(FORGE_ROOT, 'skills', KICKOFF_AGENT_SLUG), { recursive: true, force: true }); } catch { /* */ }
+  // W7-D1 (fixture rule 3: the beat owns ALL its state). The kickoff arc
+  // DISPATCHES this agent for real, and every one of those dispatches leaves
+  // `_logs/_agent-journey-kickoff-agent-<stamp>/` behind. Under the dry
+  // bridge each writes ONE `log` event and no terminal marker, so
+  // `GET /api/agents/runs/<id>` derives `state: "running"` FOREVER — nine of
+  // them had accumulated since 2026-08-10. The next run's RunPanel then
+  // reattached to the newest zombie (W7-B5 agents-26) and disabled its whole
+  // run form, which is exactly how the Wave D gate died at
+  // `agents-kickoff-set-project`. Leaving them behind makes this journey
+  // non-idempotent (the class bead `forge-6lk` names), so the arc sweeps its
+  // OWN dispatches the same way it sweeps its own SKILL.md.
+  try {
+    const logsRoot = join(FORGE_ROOT, '_logs');
+    for (const entry of readdirSync(logsRoot, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith(`_agent-${KICKOFF_AGENT_SLUG}-`)) {
+        rmSync(join(logsRoot, entry.name), { recursive: true, force: true });
+      }
+    }
+  } catch { /* no _logs yet, or already swept */ }
 }
 // mdtoc, not the mockup's "gitpulse" — the one real project committed INSIDE
 // forge's own repo (CLAUDE.md), always present for this harness regardless of
@@ -1018,7 +1054,7 @@ export const journey = defineJourney({
       {
         id: 'agents-edit-selector-navigate',
         title: 'Edit-agent arc — switch agents through the selector',
-        narration: 'Switching agents through [data-agent-select] itself — not a direct URL edit — drives the same route + state change the operator sees clicking through the fleet, proving the selector (not just the route) is what moves the builder. Navigates forward to a second real agent and back to developer-ralph, so the arc continues on its own fixture. R6-06 (agent-monitor linkage): while on architect\'s own page, this beat ALSO checks the new run-history ledger — architect is the one agent that runs on all three execution paths (a flow node inside forge-architect, a standalone dispatch, and an interactive session), so its ledger is the one place all three [data-ledger-link-kind] values can be demonstrated on a single page.',
+        narration: 'Switching agents through [data-agent-select] itself — not a direct URL edit — drives the same route + state change the operator sees clicking through the fleet, proving the selector (not just the route) is what moves the builder. Navigates forward to a second real agent and back to developer-ralph, so the arc continues on its own fixture. R6-06 (agent-monitor linkage): while on architect\'s own page, this beat ALSO checks the new run-history ledger — architect is the one agent that runs on all three execution paths (a flow node inside forge-architect, a standalone dispatch, and an interactive session), so its ledger is the one place all three [data-ledger-link-kind] values can be demonstrated on a single page. The ledger PAGES (W7-B5 agents-32, 15 rows at a time over architect\'s real 76): the beat walks its own "Show more" control until every row is on screen, which is both how an operator reaches an older run and the reason a fixture dated 2026-01-01 is visible at all.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               console.log('\n[R2-09] Edit-agent arc — switch agents through the selector');
@@ -1097,8 +1133,48 @@ export const journey = defineJourney({
               const ledgerPresent = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
               check(ledgerPresent, 'R6-06: architect\'s page renders [data-section="history-ledger"]');
 
+              // W7-D1 — TWO gate-found problems with how this beat used to
+              // read the ledger, both of which made assertions lie:
+              //
+              //  1. W7-B5 (agents-32) gave architect's ledger `pageSize={15}`.
+              //     Architect really has 76 rows on this machine, and all
+              //     three fixtures below are dated 2026-01-01, so they sort
+              //     far past page 1 and simply are not in the DOM. Paging is
+              //     a real capability, so the beat PAGES — clicking the
+              //     ledger's own "Show more" until `data-ledger-shown`
+              //     reaches `data-ledger-count` — rather than lowering what
+              //     it asserts.
+              //  2. The row locators were UNSCOPED `[data-run-id="…"]`, and
+              //     `RunPanel`'s own root section carries `data-run-id` +
+              //     `data-run-status` too. On architect's page the panel had
+              //     reattached to the standalone fixture, so four assertions
+              //     were reading the RUN PANEL and reporting `null` for every
+              //     ledger-only attribute while `data-run-status` "passed".
+              //     Every locator below is now scoped to `[data-ledger-row]`.
+              const ledgerRow = (id) => page.locator(`[data-ledger-row][data-run-id="${id}"]`);
+              const expandLedger = async () => {
+                for (let i = 0; i < 20; i += 1) {
+                  const state = await page.evaluate(() => {
+                    const el = document.querySelector('[data-section="history-ledger"]');
+                    return el
+                      ? { shown: Number(el.getAttribute('data-ledger-shown') ?? '0'), count: Number(el.getAttribute('data-ledger-count') ?? '0') }
+                      : null;
+                  });
+                  if (!state || state.shown >= state.count) return state;
+                  const more = page.locator('[data-action="ledger-show-more"]');
+                  if (await more.count() === 0) return state;
+                  await more.first().click();
+                  await sleep(120);
+                }
+                return null;
+              };
+
               if (ledgerPresent) {
-                const flowRow = page.locator(`[data-run-id="${R6_06_FLOW_CYCLE_ID}"]`);
+                const paging = await expandLedger();
+                check(paging !== null && paging.shown === paging.count,
+                  `R6-06 (W7-B5 agents-32): the ledger pages — "Show more" walks ${paging?.shown ?? '?'} shown up to all ${paging?.count ?? '?'} rows, so a run older than the first page is reachable, not lost`);
+
+                const flowRow = ledgerRow(R6_06_FLOW_CYCLE_ID);
                 const flowRowCount = await flowRow.count();
                 check(flowRowCount > 0, `R6-06: the flow-node fixture (${R6_06_FLOW_CYCLE_ID}) appears as a ledger row`);
                 if (flowRowCount > 0) {
@@ -1112,7 +1188,7 @@ export const journey = defineJourney({
                     `R6-06 (D3/D9, MEASURED): the flow-node row's cost is the architect NODE's own 2.50, not the run aggregate 12.25 (got "${cost}")`);
                 }
 
-                const standaloneRow = page.locator(`[data-run-id="${R6_06_STANDALONE_RUN_ID}"]`);
+                const standaloneRow = ledgerRow(R6_06_STANDALONE_RUN_ID);
                 const standaloneRowCount = await standaloneRow.count();
                 check(standaloneRowCount > 0, `R6-06: the standalone fixture (${R6_06_STANDALONE_RUN_ID}) appears as a ledger row`);
                 if (standaloneRowCount > 0) {
@@ -1134,13 +1210,14 @@ export const journey = defineJourney({
                     `R6-06 (MEASURED, round 2): the standalone row's cost round-trips this fixture's own 0.85 verbatim through the real shared deriver (got "${cost}")`);
                 }
 
-                const sessionRow = page.locator(`[data-run-id="${R6_06_SESSION_ID}"]`);
+                const sessionRow = ledgerRow(R6_06_SESSION_ID);
                 const sessionRowCount = await sessionRow.count();
                 check(sessionRowCount > 0, `R6-06: the session fixture (${R6_06_SESSION_ID}) appears as a ledger row`);
                 if (sessionRowCount > 0) {
                   const linkKind = await sessionRow.first().getAttribute('data-ledger-link-kind').catch(() => null);
                   const href = await sessionRow.first().getAttribute('href').catch(() => null);
                   const status = await sessionRow.first().getAttribute('data-run-status').catch(() => null);
+                  const sessionPhase = await sessionRow.first().getAttribute('data-session-phase').catch(() => null);
                   const cost = await sessionRow.first().getAttribute('data-ledger-cost-usd').catch(() => null);
                   check(linkKind === 'session', `R6-06: the session row carries data-ledger-link-kind="session" (got "${linkKind}")`);
                   // W6-IA-8 emptied the architect descriptor's legacyRoutes (the /architect/<sid>
@@ -1148,8 +1225,21 @@ export const journey = defineJourney({
                   // links STRAIGHT at the modern session shell — no redirect hop.
                   check(typeof href === 'string' && href.startsWith(`/sessions/architect/${R6_06_SESSION_ID}`),
                     `R6-06: the session row links straight to /sessions/architect/<sessionId> (legacyRoutes emptied in W6-IA-8) (got "${href}")`);
-                  check(status === 'drafting',
-                    `R6-06 (D12): the session row's status is the session's OWN status.json phase string verbatim, never mapped to a RunStatus/RunPhaseStatus literal (got "${status}")`);
+                  // W7-B1 (home-sessions-33) SPLIT the two facts D12 used to
+                  // carry on one attribute: a session's raw `status.json`
+                  // phase is an OPEN per-runner vocabulary and now rides its
+                  // own `data-session-phase`, while the CLOSED
+                  // `data-run-status` contract every other row kind shares
+                  // carries the mapped run-vocab value
+                  // (`sessionPhaseRunStatus`). D12's rule is unchanged — the
+                  // raw phase is still never mapped away — it just lives on a
+                  // different attribute, so BOTH halves are asserted here
+                  // rather than the old single one (which is what made a
+                  // landed contract read as a regression).
+                  check(sessionPhase === 'drafting',
+                    `R6-06 (D12 / W7-B1): the session row's data-session-phase is the session's OWN status.json phase string verbatim, never mapped (got "${sessionPhase}")`);
+                  check(status === 'active',
+                    `R6-06 (W7-B1 home-sessions-33): the CLOSED data-run-status contract carries the MAPPED run-vocab value for a session row — 'drafting' is a live phase, so 'active' (got "${status}")`);
                   // MEASURED (round 2) via the real sumAuthoritativeCostUsd
                   // over this fixture's own events.jsonl — see the header
                   // comment. No existing route wires this derivation up yet
@@ -1175,6 +1265,14 @@ export const journey = defineJourney({
                 document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
               check(urlBack.includes('/agents/developer-ralph') && agentIdBack === 'developer-ralph',
                 `agents-edit: the selector switches back to developer-ralph (route "${urlBack}", data-agent-id "${agentIdBack}")`);
+
+              // W7-D1 (fixture rule 3): sweep the three R6-06 ledger fixtures
+              // HERE — this is the last beat that reads them, and the flow-node
+              // one is a `_queue/done/` manifest for PROJECT, which makes it
+              // showcase-eligible for a journey ten beats away. Leaving them
+              // behind is how the demo-showcase cycle picker came to see four
+              // eligible cycles where its own seed puts two.
+              cleanAllR6_06LedgerFixtures();
         },
       },
       {

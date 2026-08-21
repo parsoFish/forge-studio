@@ -103,8 +103,32 @@ function walk(dirAbs, exts, skip) {
   return out;
 }
 
+/**
+ * W7-D1: a file the walk enumerated can vanish before it is read — a SIBLING
+ * ratchet test (`scripts/check-disabled-reason.test.ts`) plants and deletes a
+ * real probe file inside `forge-ui/components/` to prove its own gate bites,
+ * and `node --test` runs the two files concurrently. A file that no longer
+ * exists is not a violation; it is a file that no longer exists.
+ */
+function readIfPresent(file) {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 const GLOBAL_SKIP = (p) =>
   p.includes(`${join('node_modules')}`) || p.includes(`${join('.git')}`) ||
+  // W7-D1: transient git worktrees are duplicate checkouts of this same repo
+  // (parked lane worktrees), not additional repo state. Scanning them
+  // re-reports every allowed reflection file under a path the allowlist
+  // cannot match, so a developer tree with any agent worktree in it turned
+  // this ratchet red for reasons that have nothing to do with the code. The
+  // test-local mirror of this function already skipped them; the SHIPPED
+  // checker did not — the mirror had drifted from the thing it backstops.
+  p.includes(`${join('.claude', 'worktrees')}`) ||
   p.includes(`${join('brain')}`) || p.includes(`${join('mockups')}`) ||
   p.includes(`${join('demos')}`) || isTestFile(p);
 
@@ -119,7 +143,8 @@ export function checkNoIngestAffordance(root = FORGE_ROOT) {
   for (const dir of UI_SCAN_DIRS) {
     const files = walk(join(root, dir), ['.ts', '.tsx'], GLOBAL_SKIP);
     for (const file of files) {
-      const text = readFileSync(file, 'utf8');
+      const text = readIfPresent(file);
+      if (text === null) continue;
       const re = /data-action=["']([^"']*)["']/g;
       let m;
       while ((m = re.exec(text))) {
@@ -134,7 +159,8 @@ export function checkNoIngestAffordance(root = FORGE_ROOT) {
   for (const dir of BRIDGE_SCAN_DIRS) {
     const files = walk(join(root, dir), ['.ts'], GLOBAL_SKIP);
     for (const file of files) {
-      const text = readFileSync(file, 'utf8');
+      const text = readIfPresent(file);
+      if (text === null) continue;
       if (/\bop\s*===\s*['"]ingest['"]/.test(text) || /\bcase\s+['"]ingest['"]/.test(text)) {
         violations.push(`${relative(root, file)}: bridge route dispatches op === 'ingest' (forbidden — operator decision 3)`);
       }
@@ -147,7 +173,8 @@ export function checkNoIngestAffordance(root = FORGE_ROOT) {
   for (const file of allFiles) {
     const relPath = relative(root, file).split('\\').join('/');
     if (ALLOWED_INGEST_FILES.has(relPath)) continue;
-    const text = readFileSync(file, 'utf8');
+    const text = readIfPresent(file);
+    if (text === null) continue;
     if (text.includes('reflector-ingest') || text.includes('DEFAULT_KB_INGEST')) {
       violations.push(`${relPath}: references reflector-ingest/DEFAULT_KB_INGEST outside the allowed descriptor-default/reflection files`);
     }

@@ -20,7 +20,7 @@ import {
   writeShowcaseCycleOne, cleanShowcaseCycleOne,
   writeShowcaseCycleTwo, cleanShowcaseCycleTwo,
   writeShowcaseEmptyFixture, cleanShowcaseEmptyFixture,
-  SHOWCASE_EMPTY_PROJECT,
+  SHOWCASE_EMPTY_PROJECT, SHOWCASE_CYCLE_ID_1, SHOWCASE_CYCLE_ID_2,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -213,8 +213,30 @@ export const journey = defineJourney({
           check(testsTile?.value === '2', `demo-showcase-refresh: the stats strip's Tests count flips to the newer cycle's own real testEvidence count (got "${testsTile?.value}")`);
 
           // W7-B6 (projects-21): with TWO merged cycles the picker offers both.
-          const eligibleCount = await page.locator('[data-section="showcase-cycle-nav"]').getAttribute('data-eligible-count').catch(() => null);
-          check(eligibleCount === '2', `W7-B6: the cycle picker lists BOTH eligible cycles (data-eligible-count, got "${eligibleCount}")`);
+          //
+          // W7-D1 — asserted by IDENTITY, not by a global count. `data-eligible-count`
+          // is every showcase-terminal cycle PROJECT has, so any sibling journey that
+          // leaves a `_queue/done/` manifest for the same project moves it: the Wave D
+          // gate read 4 here because the agents journey's R6-06 flow-node fixture (a
+          // done manifest for PROJECT, seeded ten beats earlier and never swept — now
+          // fixed) was counted alongside this beat's own two. A count is a claim about
+          // the whole machine; what this beat actually owns, and all it should pin, is
+          // that BOTH of the cycles it seeded are offered.
+          const picker = await page.evaluate(() => {
+            const root = document.querySelector('[data-section="showcase-cycle-nav"]');
+            if (!root) return null;
+            return {
+              count: Number(root.getAttribute('data-eligible-count') ?? '0'),
+              options: Array.from(root.querySelectorAll('option')).map((o) => o.getAttribute('value') ?? ''),
+            };
+          });
+          check(picker !== null, 'W7-B6: the showcase renders its cycle picker ([data-section="showcase-cycle-nav"])');
+          for (const [label, cycleId] of [['older', SHOWCASE_CYCLE_ID_1], ['newer', SHOWCASE_CYCLE_ID_2]]) {
+            check((picker?.options ?? []).includes(cycleId),
+              `W7-B6: the cycle picker offers this beat's ${label} seeded cycle (${cycleId}) — got [${(picker?.options ?? []).join(', ')}]`);
+          }
+          check((picker?.count ?? 0) >= 2,
+            `W7-B6: data-eligible-count counts at least this beat's own two cycles (got "${picker?.count}")`);
 
           await caption(page, 'A second merged cycle landed — same project, same page, zero code changes — and the showcase already shows its evidence.');
           await frame(page, 'showcase-4-refresh', 'R4-14 — the showcase re-derives to the newest merged cycle, no code change needed', { key: true });

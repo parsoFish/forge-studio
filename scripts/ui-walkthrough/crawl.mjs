@@ -212,6 +212,40 @@ async function crawl() {
         await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
         await page.waitForTimeout(800);
       } catch (e) { status = 'nav-error'; err = String(e).slice(0, 200); }
+      // W7-D1 — EXPAND PROGRESSIVE DISCLOSURE BEFORE HARVESTING LINKS.
+      //
+      // W7-B5 (agents-32) gave the history ledger `pageSize={15}` with a
+      // "Show more" control. The ledger's rows are ANCHORS, and they were the
+      // crawler's main road to `/flows/<id>/run/<runId>` (and, through those,
+      // to the `/artifact?run=…` family): in the 2026-08-19 baseline,
+      // `/agents/architect` alone linked 61 of them, `/agents/developer-ralph`
+      // 60, `/agents/reflector` 59. Paging cut each page to 15 and the crawl
+      // lost 259 routes — which the coverage floor then read as a Studio
+      // regression rather than as the harness failing to click a button an
+      // operator obviously clicks.
+      //
+      // Measured on the live tree: `/agents/architect` 11 -> 63 run links after
+      // 5 clicks, `/agents/developer-ralph` 15 -> 60 after 3, `/` 30 -> 77
+      // after 2. Bounded at MAX_EXPANDS so a control that re-renders itself
+      // forever cannot wedge the crawl; the ledger's own `hasMore` stops
+      // rendering the button when everything is shown, which is the normal
+      // exit.
+      //
+      // (A `localStorage['forge-run-groups:<flowId>']` seed to force the
+      // flow RunRail's COMPLETE group open was tried first and REMOVED: it
+      // does expand the rail — 2 -> 60 cards, measured — but the rail's cards
+      // are `<div onClick>`, not anchors, so it bought exactly zero links.
+      // A harness override that changes what the crawl sees without changing
+      // what it can reach is decoration, and it makes the capture less
+      // representative of what the operator's browser actually renders.)
+      const MAX_EXPANDS = 40;
+      for (let expands = 0; expands < MAX_EXPANDS; expands += 1) {
+        const more = page.locator('[data-action="ledger-show-more"]');
+        if (await more.count().catch(() => 0) === 0) break;
+        await more.first().click({ timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(120);
+      }
+
       // The in-page read is capture.mjs's readPageInfo (root-anchored readiness,
       // W7-A0-5); an evaluate failure is recorded as its own signal (W7-A0-9).
       const info = await page.evaluate(readPageInfo).catch((e) => ({ evalError: String(e).slice(0, 200) }));
