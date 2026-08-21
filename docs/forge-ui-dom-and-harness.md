@@ -2408,12 +2408,21 @@ inventory rather than one shared page-level contract:
   exist (open while working, collapsed otherwise — sessions-kinds-13);
   the project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
-  (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
+  (`brain-review` carries `data-theme-count`; **W7-C2, sessions-kinds-22:
+  the panel's own per-theme `data-theme-name` accordion and its
+  `back-to-project` button are GONE — the artifact pane's brain-structure
+  renderer (shared `FilePackage` tabs) is the ONE theme viewer, and the
+  session shell's generic back link is the one back link**),
   `[data-component="brain-brief-input"]`, and
   `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"return-to-project"]`
   (W6-SW-3 sweep C6#1: renamed from `bind-and-return` — the click only ever
   navigates back to the project; the per-project brain is bound at
-  onboarding, not by this step);
+  onboarding, not by this step). **W7-C2 (sessions-kinds-21): Abandon is a
+  two-step confirm — `[data-action="abandon-brain"]` arms it, revealing
+  `[data-section="brain-abandon-confirm"]` with
+  `[data-action="confirm-abandon-brain"]` (danger-styled) and
+  `[data-action="cancel-abandon-brain"]`; Approve + commit is the
+  `.btn-primary` and abandon is the quiet secondary**;
   and — **R4-21 phase 2, retired W6-B8** — the authoring kind. Its bespoke
   `SessionAuthoringPanel` (a status block detecting the drafted shape by file
   PRESENCE + a Save form) is DELETED — `authoring` now renders the generic
@@ -2494,10 +2503,21 @@ inventory rather than one shared page-level contract:
   `answers.json`) but render through the identical `question-form` UI. The
   drafted AGENTS.md's own preview is unaffected — it already lived on
   `SessionArtifactPane`'s `markdown-draft` renderer (below), not on the
-  retired verdict component. `ArchitectQuestionForm` (`components/
+  retired verdict component. **W7-C2 (sessions-kinds-30): that renderer now
+  carries the VERDICT CONTEXT when the page threads it (`draftContext`,
+  instructions only — sourced from the summary fields already on the wire):
+  `[data-draft-target=<absolute path>]` names exactly what approving
+  writes, and in edit mode (an existing AGENTS.md)
+  `[data-action="draft-view-diff"]`/`[data-action="draft-view-draft"]`
+  toggle a line diff against the current file
+  (`[data-draft-diff-state="rendered"|"too-large"]`, per-row
+  `[data-diff-row="same"|"add"|"del"]` — `lib/text-diff.ts`'s pure
+  `lineDiff`).** `ArchitectQuestionForm` (`components/
   ArchitectQuestionForm.tsx`) keeps its `onSubmitAnswers`/`sectionName`/
-  `heading` parameterisation for any future bespoke kind, but architect is its
-  only consumer today. **architect is now the ONLY kind left on its own
+  `heading` parameterisation — and since W7-C2 the generic
+  `SessionInteractivePanel` is its second real consumer (the per-question
+  interview form, `sectionName="session-interview"`), exactly the reuse the
+  parameterisation was kept for. **architect is now the ONLY kind left on its own
   panel**, permanently (ADR-043 amendment §4).
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
   (W6-B9)** render the generic `SessionInteractivePanel` in this same ladder
@@ -2702,12 +2722,19 @@ inventory rather than one shared page-level contract:
   chip, `[data-component="session-model-chip"][data-model-tier=<tier>|""]`,
   showing the session's own `modelTier` or `"default"`. Per affordance,
   rendered inside `[data-section="session-affordance"][data-affordance-kind=…]`:
-  `question-form` → a free-text answer field (`[data-field="session-answer"]`)
-  and `[data-action="submit-answers"]` (no per-question granularity on the
-  wire — the operator reads the real question text in the transcript pane to
-  the left and replies here — `deriveSessionTranscript`,
-  `orchestrator/studio/session-transcript.ts`, already surfaces the FULL
-  pending question text as a turn while `awaiting-answers`). **W6-B9 —
+  `question-form` → **W7-C2 (sessions-kinds-17/19, bead forge-lzv): when the
+  bridge attaches the pending questions (`meta.questions`, awaiting-answers
+  only — `attachPendingQuestions`, `cli/bridge-studio-sessions.ts`), the
+  panel renders ONE control per question by reusing `ArchitectQuestionForm`
+  (`[data-section="session-interview"]`, per-question
+  `[data-question-index]`/`[data-option-label]`/`[data-question-freetext]`
+  fieldsets) and posts the REAL question text with each answer — the durable
+  answers.json record keeps the questions, never the old hardcoded
+  `"Operator response"` placeholder.** Without questions on the wire it
+  stays a free-text answer field (`[data-field="session-answer"]`)
+  and `[data-action="submit-answers"]` — with its own briefing copy
+  ("Brief the agent (optional)" / "Start →") when `affordance.phase` is
+  `briefing` (sessions-kinds-17's briefing half). **W6-B9 —
   instructions and (W6-B10, landed concurrently) demo are this affordance
   kind's first two real consumers.** instructions derives it from TWO
   phases: `awaiting-answers` (a real interview round,
@@ -2723,10 +2750,29 @@ inventory rather than one shared page-level contract:
   replaces always accepted an empty brief), and an empty interview answer
   is harmless (the agent can re-ask); the same rule applies to every phase
   and kind, with no per-phase or per-kind branch in this component. `verdict` →
-  `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`
-  (approve-only for `kb-cleanup`/`authoring` — B4's own table declares no
-  rejection path for either, so the reject button is never offered where it
-  is known in advance to 422), plus TWO artifact-driven additions, both
+  `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`,
+  rendered from the server-derived `meta.verdicts` only. **W7-C2
+  (sessions-kinds-09/23/29, library-24, beads forge-4ei): `revise` joined
+  the frozen verdict vocabulary and every draft kind's gate row now
+  declares `[approve, revise, reject]` — `[data-action="verdict-revise"]`
+  toggles `[data-section="session-revise"]`
+  (`[data-field="session-revise-feedback"]` +
+  `[data-action="verdict-revise-send"]`, which posts
+  `{verdict:'revise', feedback}` — the write route requires non-empty
+  feedback, writes it to the session's feedback.md, and re-runs the
+  drafting phase). Every verdict affordance also renders a rationale field,
+  `[data-field="session-verdict-notes"]`, posted as the optional `notes`
+  body field; the bridge appends `{at, verdict, notes?}` to the session's
+  `verdicts.json` after every ACCEPTED verdict and the transcript renders
+  each record as an operator turn. A disabled Approve now says why:
+  `[data-requires-hint]` names the unmet `meta.requires` field (or a
+  non-slug authoring id — the client mirror of the write route's own 400,
+  library-22). A committed session with a persisted `finalized` pointer
+  renders `[data-section="session-finalized"]` +
+  `[data-action="open-finalized"]` — the PERMANENT link to the object the
+  session produced (skill/hook detail page, or /community for a
+  community-refresh commit; sessions-kinds-36).** Plus TWO artifact-driven
+  additions, both
   keyed off `artifact.kind` (never `kind`): for `demo` (a real
   `generation-gallery` with at least one generation), a generation picker
   (`[data-field="session-generation-pick"]`); for `authoring` (a real

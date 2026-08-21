@@ -306,7 +306,7 @@ function MarkdownDraftBody({
           </button>
         </div>
       )}
-      {canDiff && showDiff ? <DraftDiffBody current={draftContext.current as string} draft={view.body} /> : body}
+      {canDiff && showDiff ? <DraftDiffBody current={draftContext.current as string} draft={view.body ?? ''} /> : body}
     </div>
   );
 }

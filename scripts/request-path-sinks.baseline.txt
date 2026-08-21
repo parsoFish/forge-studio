@@ -259,8 +259,6 @@ orchestrator/flow-run-requests.ts rmSync 5
 orchestrator/flow-run-requests.ts writeFileSync 1
 orchestrator/flow-runner.ts existsSync 1
 orchestrator/flow-runner.ts readFileSync 5
-orchestrator/reflector-rerun.ts existsSync 3
-orchestrator/reflector-rerun.ts readFileSync 3
 orchestrator/gate-fix-loop.ts existsSync 1
 orchestrator/gate-fix-loop.ts readFileSync 3
 orchestrator/gate-recipes.ts existsSync 1
@@ -284,7 +282,7 @@ orchestrator/interactive-finalizers.ts writeFileSync 1
 orchestrator/interactive-runner.ts lstatSync 1
 orchestrator/interactive-runner.ts mkdirSync 2
 orchestrator/interactive-runner.ts readdirSync 1
-orchestrator/interactive-runner.ts readFileSync 1
+orchestrator/interactive-runner.ts readFileSync 2
 orchestrator/interactive-session.ts existsSync 2
 orchestrator/interactive-session.ts mkdirSync 4
 orchestrator/interactive-session.ts readFileSync 3
@@ -394,6 +392,8 @@ orchestrator/queue.ts renameSync 5
 orchestrator/queue.ts statSync 1
 orchestrator/queue.ts unlinkSync 1
 orchestrator/queue.ts writeFileSync 1
+orchestrator/reflector-rerun.ts existsSync 3
+orchestrator/reflector-rerun.ts readFileSync 3
 orchestrator/release-finalize-invocation.ts readFileSync 1
 orchestrator/requeue-resume.ts execFileSync 1
 orchestrator/requeue-resume.ts existsSync 4

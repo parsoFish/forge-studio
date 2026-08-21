@@ -187,14 +187,22 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-lock',
       title: 'Approve and finalize the generation',
-      narration: 'The review gate is the SAME generic verdict every interactive session offers — approve (with an optional generation picker, sourced from the real gallery) or reject. Approving restores the chosen generation\'s sample AND the generator skill that produced it into the project repo, then writes demo.lock.json plus a history entry — the demo skill the runner executes from now on is the one the operator picked, not merely the last one the agent happened to produce.',
+      narration: 'The review gate is the SAME generic verdict every interactive session offers — approve (with an optional generation picker, sourced from the real gallery), request changes (W7-C2: the revise loop — feedback regenerates, the entire point of "generations"), or reject. Approving restores the chosen generation\'s sample AND the generator skill that produced it into the project repo, then writes demo.lock.json plus a history entry — the demo skill the runner executes from now on is the one the operator picked, not merely the last one the agent happened to produce.',
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
         console.log('\n[DB-3] demo-builder — approve and lock');
         check(await page.locator('[data-affordance-kind="verdict"]').count() > 0, 'DB-3: awaiting-review derives a verdict affordance');
         check(await page.locator('[data-action="verdict-approve"]').count() > 0
           && await page.locator('[data-action="verdict-reject"]').count() > 0,
-          'DB-3: both approve and reject render for demo (unlike kb-cleanup/authoring, which are approve-only)');
+          'DB-3: both approve and reject render for demo');
+        // W7-C2 (bead forge-4ei): the revise loop is BACK on the generic
+        // panel — the yaml row declares [approve, revise, reject] and the
+        // panel renders all three from meta.verdicts; the rationale field
+        // rides along on every verdict.
+        check(await page.locator('[data-action="verdict-revise"]').count() > 0,
+          'DB-3: the revise verdict renders (apply-feedback-and-regenerate, restored by W7-C2)');
+        check(await page.locator('[data-field="session-verdict-notes"]').count() > 0,
+          'DB-3: the verdict notes (rationale) field renders — decisions are recorded with their why');
         const picker = page.locator('[data-field="session-generation-pick"]');
         check(await picker.count() > 0, 'DB-3: the generation picker renders, sourced from the real generation-gallery artifact already on the wire');
         await picker.selectOption('1').catch(() => {});

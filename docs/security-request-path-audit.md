@@ -1574,3 +1574,19 @@ surface:
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta —
 `scripts/request-path-sinks.baseline.txt` records the relocation (and the two
 tightened rows).
+
+### W7-C2 — the generic revise turn's feedback read (`orchestrator/interactive-runner.ts`, one new `[read]`-class sink, guarded)
+
+The revise verdict (ADR-043 2026-08-21 amendment §1) sends a generic-spine
+session back to its drafting phase; the next turn's prompt must carry the
+operator's `feedback.md` the same way the two bespoke runners' prompts always
+have. `check-request-path-sinks.mjs` delta: `orchestrator/interactive-runner.ts`
+`readFileSync` 1 → 2.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/interactive-runner.ts` (`readOperatorFeedback`) | `readFileSync` | none directly — `sessionDir` is the runner's own already-resolved session directory (derived upstream through `resolveGuardedPath(projectRoot, [kindDir, sessionId])`, the SEC-04 containment segment), and the leaf rides `resolveGuardedPath(sessionDir, ['feedback.md'])` before the read | guarded | Mirrors `readFeedback` in `orchestrator/instructions-runner.ts` / `orchestrator/demo-builder-runner.ts` (both `guardedReadFile` over the same leaf name): an escaping symlinked `feedback.md` collapses to `null` == absent — never read, never inlined into the prompt. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records
+`orchestrator/interactive-runner.ts` `readFileSync` at 2.

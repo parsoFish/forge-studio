@@ -704,7 +704,11 @@ export const journey = defineJourney({
               seedStagedBrain(pbSid);
               await page.waitForSelector('main[data-page="session"][data-session-phase="awaiting-review"]', { timeout: 10000 }).catch(() => {});
               check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
-              await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
+              // W7-C2 (sessions-kinds-22): the panel's duplicate per-theme
+              // accordion is gone — the artifact pane's FilePackage tabs are
+              // the ONE theme viewer now, so the theme count is asserted
+              // there.
+              await countAtLeast(page, '[data-section="session-artifact"] [data-file-tab]', 3, 'AI-2: ≥3 seed themes drafted (artifact pane tabs — the one viewer)');
               // R2-10: the artifact pane — project-brain's declared renderer is
               // brain-structure, which renders its file tabs through the SHARED
               // FilePackage component (never a second tab-strip) — the "reused,
