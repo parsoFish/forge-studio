@@ -104,6 +104,35 @@ async function sweepOnce(page, baseUrl, check, pass) {
     check(rendered, `[pass ${pass}] route ${route.path} (${route.name}) renders a [data-page] (no 404/crash)`);
     if (!rendered) continue;
 
+    // W7-C3 a11y basics — the chrome no single page owns, checked on EVERY
+    // route (the crosscut journey beat proves the same contract in depth on a
+    // cross-section; this is the breadth half). Deliberately three cheap
+    // structural facts, not an axe run:
+    //   · the [data-page] root IS the <main> landmark (all 27+ routes render
+    //     their page root as <main> — the shells and every bespoke detail
+    //     page alike), so screen-reader landmark navigation lands on content;
+    //   · the skip link's fragment resolves to that same landmark — a skip
+    //     link naming a fragment the document does not contain reads as
+    //     provided and skips nowhere (crosscut-18);
+    //   · the tab title is the route's own, not the bare product name that
+    //     every route shared before W7-C3 (crosscut-06).
+    const a11y = await page.evaluate(() => {
+      const root = document.querySelector('[data-page]');
+      const skip = document.querySelector('[data-component="skip-link"]');
+      const frag = (skip?.getAttribute('href') ?? '').replace(/^#/, '');
+      return {
+        rootTag: root?.tagName ?? null,
+        skipTargetIsRoot: !!frag && document.getElementById(frag) === root,
+        title: document.title,
+      };
+    });
+    check(a11y.rootTag === 'MAIN',
+      `[pass ${pass}] route ${route.path}: the [data-page] root is a <main> landmark (got <${(a11y.rootTag ?? 'none').toLowerCase()}>)`);
+    check(a11y.skipTargetIsRoot,
+      `[pass ${pass}] route ${route.path}: the skip link's fragment resolves to that <main> (crosscut-18)`);
+    check(/ · forge$/.test(a11y.title) && a11y.title !== 'forge',
+      `[pass ${pass}] route ${route.path}: sets its OWN tab title, not the bare product name (got "${a11y.title}")`);
+
     // No dead "coming in milestone" placeholder CTAs.
     const deadCtas = await page.evaluate(() => {
       const sel = '[title="M2"],[title="M3"],[title="M5"]';

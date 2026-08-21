@@ -1,5 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+
+/** The fragment the skip link targets, stamped onto the route's own <main>. */
+const MAIN_ID = 'main-content';
+
 /**
  * SkipLink — the first tab stop on every route (W7-C3, crosscut-18).
  *
@@ -10,22 +16,34 @@
  *
  * Every route renders exactly one `<main>` (the StudioPage/PageLoadError/
  * NotFound shells and the bespoke detail pages all root in one), but none
- * carries a stable id — and threading an id through every shell would touch
- * ~30 files for what is purely focus plumbing. So the click handler focuses
- * the first `<main>` directly (tabIndex -1 makes a landmark focusable
- * without joining the tab order); the `href="#main-content"` fallback keeps
- * it a real link for AT that activates links without firing click handlers.
+ * carries a stable id of its own — and threading an id through every shell
+ * would touch ~30 files for what is purely focus plumbing. So this component
+ * stamps `#main-content` onto whatever `<main>` the current route rendered,
+ * re-stamping on every client-side navigation (the element is replaced), and
+ * the click handler focuses it directly (tabIndex -1 makes a landmark
+ * focusable without joining the tab order).
+ *
+ * The stamp is what keeps `href="#main-content"` HONEST: without it the link
+ * advertises a fragment that resolves to nothing, so any AT that follows the
+ * href rather than firing the click handler skips to nowhere — a skip link
+ * that silently does not skip is worse than none, because it reads as
+ * provided.
  */
 export function SkipLink() {
+  const pathname = usePathname();
+  useEffect(() => {
+    document.querySelector('main')?.setAttribute('id', MAIN_ID);
+  }, [pathname]);
   return (
     <a
       className="skip-link"
-      href="#main-content"
+      href={`#${MAIN_ID}`}
       data-component="skip-link"
       onClick={(e) => {
         const main = document.querySelector('main');
         if (!main) return; // fall through to the anchor default
         e.preventDefault();
+        main.setAttribute('id', MAIN_ID);
         main.setAttribute('tabindex', '-1');
         main.focus();
       }}

@@ -93,3 +93,24 @@ test('crosscut-17: input-family blocks no longer set outline: none', () => {
     expect(body, `${name} must not kill the focus outline`).not.toMatch(/outline:\s*none/);
   }
 });
+
+// ---------------------------------------------------------------------------
+// crosscut-18: the skip link's own target. A skip link is worse than no skip
+// link when it reads as provided and skips nowhere — so the fragment it
+// advertises must actually resolve. No `<main>` in Studio carries a stable id
+// of its own, so SkipLink stamps one; this pins the two halves agreeing (the
+// href and the stamp read the SAME constant) and the re-stamp on client-side
+// navigation, where the previous route's `<main>` is replaced.
+// ---------------------------------------------------------------------------
+
+test('crosscut-18: the skip link stamps the id it links to, and re-stamps on navigation', () => {
+  const src = readFileSync(resolve(__dirname, '../components/SkipLink.tsx'), 'utf8');
+  expect(src, 'the target fragment must be ONE constant, not two literals that can drift')
+    .toMatch(/const MAIN_ID = '([a-z-]+)';/);
+  const id = src.match(/const MAIN_ID = '([a-z-]+)';/)![1];
+  expect(src, 'href must be built from MAIN_ID').toMatch(/href=\{`#\$\{MAIN_ID\}`\}/);
+  expect(src, `the route's <main> must be stamped with #${id}`)
+    .toMatch(/querySelector\('main'\)\??\.?setAttribute\('id', MAIN_ID\)/);
+  expect(src, 'the stamp must re-run per route — a client-side nav replaces the <main>')
+    .toMatch(/useEffect\([\s\S]{0,200}?\[pathname\]\)/);
+});

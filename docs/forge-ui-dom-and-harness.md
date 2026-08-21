@@ -57,6 +57,42 @@ inventory rather than one shared page-level contract:
   click reaches the monitor — not a direct nav deep-link); `scripts/e2e-
   deadpaths.mjs` additionally crawls every `[data-nav]` href on every route
   and asserts it resolves to a known, live page.
+- **Cross-cutting page chrome (W7-C3, findings crosscut-06/16/17/18/19/24/25).**
+  The parts of Studio no single page owns. Every route, both shared shells
+  (`components/StudioPage.tsx`, `components/StudioArchitectShell.tsx`) and the
+  bespoke detail pages alike:
+
+  ```text
+  main[data-page="<name>"]                the page root IS the landmark — all
+                                          routes render their root as <main>,
+                                          so landmark navigation lands on content
+      #main-content                       stamped by SkipLink onto whatever
+                                          <main> the current route rendered,
+                                          re-stamped on client-side navigation
+  a[data-component="skip-link"]           the FIRST tab stop on every route;
+                                          visually hidden until :focus
+                                          (`.skip-link`, globals.css)
+  nav[data-component="breadcrumbs"][aria-label="Breadcrumb"]
+      ol > li …                           parents are links
+      [aria-current="page"]               the current page — text, never a link
+  ```
+
+  Plus three non-`data-*` facts in the same contract:
+
+  | contract | owner | pinned by |
+  | --- | --- | --- |
+  | per-route `<title>` — `"<parts…> · forge"`, never the bare `forge` every route shared before | `lib/document-title.ts` (`formatDocumentTitle` / `useDocumentTitle`; both shells call it, bespoke pages call it themselves) | `lib/document-title.test.ts` + the `home-crosscut-chrome` beat (distinctness across routes) |
+  | exactly one `<h1>` per route | `components/PageHeader.tsx` via the shells | `home-crosscut-chrome` |
+  | `--faint` ≥ 4.5:1 (AA) on `--bg`/`--panel`/`--panel-2`; `--accent` defined; a GLOBAL `:focus-visible` ring (not scoped to `.btn/.chip/.tab/a`, so native inputs get one) | `app/globals.css` | `lib/a11y-tokens.test.ts` (computed from the real stylesheet) |
+  | disabled primary CTAs always say why — `data-disabled-reason` + a matching `title` | each CTA's own `disabledReason` derivation | the owning route's journey beat |
+  | no horizontal scroll at a 740px viewport | — | `home-crosscut-chrome` |
+
+  Harness coverage is split breadth/depth: `scripts/e2e-deadpaths.mjs` checks
+  the three cheapest structural facts (`[data-page]` root is `<main>`, the skip
+  link's fragment resolves to it, the tab title is the route's own) on EVERY
+  route it crawls; the `home-crosscut-chrome` journey beat proves the full
+  contract in depth on a cross-section (`/`, `/flows`, `/flows/forge-develop`,
+  `/knowledge`, `/agents`) including breadcrumbs and the 740px reflow.
 - **Not-found contract — the ONE shared `NotFound`
   (`components/NotFound.tsx`, W7-A4, findings crosscut-27 / crosscut-07).**
   Every route whose id/param does not resolve renders the same page — never a

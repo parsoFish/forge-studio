@@ -702,5 +702,109 @@ export const journey = defineJourney({
         }
       },
     },
+    {
+      id: 'home-crosscut-chrome',
+      title: 'The chrome every route shares — titles, landmarks, breadcrumbs, skip link',
+      narration:
+        'The parts of Studio no single page owns. Before W7-C3 every route in the '
+        + 'product rendered the identical browser tab "forge" — twelve pinned tabs were '
+        + 'twelve identical labels — no route had a skip link, so a keyboard user walked '
+        + 'the brand link plus six nav pillars before reaching content on every page, and '
+        + 'detail pages gave no trail back to the index they came from. This beat walks a '
+        + 'cross-section of routes and reads the shared chrome off each one: a distinct '
+        + 'document title, exactly one h1 inside a real main landmark, a skip link whose '
+        + 'fragment resolves to that landmark, a semantic breadcrumb trail on the detail '
+        + 'pages, and no horizontal scroll at a 740px viewport.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[HOME.4] Cross-cutting page chrome');
+
+        // A cross-section, not a full crawl (e2e-deadpaths crawls every route):
+        // both shared shells plus a detail page of each kind that owns a trail.
+        const ROUTES = [
+          { path: '/', page: 'home', crumbs: false },
+          { path: '/flows', page: 'flows', crumbs: false },
+          { path: '/flows/forge-develop', page: 'flow-monitor', crumbs: true },
+          { path: '/knowledge', page: 'knowledge', crumbs: true },
+          { path: '/agents', page: 'agents', crumbs: false },
+        ];
+
+        const titles = [];
+        for (const route of ROUTES) {
+          await page.goto(watch.uiUrl + route.path, { waitUntil: 'domcontentloaded' });
+          await page.waitForFunction(
+            (p) => document.querySelector(`[data-page="${p}"]`) !== null,
+            route.page, { timeout: 20000 }).catch(() => {});
+
+          const chrome = await page.evaluate(() => {
+            const main = document.querySelector('main');
+            const skip = document.querySelector('[data-component="skip-link"]');
+            const frag = (skip?.getAttribute('href') ?? '').replace(/^#/, '');
+            const crumbNav = document.querySelector('[data-component="breadcrumbs"]');
+            return {
+              title: document.title,
+              hasMain: !!main,
+              mainDataPage: main?.getAttribute('data-page') ?? null,
+              h1Count: document.querySelectorAll('h1').length,
+              // crosscut-18: the skip link must resolve to the landmark it
+              // claims to skip to — an href naming a fragment that is not in
+              // the document reads as provided and skips nowhere.
+              skipTargetIsMain: !!frag && document.getElementById(frag) === main,
+              crumbLabel: crumbNav?.getAttribute('aria-label') ?? null,
+              crumbItems: crumbNav ? crumbNav.querySelectorAll('ol > li').length : 0,
+              crumbCurrent: crumbNav ? crumbNav.querySelectorAll('[aria-current="page"]').length : 0,
+            };
+          });
+
+          titles.push({ path: route.path, title: chrome.title });
+          check(chrome.hasMain && chrome.mainDataPage === route.page,
+            `HOME.4: ${route.path} roots in a <main> landmark carrying its own data-page (got "${chrome.mainDataPage}")`);
+          check(chrome.h1Count === 1,
+            `HOME.4: ${route.path} renders EXACTLY ONE <h1> (found ${chrome.h1Count})`);
+          check(chrome.skipTargetIsMain,
+            `HOME.4: ${route.path} skip link's fragment resolves to that same <main> (crosscut-18)`);
+          check(/ · forge$/.test(chrome.title) && chrome.title !== 'forge',
+            `HOME.4: ${route.path} sets a per-route document title, not the bare product name (got "${chrome.title}")`);
+          if (route.crumbs) {
+            check(chrome.crumbLabel === 'Breadcrumb' && chrome.crumbItems >= 2,
+              `HOME.4: ${route.path} renders the shared semantic breadcrumb trail (aria-label="${chrome.crumbLabel}", ${chrome.crumbItems} items)`);
+            check(chrome.crumbCurrent === 1,
+              `HOME.4: ${route.path} marks exactly one crumb aria-current="page" — the current page is never a link (found ${chrome.crumbCurrent})`);
+          }
+        }
+
+        // Distinct, not merely non-empty: the defect was every route sharing
+        // ONE title, which a per-route format check alone would not catch.
+        const distinct = new Set(titles.map((t) => t.title)).size;
+        check(distinct === titles.length,
+          `HOME.4: all ${titles.length} routes have DISTINCT tab titles (${distinct} distinct: ${titles.map((t) => t.title).join(' | ')})`);
+
+        // crosscut-25: no horizontal scroll at the narrowest supported width.
+        const prevViewport = page.viewportSize();
+        await page.setViewportSize({ width: 740, height: 900 });
+        for (const route of ROUTES) {
+          await page.goto(watch.uiUrl + route.path, { waitUntil: 'domcontentloaded' });
+          await page.waitForFunction(
+            (p) => document.querySelector(`[data-page="${p}"]`) !== null,
+            route.page, { timeout: 20000 }).catch(() => {});
+          const overflow = await page.evaluate(() =>
+            document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          check(overflow <= 0,
+            `HOME.4: ${route.path} has no horizontal scroll at 740px (overflow ${overflow}px)`);
+        }
+        if (prevViewport) await page.setViewportSize(prevViewport);
+
+        await page.goto(watch.uiUrl + '/flows/forge-develop', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="flow-monitor"]') !== null,
+          null, { timeout: 20000 }).catch(() => {});
+        // Focus the skip link so the frame captures it visible — it is
+        // deliberately off-screen until focused.
+        await page.keyboard.press('Tab').catch(() => {});
+        await frame(page, 'home-4-crosscut-chrome',
+          'Cross-cutting chrome — a per-route tab title, a breadcrumb trail back to the index, and the skip link revealed on its first tab stop',
+          { key: true });
+      },
+    },
   ],
 });
