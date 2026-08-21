@@ -239,6 +239,53 @@ export function isSafeSegment(seg: string): boolean {
   );
 }
 
+/** DEL (0x7f) is not in the C0 range `CONTROL_CHAR_RE` covers, and is no more
+ *  a legitimate filename character than the rest of them. */
+const DEL_RE = /\u007f/;
+
+/** Percent-encoded separators and traversal. These are NOT escapes on their
+ *  own — a route that has already decoded once hands us a LITERAL `%2f`,
+ *  which `join()` treats as an ordinary character and `realpath` resolves to
+ *  a file that will not exist (the observed behaviour is a 404, not a
+ *  disclosure). They are denied because a second decode ANYWHERE downstream
+ *  — a client, a log replayer, a future caller that re-decodes defensively —
+ *  turns them into the separator they spell. */
+const ENCODED_TRAVERSAL_RE = /%(?:2f|5c|00|2e%2e)/i;
+
+/**
+ * Is `relPath` a safe `<a>/<b>/<leaf>` tail to append beneath a trusted root?
+ *
+ * A DENY-list, deliberately, and a shared one: it is `isSafeSegment` applied
+ * per segment (the SAME predicate `resolveGuardedPath` walks with, so the
+ * cheap 400 layer and the containment 404 layer cannot drift) plus DEL and
+ * percent-encoded separators.
+ *
+ * W7-C3 review (A-M6) — the first cut of the artifact-filename gate was an
+ * ALLOW-list, `/^[A-Za-z0-9._-]+$/` per segment plus `.includes('..')`. A
+ * guard written as an allow-list of characters rots against real data: it
+ * rejected 55 of 508 real on-disk artifact files across 7 cycles (10.8%) —
+ * every `_logs/<cycleId>/artifacts/.capture/{before,after}` `.out` file,
+ * demo-capture
+ * evidence named from acceptance-criteria titles, where spaces, parentheses
+ * and em-dashes are the NORM — while adding zero containment: every escape
+ * shape (`%2E%2E%2F`, double-encoded, `..%2F`, `%00`, unicode, `CON`,
+ * trailing `%20`) was already refused by `guardedReadFile`. `.includes('..')`
+ * additionally false-rejected the legitimate names `..foo.txt` and `a..b.txt`
+ * — the exact `..`-normalisation false positive the containment-review
+ * catalogue names.
+ *
+ * So this DENIES the shapes that matter and says nothing about the rest:
+ * spaces, parentheses, em-dashes, apostrophes and a leading/infix `..` all
+ * pass; empty segments, `.`/`..` as a whole segment, separators, C0
+ * controls, NUL, DEL and encoded separators do not.
+ */
+export function isSafeSubPath(relPath: string): boolean {
+  if (typeof relPath !== 'string') return false;
+  if (relPath.length === 0) return false;
+  if (DEL_RE.test(relPath) || ENCODED_TRAVERSAL_RE.test(relPath)) return false;
+  return relPath.split('/').every((seg) => isSafeSegment(seg));
+}
+
 /**
  * Resolve `<root>/<segments[0]>/<segments[1]>/...` with genuine, per-segment
  * IDENTITY containment — never a lexical prefix check on the unresolved,
