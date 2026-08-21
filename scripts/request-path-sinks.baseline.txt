@@ -69,7 +69,7 @@ cli/bridge-studio-templates.ts rmSync 2
 cli/bridge-studio-templates.ts writeFileSync 3
 cli/bridge-studio-writes.ts cpSync 1
 cli/bridge-studio-writes.ts execFileSync 3
-cli/bridge-studio-writes.ts existsSync 15
+cli/bridge-studio-writes.ts existsSync 17
 cli/bridge-studio-writes.ts mkdirSync 8
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 4
@@ -78,7 +78,7 @@ cli/bridge-studio-writes.ts renameSync 1
 cli/bridge-studio-writes.ts rmSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts unlinkSync 1
-cli/bridge-studio-writes.ts writeFileSync 7
+cli/bridge-studio-writes.ts writeFileSync 8
 cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
