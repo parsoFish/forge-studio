@@ -59,6 +59,8 @@ function makeRun(overrides: Partial<Run> = {}): Run {
     status: 'active',
     origin: 'architect',
     costUsd: 1.85,
+    // required on Run; a single-flow run's lineage is just its own flow id.
+    flowLineage: ['forge-cycle'],
     phases: {
       architect: 'complete',
       pm: 'complete',

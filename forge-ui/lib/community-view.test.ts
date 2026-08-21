@@ -170,7 +170,7 @@ test('signalsLabel never renders the bare digit "0" or an empty string for a nul
 });
 
 test('signalsLabel with a real stars figure includes BOTH the figure and its curated attribution — never presented as forge\'s own ranking', () => {
-  const label = signalsLabel({ stars: '228k', attributedTo: 'obra/superpowers + Matt Pocock' });
+  const label = signalsLabel({ stars: '228k', attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 228_000 });
   expect(label).toContain('228k');
   expect(label).toContain('obra/superpowers + Matt Pocock');
 });
@@ -452,7 +452,7 @@ test('filterCommunityItems: matches on the hub label shown in the strip', () => 
 
 test('filterCommunityItems: matches on the signals attribution (provenance shown on the card)', () => {
   const items = [
-    item({ id: 'a', signals: { stars: 1, attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 1 } }),
+    item({ id: 'a', signals: { stars: '1', attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 1 } }),
     item({ id: 'b' }),
   ];
   expect(filterCommunityItems(items, 'obra').map((i) => i.id)).toEqual(['a']);

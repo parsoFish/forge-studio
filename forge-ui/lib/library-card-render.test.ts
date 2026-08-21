@@ -78,19 +78,21 @@ afterEach(() => {
 // ---- fixtures ---------------------------------------------------------------
 
 function makeFlow(overrides: Partial<Flow> & { id: string }): Flow {
-  return { id: overrides.id, name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
+  return { name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
 }
 
 function makeAgent(overrides: Partial<Agent> & { id: string }): Agent {
-  return { id: overrides.id, name: overrides.id, purpose: '', skills: [], tools: [], mcps: [], guards: [], hooks: [], ...overrides };
+  return { name: overrides.id, purpose: '', skills: [], tools: [], mcps: [], guards: [], hooks: [], ...overrides };
 }
 
 function makeProject(overrides: Partial<Project> & { id: string }): Project {
-  return { id: overrides.id, name: overrides.id, skills: [], ...overrides };
+  return { name: overrides.id, skills: [], ...overrides };
 }
 
 function makeKb(overrides: Partial<Kb> & { id: string }): Kb {
-  return { id: overrides.id, name: overrides.id, binding: { kind: 'unique' }, counts: { index: 0, themes: 0, raw: 0 }, ...overrides };
+  // `lint`/`provenance` are REQUIRED on Kb (forge-2am/forge-3oq — no third
+  // ambiguous undefined state); the fixture supplies the honest defaults.
+  return { name: overrides.id, binding: { kind: 'unique' }, counts: { index: 0, themes: 0, raw: 0 }, lint: null, provenance: 'unknown', ...overrides };
 }
 
 function makeRun(overrides: Partial<Run> & { id: string; flowId: string }): Run {

@@ -28,6 +28,12 @@ function makeRow(overrides: Partial<SessionIndexRow> & { kind: string; sessionId
     phase: 'drafting',
     terminal: false,
     needsYou: false,
+    state: 'working',
+    // `error`/`idleMs` are REQUIRED on SessionIndexRow (W7-A2); a
+    // `Partial<SessionIndexRow>` spread cannot satisfy a required field, so
+    // the base fixture carries the honest not-crashed / no-log-dir defaults.
+    error: null,
+    idleMs: null,
     modelTier: null,
     updatedAt: '2026-08-15T10:00:00.000Z',
     href: `/sessions/${overrides.kind}/${overrides.sessionId}?project=${project}`,

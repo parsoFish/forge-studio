@@ -103,9 +103,8 @@ describe('KbHealth — structural data-* hooks (R1-06 WI-3 group B, 2)', () => {
 // component — a legitimate RED via absent markup, not a crash.
 // ---------------------------------------------------------------------------
 describe('KbHealth — per-check itemization rows (R6-08 WI-1 RED-D)', () => {
-  // @ts-expect-error — `checks` is the R6-08 WI-1 addition to KbHealthData;
-  // not yet declared on the type (studio-client.ts is an implementation
-  // target). See the block comment above for why this is safe under vitest.
+  // (`checks` landed on KbHealthData — the R6-08 WI-1 @ts-expect-error that
+  // sat here is retired now that the tests tsc project enforces it, W7-C3.)
   const health = baseHealth({
     lintErrors: 1,
     lintFlags: 0,
@@ -140,8 +139,7 @@ describe('KbHealth — per-check itemization rows (R6-08 WI-1 RED-D)', () => {
 // backend fix (buildKbHealth) just closed, one layer up in the render.
 // ---------------------------------------------------------------------------
 describe('KbHealth — "n/a" check status renders honestly, distinct from "pass" (R6-08 4on)', () => {
-  // @ts-expect-error — `checks` widened locally, same rationale as the RED-D
-  // block above (studio-client.ts's KbHealthCheck.status now includes 'n/a').
+  // (`checks`/'n/a' landed on the type — stale @ts-expect-error retired, W7-C3.)
   const health = baseHealth({
     lintErrors: 0,
     lintFlags: 0,
@@ -217,7 +215,6 @@ describe('KbHealth — lint/checks counts link to the drain panel (W6-B13)', () 
   });
 
   it('W7-B2 (knowledge-09): the per-check itemization block is an INERT readout — no anchor of its own', () => {
-    // @ts-expect-error — `checks` widened locally, same rationale as the RED-D block above.
     const html = render(baseHealth({
       lintErrors: 0, lintFlags: 0,
       checks: [{ check: 'checkFrontmatter', status: 'pass', errorCount: 0, flagCount: 0 }],

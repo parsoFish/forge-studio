@@ -57,7 +57,7 @@ import type { Flow, Project, Run } from '@/lib/studio-client';
 // ---- fixtures ---------------------------------------------------------------
 
 function makeFlow(overrides: Partial<Flow> & { id: string }): Flow {
-  return { id: overrides.id, name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
+  return { name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
 }
 
 // ---- FlowsIndexBody: true-empty state -----------------------------------

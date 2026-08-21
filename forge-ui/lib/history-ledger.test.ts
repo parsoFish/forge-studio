@@ -641,6 +641,7 @@ function row(over: Partial<LedgerRow> = {}): LedgerRow {
     when: '2026-01-01T00:00:00Z',
     what: 'probe',
     narrative: null,
+    narrativeKinds: [],
     status: 'complete',
     costUsd: 0,
     href: '/flows/x/run/r-1',

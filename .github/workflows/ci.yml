@@ -36,6 +36,16 @@ jobs:
       - name: UI tests
         run: npm run test:ui
 
+      # W7-C3 (bd forge-opj): forge-ui's *.test.ts files are excluded from
+      # forge-ui/tsconfig.json (so `next build` stays off them) and vitest
+      # transpiles without typechecking — so until this step, NO tsc project
+      # saw them and a type-level pin in a test could never fail any gate.
+      # Deliberately its own step, not folded into Build: a test-first branch
+      # may legitimately carry a red type pin mid-flight; the gate binds here,
+      # at PR time.
+      - name: UI tests typecheck
+        run: npm run test:ui:typecheck
+
       - name: Studio lint
         run: node --experimental-strip-types orchestrator/cli.ts studio lint
 
@@ -93,7 +103,20 @@ jobs:
           git fetch --no-tags --depth=1 origin "$BASE_REF"
           node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF"
 
+      # W7-C3: cache the browser download; the slow half of --with-deps is an
+      # apt-get run that has hung this job before, so it is paid ONLY on a
+      # cache miss (a playwright-core version bump changes the lockfile and
+      # therefore the key). On a hit, chromium is already in
+      # ~/.cache/ms-playwright and the ubuntu-latest image carries its OS libs.
+      - name: Cache Playwright chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright-core install --with-deps chromium
 
       - name: Walkthrough crawl (assert against baseline)

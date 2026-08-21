@@ -31,7 +31,12 @@ import type { Provenance } from '../lib/studio-client';
 // intent of the assertion below.
 import * as ProvenanceBadgeModule from './ProvenanceBadge';
 
-function render(provenance?: string | null): string {
+// The helper takes the component's OWN union, not a loose `string` (W7-C3,
+// forge-opj): every value this suite probes — 'ootb', 'vision', 'operator',
+// null, undefined — is inside it, so widening bought nothing and cost the
+// type-level pin that a future probe of a value the badge cannot receive
+// fails to compile instead of quietly asserting the empty render.
+function render(provenance?: ProvenanceBadgeModule.ProvenanceBadgeValue | null): string {
   return renderToStaticMarkup(React.createElement(ProvenanceBadge, { provenance }));
 }
 

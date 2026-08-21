@@ -26,7 +26,7 @@ const FULL_CONTENT = {
   interactivity: 'Fully autonomous; never blocks on the operator.',
 };
 
-const READY_CAPABILITY: AgentCapabilityDescriptor = { interactive: false, runtimeSdks: ['claude'] };
+const READY_CAPABILITY: AgentCapabilityDescriptor = { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false };
 
 test('computeReadinessChecks: all 6 checks ok when content complete + descriptor has >=1 runtime SDK', () => {
   const checks = computeReadinessChecks({ ...FULL_CONTENT, capability: READY_CAPABILITY });
@@ -36,7 +36,7 @@ test('computeReadinessChecks: all 6 checks ok when content complete + descriptor
 });
 
 test('computeReadinessChecks: runtime check fails when capability.runtimeSdks is empty (descriptor fact, not client-derived)', () => {
-  const checks = computeReadinessChecks({ ...FULL_CONTENT, capability: { interactive: false, runtimeSdks: [] } });
+  const checks = computeReadinessChecks({ ...FULL_CONTENT, capability: { interactive: false, runtimeSdks: [], fanoutCapable: false } });
   expect(checks.find((c) => c.key === 'runtime')?.ok).toBe(false);
 });
 
@@ -60,8 +60,8 @@ test('computeReadinessChecks: content-completeness checks stay independent of th
 });
 
 test('capabilityInteractive: reflects capability.interactive when present (informational, not a pass/fail gate)', () => {
-  expect(capabilityInteractive({ interactive: true, runtimeSdks: ['claude'] })).toBe(true);
-  expect(capabilityInteractive({ interactive: false, runtimeSdks: ['claude'] })).toBe(false);
+  expect(capabilityInteractive({ interactive: true, runtimeSdks: ['claude'], fanoutCapable: false })).toBe(true);
+  expect(capabilityInteractive({ interactive: false, runtimeSdks: ['claude'], fanoutCapable: false })).toBe(false);
 });
 
 test('capabilityInteractive: defaults to false when the descriptor has not loaded yet', () => {
