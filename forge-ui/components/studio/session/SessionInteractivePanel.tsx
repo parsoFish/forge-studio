@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { postSessionAffordance, type SessionAffordance, type SessionArtifactPayload, type FilePackageFile } from '@/lib/session-client';
 import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
+import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import type { EventLogEntry } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
@@ -177,6 +178,7 @@ export function SessionInteractivePanel({
   lifecycle,
   onChanged,
   onPackageFinalized,
+  finalized = null,
 }: {
   /** The session-kind id (e.g. 'demo', 'onboarding') — the POST route's own
    *  `:kind` segment. */
@@ -229,10 +231,20 @@ export function SessionInteractivePanel({
    *  (see this file's header). Optional — a panel under a DOM-pin test never
    *  passes one, and no other affordance shape ever triggers it. */
   onPackageFinalized?: (packageKind: 'skill' | 'hook', id: string) => void;
+  /** W7-C2 (sessions-kinds-36) — the shell payload's persisted pointer at
+   *  the object this session produced (written at finalize success, read
+   *  back on every GET). Rendered as a PERMANENT link in the terminal
+   *  state — the durable sibling of `onPackageFinalized`'s one-shot
+   *  redirect. Optional so a DOM-pin test that predates it still renders;
+   *  the real page always passes the payload's value (null included). */
+  finalized?: { kind: string; id: string } | null;
 }): JSX.Element {
   const [answerText, setAnswerText] = useState('');
   const [pickedGeneration, setPickedGeneration] = useState<string>('');
   const [packageId, setPackageId] = useState('');
+  const [notesText, setNotesText] = useState('');
+  const [reviseOpen, setReviseOpen] = useState(false);
+  const [reviseFeedback, setReviseFeedback] = useState('');
   const [busyAffordanceId, setBusyAffordanceId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -268,6 +280,9 @@ export function SessionInteractivePanel({
     }
     setAnswerText('');
     setPackageId('');
+    setNotesText('');
+    setReviseOpen(false);
+    setReviseFeedback('');
     // W6-B8 — a package-shaped verdict response (`runFinalize`'s own
     // `{ok:true, kind, id}`) bubbles up to the page for navigation. Driven by
     // the RESPONSE shape, not by `kind`/`affordance` — any future affordance
@@ -312,6 +327,7 @@ export function SessionInteractivePanel({
         <div data-section="session-no-affordances" data-no-affordance-reason={reason} style={{ fontSize: 12.5, color: 'var(--faint)', padding: '10px 0' }}>
           {copy}
         </div>
+        <FinalizedLink finalized={finalized} />
         {drawer}
       </div>
     );
@@ -326,13 +342,59 @@ export function SessionInteractivePanel({
         const busy = busyAffordanceId === affordance.id;
 
         if (affordance.kind === 'question-form') {
+          // W7-C2 (sessions-kinds-17/19, bead forge-lzv) — when the bridge
+          // attached the PENDING questions (meta.questions, awaiting-answers
+          // only), render one control per question by REUSING the
+          // ArchitectQuestionForm component (per-question options + a
+          // free-text override each) instead of the single flattened box.
+          // Its submit posts the REAL question text with each answer —
+          // `{answers: [{question, answer}, …]}`, the same wire shape
+          // `handleInstructionsAnswer` has always accepted — which is what
+          // keeps the durable answers.json (and the transcript derived from
+          // it) honest; the old hardcoded 'Operator response' placeholder
+          // permanently overwrote the questions in the record.
+          const pendingQuestions = affordance.meta?.questions ?? [];
+          if (pendingQuestions.length > 0) {
+            return (
+              <div key={affordance.id} data-section="session-affordance" data-affordance-kind="question-form" style={sectionStyle}>
+                <ArchitectQuestionForm
+                  project={project ?? ''}
+                  sessionId={sessionId}
+                  round={0}
+                  questions={pendingQuestions.map((q) => ({ question: q.question, header: q.header ?? '', options: q.options }))}
+                  sectionName="session-interview"
+                  heading="Interview"
+                  onSubmitAnswers={async ({ answers }) => {
+                    if (!project) return { ok: false, error: 'no project known for this session — cannot submit' };
+                    const result = await postSessionAffordance(kind, sessionId, affordance.id, { project, answers });
+                    if (!result.ok) return { ok: false, error: result.error };
+                    onChanged?.();
+                    return { ok: true };
+                  }}
+                />
+              </div>
+            );
+          }
+          // W7-C2 (sessions-kinds-17's briefing half) — the free-text box
+          // keeps carrying the briefing checkpoint and any awaiting-answers
+          // round whose questions did not reach the wire, but the BRIEFING
+          // copy is its own: a brand-new session's first screen is an
+          // optional brief, not an "Answer" to a question nobody asked.
+          // Keyed on `affordance.phase` — the server-derived field this
+          // panel already reads — never the session `kind`.
+          const isBriefing = affordance.phase === 'briefing';
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="question-form" style={sectionStyle}>
-              <div style={labelStyle}>Answer</div>
+              <div style={labelStyle}>{isBriefing ? 'Brief the agent (optional)' : 'Answer'}</div>
+              {isBriefing && (
+                <div style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 6 }}>
+                  Anything you want the agent to focus on before it starts — leave empty to just start.
+                </div>
+              )}
               <textarea
                 value={answerText}
                 onChange={(e) => setAnswerText(e.target.value)}
-                placeholder="Your answer…"
+                placeholder={isBriefing ? 'Focus / guidance (optional)…' : 'Your answer…'}
                 rows={3}
                 data-field="session-answer"
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
@@ -343,10 +405,10 @@ export function SessionInteractivePanel({
                 className="btn btn-primary"
                 data-action="submit-answers"
                 disabled={busy}
-                onClick={() => void submit(affordance, { answers: [{ question: 'Operator response', answer: answerText.trim() }] })}
+                onClick={() => void submit(affordance, { answers: [{ question: isBriefing ? 'Briefing note' : 'Operator response', answer: answerText.trim() }] })}
                 style={{ opacity: busy ? 0.5 : 1 }}
               >
-                {busy ? 'Sending…' : 'Send answer'}
+                {busy ? 'Sending…' : isBriefing ? 'Start →' : 'Send answer'}
               </button>
             </div>
           );
@@ -381,7 +443,24 @@ export function SessionInteractivePanel({
           // enforces via a wire signal — same distinction the label text
           // ("Skill id" vs "Hook id") already relies on.
           const shapeResolved = packageArtifact === null || packageShape !== 'unknown';
-          const approveDisabled = busy || !requiresSatisfied || !shapeResolved;
+          // W7-C2 (library-22) — a client-side ADVISORY mirror of the
+          // server's own id rule (the write route now 400s a non-slug id
+          // with the same rule text): disable + hint instead of letting the
+          // click bounce off a 400. The server check remains the
+          // enforcement; this is UX, exactly like `shapeResolved` above.
+          const idValue = (providedFields['id'] ?? '').trim();
+          const idBadSlug = requiresFields.includes('id') && idValue.length > 0 && !CLIENT_SLUG_RE.test(idValue);
+          const approveDisabled = busy || !requiresSatisfied || !shapeResolved || idBadSlug;
+          // W7-C2 (sessions-kinds-23) — the disabled Approve finally SAYS
+          // why: name the first unmet requires field (or the bad slug), as
+          // an inline hint the operator can act on, not a silent 50%-opacity
+          // button.
+          const unmetRequires = requiresFields.filter((field) => (providedFields[field] ?? '').trim().length === 0);
+          const requiresHint = idBadSlug
+            ? `"${idValue}" is not a valid id — use lowercase letters/digits separated by hyphens, starting with a letter (e.g. "pr-diff-summary").`
+            : unmetRequires.length > 0
+              ? `Enter ${unmetRequires.map((f) => (f === 'id' && packageShape !== null && packageShape !== 'unknown' ? `a ${packageShape} id` : `"${f}"`)).join(', ')} to enable Approve.`
+              : null;
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="verdict" style={sectionStyle}>
               {generations.length > 0 && (
@@ -419,8 +498,30 @@ export function SessionInteractivePanel({
                   )}
                 </div>
               )}
+              {/* W7-C2 (sessions-kinds-29) — the rationale field, one per
+                  verdict affordance, sent as the OPTIONAL `notes` body field
+                  with approve/reject/revise alike; the bridge appends it to
+                  the session's verdicts.json and the transcript renders it
+                  as an operator turn — a reject is never invisible in the
+                  record again. */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={labelStyle}>Notes (optional — recorded with your decision)</div>
+                <textarea
+                  value={notesText}
+                  onChange={(e) => setNotesText(e.target.value)}
+                  placeholder="Why?"
+                  rows={2}
+                  data-field="session-verdict-notes"
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+              {requiresHint && (
+                <div data-requires-hint style={{ fontSize: 11.5, color: 'var(--dim)', margin: '0 0 8px' }}>
+                  {requiresHint}
+                </div>
+              )}
               {error && <ErrorLine message={error} />}
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {verdicts.includes('approve') && (
                   <button
                     type="button"
@@ -431,6 +532,7 @@ export function SessionInteractivePanel({
                       void submit(affordance, {
                         verdict: 'approve',
                         ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
+                        ...(notesText.trim().length > 0 ? { notes: notesText.trim() } : {}),
                         // Generic: every field the server's own meta.requires
                         // names rides along, sourced from providedFields —
                         // never a per-kind {kind,id} literal. `kind` itself is
@@ -445,19 +547,67 @@ export function SessionInteractivePanel({
                     {busy ? 'Working…' : 'Approve'}
                   </button>
                 )}
+                {/* W7-C2 (sessions-kinds-09/23, library-24, bead forge-4ei) —
+                    the revise branch, rendered from the SAME server-derived
+                    meta.verdicts list as its two siblings. First click opens
+                    the feedback box; the send button posts {verdict:
+                    'revise', feedback} — the write route requires non-empty
+                    feedback, so the send stays disabled until there is
+                    some. */}
+                {verdicts.includes('revise') && (
+                  <button
+                    type="button"
+                    className="btn"
+                    data-action="verdict-revise"
+                    disabled={busy}
+                    onClick={() => setReviseOpen((open) => !open)}
+                    style={{ opacity: busy ? 0.5 : 1 }}
+                  >
+                    Request changes
+                  </button>
+                )}
                 {verdicts.includes('reject') && (
                   <button
                     type="button"
                     className="btn"
                     data-action="verdict-reject"
                     disabled={busy}
-                    onClick={() => void submit(affordance, { verdict: 'reject' })}
+                    onClick={() => void submit(affordance, { verdict: 'reject', ...(notesText.trim().length > 0 ? { notes: notesText.trim() } : {}) })}
                     style={{ opacity: busy ? 0.5 : 1 }}
                   >
                     {busy ? 'Working…' : 'Reject'}
                   </button>
                 )}
               </div>
+              {verdicts.includes('revise') && reviseOpen && (
+                <div data-section="session-revise" style={{ marginTop: 10 }}>
+                  <div style={labelStyle}>What should change?</div>
+                  <textarea
+                    value={reviseFeedback}
+                    onChange={(e) => setReviseFeedback(e.target.value)}
+                    placeholder="Describe the changes to apply in the next draft…"
+                    rows={3}
+                    data-field="session-revise-feedback"
+                    style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    data-action="verdict-revise-send"
+                    disabled={busy || reviseFeedback.trim().length === 0}
+                    onClick={() =>
+                      void submit(affordance, {
+                        verdict: 'revise',
+                        feedback: reviseFeedback.trim(),
+                        ...(notesText.trim().length > 0 ? { notes: notesText.trim() } : {}),
+                      })
+                    }
+                    style={{ opacity: busy || reviseFeedback.trim().length === 0 ? 0.5 : 1 }}
+                  >
+                    {busy ? 'Sending…' : 'Send for revision'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         }
@@ -517,6 +667,42 @@ function ProvenanceStrip({ phase, modelTier }: { phase: string; modelTier: strin
             never the literal word "default" (not a tier the picker offers). */}
         model: {modelTier ?? 'not recorded'}
       </span>
+    </div>
+  );
+}
+
+/** W7-C2 (library-22) — a hand-mirrored copy of `SLUG_RE`
+ *  (orchestrator/skill-path.ts), per this file set's no-cross-boundary-
+ *  import convention. ADVISORY only (disable + hint); the write route's own
+ *  check is the enforcement. */
+const CLIENT_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+/** W7-C2 (sessions-kinds-36) — the permanent "what this session produced"
+ *  link, rendered in the zero-affordance (terminal) branch whenever the
+ *  shell payload carries a persisted `finalized` pointer. A plain anchor,
+ *  not `useRouter()` — same renderToStaticMarkup constraint the header
+ *  documents for `onPackageFinalized`. An unrecognised kind renders the
+ *  honest text without a link, never a guessed href. */
+function FinalizedLink({ finalized }: { finalized: { kind: string; id: string } | null }): JSX.Element | null {
+  if (finalized === null) return null;
+  const href =
+    finalized.kind === 'skill' ? `/skills/${encodeURIComponent(finalized.id)}`
+    : finalized.kind === 'hook' ? `/hooks/${encodeURIComponent(finalized.id)}`
+    : finalized.kind === 'community-registry' ? '/community'
+    : null;
+  const label = finalized.kind === 'community-registry' ? 'Committed to the community registry' : `Committed as ${finalized.kind} "${finalized.id}"`;
+  if (href === null) {
+    return (
+      <div data-section="session-finalized" style={{ fontSize: 12.5, color: 'var(--dim)', padding: '4px 0 10px' }}>
+        {label}.
+      </div>
+    );
+  }
+  return (
+    <div data-section="session-finalized" style={{ fontSize: 12.5, padding: '4px 0 10px' }}>
+      <a data-action="open-finalized" href={href} style={{ color: 'var(--ember, #ff9e4a)', textDecoration: 'none' }}>
+        {label} →
+      </a>
     </div>
   );
 }

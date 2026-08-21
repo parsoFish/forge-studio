@@ -124,6 +124,11 @@ export type SessionShellReadyState = {
    *  session-lifecycle-client.ts), carried through UNCHANGED across a
    *  `selectStage` switch — a session-level fact, like `terminal`. */
   lifecycle: SessionLifecycle;
+  /** W7-C2 (sessions-kinds-36) — the payload's own persisted pointer at
+   *  the object a committed session produced, carried through verbatim
+   *  (session-level, like `terminal`); null for a session that produced
+   *  nothing. */
+  finalized: { kind: string; id: string } | null;
   dataAttrs: SessionShellDataAttrs;
 };
 
@@ -205,6 +210,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     terminal: payload.terminal,
     transcript: payload.transcript,
     lifecycle: payload.lifecycle,
+    finalized: payload.finalized,
     dataAttrs: readyDataAttrs({
       kind: payload.kind,
       stage,

@@ -1,8 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 import { startAuthoring } from '@/lib/bridge-client';
+import { fetchAgentCapability, type AgentCapability } from '@/lib/studio-client';
+import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
+import { defaultKickoffTier } from '@/lib/kickoff-view';
 
 /**
  * R4-21 T3 (BLOCKER-2 fix) — the entry point into the creation-agent
@@ -40,6 +44,28 @@ export function AuthoringLauncher({
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // W7-C2 (library-23) — the embedded launcher and the generic
+  // /sessions/authoring/new kickoff page are two entry points into the SAME
+  // POST /api/studio/authoring/start; the launcher used to silently omit
+  // `modelTier`, so an operator starting from /skills/new never learned the
+  // choice existed. Same picker, same capability fetch, same default rule
+  // as the kickoff page — one contract, two doors.
+  const [capability, setCapability] = useState<AgentCapability | null>(null);
+  const [modelTier, setModelTier] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetchAgentCapability('creation-agent')
+      .then((cap) => {
+        if (cancelled) return;
+        setCapability(cap);
+        setModelTier((prev) => prev || defaultKickoffTier(allowedTiersFromCapability(cap)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isRangeTier = allowedTiersFromCapability(capability).length > 0;
 
   const canSubmit = project.trim().length > 0 && prompt.trim().length > 0 && !submitting;
 
@@ -49,7 +75,11 @@ export function AuthoringLauncher({
     setSubmitting(true);
     try {
       const trimmedProject = project.trim();
-      const res = await startAuthoring({ project: trimmedProject, prompt: prompt.trim() });
+      const res = await startAuthoring({
+        project: trimmedProject,
+        prompt: prompt.trim(),
+        ...(isRangeTier && modelTier ? { modelTier } : {}),
+      });
       if (!res.ok) { setError(res.error ?? 'failed to start'); return; }
       setPrompt('');
       if (res.sessionId) onStarted?.(res.sessionId, trimmedProject);
@@ -87,6 +117,7 @@ export function AuthoringLauncher({
         data-field="authoring-launcher-prompt"
         style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
       />
+      <KickoffModelTierPicker capability={capability} modelTier={modelTier} onChange={setModelTier} />
       {error && (
         <div data-authoring-launcher-error style={{ color: 'var(--red)', fontSize: 12, marginBottom: 8 }}>
           {error}
@@ -101,6 +132,14 @@ export function AuthoringLauncher({
       >
         {submitting ? 'Starting…' : 'Start with the creation agent →'}
       </button>
+      {/* W7-C2 (library-23) — the cross-link the two entry points never had:
+          the generic kickoff page is the same session with the same options,
+          discoverable from here instead of a parallel, unlinked door. */}
+      <div style={{ marginTop: 8, fontSize: 11.5 }}>
+        <Link href="/sessions/authoring/new" data-action="open-authoring-kickoff" style={{ color: 'var(--dim)' }}>
+          Same thing as the authoring kickoff page →
+        </Link>
+      </div>
     </div>
   );
 }

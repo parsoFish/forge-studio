@@ -92,7 +92,11 @@ export function ArchitectQuestionForm({
       style={{ border: '1px solid #30363d', borderRadius: 10, padding: 16, background: '#0d1117' }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3', marginBottom: 12 }}>
-        {heading} — round {round}
+        {/* W7-C2 — a consumer with no meaningful round number (the generic
+            SessionInteractivePanel's per-question interview, which has no
+            round on its wire) passes round <= 0 and gets the bare heading;
+            architect's own rounds (always >= 1) render exactly as before. */}
+        {round > 0 ? `${heading} — round ${round}` : heading}
       </div>
       {questions.map((q, i) => {
         const answered = resolvedAnswer(i) !== '';

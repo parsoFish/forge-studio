@@ -626,6 +626,18 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
 const SESSION_AFFORDANCE_KINDS = ['question-form', 'verdict', 'staged-review', 'next-turn'] as const;
 export type SessionAffordanceKind = (typeof SESSION_AFFORDANCE_KINDS)[number];
 
+/** W7-C2 (sessions-kinds-17/19, bead forge-lzv) — one pending interview
+ *  question as the bridge attaches it to the question-form affordance's
+ *  meta at `awaiting-answers` (cli/bridge-studio-sessions.ts's
+ *  `attachPendingQuestions`): the REAL question text (what the panel posts
+ *  back with each answer — never a placeholder), an optional short header,
+ *  and the recommended options. */
+export type SessionPendingQuestion = {
+  question: string;
+  header?: string;
+  options: { label: string; description: string }[];
+};
+
 export type SessionAffordance = {
   id: string;
   kind: SessionAffordanceKind;
@@ -648,7 +660,7 @@ export type SessionAffordance = {
    *  requirement — the file-package "needs an id" rule used to be a
    *  client-only assumption with no wire signal tying it to
    *  `handleAuthoringVerdict`'s own `{kind,id}` check). */
-  meta?: { writes?: string[]; next?: string; verdicts?: string[]; requires?: string[] };
+  meta?: { writes?: string[]; next?: string; verdicts?: string[]; requires?: string[]; questions?: SessionPendingQuestion[] };
 };
 
 function parseSessionAffordanceKind(raw: unknown): SessionAffordanceKind {
@@ -679,16 +691,49 @@ function parseSessionAffordance(raw: unknown): SessionAffordance {
     const next = typeof metaRaw['next'] === 'string' ? metaRaw['next'] : undefined;
     const verdicts = Array.isArray(metaRaw['verdicts']) && metaRaw['verdicts'].every((v) => typeof v === 'string') ? (metaRaw['verdicts'] as string[]) : undefined;
     const requires = Array.isArray(metaRaw['requires']) && metaRaw['requires'].every((r) => typeof r === 'string') ? (metaRaw['requires'] as string[]) : undefined;
-    if (writes !== undefined || next !== undefined || verdicts !== undefined || requires !== undefined) {
+    // W7-C2 — same tolerance discipline as the sub-fields above: a
+    // malformed `questions` degrades that ONE sub-field to absent (advisory
+    // display data — the panel then falls back to the free-text box), never
+    // throws the whole affordance away.
+    const questions = parsePendingQuestionsMeta(metaRaw['questions']);
+    if (writes !== undefined || next !== undefined || verdicts !== undefined || requires !== undefined || questions !== undefined) {
       meta = {
         ...(writes !== undefined ? { writes } : {}),
         ...(next !== undefined ? { next } : {}),
         ...(verdicts !== undefined ? { verdicts } : {}),
         ...(requires !== undefined ? { requires } : {}),
+        ...(questions !== undefined ? { questions } : {}),
       };
     }
   }
   return { id, kind, phase, ...(meta !== undefined ? { meta } : {}) };
+}
+
+/** Tolerant meta-sub-field parse for `questions` — `undefined` (not a
+ *  throw) for any malformed shape, a fully-shaped array otherwise. Each
+ *  entry: `question` string (required), `header` string (optional),
+ *  `options` an array of {label, description} strings (a malformed options
+ *  entry degrades the WHOLE questions field to absent — a question rendered
+ *  with invented options is worse than the free-text fallback). */
+function parsePendingQuestionsMeta(raw: unknown): SessionPendingQuestion[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const questions: SessionPendingQuestion[] = [];
+  for (const entry of raw) {
+    if (!isPlainObject(entry) || typeof entry['question'] !== 'string') return undefined;
+    const optionsRaw = entry['options'];
+    if (optionsRaw !== undefined && !Array.isArray(optionsRaw)) return undefined;
+    const options: { label: string; description: string }[] = [];
+    for (const o of Array.isArray(optionsRaw) ? optionsRaw : []) {
+      if (!isPlainObject(o) || typeof o['label'] !== 'string' || typeof o['description'] !== 'string') return undefined;
+      options.push({ label: o['label'], description: o['description'] });
+    }
+    questions.push({
+      question: entry['question'],
+      ...(typeof entry['header'] === 'string' ? { header: entry['header'] } : {}),
+      options,
+    });
+  }
+  return questions;
 }
 
 function parseSessionAffordances(raw: unknown): SessionAffordance[] {
@@ -767,6 +812,16 @@ export type SessionShellPayload = {
    * missing lifecycle throws, never defaults to "working".
    */
   lifecycle: SessionLifecycle;
+  /**
+   * W7-C2 (sessions-kinds-36) — the persisted {kind, id} pointer at
+   * whatever object a committed session produced (an authoring session's
+   * landed skill/hook, a community-refresh commit's registry), written once
+   * at finalize success and read back on every GET so the committed session
+   * page keeps a PERMANENT link — never a one-shot redirect lost on reload.
+   * REQUIRED like `modelTier`: `null` IS the honest value for a session
+   * that produced nothing, never an omitted key.
+   */
+  finalized: { kind: string; id: string } | null;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -849,6 +904,20 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   // W7-A2 — REQUIRED like "terminal" above; every malformed shape throws.
   const lifecycle = parseSessionLifecycle(raw['lifecycle']);
 
+  // W7-C2 — REQUIRED like "modelTier": null is the honest empty value, a
+  // missing key or any shape other than {kind: string, id: string} throws.
+  if (!('finalized' in raw)) {
+    throw new Error('missing "finalized" — expected {kind, id} or null, never an omitted key');
+  }
+  const finalizedRaw = raw['finalized'];
+  let finalized: { kind: string; id: string } | null = null;
+  if (finalizedRaw !== null) {
+    if (!isPlainObject(finalizedRaw) || typeof finalizedRaw['kind'] !== 'string' || typeof finalizedRaw['id'] !== 'string') {
+      throw new Error(`missing or invalid "finalized": expected {kind: string, id: string} or null, got ${JSON.stringify(finalizedRaw)}`);
+    }
+    finalized = { kind: finalizedRaw['kind'], id: finalizedRaw['id'] };
+  }
+
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     affordances,
@@ -856,6 +925,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     terminal,
     transcript,
     lifecycle,
+    finalized,
   };
 }
 

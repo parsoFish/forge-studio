@@ -477,6 +477,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     terminal: false,
     transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
+    finalized: null,
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -496,6 +497,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     terminal: false,
     transcript: true,
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
+    finalized: null,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
 });

@@ -377,6 +377,7 @@ export default function SessionShellPage({
                   events={events}
                   terminal={viewState.terminal}
                   lifecycle={viewState.lifecycle}
+                  finalized={viewState.finalized}
                   onChanged={refreshShell}
                   onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
                 />
@@ -389,13 +390,26 @@ export default function SessionShellPage({
                 </div>
               )}
               {/* W7-B1 (sessions-kinds-07): project/sessionId/finalize
-                  threaded — see the handler above. */}
+                  threaded — see the handler above.
+                  W7-C2 (sessions-kinds-30): the instructions summary already
+                  carries the verdict context (where approve writes + the
+                  current file's content, edit mode) — thread it so the
+                  AGENTS.md draft pane can name its destination and offer a
+                  diff. Undefined for every other kind. */}
               <SessionArtifactPane
                 artifact={viewState.artifact}
                 activeStage={viewState.selectedStage}
                 project={project ?? undefined}
                 sessionId={sessionId}
                 onFinalizeGeneration={onFinalizeGeneration}
+                draftContext={
+                  summary?.kind === 'instructions'
+                    ? {
+                        targetPath: `${summary.data.projectRepoPath}/${summary.data.currentInstructionsFile ?? 'AGENTS.md'}`,
+                        current: summary.data.currentInstructions,
+                      }
+                    : undefined
+                }
               />
             </div>
           </div>
