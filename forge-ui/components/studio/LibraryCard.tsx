@@ -127,6 +127,10 @@ export function FlowCard({
   const activeRun = flowRuns.find((r) => r.status === 'active');
   const gatedRuns = flowRuns.filter((r) => r.status === 'gated');
   const failedRuns = flowRuns.filter((r) => r.status === 'failed');
+  // W7-C1 (flows-19): a QUEUED initiative used to produce NOTHING on this
+  // card — the one state that means "work is waiting" was invisible on the
+  // flows pillar. Same lineage-aware set as the gated/failed chips.
+  const queuedRuns = flowRuns.filter((r) => r.status === 'planned');
 
   // review round (GAP 3): deriveFlowStatus stays a 3-state derivation
   // (active|gated|idle) shared byte-for-byte with the flow monitor — a
@@ -146,6 +150,7 @@ export function FlowCard({
       data-flow-status={flowStatus}
       data-flow-failed-count={failedRuns.length}
       data-flow-gated-count={gatedRuns.length}
+      data-flow-queued-count={queuedRuns.length}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
@@ -157,18 +162,26 @@ export function FlowCard({
       <div className="card-meta">
         <span className="card-stat">{nodeCount} nodes · {edgeCount} edges</span>
         {proj && <span className="badge badge-project">{proj.name}</span>}
-        {/* R2-04-F4: one badge per declared trigger — the kind is the badge
-            text, the full "<kind> → <target>" reads on hover. */}
+        {/* R2-04-F4: one badge per declared trigger. W7-C1 (flows-18): the
+            text is "on <kind>" — the bare uppercased kind ("MERGED") sat in
+            the same meta row as the "N failed" run chips and read as a run
+            STATUS, not a trigger. Full "<kind> → <target>" stays on hover. */}
         {triggers.map((tr, i) => (
           <span
             key={`${tr.on}-${tr.target?.ref ?? ''}-${i}`}
             className="badge badge-dim"
             data-trigger-badge={tr.on}
-            title={`${tr.on} → ${tr.target?.ref ?? ''}`}
+            title={`trigger: ${tr.on} → ${tr.target?.ref ?? ''}`}
+            style={{ textTransform: 'none' }}
           >
-            {tr.on}
+            on {tr.on}
           </span>
         ))}
+        {queuedRuns.length > 0 && (
+          <span className="chip">
+            {queuedRuns.length} queued
+          </span>
+        )}
         {gatedRuns.length > 0 && (
           <span className="chip chip-gated pulse-ember">
             {gatedRuns.length} need{gatedRuns.length === 1 ? 's' : ''} you
