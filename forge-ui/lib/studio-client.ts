@@ -179,7 +179,10 @@ export type Run = {
    */
   project?: string;
   status: RunStatus;
-  origin: 'architect' | 'human-directed';
+  /** W7-C3 (forge-cv9): mirrors orchestrator/run-model.ts VALID_ORIGINS —
+   *  'triggered' is a real, producible origin since R2-08-F4; the narrower
+   *  client type forced consumers to handle only two of three cases. */
+  origin: 'architect' | 'human-directed' | 'triggered';
   costUsd: number;
   startedAt?: string;
   /**

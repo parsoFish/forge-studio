@@ -218,7 +218,7 @@ export async function runInstructionsTurn(
 
   const startEv = logger.emit({
     initiative_id: initiativeId,
-    phase: 'architect',
+    phase: 'instructions',
     skill: 'instructions-runner',
     event_type: 'start',
     input_refs: [join(sessionDir, 'status.json')],
@@ -236,14 +236,14 @@ export async function runInstructionsTurn(
     {
       initiativeId,
       parentEventId: startEv.event_id,
-      phase: 'architect',
+      phase: 'instructions',
       skill: 'instructions-runner',
     },
     { readOnlySampleRate: 1, cap: 200 },
   );
   const onToolUse = sink.onToolUse;
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const sinkCtx = { initiativeId, phase: 'architect' as const, skill: 'instructions-runner', idMeta: { session_id: input.sessionId } };
+  const sinkCtx = { initiativeId, phase: 'instructions' as const, skill: 'instructions-runner', idMeta: { session_id: input.sessionId } };
   const onText = makeReasoningSink(logger, sinkCtx);
   const onThinking = makeThinkingSink(logger, sinkCtx);
 
@@ -267,7 +267,7 @@ export async function runInstructionsTurn(
       }
       writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
       logger.emit({
-        initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
+        initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
         event_type: 'log', input_refs: [], output_refs: [questionsPath],
         message: `interview round ${status.round} — ${decision.questions.length} question(s) for the operator`,
         metadata: { session_id: input.sessionId, round: status.round },
@@ -471,7 +471,7 @@ async function runDraftStep(args: {
   writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
-    initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
+    initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
     event_type: 'log', input_refs: [], output_refs: [draftPath],
     message: 'instructions-drafted (AGENTS.md awaiting operator verdict)',
     metadata: { session_id: input.sessionId, bytes: agentsMd.length, composed_seed_ids: composedIds },
@@ -520,7 +520,7 @@ function runFinalizeStep(args: {
   writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
 
   logger.emit({
-    initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
+    initiative_id: initiativeId, phase: 'instructions', skill: 'instructions-runner',
     event_type: 'log', input_refs: [draftPath], output_refs: [agentsPath],
     message: 'instructions-committed (AGENTS.md written to the repo)',
     metadata: { session_id: input.sessionId, agents_path: agentsPath },

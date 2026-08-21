@@ -226,7 +226,7 @@ export async function runDemoBuilderTurn(
 
   const startEv = logger.emit({
     initiative_id: initiativeId,
-    phase: 'unifier',
+    phase: 'demo',
     skill: 'demo-builder-runner',
     event_type: 'start',
     input_refs: [join(sessionDir, 'status.json')],
@@ -244,13 +244,13 @@ export async function runDemoBuilderTurn(
     {
       initiativeId,
       parentEventId: startEv.event_id,
-      phase: 'unifier',
+      phase: 'demo',
       skill: 'demo-builder-runner',
     },
     { readOnlySampleRate: 1, cap: 200 },
   );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
-  const sinkCtx = { initiativeId, phase: 'unifier' as const, skill: 'demo-builder-runner', idMeta: { session_id: input.sessionId } };
+  const sinkCtx = { initiativeId, phase: 'demo' as const, skill: 'demo-builder-runner', idMeta: { session_id: input.sessionId } };
   const onText = makeReasoningSink(logger, sinkCtx);
   const onThinking = makeThinkingSink(logger, sinkCtx);
 
@@ -416,7 +416,7 @@ async function runGenerateStep(args: {
 
   writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-review' });
   logger.emit({
-    initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
+    initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
     event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath], cost_usd: costUsd,
     message: `demo-generated (iteration ${status.iteration}${target ? `, element=${target}` : composed ? ', composed' : ''}, awaiting review)`,
     metadata: { session_id: input.sessionId, iteration: status.iteration, target_element: target ?? null, composed },
@@ -551,7 +551,7 @@ function runLockStep(args: {
   writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'locked' });
 
   logger.emit({
-    initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
+    initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
     event_type: 'log', input_refs: [demoPath], output_refs: [lockPath, join(histDir, 'DEMO.html')],
     message: 'demo-locked (snapshotted to history; machinery reproducible in the repo)',
     metadata: { session_id: input.sessionId, lock_path: lockPath, history_dir: histDir },

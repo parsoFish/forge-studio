@@ -1174,7 +1174,7 @@ export function instrEvent(sid, eventType, message, metadata = {}) {
   appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({
     event_id: `EV_instr_${instrSeq}`, cycle_id: `_instructions-${sid}`,
     initiative_id: `instructions-${sid}`, started_at: new Date().toISOString(),
-    phase: 'architect', skill: 'instructions-runner',
+    phase: 'instructions', skill: 'instructions-runner',
     event_type: eventType, input_refs: [], output_refs: [], message, metadata,
   }) + '\n');
 }
@@ -1230,7 +1230,7 @@ export function writeCrashedInstrSession(sid) {
   utimesSync(statusPath, tenMinAgo, tenMinAgo);
   const logDir = join(FORGE_ROOT, '_logs', `_instructions-${sid}`);
   mkdirSync(logDir, { recursive: true });
-  writeFileSync(join(logDir, 'events.jsonl'), JSON.stringify({ event_id: 'EV_crash_1', cycle_id: `_instructions-${sid}`, initiative_id: `instructions-${sid}`, started_at: new Date().toISOString(), phase: 'architect', skill: 'instructions-runner', event_type: 'start', input_refs: [], output_refs: [], message: 'instructions turn' }) + '\n');
+  writeFileSync(join(logDir, 'events.jsonl'), JSON.stringify({ event_id: 'EV_crash_1', cycle_id: `_instructions-${sid}`, initiative_id: `instructions-${sid}`, started_at: new Date().toISOString(), phase: 'instructions', skill: 'instructions-runner', event_type: 'start', input_refs: [], output_refs: [], message: 'instructions turn' }) + '\n');
   writeFileSync(join(logDir, 'stderr.log'), CRASHED_INSTR_STDERR);
 }
 
@@ -1296,7 +1296,7 @@ export function demoEvent(sid, eventType, message, metadata = {}) {
   appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({
     event_id: `EV_demo_${demoSeq}`, cycle_id: `_demo-${sid}`,
     initiative_id: `demo-${sid}`, started_at: new Date().toISOString(),
-    phase: 'unifier', skill: 'demo-builder-runner',
+    phase: 'demo', skill: 'demo-builder-runner',
     event_type: eventType, input_refs: [], output_refs: [], message, metadata,
   }) + '\n');
 }

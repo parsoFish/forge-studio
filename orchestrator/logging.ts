@@ -17,7 +17,15 @@ export type Phase =
   | 'review-loop'
   | 'closure'
   | 'release-finalize'
-  | 'reflection';
+  | 'reflection'
+  // W7-C3 (sessions-kinds-25/26): interactive session KINDS log under their
+  // own phase names. instructions-runner copy-pasted `architect` and
+  // demo-builder-runner inherited the retired `unifier`, so those sessions'
+  // cost and activity were filed under phases that never ran them. The cycle
+  // spine ignores these (forge-ui/lib/phases.ts PHASE_ORDER is unchanged);
+  // session logs are per-session, not cycle logs.
+  | 'instructions'
+  | 'demo';
 
 export type EventType =
   | 'start'
