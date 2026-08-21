@@ -83,7 +83,10 @@ see the teardown list at the bottom of the wave-7 ledger).
   `isRegeneration`, `unprovenShrinks`, id normalization); `capture.mjs` — the
   per-page browser listeners (`attachCapture`) + the in-page read
   (`readPageInfo`, readiness anchored strictly to the `[data-page]` root);
-  `boot-studio.mjs` — the `--boot` launcher; `check-baseline-shrinks.mjs` — the
+  `../lib/boot-studio.mjs` — the `--boot` launcher, SHARED with
+  `e2e-deadpaths.mjs` and `verify-cycle.mjs` since W7-C3 (`bootStudio` is this
+  harness's policy wrapper — refuses to boot over a healthy bridge — around the
+  common `spawnStudioReady` core); `check-baseline-shrinks.mjs` — the
   shrink-only CI check (+ `--crawled` cross-check, stamped-regeneration
   acceptance); `crawl.test.ts` + `capture.test.ts` + `fixtures/crawl.sample.json`
   — the pinned contract over a slice of the real wave-7 crawl.

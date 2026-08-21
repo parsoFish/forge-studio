@@ -74,6 +74,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
+import { spawnStudioReady } from './lib/boot-studio.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -462,77 +463,33 @@ async function startWatch() {
     log('reusing existing forge studio on 4124/4123');
     return { proc: null, uiUrl: 'http://localhost:4124', bridgeUrl: 'http://127.0.0.1:4123' };
   }
-  // M7-7: spawn the canonical `forge studio` launcher; detect readiness via its
-  // deterministic 'forge-studio-ready {json}' stdout line (no log-scraping).
-  return new Promise((res, rej) => {
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
-      { cwd: FORGE_ROOT, env: forgeSpawnEnv(), stdio: ['ignore', 'pipe', 'pipe'], detached: true },
-    );
-    // Track from SPAWN, not from ready: a boot-timeout rejection must still
-    // let the fatal handler kill what was spawned (the half-booted studio
-    // already holds ports 4123/4124).
-    activeWatchProc = proc;
-    let buf = '';
-    let settled = false;
-    const onData = (chunk) => {
-      if (settled) return;
-      buf += chunk.toString();
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        const m = line.match(/^forge-studio-ready (.+)$/);
-        if (!m) continue;
-        try {
-          const { bridgeUrl, uiUrl } = JSON.parse(m[1]);
-          if (bridgeUrl && uiUrl) {
-            settled = true;
-            // Keep streaming the watch's output into the run log — a watch
-            // that dies mid-run otherwise takes its dying words with it
-            // (2026-07-11: bridge vanished between hand-off and approve with
-            // zero diagnostic trail).
-            const tee = (chunk) => {
-              for (const l of chunk.toString().split('\n')) {
-                if (l.trim()) log(`[watch] ${l}`);
-              }
-            };
-            proc.stdout.off('data', onData); proc.stderr.off('data', onData);
-            proc.stdout.on('data', tee); proc.stderr.on('data', tee);
-            proc.on('exit', (code, signal) => log(`[watch] EXITED code=${code} signal=${signal}`));
-            res({ proc, uiUrl, bridgeUrl });
-            return;
-          }
-        } catch { /* not the signal line */ }
-      }
-    };
-    proc.stdout.on('data', onData);
-    proc.stderr.on('data', onData);
-    proc.on('error', rej);
-    // 150s (W6-P3 review finding #4 — was 120s, stated for a `next dev`
-    // recompile that no longer happens here): `forge studio` now serves a
-    // PRODUCTION build by default (no --dev — this harness deliberately
-    // exercises the real operator path), so readiness now includes a
-    // one-time `next build` before `next start` can bind. Budget = the
-    // pre-existing 120s (bridge start + port takeover + `next start` bind +
-    // first-request probe) PLUS a build-specific allowance measured
-    // directly: a cold `npm run build --workspace forge-ui` on the machine
-    // this was authored on took 18.06s wall-clock (`/usr/bin/time -v`, 200%
-    // CPU); +50% margin rounds to 30s. First run (or any run after forge-ui
-    // source changes) pays this; a warm/fresh `.next/` skips the build
-    // entirely and is fast. NOTE: the 30s margin is a SINGLE-SAMPLE
-    // measurement from one machine, not a calibrated distribution —
-    // re-measure (and re-derive the margin) if forge-ui's source tree/
-    // dependency graph grows enough to meaningfully slow `next build`. On
-    // timeout, kill what we spawned — the half-booted studio HOLDS the
-    // port, and rejecting without killing it strands a zombie that blocks
-    // every subsequent run (2026-07-11 R3).
-    setTimeout(() => {
-      if (settled) return;
-      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* */ } }
-      rej(new Error(`forge studio not ready within 150s; spawned watch killed. Last output:\n${buf.slice(-2000)}`));
-    }, 150000);
+  // M7-7: spawn the canonical `forge studio` launcher; readiness via its
+  // deterministic 'forge-studio-ready {json}' stdout line. W7-C3: the spawn/
+  // ready/timeout-group-kill core is the shared scripts/lib/boot-studio.mjs
+  // (one implementation for verify-cycle / e2e-deadpaths / ui-walkthrough).
+  // Budget: 150s = the pre-existing 120s (bridge start + port takeover +
+  // `next start` bind + first-request probe) + the ~30s cold `next build`
+  // allowance (W6-P3 review finding #4, measured 18.06s + 50% margin —
+  // single-sample; re-measure if forge-ui's build meaningfully slows).
+  // fullEnv (not env): forgeSpawnEnv DELETES the headroom proxy vars; a
+  // merge over process.env would silently reinstate them.
+  // The shared core's `log` tees ALL watch output into the run log — a watch
+  // that dies mid-run otherwise takes its dying words with it (2026-07-11:
+  // bridge vanished between hand-off and approve with zero diagnostic trail).
+  const teeLog = (s) => {
+    for (const l of s.split('\n')) {
+      if (l.trim()) log(`[watch] ${l}`);
+    }
+  };
+  // Track from SPAWN, not from ready (`onSpawn`): a boot that never reaches
+  // ready must still leave the fatal handler something to kill — the
+  // half-booted studio already holds ports 4123/4124.
+  const fresh = await spawnStudioReady({
+    fullEnv: forgeSpawnEnv(), timeoutMs: 150_000, log: teeLog,
+    onSpawn: (proc) => { activeWatchProc = proc; },
   });
+  fresh.proc.on('exit', (code, signal) => log(`[watch] EXITED code=${code} signal=${signal}`));
+  return { proc: fresh.proc, uiUrl: fresh.uiUrl, bridgeUrl: fresh.bridgeUrl };
 }
 
 /** Health-probe the watch bridge; restart it if it died mid-run. The bridge

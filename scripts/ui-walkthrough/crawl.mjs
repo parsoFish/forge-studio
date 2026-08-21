@@ -323,7 +323,8 @@ async function main() {
   } else {
     let studio = null;
     if (BOOT) {
-      const { bootStudio } = await import('./boot-studio.mjs');
+      // W7-C3: the boot helper is shared with e2e-deadpaths + verify-cycle.
+      const { bootStudio } = await import('../lib/boot-studio.mjs');
       studio = await bootStudio({ bridgeUrl: BRIDGE, log: (s) => process.stderr.write(s + '\n') });
       UI = studio.uiUrl; BRIDGE = studio.bridgeUrl;
       process.stderr.write(`[walkthrough --boot] ready: ui=${UI} bridge=${BRIDGE}\n`);
