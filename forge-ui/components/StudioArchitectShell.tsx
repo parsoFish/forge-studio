@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { StudioNav } from '@/components/StudioNav';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 /**
  * Native Studio chrome for the architect surfaces (M7-4, ADR-031). Replaces the
@@ -40,6 +41,7 @@ export function StudioArchitectShell({
   useDocumentTitle(idLabel, title);
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page={dataPage}
       data-page-ready={ready ? 'true' : 'false'}
       {...mainData}

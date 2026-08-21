@@ -30,6 +30,7 @@
 
 import { RunLog } from '@/components/studio/RunLog';
 import type { RunLogLine } from '@/lib/run-log-line';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export type RunMaterialRef = { path: string; kind: string };
 
@@ -70,6 +71,7 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
     // W7-C3 (agents-35): <main>, not <div> — the run page had no <main>
     // landmark at all; every other route roots its [data-page] on one.
     <main
+      id={MAIN_CONTENT_ID}
       data-page="agent-run"
       data-run-id={runId}
       data-run-state={state}

@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { StudioNav } from './StudioNav';
 import { Breadcrumbs, type Crumb } from './Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 /**
  * The ONE Studio page shell (R6-03-F3, batch-F ruling 46).
@@ -104,6 +105,7 @@ export function StudioPage({
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page={dataPage}
       {...(ready !== undefined ? { 'data-page-ready': ready ? 'true' : 'false' } : {})}
       {...mainData}

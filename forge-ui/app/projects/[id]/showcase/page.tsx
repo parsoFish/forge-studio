@@ -55,6 +55,9 @@ import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
 import { deriveShowcaseStats, listShowcaseCycleIds, resolveShowcaseSelectValue, type ShowcaseStats } from '@/lib/project-showcase';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 export default function ProjectShowcasePage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -134,6 +137,9 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // demo.json was never captured (both render empty, but honestly differently).
   const emptyReason: 'no-cycle' | 'no-demo' = result?.kind === 'loaded' ? 'no-demo' : 'no-cycle';
 
+  // W7-C3 review (A-H4): per-route tab title — before every early return.
+  useDocumentTitle('Showcase', id, 'Projects');
+
   if (ready && loadError) {
     return (
       <PageLoadError
@@ -154,6 +160,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="project-showcase"
       data-page-ready={ready ? 'true' : 'false'}
       data-fetch-status={ready ? 'ok' : 'loading'}
@@ -163,22 +170,17 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
       <StudioNav />
 
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '18px 28px 64px' }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 12.5,
-          color: 'var(--faint)',
-          padding: '10px 0 0',
- fontFamily: 'var(--font-mono)',
-        }}>
-          <Link href="/" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Forge Studio</Link>
-          <span style={{ color: 'var(--line-2)' }}>/</span>
-          <Link href={`/projects/${encodeURIComponent(id)}`} style={{ color: 'var(--dim)', textDecoration: 'none' }}>
-            {id}
-          </Link>
-          <span style={{ color: 'var(--line-2)' }}>/</span>
-          <span style={{ color: 'var(--c-project)' }}>SHOWCASE</span>
+        {/* W7-C3 review (A-H4): the shared semantic trail — this was the
+            last surviving instance of the unlabelled `<div>` breadcrumb
+            `Breadcrumbs.tsx`'s own docstring says it replaced. */}
+        <div style={{ padding: '10px 0 0' }}>
+          <Breadcrumbs
+            items={[
+              { label: 'Projects', href: '/projects' },
+              { label: id, href: `/projects/${encodeURIComponent(id)}` },
+              { label: 'Showcase' },
+            ]}
+          />
         </div>
 
         <div style={{ padding: '18px 0 20px', borderBottom: '1px solid var(--line)', marginBottom: 24 }}>

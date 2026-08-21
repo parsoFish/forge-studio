@@ -32,6 +32,7 @@ import { fetchRunDetail, type RunDetail } from '@/lib/run-view-client';
 import { pollUntilTerminal, pollDisplayState } from '@/lib/agent-dispatch';
 import { cancelAgentRun } from '@/lib/studio-client';
 import { useDocumentTitle } from '@/lib/document-title';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export default function AgentRunPage() {
   const params = useParams();
@@ -148,11 +149,11 @@ export default function AgentRunPage() {
           root — a route's [data-page] must sit on the same element type in
           every state (FlowRunDetail's convention). */}
       {!loaded ? (
-        <main data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
+        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
           Loading run…
         </main>
       ) : detail!.resolution === 'unresolved' ? (
-        <main data-page="agent-run" data-run-id={runId} data-page-ready="true" data-fetch-status="error" style={{ padding: 20 }}>
+        <main id={MAIN_CONTENT_ID} data-page="agent-run" data-run-id={runId} data-page-ready="true" data-fetch-status="error" style={{ padding: 20 }}>
           <FetchErrorState
             what="this agent run"
             error={detail!.readError?.message ?? 'the run could not be read'}

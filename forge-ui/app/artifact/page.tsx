@@ -68,6 +68,7 @@ import { fetchDemoMarkdown } from '@/lib/review-comments-client';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
 import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Types for artifact docs fetched from the bridge
@@ -744,6 +745,7 @@ function ArtifactPageInner() {
     // W7-C3 (crosscut-18): <main>, not <div> — /artifact rendered no <main>
     // landmark at all.
     <main
+      id={MAIN_CONTENT_ID}
       data-page="artifact"
       data-page-ready={ready ? 'true' : 'false'}
       data-run={runId}

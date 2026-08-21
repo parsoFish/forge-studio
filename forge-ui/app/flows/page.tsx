@@ -22,6 +22,7 @@ import {
   type Project,
   type Run,
 } from '@/lib/studio-client';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Flows index — /flows (W6-IA-2).
@@ -161,6 +162,7 @@ export default function FlowsIndexPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="flows-index"
       data-page-ready={ready ? 'true' : 'false'}
       data-flow-count={flows.length}

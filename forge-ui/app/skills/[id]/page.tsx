@@ -17,6 +17,9 @@ import {
   type SkillDetail,
   type SkillLibraryEntry,
 } from '@/lib/skill-client';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 /** Strip the leading YAML frontmatter block from a SKILL.md's raw bytes —
  *  the edit form edits the CONTENT; name/description are their own fields
@@ -159,6 +162,10 @@ export default function SkillDetailPage() {
   const trustAttr = state === 'ready' ? detail!.trust : state === 'not-installed' ? libraryEntry?.trust : undefined;
   const sourceAttr = state === 'ready' ? detail!.source : state === 'not-installed' ? libraryEntry?.source : undefined;
 
+  // W7-C3 review (A-H4): this route shipped the bare product name as its
+  // tab title. Called before the early returns below.
+  useDocumentTitle(detail?.name ?? libraryEntry?.name ?? id, 'Skills');
+
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
   if (state === 'not-found') {
     return <NotFound kind="skill" id={id} backHref="/skills" backLabel="Skills" detail="Neither on disk nor in the community catalog." />;
@@ -166,6 +173,7 @@ export default function SkillDetailPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="skill-detail"
       data-skill-id={id}
       {...(trustAttr ? { 'data-skill-trust': trustAttr } : {})}
@@ -175,7 +183,7 @@ export default function SkillDetailPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/skills" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>&larr; Skills</Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Skills', href: '/skills' }, { label: detail?.name ?? libraryEntry?.name ?? id }]} />
 
         {state === 'loading' && (
           <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>

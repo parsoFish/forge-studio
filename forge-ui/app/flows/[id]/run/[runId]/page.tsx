@@ -51,6 +51,7 @@ import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchStudioFlows, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import type { RunLogLine } from '@/lib/run-log-line';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export default function FlowRunPage() {
   const params = useParams();
@@ -150,7 +151,7 @@ export default function FlowRunPage() {
         {/* <main>, matching FlowRunDetail's own root element: a route's
             [data-page] must sit on the SAME element type in every state, or a
             selector written against one state silently misses the others. */}
-        <main data-page="flow-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
+        <main id={MAIN_CONTENT_ID} data-page="flow-run" data-run-id={runId} data-page-ready="false" className="muted" style={{ padding: 20, fontSize: 13 }}>
           Loading run…
         </main>
       </div>
@@ -162,6 +163,7 @@ export default function FlowRunPage() {
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
         <StudioNav />
         <main
+          id={MAIN_CONTENT_ID}
           data-page="flow-run"
           data-run-id={runId}
           data-flow-id={flowId}

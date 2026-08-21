@@ -97,20 +97,22 @@ test('crosscut-17: input-family blocks no longer set outline: none', () => {
 // ---------------------------------------------------------------------------
 // crosscut-18: the skip link's own target. A skip link is worse than no skip
 // link when it reads as provided and skips nowhere — so the fragment it
-// advertises must actually resolve. No `<main>` in Studio carries a stable id
-// of its own, so SkipLink stamps one; this pins the two halves agreeing (the
-// href and the stamp read the SAME constant) and the re-stamp on client-side
-// navigation, where the previous route's `<main>` is replaced.
+// advertises must actually resolve. W7-C3 review (A-H2/A-H3) replaced the
+// runtime stamp with a DECLARED id on every route's own `<main>`; the
+// rendered-output proof and the app-wide enumeration live in
+// `lib/main-landmark.test.ts`. This file keeps the source-side half: the
+// link and the markup must read the SAME constant, and nothing may write the
+// id back at runtime (that is what clobbered `#col-center` and died the
+// moment a route swapped its `<main>`).
 // ---------------------------------------------------------------------------
 
-test('crosscut-18: the skip link stamps the id it links to, and re-stamps on navigation', () => {
+test('crosscut-18: the skip link targets the DECLARED landmark id, and stamps nothing', () => {
   const src = readFileSync(resolve(__dirname, '../components/SkipLink.tsx'), 'utf8');
-  expect(src, 'the target fragment must be ONE constant, not two literals that can drift')
-    .toMatch(/const MAIN_ID = '([a-z-]+)';/);
-  const id = src.match(/const MAIN_ID = '([a-z-]+)';/)![1];
-  expect(src, 'href must be built from MAIN_ID').toMatch(/href=\{`#\$\{MAIN_ID\}`\}/);
-  expect(src, `the route's <main> must be stamped with #${id}`)
-    .toMatch(/querySelector\('main'\)\??\.?setAttribute\('id', MAIN_ID\)/);
-  expect(src, 'the stamp must re-run per route — a client-side nav replaces the <main>')
-    .toMatch(/useEffect\([\s\S]{0,200}?\[pathname\]\)/);
+  expect(src, 'the target fragment must be ONE shared constant, not a literal that can drift')
+    .toMatch(/import \{ MAIN_CONTENT_ID \} from '@\/lib\/main-landmark'/);
+  expect(src, 'href must be built from MAIN_CONTENT_ID').toMatch(/href=\{`#\$\{MAIN_CONTENT_ID\}`\}/);
+  expect(src, 'the id must be declared in the markup, never written at runtime')
+    .not.toMatch(/setAttribute\(\s*'id'/);
+  expect(src, 'a pathname-keyed effect cannot see a <main> swap — the declared id replaced it')
+    .not.toMatch(/usePathname/);
 });

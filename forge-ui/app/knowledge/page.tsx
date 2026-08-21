@@ -28,6 +28,7 @@ import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmpt
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import Link from 'next/link';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ── Tabs (R6-08 WI-3, RULING 5: URL-synced via ?tab=) ─────────────────────────
 
@@ -56,7 +57,7 @@ const SCOPE_BADGE: Record<string, string> = {
 export default function KnowledgePage() {
   return (
     <Suspense fallback={
-      <main data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <main id={MAIN_CONTENT_ID} data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <StudioNav />
         <div style={{ padding: 40, color: 'var(--dim)' }}>Loading…</div>
       </main>
@@ -452,6 +453,7 @@ function KnowledgePageInner() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
       data-fetch-status={kbsError || kbDetailError ? 'error' : kbListReady ? 'ok' : 'loading'}

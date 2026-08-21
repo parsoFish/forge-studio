@@ -66,9 +66,13 @@ inventory rather than one shared page-level contract:
   main[data-page="<name>"]                the page root IS the landmark — all
                                           routes render their root as <main>,
                                           so landmark navigation lands on content
-      #main-content                       stamped by SkipLink onto whatever
-                                          <main> the current route rendered,
-                                          re-stamped on client-side navigation
+      id="main-content"                   DECLARED in the markup on that same
+                                          <main> (`lib/main-landmark.ts` —
+                                          one shared constant), so the
+                                          fragment resolves in prerendered
+                                          HTML, survives a route swapping its
+                                          <main> mid-life, and never
+                                          overwrites an id the route owns
   a[data-component="skip-link"]           the FIRST tab stop on every route;
                                           visually hidden until :focus
                                           (`.skip-link`, globals.css)
@@ -81,7 +85,9 @@ inventory rather than one shared page-level contract:
 
   | contract | owner | pinned by |
   | --- | --- | --- |
-  | per-route `<title>` — `"<parts…> · forge"`, never the bare `forge` every route shared before | `lib/document-title.ts` (`formatDocumentTitle` / `useDocumentTitle`; both shells call it, bespoke pages call it themselves) | `lib/document-title.test.ts` + the `home-crosscut-chrome` beat (distinctness across routes) |
+  | per-route `<title>` — `"<parts…> · forge"`, never the bare `forge` every route shared before | `lib/document-title.ts` (`formatDocumentTitle` / `useDocumentTitle`; both shells call it, bespoke pages call it themselves) | `lib/route-chrome.test.ts` **enumerates every `app/**/page.tsx`** and fails on a route with no title (the quantifier, not a sample) + `lib/document-title.test.ts` + the `home-crosscut-chrome` beat |
+| a labelled breadcrumb trail on every DETAIL route (a dynamic-segment route is reached by drilling in, so it must offer the way back out) | `components/Breadcrumbs.tsx`; the run pages keep their own richer `nav[aria-label="Run breadcrumb"]` | `lib/route-chrome.test.ts` (enumerated) + `lib/breadcrumbs-render.test.ts` |
+| every `<main>` declares `id="main-content"` | `lib/main-landmark.ts` | `lib/main-landmark.test.ts` (rendered output + an enumeration of every `<main>` in `app/` and `components/`) |
   | exactly one `<h1>` per route | `components/PageHeader.tsx` via the shells | `home-crosscut-chrome` |
   | `--faint` ≥ 4.5:1 (AA) on `--bg`/`--panel`/`--panel-2`; `--accent` defined; a GLOBAL `:focus-visible` ring (not scoped to `.btn/.chip/.tab/a`, so native inputs get one) | `app/globals.css` | `lib/a11y-tokens.test.ts` (computed from the real stylesheet) |
   | disabled primary CTAs always say why — `data-disabled-reason` + a matching `title` | each CTA's own `disabledReason` derivation | the owning route's journey beat |

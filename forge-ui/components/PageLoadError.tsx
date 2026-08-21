@@ -34,6 +34,7 @@ import Link from 'next/link';
 
 import { StudioNav } from '@/components/StudioNav';
 import { FetchErrorState } from '@/components/FetchErrorState';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export type PageLoadErrorProps = {
   /** The route's OWN `data-page` value (`agents`, `projects`, `flow-monitor`, `project-showcase`, …). */
@@ -54,6 +55,7 @@ export type PageLoadErrorProps = {
 export function PageLoadError({ page, rootAttrs, what, error, status, onRetry, backHref, backLabel }: PageLoadErrorProps) {
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page={page}
       data-page-ready="true"
       data-fetch-status="error"

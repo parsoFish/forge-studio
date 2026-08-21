@@ -29,6 +29,7 @@ import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -566,6 +567,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="flow-monitor"
       data-flow-id={id}
       data-active-run={view.activeRun?.id ?? ''}

@@ -77,6 +77,7 @@ import { deleteAgent } from '@/lib/studio-client';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -603,7 +604,8 @@ export default function AgentBuilderPage() {
   }
 
   return (
-    <div
+    <main
+      id={MAIN_CONTENT_ID}
       data-page="agents"
       data-page-ready={ready ? 'true' : 'false'}
       data-agent-id={state.slug}
@@ -624,7 +626,12 @@ export default function AgentBuilderPage() {
         <CatalogPalette catalog={catalog} usedIds={usedIds} onAddToZone={addToZone} />
 
         {/* ══ CENTER: Agent Definition ══ */}
-        <main
+        {/* W7-C3 review (A-H1/A-H2): a <div>, not a second <main>. The page's
+            ONE landmark is the [data-page] root above (a route's root IS its
+            landmark — scripts/e2e-deadpaths.mjs asserts rootTag === 'MAIN'),
+            and this column keeps the `#col-center` id its own selectors and
+            scripts/journeys/agents.mjs query. */}
+        <div
           className="col-center"
           id="col-center"
           data-agent-id={state.slug}
@@ -834,7 +841,7 @@ export default function AgentBuilderPage() {
           </>
           )}
 
-        </main>{/* /#col-center */}
+        </div>{/* /#col-center */}
 
         {/* ══ RIGHT: Preview + Readiness + Flows ══ */}
         <aside className="col-right" id="col-right">
@@ -924,6 +931,6 @@ export default function AgentBuilderPage() {
           <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>
         ))}
       </div>
-    </div>
+    </main>
   );
 }

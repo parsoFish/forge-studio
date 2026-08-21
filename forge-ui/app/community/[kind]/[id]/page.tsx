@@ -21,6 +21,9 @@ import {
   type HookScanReport,
 } from '@/lib/community-client';
 import { installStateLabel, signalsLabel, hubLabel, installActionForItem } from '@/lib/community-view';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 // ---------------------------------------------------------------------------
 // Community item detail — /community/[kind]/[id] (R3-07-F1). The pre-install
@@ -125,6 +128,9 @@ export default function CommunityDetailPage() {
     void load(item.kind, item.id); // refresh so installState reflects the real post-install fact
   }
 
+  // W7-C3 review (A-H4): per-route tab title, before the early returns.
+  useDocumentTitle(item?.name ?? id, 'Community');
+
   // W7-A4 (community-11 / crosscut-27): unknown kind and unknown id are two
   // different honest answers, both through the ONE shared not-found treatment
   // with a way back to the community index.
@@ -137,6 +143,7 @@ export default function CommunityDetailPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="community-detail"
       data-item-id={id}
       {...(state === 'ready' && item ? { 'data-item-kind': item.kind, 'data-install-state': item.installState } : {})}
@@ -145,9 +152,7 @@ export default function CommunityDetailPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/community" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>
-          &larr; Community
-        </Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Community', href: '/community' }, { label: item?.name ?? id }]} />
 
         {state === 'loading' && <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>}
 

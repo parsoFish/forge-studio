@@ -50,6 +50,7 @@ import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 /**
  * W7-B6 (projects-27): per-cycle cost totals from `GET /api/cost/<cycleId>`
@@ -383,6 +384,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // showcase page's own load path calls.
   const showcaseEntryVisible = showShowcaseEntry(projectCycles, id);
 
+  // W7-C3 (crosscut-06): per-route tab title. Called BEFORE every early
+  // return — a hook after one is both a React hook-order violation and, on
+  // `/projects/new` (which returns just below), the reason that route kept
+  // shipping the bare product name as its tab title (W7-C3 review, A-H4).
+  useDocumentTitle(isNew ? 'Onboard a project' : (name || id), 'Projects');
+
   // New-project surface: onboard an existing repo (R4-B8) OR create a greenfield
   // one from a framework template (R4-03).
   if (isNew) {
@@ -397,9 +404,6 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // W6-SW-3 (sweep C2#3): loadData leaves `project` null when the URL `id`
   // isn't in fetchStudioProjects() (a stale/bad :id route param) — without
   // this branch the return below rendered the full editable editor with a
-  // W7-C3 (crosscut-06): per-route tab title (before the early returns).
-  useDocumentTitle(name || id, 'Projects');
-
   // blank name/northStar/etc, no honest "not found" state. W7-A4
   // (crosscut-27): that state is the ONE shared NotFound.
   // W7-FIX-A1 (A1-02): the read FAILED — the project may well exist. The
@@ -424,6 +428,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="projects"
       data-project-id={id}
       data-dirty={dirty ? 'true' : 'false'}
@@ -846,6 +851,7 @@ function ProjectOnboardForm() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="projects"
       data-project-id="new"
       data-page-ready="true"

@@ -43,6 +43,7 @@ import { RecentRuns } from '@/components/RecentRuns';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import type { Agent } from '@/lib/studio-client';
 import type { LedgerRow } from '@/lib/history-ledger';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export type AgentsIndexViewProps = {
   /** Whether the agent-roster fetch has resolved. */
@@ -79,6 +80,7 @@ export function AgentsIndexView({
 }: AgentsIndexViewProps) {
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="agents-index"
       data-page-ready={ready ? 'true' : 'false'}
       data-agent-count={agents.length}
