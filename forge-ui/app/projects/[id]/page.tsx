@@ -29,6 +29,8 @@ import { PageLoadError } from '@/components/PageLoadError';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { PageHeader } from '@/components/StudioPage';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
@@ -48,6 +50,8 @@ import { StartWorkActions } from '@/components/studio/StartWorkActions';
 import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * W7-B6 (projects-27): per-cycle cost totals from `GET /api/cost/<cycleId>`
@@ -381,6 +385,12 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   // showcase page's own load path calls.
   const showcaseEntryVisible = showShowcaseEntry(projectCycles, id);
 
+  // W7-C3 (crosscut-06): per-route tab title. Called BEFORE every early
+  // return — a hook after one is both a React hook-order violation and, on
+  // `/projects/new` (which returns just below), the reason that route kept
+  // shipping the bare product name as its tab title (W7-C3 review, A-H4).
+  useDocumentTitle(isNew ? 'Onboard a project' : (name || id), 'Projects');
+
   // New-project surface: onboard an existing repo (R4-B8) OR create a greenfield
   // one from a framework template (R4-03).
   if (isNew) {
@@ -419,6 +429,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="projects"
       data-project-id={id}
       data-dirty={dirty ? 'true' : 'false'}
@@ -427,10 +438,16 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18/19): one h1 (the visible identity is the name
+          input, so it is sr-only) + the shared breadcrumb trail. */}
+      <h1 className="sr-only">{name || id} — project</h1>
+      <div style={{ padding: '12px 28px 0' }}>
+        <Breadcrumbs items={[{ label: 'Projects', href: '/projects' }, { label: name || id }]} />
+      </div>
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14,
-        padding: '18px 28px 14px',
+        padding: '4px 28px 14px',
         borderBottom: '1px solid var(--line)',
         background: 'var(--bg-2)',
       }}>
@@ -440,9 +457,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           style={{
             background: 'var(--panel)', border: '1px solid var(--line-2)',
             borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-            fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500,
-            padding: '6px 32px 6px 11px', cursor: 'pointer', outline: 'none',
-          }}
+ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 500,
+            padding: '6px 32px 6px 11px', cursor: 'pointer' }}
           aria-label="Select project"
         >
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -450,7 +466,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
           <div style={{
-            width: 22, height: 24, clipPath: 'var(--hex-clip)',
+ width: 22, height: 24, clipPath: 'var(--hex-clip)',
             background: 'linear-gradient(135deg, var(--c-project) 0%, #3a8fd4 100%)',
             boxShadow: '0 0 12px rgba(92,200,255,.4)', flexShrink: 0,
           }} />
@@ -458,9 +474,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             value={name}
             onChange={(e) => { setName(e.target.value); markDirty(); }}
             style={{
-              fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700,
-              color: 'var(--text)', background: 'transparent', border: 'none', outline: 'none',
-              borderBottom: '2px solid transparent', padding: '2px 4px', minWidth: 160,
+ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700,
+              color: 'var(--text)', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', padding: '2px 4px', minWidth: 160,
             }}
             placeholder="Project name"
           />
@@ -471,7 +486,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           className="btn btn-primary"
           data-action="save-project"
           onClick={() => void handleSave()}
-          disabled={saving || !dirty}
+          {...disabledAttrs(saving ? 'Saving…' : !dirty ? 'No unsaved changes' : null)}
         >
           {saving ? 'Saving…' : 'Save project'}
         </button>
@@ -481,7 +496,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 2,
         padding: '0 28px',
-        borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
         background: 'var(--bg-2)',
       }}>
         {(['editor', 'roadmap'] as const).map((t) => (
@@ -492,10 +507,10 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
             onClick={() => setTab(t)}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
+ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
               color: tab === t ? 'var(--text)' : 'var(--faint)',
               padding: '10px 14px 8px',
-              borderBottom: tab === t ? '2px solid var(--c-project)' : '2px solid transparent',
+            borderBottom: tab === t ? '2px solid var(--c-project)' : '2px solid transparent',
               textTransform: 'capitalize',
             }}
           >
@@ -578,7 +593,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           </div>
 
           <aside style={{
-            width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
+ width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
             padding: '18px 18px 64px', display: 'flex', flexDirection: 'column',
             gap: 16, overflowY: 'auto', background: 'var(--bg-2)',
           }}>
@@ -833,10 +848,11 @@ function ProjectOnboardForm() {
   }
 
   const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--dim)', display: 'block', marginBottom: 5 };
-  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
+  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', boxSizing: 'border-box' };
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="projects"
       data-project-id="new"
       data-page-ready="true"
@@ -944,7 +960,7 @@ function ProjectOnboardForm() {
           {!failing && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button className="btn btn-primary" data-action="onboard-project" onClick={() => void onSubmit()}
-                disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+                {...disabledAttrs(saving ? 'Onboarding…' : !canSubmit ? 'Fill in the required fields first' : null)} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
                 {saving ? 'Onboarding…' : 'Onboard project →'}
               </button>
               {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, quality gate, and north star are required.</span>}
@@ -1227,7 +1243,7 @@ function RoadmapView({
                     <button
                       className="btn btn-sm btn-primary"
                       data-action="actionable-start"
-                      disabled={dev === 'starting' || dev === 'started'}
+                      {...disabledAttrs(dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Already started — open the run to follow it' : null)}
                       onClick={() => void startOne(row.initiativeId)}
                     >
                       {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
@@ -1292,7 +1308,7 @@ function RoadmapView({
                   setManualCeilingUsd(raw === '' ? undefined : Number(raw));
                 }}
                 style={{
-                  width: 62, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+ width: 62, fontSize: 11, padding: '3px 6px', borderRadius: 6,
                   border: '1px solid var(--line)', background: 'var(--panel)', color: 'inherit',
                 }}
               />
@@ -1303,10 +1319,16 @@ function RoadmapView({
               disabled={eligible.length === 0 || batchStarting}
               onClick={() => void startEligible()}
               style={{
-                fontSize: 11, fontWeight: 600, color: '#fff',
-                background: eligible.length === 0 ? 'var(--faint)' : '#238636',
+                // W7-C3 review (A-M8): --faint is a TEXT token; painting it as
+                // a background under #fff was 3.24:1 (and got WORSE, from
+                // 5.74:1, when the AA fix lightened --faint). The disabled
+                // state is the standard recessive pairing instead — --faint
+                // text on --panel-2, the 4.92:1 the token test already pins.
+                fontSize: 11, fontWeight: 600,
+                color: eligible.length === 0 ? 'var(--faint)' : '#fff',
+                background: eligible.length === 0 ? 'var(--panel-2)' : '#238636',
                 border: '1px solid var(--line)', borderRadius: 6, padding: '4px 12px',
-                cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
+            cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
                 opacity: batchStarting ? 0.6 : 1,
               }}
             >

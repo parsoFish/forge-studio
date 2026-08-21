@@ -106,7 +106,8 @@ test('AT-50: templateBadges(entry) derives tokens from real fields — never a f
 test('AT-51: previewClassFor(previewKind) is a total function over the 6 known kinds, each mapping to a distinct class; an unrecognised kind throws (never a silent default)', () => {
   const kinds = ['html', 'video', 'shots', 'mock', 'doc', 'scaffold'] as const;
   const classes = kinds.map((k) => previewClassFor(k));
-  expect(new Set(classes).size).toBe(kinds.length, 'every previewKind must map to a DISTINCT class');
+  // every previewKind must map to a DISTINCT class
+  expect(new Set(classes).size).toBe(kinds.length);
   for (const cls of classes) {
     expect(typeof cls).toBe('string');
     expect(cls.length).toBeGreaterThan(0);

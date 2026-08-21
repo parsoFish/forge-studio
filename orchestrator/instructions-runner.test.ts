@@ -235,7 +235,10 @@ test('missing status.json throws a clear error', async () => {
 });
 
 test('ADR-024: instructionsAgentSpec derives phase, tier (sonnet), and read-only tools from SKILL.md', () => {
-  assert.equal(instructionsAgentSpec.phase, 'architect');
+  // W7-C3 review (A-M10): the frontmatter is ADR-024's single source of
+  // intent, so it must AGREE with the phase the runner emits (sessions-kinds-25);
+  // it still said `architect` while every event row said `instructions`.
+  assert.equal(instructionsAgentSpec.phase, 'instructions');
   assert.equal(instructionsAgentSpec.tier, 'sonnet');
   assert.equal(INSTRUCTIONS_MODEL, 'claude-sonnet-4-6');
   assert.deepEqual([...instructionsAgentSpec.allowedTools], ['Read', 'Grep', 'Glob', 'Bash']);
@@ -397,4 +400,25 @@ test('R3-05-F3: edit-mode revision does not duplicate the composed-seeds footer 
   const footerCount = (draft.match(/forge:composed-instruction-seeds/g) ?? []).length;
   assert.equal(footerCount, 1, `exactly one footer after an edit-mode revision, got ${footerCount}`);
   rmSync(seedsRoot, { recursive: true, force: true });
+});
+
+test("W7-C3 (sessions-kinds-25): every event row carries phase 'instructions' — never 'architect'", async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const queryFn = makeQueryFn({
+    interview: {
+      done: false,
+      questions: [{ question: 'Anything off-limits?', header: 'Off-limits', options: [] }],
+    },
+  });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  const events = readFileSync(join(logsRoot, `_instructions-${sessionId}`, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  assert.ok(events.length > 0, 'the turn emitted events');
+  for (const e of events) {
+    assert.equal(e.phase, 'instructions', `event ${e.event_type} "${e.message}" filed under phase "${e.phase}" — instructions work must not be attributed to the architect phase`);
+  }
 });

@@ -957,7 +957,10 @@ async function runDraftStep(args: {
   const datePart = created_at.slice(0, 10);
   // Slug set lets buildManifest resolve `depends_on` refs to sibling initiatives
   // (and drop refs to slugs not in this draft, which would block forever).
-  const knownSlugs = new Set(draftInitiatives.map((d) => slugify(d.slug || d.title)));
+  // W7-C3 deref guard: a draft row with NEITHER slug nor title (structured
+  // output is LLM-produced) must not crash the whole run inside slugify's
+  // .toLowerCase() — it falls to slugify's own 'initiative' fallback.
+  const knownSlugs = new Set(draftInitiatives.map((d) => slugify(d.slug || d.title || '')));
   const manifests = draftInitiatives.map((d) =>
     buildManifest(d, status, datePart, created_at, knownSlugs),
   );
@@ -1312,7 +1315,8 @@ export function buildManifest(
   created_at: string,
   knownSlugs?: Set<string>,
 ): InitiativeManifest {
-  const slug = slugify(d.slug || d.title);
+  // W7-C3 deref guard — same rationale as the knownSlugs site above.
+  const slug = slugify(d.slug || d.title || '');
   // Resolve cross-initiative `depends_on` slug refs → full initiative_ids.
   // Drop self-refs and refs to slugs not in this draft (would block forever).
   const dependsOnInitiatives = Array.from(

@@ -140,7 +140,7 @@ export async function runProjectBrainTurn(
 
   const startEv = logger.emit({
     initiative_id: initiativeId,
-    phase: 'reflection',
+    phase: 'project-brain',
     skill: 'project-brain-builder',
     event_type: 'start',
     input_refs: [join(sessionDir, 'status.json')],
@@ -158,14 +158,14 @@ export async function runProjectBrainTurn(
     {
       initiativeId,
       parentEventId: startEv.event_id,
-      phase: 'reflection',
+      phase: 'project-brain',
       skill: 'project-brain-builder',
     },
     { readOnlySampleRate: 1, cap: 200 },
   );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
   const onThinking = makeThinkingSink(logger, {
-    initiativeId, phase: 'reflection', skill: 'project-brain-builder', idMeta: { session_id: input.sessionId },
+    initiativeId, phase: 'project-brain', skill: 'project-brain-builder', idMeta: { session_id: input.sessionId },
   });
 
   let result: RunProjectBrainTurnResult;
@@ -185,7 +185,7 @@ export async function runProjectBrainTurn(
   logger.emit({
     initiative_id: initiativeId,
     parent_event_id: startEv.event_id,
-    phase: 'reflection',
+    phase: 'project-brain',
     skill: 'project-brain-builder',
     event_type: 'end',
     input_refs: [],

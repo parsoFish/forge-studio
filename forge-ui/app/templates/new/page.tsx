@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { createTemplate } from '@/lib/template-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Template builder — /templates/new (W7-B4, library-17/library-01). A
@@ -80,7 +81,7 @@ export default function TemplateBuilderPage() {
   }
 
   const labelStyle: React.CSSProperties = { fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: 'var(--dim)', display: 'block', marginBottom: 5 };
-  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
+  const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', boxSizing: 'border-box' };
 
   return (
     <StudioPage
@@ -151,7 +152,7 @@ export default function TemplateBuilderPage() {
             className="btn btn-primary"
             data-action="create-template"
             onClick={() => void onSubmit()}
-            disabled={!canSubmit || saving}
+            {...disabledAttrs(saving ? 'Creating…' : !canSubmit ? 'Fill in the required fields first' : null)}
             style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}
           >
             {saving ? 'Creating…' : 'Create template →'}

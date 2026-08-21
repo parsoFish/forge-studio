@@ -163,6 +163,7 @@ export default function HomePage() {
         'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
       }}
       eyebrow="forge studio"
+      docTitle="Home"
       title="Everything running, at a glance"
       lede="One surface for the whole fleet: live flows and agents, the portfolio behind them, and every run that shaped it."
       actions={

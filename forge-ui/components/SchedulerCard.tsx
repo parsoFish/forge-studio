@@ -30,6 +30,7 @@
 import { deriveSchedulerView, type SchedulerAction, type SchedulerViewState } from '@/lib/scheduler-view';
 import { useSchedulerStatus } from '@/lib/use-scheduler-status';
 import type { SchedulerStatus } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 const ACTION_LABEL: Record<SchedulerAction, string> = {
   start: 'Start',
@@ -132,7 +133,7 @@ export function SchedulerCardView({
               type="button"
               className={action === 'start' || action === 'resume' ? 'btn btn-primary' : 'btn'}
               data-action={`scheduler-${action}`}
-              disabled={busy}
+              {...disabledAttrs(busy ? 'The scheduler is still applying the last action…' : null)}
               onClick={() => onAction?.(action)}
               style={{ fontSize: strip ? 11.5 : 12.5, padding: strip ? '3px 10px' : undefined }}
             >

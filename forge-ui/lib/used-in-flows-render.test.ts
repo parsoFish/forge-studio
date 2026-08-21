@@ -25,7 +25,7 @@ import { dispatchProvenanceNote } from '@/lib/agent-dispatch-provenance';
 import type { Flow } from '@/lib/studio-client';
 
 function makeFlow(overrides: Partial<Flow> & { id: string }): Flow {
-  return { id: overrides.id, name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
+  return { name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
 }
 
 // ---- dispatchProvenanceNote (the pure derivation) ---------------------------

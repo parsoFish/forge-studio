@@ -27,6 +27,9 @@ import { deriveKickoffCandidates, canStartFlow } from '@/lib/kickoff-candidates'
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
+import { useDocumentTitle } from '@/lib/document-title';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -516,6 +519,8 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // below (JSX + data-* mirrors) uses `view.*`, never the raw state, so a
   // flow switch never paints the previous flow's run model.
   const view = resolveFlowViewState(id, { flow, runs, activeRun, ready });
+  // W7-C3 (crosscut-06): per-route tab title.
+  useDocumentTitle(view.flow?.name ?? id, 'Flows');
 
   // ---- empty states ----
 
@@ -562,6 +567,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="flow-monitor"
       data-flow-id={id}
       data-active-run={view.activeRun?.id ?? ''}
@@ -573,6 +579,14 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18): one h1 per page. The monitor's visible identity
+          is the flow SELECTOR and the builder's is the name input, so the
+          heading is visually hidden but real for AT/outline tooling. */}
+      <h1 className="sr-only">{view.flow?.name ?? id} — flow {tab === 'build' ? 'builder' : 'monitor'}</h1>
+      {/* W7-C3 (crosscut-19): the shared trail on the flow monitor/builder. */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <Breadcrumbs items={[{ label: 'Flows', href: '/flows' }, { label: view.flow?.name ?? id }]} />
+      </div>
 
       {/* BUILD tab: FlowHeader replaces the static flow strip */}
       {tab === 'build' ? (
@@ -634,7 +648,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           <div
             style={{
               background: 'var(--panel)',
-              borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
               padding: '14px 24px 0',
               flexShrink: 0,
             }}
@@ -660,7 +674,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                     data-field="monitor-flow-selector"
                     value={id}
                     onChange={(e) => { if (e.target.value !== id) router.push(`/flows/${encodeURIComponent(e.target.value)}`); }}
-                    style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer', outline: 'none' }}
+                    style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, padding: '4px 10px', cursor: 'pointer' }}
                   >
                     {candidates.map((f) => (
                       <option key={f.id} value={f.id}>{f.name}{flowsWithRuns.has(f.id) ? '' : ' (no runs)'}</option>
@@ -750,13 +764,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
               {/* Hint caption */}
               <p
                 style={{
-                  margin: 0,
+ margin: 0,
                   padding: '7px 20px 6px',
                   fontSize: 12,
                   color: 'var(--faint)',
                   fontStyle: 'italic',
                   background: 'var(--panel)',
-                  borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
                   flexShrink: 0,
                 }}
               >
@@ -822,7 +836,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                     gap: 10,
                     padding: '8px 20px',
                     background: 'rgba(255,80,80,0.06)',
-                    borderBottom: '1px solid rgba(255,80,80,0.2)',
+            borderBottom: '1px solid rgba(255,80,80,0.2)',
                     flexShrink: 0,
                   }}
                 >
@@ -838,7 +852,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                       color: '#fff',
                       border: 'none',
                       borderRadius: 4,
-                      cursor: 'pointer',
+            cursor: 'pointer',
                     }}
                   >
                     Resume
@@ -944,7 +958,7 @@ function GatedBanner({
     <div
       style={{
         background: 'rgba(255,158,74,0.08)',
-        borderBottom: '1px solid rgba(255,158,74,0.3)',
+            borderBottom: '1px solid rgba(255,158,74,0.3)',
         padding: '7px 18px',
         fontSize: 12,
         color: 'var(--ember)',
@@ -969,7 +983,7 @@ function GatedBanner({
               border: 'none',
               color: 'var(--ember)',
               textDecoration: 'underline',
-              cursor: 'pointer',
+            cursor: 'pointer',
               fontSize: 12,
               padding: 0,
             }}

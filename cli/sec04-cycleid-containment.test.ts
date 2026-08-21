@@ -36,7 +36,19 @@
  * projectsRoot AND forgeRoot (under os.tmpdir()); preconditions asserted by
  * execution first (immutable-gates false-negative discipline).
  *
- * RED-ON-CURRENT-CODE: every `(RED)` FAILS at this HEAD.
+ * RED-ON-CURRENT-CODE — CORRECTED (W7-C3 review, T4). This header was written
+ * against the pre-SEC-04 bridge and shipped unchanged; at THIS head the whole
+ * suite is green, because the `guardedReadFile`/`resolveGuardedPath` calls on
+ * the events / cost / artifact / work-item / reflect routes landed in the
+ * merged SEC-04 sweep (bd forge-ebj) that these `(RED)` cases drove. They are
+ * kept, and kept named `(RED)`, as the REGRESSION pins for that sweep: each
+ * one reproduces a live escape against the pre-sweep code and must stay green
+ * for as long as the guards are called. Reading them as "currently failing"
+ * would mislead a later security audit into re-fixing a closed class, and
+ * treating a green suite as RED-first evidence inverts the repo's own
+ * immutable-gates discipline (contrast `scripts/check-raw-fs-guarded.test.ts`,
+ * whose header states it correctly). The one genuinely NEW pin in this file is
+ * the artifact FILENAME dimension below (bd forge-0u4).
  */
 
 import { test, before, after } from 'node:test';
@@ -265,6 +277,94 @@ test('(RED) GET /api/artifact with a symlinked leaf inside a real artifacts dir 
   const r = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/evil.txt` });
   assert.ok(!r.body.includes(SENTINEL), `the lexical startsWith(safeBase) check passed a symlinked leaf — an out-of-root artifact was served — status ${r.status}: ${r.body}`);
   assert.ok(is4xx(r.status), `a symlinked artifact leaf must be rejected 4xx — got ${r.status}: ${r.body}`);
+});
+
+// W7-C3 (forge-0u4), re-cut by the W7-C3 review (A-M6): the FILENAME
+// dimension is a DENY of the shapes that matter, sharing the guard's own
+// per-segment predicate (`isSafeSubPath`), NOT an allow-list charset. The
+// first cut allow-listed `/^[A-Za-z0-9._-]+$/` and was a fails-closed
+// regression — 55 of 508 real on-disk artifact files (10.8%) started
+// returning 400, all `.capture/{before,after}/*.out` demo-capture evidence
+// named from acceptance-criteria titles — while adding ZERO containment:
+// every escape shape was already refused by `guardedReadFile`. Its own
+// GREEN twin used `ok.txt`, a name inside the charset, so it could not see
+// that. Both directions are pinned below.
+
+/** Encode a `<cycleId>/<filename>` tail so ONE `decodeURIComponent` (what the
+ *  route does) yields it back verbatim, separators intact. */
+function artifactPath(cycleId: string, filename: string): string {
+  const tail = [cycleId, ...filename.split('/')].map(encodeURIComponent).join('/');
+  return `/api/artifact/${tail}`;
+}
+
+test('W7-C3 review (A-M6): a REAL .capture artifact name — spaces, parens, an em-dash — still serves 200', async () => {
+  const cid = 'artifact-realname-cycle';
+  // Verbatim shapes from the operator's own _logs: demo-capture evidence is
+  // named from the acceptance-criteria title, so this is the NORM, not an edge.
+  const names = [
+    '.capture/after/Acceptance fixture gate (npm run acceptance).out',
+    '.capture/before/Quality gate \u2014 release + taskagent packages green.out',
+    '..foo.txt', // a dot-dot PREFIX is a legitimate name, not traversal
+    'a..b.txt', // and so is an infix
+  ];
+  for (const name of names) {
+    const abs = join(logsRoot, cid, 'artifacts', ...name.split('/'));
+    mkdirSync(join(abs, '..'), { recursive: true });
+    writeFileSync(abs, `CONTENT-OF ${name}`);
+    const r = await rawRequest(bridgeUrl, { method: 'GET', path: artifactPath(cid, name) });
+    assert.equal(r.status, 200, `a real artifact filename must serve — "${name}" got ${r.status}: ${r.body}`);
+    assert.equal(r.body, `CONTENT-OF ${name}`, `served the wrong bytes for "${name}"`);
+  }
+});
+
+test('W7-C3 (forge-0u4): the filename gate still refuses every escape shape, and names the filename', async () => {
+  const cid = 'artifact-charset-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  writeFileSync(join(logsRoot, cid, 'artifacts', 'ok.txt'), 'fine');
+
+  // The gate's OWN 400 (refused before any fs access), each naming the
+  // filename dimension rather than laundering into a generic not-found.
+  const gateRefuses: Array<[string, string]> = [
+    ['a %2E%2E%2F traversal segment', `/api/artifact/${cid}/%2E%2E%2Fok.txt`],
+    ['a bare ../ traversal segment', `/api/artifact/${cid}/../ok.txt`],
+    ['an empty segment (doubled slash)', `/api/artifact/${cid}//ok.txt`],
+    ['a NUL byte', `/api/artifact/${cid}/ok%00.txt`],
+    ['a C0 control character', `/api/artifact/${cid}/ok%01.txt`],
+    ['DEL (0x7f)', `/api/artifact/${cid}/ok%7F.txt`],
+    ['a backslash separator', `/api/artifact/${cid}/a%5Cb.txt`],
+    ['a double-encoded separator', `/api/artifact/${cid}/a%252Fb.txt`],
+    ['a "." segment', `/api/artifact/${cid}/./ok.txt`],
+  ];
+  for (const [label, path] of gateRefuses) {
+    const r = await rawRequest(bridgeUrl, { method: 'GET', path });
+    assert.equal(r.status, 400, `${label} must be the gate's own 400 — got ${r.status}: ${r.body}`);
+    assert.match(r.body, /invalid filename/, `${label}: the refusal must name the filename dimension`);
+  }
+
+  // Shapes the CONTAINMENT layer owns. The gate deliberately says nothing
+  // about them (they are ordinary names on disk); they must still never
+  // serve anything, and the 404 is the guard's honest no-oracle answer.
+  const outside = newOutsideDir('sec04-artifact-charset-outside-');
+  const SENTINEL = 'PWNED-ARTIFACT-CHARSET-91b2c';
+  writeFileSync(join(outside, 'secret.txt'), SENTINEL);
+  const guardRefuses: Array<[string, string]> = [
+    ['a unicode fullwidth solidus', `/api/artifact/${cid}/%EF%BC%8Fetc%EF%BC%8Fpasswd`],
+    ['a Windows device name', `/api/artifact/${cid}/CON`],
+    ['a trailing space', `/api/artifact/${cid}/ok.txt%20`],
+    ['an absolute-looking outside path', `/api/artifact/${cid}/${encodeURIComponent(join(outside, 'secret.txt'))}`],
+  ];
+  for (const [label, path] of guardRefuses) {
+    const r = await rawRequest(bridgeUrl, { method: 'GET', path });
+    assert.ok(is4xx(r.status), `${label} must be refused 4xx — got ${r.status}: ${r.body}`);
+    assert.ok(!r.body.includes(SENTINEL), `${label} disclosed an out-of-root file — status ${r.status}`);
+  }
+
+  // GREEN twins: a well-formed name still serves; a well-formed ABSENT one
+  // stays the guard path's 404, distinct from the gate's 400.
+  const ok = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/ok.txt` });
+  assert.equal(ok.status, 200, `a well-formed filename must still serve — got ${ok.status}: ${ok.body}`);
+  const absent = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/artifact/${cid}/missing.txt` });
+  assert.equal(absent.status, 404, `a well-formed absent filename stays the guard's 404 — got ${absent.status}: ${absent.body}`);
 });
 
 // ===========================================================================

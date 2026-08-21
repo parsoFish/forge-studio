@@ -71,7 +71,8 @@ export function StudioNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="afb-nav" data-component="studio-nav">
+    // W7-C3 (crosscut-18): aria-label so AT can name the landmark.
+    <nav className="afb-nav" aria-label="Primary" data-component="studio-nav">
       <Link className="afb-brand" href="/">
         <span className="hex-mark" />
         FORGE&nbsp;STUDIO <span className="sub">/ modular agent flows</span>

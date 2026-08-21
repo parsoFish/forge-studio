@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FilePackage } from '@/components/studio/FilePackage';
@@ -16,6 +15,9 @@ import {
   type TemplateDetail,
 } from '@/lib/template-client';
 import { templateBadges, previewClassFor } from '@/lib/template-library-view';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
 
 // ---------------------------------------------------------------------------
 // Template detail — /templates/[id] (R3-06, WI-4)
@@ -138,6 +140,9 @@ export default function TemplateDetailPage() {
       ? (detail!.endpointsVerified ? 'true' : 'false')
       : undefined;
 
+  // W7-C3 review (A-H4): per-route tab title, before the early returns.
+  useDocumentTitle(detail?.name ?? id, 'Templates');
+
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
   if (state === 'not-found') {
     return <NotFound kind="template" id={id} backHref="/templates" backLabel="Templates" />;
@@ -145,6 +150,7 @@ export default function TemplateDetailPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="template-detail"
       data-template-id={id}
       {...(categoryAttr ? { 'data-template-category': categoryAttr } : {})}
@@ -154,7 +160,7 @@ export default function TemplateDetailPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/templates" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>&larr; Templates</Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Templates', href: '/templates' }, { label: detail?.name ?? id }]} />
 
         {state === 'loading' && (
           <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>

@@ -46,7 +46,7 @@ import { ProjectsIndexBody } from '@/components/studio/ProjectsIndex';
 import type { Project, Kb } from './studio-client.ts';
 
 function makeProject(overrides: Partial<Project> & { id: string }): Project {
-  return { id: overrides.id, name: overrides.id, skills: [], ...overrides };
+  return { name: overrides.id, skills: [], ...overrides };
 }
 
 // ---- data-page attr — always present, whether or not the first fetch has

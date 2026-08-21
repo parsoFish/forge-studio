@@ -1,5 +1,7 @@
 'use client';
 
+import { disabledAttrs } from '@/lib/disabled-reason';
+
 // ---------------------------------------------------------------------------
 // TemplateEditor — W7-B4 (library-17). The single-file template editor: a
 // planning template (studio/artifact-templates/<id>.md) or demo element
@@ -47,7 +49,7 @@ export function TemplateEditor({
         }}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button type="button" className="btn btn-primary btn-sm" data-action="save-template" onClick={onSave} disabled={saving}>
+        <button type="button" className="btn btn-primary btn-sm" data-action="save-template" onClick={onSave} {...disabledAttrs(saving ? 'Saving…' : null)}>
           {saving ? 'Saving…' : 'Save template'}
         </button>
         <button type="button" className="btn btn-sm" data-action="cancel-template-edit" onClick={onCancel} disabled={saving}>

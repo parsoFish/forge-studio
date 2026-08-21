@@ -197,7 +197,7 @@ export function FlowHeader({
       data-goal-set={goalSet ? 'true' : 'false'}
       style={{
         background: 'var(--panel)',
-        borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)',
         padding: '14px 24px 10px',
         flexShrink: 0,
       }}
@@ -213,10 +213,9 @@ export function FlowHeader({
             border: '1px solid var(--line)',
             borderRadius: 'var(--radius-sm)',
             color: 'var(--text)',
-            fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
             fontSize: 13,
             padding: '6px 11px',
-            outline: 'none',
             cursor: 'pointer',
             minWidth: 180,
           }}
@@ -235,7 +234,7 @@ export function FlowHeader({
           placeholder="Flow name…"
           onChange={(e) => onChange({ ...state, name: e.target.value })}
           style={{
-            fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
             fontSize: 18,
             fontWeight: 700,
             color: 'var(--text)',
@@ -243,8 +242,7 @@ export function FlowHeader({
             border: 'none',
             borderBottom: '2px solid transparent',
             padding: '2px 6px',
-            outline: 'none',
-            flex: 1,
+                        flex: 1,
             minWidth: 200,
             transition: 'border-color 0.15s',
           }}
@@ -263,7 +261,7 @@ export function FlowHeader({
               gap: 5,
               fontSize: 11.5,
               color: 'var(--amber)',
-              fontFamily: 'var(--font-mono)',
+ fontFamily: 'var(--font-mono)',
               padding: '2px 8px',
               border: '1px solid rgba(251,191,36,0.3)',
               borderRadius: 4,
@@ -300,7 +298,7 @@ export function FlowHeader({
             alignItems: 'center',
             gap: 7,
             padding: '7px 16px',
-            fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
             fontSize: 13,
             fontWeight: 600,
             color: saving ? 'var(--dim)' : '#fff',
@@ -364,7 +362,7 @@ export function FlowHeader({
       {/* Goal row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
         <span style={{
-          fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: '0.08em',
@@ -386,11 +384,10 @@ export function FlowHeader({
             border: '1px solid var(--line)',
             borderRadius: 'var(--radius-sm)',
             color: 'var(--text)',
-            fontFamily: 'var(--font-body)',
+ fontFamily: 'var(--font-body)',
             fontSize: 13,
             padding: '8px 11px',
-            outline: 'none',
-            resize: 'none',
+                        resize: 'none',
             minHeight: 36,
             maxHeight: 80,
             transition: 'border-color 0.12s',
@@ -415,7 +412,7 @@ export function FlowHeader({
         <select
           value={state.kb}
           onChange={(e) => onChange({ ...state, kb: e.target.value })}
-          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12.5, padding: '4px 8px', outline: 'none', cursor: 'pointer' }}
+          style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12.5, padding: '4px 8px', cursor: 'pointer' }}
           data-field="kb-select"
         >
           <option value="">— none —</option>
@@ -486,7 +483,7 @@ export function FlowHeader({
               }
             }}
             data-field="trigger-kind"
-            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', cursor: 'pointer' }}
           >
             {SHIPPED_TRIGGER_KINDS.map((k) => (
               <option key={k} value={k}>{k}</option>
@@ -500,7 +497,7 @@ export function FlowHeader({
             value={triggerTarget}
             onChange={(e) => setTriggerTarget(e.target.value)}
             data-field="trigger-target"
-            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', cursor: 'pointer' }}
           >
             <option value="">trigger a flow…</option>
             {/* zyc review finding 2: same isSameTriggerIdentity the add-dedup
@@ -523,7 +520,7 @@ export function FlowHeader({
               onChange={(e) => setAgentSlug(e.target.value)}
               placeholder="agent slug"
               data-field="trigger-agent-slug"
-              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 110 }}
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', width: 110 }}
             />
           )}
 
@@ -537,13 +534,13 @@ export function FlowHeader({
                 placeholder="0 3 * * *"
                 data-field="trigger-schedule"
                 data-schedule-invalid={cronScheduleInvalid ? 'true' : 'false'}
-                style={{ background: 'var(--bg-2)', border: `1px solid ${cronScheduleInvalid ? 'var(--red)' : 'var(--line)'}`, borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 110 }}
+                style={{ background: 'var(--bg-2)', border: `1px solid ${cronScheduleInvalid ? 'var(--red)' : 'var(--line)'}`, borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', width: 110 }}
               />
               <select
                 value={cronConcurrency}
                 onChange={(e) => setCronConcurrency(e.target.value as 'allow' | 'forbid')}
                 data-field="trigger-concurrency"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', cursor: 'pointer' }}
               >
                 <option value="forbid">forbid</option>
                 <option value="allow">allow</option>
@@ -572,13 +569,13 @@ export function FlowHeader({
                 onChange={(e) => setWebhookId(e.target.value)}
                 placeholder="hook id"
                 data-field="webhook-id"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 100 }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', width: 100 }}
               />
               <select
                 value={webhookProvider}
                 onChange={(e) => setWebhookProvider(e.target.value as 'github' | 'gitea' | 'gitlab')}
                 data-field="webhook-provider"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', cursor: 'pointer' }}
               >
                 {(WEBHOOK_PROVIDERS_BY_KIND[triggerKind] ?? []).map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -602,7 +599,7 @@ export function FlowHeader({
                 onChange={(e) => setWebhookSecretEnv(e.target.value)}
                 placeholder="SECRET_ENV_NAME"
                 data-field="webhook-secret-env"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 140 }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', width: 140 }}
               />
               <input
                 type="text"
@@ -610,7 +607,7 @@ export function FlowHeader({
                 onChange={(e) => setWebhookSources(e.target.value)}
                 placeholder="owner/repo, owner/repo2"
                 data-field="webhook-sources"
-                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 170 }}
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', width: 170 }}
               />
               {webhookId && (
                 <span data-hook-url={`/api/hooks/${webhookId}`} style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
@@ -627,12 +624,12 @@ export function FlowHeader({
               background: 'transparent',
               border: '1px solid transparent',
               color: canAddTrigger ? 'var(--dim)' : 'var(--faint)',
-              fontFamily: 'var(--font-display)',
+ fontFamily: 'var(--font-display)',
               fontSize: 12,
               fontWeight: 600,
               padding: '3px 10px',
               borderRadius: 'var(--radius-sm)',
-              cursor: canAddTrigger ? 'pointer' : 'not-allowed',
+            cursor: canAddTrigger ? 'pointer' : 'not-allowed',
             }}
             data-action="add-trigger"
           >

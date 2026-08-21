@@ -91,13 +91,14 @@ export default function TemplateLibraryPage() {
         <input
           type="text"
           data-field="template-search"
+          aria-label="Search templates"
           placeholder="Search templates by name or description…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           style={{
-            width: '100%', maxWidth: 420, marginBottom: 24, background: 'var(--bg-2)',
+ width: '100%', maxWidth: 420, marginBottom: 24, background: 'var(--bg-2)',
             border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', color: 'var(--text)',
-            fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box',
+            fontSize: 13, padding: '8px 11px', boxSizing: 'border-box',
           }}
         />
 

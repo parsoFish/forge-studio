@@ -13,13 +13,10 @@
  * NOT click action buttons (those have side effects — the journey covers them).
  */
 
-import { spawn, execSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { createAssertions } from './lib/journey-assertions.mjs';
-
-const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+import { spawnStudioReady } from './lib/boot-studio.mjs';
 
 // Every Studio route a user can reach. Each must render a [data-page].
 const ROUTES = [
@@ -95,62 +92,6 @@ const ROUTES = [
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function startWatch() {
-  return new Promise((res, rej) => {
-    const proc = spawn(process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'studio', '--no-open'],
-      { cwd: FORGE_ROOT, env: { ...process.env, FORGE_ARCHITECT_NO_SPAWN: '1' },
-        stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-    let buf = '';
-    let settled = false;
-    const onData = (chunk) => {
-      if (settled) return;
-      buf += chunk.toString();
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        const m = line.match(/^forge-studio-ready (.+)$/);
-        if (!m) continue;
-        try {
-          const { bridgeUrl, uiUrl } = JSON.parse(m[1]);
-          if (bridgeUrl && uiUrl) { settled = true; res({ proc, uiUrl, bridgeUrl }); return; }
-        } catch { /* not the signal line */ }
-      }
-    };
-    proc.stdout.on('data', onData);
-    proc.stderr.on('data', onData);
-    proc.on('error', rej);
-    // W6-P3 review finding #4: `forge studio` now serves a PRODUCTION build
-    // by default (no --dev here, deliberately — this harness exercises what
-    // the operator actually runs), so readiness now includes a one-time
-    // `next build` before `next start` can bind. Budget = the pre-existing
-    // 90s (bridge start + port takeover + `next start` bind + first-request
-    // probe — unchanged from the old next-dev budget) PLUS a build-specific
-    // allowance measured directly: a cold `npm run build --workspace
-    // forge-ui` on the machine this was authored on took 18.06s wall-clock
-    // (`/usr/bin/time -v`, 200% CPU); +50% margin rounds to 30s. First run
-    // (or any run after forge-ui source changes) pays this; a warm/fresh
-    // `.next/` skips the build entirely and is fast. NOTE: the 30s margin is
-    // a SINGLE-SAMPLE measurement from one machine, not a calibrated
-    // distribution — re-measure (and re-derive the margin) if forge-ui's
-    // source tree/dependency graph grows enough to meaningfully slow `next
-    // build`.
-    setTimeout(() => {
-      if (settled) return;
-      // Kill the whole process group (negative pid — `proc` was spawned
-      // `detached: true`, making it its own group leader), mirroring
-      // verify-cycle.mjs's boot-timeout handler. A build-overrun rejection
-      // here previously left the half-booted, detached `forge studio`
-      // running with nothing to reap it — the exact zombie-on-4123/4124
-      // failure verify-cycle.mjs's own comment cites from 2026-07-11,
-      // now more likely to trip since this harness's timeout absorbs a
-      // cold production build.
-      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* already dead */ } }
-      rej(new Error('forge studio not ready in 120s; spawned watch killed'));
-    }, 120000);
-  });
-}
-
 /** Visit every route once and assert it is dead-path-free. */
 async function sweepOnce(page, baseUrl, check, pass) {
   for (const route of ROUTES) {
@@ -162,6 +103,35 @@ async function sweepOnce(page, baseUrl, check, pass) {
       .catch(() => false);
     check(rendered, `[pass ${pass}] route ${route.path} (${route.name}) renders a [data-page] (no 404/crash)`);
     if (!rendered) continue;
+
+    // W7-C3 a11y basics — the chrome no single page owns, checked on EVERY
+    // route (the crosscut journey beat proves the same contract in depth on a
+    // cross-section; this is the breadth half). Deliberately three cheap
+    // structural facts, not an axe run:
+    //   · the [data-page] root IS the <main> landmark (all 27+ routes render
+    //     their page root as <main> — the shells and every bespoke detail
+    //     page alike), so screen-reader landmark navigation lands on content;
+    //   · the skip link's fragment resolves to that same landmark — a skip
+    //     link naming a fragment the document does not contain reads as
+    //     provided and skips nowhere (crosscut-18);
+    //   · the tab title is the route's own, not the bare product name that
+    //     every route shared before W7-C3 (crosscut-06).
+    const a11y = await page.evaluate(() => {
+      const root = document.querySelector('[data-page]');
+      const skip = document.querySelector('[data-component="skip-link"]');
+      const frag = (skip?.getAttribute('href') ?? '').replace(/^#/, '');
+      return {
+        rootTag: root?.tagName ?? null,
+        skipTargetIsRoot: !!frag && document.getElementById(frag) === root,
+        title: document.title,
+      };
+    });
+    check(a11y.rootTag === 'MAIN',
+      `[pass ${pass}] route ${route.path}: the [data-page] root is a <main> landmark (got <${(a11y.rootTag ?? 'none').toLowerCase()}>)`);
+    check(a11y.skipTargetIsRoot,
+      `[pass ${pass}] route ${route.path}: the skip link's fragment resolves to that <main> (crosscut-18)`);
+    check(/ · forge$/.test(a11y.title) && a11y.title !== 'forge',
+      `[pass ${pass}] route ${route.path}: sets its OWN tab title, not the bare product name (got "${a11y.title}")`);
 
     // No dead "coming in milestone" placeholder CTAs.
     const deadCtas = await page.evaluate(() => {
@@ -206,7 +176,11 @@ async function main() {
   // `next build` (measured ~18s on the authoring machine) before `next
   // start` binds; a fresh `.next/` skips straight to `next start`.
   console.log('[deadpaths] booting forge studio (cold run pays a one-time production build, ~20-40s; warm re-runs skip it)…');
-  const watch = await startWatch();
+  // W7-C3: the studio boot is the shared scripts/lib/boot-studio.mjs core
+  // (one ready-line parser + group-kill timeout for all three harnesses).
+  // Budget: 120s — the pre-existing 90s bridge/bind budget + the ~30s cold
+  // `next build` allowance (W6-P3 review finding #4, measured 18.06s + 50%).
+  const watch = await spawnStudioReady({ env: { FORGE_ARCHITECT_NO_SPAWN: '1' }, timeoutMs: 120_000 });
   console.log(`[deadpaths] ready: ${watch.uiUrl}`);
   try { execSync(`curl -s -m 60 ${watch.uiUrl}/ -o /dev/null`); } catch { /* warm */ }
 

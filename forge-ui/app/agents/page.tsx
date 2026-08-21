@@ -33,6 +33,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StudioNav } from '@/components/StudioNav';
 import { AgentsIndexView } from '@/components/studio/AgentsIndexView';
+import { useDocumentTitle } from '@/lib/document-title';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { fetchStudioAgents, type Agent } from '@/lib/studio-client';
@@ -104,6 +105,9 @@ export default function AgentsIndexPage() {
     // `recentRunsKey`: the unresolved-notice Retry re-runs the fan-out alone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, agents, recentRunsKey]);
+
+  // W7-C3 (crosscut-06): per-route tab title.
+  useDocumentTitle('Agents');
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>

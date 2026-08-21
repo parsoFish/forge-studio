@@ -132,10 +132,30 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
       const brokenContent = themeContent({ title: 'Memo Fixture Theme', valid: false });
       assert.equal(brokenContent.length, validContent.length, 'fixture precondition: the two variants are byte-identical in length');
       writeFileSync(themeFile, brokenContent);
+      // W7-C3 (bead forge-b0n): stamp the mtime forward explicitly instead of
+      // trusting that two writes a few microseconds apart land in different
+      // filesystem mtime ticks. They frequently did not, and this test was
+      // this suite's chronic flake. What it exists to pin is
+      // statWalkFingerprint's OWN key isolation — same byte length moves
+      // maxMtimeMs and NOTHING else — not the host clock's resolution, which
+      // is no contract of forge's. The stamp makes the mtime input
+      // deterministic so the assertion measures only what it claims.
+      // Math.floor: statfs reports sub-millisecond mtimes, but utimesSync
+      // writes whole-millisecond precision — stamping from the raw fractional
+      // value would not round-trip.
+      const stampedMs = Math.floor(before.maxMtimeMs) + 2000;
+      utimesSync(themeFile, new Date(stampedMs), new Date(stampedMs));
       const after = statWalkFingerprint(forgeRoot);
       assert.equal(after.fileCount, before.fileCount);
       assert.equal(after.totalSize, before.totalSize);
-      assert.notEqual(after.maxMtimeMs, before.maxMtimeMs, 'a fresh write must bump mtime even when size is unchanged');
+      // Sub-millisecond tolerance, stated rather than rounded away: node
+      // derives mtimeMs from the inode's NANOSECOND stamp as a float, so a
+      // whole-millisecond utimes reads back as e.g. …619.999. The contract is
+      // "the fingerprint carries the file's real mtime", not "reads back
+      // bit-identical to the number we handed the syscall".
+      assert.ok(Math.abs(after.maxMtimeMs - stampedMs) < 1,
+        `the fingerprint must carry the file's real mtime (got ${after.maxMtimeMs}, stamped ${stampedMs})`);
+      assert.ok(after.maxMtimeMs > before.maxMtimeMs, 'a same-size edit must MOVE the mtime key');
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
     }

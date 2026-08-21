@@ -37,6 +37,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { StudioNav } from '@/components/StudioNav';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 export type NotFoundVariant = 'unknown' | 'retired' | 'unselected';
 
@@ -63,6 +64,7 @@ function heading(kind: string, id: string, variant: NotFoundVariant): ReactNode 
 export function NotFound({ kind, id, backHref, backLabel, variant = 'unknown', detail }: NotFoundProps) {
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="not-found"
       data-page-ready="true"
       data-not-found-kind={kind}

@@ -260,8 +260,8 @@ test('AT-4: deriveShowcaseCycleId picks the genuinely-newest cycle via the ended
 // cycleId regardless of input-array order (never input-order-dependent).
 test('AT-5: deriveShowcaseCycleId breaks an exact-timestamp tie by greater cycleId, order-independently', () => {
   const same = '2026-07-01T00:00:00.000Z';
-  const a: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-aaa', project: 'gitpulse', status: 'merged', startedAt: same, endedAt: same };
-  const b: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-zzz', project: 'gitpulse', status: 'done', startedAt: same, endedAt: same };
+  const a: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-aaa', initiativeId: 'INIT-aaa', project: 'gitpulse', status: 'merged', startedAt: same, endedAt: same };
+  const b: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-zzz', initiativeId: 'INIT-zzz', project: 'gitpulse', status: 'done', startedAt: same, endedAt: same };
   expect(deriveShowcaseCycleId([a, b], 'gitpulse')).toBe(b.cycleId);
   expect(deriveShowcaseCycleId([b, a], 'gitpulse')).toBe(b.cycleId);
 });

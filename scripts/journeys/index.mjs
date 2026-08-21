@@ -234,6 +234,7 @@ export const RUN_ORDER = [
   ['home', 'home-projects-index'],
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
+  ['home', 'home-crosscut-chrome'],
 
   // W6-B11 — self-contained (its own disjoint instructions-session fixture,
   // seeded/swept entirely within its own two beats); runs right after home

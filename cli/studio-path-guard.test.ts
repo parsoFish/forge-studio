@@ -168,6 +168,7 @@ import {
   guardedReadFile,
   guardedWriteFile,
   guardedReadDir,
+  isSafeSubPath,
 } from './studio-path-guard.ts';
 
 test('sanity: test process is non-root (uid 1000) — mode 000 genuinely denies access, not bypassed', () => {
@@ -822,5 +823,54 @@ test('SEC-04 P7 (root-trust contract): a request-influenced project id as a SEGM
   } finally {
     rmSync(projectsRoot, { recursive: true, force: true });
     rmSync(outsideVictim, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// isSafeSubPath — W7-C3 review (A-M6). The shared DENY predicate the artifact
+// route's cheap 400 layer and `resolveGuardedPath`'s containment layer both
+// read, so the two cannot drift. Its predecessor was an allow-list charset
+// that rejected 10.8% of the operator's real on-disk artifact files while
+// adding zero containment; these two tests are the both-ways pin.
+// ---------------------------------------------------------------------------
+
+test('isSafeSubPath ALLOWS the shapes real artifact filenames actually take', () => {
+  const legitimate = [
+    'PLAN.md',
+    '.capture/after/Acceptance fixture gate (npm run acceptance).out',
+    '.capture/before/Quality gate \u2014 release + taskagent packages green.out',
+    "operator's notes.md", // an apostrophe
+    '..foo.txt', // a dot-dot PREFIX is a name, not traversal
+    'a..b.txt', // and so is an infix
+    'WI-1 [done].md',
+    '\u65e5\u672c\u8a9e.txt', // non-ASCII is a filename, not an attack
+  ];
+  for (const name of legitimate) {
+    assert.equal(isSafeSubPath(name), true, `a legitimate artifact name was refused: ${JSON.stringify(name)}`);
+  }
+});
+
+test('isSafeSubPath DENIES the shapes that matter', () => {
+  const denied: Array<[string, unknown]> = [
+    ['empty', ''],
+    ['a "." segment', './ok.txt'],
+    ['a ".." segment', '../ok.txt'],
+    ['a trailing ".." segment', 'a/..'],
+    ['an empty middle segment', 'a//b.txt'],
+    ['a backslash separator', 'a\\b.txt'],
+    ['a NUL byte', 'ok\u0000.txt'],
+    ['a C0 control', 'ok\u0001.txt'],
+    ['DEL', 'ok\u007f.txt'],
+    ['an encoded forward slash', 'a%2Fb.txt'],
+    ['an encoded backslash', 'a%5Cb.txt'],
+    ['an encoded NUL', 'a%00b.txt'],
+    ['encoded dot-dot', 'a%2e%2eb.txt'],
+    // Runtime boundary: the annotation is a claim, not a check.
+    ['a non-string', 42],
+    ['null', null],
+    ['an array', ['a', 'b']],
+  ];
+  for (const [label, value] of denied) {
+    assert.equal(isSafeSubPath(value as string), false, `${label} must be denied: ${JSON.stringify(value)}`);
   }
 });

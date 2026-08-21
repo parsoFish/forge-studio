@@ -36,6 +36,16 @@ jobs:
       - name: UI tests
         run: npm run test:ui
 
+      # W7-C3 (bd forge-opj): forge-ui's *.test.ts files are excluded from
+      # forge-ui/tsconfig.json (so `next build` stays off them) and vitest
+      # transpiles without typechecking — so until this step, NO tsc project
+      # saw them and a type-level pin in a test could never fail any gate.
+      # Deliberately its own step, not folded into Build: a test-first branch
+      # may legitimately carry a red type pin mid-flight; the gate binds here,
+      # at PR time.
+      - name: UI tests typecheck
+        run: npm run test:ui:typecheck
+
       - name: Studio lint
         run: node --experimental-strip-types orchestrator/cli.ts studio lint
 
@@ -56,6 +66,12 @@ jobs:
 
       - name: Raw-fs guarded def-use lint (SEC-04)
         run: node scripts/check-raw-fs-guarded.mjs
+
+      # W7-C3 review (A-M12): a disabled primary CTA must say why. The
+      # convention shipped documented and unenforced — ~29 primary CTAs
+      # carried neither `data-disabled-reason` nor a `title`.
+      - name: Disabled-CTA reason ratchet
+        run: node scripts/check-disabled-reason.mjs
 
   # W7-A0 — the UI-walkthrough crawl as a standing gate: boots `forge studio`
   # (production build; dry-bridge + no-spawn seams — nothing can spawn an
@@ -93,7 +109,20 @@ jobs:
           git fetch --no-tags --depth=1 origin "$BASE_REF"
           node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF"
 
+      # W7-C3: cache the browser download; the slow half of --with-deps is an
+      # apt-get run that has hung this job before, so it is paid ONLY on a
+      # cache miss (a playwright-core version bump changes the lockfile and
+      # therefore the key). On a hit, chromium is already in
+      # ~/.cache/ms-playwright and the ubuntu-latest image carries its OS libs.
+      - name: Cache Playwright chromium
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright-core install --with-deps chromium
 
       - name: Walkthrough crawl (assert against baseline)
@@ -124,3 +153,39 @@ jobs:
             _walkthrough/ci/shots
           if-no-files-found: ignore
           retention-days: 7
+
+  # W7-C3 review (T1 CI-gap ruling) — the dead-path crawler as a standing gate.
+  # It was NOT in CI, which is exactly why three structural a11y assertions
+  # this PR added to it shipped broken: assertions added to an un-run harness
+  # are decoration. It boots `forge studio` the same way the ui-walkthrough
+  # job above already does (shared scripts/lib/boot-studio.mjs), sweeps every
+  # Studio route TWICE and fails on any dead path, wrong landmark, unresolved
+  # skip-link fragment, bare tab title or dead nav link.
+  #
+  # `ui:journey` deliberately stays OUT: 17 journeys, host-global ports and a
+  # full rewrite of demos/e2e/ make it a wave/manual gate, not a per-PR one
+  # (recorded in docs/forge-ui-dom-and-harness.md).
+  deadpaths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Dead-path crawl (every route, twice)
+        run: npm run ui:deadpaths
+        env:
+          FORGE_ARCHITECT_NO_SPAWN: "1"
+          FORGE_DRY_BRIDGE: "1"

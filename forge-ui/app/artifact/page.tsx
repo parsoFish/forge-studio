@@ -39,6 +39,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useDocumentTitle } from '@/lib/document-title';
 
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
@@ -67,6 +68,7 @@ import { fetchDemoMarkdown } from '@/lib/review-comments-client';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
 import { architectGateArmed, architectSessionHref, architectSessionIdFromRunId, isArchitectRunId } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Types for artifact docs fetched from the bridge
@@ -475,6 +477,9 @@ function ArtifactPageInner() {
 
   const meta = TYPE_META[type];
 
+  // W7-C3 (crosscut-06): per-route tab title — artifact type + run handle.
+  useDocumentTitle(meta.title, runId);
+
   // W7-FIX-A3 (A3-03): the id every artifact-keyed child (demo media, the
   // review surface's comment sidecar, the reflection answers write) uses —
   // the run's OWN cycle id once claimed, the URL handle otherwise.
@@ -737,7 +742,10 @@ function ArtifactPageInner() {
   }
 
   return (
-    <div
+    // W7-C3 (crosscut-18): <main>, not <div> — /artifact rendered no <main>
+    // landmark at all.
+    <main
+      id={MAIN_CONTENT_ID}
       data-page="artifact"
       data-page-ready={ready ? 'true' : 'false'}
       data-run={runId}
@@ -750,8 +758,10 @@ function ArtifactPageInner() {
       <StudioNav />
 
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 28px' }}>
-        {/* Breadcrumb */}
-        <div style={{
+        {/* Breadcrumb — W7-C3 (crosscut-19): a labelled landmark; keeps its
+            richer per-mode links + data-crumb pins (predates the shared
+            Breadcrumbs component, which carries no action slots). */}
+        <nav aria-label="Breadcrumb" style={{
           display: 'flex',
           alignItems: 'center',
           gap: 6,
@@ -810,22 +820,24 @@ function ArtifactPageInner() {
           >
             {isArchitect ? '← back to session' : '← back to monitor'}
           </Link>
-        </div>
+        </nav>
 
         {/* Artifact header */}
         <div style={{ padding: '24px 0 20px', borderBottom: '1px solid var(--line)', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 10 }}>
             <div>
-              <div style={{
+              {/* W7-C3 (crosscut-18): the artifact title is the page's ONE h1. */}
+              <h1 style={{
                 fontFamily: 'var(--font-display)',
                 fontSize: 26,
                 fontWeight: 700,
                 lineHeight: 1.2,
                 color: 'var(--text)',
                 letterSpacing: '-0.01em',
+                margin: 0,
               }}>
                 {meta.title}
-              </div>
+              </h1>
             </div>
             {/* W7-B7 (artifact-plan-26): the filename chip opens the RAW
                 artifact file when one resolved — no longer inert metadata. */}
@@ -1198,7 +1210,7 @@ function ArtifactPageInner() {
           onStateChange={(s) => setGateState(s)}
         />
       )}
-    </div>
+    </main>
   );
 }
 

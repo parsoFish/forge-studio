@@ -17,7 +17,20 @@ export type Phase =
   | 'review-loop'
   | 'closure'
   | 'release-finalize'
-  | 'reflection';
+  | 'reflection'
+  // W7-C3 (sessions-kinds-25/26) + the W7-C3 review (A-M9): interactive
+  // session KINDS log under their OWN phase names, all three of them.
+  // instructions-runner copy-pasted `architect`, demo-builder-runner
+  // inherited the retired `unifier`, and project-brain-builder-runner filed
+  // under `reflection` — the OOTB reflector's cycle-spine phase — so those
+  // sessions' cost and activity were billed to phases that never ran them.
+  // Each value matches the session KIND id (studio/session-kinds.yaml) and
+  // the skill's own SKILL.md frontmatter phase, which ADR-024 makes the
+  // single source of intent. The cycle spine ignores these; session logs are
+  // per-session, not cycle logs.
+  | 'instructions'
+  | 'demo'
+  | 'project-brain';
 
 export type EventType =
   | 'start'

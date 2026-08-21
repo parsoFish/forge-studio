@@ -7,6 +7,8 @@ import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import type { EventLogEntry } from '@/lib/bridge-client';
+import { modelChipLabel } from '@/lib/model-chip';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -404,7 +406,7 @@ export function SessionInteractivePanel({
                 type="button"
                 className="btn btn-primary"
                 data-action="submit-answers"
-                disabled={busy}
+                {...disabledAttrs(busy ? 'Submitting…' : null)}
                 onClick={() => void submit(affordance, { answers: [{ question: isBriefing ? 'Briefing note' : 'Operator response', answer: answerText.trim() }] })}
                 style={{ opacity: busy ? 0.5 : 1 }}
               >
@@ -527,7 +529,7 @@ export function SessionInteractivePanel({
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-approve"
-                    disabled={approveDisabled}
+                    {...disabledAttrs(busy ? 'Submitting…' : !shapeResolved ? 'The draft’s shape is still resolving' : !requiresSatisfied ? 'Fill in every field this verdict requires first' : null)}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'approve',
@@ -590,11 +592,17 @@ export function SessionInteractivePanel({
                     data-field="session-revise-feedback"
                     style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                   />
+                  {/* W7-C3 merge: C2 added this CTA in parallel with the
+                      disabled-reason convention, so it shipped with a bare
+                      `disabled`. It has TWO disabling branches and one reason
+                      must cover both -- the empty-feedback branch is the client
+                      half of the server's own 400 ("feedback is required for
+                      kind revise"), so it says the same thing. */}
                   <button
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-revise-send"
-                    disabled={busy || reviseFeedback.trim().length === 0}
+                    {...disabledAttrs(busy ? 'Submitting…' : reviseFeedback.trim().length === 0 ? 'Describe what should change first' : null)}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'revise',
@@ -663,9 +671,10 @@ function ProvenanceStrip({ phase, modelTier }: { phase: string; modelTier: strin
           color: 'var(--dim)', whiteSpace: 'nowrap',
         }}
       >
-        {/* W7-A2 (sessions-kinds-31) — a null tier is honestly "not recorded",
-            never the literal word "default" (not a tier the picker offers). */}
-        model: {modelTier ?? 'not recorded'}
+        {/* W7-A2/W7-C3 (sessions-kinds-31) — a null tier is honestly "not
+            recorded", never the literal word "default" (not a tier the picker
+            offers). One rule, unit-pinned: lib/model-chip.ts. */}
+        model: {modelChipLabel(modelTier)}
       </span>
     </div>
   );

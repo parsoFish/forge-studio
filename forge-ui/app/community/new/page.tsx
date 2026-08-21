@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import {
@@ -11,6 +10,10 @@ import {
   type CommunityKind,
   type RegistryItemInput,
 } from '@/lib/community-client';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Registry item form — /community/new (W7-B3, community-23). Add a curated
@@ -125,8 +128,12 @@ function RegistryItemFormInner(): JSX.Element {
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
 
+  // W7-C3 review (A-H4): per-route tab title.
+  useDocumentTitle(editing ? `Edit ${editId}` : 'Add a registry item', 'Community');
+
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="community-registry-form"
       data-form-mode={editing ? 'edit' : 'add'}
       data-page-ready={loaded ? 'true' : 'false'}
@@ -134,9 +141,7 @@ function RegistryItemFormInner(): JSX.Element {
     >
       <StudioNav />
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/community" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>
-          &larr; Community
-        </Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Community', href: '/community' }, { label: editing ? `Edit ${editId}` : 'Add a registry item' }]} />
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: '14px 0 6px' }}>
           {editing ? `Edit registry item — ${editId}` : 'Add a registry item'}
         </h1>
@@ -206,7 +211,7 @@ function RegistryItemFormInner(): JSX.Element {
           type="button"
           className="btn btn-primary"
           data-action={editing ? 'save-registry-item' : 'submit-registry-item'}
-          disabled={!requiredFilled || submitting || Boolean(loadError)}
+          {...disabledAttrs(submitting ? 'Saving…' : loadError ? 'The registry could not be read — reload before writing to it' : !requiredFilled ? 'Fill in id, name, description and upstream first' : null)}
           onClick={() => void onSubmit()}
           style={{ marginTop: 16, opacity: requiredFilled && !loadError ? 1 : 0.5 }}
         >

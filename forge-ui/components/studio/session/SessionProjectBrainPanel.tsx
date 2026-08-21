@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { projectBrainBrief, projectBrainApprove, projectBrainAbandon, type ProjectBrainSession } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // SessionProjectBrainPanel — the project-brain kind's live interactive
@@ -83,7 +84,7 @@ export function SessionProjectBrainPanel({
             placeholder="Focus / guidance (optional)"
             style={textarea}
           />
-          <button data-action="start-brain-analysis" disabled={busy} onClick={() => void startAnalysis()} className="btn btn-primary">
+          <button data-action="start-brain-analysis" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void startAnalysis()} className="btn btn-primary">
             {busy ? 'Starting…' : 'Start analysis →'}
           </button>
         </div>
@@ -101,7 +102,7 @@ export function SessionProjectBrainPanel({
             {themes.length} draft theme(s) — review them in the artifact pane on the right, then approve to commit into the central brain.
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button data-action="approve-brain" disabled={busy || confirmingAbandon} onClick={() => void approve()} className="btn btn-primary">
+            <button data-action="approve-brain" {...disabledAttrs(busy ? 'Working…' : confirmingAbandon ? 'Resolve the abandon confirmation first' : null)} onClick={() => void approve()} className="btn btn-primary">
               {busy ? 'Committing…' : 'Approve + commit'}
             </button>
             {!confirmingAbandon ? (

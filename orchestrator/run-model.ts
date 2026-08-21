@@ -582,7 +582,7 @@ function buildRun(args: {
 }): Run {
   const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
 
-  // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
+  // --- Phase status derivation (see orchestrator/run-model-derive.ts) ---
   const phases = deriveNodeStatuses(events, runStatus, nodeMapping, agentSlugToNodeId);
 
   // --- Per-node metadata ---

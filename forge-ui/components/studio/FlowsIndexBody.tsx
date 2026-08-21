@@ -141,8 +141,7 @@ export function FlowsIndexBody({ flows, runs, projects }: FlowsIndexBodyProps) {
             color: 'var(--text)',
             fontSize: 13,
             padding: '6px 10px',
-            outline: 'none',
-          }}
+                      }}
         />
         {needle !== '' && (
           <span style={{ fontSize: 12, color: 'var(--dim)' }}>

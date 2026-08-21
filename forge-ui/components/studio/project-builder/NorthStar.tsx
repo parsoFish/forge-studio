@@ -21,7 +21,7 @@ export function NorthStar({ value, onChange }: { value: string; onChange: (v: st
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="One sentence that defines what done looks like for this project…"
-            style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500, color: 'var(--text)', lineHeight: 1.45, resize: 'none', minHeight: 56, padding: 0, boxSizing: 'border-box' }}
+            style={{ width: '100%', background: 'transparent', border: 'none', fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500, color: 'var(--text)', lineHeight: 1.45, resize: 'none', minHeight: 56, padding: 0, boxSizing: 'border-box' }}
           />
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: over ? 'var(--amber)' : 'var(--faint)', textAlign: 'right', marginTop: 6 }}>
             {n} / 140

@@ -75,6 +75,10 @@ import {
 import { sessionEntryHrefForAgent } from '@/lib/session-kind-meta';
 import { deleteAgent } from '@/lib/studio-client';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
+import { useDocumentTitle } from '@/lib/document-title';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -572,6 +576,10 @@ export default function AgentBuilderPage() {
   // reproduce).
   const historyRows = historyResolution?.kind === 'found' ? historyResolution.rows : [];
 
+  // W7-C3 (crosscut-06): per-route tab title (before the early returns —
+  // rules of hooks).
+  useDocumentTitle(state.name || (isNew ? 'New agent' : slugParam), 'Agents');
+
   // ---- render ----
   // W7-A4 (crosscut-02 / agents-10 / crosscut-27): unknown slug → the ONE
   // shared not-found treatment with a way back to the roster.
@@ -597,13 +605,21 @@ export default function AgentBuilderPage() {
   }
 
   return (
-    <div
+    <main
+      id={MAIN_CONTENT_ID}
       data-page="agents"
       data-page-ready={ready ? 'true' : 'false'}
       data-agent-id={state.slug}
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}
     >
       <StudioNav />
+      {/* W7-C3 (crosscut-18/agents-35): one h1 per page — the builder's
+          visible identity is the name input, so the heading is sr-only. */}
+      <h1 className="sr-only">Agent builder — {state.name || (isNew ? 'new agent' : state.slug)}</h1>
+      {/* W7-C3 (crosscut-19): the shared trail on the agent builder. */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <Breadcrumbs items={[{ label: 'Agents', href: '/agents' }, { label: state.name || (isNew ? 'new agent' : state.slug) }]} />
+      </div>
 
       <div className="workbench">
 
@@ -611,7 +627,12 @@ export default function AgentBuilderPage() {
         <CatalogPalette catalog={catalog} usedIds={usedIds} onAddToZone={addToZone} />
 
         {/* ══ CENTER: Agent Definition ══ */}
-        <main
+        {/* W7-C3 review (A-H1/A-H2): a <div>, not a second <main>. The page's
+            ONE landmark is the [data-page] root above (a route's root IS its
+            landmark — scripts/e2e-deadpaths.mjs asserts rootTag === 'MAIN'),
+            and this column keeps the `#col-center` id its own selectors and
+            scripts/journeys/agents.mjs query. */}
+        <div
           className="col-center"
           id="col-center"
           data-agent-id={state.slug}
@@ -646,6 +667,7 @@ export default function AgentBuilderPage() {
                 <input
                   className="agent-name-input"
                   type="text"
+                  aria-label="Agent name"
                   placeholder="Agent name…"
                   spellCheck={false}
                   value={state.name}
@@ -775,7 +797,7 @@ export default function AgentBuilderPage() {
               id="btn-save"
               data-action="save-agent"
               onClick={() => void handleSave()}
-              disabled={saving}
+              {...disabledAttrs(saving ? 'Saving the agent…' : null)}
             >
               {saving ? 'Saving…' : 'Save agent'}
             </button>
@@ -820,7 +842,7 @@ export default function AgentBuilderPage() {
           </>
           )}
 
-        </main>{/* /#col-center */}
+        </div>{/* /#col-center */}
 
         {/* ══ RIGHT: Preview + Readiness + Flows ══ */}
         <aside className="col-right" id="col-right">
@@ -910,6 +932,6 @@ export default function AgentBuilderPage() {
           <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>
         ))}
       </div>
-    </div>
+    </main>
   );
 }

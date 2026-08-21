@@ -79,6 +79,11 @@ function makeCommunityItem(id: string, overrides: Partial<CommunityItem> = {}): 
   return {
     id, kind: 'skill', name: id, desc: '', upstream: '', hub: null, signals: null,
     vendored: false, installState: 'not-installed', probeState: null, origin: 'catalog',
+    // required on CommunityItem (community-client.ts): a registry-sourced
+    // row that no refresh pass has verified yet — null fetchedAt is the
+    // honest "seed — never verified" state, and upstreamUpdatedAt is never
+    // fabricated when unknown.
+    fetchedAt: null, fetchedBy: 'seed', upstreamUpdatedAt: null,
     ...overrides,
   };
 }

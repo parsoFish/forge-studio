@@ -21,6 +21,10 @@ import {
   type HookLifecycleEvent,
 } from '@/lib/hook-client';
 import { buildHookDetailView, type HookDetailView } from '@/lib/hook-library-view';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Hook detail — /hooks/[id] (R3-03-F4). Three distinct outcomes, never
@@ -169,6 +173,9 @@ export default function HookDetailPage() {
 
   const view = state === 'ready' && detail ? buildHookDetailView(detail) : null;
 
+  // W7-C3 review (A-H4): per-route tab title, before the early returns.
+  useDocumentTitle(detail?.name ?? id, 'Hooks');
+
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
   if (state === 'not-found') {
     return <NotFound kind="hook" id={id} backHref="/hooks" backLabel="Hooks" detail="Either no hook has this id, or its definition failed to load as a valid hook." />;
@@ -176,6 +183,7 @@ export default function HookDetailPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="hook-detail"
       data-hook-id={id}
       data-page-ready={state !== 'loading' ? 'true' : 'false'}
@@ -184,7 +192,7 @@ export default function HookDetailPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/hooks" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>&larr; Hooks</Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Hooks', href: '/hooks' }, { label: detail?.name ?? id }]} />
 
         {state === 'loading' && (
           <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>
@@ -248,7 +256,7 @@ export default function HookDetailPage() {
                   longer match, and that is the honest state.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn btn-primary btn-sm" data-action="save-hook-edit" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editName.trim()}>
+                  <button type="button" className="btn btn-primary btn-sm" data-action="save-hook-edit" onClick={() => void handleSaveEdit()} {...disabledAttrs(savingEdit ? 'Saving…' : !editName.trim() ? 'Give the hook a name first' : null)}>
                     {savingEdit ? 'Saving…' : 'Save changes'}
                   </button>
                   <button type="button" className="btn btn-sm" data-action="cancel-hook-edit" onClick={toggleEdit} disabled={savingEdit}>
@@ -367,7 +375,7 @@ function HookDetailBody({
           <SectionLabel>Approval</SectionLabel>
           {canApprove && (
             <div>
-              <button type="button" className="btn btn-primary" data-action="approve-hook" onClick={onApprove} disabled={approving}>
+              <button type="button" className="btn btn-primary" data-action="approve-hook" onClick={onApprove} {...disabledAttrs(approving ? 'Approving…' : null)}>
                 {approving ? 'Approving…' : 'Approve'}
               </button>
             </div>

@@ -7,7 +7,9 @@
  * buildNodeMapping / Run types all live in run-model.ts).
  *
  * Responsibility boundaries:
- *   - Phase status derivation  (ported from forge-ui/lib/phases.ts)
+ *   - Phase status derivation  (this module is its ONLY home; the
+ *     forge-ui/lib/phases.ts it was ported from had no consumers left and
+ *     was deleted in the W7-C3 review)
  *   - Per-node metadata derivation
  *   - Work item status derivation (ported from forge-ui/lib/wi-status.ts)
  *   - Artifact detection
@@ -36,7 +38,8 @@ export const PROGRESS_EVENT_TYPES = new Set([
 export const WEDGE_THRESHOLD_MS = 30 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
-// Phase status derivation — ported from forge-ui/lib/phases.ts
+// Phase status derivation — the ONE home (the forge-ui mirror it was ported
+// from had no consumers and is deleted)
 // ---------------------------------------------------------------------------
 
 type NodeAccum = {

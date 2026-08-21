@@ -205,7 +205,7 @@ export default function CommunityBrowserPage() {
                     className="badge"
                     onClick={() => setHubFilter((prev) => (prev === hub.id ? null : hub.id))}
                     style={{
-                      cursor: 'pointer', border: active ? '1px solid var(--ember, #FF9E4A)' : undefined,
+            cursor: 'pointer', border: active ? '1px solid var(--ember, #FF9E4A)' : undefined,
                       opacity: declaredOnly ? 0.65 : 1,
                     }}
                     title={
@@ -242,9 +242,9 @@ export default function CommunityBrowserPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
-              width: '100%', maxWidth: 340, background: 'var(--bg-2)',
+ width: '100%', maxWidth: 340, background: 'var(--bg-2)',
               border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', color: 'var(--text)',
-              fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box',
+              fontSize: 13, padding: '8px 11px', boxSizing: 'border-box',
             }}
           />
           {KIND_FILTERS.map((k) => (

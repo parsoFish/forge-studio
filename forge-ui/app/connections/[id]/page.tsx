@@ -19,6 +19,10 @@ import {
   type ConnectionBadge,
   type InstallOutcomeView,
 } from '@/lib/connection-library-view';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Connection detail — /connections/[id] (R3-04-F2/F3). Four distinct
@@ -123,6 +127,9 @@ export default function ConnectionDetailPage() {
 
   const badges = connection ? connectionBadges(connection) : [];
 
+  // W7-C3 review (A-H4): per-route tab title, before the early returns.
+  useDocumentTitle(connection?.name ?? id, 'Connections');
+
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
   if (state === 'not-found') {
     return <NotFound kind="connection" id={id} backHref="/connections" backLabel="Connections" detail="Either no connection has this id, or its catalog entry failed to compose (missing install/probe/provenance/config metadata)." />;
@@ -130,6 +137,7 @@ export default function ConnectionDetailPage() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="connection-detail"
       data-connection-id={id}
       data-page-ready={state !== 'loading' ? 'true' : 'false'}
@@ -145,9 +153,7 @@ export default function ConnectionDetailPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <Link href="/connections" style={{ fontSize: 12, color: 'var(--dim)', textDecoration: 'none' }}>
-          &larr; Connections
-        </Link>
+        <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Connections', href: '/connections' }, { label: connection?.name ?? id }]} />
 
         {state === 'loading' && <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>}
 
@@ -302,7 +308,7 @@ function InstallSection({
 
       {connection.installable && (
         <div>
-          <button type="button" className="btn btn-primary" data-action="install-connection" onClick={onInstall} disabled={installing}>
+          <button type="button" className="btn btn-primary" data-action="install-connection" onClick={onInstall} {...disabledAttrs(installing ? 'Installing…' : null)}>
             {installing ? 'Installing…' : 'Install'}
           </button>
         </div>

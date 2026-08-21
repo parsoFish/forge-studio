@@ -26,8 +26,10 @@ import { KbSelector } from './KbSelector';
 import type { Kb } from '@/lib/studio-client';
 
 function makeKb(id: string, kind: 'flow' | 'project' | 'unique' = 'unique'): Kb {
+  // KbBinding is a discriminated union — flow/project bindings REQUIRE ref.
+  const binding = kind === 'unique' ? ({ kind } as const) : ({ kind, ref: id } as const);
   return {
-    id, name: id, binding: { kind }, counts: { index: 0, themes: 0, raw: 0 },
+    id, name: id, binding, counts: { index: 0, themes: 0, raw: 0 },
     lint: null, provenance: 'unknown',
   };
 }

@@ -479,6 +479,49 @@ test('C4: every real allowlist row is well-formed (file, line, a reason, and an 
   }
 });
 
+// =============================================================================
+// Group E — W7-C3 (forge-i9w): the fd-based sink family. openSync is a PATH
+// sink (its first argument is a filesystem path, exactly like readFileSync);
+// the fd-consuming half of the family (readSync/writeSync/fstatSync/closeSync)
+// takes a file DESCRIPTOR, not a path, so the path dimension is entirely
+// carried by the openSync that produced the fd. R4-22's TOCTOU fix moved
+// interactive-finalizers onto openSync(O_NOFOLLOW)+readSync/writeSync and the
+// lint went structurally blind to that whole module's future openSync paths.
+// =============================================================================
+
+test('E1 (RED): a request-derived path reaching a raw openSync is a finding', () => {
+  // Kills: a sink list that stops at the six buffer-API names — the exact
+  // blindness forge-i9w documents.
+  const text = fn(
+    'export function handleTail(body) {',
+    "  const fd = openSync(join(logsRoot, body.runId, 'stderr.log'), 'a');",
+    '  return fd;',
+    '}',
+  );
+  const findings = analyzeModule(text, 'cli/ui-bridge.ts');
+  assert.equal(findings.length, 1, 'exactly one finding');
+  assert.equal(findings[0].sink, 'openSync');
+});
+
+test('E2 (GREEN twin): the SAME open routed through the guard is NOT a finding (O_NOFOLLOW on a guard-produced path is credited, not blanket-flagged)', () => {
+  const text = fn(
+    'export function handleTail(body) {',
+    "  const p = guardedFile(logsRoot, [body.runId, 'stderr.log'], 'write');",
+    '  if (p === null) return null;',
+    "  const fd = openSync(p, 'a');",
+    '  return fd;',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
+});
+
+test('E3: openSync is in the sink list; the fd-consuming names are NOT (they take an fd, not a path)', () => {
+  assert.ok(RAW_FS_SINKS.includes('openSync'), 'openSync joins the path-sink family');
+  for (const notAPathSink of ['readSync', 'writeSync', 'fstatSync', 'closeSync']) {
+    assert.ok(!RAW_FS_SINKS.includes(notAPathSink), `${notAPathSink} takes an fd — flagging it would be noise, not coverage`);
+  }
+});
+
 test('the export surface is present (registry probes)', () => {
   assert.equal(typeof (lint as Record<string, unknown>).analyzeModule, 'function');
   assert.equal(typeof (lint as Record<string, unknown>).runLint, 'function');

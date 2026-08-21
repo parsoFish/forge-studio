@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import type { KbNodeArticle } from '@/lib/studio-client';
 import { pinGuidance } from '@/lib/studio-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 interface Props {
   selectedArticle: KbNodeArticle | null;
@@ -120,7 +121,7 @@ export function GuidancePanel({ selectedArticle, kbId, onPinned, pendingGuidance
             data-action="pin-guidance"
             style={{ width: '100%' }}
             onClick={() => { void handlePin(); }}
-            disabled={!kbId || !text.trim() || pinning}
+            {...disabledAttrs(pinning ? 'Pinning…' : !kbId ? 'Select or create a knowledge base first.' : !text.trim() ? 'Write the guidance first' : null)}
             title={!kbId ? 'Select or create a knowledge base first.' : undefined}
           >
             {pinning ? 'Pinning…' : 'Pin guidance'}

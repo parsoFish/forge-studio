@@ -8,6 +8,8 @@ import {
 } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
 import { resolveActiveKbId } from '@/lib/knowledge-id-resolution';
+import { useDocumentTitle } from '@/lib/document-title';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
@@ -26,6 +28,7 @@ import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmpt
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import Link from 'next/link';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ── Tabs (R6-08 WI-3, RULING 5: URL-synced via ?tab=) ─────────────────────────
 
@@ -54,7 +57,7 @@ const SCOPE_BADGE: Record<string, string> = {
 export default function KnowledgePage() {
   return (
     <Suspense fallback={
-      <main data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <main id={MAIN_CONTENT_ID} data-page="knowledge" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <StudioNav />
         <div style={{ padding: 40, color: 'var(--dim)' }}>Loading…</div>
       </main>
@@ -439,6 +442,9 @@ function KnowledgePageInner() {
   // ── Current KB meta ───────────────────────────────────────────────────────
   const currentKb = kbDetail?.kb ?? allKbs.find((k) => k.id === currentId) ?? null;
 
+  // W7-C3 (crosscut-06): per-route tab title — the selected KB's name.
+  useDocumentTitle(currentKb?.name, 'Knowledge');
+
   // W7-A4 (crosscut-27): the ONE shared not-found treatment; back = /knowledge
   // (the roster's own default selection, with a clean URL).
   if (notFound) {
@@ -447,6 +453,7 @@ function KnowledgePageInner() {
 
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="knowledge"
       {...(ready ? { 'data-page-ready': 'true' } : {})}
       data-fetch-status={kbsError || kbDetailError ? 'error' : kbListReady ? 'ok' : 'loading'}
@@ -471,6 +478,11 @@ function KnowledgePageInner() {
         </div>
       )}
 
+      {/* W7-C3 (crosscut-19): the shared trail on the KB detail surface. */}
+      <div style={{ padding: '10px 20px 0' }}>
+        <Breadcrumbs items={[{ label: 'Knowledge', href: '/knowledge' }, { label: currentKb?.name ?? currentId ?? 'roster' }]} />
+      </div>
+
       {/* Header bar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px',
@@ -489,13 +501,16 @@ function KnowledgePageInner() {
         <Link href="/knowledge/new" className="btn btn-sm" data-action="new-kb" style={{ textDecoration: 'none' }}>
           + New KB
         </Link>
+        {/* W7-C3 (crosscut-18): keep one h1 even before a KB resolves. */}
+        {!currentKb && <h1 className="sr-only">Knowledge</h1>}
 
         {currentKb && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span id="kb-title" style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', lineHeight: 1.2 }}>
+              {/* W7-C3 (crosscut-18): the KB name is the page's ONE h1. */}
+              <h1 id="kb-title" style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', lineHeight: 1.2, margin: 0 }}>
                 {currentKb.name}
-              </span>
+              </h1>
               <span id="kb-scope-badge" className={`badge ${SCOPE_BADGE[currentKb.binding.kind] ?? 'badge-dim'}`}>
                 {currentKb.binding.kind}
               </span>

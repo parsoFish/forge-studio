@@ -1,7 +1,7 @@
 ---
 name: project-brain-builder
 description: Read a managed project from scratch and author its initial brain — real theme pages (patterns, conventions, structure) grounded in the project's current state.
-phase: reflection
+phase: project-brain
 surface: unattended
 # Internal/system agent — dispatched by the bridge for the project-brain builder
 # (the project-builder "Build project brain" flow), never composed into a flow.

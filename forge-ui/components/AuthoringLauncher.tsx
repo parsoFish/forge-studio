@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import { startAuthoring } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 import { fetchAgentCapability, type AgentCapability } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { defaultKickoffTier } from '@/lib/kickoff-view';
@@ -101,6 +102,7 @@ export function AuthoringLauncher({
         value={project}
         onChange={(e) => setProject(e.target.value)}
         placeholder="a project (session scratch space — not what this belongs to)"
+        aria-label="Session scratch project"
         data-field="authoring-launcher-project"
         style={inputStyle}
       />
@@ -113,6 +115,7 @@ export function AuthoringLauncher({
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder="Describe what it should do…"
+        aria-label="Describe what it should do"
         rows={3}
         data-field="authoring-launcher-prompt"
         style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
@@ -125,7 +128,7 @@ export function AuthoringLauncher({
       )}
       <button
         onClick={() => void onSubmit()}
-        disabled={!canSubmit}
+        {...disabledAttrs(submitting ? 'Starting the creation agent…' : !project.trim() ? 'Pick a project first' : !prompt.trim() ? 'Describe what the agent should build first' : null)}
         data-action="start-authoring"
         className="btn btn-primary"
         style={{ opacity: canSubmit ? 1 : 0.5 }}

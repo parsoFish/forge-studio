@@ -156,7 +156,7 @@ import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -1943,13 +1943,32 @@ async function handleHttp(
       sendJson(res, 400, { error: 'invalid cycleId' }, origin);
       return;
     }
+    // W7-C3 (bd forge-0u4), re-cut by the W7-C3 review (A-M6) — the FILENAME
+    // dimension is enumerated as a DENY of the shapes that matter, sharing
+    // the guard's OWN per-segment predicate (`isSafeSubPath`) so the cheap
+    // 400 layer and the containment 404 layer cannot drift. The first cut was
+    // an allow-list charset (`/^[A-Za-z0-9._-]+$/` + `.includes('..')`) and
+    // was a fails-closed regression: it 400'd 55 of 508 real on-disk artifact
+    // files (10.8%, all `.capture/{before,after}/*.out` demo evidence named
+    // from AC titles) while every real attack shape was ALREADY refused by
+    // `guardedReadFile` below. Legitimate names with spaces, parentheses,
+    // em-dashes and a leading `..` pass; separators, `.`/`..` segments, empty
+    // segments, control characters, NUL, DEL and encoded separators do not.
+    // Pinned both ways in cli/sec04-cycleid-containment.test.ts (a real
+    // `.capture` name serves 200; every escape shape still refused) and per
+    // predicate in cli/studio-path-guard.test.ts.
+    if (!isSafeSubPath(filename)) {
+      sendJson(res, 400, { error: 'invalid filename' }, origin);
+      return;
+    }
+    const filenameSegments = filename.split('/');
     // SEC-04 (bd forge-ebj) — the lexical `startsWith(safeBase)` above was
     // blind to a SYMLINKED leaf: `artifacts/<filename>` real-located inside a
     // genuine cycle dir but pointing out of root passed it and readFileSync
     // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
-    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filename.split('/')]);
+    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
     if (body === null) {
       sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return;

@@ -12,6 +12,7 @@ import type { LedgerRow } from '@/lib/history-ledger';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from '@/lib/fetch-error-scope';
+import { useDocumentTitle } from '@/lib/document-title';
 import {
   fetchStudioFlows,
   fetchRuns,
@@ -21,6 +22,7 @@ import {
   type Project,
   type Run,
 } from '@/lib/studio-client';
+import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
 // ---------------------------------------------------------------------------
 // Flows index — /flows (W6-IA-2).
@@ -155,8 +157,12 @@ export default function FlowsIndexPage() {
     };
   }, []);
 
+  // W7-C3 (crosscut-06): per-route tab title.
+  useDocumentTitle('Flows');
+
   return (
     <main
+      id={MAIN_CONTENT_ID}
       data-page="flows-index"
       data-page-ready={ready ? 'true' : 'false'}
       data-flow-count={flows.length}

@@ -85,6 +85,8 @@ function makeRun(phaseMeta: Record<string, RunPhaseMeta> = {}): Run {
     status: 'active',
     origin: 'architect',
     costUsd: 0,
+    // required on Run; a single-flow run's lineage is just its own flow id.
+    flowLineage: ['forge-develop'],
     phases: {},
     phaseMeta,
     artifactsReady: {},

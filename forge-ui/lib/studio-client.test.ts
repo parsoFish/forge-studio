@@ -46,15 +46,6 @@ import {
   // throws a genuine "is not a function" RED rather than silently no-op-ing.
   WEBHOOK_FAMILY_TRIGGER_KINDS,
   isSameTriggerIdentity,
-  // R1-06 WI-2 group B (3) / T1 Q3 — REMOVAL pin: bootstrapKb is a dead,
-  // competing seed path (POST /api/studio/kbs/:id/bootstrap) now that KB
-  // create hands off to the real project-brain agent flow (F2). Still
-  // exported today, so this static import resolves to a real function and
-  // the typeof check below goes red for the right reason — same "missing
-  // named export resolves to undefined, not a collection-time throw"
-  // convention already documented above for AT-F1-1 / zyc findings, used
-  // here in reverse (red-while-present, not red-while-absent).
-  bootstrapKb,
   // R1-06 WI-2 group A: same "not yet exported" RED convention as
   // AT-F1-1 above — does NOT exist on ./studio-client yet.
   // `/knowledge/new`'s `[data-field="kb-binding-band"]` select (forge-ui/
@@ -90,6 +81,13 @@ import {
   fetchKbDrainRun,
   fetchActiveOrLatestKbDrain,
 } from './studio-client';
+// R1-06 WI-2 group B (3) / T1 Q3 — the bootstrapKb REMOVAL pin reads the
+// module's export list, NOT a named import: once the export is genuinely
+// gone a named import is a hard type error (W7-C3's tests tsc project),
+// and an `in` check over the namespace is the stronger assertion anyway —
+// it fails if the symbol comes back under any value at all, including
+// `undefined`.
+import * as StudioClientModule from './studio-client';
 import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
 // into is session-client.ts's EXPORTED `ContractStageRow` (:248-258) — the
@@ -219,7 +217,7 @@ test('parseAgentCapability: an allowedTiers array with ANY unrecognised element 
 });
 
 test('fetchAgentCapability: issues one GET to /api/studio/agents/:slug/capability and returns the parsed descriptor', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({
@@ -240,7 +238,7 @@ test('fetchAgentCapability: issues one GET to /api/studio/agents/:slug/capabilit
 });
 
 test('fetchAgentCapability: a 404 (unknown slug) resolves to null, never throws', async () => {
-  const fetchSpy = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ error: 'unknown agent' }) }));
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({ ok: false, status: 404, json: async () => ({ error: 'unknown agent' }) }));
   vi.stubGlobal('fetch', fetchSpy);
 
   expect(await fetchAgentCapability('no-such-agent')).toBeNull();
@@ -868,6 +866,10 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     trigger: { kind: 'schedule', source: 'cron', scope: null },
     // W7-B7 (artifact-plan-17): the PR artifact page's link source.
     prUrl: 'https://github.com/parsoFish/gitpulse/pull/12',
+    // W6-SW-3 (sweep C8#1): declared on Run and carried by parseRun, so
+    // `Required<Run>` demands it here — the pin is only a FIELD-PARITY pin
+    // if it enumerates every field (GateBar depends on this one).
+    project: 'gitpulse',
   };
 
   const parsed = parseRun(raw);
@@ -876,6 +878,18 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     expect(parsed[key], `field "${key}" was dropped (undefined) by parseRun`).not.toBeUndefined();
     expect(parsed[key], `field "${key}" was mutated, not carried through verbatim`).toEqual(raw[key]);
   }
+});
+
+test("W7-C3 (forge-cv9): the client Run type admits every server-producible origin — 'triggered' included", () => {
+  // orchestrator/run-model.ts types origin 'architect'|'human-directed'|'triggered'
+  // (R2-08-F4 made 'triggered' a real, producible value); the client type was
+  // narrower, so any consumer switching on origin either failed to compile
+  // against real data or was written to handle only two cases. The annotation
+  // below is the TYPE-level half (gate-enforced by the forge-ui tests tsc
+  // project, forge-opj); the runtime half proves parseRun carries the value.
+  const origin: Run['origin'] = 'triggered';
+  const parsed = parseRun({ id: 'CYCLE-triggered-origin', origin });
+  expect(parsed.origin).toBe('triggered');
 });
 
 // ---------------------------------------------------------------------------
@@ -925,6 +939,14 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
 // checklist into emptiness).
 // ---------------------------------------------------------------------------
 
+// W7-C3 (forge-opj): a `vi.fn(async () => …)` mock declares ZERO parameters,
+// so `fetchSpy.mock.calls[0][0]` is an out-of-range index on a 0-tuple —
+// invisible while nothing type-checked these files, and it silently defeats
+// every wire-contract (URL + init) assertion's type safety. Declaring the
+// fetch-shaped parameters costs no behaviour change and makes those
+// assertions check real fetch arguments.
+type FetchArgs = [input: string, init?: RequestInit];
+
 const BRIDGE_BASE = 'http://bridge.test';
 
 const CAPTURED_CONTRACT_STAGES: {
@@ -968,7 +990,7 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
     'fetchContractStages is not exported from ./studio-client yet — the zero-caller gap this AT closes',
   ).toBe('function');
 
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => CAPTURED_CONTRACT_STAGES,
@@ -1027,7 +1049,7 @@ const SESSION_INDEX_ROWS = [
 test('fetchStudioSessions() defaults to ?active=1 (operator-locked: in-flight sessions only) and parses the wire rows verbatim', async () => {
   expect(typeof fetchStudioSessions, 'fetchStudioSessions is not exported from ./studio-client yet').toBe('function');
 
-  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: SESSION_INDEX_ROWS }) }));
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({ ok: true, status: 200, json: async () => ({ sessions: SESSION_INDEX_ROWS }) }));
   vi.stubGlobal('fetch', fetchSpy);
 
   const rows = await fetchStudioSessions();
@@ -1038,7 +1060,7 @@ test('fetchStudioSessions() defaults to ?active=1 (operator-locked: in-flight se
 });
 
 test('fetchStudioSessions(false) fetches the unfiltered index (no ?active= query)', async () => {
-  const fetchSpy = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ sessions: [] }) }));
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({ ok: true, status: 200, json: async () => ({ sessions: [] }) }));
   vi.stubGlobal('fetch', fetchSpy);
 
   await fetchStudioSessions(false);
@@ -1052,7 +1074,7 @@ test('fetchStudioSessions(false) fetches the unfiltered index (no ?active= query
 // REJECTS with a BridgeReadError carrying the bridge's own status + text, so no
 // caller can receive a value it could mistake for an empty index.
 test('fetchStudioSessions() REJECTS with BridgeReadError{status:500, message:"boom"} when the bridge responds non-2xx — never resolves []', async () => {
-  const fetchSpy = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: 'boom' }) }));
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({ ok: false, status: 500, json: async () => ({ error: 'boom' }) }));
   vi.stubGlobal('fetch', fetchSpy);
 
   await expect(fetchStudioSessions()).rejects.toMatchObject({ name: 'BridgeReadError', status: 500, message: 'boom' });
@@ -1103,7 +1125,7 @@ test('R4-19-F2 AT-F2-1: startKbCleanup is not exported from ./studio-client yet 
 });
 
 test('R4-19-F2 AT-F2-2: startKbCleanup(id) issues EXACTLY ONE POST to /api/studio/kbs/:id/cleanup/start with the x-forge-csrf header, and returns {ok:true, sessionId, project} from a real 200 body — BOTH fields matter: a launcher navigating to the session page needs "project" for its ?project=<anchor> query param, not just "sessionId" (kb-cleanup sessions for a non-project-bound KB anchor under a ".kb-<id>" scratch project, cli/ui-bridge.ts\'s KB_SEEDING_ANCHOR_PREFIX carve-out — a launcher that re-derives "project" from the kbId itself, rather than using what this route returns, would silently mis-anchor every non-project KB\'s session URL', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({ ok: true, sessionId: '2026-08-14T08-34-38-a34fff82', project: '.kb-forge-dev' }),
@@ -1122,7 +1144,7 @@ test('R4-19-F2 AT-F2-2: startKbCleanup(id) issues EXACTLY ONE POST to /api/studi
 });
 
 test('R4-19-F2 AT-F2-3: startKbCleanup(id): a real 404 "unknown kb" body round-trips the server\'s error message VERBATIM as {ok:false, error} — never a generic "failed" string — and carries no sessionId/project', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: false,
     status: 404,
     json: async () => ({ error: 'unknown kb: bogus' }),
@@ -1130,6 +1152,10 @@ test('R4-19-F2 AT-F2-3: startKbCleanup(id): a real 404 "unknown kb" body round-t
   vi.stubGlobal('fetch', fetchSpy);
 
   const result = await startKbCleanup('bogus');
+  // `expect(result.ok).toBe(false)` does not NARROW the union for the reads
+  // below — assert-then-narrow, so a future {ok:true} regression fails here
+  // rather than at an `any`-shaped property read.
+  if (result.ok) throw new Error(`expected a failure result, got ${JSON.stringify(result)}`);
   expect(result.ok).toBe(false);
   expect(result.error).toBe('unknown kb: bogus');
   expect((result as { sessionId?: string }).sessionId).toBeUndefined();
@@ -1144,7 +1170,7 @@ test('R4-19-F2 AT-F2-3: startKbCleanup(id): a real 404 "unknown kb" body round-t
 // ---------------------------------------------------------------------------
 
 test('W6-B13: dispatchKbDrain(id) issues EXACTLY ONE POST to /api/studio/kbs/:id/drain with the x-forge-csrf header, and returns {ok:true, runId} from a real 200 body', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({ ok: true, runId: 'forge-dev-drain-abc123' }),
@@ -1162,7 +1188,7 @@ test('W6-B13: dispatchKbDrain(id) issues EXACTLY ONE POST to /api/studio/kbs/:id
 });
 
 test('W6-B13: dispatchKbDrain: a real 409 "already active" body round-trips the server\'s error message VERBATIM as {ok:false, error} — never a generic "failed" string', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: false,
     status: 409,
     json: async () => ({ error: 'a drain run is already active for this kb', runId: 'forge-dev-drain-existing' }),
@@ -1179,7 +1205,7 @@ test('W6-B13: dispatchKbDrain: a real 409 "already active" body round-trips the 
 });
 
 test('W6-B13: fetchKbDrainRun(id, runId) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain/:runId and returns the full status verbatim', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({
@@ -1201,7 +1227,7 @@ test('W6-B13: fetchKbDrainRun(id, runId) issues EXACTLY ONE GET to /api/studio/k
 });
 
 test('W6-B13: fetchKbDrainRun: a 404 "unknown drain run" degrades to an honest ok:false fallback — never throws, never fabricates a terminal state', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: false,
     status: 404,
     json: async () => ({ error: 'unknown drain run' }),
@@ -1217,7 +1243,7 @@ test('W6-B13: fetchKbDrainRun: a 404 "unknown drain run" degrades to an honest o
 });
 
 test('W6-B13: fetchActiveOrLatestKbDrain(id) issues EXACTLY ONE GET to /api/studio/kbs/:id/drain (no trailing runId segment) and passes runId:null through when no run has ever been dispatched', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({ ok: true, runId: null }),
@@ -1232,7 +1258,7 @@ test('W6-B13: fetchActiveOrLatestKbDrain(id) issues EXACTLY ONE GET to /api/stud
 });
 
 test('W6-B13: fetchActiveOrLatestKbDrain: reattaches to a real active-or-latest run\'s full status when one exists', async () => {
-  const fetchSpy = vi.fn(async () => ({
+  const fetchSpy = vi.fn(async (..._args: FetchArgs) => ({
     ok: true,
     status: 200,
     json: async () => ({
@@ -1257,7 +1283,7 @@ test('W6-B13: fetchActiveOrLatestKbDrain: reattaches to a real active-or-latest 
 // ---------------------------------------------------------------------------
 
 test('RED (R1-06 WI-2 group B, T1 Q3): bootstrapKb must be REMOVED from studio-client — it is a dead, competing seed path', () => {
-  expect(typeof bootstrapKb).toBe('undefined');
+  expect(Object.keys(StudioClientModule)).not.toContain('bootstrapKb');
 });
 
 // ---------------------------------------------------------------------------

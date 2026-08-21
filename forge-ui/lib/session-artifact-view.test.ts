@@ -117,7 +117,7 @@ import {
   cleanupPlanView,
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
-import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact, ContractBuildoutArtifact } from './session-client.ts';
+import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact, ContractBuildoutArtifact, CleanupPlanArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
 // R4-19-F2 — reads the REAL r4-19-f2-live-capture fixture's cleanup-plan.md
@@ -470,6 +470,10 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
     turns: [],
     artifact: NONEMPTY_ROADMAP, // today's live, stage-unaware kind, reused for this fixture
     affordances: [],
+    // W7-C2 (T1 review P0-3/P0-4): both REQUIRED, `null` being the honest
+    // value — nothing finalized, and the transcript derivation succeeded.
+    finalized: null,
+    transcriptError: null,
     modelTier: null,
     terminal: false,
     transcript: true,
@@ -984,14 +988,14 @@ test('R4-17 AT-122 (D10): sessionArtifactView: an UNRECOGNISED artifact kind (ne
 // CALL `cleanupPlanView` (directly or via the dispatcher), are red; every
 // pre-existing AT-70..122 test above is unaffected. — AT-123..134
 //
-// `CleanupPlanArtifact`/`CleanupPlanAction` are NOT imported from
-// ./session-client.ts -- it does not declare this shape yet (implementation
-// target, out of scope for this test-only file); hand-declared here exactly
-// like FILE_PACKAGE_ARTIFACT's own `FilePackageArtifact` precedent above
-// (RED-3a/b): never cross-importing a not-yet-shipped type from the module
-// under test's own dependency. The shape mirrors the AUTHORITATIVE type from
-// the concurrently-landing backend (orchestrator/studio/session-transcript.ts's
-// CleanupPlanArtifact/CleanupPlanAction) -- three action states, not two:
+// `CleanupPlanArtifact` WAS hand-declared here while it was still an
+// implementation target (never cross-import a not-yet-shipped type from the
+// module under test's own dependency). It has since LANDED on
+// ./session-client.ts -- which session-artifact-view.ts itself imports -- so
+// the fixtures below now bind to the authoritative type, and the tests are
+// pinned against the real shape rather than a local copy that could drift
+// (W7-C3: the forge-ui tests tsc project makes that binding a gate).
+// Three action states, not two:
 // 'open' | 'cleared' | 'unknown'. The third state is load-bearing and was won
 // the hard way -- a real run once reported every action 'cleared' while
 // nothing had been fixed, because absence-of-a-finding was wrongly treated as

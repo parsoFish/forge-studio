@@ -142,7 +142,7 @@ export function ActivityLog({
             fontWeight: 600,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
-            color: 'var(--faint, #5b6779)',
+            color: 'var(--faint)',
             fontFamily: 'ui-monospace, Menlo, monospace',
             whiteSpace: 'nowrap',
           }}
@@ -174,7 +174,7 @@ export function ActivityLog({
             style={{
               fontSize: 11,
               fontFamily: 'ui-monospace, Menlo, monospace',
-              color: 'var(--faint, #5b6779)',
+              color: 'var(--faint)',
               whiteSpace: 'nowrap',
             }}
           >
@@ -225,7 +225,7 @@ export function ActivityLog({
       {open && (
         <div style={{ maxHeight: 260, overflowY: 'auto', padding: '6px 0' }}>
           {rows.length === 0 ? (
-            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--faint, #5b6779)' }}>
+            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--faint)' }}>
               Waiting for activity…
             </div>
           ) : (
@@ -265,7 +265,7 @@ function PhaseChip({ label, active }: { label: string; active: boolean }): JSX.E
           width: 6,
           height: 6,
           borderRadius: '50%',
-          background: active ? STATUS_COLOR.active : 'var(--faint, #5b6779)',
+          background: active ? STATUS_COLOR.active : 'var(--faint)',
         }}
       />
       {label}
@@ -277,9 +277,9 @@ const TAG_COLOR: Record<ActivityRow['kind'], string> = {
   tool: STATUS_COLOR.complete,
   'tool-coalesced': STATUS_COLOR.attention,
   thinking: STATUS_COLOR.active,
-  'thinking-redacted': 'var(--faint, #5b6779)',
+  'thinking-redacted': 'var(--faint)',
   reasoning: STATUS_COLOR.active,
-  capped: 'var(--faint, #5b6779)',
+  capped: 'var(--faint)',
   // W7-B2 (knowledge-01): a job's own per-transition progress line.
   progress: STATUS_COLOR.active,
 };
@@ -338,7 +338,7 @@ function ActivityRowView({
           whiteSpace: 'pre-wrap',
           fontStyle: ITALIC_KINDS.has(row.kind) ? 'italic' : 'normal',
           fontFamily: isTool ? 'ui-monospace, Menlo, monospace' : 'inherit',
-          color: row.kind === 'thinking-redacted' || row.kind === 'capped' ? 'var(--faint, #5b6779)' : 'var(--text, #e6edf3)',
+          color: row.kind === 'thinking-redacted' || row.kind === 'capped' ? 'var(--faint)' : 'var(--text, #e6edf3)',
         }}
       >
         {row.clamp ? (expanded ? row.text : row.clamp.shown) : row.text}
