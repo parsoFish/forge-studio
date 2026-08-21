@@ -202,3 +202,73 @@ test('DELETE /api/studio/kbs/:id — removes the dot-anchor session dir and repo
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7 FIX-B-KB — the journey kb-maintain fixture shape must consolidate to a
+// genuine `cleared` terminal under no-spawn.
+//
+// The fixture theme's description carries an unquoted `: ` (real themes do
+// too — parseTheme's lenient fallback exists exactly for that), which makes
+// gray-matter throw on first parse. gray-matter caches the file object
+// BEFORE the parse throws, so every LATER parse of the byte-identical
+// content silently got `data: {}` back — the own-theme lens then invented
+// three agent-tier "missing required frontmatter field" findings for fields
+// plainly present, and consolidate reported cleared=1/4 → "not-cleared"
+// (the knowledge journey's kb-maintain gate failure). This pin drives the
+// exact journey shape end to end: exactly ONE agent-tier finding, fixed
+// deterministically in-process, terminal cleared=true.
+// ---------------------------------------------------------------------------
+
+test('runBrainConsolidateNow: the journey kb-maintain fixture (unquoted-colon description) reaches cleared=true under no-spawn (W7 FIX-B-KB)', async () => {
+  const { runBrainConsolidateNow } = await import('./bridge-studio-kbs.ts');
+  const root = mkdtempSync(join(tmpdir(), 'kbs-w7-consolidate-'));
+  const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  try {
+    const kbId = 'jm-kb';
+    const kbDir = join(root, 'brain', 'projects', kbId);
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    writeFileSync(join(kbDir, 'kb.yaml'), `id: ${kbId}\nname: ${kbId} (project)\nbinding:\n  kind: project\n  ref: ${kbId}\ndesc: journey-shaped fixture\nbackend: filesystem\n`);
+    const now = new Date().toISOString();
+    // Mirrors scripts/journeys/knowledge.mjs seedScratchKbMaintain() —
+    // including the unquoted colon in `description:` that gray-matter
+    // rejects (the lenient-fallback + cache-poisoning trigger). Uniquified
+    // so no earlier parse in this process can pre-poison the content key.
+    writeFileSync(join(kbDir, 'themes', 'colon-lesson.md'), [
+      '---',
+      'title: Colon lesson — deliberately unindexed',
+      `description: A scratch lint fixture: unquoted colon, real theme, missing from its own index (w7pin-${Date.now()})`,
+      'category: pattern',
+      'keywords: [w7, fix-b-kb]',
+      `created_at: ${now}`,
+      `updated_at: ${now}`,
+      'related_themes: []',
+      '---',
+      '',
+      '# Theme: colon lesson',
+      '',
+    ].join('\n'));
+    writeFileSync(join(kbDir, 'patterns.md'), `# ${kbId} — Patterns\n\n## Theme pages\n\n(deliberately empty)\n`);
+
+    const runId = `${kbId}-consolidate-w7pin`;
+    await runBrainConsolidateNow(root, kbId, runId);
+
+    const evRaw = readFileSync(join(root, '_logs', `_brainfix-${runId}`, 'events.jsonl'), 'utf8');
+    const end = evRaw.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l) as { event_type?: string; metadata?: Record<string, unknown> })
+      .find((e) => e.event_type === 'end');
+    assert.ok(end, `terminal 'end' event must exist, got: ${evRaw}`);
+    assert.equal(
+      end?.metadata?.['total'], 1,
+      `the fixture must scope to exactly ONE agent-tier finding — more means phantom findings from a poisoned parse, got ${JSON.stringify(end?.metadata)}`,
+    );
+    assert.equal(end?.metadata?.['cleared'], true, `the deterministic in-process fix must clear it, got ${JSON.stringify(end?.metadata)}`);
+    assert.ok(
+      readFileSync(join(kbDir, 'patterns.md'), 'utf8').includes('(./themes/colon-lesson.md)'),
+      'the KB\'s own patterns.md must carry the appended link',
+    );
+  } finally {
+    if (prevNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

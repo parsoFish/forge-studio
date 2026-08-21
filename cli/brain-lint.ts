@@ -28,13 +28,10 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, basename, sep } from 'node:path';
-// gray-matter has no usable types; we treat the default export as `any` for parsing.
-// The structure we use is well-defined: `{ data, content }`.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import matter from 'gray-matter';
 
 import { cyclesRawDir } from '../orchestrator/brain-paths.ts';
 import { applyAutoFixes } from './brain-fix-auto.ts';
+import { parseThemeFile, type ParsedThemeFile } from './theme-frontmatter.ts';
 
 // ---------- types ----------
 
@@ -231,56 +228,17 @@ function findThemeBySlug(brainRoot: string, slug: string): string | null {
 }
 
 /**
- * Lenient frontmatter parser. Tries gray-matter first; on YAML failure (e.g.
- * unquoted `:` in a description value), falls back to a regex line-by-line
- * extractor that captures `key: value` pairs without YAML-spec strictness.
- * This means lint can still surface frontmatter findings (missing fields,
- * bad category) on themes that gray-matter would reject — failing-closed
- * would hide the very class of violations we want to find.
+ * Lenient frontmatter parser — delegates to the ONE shared implementation in
+ * cli/theme-frontmatter.ts (W7 FIX-B-KB: extracted so the deterministic
+ * fixers in cli/brain-fix-auto.ts parse themes with the exact same lenient
+ * fallback the lint checks use; the two used to disagree, so the fixer
+ * refused the very theme lint had just flagged). Null only on a READ
+ * failure — the parse itself always produces a result (gray-matter first,
+ * cache-bypassed; regex line-extractor fallback on YAML failure, e.g. an
+ * unquoted `:` in a description value).
  */
-function parseTheme(file: string): {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: Record<string, any>;
-  content: string;
-  raw: string;
-} | null {
-  let raw: string;
-  try {
-    raw = readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-  try {
-    const { data, content } = matter(raw);
-    return { data, content, raw };
-  } catch {
-    // Fallback: split on first two `---` lines.
-    const lines = raw.split('\n');
-    if (lines[0]?.trim() !== '---') {
-      return { data: {}, content: raw, raw };
-    }
-    let end = -1;
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i].trim() === '---') {
-        end = i;
-        break;
-      }
-    }
-    if (end < 0) {
-      return { data: {}, content: raw, raw };
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: Record<string, any> = {};
-    for (let i = 1; i < end; i++) {
-      const line = lines[i];
-      const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
-      if (m) {
-        data[m[1]] = m[2].trim();
-      }
-    }
-    const content = lines.slice(end + 1).join('\n');
-    return { data, content, raw };
-  }
+function parseTheme(file: string): ParsedThemeFile | null {
+  return parseThemeFile(file);
 }
 
 // ---------- checkFrontmatter ----------
@@ -1199,7 +1157,15 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
     const parts = rel.split('/').filter(Boolean);
     const actualSubdir = parts[0] ?? '';
     const isProjectTheme = actualSubdir === 'projects';
-    if (!isProjectTheme && ALLOWED_CATEGORIES.has(cat)) {
+    // checkCategoryScope governs ONLY the forge sub-wikis (three-brain
+    // routing, ADR 018) — see LINT_THEME_FILE_CHECKS's own exclusion note.
+    // W7 FIX-B-KB: this used to fire for ANY non-`projects` location, so a
+    // top-level scratch/flow/band KB's category-bearing themes were all
+    // flagged mis-routed — an AUTO-tier finding whose fixer (`fixMisRouted`,
+    // cli/brain-fix-auto.ts) git-mv's the file into brain/cycles|forge-dev,
+    // i.e. a scratch KB's own themes migrating into the real forge brains.
+    const isForgeTheme = (THEME_SUBDIRS as readonly string[]).includes(actualSubdir);
+    if (isForgeTheme && ALLOWED_CATEGORIES.has(cat)) {
       const expected = CATEGORY_TO_BRAIN_SUBDIR[cat];
       if (expected && actualSubdir !== expected) {
         findings.push({

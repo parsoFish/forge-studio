@@ -1553,3 +1553,24 @@ route has carried since W6-B14. `check-request-path-sinks.mjs` delta (1 file,
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta —
 `scripts/request-path-sinks.baseline.txt` now records `cli/bridge-studio-kbs.ts`
 `mkdirSync` at 9.
+
+### W7 FIX-B-KB — the shared lenient theme parser (`cli/theme-frontmatter.ts`, one relocated `[read]`-class sink)
+
+The one lenient theme-frontmatter parser moved out of `cli/brain-lint.ts`'s
+private `parseTheme` into the new leaf module `cli/theme-frontmatter.ts`, so
+the lint checks and the deterministic fixers (`cli/brain-fix-auto.ts`) share a
+single parse derivation (they used to disagree: the fixer's strict copy
+refused unquoted-colon themes the lint fallback accepted, so consolidate could
+never clear the finding it was dispatched for). `check-request-path-sinks.mjs`
+delta: `cli/theme-frontmatter.ts` `readFileSync` 0 → 1, with the SAME sink
+count DROPPING in both former hosts (`cli/brain-lint.ts` `readFileSync` 5 → 4,
+`cli/brain-fix-auto.ts` `readFileSync` 4 → 3) — a relocation, net −1, not new
+surface:
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/theme-frontmatter.ts` (`parseThemeFile`) | `readFileSync` | none directly — `file` is always a server-enumerated theme path: `readThemeFiles`/`listOwnThemeFiles` walks (the latter through `guardedReadDir` over `resolveKbBrainDir`), or a lint Finding's own `file` (constructed from those same walks), or `op=fix-agent`'s body path which the route validates absolute-under-`brain/` before dispatch | accidentally-safe (unchanged) | Byte-identical read+parse logic relocated from `cli/brain-lint.ts:241-294`; neither module is in `check-raw-fs-guarded.mjs`'s scanned-module list (shared helpers, not request handlers), and every caller's path provenance is unchanged by the move. The parse now always passes gray-matter an options object — cache-bypass, a correctness fix (poisoned-cache empty frontmatter), no fs-surface change. |
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` records the relocation (and the two
+tightened rows).

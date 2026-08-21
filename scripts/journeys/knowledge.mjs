@@ -286,21 +286,27 @@ function cleanScratchKb() {
 
 // ── scratch project-brain (knowledge-lint-index — W6-B13 drain-to-green) ──────
 // A FIFTH scratch KB, disjoint from every one above — the drain button's own
-// fixture. Deliberately the SAME shape as SCRATCH_KB_MAINTAIN (a
-// brain/projects/* KB with one theme missing from its own category index —
-// the checkProjectBrainIndexes "not listed" finding, resolution:'agent'):
-// that shape is PROVEN by knowledge-kb-maintain-session's own beat to trip
-// EXACTLY one finding and nothing spurious. It is deliberately NOT reused —
-// a separate directory keeps each beat's state ownership independent
-// (rule 3) even though, unlike Consolidate, drain under no-spawn never
-// writes to this KB's files at all (its one agent-tier finding can never
-// clear without a real SDK turn — see the beat's own honesty-rule comment).
+// fixture. W7 FIX-B-KB: this fixture used to mirror SCRATCH_KB_MAINTAIN's
+// "missing from its own category index" shape and lean on it being
+// unfixable without an agent turn — but that was only ever true because the
+// index auto-fixer wrote the WRONG index (the brain/cycles leak); with the
+// own-tree fixer the drain's real auto pass legitimately heals that shape
+// to a genuine "green", which is the wrong demo for THIS beat. So the seed
+// here is now a finding with NO auto or deterministic path at all — a
+// dangling `related_themes` edge (checkDanglingEdges → `edge.dangling`,
+// resolution:'agent', see classifyFinding in cli/brain-lint.ts) — while the
+// theme IS properly listed in its own patterns.md (zero index findings).
+// Disjoint directory keeps each beat's state ownership independent (rule 3);
+// drain under no-spawn never writes to this KB's files at all (a dangling
+// edge is repointed only by a real SDK turn).
 const SCRATCH_KB_DRAIN_ID = 'journey-scratch-kb-drain';
 const SCRATCH_KB_DRAIN_NAME = 'journey-scratch-kb-drain (project)';
 const SCRATCH_KB_DRAIN_DESC = 'Ephemeral per-project-shaped brain created by the e2e journey itself, seeded with one agent-tier lint finding to demo the drain-to-green button reaching an honest, CI-safe terminal.';
 const SCRATCH_KB_DRAIN_DIR = join(FORGE_ROOT, 'brain', 'projects', SCRATCH_KB_DRAIN_ID);
 const SCRATCH_KB_DRAIN_THEME_SLUG = 'scratch-drain-lesson';
-const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, present on disk, deliberately left out of its own category index so checkProjectBrainIndexes flags it (agent-tier) and the drain button has something genuine to work on.';
+const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, listed in its own category index, but carrying a deliberately dangling related_themes edge so checkDanglingEdges flags it (agent-tier, no auto fixer) and the drain button has something genuine — and genuinely agent-only — to work on.';
+// A slug that exists NOWHERE under brain/**/themes — the dangling target.
+const SCRATCH_KB_DRAIN_DANGLING_SLUG = 'journey-scratch-nonexistent-theme';
 
 function cleanScratchKbDrain() {
   try { rmSync(SCRATCH_KB_DRAIN_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
@@ -320,9 +326,10 @@ function cleanScratchKbDrain() {
   } catch { /* best-effort */ }
 }
 
-/** Mirrors seedScratchKbMaintain's own shape exactly — see that function's
- *  header for why this trips exactly the checkProjectBrainIndexes "not
- *  listed" finding and nothing else. */
+/** Seeds exactly ONE finding: a dangling related_themes edge
+ *  (checkDanglingEdges, agent-tier, NO auto/deterministic fixer — see the
+ *  W7 FIX-B-KB block comment above). The theme is properly indexed in its
+ *  own patterns.md so no index-tier finding fires alongside it. */
 function seedScratchKbDrain() {
   const themesDir = join(SCRATCH_KB_DRAIN_DIR, 'themes');
   mkdirSync(themesDir, { recursive: true });
@@ -339,13 +346,18 @@ function seedScratchKbDrain() {
   const now = new Date().toISOString();
   writeFileSync(join(themesDir, `${SCRATCH_KB_DRAIN_THEME_SLUG}.md`), [
     '---',
-    'title: Scratch drain lesson — deliberately unindexed',
-    `description: ${SCRATCH_KB_DRAIN_THEME_DESC}`,
+    'title: Scratch drain lesson — deliberately dangling edge',
+    // JSON.stringify = double-quoted YAML: the DESC contains an unquoted
+    // `: ` which would otherwise make gray-matter throw and route this
+    // fixture through the lenient fallback — the seed must be VALID yaml so
+    // the beat demos drain honesty, not parser-fallback trivia (the fallback
+    // path has its own unit pins in cli/theme-frontmatter.test.ts).
+    `description: ${JSON.stringify(SCRATCH_KB_DRAIN_THEME_DESC)}`,
     'category: pattern',
     'keywords: [e2e-journey, scratch-kb, kb-drain, drain-to-green]',
     `created_at: ${now}`,
     `updated_at: ${now}`,
-    'related_themes: []',
+    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}]`,
     '---',
     '',
     '# Theme: scratch drain lesson',
@@ -355,9 +367,12 @@ function seedScratchKbDrain() {
     SCRATCH_KB_DRAIN_THEME_DESC,
     '',
   ].join('\n'), 'utf8');
-  // patterns.md EXISTS (so checkProjectBrainIndexes doesn't instead flag
-  // "no category index files") but omits the theme's own link line — the
-  // finding the drain button is being asked to work on.
+  // patterns.md EXISTS and LISTS the theme — zero index-tier findings, so
+  // the drain's real auto pass has nothing it can (or should) fix and the
+  // ONLY finding is the agent-tier dangling edge above (W7 FIX-B-KB: the
+  // old missing-link shape is auto-healable now that ensureLinked targets
+  // the KB's own tree, which turned this beat's honest "no-progress" demo
+  // into a real green).
   writeFileSync(join(SCRATCH_KB_DRAIN_DIR, 'patterns.md'), [
     `# ${SCRATCH_KB_DRAIN_ID} — Patterns`,
     '',
@@ -365,7 +380,7 @@ function seedScratchKbDrain() {
     '',
     '## Theme pages',
     '',
-    '(deliberately empty — the e2e journey seeds this to demo the drain button reaching an honest terminal)',
+    `- [\`${SCRATCH_KB_DRAIN_THEME_SLUG}\`](./themes/${SCRATCH_KB_DRAIN_THEME_SLUG}.md) — ${SCRATCH_KB_DRAIN_THEME_DESC}`,
     '',
   ].join('\n'), 'utf8');
 }
@@ -1057,6 +1072,7 @@ export const journey = defineJourney({
               console.log('\n[S3.2] KB health — drain to green + index / OOTB brains');
               cleanScratchKbDrain(); // guard against leftover state from a prior crashed run
               seedScratchKbDrain();
+              try {
 
               const TERMINAL_DRAIN_STATES = ['green', 'needs-you', 'no-progress', 'round-cap', 'cost-ceiling', 'cancelled', 'failed', 'timed-out', 'unreadable'];
               const waitForTerminalDrainState = (p, timeout) => p.waitForFunction(
@@ -1105,8 +1121,11 @@ export const journey = defineJourney({
                   ({ state: drainState, runId: runIdBefore } = await readDrainAttrs(page));
                 } catch { /* checked below */ }
                 // Honesty rule: under FORGE_ARCHITECT_NO_SPAWN=1 the agent-tier turn never
-                // runs, so the seeded fixture's one agent-tier (checkProjectBrainIndexes)
-                // finding can never actually clear here — the only honest terminal this run
+                // runs, so the seeded fixture's one agent-tier (checkDanglingEdges — a
+                // dangling related_themes edge, NO auto/deterministic fixer; W7 FIX-B-KB
+                // moved the seed off the missing-index-link shape, which the own-tree
+                // index auto-fixer now legitimately heals to a real green) finding can
+                // never actually clear here — the only honest terminal this run
                 // can reach is 'no-progress' (nothing changed round-over-round). Asserting
                 // this exact state (not just "some terminal") kills a false 'green' that
                 // would mean an agent turn secretly ran under a harness meant to suppress it.
@@ -1134,7 +1153,12 @@ export const journey = defineJourney({
                 // drain run"), never a fake success. (The live-run Stop control's
                 // rendering is pinned by lib/kb-drain-panel-render.test.ts — a
                 // NO_SPAWN drain terminates too fast to click it deterministically.)
-                const cancelRes = await fetch(`${watch.bridgeUrl}/api/studio/kbs/${encodeURIComponent(SCRATCH_KB_DRAIN_ID)}/drain/cancel`, { method: 'POST' });
+                // W7 FIX-B-KB: like EVERY node-side POST in the journeys, this
+                // must carry the x-forge-csrf header the bridge's global
+                // anti-CSRF guard requires — without it the guard's 403 fires
+                // before the cancel route's own terminal check can answer 409
+                // (the gate regression: got 403, wanted 409).
+                const cancelRes = await fetch(`${watch.bridgeUrl}/api/studio/kbs/${encodeURIComponent(SCRATCH_KB_DRAIN_ID)}/drain/cancel`, { method: 'POST', headers: { 'x-forge-csrf': '1' } });
                 check(cancelRes.status === 409,
                   `kb-drain: POST .../drain/cancel on a terminal run refuses with 409 (got ${cancelRes.status}) — cancel is real and honest (knowledge-14)`);
 
@@ -1236,7 +1260,11 @@ export const journey = defineJourney({
                 holdTailMs: 1500,
               });
 
-              cleanScratchKbDrain();
+              } finally {
+                // Fixture rule 3 (W7 FIX-B-KB): swept even when a wait above
+                // throws mid-beat — never left for the boundary check.
+                cleanScratchKbDrain();
+              }
 
         },
       },
@@ -1510,6 +1538,7 @@ export const journey = defineJourney({
               console.log('\n[S3.4] KB maintenance — Consolidate drives a real lint reduction');
               cleanScratchKbMaintain(); // guard against leftover state from a prior crashed run
               seedScratchKbMaintain();
+              try {
 
               // Entry point: the Knowledge page's own KB selector, choosing the
               // freshly-seeded scratch KB — the real discovery point for maintaining an
@@ -1652,7 +1681,12 @@ export const journey = defineJourney({
               check(VALID_CHECK_STATUSES.includes(checkProjectBrainIndexesAfter), `kb-maintain: the named-check itemization still renders checkProjectBrainIndexes post-Consolidate (got "${checkProjectBrainIndexesAfter}")`);
               await frame(page, 'kb-maintain-3-healed', `Knowledge — Consolidate ran the real op=consolidate pipeline to a cleared terminal (checkProjectBrainIndexes observed status=${checkProjectBrainIndexesAfter}; the authoritative warn→pass flip is API-pinned)`, { key: true });
 
-              cleanScratchKbMaintain();
+              } finally {
+                // Fixture rule 3 (W7 FIX-B-KB): the beat owns ALL its state —
+                // the scratch KB is swept even when a wait above throws
+                // mid-beat, never left dirtying the tree for the boundary check.
+                cleanScratchKbMaintain();
+              }
 
         },
       },
@@ -1665,6 +1699,7 @@ export const journey = defineJourney({
               console.log('\n[R4-19-F2] KB cleanup — launcher + drafted session (dry-bridge replay)');
               cleanScratchKbCleanup(); // guard against leftover state from a prior crashed run
               seedScratchKbCleanup();
+              try {
 
               // Entry point: the Knowledge page's own KB selector, choosing the
               // freshly-seeded scratch KB — mirrors knowledge-kb-maintain-session's own
@@ -1692,21 +1727,62 @@ export const journey = defineJourney({
               } catch { /* checked below */ }
               check(kbReady, 'kb-cleanup-launch: the seeded scratch KB\'s page reaches data-page-ready="true" from the Knowledge selector');
 
+              // W7-B2 (knowledge-19/24): the KB actions left the page header —
+              // they live in the ONE gated action group on the Health tab now
+              // (KbActionGroup), exactly where kb-maintain-session clicks
+              // Consolidate. Switch there first (W7 FIX-B-KB: this beat used
+              // to look for the launcher on the Explore tab and found nothing).
+              await page.locator('[data-tab="health"]').click().catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-tab="health"]')?.getAttribute('data-tab-active') === 'true',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-component="kb-action-group"] [data-action="start-kb-cleanup"]') !== null,
+                null, { timeout: 10000 },
+              ).catch(() => {});
               const launcher = page.locator('[data-component="kb-action-group"] [data-action="start-kb-cleanup"]');
               check(await launcher.count() > 0, 'kb-cleanup-launch: the "Cleanup plan" launcher ([data-action="start-kb-cleanup"]) renders in the KB-actions group, next to Consolidate');
-              await frame(page, 'kb-cleanup-0-entry', 'Knowledge — the seeded scratch KB, the Cleanup plan launcher visible beside Consolidate');
+              await frame(page, 'kb-cleanup-0-entry', 'Knowledge — the seeded scratch KB, the Cleanup plan launcher beside Consolidate on the Health tab');
 
-              // Real POST — capture the response the form itself never surfaces
-              // (mirrors knowledge-create-kb / knowledge-create-kb-band-scope's own
-              // waitForResponse-before-click idiom).
+              // W7-B2 (knowledge-33), as-built truth: the launcher ROUTES to
+              // the ONE kickoff form (/sessions/kb-cleanup/new?kb=<id> —
+              // model choice included) instead of POSTing directly; the POST
+              // to /api/studio/kbs/:id/cleanup/start is now the form's own
+              // submit. Drive it exactly like the operator would.
+              await caption(page, 'Cleanup plan — the launcher opens the one kickoff form, KB pre-selected.');
+              await launcher.click().catch(() => {});
+              let kickoffReady = false;
+              try {
+                await page.waitForFunction(
+                  () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true'
+                    && document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-kickoff-kind') === 'kb-cleanup',
+                  null, { timeout: 15000 },
+                );
+                kickoffReady = true;
+              } catch { /* checked below */ }
+              check(kickoffReady, 'kb-cleanup-launch: the launcher routes to the ONE kickoff form ([data-page="session-kickoff"][data-kickoff-kind="kb-cleanup"], knowledge-33)');
+              const prefilledKb = await page.evaluate(() => document.querySelector('[data-field="kickoff-kb"]')?.value ?? '');
+              check(prefilledKb === SCRATCH_KB_CLEANUP_ID, `kb-cleanup-launch: the launcher's ?kb= prefill seeds the form's KB select (got "${prefilledKb}")`);
+              await frame(page, 'kb-cleanup-0b-kickoff', 'Sessions — the kb-cleanup kickoff form: KB pre-selected, model tier included, one Start button');
+
+              // Route-level pin (W7 FIX-B-KB): the form's submit is the SAME
+              // API path the old direct launcher used — capture its response
+              // (mirrors knowledge-create-kb / knowledge-create-kb-band-scope's
+              // waitForResponse-before-click idiom) and hold it to the real
+              // {sessionId, project} contract.
               const startRespPromise = page.waitForResponse((r) => {
                 try {
                   const u = new URL(r.url());
                   return /^\/api\/studio\/kbs\/[^/]+\/cleanup\/start$/.test(u.pathname) && r.request().method() === 'POST';
                 } catch { return false; }
               }, { timeout: 12000 }).catch(() => null);
-              await caption(page, 'Cleanup plan — a real POST starts a drafting session for this KB.');
-              await launcher.click().catch(() => {});
+              await caption(page, 'Start session — a real POST starts a drafting session for this KB.');
+              await page.waitForFunction(() => {
+                const b = document.querySelector('[data-action="start-session"]');
+                return b !== null && !b.hasAttribute('disabled');
+              }, null, { timeout: 10000 }).catch(() => {});
+              await page.locator('[data-action="start-session"]').click().catch(() => {});
               const startResp = await startRespPromise;
               let sid = '', sessionProject = '';
               if (startResp) {
@@ -1723,7 +1799,9 @@ export const journey = defineJourney({
 
               if (!sid) { return; }
 
-              await page.goto(`${watch.uiUrl}/sessions/kb-cleanup/${encodeURIComponent(sid)}?project=${encodeURIComponent(sessionProject)}`, { waitUntil: 'domcontentloaded' });
+              // The kickoff form itself navigates into the new session on
+              // success (router.push /sessions/kb-cleanup/<sid>?project=…) —
+              // wait for that real landing, no manual goto.
               let sessionReady = false;
               try {
                 await page.waitForFunction(
@@ -1732,7 +1810,7 @@ export const journey = defineJourney({
                 );
                 sessionReady = true;
               } catch { /* checked below */ }
-              check(sessionReady, `kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/${sid}`);
+              check(sessionReady, `kb-cleanup-launch: the kickoff form lands on the real session at /sessions/kb-cleanup/${sid}`);
 
               const phaseBefore = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
               check(phaseBefore === 'drafting', `kb-cleanup-launch: under FORGE_DRY_BRIDGE=1 the start route writes phase="drafting" and returns WITHOUT spawning an agent (got "${phaseBefore}") — a real drafted plan never appears on its own here`);
@@ -1801,6 +1879,17 @@ export const journey = defineJourney({
                 'kb-cleanup-launch: no reject button — kb-cleanup declares no rejection path');
               await frame(page, 'kb-cleanup-2-plan-review', 'Sessions — kb-cleanup: the real captured plan replayed, both actions honestly unknown, approve offered', { key: true });
 
+              } finally {
+                // Fixture rule 3 (W7 FIX-B-KB): the beat owns ALL its state.
+                // On any path that does NOT hand a live session to
+                // knowledge-kb-cleanup-approve (a throw, the early return on
+                // a failed POST), sweep the scratch KB + its .kb-<id> anchor
+                // NOW — this exact leak (brain/journey-scratch-kb-cleanup
+                // left behind) was the gate's tree-dirtied evidence. On the
+                // handoff path the approve beat's own finally sweeps.
+                if (!kbCleanupSessionId) cleanScratchKbCleanup();
+              }
+
         },
       },
       {
@@ -1810,6 +1899,7 @@ export const journey = defineJourney({
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               console.log('\n[R4-19-F2] KB cleanup — approve + apply');
+              try {
               if (!kbCleanupSessionId || !kbCleanupSessionProject) {
                 check(false, 'kb-cleanup-approve: kbCleanupSessionId/kbCleanupSessionProject available (precondition, set by knowledge-kb-cleanup-launch)');
                 return;
@@ -1848,9 +1938,15 @@ export const journey = defineJourney({
                 await frame(page, 'kb-cleanup-3-apply-error', `Sessions — kb-cleanup: Approve & apply surfaced an error verbatim: "${errorText.trim()}"`, { key: true });
               }
 
-              cleanScratchKbCleanup();
-              kbCleanupSessionId = null;
-              kbCleanupSessionProject = null;
+              } finally {
+                // Fixture rule 3 (W7 FIX-B-KB): ALWAYS swept — including the
+                // precondition early-return and any mid-beat throw, both of
+                // which used to leak brain/journey-scratch-kb-cleanup + the
+                // .kb-<id> session anchor onto the post-run boundary check.
+                cleanScratchKbCleanup();
+                kbCleanupSessionId = null;
+                kbCleanupSessionProject = null;
+              }
 
         },
       },
