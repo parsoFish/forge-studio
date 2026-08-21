@@ -123,16 +123,18 @@ export const journey = defineJourney({
           document.querySelector('[data-component="flows-grid"]')?.getAttribute('data-flow-visible-count'));
         check(visibleCount === String(cardIds.length),
           `FOB.filter: data-flow-visible-count mirrors the rendered grid (${visibleCount} vs ${cardIds.length})`);
-        // Type a needle that matches only forge-develop; the grid narrows and
+        // Type a needle that matches only forge-develop ("develop" would ALSO
+        // hit forge-architect's goal — "ready for Develop to execute" — so use
+        // a token unique to the develop flow's goal); the grid narrows and
         // the count tells automation so without card-scraping.
-        await page.locator('[data-field="flows-filter"]').fill('develop').catch(() => {});
+        await page.locator('[data-field="flows-filter"]').fill('adversarial').catch(() => {});
         await page.waitForFunction(
           () => document.querySelector('[data-component="flows-grid"]')?.getAttribute('data-flow-visible-count') === '1',
           null, { timeout: 5000 },
         ).catch(() => {});
         const narrowed = await page.evaluate(() =>
           document.querySelector('[data-component="flows-grid"]')?.getAttribute('data-flow-visible-count'));
-        check(narrowed === '1', `FOB.filter: typing "develop" narrows the grid to 1 card (data-flow-visible-count="${narrowed}")`);
+        check(narrowed === '1', `FOB.filter: typing "adversarial" narrows the grid to 1 card (data-flow-visible-count="${narrowed}")`);
         await frame(page, 'fob-0b-filter', 'FOB — the flows filter narrows the grid; data-flow-visible-count mirrors it');
         await page.locator('[data-field="flows-filter"]').fill('').catch(() => {});
 
