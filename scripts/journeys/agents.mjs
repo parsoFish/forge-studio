@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, READ, SK_NEW_SLUG,
+  seedThroughlineSkillFixture,
   // R6-06 Task 3 — the agent-history-ledger beat's three fixtures:
   //   - flow-node: real _queue/_logs manifest, hand-authored below (mirrors
   //     archEvent's own JSONL-append style, no existing helper for this
@@ -549,6 +550,20 @@ export const journey = defineJourney({
               // ── A-scratch: COMPOSE A BRAND-NEW AGENT FROM SCRATCH ─────────────────────
               console.log('\n[A-scratch] Compose a brand-new agent from scratch');
               cleanScratchAgent();
+              // W7-FIX-B-UI: self-containment — in the FULL walkthrough, SK-3
+              // (skills/skills-create) authored SK_NEW_SLUG through the real
+              // /skills/new form and this is a strict no-op; under a scoped
+              // `--journey` run without the skills journey the throughline
+              // skill would not exist and the chip lookup below would time
+              // out, aborting the whole run (gateB2 2026-08-21). Seeding the
+              // exact plain-skill shape the create route writes keeps the
+              // R3-01-F2 claim real either way: the file lands AFTER the
+              // bridge booted, so the palette chip still proves live
+              // filesystem discovery with no restart. The runner's finally
+              // sweeps it via cleanSkillArtifacts() (scoped runs included).
+              if (seedThroughlineSkillFixture()) {
+                console.log(`  [A-scratch] scoped run: seeded skills/${DND_SKILL_ID}/SKILL.md (skills journey not in this run's scope)`);
+              }
 
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(

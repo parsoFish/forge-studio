@@ -1455,6 +1455,46 @@ export const SK_NEW_SLUG = 'api-contract-review';   // = name.toLowerCase().repl
 export const SK_CLIP_NAME = 'API contract review clip';
 export const SK_CLIP_SLUG = 'api-contract-review-clip';
 
+/**
+ * Seed the walkthrough's throughline skill (SK_NEW_SLUG) when the skills
+ * journey has not authored it — W7-FIX-B-UI. agents/agents-scratch-build
+ * composes this skill into the from-scratch agent as a live palette chip
+ * (R3-01-F2 filesystem discovery). In the FULL walkthrough, skills/
+ * skills-create (SK-3) authors it through the real /skills/new form and this
+ * is a strict no-op; under a scoped `--journey` run without the skills
+ * journey, the beat seeds it here so every journey stays self-contained
+ * (the ordering contract in scripts/journeys/index.mjs). The written shape
+ * mirrors POST /api/studio/skills (cli/bridge-studio-skills.ts): frontmatter
+ * name/description/`library: true`, NO runtime block — the exact plain-skill
+ * shape orchestrator/studio/registry.ts listPlainSkills unions into the
+ * palette, pinned by scripts/journey-scoped-selfcontainment.test.ts against
+ * that real scanner. Cleanup is unchanged: the runner's finally sweeps
+ * SK_NEW_SLUG via cleanSkillArtifacts() on every run, scoped or full.
+ *
+ * @param {string} [root] forge root (parameterised for the pin test)
+ * @returns {boolean} true if this call seeded the fixture, false no-op
+ */
+export function seedThroughlineSkillFixture(root = FORGE_ROOT) {
+  const dir = join(root, 'skills', SK_NEW_SLUG);
+  const skillMdPath = join(dir, 'SKILL.md');
+  if (existsSync(skillMdPath)) return false; // SK-3 (or a prior seed) owns it
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(skillMdPath, [
+    '---',
+    `name: ${SK_NEW_NAME}`,
+    'description: Review an API surface for contract-breaking changes before merge.',
+    'library: true',
+    '---',
+    '',
+    `# ${SK_NEW_NAME}`,
+    '',
+    'Review the proposed API change against the last published contract.',
+    'Flag removed fields, renamed endpoints, and narrowed types as breaking.',
+    '',
+  ].join('\n'));
+  return true;
+}
+
 // Byte-stash of the real skill under edit (mirrors patchDemoProcess /
 // restoreProjectJson): module-level so BOTH the beat's own tail and the
 // runner's finally (which routes through cleanSkillArtifacts) can restore

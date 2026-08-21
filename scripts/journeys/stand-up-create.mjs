@@ -298,8 +298,8 @@ export const journey = defineJourney({
       },
       {
         id: 'su-create-library',
-        title: 'Everything is data — projects index, Library shelves, Home attention strip',
-        narration: 'With a brand-new project just stood up from nothing, its own index page renders it as a real data card, the rebuilt Library page renders its five shelves (skills/hooks/connections/templates/community, W6-IA-4) as real registry data, and Home\'s cross-project attention strip still surfaces this project. (W6-IA-4: Library is shelves-only now — the flows/agents/projects/knowledge shelves this beat used to check on /library moved onto their own real index routes; /flows and /agents each get their own dedicated journey coverage, so this beat checks /projects — the one index route with no other dedicated journey file yet — plus the rebuilt Library shelves and Home\'s attention strip.)',
+        title: 'Everything is data — projects index, Library shelves, Home attention strips',
+        narration: 'With a brand-new project just stood up from nothing, its own index page renders it as a real data card, the rebuilt Library page renders its five shelves (skills/hooks/connections/templates/community, W6-IA-4) as real registry data, and Home\'s cross-project attention surfaces stay honest: W7-B1 split them into two NAMED strips that render ONLY on a real condition — no project is gated here (this journey\'s stand-ups are contract-green by design), so the gate strip stays absent, while the repo\'s standing KB lint debt fires "Knowledge bases needing attention" with rows that link straight to their owning surface. (W6-IA-4: Library is shelves-only now — the flows/agents/projects/knowledge shelves this beat used to check on /library moved onto their own real index routes; /flows and /agents each get their own dedicated journey coverage, so this beat checks /projects — the one index route with no other dedicated journey file yet — plus the rebuilt Library shelves and Home\'s attention strips.)',
         drive: async (ctx) => {
               const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -367,20 +367,30 @@ export const journey = defineJourney({
               check(await page.locator('[data-action="kb-crosslink"]').count() === 0,
                 'library: the KB cross-link card is removed (W7-B4 library-02 — the nav owns Knowledge)');
 
-              // ── A1.3: cross-project attention strip — now lives on Home (R4-11-F4 + W6-IA-4) ─
-              // mdtoc is a standing, always-registered fixture (checked into the repo,
-              // not created/cleaned by any beat) so the strip always has ≥1 item here.
-              console.log('\n[A1.3] Home — cross-project attention strip');
+              // ── A1.3: cross-project attention — now lives on Home (R4-11-F4 + W6-IA-4) ─
+              // W7-B1 (home-sessions-01/02) split Home's attention into TWO
+              // NAMED strips, each rendering ONLY when its own real condition
+              // fires (never on mere existence — home-view.ts's
+              // buildHomeAttention/buildKbAttention): `attention-strip`
+              // (project gate rows) and `kbs-needing-attention` (KB lint
+              // rows). This journey's environment has NO gated project — the
+              // projects it stands up are contract-green by design — so the
+              // gate strip honestly does not render (W7-FIX-B-UI; gateB2
+              // 2026-08-21). What IS real here is the standing KB lint debt
+              // the repo's own brains carry, so the KB strip is the one this
+              // beat asserts; the deep two-strip coverage (seeded gated
+              // project + seeded lint-flagged KB) lives in home.mjs HOME.2.
+              console.log('\n[A1.3] Home — cross-project attention (KBs needing attention)');
               await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 20000 },
               ).catch(() => {});
-              await countAtLeast(page, '[data-section="attention-strip"]', 1, 'home: [data-section="attention-strip"] present');
-              await countAtLeast(page, '[data-attention-item]', 1, 'home: ≥1 [data-attention-item] in the attention strip');
+              await countAtLeast(page, '[data-section="kbs-needing-attention"]', 1, 'home: [data-section="kbs-needing-attention"] present (W7-B1 named strip; real KB lint flags fire it)');
+              await countAtLeast(page, '[data-attention-item]', 1, 'home: ≥1 [data-attention-item] in the attention strips');
               const attentionLink = await page.evaluate(() =>
                 document.querySelector('[data-attention-item]')?.getAttribute('href') ?? '');
-              check(/^\/(projects\/[^/]+|knowledge\?id=[^/]+)$/.test(attentionLink),
+              check(/^\/(projects\/[^/]+|knowledge\?id=[^/]+(&tab=[a-z-]+)?)$/.test(attentionLink),
                 `home: attention item links through to its owning project or KB surface (got "${attentionLink}")`);
 
         },
