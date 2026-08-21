@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { startInstructions } from '@/lib/bridge-client';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * Standing-instructions panel, bound to the project's **AGENTS.md** as the single
@@ -86,7 +87,7 @@ export function Instructions({
         className="btn btn-sm"
         data-action="launch-instructions"
         onClick={() => void onLaunch()}
-        disabled={launching}
+        {...disabledAttrs(launching ? 'Launching the instructions session…' : null)}
         style={{ opacity: launching ? 0.6 : 1 }}
       >
         {launching ? 'Starting…' : 'start another'}
@@ -98,7 +99,7 @@ export function Instructions({
       className="btn btn-primary"
       data-action="launch-instructions"
       onClick={() => void onLaunch()}
-      disabled={launching}
+      {...disabledAttrs(launching ? 'Launching the instructions session…' : null)}
       style={{ alignSelf: 'flex-start', opacity: launching ? 0.6 : 1 }}
     >
       {launching ? 'Starting…' : fileBound ? `✦ Edit ${fileName} with the instructions agent` : '✦ Generate AGENTS.md with the instructions agent'}

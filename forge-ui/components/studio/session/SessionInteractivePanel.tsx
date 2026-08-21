@@ -7,6 +7,7 @@ import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import type { EventLogEntry } from '@/lib/bridge-client';
 import { modelChipLabel } from '@/lib/model-chip';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -343,7 +344,7 @@ export function SessionInteractivePanel({
                 type="button"
                 className="btn btn-primary"
                 data-action="submit-answers"
-                disabled={busy}
+                {...disabledAttrs(busy ? 'Submitting…' : null)}
                 onClick={() => void submit(affordance, { answers: [{ question: 'Operator response', answer: answerText.trim() }] })}
                 style={{ opacity: busy ? 0.5 : 1 }}
               >
@@ -427,7 +428,7 @@ export function SessionInteractivePanel({
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-approve"
-                    disabled={approveDisabled}
+                    {...disabledAttrs(busy ? 'Submitting…' : !shapeResolved ? 'The draft’s shape is still resolving' : !requiresSatisfied ? 'Fill in every field this verdict requires first' : null)}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'approve',

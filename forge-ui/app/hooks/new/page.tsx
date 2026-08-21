@@ -6,6 +6,7 @@ import { StudioPage } from '@/components/StudioPage';
 import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createHook, HOOK_LIFECYCLE_EVENTS, type HookLifecycleEvent } from '@/lib/hook-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Hook builder — /hooks/new (R3-03-F4). Mirrors /skills/new exactly. Author
@@ -135,7 +136,7 @@ export default function HookBuilderPage() {
           {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn btn-primary" data-action="create-hook" onClick={() => void onSubmit()}
-              disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+              {...disabledAttrs(saving ? 'Creating…' : !canSubmit ? 'Fill in the required fields first' : null)} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
               {saving ? 'Creating…' : 'Create hook →'}
             </button>
             {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, description + script are required.</span>}

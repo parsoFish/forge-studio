@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { startAuthoring } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * R4-21 T3 (BLOCKER-2 fix) — the entry point into the creation-agent
@@ -96,7 +97,7 @@ export function AuthoringLauncher({
       )}
       <button
         onClick={() => void onSubmit()}
-        disabled={!canSubmit}
+        {...disabledAttrs(submitting ? 'Starting the creation agent…' : !project.trim() ? 'Pick a project first' : !prompt.trim() ? 'Describe what the agent should build first' : null)}
         data-action="start-authoring"
         className="btn btn-primary"
         style={{ opacity: canSubmit ? 1 : 0.5 }}

@@ -22,6 +22,7 @@ import {
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Connection detail — /connections/[id] (R3-04-F2/F3). Four distinct
@@ -307,7 +308,7 @@ function InstallSection({
 
       {connection.installable && (
         <div>
-          <button type="button" className="btn btn-primary" data-action="install-connection" onClick={onInstall} disabled={installing}>
+          <button type="button" className="btn btn-primary" data-action="install-connection" onClick={onInstall} {...disabledAttrs(installing ? 'Installing…' : null)}>
             {installing ? 'Installing…' : 'Install'}
           </button>
         </div>

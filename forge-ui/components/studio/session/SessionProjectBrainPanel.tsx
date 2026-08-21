@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { projectBrainBrief, projectBrainApprove, projectBrainAbandon, type ProjectBrainSession } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // SessionProjectBrainPanel — the project-brain kind's live interactive
@@ -75,7 +76,7 @@ export function SessionProjectBrainPanel({
             placeholder="Focus / guidance (optional)"
             style={textarea}
           />
-          <button data-action="start-brain-analysis" disabled={busy} onClick={() => void startAnalysis()} style={primaryBtn}>
+          <button data-action="start-brain-analysis" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void startAnalysis()} style={primaryBtn}>
             {busy ? 'Starting…' : 'Start analysis →'}
           </button>
         </div>
@@ -101,7 +102,7 @@ export function SessionProjectBrainPanel({
             </details>
           ))}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button data-action="approve-brain" disabled={busy} onClick={() => void approve()} style={primaryBtn}>
+            <button data-action="approve-brain" {...disabledAttrs(busy ? 'Working…' : null)} onClick={() => void approve()} style={primaryBtn}>
               {busy ? 'Committing…' : 'Approve + commit'}
             </button>
             <button data-action="abandon-brain" disabled={busy} onClick={() => void abandon()} style={ghostBtn}>

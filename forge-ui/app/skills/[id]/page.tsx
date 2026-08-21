@@ -20,6 +20,7 @@ import {
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /** Strip the leading YAML frontmatter block from a SKILL.md's raw bytes —
  *  the edit form edits the CONTENT; name/description are their own fields
@@ -276,7 +277,7 @@ export default function SkillDetailPage() {
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn btn-primary btn-sm" data-action="save-skill-edit" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editName.trim()}>
+                  <button type="button" className="btn btn-primary btn-sm" data-action="save-skill-edit" onClick={() => void handleSaveEdit()} {...disabledAttrs(savingEdit ? 'Saving…' : !editName.trim() ? 'Give the skill a name first' : null)}>
                     {savingEdit ? 'Saving…' : 'Save changes'}
                   </button>
                   <button type="button" className="btn btn-sm" data-action="cancel-skill-edit" onClick={toggleEdit} disabled={savingEdit}>
@@ -422,7 +423,7 @@ function SkillDetailBody({
               className="btn btn-primary"
               data-action="approve-skill"
               onClick={onApprove}
-              disabled={approving}
+              {...disabledAttrs(approving ? 'Approving…' : null)}
             >
               {approving ? 'Approving…' : 'Approve'}
             </button>

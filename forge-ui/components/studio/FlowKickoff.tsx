@@ -9,6 +9,7 @@ import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { startFlowRun } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import type { KickoffCandidate } from '@/lib/kickoff-candidates';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 export type { KickoffCandidate } from '@/lib/kickoff-candidates';
 
@@ -185,7 +186,7 @@ function GenericKickoff({
           </option>
         ))}
       </select>
-      <button data-action="start-run" disabled={submitting} onClick={() => void start()} style={launchButtonStyle}>
+      <button data-action="start-run" {...disabledAttrs(submitting ? 'Starting the run…' : null)} onClick={() => void start()} style={launchButtonStyle}>
         {submitting ? 'Starting…' : 'Start Run'}
       </button>
       {candidates.length === 0 && (

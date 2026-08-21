@@ -24,6 +24,7 @@ import { buildHookDetailView, type HookDetailView } from '@/lib/hook-library-vie
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Hook detail — /hooks/[id] (R3-03-F4). Three distinct outcomes, never
@@ -255,7 +256,7 @@ export default function HookDetailPage() {
                   longer match, and that is the honest state.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn btn-primary btn-sm" data-action="save-hook-edit" onClick={() => void handleSaveEdit()} disabled={savingEdit || !editName.trim()}>
+                  <button type="button" className="btn btn-primary btn-sm" data-action="save-hook-edit" onClick={() => void handleSaveEdit()} {...disabledAttrs(savingEdit ? 'Saving…' : !editName.trim() ? 'Give the hook a name first' : null)}>
                     {savingEdit ? 'Saving…' : 'Save changes'}
                   </button>
                   <button type="button" className="btn btn-sm" data-action="cancel-hook-edit" onClick={toggleEdit} disabled={savingEdit}>
@@ -374,7 +375,7 @@ function HookDetailBody({
           <SectionLabel>Approval</SectionLabel>
           {canApprove && (
             <div>
-              <button type="button" className="btn btn-primary" data-action="approve-hook" onClick={onApprove} disabled={approving}>
+              <button type="button" className="btn btn-primary" data-action="approve-hook" onClick={onApprove} {...disabledAttrs(approving ? 'Approving…' : null)}>
                 {approving ? 'Approving…' : 'Approve'}
               </button>
             </div>

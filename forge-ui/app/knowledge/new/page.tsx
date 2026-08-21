@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { createKb, deriveKbBandOptions, fetchStudioFlows, fetchStudioProjects } from '@/lib/studio-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // New knowledge base — create form (ADR-033 / J6; R1-01 binding contract).
@@ -129,7 +130,7 @@ export default function NewKbPage() {
           {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn btn-primary" data-action="create-kb" onClick={() => void onSubmit()}
-              disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+              {...disabledAttrs(saving ? 'Creating…' : !canSubmit ? 'Fill in the required fields first' : null)} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
               {saving ? 'Creating…' : 'Create knowledge base →'}
             </button>
             {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>A name and a binding are required.</span>}

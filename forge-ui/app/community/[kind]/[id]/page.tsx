@@ -24,6 +24,7 @@ import { installStateLabel, signalsLabel, hubLabel, installActionForItem } from 
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Community item detail — /community/[kind]/[id] (R3-07-F1). The pre-install
@@ -494,7 +495,7 @@ function InstallSection({
             data-action="install-community-item"
             data-install-routed-to={routedTo}
             onClick={onInstall}
-            disabled={installing}
+            {...disabledAttrs(installing ? 'Installing…' : null)}
           >
             {installing ? 'Installing…' : 'Install'}
           </button>
@@ -524,7 +525,7 @@ function InstallSection({
                 setConfirmingInstall(false);
                 onInstall();
               }}
-              disabled={installing}
+              {...disabledAttrs(installing ? 'Installing…' : null)}
             >
               {installing ? 'Installing…' : confirmingInstall ? 'Yes, run npm install' : 'Install…'}
             </button>

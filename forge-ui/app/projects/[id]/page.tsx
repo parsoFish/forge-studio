@@ -51,6 +51,7 @@ import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * W7-B6 (projects-27): per-cycle cost totals from `GET /api/cost/<cycleId>`
@@ -485,7 +486,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
           className="btn btn-primary"
           data-action="save-project"
           onClick={() => void handleSave()}
-          disabled={saving || !dirty}
+          {...disabledAttrs(saving ? 'Saving…' : !dirty ? 'No unsaved changes' : null)}
         >
           {saving ? 'Saving…' : 'Save project'}
         </button>
@@ -959,7 +960,7 @@ function ProjectOnboardForm() {
           {!failing && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button className="btn btn-primary" data-action="onboard-project" onClick={() => void onSubmit()}
-                disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+                {...disabledAttrs(saving ? 'Onboarding…' : !canSubmit ? 'Fill in the required fields first' : null)} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
                 {saving ? 'Onboarding…' : 'Onboard project →'}
               </button>
               {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, quality gate, and north star are required.</span>}
@@ -1242,7 +1243,7 @@ function RoadmapView({
                     <button
                       className="btn btn-sm btn-primary"
                       data-action="actionable-start"
-                      disabled={dev === 'starting' || dev === 'started'}
+                      {...disabledAttrs(dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Already started — open the run to follow it' : null)}
                       onClick={() => void startOne(row.initiativeId)}
                     >
                       {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}

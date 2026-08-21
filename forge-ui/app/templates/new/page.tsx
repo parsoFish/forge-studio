@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { createTemplate } from '@/lib/template-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Template builder — /templates/new (W7-B4, library-17/library-01). A
@@ -151,7 +152,7 @@ export default function TemplateBuilderPage() {
             className="btn btn-primary"
             data-action="create-template"
             onClick={() => void onSubmit()}
-            disabled={!canSubmit || saving}
+            {...disabledAttrs(saving ? 'Creating…' : !canSubmit ? 'Fill in the required fields first' : null)}
             style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}
           >
             {saving ? 'Creating…' : 'Create template →'}

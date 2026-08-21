@@ -67,6 +67,7 @@ import { StandingTriggers } from './StandingTriggers';
 import type { StandingTrigger } from '@/lib/standing-triggers';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -439,7 +440,7 @@ export function RunPanel({
         data-action="run-agent"
         data-run-ceiling={resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable) ?? ''}
         onClick={() => void onRun()}
-        disabled={controlsDisabled}
+        {...disabledAttrs(controlsDisabled ? (standaloneBlockedReason || blockedMessage || (dispatching ? 'Dispatching…' : runningNow ? 'A run is already in flight' : 'Save the agent (no unsaved changes) to run it')) : null, 'Dispatch this agent standalone')}
         title={standaloneBlockedReason || blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
       >
         {dispatching

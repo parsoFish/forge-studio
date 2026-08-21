@@ -78,6 +78,7 @@ import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -796,7 +797,7 @@ export default function AgentBuilderPage() {
               id="btn-save"
               data-action="save-agent"
               onClick={() => void handleSave()}
-              disabled={saving}
+              {...disabledAttrs(saving ? 'Saving the agent…' : null)}
             >
               {saving ? 'Saving…' : 'Save agent'}
             </button>

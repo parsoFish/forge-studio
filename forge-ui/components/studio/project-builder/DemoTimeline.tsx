@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DemoStep } from '@/lib/studio-client';
 import { startDemoBuilder, listDemoElements, type DemoElementSummary } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 const KIND_META: Record<string, { icon: string; label: string }> = {
   capture: { icon: '📸', label: 'Capture' },
@@ -197,7 +198,7 @@ export function DemoTimeline({
             data-action="launch-demo-builder"
             data-demo-mode={hasLockedDemo ? 'update' : 'create'}
             onClick={() => void onLaunchDemoBuilder()}
-            disabled={launching}
+            {...disabledAttrs(launching ? 'Launching the demo builder…' : null)}
             style={{ alignSelf: 'flex-start', marginBottom: 14, opacity: launching ? 0.6 : 1 }}
           >
             {launching ? 'Starting…' : hasLockedDemo ? '✦ Update the demo with the agent' : '✦ Build the demo with the agent'}

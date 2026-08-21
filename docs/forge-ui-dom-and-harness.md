@@ -86,11 +86,11 @@ inventory rather than one shared page-level contract:
   | contract | owner | pinned by |
   | --- | --- | --- |
   | per-route `<title>` — `"<parts…> · forge"`, never the bare `forge` every route shared before | `lib/document-title.ts` (`formatDocumentTitle` / `useDocumentTitle`; both shells call it, bespoke pages call it themselves) | `lib/route-chrome.test.ts` **enumerates every `app/**/page.tsx`** and fails on a route with no title (the quantifier, not a sample) + `lib/document-title.test.ts` + the `home-crosscut-chrome` beat |
-| a labelled breadcrumb trail on every DETAIL route (a dynamic-segment route is reached by drilling in, so it must offer the way back out) | `components/Breadcrumbs.tsx`; the run pages keep their own richer `nav[aria-label="Run breadcrumb"]` | `lib/route-chrome.test.ts` (enumerated) + `lib/breadcrumbs-render.test.ts` |
-| every `<main>` declares `id="main-content"` | `lib/main-landmark.ts` | `lib/main-landmark.test.ts` (rendered output + an enumeration of every `<main>` in `app/` and `components/`) |
+  | a labelled breadcrumb trail on every DETAIL route (a dynamic-segment route is reached by drilling in, so it must offer the way back out) | `components/Breadcrumbs.tsx`; the run pages keep their own richer `nav[aria-label="Run breadcrumb"]` | `lib/route-chrome.test.ts` (enumerated) + `lib/breadcrumbs-render.test.ts` |
+  | every `<main>` declares `id="main-content"` | `lib/main-landmark.ts` | `lib/main-landmark.test.ts` (rendered output + an enumeration of every `<main>` in `app/` and `components/`) |
   | exactly one `<h1>` per route | `components/PageHeader.tsx` via the shells | `home-crosscut-chrome` |
-  | `--faint` ≥ 4.5:1 (AA) on `--bg`/`--panel`/`--panel-2`; `--accent` defined; a GLOBAL `:focus-visible` ring (not scoped to `.btn/.chip/.tab/a`, so native inputs get one) | `app/globals.css` | `lib/a11y-tokens.test.ts` (computed from the real stylesheet) |
-  | disabled primary CTAs always say why — `data-disabled-reason` + a matching `title` | each CTA's own `disabledReason` derivation | the owning route's journey beat |
+  | `--faint` ≥ 4.5:1 (AA) on `--bg`/`--bg-2`/`--panel`/`--panel-2`; `--accent` ≥ 4.5:1 as text AND `--accent-fg` ≥ 4.5:1 painted ON it (defining `--accent` put #fff on #ff9e4a = 2.05:1); no `#fff` label on a `--accent`/`--faint` fill; a GLOBAL `:focus-visible` ring (not scoped to `.btn/.chip/.tab/a`, so native inputs get one) | `app/globals.css` | `lib/a11y-tokens.test.ts` (computed from the real stylesheet) |
+  | disabled primary CTAs always say why — `data-disabled-reason` + a matching `title` | ONE derivation: `{...disabledAttrs(cond ? 'why' : null)}` (`lib/disabled-reason.ts`) drives `disabled`, `title` and the attribute together, so they cannot disagree | `scripts/check-disabled-reason.mjs` — a CI ratchet over every disabled primary CTA (it shipped as an unenforced convention that ~29 CTAs violated, including the PR that introduced it) + `lib/disabled-reason.test.ts` |
   | no horizontal scroll at a 740px viewport | — | `home-crosscut-chrome` |
 
   Harness coverage is split breadth/depth: `scripts/e2e-deadpaths.mjs` checks
@@ -3944,6 +3944,22 @@ sessions, cycle logs, queue manifests, the scratch flow it authored, any
 Plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
 (`npm run ui:deadpaths`), the dead-route/no-op sweep, sharing the same
 assertion module.
+
+**Which harness runs in CI, and why the split** (W7-C3 review, T1 ruling).
+`e2e-deadpaths` IS a CI job (`deadpaths` in
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) alongside
+`ui-walkthrough`: both boot `forge studio` through the shared
+[`scripts/lib/boot-studio.mjs`](./scripts/lib/boot-studio.mjs), so the second
+job costs one more runner. It was NOT in CI before, and that is precisely how
+three structural a11y assertions added to it shipped broken — **assertions
+added to a harness nothing runs are decoration.** `ui:journey` deliberately
+stays OUT: 17 journeys, host-global ports 4123/4124 and a full regeneration
+of `demos/e2e/` make it a wave/manual gate, run by the operator (or a wave
+gate agent) rather than per PR. A journey change is therefore verified by
+reading the beat plus a unit test over the harness's own pure assertion
+logic — see [`scripts/crosscut-chrome-beat.test.ts`](./scripts/crosscut-chrome-beat.test.ts),
+which cross-checks the `home-crosscut-chrome` beat's declared `data-page`
+values against the routes that actually render them.
 
 **Story-beat parity** — the studio end-state mockup's 27 scripted stories
 ([`mockups/studio-endstate-v2/journeys-data.jsx`](./mockups/studio-endstate-v2/journeys-data.jsx))

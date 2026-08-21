@@ -41,6 +41,7 @@ import {
 import { pollAgentFix, pollDisplayState, type PolledAgentFixStatus, type PollDisplayState } from '@/lib/agent-dispatch';
 import { consolidateResultLabel } from '@/lib/kb-consolidate';
 import type { KbDrainDisplayState } from '@/lib/kb-drain-view';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 const ACTIVE_JOB_POLL_MS = 5000;
 
@@ -310,7 +311,7 @@ export function KbActionGroupView({
       )}
 
       <div style={row}>
-        <button data-action="drain-to-green" style={{ ...primaryBtn, opacity: gated ? 0.55 : 1 }} disabled={gated} onClick={onDrain} title={gateReason ?? undefined}>
+        <button data-action="drain-to-green" style={{ ...primaryBtn, opacity: gated ? 0.55 : 1 }} {...disabledAttrs(gated ? (gateReason ?? (busy !== null ? `${busy} is running…` : 'attaching to the running drain…')) : null)} onClick={onDrain} title={gateReason ?? undefined}>
           {busy === 'drain' ? 'Starting…' : drainState === 'running' ? 'Draining…' : 'Drain to green'}
         </button>
         <span style={explain}>

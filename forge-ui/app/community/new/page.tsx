@@ -13,6 +13,7 @@ import {
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Registry item form — /community/new (W7-B3, community-23). Add a curated
@@ -210,7 +211,7 @@ function RegistryItemFormInner(): JSX.Element {
           type="button"
           className="btn btn-primary"
           data-action={editing ? 'save-registry-item' : 'submit-registry-item'}
-          disabled={!requiredFilled || submitting || Boolean(loadError)}
+          {...disabledAttrs(submitting ? 'Saving…' : loadError ? 'The registry could not be read — reload before writing to it' : !requiredFilled ? 'Fill in id, name, description and upstream first' : null)}
           onClick={() => void onSubmit()}
           style={{ marginTop: 16, opacity: requiredFilled && !loadError ? 1 : 0.5 }}
         >

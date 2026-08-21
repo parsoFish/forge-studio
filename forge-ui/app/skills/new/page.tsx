@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createSkill, fetchStudioProjects } from '@/lib/studio-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // Skill builder (P2) — author a plain composable skill in-platform. Minimal:
@@ -87,7 +88,7 @@ export default function SkillBuilderPage() {
           {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn btn-primary" data-action="create-skill" onClick={() => void onSubmit()}
-              disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
+              {...disabledAttrs(saving ? 'Creating…' : !canSubmit ? 'Fill in the required fields first' : null)} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
               {saving ? 'Creating…' : 'Create skill →'}
             </button>
             {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name + description are required.</span>}
