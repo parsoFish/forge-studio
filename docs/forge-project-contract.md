@@ -216,7 +216,10 @@ Three categories must be covered:
 
 1. **Forge scratch:** `.forge/work-items/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`
    must be untracked *and* ignored (git-truth check: `git ls-files
-   --error-unmatch` + `git check-ignore -q`).
+   --error-unmatch` + `git check-ignore -q`; a *directory* scratch path is
+   probed via a sentinel child so a dir-only ignore pattern like
+   `.forge/work-items/` counts before the dir exists — the pattern will
+   ignore it the moment the dev-loop creates it).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
 3. **Force-tracked contract config:** `.forge/project.json` lives inside the

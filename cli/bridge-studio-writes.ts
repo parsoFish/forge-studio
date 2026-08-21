@@ -54,7 +54,7 @@ import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '../orchestrator/project-brain-seed.ts';
 import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { runPreflight } from './preflight.ts';
+import { runPreflight, SCRATCH_PATHS } from './preflight.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { cachedListRuns } from './run-list-cache.ts';
@@ -152,6 +152,14 @@ function checkContractArtifactContainment(projectRoot: string): void {
   if (!existsSync(forgeJsonPath)) {
     const guard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
     if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking .forge/project.json');
+  }
+
+  // W7-FIX-B-PROJ: `.gitignore` joined the scaffold's write set (the C2
+  // hygiene file written when scaffoldContractArtifacts creates the repo) —
+  // the pure pre-check must cover EVERY path the route may write.
+  if (!existsSync(join(projectRoot, '.gitignore'))) {
+    const guard = resolveGuardedPath(projectRoot, ['.gitignore']);
+    if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking .gitignore');
   }
 
   const { roadmap, profile } = contractArtifactTargets(projectRoot);
@@ -255,6 +263,31 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
       created.push('.git/');
     } catch {
       // git unavailable or dir not writable — preflight will surface C6.
+    }
+    // W7-FIX-B-PROJ (gate A0 / R1-03-F1): a repo THIS call creates starts
+    // with no ignore rules at all, so preflight C2 — now honestly evaluated
+    // against the project's OWN repo (projects-11) — hard-failed every
+    // scratch path at birth, parking the create-from-nothing form on a
+    // failing checklist. The scaffold that creates the repo also closes C2:
+    // write the hygiene .gitignore (scratch paths single-sourced from
+    // SCRATCH_PATHS; node_modules + the generic build outputs cover the
+    // ARTIFACTS companion for the common shapes). ONLY when absent — an
+    // operator file is never clobbered — and ONLY on the two branches that
+    // create the repo from nothing; an existing repo's hygiene gaps surface
+    // through the honest resolution panel + auto-fix instead. Written even
+    // when `git init` itself failed: checkC2's no-repo fallback is a
+    // .gitignore text-scan, which this file satisfies too.
+    if (!existsSync(join(projectRoot, '.gitignore'))) {
+      const giGuard = resolveGuardedPath(projectRoot, ['.gitignore']);
+      if (!giGuard.ok) throw new ScaffoldContainmentError('path containment check failed while scaffolding .gitignore');
+      writeFileSync(
+        giGuard.realPath,
+        '# scaffolded by forge onboarding — C2 scratch hygiene + build outputs\n' +
+          'node_modules/\ndist/\nbuild/\nout/\ncoverage/\n' +
+          `# forge scratch (C2)\n${SCRATCH_PATHS.join('\n')}\n`,
+        'utf8',
+      );
+      created.push('.gitignore');
     }
   }
 

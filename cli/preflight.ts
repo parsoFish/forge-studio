@@ -261,6 +261,7 @@ function checkC2(dir: string): ClauseResult {
   const violations: string[] = [];
   for (const p of SCRATCH_PATHS) {
     // Strip trailing slash for git commands (git ls-files doesn't match dirs with /).
+    const isDir = p.endsWith('/');
     const pathArg = p.replace(/\/$/, '');
 
     const isTracked =
@@ -273,8 +274,18 @@ function checkC2(dir: string): ClauseResult {
       continue;
     }
 
+    // W7-FIX-B-PROJ: a DIRECTORY scratch path is probed via a sentinel CHILD.
+    // git's dir-only ignore patterns (`.forge/work-items/` — the exact form
+    // `fixScratchHygiene` appends) match only paths git can stat as
+    // directories, so probing the dir itself false-fails while the dir does
+    // not exist yet (every fresh onboard — the dev-loop creates it later,
+    // at which point the pattern DOES ignore it). Any pattern that ignores
+    // the dir also ignores its children, and both pattern forms (with and
+    // without the trailing slash) match the child, so the sentinel judges
+    // the future truth without caring about on-disk state.
+    const ignoreProbe = isDir ? `${pathArg}/.forge-c2-dir-probe` : pathArg;
     const isIgnored =
-      spawnSync('git', ['-C', dir, 'check-ignore', '-q', pathArg], {
+      spawnSync('git', ['-C', dir, 'check-ignore', '-q', ignoreProbe], {
         stdio: 'ignore',
       }).status === 0;
 
