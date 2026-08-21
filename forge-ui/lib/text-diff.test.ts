@@ -14,6 +14,10 @@ import { lineDiff } from './text-diff';
 
 test('C2-DIFF-1: identical texts -> all rows "same", none added/deleted', () => {
   const rows = lineDiff('a\nb\nc', 'a\nb\nc');
+  // 3 lines is far under MAX_LCS_CELLS, so the fail-soft null branch
+  // (C2-DIFF-8) is not a legal outcome here — fail on it explicitly
+  // rather than as a TypeError, and narrow for the reads below.
+  if (rows === null) throw new Error('lineDiff returned null well under the size cap');
   expect(rows.every((r) => r.type === 'same')).toBe(true);
   expect(rows.map((r) => r.text)).toEqual(['a', 'b', 'c']);
 });

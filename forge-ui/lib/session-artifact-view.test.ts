@@ -470,6 +470,10 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
     turns: [],
     artifact: NONEMPTY_ROADMAP, // today's live, stage-unaware kind, reused for this fixture
     affordances: [],
+    // W7-C2 (T1 review P0-3/P0-4): both REQUIRED, `null` being the honest
+    // value — nothing finalized, and the transcript derivation succeeded.
+    finalized: null,
+    transcriptError: null,
     modelTier: null,
     terminal: false,
     transcript: true,

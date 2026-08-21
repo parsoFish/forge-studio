@@ -592,16 +592,16 @@ export function SessionInteractivePanel({
                     data-field="session-revise-feedback"
                     style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                   />
+                  {/* W7-C3 merge: C2 added this CTA in parallel with the
+                      disabled-reason convention, so it shipped with a bare
+                      `disabled`. It has TWO disabling branches and one reason
+                      must cover both -- the empty-feedback branch is the client
+                      half of the server's own 400 ("feedback is required for
+                      kind revise"), so it says the same thing. */}
                   <button
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-revise-send"
-                    {/* W7-C3 merge: C2 added this CTA in parallel with the
-                        disabled-reason convention, so it shipped with a bare
-                        `disabled`. It has TWO disabling branches and one reason
-                        must cover both -- the empty-feedback branch is the client
-                        half of the server's own 400 ("feedback is required for
-                        kind revise"), so it says the same thing. */}
                     {...disabledAttrs(busy ? 'Submitting…' : reviseFeedback.trim().length === 0 ? 'Describe what should change first' : null)}
                     onClick={() =>
                       void submit(affordance, {

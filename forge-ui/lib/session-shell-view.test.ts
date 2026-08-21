@@ -130,6 +130,10 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   ],
   artifact: { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
   affordances: [],
+  // W7-C2 (T1 review P0-3/P0-4): both REQUIRED, `null` being the honest
+  // value — nothing finalized, and the transcript derivation succeeded.
+  finalized: null,
+  transcriptError: null,
   modelTier: null,
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
@@ -165,6 +169,10 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   ],
   artifact: { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '# draft', hasDraft: true },
   affordances: [],
+  // W7-C2 (T1 review P0-3/P0-4): both REQUIRED, `null` being the honest
+  // value — nothing finalized, and the transcript derivation succeeded.
+  finalized: null,
+  transcriptError: null,
   modelTier: null,
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
