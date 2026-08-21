@@ -516,6 +516,19 @@ export async function runFinalize(
       }
 
       // Step 7 — success. `revert` above must NEVER fire on this path.
+      //
+      // W7-C2 (sessions-kinds-36) — persist the permanent {kind, id} pointer
+      // at the object this session produced, so the committed session page
+      // can render a durable "Committed as …" link on every later read (the
+      // old behaviour navigated ONCE, off this response, and the linkage was
+      // lost on reload). Read FRESH (the committing turn itself rewrote
+      // status.json to phase 'committed') and best-effort: the package HAS
+      // landed and installed — a failed pointer write must never turn that
+      // into a reported failure.
+      const committedStatus = guardedReadSessionStatus<InteractiveTurnStatus>(projectsRoot, dirSegments);
+      if (committedStatus) {
+        guardedWriteSessionStatus(projectsRoot, dirSegments, { ...committedStatus, finalized: { kind, id } });
+      }
       sendJson(res, 200, { ok: true, kind, id }, origin);
     } catch (err) {
       revert();

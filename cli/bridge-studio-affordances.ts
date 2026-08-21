@@ -144,6 +144,7 @@ import {
 } from '../orchestrator/studio/session-kinds.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
+import { SLUG_RE } from '../orchestrator/skill-path.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import { runFinalize } from './bridge-studio-authoring.ts';
@@ -176,11 +177,14 @@ function unhandledAffordanceBody(kind: SessionAffordanceKind, error: string): Un
 // ---------------------------------------------------------------------------
 
 /** The subset of `SpawnableAgentId` (`cli/ui-bridge.ts`) this route ever
- *  spawns a turn for — never `architect` (no writable affordance),
- *  `project-brain` (no verdict/question-form row in its panel), or
- *  `authoring` (its turn runs INSIDE `runFinalize`, not via a detached
- *  spawn). */
-export type LegacySpawnableAgentId = 'instructions' | 'demo-builder';
+ *  spawns a turn for — never `architect` (no writable affordance) or
+ *  `project-brain` (no verdict/question-form row in its panel). W7-C2: the
+ *  three generic-spine kinds (`authoring`/`kb-cleanup`/`community-refresh`)
+ *  joined for the REVISE verdict — a revise sends the session back to its
+ *  agent phase and spawns the next turn through the SAME detached
+ *  `spawnAgentTurn` their own start routes already use (authoring's APPROVE
+ *  still runs its turn INSIDE `runFinalize`, unchanged). */
+export type LegacySpawnableAgentId = 'instructions' | 'demo-builder' | 'authoring' | 'kb-cleanup' | 'community-refresh';
 
 export type AffordanceRouteContext = StudioContext & {
   /** Injected from `cli/ui-bridge.ts` — see this file's header for why this
@@ -280,6 +284,124 @@ const GENERIC_AFFORDANCE_ROUTE = '/api/studio/sessions/:kind/:sessionId/:afforda
 
 function affordanceDryBridgeMarker(ctx: AffordanceRouteContext, sessionId: string): ReturnType<typeof dryBridgeAgentTurnMarker> {
   return dryBridgeAgentTurnMarker(ctx.logsRoot, GENERIC_AFFORDANCE_ROUTE, sessionId);
+}
+
+// ---------------------------------------------------------------------------
+// W7-C2 (sessions-kinds-29) — the durable verdict record. Appended by the
+// MAIN dispatcher, AFTER the per-kind handler has sent its response and ONLY
+// when that response was a 2xx — a refused verdict (409 wrong-phase, 422
+// unsupported value, 400 bad body, a failed finalize) never records a
+// decision that did not happen. `deriveSessionTranscript`
+// (orchestrator/studio/session-transcript.ts) renders each record as an
+// operator turn, so a reject (and its rationale) is never invisible in the
+// session record. Best-effort by design: the verdict itself already landed
+// (the phase write IS the source of truth); a failed record append must
+// never turn an applied verdict into a reported failure.
+// ---------------------------------------------------------------------------
+
+const VERDICTS_FILENAME = 'verdicts.json';
+
+function appendVerdictRecord(
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  verdict: string,
+  notes: string,
+): void {
+  const priorRaw = guardedReadFile(projectsRoot, [...dirSegs, VERDICTS_FILENAME]);
+  const parsed = priorRaw !== null ? safeParseJson<unknown>(priorRaw) : null;
+  const prior = Array.isArray(parsed) ? parsed : [];
+  const record = { at: new Date().toISOString(), verdict, ...(notes.length > 0 ? { notes } : {}) };
+  guardedWriteFile(projectsRoot, [...dirSegs, VERDICTS_FILENAME], JSON.stringify([...prior, record], null, 2));
+}
+
+// ---------------------------------------------------------------------------
+// W7-C2 (sessions-kinds-09/23, library-24, bead forge-4ei) — the ONE generic
+// revise handler. A revise is the same shape for every kind that declares
+// it: write the operator's feedback to the session's feedback.md (the file
+// every draft runner already reads — instructions/demo bespoke, the generic
+// spine via buildTurnPrompt's feedback section), send the session back to
+// its DRAFTING phase, and spawn the next turn. The target phase is DERIVED
+// from the phase table, never a hand-kept per-kind map: the drafting phase
+// is the `step: agent` row whose own `next` lands on the verdict row this
+// affordance was derived from (instructions drafting→awaiting-verdict, demo
+// generating→awaiting-review, authoring analyzing→awaiting-review,
+// kb-cleanup drafting→awaiting-approval, community-refresh
+// gathering→awaiting-review — all five real tables have exactly one). No
+// such row ⇒ 501, fail LOUD — a yaml row declaring `revise` with no agent
+// producer to re-run is authored-data-with-no-consumer, never guessed
+// around.
+//
+// `iteration` is bumped when the status already tracks one (demo's
+// regenerate semantics — mirrors POST /api/demo-builder/feedback's
+// `iteration + 1` exactly); a kind with no iteration field is untouched.
+//
+// SYNC INVARIANT: no await between the caller's status read and the writes
+// below — see this file's header note.
+// ---------------------------------------------------------------------------
+
+/** Which SPAWN_AGENT_SPECS id runs a kind's next turn — the SAME mapping
+ *  each kind's own start route uses (`demo` sessions spawn the
+ *  `demo-builder` agent; every other revise-capable kind's spawn id IS its
+ *  descriptor id). Fail-loud for anything else. */
+function reviseSpawnAgentId(descriptorId: string): LegacySpawnableAgentId | null {
+  switch (descriptorId) {
+    case 'instructions': return 'instructions';
+    case 'demo': return 'demo-builder';
+    case 'authoring': return 'authoring';
+    case 'kb-cleanup': return 'kb-cleanup';
+    case 'community-refresh': return 'community-refresh';
+    default: return null;
+  }
+}
+
+function handleGenericRevise(
+  ctx: AffordanceRouteContext,
+  res: ServerResponse,
+  origin: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  descriptor: SessionKindDescriptor,
+  affordance: SessionAffordance,
+  status: Record<string, unknown>,
+  project: string,
+  sessionId: string,
+  feedback: string,
+): void {
+  const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases ?? [];
+  const producer = phases.find((p) => p.step === 'agent' && p.next === affordance.phase);
+  if (!producer) {
+    sendJson(
+      res,
+      501,
+      unhandledAffordanceBody('verdict', `session kind "${descriptor.id}" declares a "revise" verdict at phase "${affordance.phase}" but its phase table has no agent-step producer row to re-run`),
+      origin,
+    );
+    return;
+  }
+  const agentId = reviseSpawnAgentId(descriptor.id);
+  if (agentId === null) {
+    sendJson(
+      res,
+      501,
+      unhandledAffordanceBody('verdict', `no revise turn spawner is wired for session kind "${descriptor.id}"`),
+      origin,
+    );
+    return;
+  }
+
+  const iterationBump = typeof status.iteration === 'number' ? { iteration: (status.iteration as number) + 1 } : {};
+  if (
+    guardedWriteFile(projectsRoot, [...dirSegs, 'feedback.md'], feedback) === null ||
+    guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: producer.phase, ...iterationBump }) === null
+  ) {
+    sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+    return;
+  }
+
+  ctx.spawnAgentTurn(ctx.forgeRoot, agentId, project, sessionId);
+  if (descriptor.id === 'instructions') ctx.broadcastInstructionsChanged();
+  if (descriptor.id === 'demo') ctx.broadcastDemoChanged();
+  sendJson(res, 200, { ok: true, phase: producer.phase, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 async function handleInstructionsAnswer(
@@ -386,9 +508,11 @@ async function handleInstructionsBrief(
 }
 
 // ---------------------------------------------------------------------------
-// verdict — instructions (approve|reject only; "revise" stays on the bespoke
-// `/api/instructions/verdict` route — out of the generic body schema the
-// task brief scopes: "verdict: approve|reject").
+// verdict — instructions (approve|reject; "revise" is the ONE generic
+// `handleGenericRevise` arm since W7-C2 — the bespoke
+// `/api/instructions/verdict` route keeps its own revise arm as the
+// independently-tested bespoke surface, and C2-REV-4 pins the two reaching
+// the identical phase + feedback.md).
 // ---------------------------------------------------------------------------
 
 async function handleInstructionsVerdict(
@@ -546,15 +670,28 @@ async function handleKbCleanupVerdict(
   origin: string,
   projectsRoot: string,
   dirSegs: readonly string[],
+  status: Record<string, unknown>,
   sessionId: string,
   project: string,
+  verdict: 'approve' | 'reject',
 ): Promise<void> {
-  // W6-B6 post-merge review: the reject-422 that used to live here is now
-  // the GENERIC gate in the main handler above, reading the SAME
-  // `affordance.meta.verdicts` `studio/session-kinds.yaml`'s
-  // `awaiting-approval` row declares (`verdicts: [approve]`) — this
-  // function is only ever reached with `verdict === 'approve'` now, so it
-  // no longer needs `verdict` as a parameter at all.
+  // W7-C2 (sessions-kinds-23) — reject: a plain, SYNC-INVARIANT write (no
+  // await before it) straight to the terminal `rejected` row the yaml now
+  // declares, mirroring handleDemoVerdict's own reject arm. No spawn — a
+  // discarded plan runs nothing. The drafted plan file stays on disk (the
+  // session dir is the audit trail), it just never drains.
+  if (verdict === 'reject') {
+    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
+      sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+      return;
+    }
+    sendJson(res, 200, { ok: true, phase: 'rejected' }, origin);
+    return;
+  }
+
+  // W6-B6 post-merge review: the unsupported-verdict 422 lives in the main
+  // handler above, reading the SAME `affordance.meta.verdicts`
+  // `studio/session-kinds.yaml`'s `awaiting-approval` row declares.
   //
   // Delegates WHOLESALE to `approveKbCleanup` (cli/bridge-studio-kbs.ts) —
   // the phase re-check (belt-and-suspenders on top of the caller's own
@@ -613,15 +750,25 @@ async function handleAuthoringVerdict(
   origin: string,
   projectsRoot: string,
   dirSegs: readonly string[],
+  status: Record<string, unknown>,
   project: string,
   sessionId: string,
+  verdict: 'approve' | 'reject',
   body: Record<string, unknown>,
 ): Promise<void> {
-  // W6-B6 post-merge review: same as handleKbCleanupVerdict above — the
-  // reject-422 now happens generically, reading `affordance.meta.verdicts`
-  // (`studio/session-kinds.yaml`'s `awaiting-review` row declares
-  // `verdicts: [approve]`). Only ever reached with `verdict === 'approve'`.
-  //
+  // W7-C2 (sessions-kinds-23 / library-24) — reject: a plain, SYNC-INVARIANT
+  // write straight to the terminal `rejected` row the yaml now declares. No
+  // spawn, nothing landed in either library; the staged draft stays on disk
+  // as the session's own record but is never installed.
+  if (verdict === 'reject') {
+    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
+      sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
+      return;
+    }
+    sendJson(res, 200, { ok: true, phase: 'rejected' }, origin);
+    return;
+  }
+
   // W6-B9 (reviewer finding on W6-B8): `body.kind`/`body.id` used to be
   // hardcoded, authoring-specific checks here — `kind` duplicated a fact
   // the server can derive for itself (never an operator decision, D4), and
@@ -636,8 +783,25 @@ async function handleAuthoringVerdict(
     return;
   }
   // body.id is already guaranteed a non-empty (post-trim) string by the
-  // generic `requires` check above — re-read (never re-validate) it here.
+  // generic `requires` check above — re-read (never re-validate presence)
+  // here.
   const id = (body.id as string).trim();
+  // W7-C2 (library-22) — the id's SHAPE is validated HERE, before any phase
+  // write: the finalizer downstream (runInteractiveTurn) enforces the same
+  // SLUG_RE but raises it as an InteractiveRunnerError, which used to
+  // surface as a 500 carrying the raw error-class text. A 400 with an
+  // operator-readable rule (and no internal class name) is the honest
+  // answer to a typo'd id; the panel mirrors this SAME rule as a
+  // disable+hint, and the server check remains the enforcement.
+  if (!SLUG_RE.test(id)) {
+    sendJson(
+      res,
+      400,
+      { error: `"${id}" is not a valid id — use lowercase letters/digits separated by hyphens, starting with a letter (e.g. "pr-diff-summary")` },
+      origin,
+    );
+    return;
+  }
   // runFinalize sends its OWN response (success and every failure path) —
   // this route hands off wholesale rather than reimplementing any part of
   // the copyStagingToLibrary + skill/hook-install sequence.
@@ -748,6 +912,16 @@ async function handleCommunityRefreshVerdict(
       revert();
       sendJson(res, 500, { error: `commit turn did not reach phase "committed" (got "${turnResult.phase}")` }, origin);
       return;
+    }
+    // W7-C2 (sessions-kinds-36) — persist the permanent pointer at what this
+    // session produced (the community registry), so the committed session
+    // page can link to it on every later read, not just navigate once.
+    // Best-effort on top of an already-committed turn: read FRESH (the turn
+    // itself rewrote status.json) and never let a failed pointer write turn
+    // a real commit into a reported failure.
+    const committedStatus = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
+    if (committedStatus) {
+      guardedWriteSessionStatus(projectsRoot, dirSegs, { ...committedStatus, finalized: { kind: 'community-registry', id: 'registry' } });
     }
     sendJson(res, 200, { ok: true, phase: 'committed' }, origin);
   } catch (err) {
@@ -890,8 +1064,8 @@ export async function handleStudioAffordanceRoutes(
 
     if (affordance.kind === 'verdict') {
       const verdictRaw = b.verdict;
-      if (verdictRaw !== 'approve' && verdictRaw !== 'reject') {
-        sendJson(res, 400, { error: `body.verdict is required and must be "approve" or "reject", got ${JSON.stringify(verdictRaw)}` }, origin);
+      if (verdictRaw !== 'approve' && verdictRaw !== 'reject' && verdictRaw !== 'revise') {
+        sendJson(res, 400, { error: `body.verdict is required and must be "approve", "reject" or "revise", got ${JSON.stringify(verdictRaw)}` }, origin);
         return true;
       }
       const verdict = verdictRaw;
@@ -917,6 +1091,47 @@ export async function handleStudioAffordanceRoutes(
         return true;
       }
 
+      // W7-C2 (sessions-kinds-29) — `notes`: the OPTIONAL operator rationale,
+      // legal on every verdict value, capped against the SAME shared limit
+      // the interview answers hold. Recorded (verdicts.json) only after the
+      // per-kind handler responds 2xx — see appendVerdictRecord's own header.
+      const notesRaw = b.notes;
+      if (notesRaw !== undefined && typeof notesRaw !== 'string') {
+        sendJson(res, 400, { error: `body.notes must be a string when present, got ${JSON.stringify(notesRaw)}` }, origin);
+        return true;
+      }
+      const notes = typeof notesRaw === 'string' ? notesRaw.trim() : '';
+      const notesBytes = Buffer.byteLength(notes, 'utf8');
+      if (notesBytes > MAX_ANSWER_FIELD_BYTES) {
+        sendJson(res, 400, { error: `body.notes is ${notesBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+        return true;
+      }
+
+      // W7-C2 — `feedback`: REQUIRED (non-empty) for revise, refused on any
+      // other verdict shape only by absence of meaning (it is simply ignored
+      // there — the revise arm is its only reader). An empty revise is
+      // refused: re-running the drafting turn with no guidance regenerates
+      // the same draft, which is never what the operator meant.
+      let feedback = '';
+      if (verdict === 'revise') {
+        const feedbackRaw = b.feedback;
+        if (typeof feedbackRaw !== 'string' || feedbackRaw.trim().length === 0) {
+          sendJson(
+            res,
+            400,
+            { error: `body.feedback is required for verdict "revise" on session kind "${descriptor.id}" at phase "${phase}" — say what to change, got ${JSON.stringify(feedbackRaw)}` },
+            origin,
+          );
+          return true;
+        }
+        feedback = feedbackRaw;
+        const feedbackBytes = Buffer.byteLength(feedback, 'utf8');
+        if (feedbackBytes > MAX_ANSWER_FIELD_BYTES) {
+          sendJson(res, 400, { error: `body.feedback is ${feedbackBytes} bytes — exceeds the ${MAX_ANSWER_FIELD_BYTES}-byte limit` }, origin);
+          return true;
+        }
+      }
+
       // W6-B9 (reviewer finding on W6-B8) — the GENERIC body-shape check:
       // "which extra POST body fields this verdict needs beyond `verdict`
       // itself" is now ONE business rule with ONE source, exactly mirroring
@@ -930,42 +1145,75 @@ export async function handleStudioAffordanceRoutes(
       // per-kind list. Each named field must be present as a non-empty
       // (post-trim) string; the FIRST missing/empty field 400s, naming it —
       // never a generic "bad request".
-      const requiresFields = affordance.meta?.requires ?? [];
-      for (const field of requiresFields) {
-        const value = b[field];
-        if (typeof value !== 'string' || value.trim().length === 0) {
-          sendJson(
-            res,
-            400,
-            { error: `body.${field} is required for verdict "${verdict}" on session kind "${descriptor.id}" at phase "${phase}", got ${JSON.stringify(value)}` },
-            origin,
-          );
-          return true;
+      //
+      // W7-C2 scoped this to APPROVE: `requires` names what the approve
+      // FINALIZER needs (authoring's library `id`); revise/reject need
+      // nothing extra, and enforcing `id` on them would block the very
+      // exits the three-way gate exists to provide. The panel gates only
+      // its Approve button on the same list — both sides read the same
+      // scoping.
+      if (verdict === 'approve') {
+        const requiresFields = affordance.meta?.requires ?? [];
+        for (const field of requiresFields) {
+          const value = b[field];
+          if (typeof value !== 'string' || value.trim().length === 0) {
+            sendJson(
+              res,
+              400,
+              { error: `body.${field} is required for verdict "${verdict}" on session kind "${descriptor.id}" at phase "${phase}", got ${JSON.stringify(value)}` },
+              origin,
+            );
+            return true;
+          }
         }
       }
 
-      switch (descriptor.id) {
-        case 'instructions':
-          await handleInstructionsVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict);
-          return true;
-        case 'demo':
-          await handleDemoVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
-          return true;
-        case 'kb-cleanup':
-          await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, project);
-          return true;
-        case 'authoring':
-          await handleAuthoringVerdict(ctx, res, origin, projectsRoot, dirSegs, project, sessionId, b);
-          return true;
-        case 'community-refresh':
-          await handleCommunityRefreshVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, verdict);
-          return true;
-        default:
-          // Structurally unreachable today — the only descriptors whose
-          // panel/turnSpec ever derive a verdict affordance are the four
-          // above. Fails LOUD, never routes an unknown kind through one of
-          // the four handlers as a best guess.
-          break;
+      // W7-C2 — revise is ONE generic arm for every kind (see
+      // handleGenericRevise's own header: feedback.md + the derived
+      // producer phase + the kind's own turn spawner).
+      let dispatched = false;
+      if (verdict === 'revise') {
+        handleGenericRevise(ctx, res, origin, projectsRoot, dirSegs, descriptor, affordance, status, project, sessionId, feedback);
+        dispatched = true;
+      } else {
+        switch (descriptor.id) {
+          case 'instructions':
+            await handleInstructionsVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict);
+            dispatched = true;
+            break;
+          case 'demo':
+            await handleDemoVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
+            dispatched = true;
+            break;
+          case 'kb-cleanup':
+            await handleKbCleanupVerdict(ctx, res, origin, projectsRoot, dirSegs, status, sessionId, project, verdict);
+            dispatched = true;
+            break;
+          case 'authoring':
+            await handleAuthoringVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
+            dispatched = true;
+            break;
+          case 'community-refresh':
+            await handleCommunityRefreshVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, verdict);
+            dispatched = true;
+            break;
+          default:
+            // Structurally unreachable today — the only descriptors whose
+            // panel/turnSpec ever derive a verdict affordance are the five
+            // above. Fails LOUD, never routes an unknown kind through one of
+            // the five handlers as a best guess.
+            break;
+        }
+      }
+      if (dispatched) {
+        // W7-C2 (sessions-kinds-29) — record the decision ONLY when the
+        // handler accepted it (2xx already sent). Best-effort: the phase
+        // write is the source of truth; a failed record append never turns
+        // an applied verdict into a reported failure.
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          appendVerdictRecord(projectsRoot, dirSegs, verdict, notes);
+        }
+        return true;
       }
     }
 

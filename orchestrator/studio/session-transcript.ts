@@ -134,9 +134,18 @@ const THEMES_DIRNAME = 'themes';
  *  equals this constant; any other phase means questions.json is stale. */
 const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
 
+/** W7-C2 (sessions-kinds-29) — the durable operator-verdict record: the
+ *  generic affordance write route (cli/bridge-studio-affordances.ts) appends
+ *  `{at, verdict, notes?}` here after every ACCEPTED verdict, so a reject/
+ *  approve (and its rationale) is never invisible in the transcript. The
+ *  revise verdict's feedback text is deliberately NOT copied into a record —
+ *  feedback.md already renders its own operator turn; the revise record is
+ *  the bare decision. */
+const VERDICTS_FILENAME = 'verdicts.json';
+
 /** The fixed candidate list every derivation scans, regardless of
  *  descriptor — file-presence-driven, never descriptor.id-driven. */
-const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME, QUESTIONS_FILENAME, FEEDBACK_FILENAME] as const;
+const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME, QUESTIONS_FILENAME, FEEDBACK_FILENAME, VERDICTS_FILENAME] as const;
 
 // ---------------------------------------------------------------------------
 // Traversal choke point — every file read in this module goes through this
@@ -285,6 +294,40 @@ function parseAnswerRoundsJson(raw: string): ParseOutcome<ParsedRound[]> {
 
 type ParsedQuestion = { readonly question: string };
 
+type ParsedVerdictRecord = { readonly verdict: string; readonly notes?: string };
+
+/** verdicts.json — fails closed on the same principle as answers.json (a
+ *  malformed verdict record must never surface an invented turn, and must
+ *  never be silently dropped either). Shape: an array of records each
+ *  carrying a string `verdict`; `notes` optional (string when present). */
+function parseVerdictsJson(raw: string): ParseOutcome<ParsedVerdictRecord[]> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, message: `${VERDICTS_FILENAME} is not valid JSON — ${(e as Error).message}` };
+  }
+  if (!Array.isArray(parsed)) {
+    return { ok: false, message: `${VERDICTS_FILENAME} must be a JSON array of verdict records, got ${typeof parsed}` };
+  }
+  const records: ParsedVerdictRecord[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const r = parsed[i];
+    if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must be an object, got ${Array.isArray(r) ? 'array' : typeof r}` };
+    }
+    const rec = r as Record<string, unknown>;
+    if (typeof rec.verdict !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must carry a string "verdict" field` };
+    }
+    if ('notes' in rec && rec.notes !== undefined && typeof rec.notes !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] has a non-string "notes" field` };
+    }
+    records.push({ verdict: rec.verdict, ...(typeof rec.notes === 'string' ? { notes: rec.notes } : {}) });
+  }
+  return { ok: true, value: records };
+}
+
 /** questions.json — fails closed on the same principle as answers.json
  *  (not tested by an explicit AT, but "never fabricate" applies equally: a
  *  malformed pending-question file must never surface an invented turn). */
@@ -388,6 +431,24 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
     turns.push({ index: index++, role: 'operator', stage: staged.value, text: feedbackBody, source: FEEDBACK_FILENAME });
+  }
+
+  // verdicts.json (W7-C2, sessions-kinds-29) — one operator turn per
+  // recorded decision, in record order: "Verdict: <verdict>" plus the
+  // rationale when one was given. The revise record deliberately carries no
+  // text of its own (feedback.md above holds the words) — no duplication.
+  const verdictsRaw = safeReadFileInSession(sessionDir, VERDICTS_FILENAME);
+  if (verdictsRaw !== null) {
+    const parsedV = parseVerdictsJson(verdictsRaw);
+    if (!parsedV.ok) return { ok: false, error: { message: parsedV.message } };
+    const staged = resolveStage(undefined);
+    if (!staged.ok) return { ok: false, error: { message: staged.message } };
+    for (const [i, record] of parsedV.value.entries()) {
+      const text = record.notes !== undefined && record.notes.length > 0
+        ? `Verdict: ${record.verdict} — ${record.notes}`
+        : `Verdict: ${record.verdict}`;
+      turns.push({ index: index++, role: 'operator', stage: staged.value, text, source: `${VERDICTS_FILENAME}#${i + 1}` });
+    }
   }
 
   return { ok: true, turns, sourcesScanned: CANDIDATE_SOURCE_FILES };

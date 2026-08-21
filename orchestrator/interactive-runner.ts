@@ -477,7 +477,7 @@ async function runAgentStyleStep(args: {
     // agent resolve it against the wrong base (beside status.registryPath)
     // and crash the session with "produced no files".
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
-    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, readOperatorFeedback(sessionDir));
     // W7-B3 (community-13): the turn budget comes from the agent's OWN
     // SKILL.md `budgets.maxTurns` — the same declared field every unattended
     // agent already carries (run-agent.ts reads it for one-shot spawns). A
@@ -778,6 +778,7 @@ function buildTurnPrompt(
   status: InteractiveTurnStatus,
   skill: string,
   writeRoots: readonly string[],
+  feedback: string | null,
 ): string {
   const writes = phaseRow.writes ?? [];
   return [
@@ -792,12 +793,34 @@ function buildTurnPrompt(
           'Use these absolute paths exactly as given — a write anywhere else (any other absolute path, or a relative path resolved against some other base) is refused by the tool fence.',
         ].join('\n')
       : 'Write your output where the skill above instructs.',
+    // W7-C2 (revise verdict, sessions-kinds-09/23) — the operator's revision
+    // feedback, when the generic affordance route sent this session back to
+    // its drafting phase: mirrored from instructions-runner.ts's /
+    // demo-builder-runner.ts's own feedback.md sections, so the generic
+    // spine's revise turn actually carries the words that triggered it.
+    ...(feedback !== null ? ['', 'Operator revision feedback on the previous draft (apply it):', feedback] : []),
     '',
     'Session status (read-only context):',
     '```json',
     JSON.stringify(status, null, 2),
     '```',
   ].join('\n');
+}
+
+/** Read `feedback.md` (the operator's revise-verdict notes) from the session
+ *  dir through the SAME containment choke point every other session-dir
+ *  read here uses — an escaping symlink collapses to null == absent, same
+ *  as `readFeedback` in instructions-runner.ts / demo-builder-runner.ts.
+ *  Trimmed content, or null when absent/empty. */
+function readOperatorFeedback(sessionDir: string): string | null {
+  const guarded = resolveGuardedPath(sessionDir, ['feedback.md']);
+  if (!guarded.ok || !guarded.exists) return null;
+  try {
+    const body = readFileSync(guarded.realPath, 'utf8').trim();
+    return body.length > 0 ? body : null;
+  } catch {
+    return null;
+  }
 }
 
 // W6-B1 review round 2: the local makeReasoningSink/makeThinkingSink duplicates

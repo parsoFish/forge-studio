@@ -395,6 +395,99 @@ export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string
 }
 
 // ---------------------------------------------------------------------------
+// W7-C2 (sessions-kinds-17/19, bead forge-lzv) — pending interview questions
+// on the wire. `deriveSessionAffordances` is a PURE function over the
+// descriptor (it can never read the session dir), so the file-backed half of
+// the question-form affordance — the actual pending questions.json — is
+// attached HERE, at the one place that already owns the guarded session-dir
+// reads. Attached ONLY at phase 'awaiting-answers' (the same pending rule
+// `deriveSessionTranscript`'s own AWAITING_ANSWERS_PHASE constant encodes —
+// hand-copied literal per that module's convention): any other phase means
+// questions.json is stale leftover from a prior round. The panel renders one
+// control per entry and posts the REAL question text back with each answer,
+// which is what keeps the durable answers.json record honest.
+// ---------------------------------------------------------------------------
+
+type PendingQuestion = {
+  readonly question: string;
+  readonly header?: string;
+  readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>;
+};
+
+const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
+const QUESTIONS_FILENAME = 'questions.json';
+
+/** Structural parse of questions.json for the WIRE (display data). The
+ *  transcript derivation has already fail-closed the whole read on a
+ *  malformed file by the time this runs, so this parser only needs to shape
+ *  what survived: `question` must be a string (a violating entry returns
+ *  null — belt-and-suspenders, never a fabricated entry); `header` optional;
+ *  `options` kept only where each entry carries string label+description. */
+function parsePendingQuestions(raw: string): PendingQuestion[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const questions: PendingQuestion[] = [];
+  for (const entry of parsed) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.question !== 'string') return null;
+    const optionsRaw = Array.isArray(rec.options) ? rec.options : [];
+    const options = optionsRaw.flatMap((o) => {
+      if (o !== null && typeof o === 'object' && !Array.isArray(o)) {
+        const or = o as Record<string, unknown>;
+        if (typeof or.label === 'string' && typeof or.description === 'string') {
+          return [{ label: or.label, description: or.description }];
+        }
+      }
+      return [];
+    });
+    questions.push({
+      question: rec.question,
+      ...(typeof rec.header === 'string' ? { header: rec.header } : {}),
+      options,
+    });
+  }
+  return questions;
+}
+
+/** Attach `meta.questions` onto the question-form affordance when (and only
+ *  when) a pending questions.json exists at awaiting-answers. Every other
+ *  affordance rides through untouched. */
+function attachPendingQuestions(
+  affordances: ReturnType<typeof deriveSessionAffordances>,
+  sessionDir: string,
+  phase: string,
+): ReturnType<typeof deriveSessionAffordances> {
+  if (phase !== AWAITING_ANSWERS_PHASE) return affordances;
+  if (!affordances.some((a) => a.kind === 'question-form' && a.phase === AWAITING_ANSWERS_PHASE)) return affordances;
+  const raw = safeReadFileInSession(sessionDir, QUESTIONS_FILENAME);
+  if (raw === null) return affordances;
+  const questions = parsePendingQuestions(raw);
+  if (questions === null || questions.length === 0) return affordances;
+  return affordances.map((a) =>
+    a.kind === 'question-form' && a.phase === AWAITING_ANSWERS_PHASE
+      ? { ...a, meta: { ...(a.meta ?? {}), questions } }
+      : a,
+  );
+}
+
+/** W7-C2 (sessions-kinds-36) — the persisted "what this session produced"
+ *  pointer, read off status.json. Anything but the exact {kind: string,
+ *  id: string} shape collapses to null (never echoed raw). */
+function parseFinalized(statusParsed: Record<string, unknown>): { kind: string; id: string } | null {
+  const raw = statusParsed.finalized;
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const rec = raw as Record<string, unknown>;
+  if (typeof rec.kind !== 'string' || typeof rec.id !== 'string') return null;
+  return { kind: rec.kind, id: rec.id };
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -620,7 +713,10 @@ export async function handleStudioSessionsRoutes(
         // view for the CURRENT phase; see this file's header for the full
         // contract note. Computed unconditionally (never omitted) — a kind
         // with no turnSpec/panel (architect) yields `[]`, not a missing key.
-        affordances: deriveSessionAffordances(descriptor, phase),
+        // W7-C2: the question-form affordance additionally carries the
+        // PENDING questions at awaiting-answers (attachPendingQuestions —
+        // file-backed data the pure derivation cannot read itself).
+        affordances: attachPendingQuestions(deriveSessionAffordances(descriptor, phase), sessionDir, phase),
         // W6-B6 (ADR-043 2026-08-15 amendment §3) — see this file's header
         // note. Read directly off the already-parsed `statusParsed`, the
         // SAME realpath-guarded read every other field on this envelope
@@ -653,6 +749,12 @@ export async function handleStudioSessionsRoutes(
         lifecycle: deriveSessionLifecycleFor({
           descriptor, phase, terminal: isTerminalPhase(descriptor, phase), project, sessionId, projectsRoot, logsRoot: ctx.logsRoot,
         }),
+        // W7-C2 (sessions-kinds-36) — ALWAYS present, mirroring
+        // `modelTier`'s own null-is-honest convention: the persisted
+        // {kind, id} pointer at whatever object a committed session
+        // produced (runFinalize / the community-refresh approve arm write
+        // it), or null for a session that produced nothing.
+        finalized: parseFinalized(statusParsed),
       },
       origin,
     );
