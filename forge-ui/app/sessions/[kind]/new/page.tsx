@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
-import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
+import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, startOnboardingSession, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
@@ -38,7 +38,8 @@ import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/ki
 //
 // Kinds: instructions, demo, kb-cleanup (KB select, not project), authoring
 // (the only one that takes a free-text prompt — its `/start` body REQUIRES
-// one), project-brain, community-refresh (W6-CR-3 — the ONLY kind with
+// one), project-brain, onboarding (W7-C1 — the retired onboard-project flow
+// wrapper's replacement entry; project select only), community-refresh (W6-CR-3 — the ONLY kind with
 // `selector: 'none'`: the community registry is forge's own single,
 // forge-wide file, not a per-project artifact, so there is nothing for the
 // operator to select — just Start + a model-tier picker). `architect` is
@@ -287,6 +288,16 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           break;
         case 'kb-cleanup': {
           const r = await startKbCleanup(kbId.trim(), tier);
+          result = r.ok ? { ok: true, sessionId: r.sessionId, project: r.project } : { ok: false, error: r.error };
+          break;
+        }
+        // W7-C1 (sessions-kinds-01/crosscut-14): the onboarding session's
+        // generic kickoff — the onboard-project FLOW wrapper is retired, so
+        // this page is onboarding's one direct entry. The route takes only
+        // {project} (onboarding-agent is strategy:fixed — no tier on the
+        // wire; the picker renders its read-only chip).
+        case 'onboarding': {
+          const r = await startOnboardingSession(project.trim());
           result = r.ok ? { ok: true, sessionId: r.sessionId, project: r.project } : { ok: false, error: r.error };
           break;
         }

@@ -379,15 +379,19 @@ describe('D4 — producer/consumer cross-check', () => {
     assert.equal(reviewFindings.declaredConsumer, 'review', 'must stay the bare frontmatter value, not the resolved gate:review form');
   });
 
-  it('AT-26: verdict / work-items / demo-fix-spec have zero edges → endpointsVerified: false + exactly 3 lint flags naming them, 0 errors', () => {
+  it('AT-26: verdict / work-items / demo-fix-spec / contract have zero edges → endpointsVerified: false + exactly 4 lint flags naming them, 0 errors', () => {
+    // W7-C1: `contract` joined this set when the OOTB onboard flow wrapper
+    // (the one DAG edge that carried it) was retired — the template stays
+    // registered for authored flows, so unverifiable-endpoints is the
+    // honest classification, same as the band-re-entry three.
     const entries = listTemplateLibrary(REPO_ROOT);
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.equal(byId(entries, id).endpointsVerified, false, `${id} must be endpointsVerified: false (unverifiable)`);
     }
     const flags = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/unverifiable-endpoints');
-    assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
+    assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
     assert.ok(flags.every((f) => f.level === 'flag'));
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
     }
     const errors = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/endpoint-mismatch' && f.level === 'error');
