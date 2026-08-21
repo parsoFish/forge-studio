@@ -350,3 +350,32 @@ test('W6-B14: fresh mount -> NO [data-action="re-check"] button', () => {
   const html = render({ interactive: false });
   expect(html).not.toContain('data-action="re-check"');
 });
+
+// ---------------------------------------------------------------------------
+// W7-D1 — a disabled INPUT names why, not just a disabled CTA. The Wave D
+// gate died on `<select disabled …>` with no reason anywhere in the markup,
+// so an operator (and the harness) had nothing to read. The derivation itself
+// is pinned exhaustively in `run-panel-gating.test.ts`; these two pin that
+// RunPanel actually renders it.
+// ---------------------------------------------------------------------------
+
+test('W7-D1: an unsaved agent disables the project select WITH a data-disabled-reason, never bare', () => {
+  const html = render({ canRun: false });
+  const tag = tagContaining(html, 'data-run-project');
+  expect(tag).toContain('disabled');
+  expect(tag).toContain('data-disabled-reason="Save the agent (no unsaved changes) to run it"');
+});
+
+test('W7-D1: a runnable agent leaves the project select enabled and invents no reason', () => {
+  const tag = tagContaining(render({ canRun: true }), 'data-run-project');
+  expect(tag).not.toContain('disabled');
+  expect(tag).not.toContain('data-disabled-reason');
+});
+
+test('W7-D1: a connection block reaches the inputs textarea and the materials input too, verbatim', () => {
+  const html = render({ blockedMessage: 'connection "git" is not ready' });
+  for (const marker of ['data-run-inputs', 'data-run-materials-input']) {
+    const tag = tagContaining(html, marker);
+    expect(tag, marker).toContain('data-disabled-reason="connection &quot;git&quot; is not ready"');
+  }
+});

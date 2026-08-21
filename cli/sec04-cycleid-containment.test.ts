@@ -471,3 +471,74 @@ test('(RED) POST /api/reflect/<..>/answer with a symlinked user-feedback.md leaf
     `writeFileSync followed the symlinked user-feedback.md leaf and overwrote an out-of-root victim — status ${r.status}: ${r.body}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// W7-D1 — the artifact route and the run model disagreed about where a frozen
+// cycle's PR description lives, and the DECLARATION won.
+//
+// `deriveArtifacts` (orchestrator/run-model-derive.ts) marks `pr` ready when
+// `pr-description.md` exists in EITHER `artifacts/` or — deliberately, "so
+// older frozen logs still resolve" — the cycle-log ROOT. The route only ever
+// read `artifacts/`. So a pre-mirror cycle advertised a PR tab in
+// `artifactsReady` and 404'd when the operator clicked it: a field parsed and
+// surfaced, enforced by nothing — the campaign's `declared-data-fails-open`
+// class, this time between a deriver and the route that serves what it
+// declares. Real instance found by the Wave D crawl once it learned to page
+// the history ledgers and could reach the artifact page for
+// `2026-06-18T10-27-18_INIT-2026-06-17-release-definition-permissions-coverage`
+// (pr-description.md at the log root, `artifactsReady.pr: "view"`, 404).
+//
+// The fix restores PARITY UP — the route serves what the deriver declares —
+// rather than parity down, because the file is genuinely there and the
+// deriver's fallback exists on purpose. It is deliberately ONE exact filename,
+// routed through the SAME `guardedReadFile` containment as the normal path:
+// the cycle-log root also holds `events.jsonl`, `report.md`, `retro.md` and
+// `user-questions.json`, and none of those may become servable as a side
+// effect. Both directions pinned.
+// ---------------------------------------------------------------------------
+
+test('W7-D1: a LEGACY frozen cycle serves pr-description.md from the cycle-log ROOT — the location deriveArtifacts declares ready', async () => {
+  const cid = 'artifact-legacy-pr-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  writeFileSync(join(logsRoot, cid, 'pr-description.md'), '# Why\nLEGACY-ROOT-PR-BODY\n');
+  const r = await rawRequest(bridgeUrl, { method: 'GET', path: artifactPath(cid, 'pr-description.md') });
+  assert.equal(r.status, 200, `a legacy root-located pr-description.md must serve, got ${r.status}: ${r.body}`);
+  assert.match(r.body, /LEGACY-ROOT-PR-BODY/);
+});
+
+test('W7-D1: artifacts/ still WINS over the legacy root copy — the fallback is a fallback, not an override', async () => {
+  const cid = 'artifact-both-pr-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  writeFileSync(join(logsRoot, cid, 'artifacts', 'pr-description.md'), 'MODERN-MIRRORED-COPY\n');
+  writeFileSync(join(logsRoot, cid, 'pr-description.md'), 'LEGACY-ROOT-COPY\n');
+  const r = await rawRequest(bridgeUrl, { method: 'GET', path: artifactPath(cid, 'pr-description.md') });
+  assert.equal(r.status, 200);
+  assert.match(r.body, /MODERN-MIRRORED-COPY/);
+  assert.doesNotMatch(r.body, /LEGACY-ROOT-COPY/);
+});
+
+test('W7-D1 (the fallback did NOT widen the route): no OTHER cycle-log root file becomes servable', async () => {
+  const cid = 'artifact-root-leak-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  // Every one of these really does sit at the cycle-log root on real cycles.
+  for (const name of ['events.jsonl', 'report.md', 'retro.md', 'user-questions.json', 'recap.md', 'brain-lint.md']) {
+    writeFileSync(join(logsRoot, cid, name), `SECRET-${name}`);
+    const r = await rawRequest(bridgeUrl, { method: 'GET', path: artifactPath(cid, name) });
+    assert.equal(r.status, 404, `${name} must NOT be servable from the cycle-log root, got ${r.status}`);
+    assert.doesNotMatch(r.body, new RegExp(`SECRET-${name.replace('.', '\\.')}`), `${name} body leaked`);
+  }
+});
+
+test('W7-D1: the legacy fallback shares the containment guard — a SYMLINKED root pr-description.md is refused, not followed', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const outside = newOutsideDir('artifact-legacy-outside-');
+  writeFileSync(join(outside, 'secret.md'), 'OUT-OF-ROOT-PR');
+  const cid = 'artifact-legacy-symlink-cycle';
+  mkdirSync(join(logsRoot, cid, 'artifacts'), { recursive: true });
+  try {
+    symlinkSync(join(outside, 'secret.md'), join(logsRoot, cid, 'pr-description.md'));
+  } catch { t.skip('symlinks unavailable'); return; }
+  const r = await rawRequest(bridgeUrl, { method: 'GET', path: artifactPath(cid, 'pr-description.md') });
+  assert.equal(r.status, 404, `a symlinked legacy pr-description.md must be refused, got ${r.status}`);
+  assert.doesNotMatch(r.body, /OUT-OF-ROOT-PR/);
+});

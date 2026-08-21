@@ -103,7 +103,15 @@ describe('/projects/[id] (A1-02)', () => {
     // panels re-run on their OWN key: a panel Retry / panels-only recovery never re-runs loadData (form clobber)
     expect(PROJECT).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null \|\| panelErrorList\.length > 0,\s*loadError !== null \? reload : retryPanels,\s*\)/);
     expect(PROJECT).toMatch(/\}, \[isNew, loadData, loadKey\]\);/);
-    expect(PROJECT).toMatch(/\}, \[isNew, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey\]\);/);
+    // W7-D1: `projectKnown` JOINS this dependency list — a STRENGTHENING, not a
+    // relaxation. The panel reads must not fire for an id the roster has not
+    // confirmed (the same rule W7-A4 wrote for `new`, one case wider), and the
+    // gate is a stable boolean rather than the `project` object so a save that
+    // changes the object's identity does not re-run every panel read. Both the
+    // guard and the dependency are pinned, so removing either fails here.
+    expect(PROJECT).toMatch(/if \(isNew \|\| !projectKnown\) return;/);
+    expect(PROJECT).toMatch(/const projectKnown = project !== null;/);
+    expect(PROJECT).toMatch(/\}, \[isNew, projectKnown, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey\]\);/);
     // a failed cycles read never keeps a PREVIOUS project's cycles under this project's error
     expect(PROJECT).toMatch(/catch \(err\) \{[\s\S]{0,300}setCycleGroups\(\[\]\);\s*setProjectCycles\(\[\]\);\s*setPanelError\('cycles'/);
     // …and that panel error is RENDERED (the shared inline failure state), not just stored

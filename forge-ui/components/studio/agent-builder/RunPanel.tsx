@@ -48,7 +48,7 @@
  * is needed to wire the drawer's live event subscription.
  */
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import {
   dispatchAgentRun,
@@ -68,6 +68,7 @@ import type { StandingTrigger } from '@/lib/standing-triggers';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { deriveRunGating, runStateOf } from '@/lib/run-panel-gating';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -163,9 +164,17 @@ export function RunPanel({
   const [materials, setMaterials] = useState<MaterialUpload[]>([]);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  // W7-D1: the ledger status a run id was REATTACHED from. Held so the panel
+  // never has to GUESS a reattached run's state before the poll's first real
+  // response — see `runStateOf` and this file's gating section below.
+  const [reattachedStatus, setReattachedStatus] = useState<string | null>(null);
   const [status, setStatus] = useState<PolledAgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  // W7-D1: set the instant a dispatch claims this panel, so an in-flight
+  // reattach fetch that resolves afterwards cannot adopt a stale historical
+  // run over the run the operator just started.
+  const dispatchedRef = useRef(false);
   const [pollNonce, setPollNonce] = useState(0);
   // W7-B5 (agents-30) cancel state. These live UP HERE with every other hook,
   // ABOVE the `if (interactive) return …` early return below — not next to
@@ -202,10 +211,20 @@ export function RunPanel({
     // resumes polling exactly as before (the poll observes the live state).
     fetchLatestStandaloneRun(slug).then((row) => {
       if (cancelled || !row) return;
-      // Functional update, not a bare setRunId(row.id): a real dispatch
-      // (onRun, below) may have already set a FRESH runId while this fetch
-      // was in flight — never stomp it with a stale reattach result.
-      setRunId((current) => current ?? row.id);
+      // A real dispatch (onRun, below) may have already claimed this panel
+      // while the fetch was in flight — never stomp it with a stale reattach.
+      // W7-D1: the guard is a REF, not a functional `setRunId` update, because
+      // the id and its status must be adopted together or not at all (a
+      // `setState` inside another setter's updater is not allowed to be the
+      // deciding read — the updater must stay pure).
+      if (dispatchedRef.current) return;
+      setRunId(row.id);
+      // W7-D1: record the row's OWN status alongside the id. Without this the
+      // panel fell through to "a runId with no status yet is still being
+      // watched" and fabricated 'running' for a run the ledger had already
+      // reported terminal — the lock that made an agent whose last run died
+      // permanently un-runnable.
+      setReattachedStatus(row.status);
     }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,18 +281,32 @@ export function RunPanel({
     );
   }
 
-  const runState = status?.state ?? (runId ? 'running' : 'idle');
+  // W7-D1: ONE derivation for the run state and for everything gated on it —
+  // `lib/run-panel-gating.ts`, exhaustively tested there because the defect it
+  // fixes lived in effect-driven state that `renderToStaticMarkup` never runs.
+  const runState = runStateOf({ status, runId, reattachedStatus });
   const runningNow = runState === 'running';
   // W6-B14: the shared three-state contract — `watching` before the poll's
   // first real response lands too (a dispatched runId with no status yet is
   // still "being watched", not idle), never fabricated once a real
   // done/failed/timed-out status is in hand.
   const pollState = pollDisplayState(status) ?? (runId ? 'watching' : null);
-  const effectiveCanRun = canRun && !blockedMessage && !standaloneBlockedReason;
-  // W7-B5 (agents-29): the Run control stays disabled while the DISPATCHED
-  // run itself is still running — not just during the POST — so a double
-  // click can never start two concurrent runs and orphan the first.
-  const controlsDisabled = !effectiveCanRun || dispatching || runningNow;
+  // W7-B5 (agents-29) as AMENDED by W7-D1: the RUN CONTROL stays disabled
+  // while a run we are actively observing is still running, so a double click
+  // can never start two concurrent runs and orphan the first. The FORM does
+  // not — editing the next run's project while one is in flight harms
+  // nothing, and disabling it is what bricked the surface: a reattached run
+  // that died without a terminal marker reports 'running' forever, and
+  // `pollAgentRun`'s timeout keeps that last real state (adding only
+  // `pollExhausted`), so the lock never lifted on its own.
+  const gating = deriveRunGating({
+    canRun,
+    blockedMessage,
+    standaloneBlockedReason,
+    dispatching,
+    runState,
+    pollExhausted: status?.pollExhausted === true,
+  });
 
   const onMaterialsChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -324,6 +357,10 @@ export function RunPanel({
     setError(null);
     setDispatching(true);
     setStatus(null);
+    // W7-D1: claim the panel BEFORE the POST, so a reattach fetch that
+    // resolves mid-dispatch cannot adopt a stale historical run over this one.
+    dispatchedRef.current = true;
+    setReattachedStatus(null);
     try {
       const inputs = parseRunInputs(inputsText);
       const opts: {
@@ -365,7 +402,7 @@ export function RunPanel({
         aria-label="Run against project"
         value={project}
         onChange={(e) => setProject(e.target.value)}
-        disabled={controlsDisabled}
+        {...disabledAttrs(gating.formDisabledReason, 'Run this agent against a managed project')}
         style={{ marginBottom: 8 }}
       >
         <option value="">no project</option>
@@ -382,7 +419,7 @@ export function RunPanel({
         placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
         value={inputsText}
         onChange={(e) => setInputsText(e.target.value)}
-        disabled={controlsDisabled}
+        {...disabledAttrs(gating.formDisabledReason, 'Inputs handed to this run')}
         style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
       />
 
@@ -399,8 +436,13 @@ export function RunPanel({
             min={0}
             step="0.01"
             value={costCeiling}
+            {...disabledAttrs(
+              !costCeilingEnforceable
+                ? "This agent's loop strategy can't enforce a per-run cost ceiling, so the field is disabled — submitting one would be refused by the server anyway."
+                : gating.formDisabledReason,
+              'The cost ceiling this run will be dispatched with',
+            )}
             onChange={(e) => setManualCostCeiling(Number(e.target.value))}
-            disabled={!costCeilingEnforceable || controlsDisabled}
           />
           {!costCeilingEnforceable && (
             <p data-component="ceiling-explanation" className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
@@ -425,7 +467,7 @@ export function RunPanel({
           data-run-materials-input
           multiple
           onChange={(e) => void onMaterialsChange(e)}
-          disabled={controlsDisabled}
+          {...disabledAttrs(gating.formDisabledReason, 'Attach materials of the kinds this agent declares')}
         />
         {materialsError && (
           <p className="save-hint save-hint-dirty" style={{ fontSize: 11, margin: '4px 0 0' }}>{materialsError}</p>
@@ -440,8 +482,7 @@ export function RunPanel({
         data-action="run-agent"
         data-run-ceiling={resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable) ?? ''}
         onClick={() => void onRun()}
-        {...disabledAttrs(controlsDisabled ? (standaloneBlockedReason || blockedMessage || (dispatching ? 'Dispatching…' : runningNow ? 'A run is already in flight' : 'Save the agent (no unsaved changes) to run it')) : null, 'Dispatch this agent standalone')}
-        title={standaloneBlockedReason || blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
+        {...disabledAttrs(gating.runDisabledReason, 'Dispatch this agent standalone')}
       >
         {dispatching
           ? 'Dispatching…'
