@@ -1,14 +1,14 @@
 {
  "_comment": "W7-A0 walkthrough baseline: the failures KNOWN on main when this file was generated. Lanes must SHRINK this file (delete the entries their PR fixes) and NEVER grow it — a new failing route/request/error fails `npm run ui:walkthrough -- --assert`, and scripts/ui-walkthrough/check-baseline-shrinks.mjs fails CI if a PR adds an entry (growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, expectedRoutes recorded). expectedRoutes[ci|host] is the coverage floor: a full crawl in that environment must visit >= 90% of it. Regenerate only from main with `--write-baseline` (ids are normalized to <id>).",
- "generatedAt": "2026-08-19T02:57:07.333Z",
- "source": "main@08ec533d — read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) — http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json)",
+ "generatedAt": "2026-08-21T13:35:06.073Z",
+ "source": "main@d1a52609 + the W7-D gate fix round — Wave D exit gate, ledger-expanded crawl (host) — http://localhost:4124 at 2026-08-21T13:34:24.065Z (replayed from _walkthrough/explore/crawl.json)",
  "expectedRoutes": {
   "ci": 136,
-  "host": 924
+  "host": 715
  },
  "expectedRoutesSource": {
   "ci": "main@08ec533d — CI run 32199260116 (github ubuntu, --boot dry-bridge clean checkout) — http://localhost:4124 at 2026-08-19T00:01:47.315Z (replayed from _walkthrough/ci-run-32199260116/crawl.json) (136 routes, 0 unvisited)",
-  "host": "main@08ec533d — read-only crawl of the operator's running Studio (main build ac7e71e0, code-identical to 08ec533d; harness checkout fix/w7-a0-harness) — http://localhost:4124 at 2026-08-19T02:48:00.144Z (replayed from _walkthrough/host-main/crawl.json) (924 routes, 0 unvisited)"
+  "host": "main@d1a52609 + the W7-D gate fix round — Wave D exit gate, ledger-expanded crawl (host) — http://localhost:4124 at 2026-08-21T13:34:24.065Z (replayed from _walkthrough/explore/crawl.json) (715 routes, 0 unvisited)"
  },
  "entries": []
 }

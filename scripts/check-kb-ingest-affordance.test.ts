@@ -85,6 +85,22 @@ function walk(dirAbs: string, exts: string[], skip: (p: string) => boolean): str
   return out;
 }
 
+/**
+ * W7-D1: a file the walk enumerated can vanish before it is read — a SIBLING
+ * ratchet test (`scripts/check-disabled-reason.test.ts`) plants and deletes a
+ * real probe file inside `forge-ui/components/` to prove its own gate bites,
+ * and `node --test` runs the two files concurrently. A file that no longer
+ * exists is not a violation; it is a file that no longer exists.
+ */
+function readIfPresent(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
 const GLOBAL_SKIP = (p: string): boolean =>
   p.includes(`${join('node_modules')}`) || p.includes(`${join('.git')}`) ||
   // Transient git worktrees are duplicate checkouts of the repo (e.g. parked
@@ -105,7 +121,8 @@ function checkNoIngestAffordance(root: string): string[] {
   for (const dir of UI_SCAN_DIRS) {
     const files = walk(join(root, dir), ['.ts', '.tsx'], GLOBAL_SKIP);
     for (const file of files) {
-      const text = readFileSync(file, 'utf8');
+      const text = readIfPresent(file);
+      if (text === null) continue;
       const re = /data-action=["']([^"']*)["']/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(text))) {
@@ -120,7 +137,8 @@ function checkNoIngestAffordance(root: string): string[] {
   for (const dir of BRIDGE_SCAN_DIRS) {
     const files = walk(join(root, dir), ['.ts'], GLOBAL_SKIP);
     for (const file of files) {
-      const text = readFileSync(file, 'utf8');
+      const text = readIfPresent(file);
+      if (text === null) continue;
       if (/\bop\s*===\s*['"]ingest['"]/.test(text) || /\bcase\s+['"]ingest['"]/.test(text)) {
         violations.push(`${relative(root, file)}: bridge route dispatches op === 'ingest' (forbidden — operator decision 3)`);
       }
@@ -133,7 +151,8 @@ function checkNoIngestAffordance(root: string): string[] {
   for (const file of allFiles) {
     const relPath = relative(root, file).split('\\').join('/');
     if (ALLOWED_INGEST_FILES.has(relPath)) continue;
-    const text = readFileSync(file, 'utf8');
+    const text = readIfPresent(file);
+    if (text === null) continue;
     if (text.includes('reflector-ingest') || text.includes('DEFAULT_KB_INGEST')) {
       violations.push(`${relPath}: references reflector-ingest/DEFAULT_KB_INGEST outside the allowed descriptor-default/reflection files`);
     }
@@ -575,3 +594,46 @@ test(
     }
   },
 );
+
+// =============================================================================
+// W7-D1 — the SHIPPED checker and this file's local mirror must skip the same
+// things. They had drifted: the mirror skipped `.claude/worktrees/`, the real
+// `check-kb-ingest-affordance.mjs` did not, so any parked lane worktree
+// (this campaign leaves several) re-reported every allowed reflection file
+// under a path `ALLOWED_INGEST_FILES` cannot match and turned the ratchet red
+// on a developer tree while staying green on CI, which has no worktrees.
+// =============================================================================
+
+test('W7-D1: the REAL checker ignores a git worktree checkout of this same repo — a duplicate checkout is not additional repo state', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-ingest-worktree-'));
+  try {
+    // A worktree containing the exact file the allowlist normally permits AT
+    // ITS OWN path — the shape that produced the false violations.
+    const wt = join(root, '.claude', 'worktrees', 'agent-fixture', 'orchestrator', 'studio');
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, 'kb-descriptor.ts'), "export const DEFAULT_KB_INGEST = 'reflector-ingest';\n");
+    assert.deepEqual(
+      checkNoIngestAffordanceReal(root),
+      [],
+      'a `.claude/worktrees/**` copy of an allowlisted file must not be reported — the allowlist keys on repo-relative paths, which a worktree copy can never match',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('W7-D1 (the gate bites): the same file OUTSIDE a worktree, at a path the allowlist does not cover, IS still reported', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-ingest-notworktree-'));
+  try {
+    const dir = join(root, 'orchestrator', 'somewhere-else');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'kb-descriptor.ts'), "export const DEFAULT_KB_INGEST = 'reflector-ingest';\n");
+    const violations = checkNoIngestAffordanceReal(root);
+    assert.ok(
+      violations.some((v: string) => v.includes('orchestrator/somewhere-else/kb-descriptor.ts')),
+      `skipping worktrees must not have blunted the rule itself; got: ${JSON.stringify(violations)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

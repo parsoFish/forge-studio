@@ -238,3 +238,60 @@ test('saveProjectRepo: the merge commit onto main carries forge-orchestrator ide
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// projects-37 (S1, W7-C4): an UNBORN repo — freshly `git init`'d, zero commits
+// — is exactly what onboarding a brand-new project leaves behind (W7-B6 WI-1
+// made `git init` fire for real on that path for the first time, but added no
+// initial commit). `defaultBranch()` falls back to the literal string 'main'
+// when neither main nor master exists as a ref, and `ensureStudioBranch` then
+// ran `git checkout -b forge-studio main` — fatal ("'main' is not a commit").
+// That throw propagated out of `withStudioWrite` to the PUT
+// /api/studio/projects/:id route's outer catch → 500, and the operator's very
+// first "Save project" silently discarded the edit.
+//
+// On an unborn HEAD the correct incantation is `git checkout -b forge-studio`
+// with NO start-point.
+// ---------------------------------------------------------------------------
+
+/** A git repo with NO commits at all — the state `git init` alone leaves. */
+function setupUnbornRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'proj-tx-unborn-'));
+  execFileSync('git', ['-C', dir, 'init', '-q'], { stdio: 'ignore' });
+  g(dir, ['config', 'user.email', 'test@forge.dev']);
+  g(dir, ['config', 'user.name', 'Forge Test']);
+  return dir;
+}
+
+test('projects-37: ensureStudioBranch on an UNBORN (zero-commit) repo lands on forge-studio instead of throwing', () => {
+  const dir = setupUnbornRepo();
+  try {
+    // Precondition: the injection is armed — the repo really has no commits,
+    // so there is no ref for `checkout -b <branch> <start-point>` to use.
+    assert.equal(g(dir, ['rev-list', '--all', '--count']), '0', 'precondition: the fixture repo must be unborn');
+
+    ensureStudioBranch(dir);
+
+    // `rev-parse --abbrev-ref HEAD` cannot be used here: HEAD is still unborn
+    // (checkout -b on an unborn HEAD only re-points the symbolic ref), so the
+    // branch name has to be read symbolically.
+    assert.equal(g(dir, ['symbolic-ref', '--short', 'HEAD']), STUDIO_BRANCH);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('projects-37: withStudioWrite on an UNBORN repo commits the first write to forge-studio', () => {
+  const dir = setupUnbornRepo();
+  try {
+    withStudioWrite(dir, 'forge-studio: update .forge/project.json', () => {
+      mkdirSync(join(dir, '.forge'), { recursive: true });
+      writeFileSync(join(dir, '.forge', 'project.json'), '{"name":"edited"}\n');
+    }, ['.forge/project.json']);
+
+    assert.equal(g(dir, ['rev-parse', '--abbrev-ref', 'HEAD']), STUDIO_BRANCH);
+    assert.match(g(dir, ['log', '-1', '--pretty=%s']), /update \.forge\/project\.json/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

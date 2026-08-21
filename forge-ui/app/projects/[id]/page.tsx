@@ -281,8 +281,19 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     // loadKey: the page-load Retry / recovery-while-failed re-run the project read (W7-FIX-A1)
   }, [isNew, loadData, loadKey]);
 
+  // W7-D1 — the SAME rule as `isNew`, one case wider. W7-A4 stopped
+  // per-project reads firing for `/projects/new`, but not for an id the roster
+  // does not have: the page renders its whole subtree while `ready` is still
+  // false, so `/projects/claude-harness` (linked from a retired flow's run
+  // ledger) fired preflight + contract-stages + onboarding/active and 404'd
+  // all three before settling on the honest NotFound. The walkthrough gate
+  // only saw it once the crawler learned to page the history ledgers and
+  // reached that route at all. `projectKnown` is a stable boolean, not the
+  // `project` object — the panels must not re-read every time a save changes
+  // its identity.
+  const projectKnown = project !== null;
   useEffect(() => {
-    if (isNew) return;
+    if (isNew || !projectKnown) return;
     const signal = { cancelled: false };
     setPanelErrors({});
     void loadPreflight(signal);
@@ -290,7 +301,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
     void loadCycleGroups(signal);
     return () => { signal.cancelled = true; };
     // loadKey (page Retry) AND panelKey (panel Retry / panels-only recovery) re-run the panel reads
-  }, [isNew, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey]);
+  }, [isNew, projectKnown, loadPreflight, loadRoadmap, loadCycleGroups, loadKey, panelKey]);
 
   // W6-B10 (R1-03-F2 reversed): the demo builder is a dedicated session
   // screen (`/sessions/demo/<sid>`, the ONE session screen every kind
@@ -652,14 +663,19 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
                 component; ContractPanelMount resolves it client-side since this
                 page is 'use client'). Distinct concern from the preflight
                 VERDICT above (ContractReadiness / ContractResolutionPanel). */}
-            <ContractPanelMount
-              projectId={id}
-              northStar={northStar}
-              instructions={instructions}
-              instructionsSource={instructionsSource}
-            />
+            {/* W7-D1: both of these fetch per-project on mount
+                (contract-stages / onboarding-active), so neither may mount for
+                an id the roster has not confirmed — see `projectKnown`. */}
+            {projectKnown && (
+              <ContractPanelMount
+                projectId={id}
+                northStar={northStar}
+                instructions={instructions}
+                instructionsSource={instructionsSource}
+              />
+            )}
 
-            <OnboardWithAgent projectId={id} />
+            {projectKnown && <OnboardWithAgent projectId={id} />}
 
             {/* W7-B6 (projects-19): this project's open sessions with resume
                 links — the page no longer only mints new ones. */}

@@ -107,7 +107,7 @@ import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-bounda
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import { cleanCommunityArtifacts } from './journeys/community.mjs';
-import { restoreDeveloperRalphSkill, cleanKickoffAgent } from './journeys/agents.mjs';
+import { restoreDeveloperRalphSkill, cleanKickoffAgent, cleanAllR6_06LedgerFixtures } from './journeys/agents.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
   OUT, FRAMES, CLIPS,
@@ -466,6 +466,10 @@ async function main() {
         // seven-beat arc, which (like the edit-agent arc above) has no
         // per-beat try/catch of its own.
         cleanKickoffAgent();
+        // W7-D1: same crash-safe backstop for the three R6-06 ledger fixtures —
+        // they are seeded into _queue/ and _logs/, outside the seeding beat's
+        // own directory, and one of them is showcase-eligible for PROJECT.
+        cleanAllR6_06LedgerFixtures();
         cleanFirstFlow();
         cleanFirstProject();
         cleanFirstFlowRun();

@@ -158,6 +158,14 @@ import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from './studio-path-guard.ts';
 
+
+/** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
+ *  root, for frozen cycles written before the mirror-into-`artifacts/` change.
+ *  Kept as a named constant so the route and the deriver's own comment name the
+ *  same single file, and so widening it is a deliberate edit rather than a
+ *  string that quietly grows. */
+const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
+
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
 /** W7-B3 (community-08) — bound on the optional community-refresh kickoff
@@ -1968,7 +1976,25 @@ async function handleHttp(
     // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
-    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
+    let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
+    // W7-D1 — PARITY with `deriveArtifacts` (orchestrator/run-model-derive.ts),
+    // which marks `pr` ready when `pr-description.md` exists in EITHER
+    // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
+    // location too so older frozen logs still resolve"). This route only ever
+    // read `artifacts/`, so a frozen pre-mirror cycle advertised a PR tab in
+    // `artifactsReady` and 404'd when the operator clicked it — a declaration
+    // enforced by nothing, found by the Wave D crawl on
+    // 2026-06-18T10-27-18_INIT-2026-06-17-release-definition-permissions-coverage.
+    //
+    // Deliberately ONE exact filename, and only as a FALLBACK after the
+    // modern location misses: the cycle-log root also holds events.jsonl,
+    // report.md, retro.md and user-questions.json, none of which may become
+    // servable as a side effect. It goes through the SAME `guardedReadFile`,
+    // so a symlinked legacy copy is refused exactly as a symlinked modern one
+    // is. All four directions pinned in sec04-cycleid-containment.test.ts.
+    if (body === null && filename === LEGACY_ROOT_ARTIFACT) {
+      body = guardedReadFile(ctx.logsRoot, [cycleId, LEGACY_ROOT_ARTIFACT]);
+    }
     if (body === null) {
       sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return;

@@ -116,6 +116,18 @@ async function sweepOnce(page, baseUrl, check, pass) {
     //     provided and skips nowhere (crosscut-18);
     //   · the tab title is the route's own, not the bare product name that
     //     every route shared before W7-C3 (crosscut-06).
+    // W7-D1: `useDocumentTitle` sets `document.title` from a PASSIVE effect,
+    // which flushes after paint — `waitForSelector('[data-page]')` can resolve
+    // before it. Reading the title at that instant is a race the harness lost
+    // on `/library` in the Wave D gate (measured: "forge" at
+    // domcontentloaded, "Library · forge" 2s later — the route was never
+    // broken, the check was). Wait for the title to SETTLE, bounded; a route
+    // that genuinely never sets one still fails, it just fails after the
+    // timeout instead of before the effect.
+    await page
+      .waitForFunction(() => / · forge$/.test(document.title) && document.title !== 'forge', null, { timeout: 5000 })
+      .catch(() => {});
+
     const a11y = await page.evaluate(() => {
       const root = document.querySelector('[data-page]');
       const skip = document.querySelector('[data-component="skip-link"]');

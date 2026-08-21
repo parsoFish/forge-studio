@@ -1870,16 +1870,22 @@ export const journey = defineJourney({
               const panelPhaseAfter = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
               check(panelPhaseAfter === 'awaiting-approval', `kb-cleanup-launch: data-session-phase="${panelPhaseAfter}" after the stand-in phase transition`);
 
-              // awaiting-approval is kb-cleanup's `{step:'noop', awaits:'verdict',
-              // verdicts:['approve']}` row — exactly ONE verdict affordance,
-              // approve-only (no reject button — mirrors demo-builder.mjs's own
-              // "unlike kb-cleanup/authoring" note).
+              // W7-C2 (sessions-kinds-23) SUPERSEDED W6-B6's approve-only
+              // ruling: kb-cleanup's `awaiting-approval` row now declares
+              // `verdicts: [approve, revise, reject]` (studio/session-kinds.yaml)
+              // with its own terminal `rejected` row. A cleanup plan the
+              // operator does not want has real rejection semantics, and a
+              // nearly-right one can be redrafted instead of being
+              // applied-or-abandoned. The beat asserts the THREE-way gate the
+              // yaml actually declares — it previously pinned the retired
+              // approve-only contract, which is how a landed capability came
+              // to look like a gate failure.
               check(await page.locator('[data-affordance-kind="verdict"]').count() > 0,
                 'kb-cleanup-launch: awaiting-approval derives a verdict affordance');
-              check(await page.locator('[data-action="verdict-approve"]').count() > 0,
-                'kb-cleanup-launch: [data-action="verdict-approve"] renders now that phase="awaiting-approval" — absent one step ago');
-              check(await page.locator('[data-action="verdict-reject"]').count() === 0,
-                'kb-cleanup-launch: no reject button — kb-cleanup declares no rejection path');
+              for (const verdict of ['approve', 'revise', 'reject']) {
+                check(await page.locator(`[data-action="verdict-${verdict}"]`).count() > 0,
+                  `kb-cleanup-launch: [data-action="verdict-${verdict}"] renders now that phase="awaiting-approval" — the three-way gate W7-C2 declared (all three absent one step ago)`);
+              }
               await frame(page, 'kb-cleanup-2-plan-review', 'Sessions — kb-cleanup: the real captured plan replayed, both actions honestly unknown, approve offered', { key: true });
 
               } finally {

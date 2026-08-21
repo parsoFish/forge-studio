@@ -25,7 +25,7 @@ In the compare-ref-analytics-delta cycle the demo artifact contained `beforeNote
 
 Two forge gaps combined:
 
-1. **`forge demo capture` absent from unifier prompt.** `orchestrator/unifier-invocation.ts` and `skills/developer-unifier/SKILL.md` instruct the unifier to run `forge demo render` — never `forge demo capture`. Without an explicit capture step, every checkpoint falls back to prose `beforeNote`/`afterNote`.
+1. **`forge demo capture` absent from unifier prompt.** The unifier-invocation logic instructs the unifier to run `forge demo render` — never `forge demo capture`. Without an explicit capture step, every checkpoint falls back to prose `beforeNote`/`afterNote`.
 
 2. **`captureCheckpoints` silently skips on non-zero build.** `cli/demo.ts:captureCheckpoints` did `if (!status.ok) continue`, so a fresh-worktree `npm run build` failure zeroed ALL capture — even though the committed `dist/` in the worktree runs fine. CLI-output capture should run independently of the build result.
 
@@ -35,7 +35,7 @@ Two forge gaps combined:
 
 ## Fix
 
-- Add `forge demo capture <init-id>` (run from the worktree root) as a mandatory step in `skills/developer-unifier/SKILL.md` and `orchestrator/unifier-invocation.ts`, before `forge demo render`.
+- Add `forge demo capture <init-id>` (run from the worktree root) as a mandatory step in `skills/developer-unifier/SKILL.md` before `forge demo render`.
 - Fix `captureCheckpoints` to run CLI-output capture regardless of `npm run build` exit code — use the committed `dist/` when the build fails.
 - For flags that are NEW on HEAD (like `--compare`), the "before" run legitimately errors — that error IS the honest before evidence; do not suppress it.
 
