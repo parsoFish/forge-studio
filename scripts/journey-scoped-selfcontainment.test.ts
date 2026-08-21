@@ -25,7 +25,11 @@
  *    (KB lint rows). A1.3's environment has no gated project — its
  *    [data-attention-item] rows are all KB rows (gateB2 line 199-201:
  *    strip 0 ✗, items 4 ✓, link "/knowledge?id=cycles&tab=health") — so the
- *    beat must assert the strip its own environment actually fires.
+ *    beat now asserts the KB strip, and fires it on a condition the beat
+ *    OWNS: a seeded lint-flagged scratch KB (writeSuLintKbFixture — the
+ *    HOME.2 fixture shape), never the repo's transient standing lint debt,
+ *    which the operator can drain to green at any time (KB lint is derived
+ *    live per request — cli/kb-lint-summary.ts, derive-don't-store).
  *    home.mjs HOME.2 keeps the deep two-strip coverage (it seeds a gated
  *    project AND a lint-flagged KB); a keeper pin below guards that.
  */
@@ -35,7 +39,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { seedThroughlineSkillFixture, SK_NEW_SLUG, SK_NEW_NAME } from './lib/journey-fixtures.mjs';
+import { seedThroughlineSkillFixture, SK_NEW_SLUG, SK_NEW_NAME, SK_NEW_DESC } from './lib/journey-fixtures.mjs';
 import { listPlainSkills } from '../orchestrator/studio/registry.ts';
 
 function tmpRoot(): string {
@@ -52,7 +56,7 @@ test('seedThroughlineSkillFixture writes a plain skill the REAL listPlainSkills 
     const found = listPlainSkills(root).find((s) => s.id === SK_NEW_SLUG);
     assert.ok(found, `listPlainSkills must discover skills/${SK_NEW_SLUG}/SKILL.md — the same scanner GET /api/studio/catalog unions into the palette`);
     assert.equal(found!.name, SK_NEW_NAME, 'chip name must be the frontmatter name, matching what SK-3 authors');
-    assert.ok(found!.desc && found!.desc.length > 0, 'the fixture carries a real description (the chip tooltip)');
+    assert.equal(found!.desc, SK_NEW_DESC, 'the chip tooltip is the shared SK_NEW_DESC constant — the SAME description SK-3 types into the real /skills/new form (skills.mjs), so the two paths can never drift');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -93,20 +97,45 @@ const agentsSrc = readFileSync(join(journeysDir, 'agents.mjs'), 'utf8');
 const standUpCreateSrc = readFileSync(join(journeysDir, 'stand-up-create.mjs'), 'utf8');
 const homeSrc = readFileSync(join(journeysDir, 'home.mjs'), 'utf8');
 
-test('agents.mjs seeds its own throughline skill — self-contained under any --journey scope', () => {
-  assert.ok(
-    agentsSrc.includes('seedThroughlineSkillFixture('),
-    'agents-scratch-build must call seedThroughlineSkillFixture() before the catalog-chip lookup — a scoped run without the skills journey has no SK-3 to author it (gateB2 line 513)',
-  );
+test('agents.mjs seeds its own throughline skill BEFORE the catalog-chip lookup — self-contained under any --journey scope', () => {
+  // Ordering pin, not a bare .includes(): a prose mention in a comment (or a
+  // call moved BELOW the chip lookup) must not keep this green — the
+  // invariant is "the seed runs first, so the chip exists when looked up"
+  // (gateB2 line 513). The chip-lookup marker is A-scratch's own palette
+  // query — the [data-component="catalog-palette"]-prefixed selector appears
+  // exactly once in agents.mjs (dragSkillChipIntoZone and the clip context
+  // use the bare .catalog-chip form).
+  const seedIdx = agentsSrc.indexOf('seedThroughlineSkillFixture(');
+  const chipIdx = agentsSrc.indexOf('[data-component="catalog-palette"] .catalog-chip[data-id=');
+  assert.notEqual(seedIdx, -1,
+    'agents-scratch-build must call seedThroughlineSkillFixture() — a scoped run without the skills journey has no SK-3 to author it (gateB2 line 513)');
+  assert.notEqual(chipIdx, -1,
+    'the A-scratch catalog-chip lookup marker must exist ([data-component="catalog-palette"] .catalog-chip[data-id=…) — if the lookup moved, update this pin to its new marker');
+  assert.ok(seedIdx < chipIdx,
+    'seedThroughlineSkillFixture() must run BEFORE the catalog-chip lookup — seeding after the lookup re-opens the gateB2 scoped-run timeout');
 });
 
-test('stand-up-create A1.3 asserts the strip its environment fires: kbs-needing-attention (W7-B1 as-built)', () => {
+test('stand-up-create A1.3 seeds its own lint-flagged KB and asserts kbs-needing-attention (W7-B1 as-built)', () => {
+  // Scope every pin to the A1.3 region: the file-wide form blocked any FUTURE
+  // stand-up-create beat that legitimately seeds a gated project and asserts
+  // the gate strip (the exact HOME.2 pattern this file endorses below).
+  const a13Start = standUpCreateSrc.indexOf('[A1.3]');
+  const a13End = standUpCreateSrc.indexOf("id: 'su-create-orientation'");
+  assert.notEqual(a13Start, -1, 'the A1.3 block marker ("[A1.3]") must exist in stand-up-create.mjs');
+  assert.notEqual(a13End, -1, "the region end marker (id: 'su-create-orientation', the next beat) must exist — if the beat order changed, update this pin");
+  assert.ok(a13Start < a13End, 'the A1.3 block must precede the su-create-orientation beat');
+  const a13Region = standUpCreateSrc.slice(a13Start, a13End);
+
+  const seedIdx = a13Region.indexOf('writeSuLintKbFixture(');
+  const stripIdx = a13Region.indexOf('kbs-needing-attention');
+  assert.notEqual(stripIdx, -1,
+    'A1.3 must assert [data-section="kbs-needing-attention"] — its [data-attention-item] rows are KB lint rows (gateB2 line 200-201)');
+  assert.notEqual(seedIdx, -1,
+    'A1.3 must seed its OWN lint-flagged scratch KB (writeSuLintKbFixture) — KB lint is derived live per request, so riding the repo\'s standing lint debt goes red the day the operator drains it to green');
+  assert.ok(seedIdx < stripIdx,
+    'the seed must run BEFORE the strip assertion — seeding after it asserts the environmental condition, not the self-owned one');
   assert.ok(
-    standUpCreateSrc.includes('kbs-needing-attention'),
-    'A1.3 must assert [data-section="kbs-needing-attention"] — its [data-attention-item] rows are KB lint rows (gateB2 line 200-201)',
-  );
-  assert.ok(
-    !standUpCreateSrc.includes('data-section="attention-strip"'),
+    !a13Region.includes('data-section="attention-strip"'),
     'A1.3 must NOT require the gate strip — no project is gated in its environment, and W7-B1 strips render ONLY on a real condition (gateB2 line 199)',
   );
 });

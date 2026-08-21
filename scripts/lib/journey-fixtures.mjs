@@ -1447,6 +1447,11 @@ export const SK_EDIT_SLUG = 'project-scoped-review';
 export const SK_EDIT_PATH = join(FORGE_ROOT, 'skills', SK_EDIT_SLUG, 'SKILL.md');
 export const SK_NEW_NAME = 'API contract review';
 export const SK_NEW_SLUG = 'api-contract-review';   // = name.toLowerCase().replace(/\s+/g,'-')
+// ONE constant for the throughline skill's description: skills.mjs SK-3 types
+// it into the real /skills/new form AND seedThroughlineSkillFixture() below
+// writes it straight to disk — sharing the literal pins the two paths to the
+// same artifact bytes for the same slug (W7-FIX-B-UI review finding 2).
+export const SK_NEW_DESC = 'Review an API surface for contract-breaking changes before merge.';
 // The create CLIP records in a fresh context and clicks Create for real — it
 // uses its own slug so it never collides with the main beat's SK_NEW_SLUG
 // artifact. SK_NEW_SLUG is the walkthrough's THROUGHLINE skill (a later
@@ -1482,7 +1487,7 @@ export function seedThroughlineSkillFixture(root = FORGE_ROOT) {
   writeFileSync(skillMdPath, [
     '---',
     `name: ${SK_NEW_NAME}`,
-    'description: Review an API surface for contract-breaking changes before merge.',
+    `description: ${SK_NEW_DESC}`,
     'library: true',
     '---',
     '',

@@ -58,6 +58,58 @@ function cleanCreateProjects() {
   cleanOnboardedProject(TEMPLATE_SLUG);
 }
 
+// ── A1.3's SELF-OWNED lint-flagged scratch KB (W7-FIX-B-UI review finding 1) ─
+// A1.3's KB-strip assertion must never ride the repo's TRANSIENT standing
+// lint debt: KB lint is derived live per request (cli/kb-lint-summary.ts,
+// derive-don't-store), so the day the operator drains the checked-in brains
+// to green (the wave-6 one-button "Drain to green"), an un-seeded
+// `kbs-needing-attention` assertion goes red with ZERO UI regression. The
+// beat therefore seeds its OWN condition: the same directly-verified fixture
+// shape as home.mjs's HOME_LINT_KB (a valid-frontmatter theme with NO
+// category index files beside it genuinely trips cli/brain-lint.ts's
+// checkProjectBrainIndexes → one `flag` → buildKbAttention "warn"), on its
+// own slug so the two journeys never collide on disk, with its own dedicated
+// .gitignore entry, seeded before the beat's Home visit and swept crash-safe
+// (leading sweep + finally — the beat owns ALL its state, failure paths
+// included).
+const SU_LINT_KB = 'sucreate-fixture-lint-kb';
+const SU_LINT_KB_DIR = join(FORGE_ROOT, 'brain', 'projects', SU_LINT_KB);
+
+function cleanSuLintKb() {
+  try { rmSync(SU_LINT_KB_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
+function writeSuLintKbFixture() {
+  mkdirSync(join(SU_LINT_KB_DIR, 'themes'), { recursive: true });
+  writeFileSync(join(SU_LINT_KB_DIR, 'kb.yaml'), [
+    `id: ${SU_LINT_KB}`,
+    'name: Stand-up fixture — lint-flagged KB',
+    'binding:',
+    '  kind: unique',
+    'desc: Journey-seeded scratch KB proving Home\'s "KBs needing attention" strip fires on a real per-KB lint flag.',
+    'backend: filesystem',
+    '',
+  ].join('\n'));
+  writeFileSync(join(SU_LINT_KB_DIR, 'themes', 'sample-theme.md'), [
+    '---',
+    'title: Sample theme',
+    'description: A journey-seeded theme with valid frontmatter but no category index files.',
+    'category: pattern',
+    'keywords:',
+    '  - sucreate-fixture',
+    'created_at: 2026-08-21',
+    'updated_at: 2026-08-21',
+    '---',
+    '',
+    '# Sample theme',
+    '',
+    'Journey-seeded scratch content — proves checkProjectBrainIndexes flags an ' +
+      'unindexed project brain (no patterns.md/antipatterns.md/decisions.md/' +
+      'reference.md beside it). Never a real theme; swept every run.',
+    '',
+  ].join('\n'));
+}
+
 // ── R4-12-F2 LEDGER-NAV SEED (module-local) ─────────────────────────────────
 // A THROWAWAY completed cycle for the permanent cycle-ledger dig-in proof
 // (AT-F2-4). It carries its OWN distinct init id — NEVER the canonical CYCLE_ID
@@ -299,7 +351,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-library',
         title: 'Everything is data — projects index, Library shelves, Home attention strips',
-        narration: 'With a brand-new project just stood up from nothing, its own index page renders it as a real data card, the rebuilt Library page renders its five shelves (skills/hooks/connections/templates/community, W6-IA-4) as real registry data, and Home\'s cross-project attention surfaces stay honest: W7-B1 split them into two NAMED strips that render ONLY on a real condition — no project is gated here (this journey\'s stand-ups are contract-green by design), so the gate strip stays absent, while the repo\'s standing KB lint debt fires "Knowledge bases needing attention" with rows that link straight to their owning surface. (W6-IA-4: Library is shelves-only now — the flows/agents/projects/knowledge shelves this beat used to check on /library moved onto their own real index routes; /flows and /agents each get their own dedicated journey coverage, so this beat checks /projects — the one index route with no other dedicated journey file yet — plus the rebuilt Library shelves and Home\'s attention strips.)',
+        narration: 'With a brand-new project just stood up from nothing, its own index page renders it as a real data card, the rebuilt Library page renders its five shelves (skills/hooks/connections/templates/community, W6-IA-4) as real registry data, and Home\'s cross-project attention surfaces stay honest: W7-B1 split them into two NAMED strips that render ONLY on a real condition — no project is gated here (this journey\'s stand-ups are contract-green by design), so the gate strip stays absent, while a journey-seeded lint-flagged scratch KB — a real per-KB lint condition this beat owns and sweeps itself, never the repo\'s transient standing lint debt — fires "Knowledge bases needing attention" with a row that deep-links straight to that KB\'s own Health tab. (W6-IA-4: Library is shelves-only now — the flows/agents/projects/knowledge shelves this beat used to check on /library moved onto their own real index routes; /flows and /agents each get their own dedicated journey coverage, so this beat checks /projects — the one index route with no other dedicated journey file yet — plus the rebuilt Library shelves and Home\'s attention strips.)',
         drive: async (ctx) => {
               const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -376,22 +428,35 @@ export const journey = defineJourney({
               // rows). This journey's environment has NO gated project — the
               // projects it stands up are contract-green by design — so the
               // gate strip honestly does not render (W7-FIX-B-UI; gateB2
-              // 2026-08-21). What IS real here is the standing KB lint debt
-              // the repo's own brains carry, so the KB strip is the one this
-              // beat asserts; the deep two-strip coverage (seeded gated
-              // project + seeded lint-flagged KB) lives in home.mjs HOME.2.
+              // 2026-08-21). The KB strip is the one this beat asserts, and
+              // it fires it on a condition the beat OWNS — the seeded
+              // SU_LINT_KB fixture (see its header above), never the repo's
+              // transient standing lint debt — so the assertion stays green
+              // the day that debt is drained. The deep two-strip coverage
+              // (seeded gated project + seeded lint-flagged KB, headings,
+              // drain links, row vocab) lives in home.mjs HOME.2.
               console.log('\n[A1.3] Home — cross-project attention (KBs needing attention)');
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
-              await page.waitForFunction(
-                () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
-                null, { timeout: 20000 },
-              ).catch(() => {});
-              await countAtLeast(page, '[data-section="kbs-needing-attention"]', 1, 'home: [data-section="kbs-needing-attention"] present (W7-B1 named strip; real KB lint flags fire it)');
-              await countAtLeast(page, '[data-attention-item]', 1, 'home: ≥1 [data-attention-item] in the attention strips');
-              const attentionLink = await page.evaluate(() =>
-                document.querySelector('[data-attention-item]')?.getAttribute('href') ?? '');
-              check(/^\/(projects\/[^/]+|knowledge\?id=[^/]+(&tab=[a-z-]+)?)$/.test(attentionLink),
-                `home: attention item links through to its owning project or KB surface (got "${attentionLink}")`);
+              cleanSuLintKb(); // crash-safe leading sweep — a prior interrupted run's leftovers
+              writeSuLintKbFixture();
+              try {
+                await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(
+                  () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 20000 },
+                ).catch(() => {});
+                await countAtLeast(page, '[data-section="kbs-needing-attention"]', 1, 'home: [data-section="kbs-needing-attention"] present (W7-B1 named strip; the seeded lint-flagged KB fires it)');
+                await countAtLeast(page, `[data-attention-item][data-attention-kind="kb"][data-attention-kb="${SU_LINT_KB}"]`, 1,
+                  `home: the seeded KB's own [data-attention-item] row renders (self-owned condition — never environmental lint debt)`);
+                const attentionLink = await page.evaluate((kbId) =>
+                  document.querySelector(`[data-attention-item][data-attention-kb="${kbId}"]`)?.getAttribute('href') ?? '', SU_LINT_KB);
+                // Exact deep-link, not a loose regex: buildKbAttention's stated
+                // contract is that a lint-fired row lands on the KB's own
+                // Health tab — where the finding lives (home-view.ts).
+                check(attentionLink === `/knowledge?id=${SU_LINT_KB}&tab=health`,
+                  `home: the seeded KB row deep-links to its own Health tab (got "${attentionLink}")`);
+              } finally {
+                cleanSuLintKb(); // the beat owns ALL its state — failure paths included
+              }
 
         },
       },
