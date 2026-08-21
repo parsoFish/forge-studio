@@ -10,7 +10,7 @@ This is a **living roadmap** (session decision Q1): IDs are stable and never reu
 
 ### R2-B1 Flow engine (flows-as-data + data-table dispatch)
 
-`orchestrator/flow-runner.ts` executes flow definitions from `studio/flows/<id>/flow.yaml` (ADR-028): node-kind resolution via the `GATE_KIND`/`AGENT_KIND` data tables + `DEFAULT_NODE_EXECUTORS` registry (injectable via `FlowRunArgs.nodeExecutors`), per-flow budgets (`orchestrator/flow-budgets.ts`), wedge-kill deadline (`orchestrator/stream-deadline.ts` — SDK abort threaded into PM but **not yet chained into per-WI Ralphs**, ADR-028 open note), unifier-resume (ADR-019), run model derived not stored (`orchestrator/run-model-derive.ts`). Three seed flows: `forge-architect` → `forge-develop` → `forge-reflect` chained by flowLineage.
+`orchestrator/flow-runner.ts` executes flow definitions from `studio/flows/<id>/flow.yaml` (ADR-028): node-kind resolution via the `GATE_KIND`/`AGENT_KIND` data tables + `DEFAULT_NODE_EXECUTORS` registry (injectable via `FlowRunArgs.nodeExecutors`), per-flow budgets (`orchestrator/flow-budgets.ts`), wedge-kill deadline (`orchestrator/stream-deadline.ts` — SDK abort threaded into PM but **not yet chained into per-WI Ralphs**, ADR-028 open note), unifier-resume (ADR-019), run model derived not stored (`orchestrator/run-model-derive.ts`). Two seed flows: `forge-architect` → `forge-develop` chained by flowLineage (W7-C1, 2026-08-21: the single-node reflect flow wrapper is retired — reflection is the standalone post-merge reflector **agent** run dispatched by `orchestrator/finalize-merged.ts` from forge-develop's `on: merged` declaration).
 
 ### R2-B2 Bespoke interactive runners (the pre-primitive state)
 

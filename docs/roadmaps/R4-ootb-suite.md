@@ -33,6 +33,12 @@ schema, not its addressee (adversarial review 2026-07-17, E11).
 architect(gate:plan)→pm; dev→unifier(resumable)→review(gate:verdict) with
 trigger `{on: merged, flow: forge-reflect}` fired async by
 `orchestrator/finalize-merged.ts`; reflect = single disposable node, no gate.
+*(W7-C1, 2026-08-21: the seed set is now TWO flows — R4-09-F1 had already
+repointed the merged trigger at the reflect **agent** `{kind: agent, ref:
+reflector}`, and W7-C1 deleted the vestigial `forge-reflect` wrapper outright;
+reflection ships solely as the standalone post-merge agent run. The
+`onboard-project` flow wrapper (R4-18) is likewise retired — the onboarding
+SESSION is the one entry.)*
 Starters (inert templates, ADR-033): `studio/starters/agents/{plan,dev,review}` +
 `studio/starters/flows/basic.yaml`.
 

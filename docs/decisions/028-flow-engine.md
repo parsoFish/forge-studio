@@ -182,3 +182,22 @@ the `'agent'` fallback becomes the default path for every roster agent except
 that one, not the exception. Design only — the migration itself is R4-01-F2's
 implementation, gated on the standing harness suite per this ADR's Consequences
 (no parallel old/new dispatch survives cutover).
+
+## Amendment (W7-C1, 2026-08-21): the reflect flow wrapper is deleted — `on: merged` dispatches the agent
+
+T1-ratified during the wave-7 flows-pillar consolidation. The Triggers item
+above says "`forge-develop` declares `{on: merged, flow: forge-reflect}`" —
+since R4-09-F1 the declaration's target is the reflect **agent** (`{on:
+merged, target: {kind: agent, ref: reflector}}`), resolved by
+`orchestrator/finalize-merged.ts` through the agent-def `reflection-close`
+band guard (`agent-bands.ts`), and W7-C1 deletes the vestigial single-node
+`studio/flows/forge-reflect/` wrapper entirely. Reflect is an **OOTB agent
+run, not a flow**: it never appears as a flow monitor or a flowLineage entry;
+its evidence surfaces on the develop monitor's reflection-ready banner, the
+artifact reflection view, and `/agents/reflector` (standing trigger + on-demand
+run). The kickoff sentence's `trigger-only` example ("reflect, fired by the
+merge trigger above") is historical — the kind stays valid for authored flows;
+no seed flow uses it today. Engine semantics are otherwise unchanged: agent
+targets dispatch directly (no `_queue/flow-runs/` staging — that path remains
+flow-target-only), and the flow-runner/`claim-validator`/`run-model` lose
+their reflect-flow special cases (reflection adds no lineage entry).

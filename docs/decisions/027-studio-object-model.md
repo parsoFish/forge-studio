@@ -649,3 +649,29 @@ nodes' agent `composition.guards` via `resolveBandGuard`) the KB is scoped to.
   deliberate crossing of the R1-01 "scoping, not who-reads-what" boundary and is
   ratified in ADR-010, enforced by `orchestrator/kb-read-policy-guard.test.ts`'s
   descriptor walk. Contract + guard only until R4-19 wires a real read.
+
+## Amendment (W7-C1, 2026-08-21): reflect is an OOTB agent run — the seed flow set is two
+
+T1-ratified during the wave-7 flows-pillar consolidation. The OOTB seed set
+shrinks from three flows to **two**: `studio/flows/forge-architect/` and
+`studio/flows/forge-develop/`. Two vestigial wrappers are deleted outright (no
+back-compat, per the no-legacy rule):
+
+- **`forge-reflect`** — R4-09-F1 had already retired it as the *shipped* shape
+  (the merged trigger targets the reflect **agent**, `{kind: agent, ref:
+  reflector}`); the wrapper survived only as an authorable-only,
+  `kickoff: trigger-only` monitor that mirrored Develop history with no Run
+  control (wave-7 finding flows-17). Reflection is an **OOTB agent run, not a
+  flow**: dispatched post-merge by `orchestrator/finalize-merged.ts` from
+  forge-develop's declaration, and runnable on demand from `/agents/reflector`.
+- **`onboard-project`** — the flow-shaped duplicate of the onboarding SESSION
+  (findings flows-20/sessions-kinds-01/crosscut-14); the session is the one
+  entry, kicked off from `/sessions/onboarding/new`.
+
+Format consequences owned by this ADR: the `kickoff` enum (Stage C amendment
+above) is unchanged — `trigger-only` remains a valid, authorable kind; it
+simply no longer has a seed-flow exemplar. The Stage C sentence naming
+`forge-reflect` as the `trigger-only` seed, and the R1-01 note about "the
+three seed flows' `kb: cycles` read grants", are superseded accordingly (the
+read grants now live on the two remaining seed flow.yamls; the reflector
+agent's brain access rides its own agent definition per ADR-010).
