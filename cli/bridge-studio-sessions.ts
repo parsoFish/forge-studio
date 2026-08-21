@@ -93,10 +93,15 @@
  *     directly, so the residual risk is negligible (see
  *     session-transcript.ts's module header for the full rationale).
  *   - `deriveSessionTranscript`'s `{ok:false}` (an unknown stage in a
- *     checkpoint) surfaces as a 409 naming the offending value + the allowed
- *     set — never smoothed into a 200. A `deriveSessionArtifact` throw
- *     (reserved artifact kind) surfaces as a 500 — never a 200 with an empty
- *     artifact.
+ *     checkpoint, a malformed answers/questions/verdicts file) yields ZERO
+ *     turns plus the verbatim reason on the ALWAYS-present `transcriptError`
+ *     field — never smoothed into defaulted stages or a partial transcript,
+ *     and (W7-C2 T1 review, P0-3) never a 409 that takes the whole page down
+ *     with it: a corrupt verdicts.json used to make the session
+ *     unrenderable, so the operator could not approve/reject/revise their
+ *     way out of the very state that produced it. Fail-closed, scoped to the
+ *     one pane. A `deriveSessionArtifact` throw (reserved artifact kind)
+ *     surfaces as a 500 — never a 200 with an empty artifact.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -409,10 +414,29 @@ export function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string
 // ---------------------------------------------------------------------------
 
 type PendingQuestion = {
+  /** W7-C2 T1 review (A3, finding sessions-kinds-19) — the CORRELATION
+   *  handle. questions.json carries no authored id (the shape is the
+   *  reflector's `StructuredQuestion`: question/header/options), so the one
+   *  honest, stable identity a pending question has is its POSITION in the
+   *  round's file — rendered here as `q<1-based index>`. Derived, never
+   *  stored: the same file always yields the same ids, and nothing has to
+   *  keep a second copy in sync. The panel posts it back with each answer
+   *  and `handleInstructionsAnswer` re-derives it from the SAME file to
+   *  cross-check, so an edited/duplicated question TEXT can no longer
+   *  mis-bind an answer. */
+  readonly id: string;
   readonly question: string;
   readonly header?: string;
   readonly options: ReadonlyArray<{ readonly label: string; readonly description: string }>;
 };
+
+/** The 1-based positional id for the question at `index` of a round's
+ *  questions.json. Exported so the WRITE route (cli/bridge-studio-
+ *  affordances.ts) derives answer-correlation ids from this ONE rule
+ *  instead of re-deriving its own. */
+export function pendingQuestionId(index: number): string {
+  return `q${index + 1}`;
+}
 
 const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
 const QUESTIONS_FILENAME = 'questions.json';
@@ -420,10 +444,19 @@ const QUESTIONS_FILENAME = 'questions.json';
 /** Structural parse of questions.json for the WIRE (display data). The
  *  transcript derivation has already fail-closed the whole read on a
  *  malformed file by the time this runs, so this parser only needs to shape
- *  what survived: `question` must be a string (a violating entry returns
- *  null — belt-and-suspenders, never a fabricated entry); `header` optional;
- *  `options` kept only where each entry carries string label+description. */
-function parsePendingQuestions(raw: string): PendingQuestion[] | null {
+ *  what survived: `question` must be a string; `header` optional; `options`
+ *  must be an array whose every entry carries string label+description.
+ *
+ *  W7-C2 T1 review (A4) — EVERY malformed shape returns null (the whole
+ *  field is then absent and the panel falls back to the free-text box),
+ *  including a malformed OPTION entry. The prior `flatMap` silently dropped
+ *  a bad option, showing the operator FEWER choices than the agent asked
+ *  for with no signal — a silent partial in a module whose stated
+ *  discipline is fail-closed. This now matches the CLIENT's own rule
+ *  (`parsePendingQuestionsMeta`, forge-ui/lib/session-client.ts) exactly,
+ *  so the stricter side is no longer unreachable behind a pre-sanitising
+ *  server. */
+export function parsePendingQuestions(raw: string): PendingQuestion[] | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -432,21 +465,21 @@ function parsePendingQuestions(raw: string): PendingQuestion[] | null {
   }
   if (!Array.isArray(parsed)) return null;
   const questions: PendingQuestion[] = [];
-  for (const entry of parsed) {
+  for (const [index, entry] of parsed.entries()) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
     const rec = entry as Record<string, unknown>;
     if (typeof rec.question !== 'string') return null;
+    if (rec.options !== undefined && !Array.isArray(rec.options)) return null;
     const optionsRaw = Array.isArray(rec.options) ? rec.options : [];
-    const options = optionsRaw.flatMap((o) => {
-      if (o !== null && typeof o === 'object' && !Array.isArray(o)) {
-        const or = o as Record<string, unknown>;
-        if (typeof or.label === 'string' && typeof or.description === 'string') {
-          return [{ label: or.label, description: or.description }];
-        }
-      }
-      return [];
-    });
+    const options: { label: string; description: string }[] = [];
+    for (const o of optionsRaw) {
+      if (o === null || typeof o !== 'object' || Array.isArray(o)) return null;
+      const or = o as Record<string, unknown>;
+      if (typeof or.label !== 'string' || typeof or.description !== 'string') return null;
+      options.push({ label: or.label, description: or.description });
+    }
     questions.push({
+      id: pendingQuestionId(index),
       question: rec.question,
       ...(typeof rec.header === 'string' ? { header: rec.header } : {}),
       options,
@@ -477,14 +510,61 @@ function attachPendingQuestions(
 }
 
 /** W7-C2 (sessions-kinds-36) — the persisted "what this session produced"
- *  pointer, read off status.json. Anything but the exact {kind: string,
- *  id: string} shape collapses to null (never echoed raw). */
-function parseFinalized(statusParsed: Record<string, unknown>): { kind: string; id: string } | null {
+ *  pointer, read off status.json, plus `exists` — whether the object it
+ *  points at is STILL THERE, derived at read time.
+ *
+ *  W7-C2 T1 review (P0-4) — `exists` closes the dangling-pointer half of
+ *  this field: `FinalizedLink` used to emit `/skills/<id>` off the stored
+ *  pointer alone, so a deleted or renamed object left the operator a dead
+ *  link forever. The pointer's IDENTITY is genuinely new information the
+ *  finalizer alone knows (which library id the operator chose), so it stays
+ *  persisted; its LIVENESS is derived from the filesystem on every read —
+ *  never a second stored copy that can go stale. */
+export type FinalizedPointer = { kind: string; id: string; exists: boolean };
+
+/** Where each finalized `kind` lands its object. The ONE table that answers
+ *  "does the thing this session produced still exist" — every entry resolves
+ *  through the same `resolveGuardedPath` choke point the rest of this module
+ *  uses (or, for a KB, through `resolveKbBrainDir`, the SAME resolver the
+ *  cleanup-plan artifact branch above already trusts). An unrecognised kind
+ *  is NOT dropped from the wire — it rides through with `exists: false`, and
+ *  the panel renders the honest label with no link (never a guessed href). */
+function finalizedObjectExists(
+  kind: string,
+  id: string,
+  opts: { forgeRoot: string; projectsRoot: string; project: string },
+): boolean {
+  const guarded = (root: string, segs: readonly string[]): boolean => {
+    const g = resolveGuardedPath(root, segs);
+    return g.ok && g.exists;
+  };
+  switch (kind) {
+    case 'skill': return guarded(opts.forgeRoot, ['skills', id]);
+    case 'hook': return guarded(opts.forgeRoot, ['studio', 'hooks', id]);
+    case 'community-registry': return guarded(opts.forgeRoot, ['studio', 'community', 'registry.yaml']);
+    // `agents-md`/`demo` name the PROJECT they landed in (instructions writes
+    // AGENTS.md at the project repo root; demo's lock lands at
+    // .forge/demo/demo.lock.json — DEMO_LOCK_REL_PATH,
+    // orchestrator/demo-builder-runner.ts, hand-copied as segments here the
+    // same way this module hand-copies AWAITING_ANSWERS_PHASE).
+    case 'agents-md': return guarded(opts.projectsRoot, [id, 'AGENTS.md']);
+    case 'demo': return guarded(opts.projectsRoot, [id, '.forge', 'demo', 'demo.lock.json']);
+    case 'kb': return resolveKbBrainDir(opts.forgeRoot, id) !== null;
+    default: return false;
+  }
+}
+
+/** Anything but the exact {kind: string, id: string} shape collapses to null
+ *  (never echoed raw). */
+function deriveFinalized(
+  statusParsed: Record<string, unknown>,
+  opts: { forgeRoot: string; projectsRoot: string; project: string },
+): FinalizedPointer | null {
   const raw = statusParsed.finalized;
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const rec = raw as Record<string, unknown>;
   if (typeof rec.kind !== 'string' || typeof rec.id !== 'string') return null;
-  return { kind: rec.kind, id: rec.id };
+  return { kind: rec.kind, id: rec.id, exists: finalizedObjectExists(rec.kind, rec.id, opts) };
 }
 
 // ---------------------------------------------------------------------------
@@ -618,13 +698,14 @@ export async function handleStudioSessionsRoutes(
     // LEGACY_SESSION_TERMINAL_PHASES; see isTerminalPhase's own doc comment.
     if (!isTerminalPhase(descriptor, phase)) ctx.ensureSessionTail(descriptor.id, sessionId);
 
+    // W7-C2 T1 review (P0-3) — fail-closed, SCOPED. A malformed transcript
+    // source yields ZERO turns plus the verbatim reason on `transcriptError`
+    // (below) — never defaulted stages, never a partial transcript, and
+    // never a 409 that takes the operator's verdict controls down with it.
+    // See the `transcriptError` field comment for the full rationale.
     const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir, phase });
-    if (!transcriptResult.ok) {
-      // Fail-closed pass-through: never smoothed into a 200 with defaulted
-      // stages — surfaces the offending value + allowed set verbatim.
-      sendJson(res, 409, { ok: false, error: transcriptResult.error.message }, origin);
-      return true;
-    }
+    const transcriptError = transcriptResult.ok ? null : transcriptResult.error.message;
+    const turns = transcriptResult.ok ? transcriptResult.turns : [];
 
     let artifact: unknown;
     try {
@@ -707,7 +788,7 @@ export async function handleStudioSessionsRoutes(
         phase,
         stages: descriptor.stages,
         defaultStage: descriptor.defaultStage,
-        turns: transcriptResult.turns,
+        turns,
         artifact,
         // W6-B3 (ADR-043 2026-08-15 amendment §1/§2) — the derived affordance
         // view for the CURRENT phase; see this file's header for the full
@@ -754,7 +835,20 @@ export async function handleStudioSessionsRoutes(
         // {kind, id} pointer at whatever object a committed session
         // produced (runFinalize / the community-refresh approve arm write
         // it), or null for a session that produced nothing.
-        finalized: parseFinalized(statusParsed),
+        finalized: deriveFinalized(statusParsed, { forgeRoot: ctx.forgeRoot, projectsRoot, project }),
+        // W7-C2 T1 review (P0-3, finding A2/F2) — the transcript's own
+        // fail-closed error, SCOPED to the transcript. It used to 409 the
+        // WHOLE session GET, which made a corrupt verdicts.json brick the
+        // page: no verdict controls, so the operator could not approve,
+        // reject or revise their way out of it. Fail-closed semantics are
+        // unchanged (nothing malformed is ever silently dropped or
+        // smoothed into fabricated turns — `turns` is EMPTY, never
+        // partial), but the blast radius is now one pane: the shell still
+        // renders, the affordances still work, and the transcript pane
+        // shows this message verbatim. ALWAYS present, mirroring
+        // `terminal`/`affordances`/`finalized`; null when the derivation
+        // succeeded.
+        transcriptError,
       },
       origin,
     );

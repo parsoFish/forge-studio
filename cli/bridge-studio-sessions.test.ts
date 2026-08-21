@@ -998,18 +998,28 @@ test('AT-47: a sessionId resolving via a symlink into ANOTHER project\'s session
 // Fail-closed unknown stage surfaces through the route (AT-48)
 // ---------------------------------------------------------------------------
 
-test('AT-48: an unknown-stage checkpoint surfaces as a non-200 (or ok:false), naming the offending value + allowed set — never smoothed into a 200 with defaulted stages', async () => {
+// W7-C2 T1 review (P0-3) — AT-48's contract is now SCOPED, not softened. It
+// used to assert a non-200 for the whole GET; a corrupt transcript source
+// therefore took the entire session page down with it, and the operator lost
+// the verdict controls they needed to get out of that state (proven with a
+// truncated verdicts.json). The fail-closed properties AT-48 exists to
+// protect are all still asserted below, and two more are added: the turns
+// must be EMPTY (never partial, never defaulted to a fabricated stage) and
+// the shell must stay usable (affordances still derived). What changed is
+// only WHERE the refusal surfaces — `transcriptError`, one pane — not
+// WHETHER it surfaces.
+test('AT-48: an unknown-stage checkpoint surfaces as an explicit transcriptError naming the offending value + allowed set, with ZERO turns — never smoothed into defaulted stages, and never bricking the rest of the shell', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${BADSTAGE_SESSION}?project=badstageproj`);
   const text = await res.text();
-  let parsed: { ok?: boolean; error?: string; stages?: unknown } = {};
-  try { parsed = JSON.parse(text); } catch { /* non-JSON is fine, handled below */ }
+  assert.equal(res.status, 200, `the shell must stay renderable, got status=${res.status} body=${text}`);
+  const parsed = JSON.parse(text) as { ok?: boolean; transcriptError?: unknown; turns?: unknown[]; affordances?: unknown[] };
 
-  const smoothedInto200 = res.status === 200 && parsed.ok !== false;
-  assert.ok(!smoothedInto200, `an unknown-stage checkpoint must not be smoothed into a plain 200, got status=${res.status} body=${text}`);
-
-  const message = parsed.error ?? text;
-  assert.ok(message.includes('no-such-stage'), `response must name the offending value, got: ${message}`);
-  assert.ok(message.includes('roadmap'), `response must name the allowed stage set, got: ${message}`);
+  const message = typeof parsed.transcriptError === 'string' ? parsed.transcriptError : '';
+  assert.ok(message.length > 0, `the refusal must be surfaced, never silently empty: ${text}`);
+  assert.ok(message.includes('no-such-stage'), `transcriptError must name the offending value, got: ${message}`);
+  assert.ok(message.includes('roadmap'), `transcriptError must name the allowed stage set, got: ${message}`);
+  assert.deepEqual(parsed.turns, [], 'a refused derivation contributes NO turns — never a partial or defaulted transcript');
+  assert.ok(Array.isArray(parsed.affordances), 'the rest of the shell (affordances included) still renders — the failure is scoped to the transcript pane');
 });
 
 // ---------------------------------------------------------------------------
@@ -1540,8 +1550,87 @@ test('C2-SHELL-3: `finalized` is ALWAYS on the wire — null when the session pr
   }), 'utf8');
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
   assert.equal(res.status, 200);
-  const body = (await res.json()) as { finalized: { kind: string; id: string } | null };
-  assert.deepEqual(body.finalized, { kind: 'skill', id: 'c2-authored-skill' });
+  // W7-C2 T1 review (P0-4) — the pointer's identity rides through verbatim,
+  // and `exists` is DERIVED at read time. This fixture points at a skill that
+  // was never installed in this temp forge root, so the honest answer is
+  // `exists: false` — which is exactly what stops `FinalizedLink` emitting a
+  // dead `/skills/<id>`.
+  const body = (await res.json()) as { finalized: { kind: string; id: string; exists: boolean } | null };
+  assert.deepEqual(body.finalized, { kind: 'skill', id: 'c2-authored-skill', exists: false });
+});
+
+test('C2-FIX-P04-1: `finalized.exists` is DERIVED from the object on disk — true once the skill is really installed, false again when it is removed', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2finex';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({
+    session_id: sessionId, project: 'demoproj', phase: 'committed',
+    finalized: { kind: 'skill', id: 'c2-live-skill' },
+  }), 'utf8');
+  const skillDir = join(forgeRoot, 'skills', 'c2-live-skill');
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: C2 Live\ndescription: fixture\n---\n', 'utf8');
+  const live = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.deepEqual(((await live.json()) as { finalized: unknown }).finalized, { kind: 'skill', id: 'c2-live-skill', exists: true });
+
+  rmSync(skillDir, { recursive: true, force: true });
+  const gone = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.deepEqual(
+    ((await gone.json()) as { finalized: unknown }).finalized,
+    { kind: 'skill', id: 'c2-live-skill', exists: false },
+    'a deleted/renamed object must be reported as gone — the stored pointer alone is never treated as proof it is still there',
+  );
+});
+
+test('C2-FIX-P03-1: a corrupt verdicts.json scopes its fail-closed refusal to the TRANSCRIPT — the shell still renders WITH its verdict affordance', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2vbad';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-verdict', round: 2 }), 'utf8');
+  writeFileSync(join(dir, 'AGENTS.draft.md'), '# AGENTS.md\n', 'utf8');
+  // A partial write from a killed bridge — valid-JSON-prefix, unparseable file.
+  writeFileSync(join(dir, 'verdicts.json'), '[{"at":"2026-08-21T10:00:00.000Z","verdict":"revise"},{"at":"2026', 'utf8');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200, 'the operator must still be able to open the session that produced the corruption');
+  const body = (await res.json()) as { ok: boolean; turns: unknown[]; transcriptError: string | null; affordances: Array<{ kind: string }> };
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.turns, [], 'nothing malformed is silently dropped — the transcript is EMPTY, never partial');
+  assert.match(String(body.transcriptError), /verdicts\.json/, 'the reason is surfaced verbatim, naming the file');
+  assert.ok(body.affordances.some((a) => a.kind === 'verdict'), 'the verdict controls must still be derivable — bricking them is what trapped the operator');
+});
+
+test('C2-FIX-A4-1: a MALFORMED option entry degrades the WHOLE questions field to absent (fail closed) — never a question shown with fewer options than the agent asked for', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2badopt';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
+  writeFileSync(join(dir, 'questions.json'), JSON.stringify([
+    { question: 'Which gate?', options: [{ label: 'npm test', description: 'the suite' }, { label: 'npm run lint' }] },
+  ]), 'utf8');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { affordances: Array<{ kind: string; meta?: { questions?: unknown } }> };
+  const qf = body.affordances.find((a) => a.kind === 'question-form');
+  assert.ok(qf, 'the question-form affordance still derives');
+  assert.equal(qf!.meta?.questions, undefined, 'a malformed option must not silently shrink the option list — the whole field degrades to absent');
+});
+
+test('C2-FIX-A3-1: each pending question carries a server-derived positional `id` — the answer-correlation handle', async () => {
+  const sessionId = '2026-08-21T09-00-00-c2qid';
+  const dir = join(forgeRoot, 'projects', 'demoproj', '_instructions', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project: 'demoproj', phase: 'awaiting-answers', round: 1 }), 'utf8');
+  writeFileSync(join(dir, 'questions.json'), JSON.stringify([
+    { question: 'Same text?', options: [] },
+    { question: 'Same text?', options: [] },
+  ]), 'utf8');
+
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${sessionId}?project=demoproj`);
+  const body = (await res.json()) as { affordances: Array<{ kind: string; meta?: { questions?: Array<{ id: string; question: string }> } }> };
+  const qs = body.affordances.find((a) => a.kind === 'question-form')!.meta!.questions!;
+  assert.deepEqual(qs.map((q) => q.id), ['q1', 'q2'], 'two identically-worded questions are still distinguishable — text alone never was');
 });
 
 test('C2-SHELL-4: a malformed status.finalized (wrong shape) collapses to null — never echoed raw', async () => {

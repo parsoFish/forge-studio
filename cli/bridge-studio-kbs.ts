@@ -597,6 +597,17 @@ export async function approveKbCleanup(
     return { ok: false, status: 409, error: `session is not awaiting-approval (current phase: "${status.phase}")` };
   }
   const kbId = status.kb_id;
+  // W7-C2 T1 review (P0-4, sessions-kinds-36) — the permanent "what this
+  // session produced" pointer, written alongside EVERY `applied` transition
+  // below (both the draft-apply arm and the consolidate arm). It was
+  // declared REQUIRED on the session-shell payload and rendered by
+  // `FinalizedLink`, but only 2 of the 5 finalizing kinds ever wrote it — a
+  // field surfaced everywhere and produced by 40% of its producers is
+  // declared-data-fails-open. What a kb-cleanup session produces is the
+  // cleaned KB itself, so the pointer names `status.kb_id` (the SAME sole
+  // source of truth the drain uses); the shell route derives whether that
+  // KB still resolves rather than trusting the pointer's mere presence.
+  const finalized = { kind: 'kb', id: kbId };
 
   // ---- W7-B2 (orch-01): a DRAFT-carrying session (minted by the drain's
   // structural-only gate — `mintKbCleanupDraftSession`, cli/bridge-studio-
@@ -688,7 +699,7 @@ export async function approveKbCleanup(
       guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'awaiting-approval', apply_error: writeError });
       return { ok: false, status: 500, error: `kb-cleanup apply: draft write failed: ${writeError}` };
     }
-    const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+    const draftDone = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied', finalized });
     if (draftDone === null) {
       return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
     }
@@ -722,7 +733,7 @@ export async function approveKbCleanup(
   // drain ever being enqueued in the first place for one approval.
   await enqueueConsolidate(kbId, () => runBrainConsolidateNow(forgeRoot, kbId, runId));
 
-  const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+  const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied', finalized });
   if (written === null) {
     return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
   }

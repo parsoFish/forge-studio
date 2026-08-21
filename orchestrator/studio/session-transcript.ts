@@ -294,12 +294,24 @@ function parseAnswerRoundsJson(raw: string): ParseOutcome<ParsedRound[]> {
 
 type ParsedQuestion = { readonly question: string };
 
-type ParsedVerdictRecord = { readonly verdict: string; readonly notes?: string };
+type ParsedVerdictRecord = {
+  readonly at: string;
+  readonly verdict: string;
+  readonly notes?: string;
+  readonly feedback?: string;
+};
 
 /** verdicts.json — fails closed on the same principle as answers.json (a
  *  malformed verdict record must never surface an invented turn, and must
  *  never be silently dropped either). Shape: an array of records each
- *  carrying a string `verdict`; `notes` optional (string when present). */
+ *  carrying a string `at` (W7-C2 T1 review, A13 — REQUIRED, and now
+ *  actually READ: the records are ordered by it below, so an
+ *  out-of-sequence file renders chronologically instead of in write order)
+ *  and a string `verdict`; `notes` and `feedback` optional (string when
+ *  present). `feedback` is the revise round's OWN words (W7-C2 T1 review,
+ *  P0-2) — feedback.md holds only the CURRENT pending note and is
+ *  overwritten by each revise, so it could never carry round 1's rationale
+ *  once round 2 landed. */
 function parseVerdictsJson(raw: string): ParseOutcome<ParsedVerdictRecord[]> {
   let parsed: unknown;
   try {
@@ -320,10 +332,21 @@ function parseVerdictsJson(raw: string): ParseOutcome<ParsedVerdictRecord[]> {
     if (typeof rec.verdict !== 'string') {
       return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must carry a string "verdict" field` };
     }
+    if (typeof rec.at !== 'string' || rec.at.length === 0) {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] must carry a non-empty string "at" timestamp` };
+    }
     if ('notes' in rec && rec.notes !== undefined && typeof rec.notes !== 'string') {
       return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] has a non-string "notes" field` };
     }
-    records.push({ verdict: rec.verdict, ...(typeof rec.notes === 'string' ? { notes: rec.notes } : {}) });
+    if ('feedback' in rec && rec.feedback !== undefined && typeof rec.feedback !== 'string') {
+      return { ok: false, message: `${VERDICTS_FILENAME} record[${i}] has a non-string "feedback" field` };
+    }
+    records.push({
+      at: rec.at,
+      verdict: rec.verdict,
+      ...(typeof rec.notes === 'string' ? { notes: rec.notes } : {}),
+      ...(typeof rec.feedback === 'string' ? { feedback: rec.feedback } : {}),
+    });
   }
   return { ok: true, value: records };
 }
@@ -424,8 +447,13 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     }
   }
 
-  // feedback.md — an honest single operator turn (the revision note between
-  // draft rounds).
+  // feedback.md — an honest single operator turn: the CURRENT, not-yet-
+  // consumed revision note. W7-C2 T1 review (P0-2): this file is transient
+  // by design — each revise overwrites it and the next agent turn CONSUMES
+  // it (orchestrator/interactive-runner.ts deletes it once it has been
+  // folded into a prompt), so it can only ever hold the newest round's
+  // words. The DURABLE per-round record is verdicts.json's own `feedback`
+  // field, rendered below.
   const feedbackBody = safeReadFileInSession(sessionDir, FEEDBACK_FILENAME);
   if (feedbackBody !== null) {
     const staged = resolveStage(undefined);
@@ -434,20 +462,38 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   }
 
   // verdicts.json (W7-C2, sessions-kinds-29) — one operator turn per
-  // recorded decision, in record order: "Verdict: <verdict>" plus the
-  // rationale when one was given. The revise record deliberately carries no
-  // text of its own (feedback.md above holds the words) — no duplication.
+  // recorded decision: "Verdict: <verdict>" plus the rationale when one was
+  // given, plus (W7-C2 T1 review, P0-2) that round's OWN revise words.
+  //
+  // Ordered by `at` (W7-C2 T1 review, A13 — the field was stamped and never
+  // read, so a multi-round file rendered in write order regardless of when
+  // the decisions were actually made). Sorting is LEXICOGRAPHIC, which is
+  // chronological for the ISO-8601 stamps `appendVerdictRecord` writes, and
+  // STABLE, so two records sharing a stamp keep their file order. Cross-
+  // SOURCE chronology is deliberately NOT attempted: idea.md / answers.json /
+  // questions.json / feedback.md carry no timestamps at all, so interleaving
+  // them would mean inventing an order — the verdict block stays a block,
+  // internally chronological, appended after the untimestamped sources.
+  //
+  // `#<n>` in `source` is the record's POSITION IN THE FILE (1-based), not
+  // its display position — it names the durable record a reader can go find.
   const verdictsRaw = safeReadFileInSession(sessionDir, VERDICTS_FILENAME);
   if (verdictsRaw !== null) {
     const parsedV = parseVerdictsJson(verdictsRaw);
     if (!parsedV.ok) return { ok: false, error: { message: parsedV.message } };
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
-    for (const [i, record] of parsedV.value.entries()) {
-      const text = record.notes !== undefined && record.notes.length > 0
+    const ordered = parsedV.value
+      .map((record, position) => ({ record, position }))
+      .sort((a, b) => (a.record.at < b.record.at ? -1 : a.record.at > b.record.at ? 1 : a.position - b.position));
+    for (const { record, position } of ordered) {
+      const headline = record.notes !== undefined && record.notes.length > 0
         ? `Verdict: ${record.verdict} — ${record.notes}`
         : `Verdict: ${record.verdict}`;
-      turns.push({ index: index++, role: 'operator', stage: staged.value, text, source: `${VERDICTS_FILENAME}#${i + 1}` });
+      const text = record.feedback !== undefined && record.feedback.length > 0
+        ? `${headline}\n\n${record.feedback}`
+        : headline;
+      turns.push({ index: index++, role: 'operator', stage: staged.value, text, source: `${VERDICTS_FILENAME}#${position + 1}` });
     }
   }
 
