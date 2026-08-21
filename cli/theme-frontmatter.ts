@@ -33,13 +33,36 @@ export type ParsedThemeFile = {
 };
 
 /**
+ * Decode one fallback scalar. An inline `[a, b]` flow list becomes a REAL
+ * string array — matching what gray-matter would have produced for the same
+ * line (`keywords`/`related_themes` are exactly this shape). Leaving it as a
+ * raw string made every `Array.isArray(...)` tolerance clause downstream
+ * silently SKIP the field (`danglingEdgeFindings` skipped seeded dangling
+ * edges — the kb-drain false-green). Entries are trimmed, surrounding
+ * single/double quotes stripped, empties dropped (`[]` → []). Everything
+ * else stays the raw trimmed string.
+ */
+function decodeFallbackValue(value: string): string | string[] {
+  if (value.startsWith('[') && value.endsWith(']')) {
+    const inner = value.slice(1, -1).trim();
+    if (inner === '') return [];
+    return inner
+      .split(',')
+      .map((entry) => entry.trim().replace(/^['"]|['"]$/g, '').trim())
+      .filter((entry) => entry !== '');
+  }
+  return value;
+}
+
+/**
  * Lenient frontmatter parse of raw theme text. Tries gray-matter first
  * (cache-bypassing, see module header); on YAML failure falls back to a
  * regex line-by-line extractor that captures `key: value` pairs without
- * YAML-spec strictness. This means callers can still surface frontmatter
- * findings (missing fields, bad category) — and still apply deterministic
- * index-link fixes — on themes gray-matter would reject; failing-closed
- * would hide the very class of violations lint exists to find.
+ * YAML-spec strictness (inline `[a, b]` lists still decode to real arrays —
+ * see `decodeFallbackValue`). This means callers can still surface
+ * frontmatter findings (missing fields, bad category) — and still apply
+ * deterministic index-link fixes — on themes gray-matter would reject;
+ * failing-closed would hide the very class of violations lint exists to find.
  */
 export function parseThemeRaw(raw: string): ParsedThemeFile {
   try {
@@ -67,7 +90,7 @@ export function parseThemeRaw(raw: string): ParsedThemeFile {
       const line = lines[i];
       const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
       if (m) {
-        data[m[1]] = m[2].trim();
+        data[m[1]] = decodeFallbackValue(m[2].trim());
       }
     }
     const content = lines.slice(end + 1).join('\n');

@@ -286,21 +286,27 @@ function cleanScratchKb() {
 
 // ── scratch project-brain (knowledge-lint-index — W6-B13 drain-to-green) ──────
 // A FIFTH scratch KB, disjoint from every one above — the drain button's own
-// fixture. Deliberately the SAME shape as SCRATCH_KB_MAINTAIN (a
-// brain/projects/* KB with one theme missing from its own category index —
-// the checkProjectBrainIndexes "not listed" finding, resolution:'agent'):
-// that shape is PROVEN by knowledge-kb-maintain-session's own beat to trip
-// EXACTLY one finding and nothing spurious. It is deliberately NOT reused —
-// a separate directory keeps each beat's state ownership independent
-// (rule 3) even though, unlike Consolidate, drain under no-spawn never
-// writes to this KB's files at all (its one agent-tier finding can never
-// clear without a real SDK turn — see the beat's own honesty-rule comment).
+// fixture. W7 FIX-B-KB: this fixture used to mirror SCRATCH_KB_MAINTAIN's
+// "missing from its own category index" shape and lean on it being
+// unfixable without an agent turn — but that was only ever true because the
+// index auto-fixer wrote the WRONG index (the brain/cycles leak); with the
+// own-tree fixer the drain's real auto pass legitimately heals that shape
+// to a genuine "green", which is the wrong demo for THIS beat. So the seed
+// here is now a finding with NO auto or deterministic path at all — a
+// dangling `related_themes` edge (checkDanglingEdges → `edge.dangling`,
+// resolution:'agent', see classifyFinding in cli/brain-lint.ts) — while the
+// theme IS properly listed in its own patterns.md (zero index findings).
+// Disjoint directory keeps each beat's state ownership independent (rule 3);
+// drain under no-spawn never writes to this KB's files at all (a dangling
+// edge is repointed only by a real SDK turn).
 const SCRATCH_KB_DRAIN_ID = 'journey-scratch-kb-drain';
 const SCRATCH_KB_DRAIN_NAME = 'journey-scratch-kb-drain (project)';
 const SCRATCH_KB_DRAIN_DESC = 'Ephemeral per-project-shaped brain created by the e2e journey itself, seeded with one agent-tier lint finding to demo the drain-to-green button reaching an honest, CI-safe terminal.';
 const SCRATCH_KB_DRAIN_DIR = join(FORGE_ROOT, 'brain', 'projects', SCRATCH_KB_DRAIN_ID);
 const SCRATCH_KB_DRAIN_THEME_SLUG = 'scratch-drain-lesson';
-const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, present on disk, deliberately left out of its own category index so checkProjectBrainIndexes flags it (agent-tier) and the drain button has something genuine to work on.';
+const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, listed in its own category index, but carrying a deliberately dangling related_themes edge so checkDanglingEdges flags it (agent-tier, no auto fixer) and the drain button has something genuine — and genuinely agent-only — to work on.';
+// A slug that exists NOWHERE under brain/**/themes — the dangling target.
+const SCRATCH_KB_DRAIN_DANGLING_SLUG = 'journey-scratch-nonexistent-theme';
 
 function cleanScratchKbDrain() {
   try { rmSync(SCRATCH_KB_DRAIN_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
@@ -320,9 +326,10 @@ function cleanScratchKbDrain() {
   } catch { /* best-effort */ }
 }
 
-/** Mirrors seedScratchKbMaintain's own shape exactly — see that function's
- *  header for why this trips exactly the checkProjectBrainIndexes "not
- *  listed" finding and nothing else. */
+/** Seeds exactly ONE finding: a dangling related_themes edge
+ *  (checkDanglingEdges, agent-tier, NO auto/deterministic fixer — see the
+ *  W7 FIX-B-KB block comment above). The theme is properly indexed in its
+ *  own patterns.md so no index-tier finding fires alongside it. */
 function seedScratchKbDrain() {
   const themesDir = join(SCRATCH_KB_DRAIN_DIR, 'themes');
   mkdirSync(themesDir, { recursive: true });
@@ -339,13 +346,18 @@ function seedScratchKbDrain() {
   const now = new Date().toISOString();
   writeFileSync(join(themesDir, `${SCRATCH_KB_DRAIN_THEME_SLUG}.md`), [
     '---',
-    'title: Scratch drain lesson — deliberately unindexed',
-    `description: ${SCRATCH_KB_DRAIN_THEME_DESC}`,
+    'title: Scratch drain lesson — deliberately dangling edge',
+    // JSON.stringify = double-quoted YAML: the DESC contains an unquoted
+    // `: ` which would otherwise make gray-matter throw and route this
+    // fixture through the lenient fallback — the seed must be VALID yaml so
+    // the beat demos drain honesty, not parser-fallback trivia (the fallback
+    // path has its own unit pins in cli/theme-frontmatter.test.ts).
+    `description: ${JSON.stringify(SCRATCH_KB_DRAIN_THEME_DESC)}`,
     'category: pattern',
     'keywords: [e2e-journey, scratch-kb, kb-drain, drain-to-green]',
     `created_at: ${now}`,
     `updated_at: ${now}`,
-    'related_themes: []',
+    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}]`,
     '---',
     '',
     '# Theme: scratch drain lesson',
@@ -355,9 +367,12 @@ function seedScratchKbDrain() {
     SCRATCH_KB_DRAIN_THEME_DESC,
     '',
   ].join('\n'), 'utf8');
-  // patterns.md EXISTS (so checkProjectBrainIndexes doesn't instead flag
-  // "no category index files") but omits the theme's own link line — the
-  // finding the drain button is being asked to work on.
+  // patterns.md EXISTS and LISTS the theme — zero index-tier findings, so
+  // the drain's real auto pass has nothing it can (or should) fix and the
+  // ONLY finding is the agent-tier dangling edge above (W7 FIX-B-KB: the
+  // old missing-link shape is auto-healable now that ensureLinked targets
+  // the KB's own tree, which turned this beat's honest "no-progress" demo
+  // into a real green).
   writeFileSync(join(SCRATCH_KB_DRAIN_DIR, 'patterns.md'), [
     `# ${SCRATCH_KB_DRAIN_ID} — Patterns`,
     '',
@@ -365,7 +380,7 @@ function seedScratchKbDrain() {
     '',
     '## Theme pages',
     '',
-    '(deliberately empty — the e2e journey seeds this to demo the drain button reaching an honest terminal)',
+    `- [\`${SCRATCH_KB_DRAIN_THEME_SLUG}\`](./themes/${SCRATCH_KB_DRAIN_THEME_SLUG}.md) — ${SCRATCH_KB_DRAIN_THEME_DESC}`,
     '',
   ].join('\n'), 'utf8');
 }
@@ -1106,8 +1121,11 @@ export const journey = defineJourney({
                   ({ state: drainState, runId: runIdBefore } = await readDrainAttrs(page));
                 } catch { /* checked below */ }
                 // Honesty rule: under FORGE_ARCHITECT_NO_SPAWN=1 the agent-tier turn never
-                // runs, so the seeded fixture's one agent-tier (checkProjectBrainIndexes)
-                // finding can never actually clear here — the only honest terminal this run
+                // runs, so the seeded fixture's one agent-tier (checkDanglingEdges — a
+                // dangling related_themes edge, NO auto/deterministic fixer; W7 FIX-B-KB
+                // moved the seed off the missing-index-link shape, which the own-tree
+                // index auto-fixer now legitimately heals to a real green) finding can
+                // never actually clear here — the only honest terminal this run
                 // can reach is 'no-progress' (nothing changed round-over-round). Asserting
                 // this exact state (not just "some terminal") kills a false 'green' that
                 // would mean an agent turn secretly ran under a harness meant to suppress it.

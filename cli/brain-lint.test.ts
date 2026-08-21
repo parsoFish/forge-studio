@@ -1388,6 +1388,38 @@ test('lintThemeFiles: frontmatter parsing is order-independent — a prior parse
   }
 });
 
+test('lintThemeFiles: a dangling related_themes edge is still flagged when the frontmatter needs the lenient fallback (W7 FIX-B-KB: the fallback stored the list as a raw string, danglingEdgeFindings skipped non-arrays — the kb-drain beat saw a false instant green)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brain-lint-fbdangle-'));
+  try {
+    const themesDir = join(root, 'brain', 'projects', 'fallback-dangle-kb', 'themes');
+    mkdirSync(themesDir, { recursive: true });
+    const file = join(themesDir, 'dangler.md');
+    writeFileSync(file, [
+      '---',
+      'title: Fallback dangler fixture',
+      // Unquoted `: ` -> gray-matter throws -> regex fallback parses the fields.
+      `description: A scratch fixture: unquoted colon forces the fallback (fbdangle-${Date.now()})`,
+      'category: pattern',
+      'related_themes: [this-slug-exists-nowhere-under-brain]',
+      'created_at: 2026-01-01T00:00:00Z',
+      'updated_at: 2026-01-01T00:00:00Z',
+      '---',
+      '',
+      '# body',
+      '',
+    ].join('\n'));
+    const findings = lintThemeFiles(root, [file]);
+    const dangling = findings.filter((f) => f.check === 'checkDanglingEdges');
+    assert.equal(
+      dangling.length,
+      1,
+      `the seeded dangling edge must be flagged even through the fallback parse — a raw-string related_themes silently skipping the check is the false-green drain defect, got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('lintThemeFiles: checkCategoryScope governs ONLY the forge sub-wikis — a scratch/band KB\'s own themes are never flagged mis-routed (W7 FIX-B-KB: the auto-tier mover that would drag scratch themes into brain/cycles|forge-dev)', () => {
   const root = mkdtempSync(join(tmpdir(), 'brain-lint-catscope-'));
   try {
