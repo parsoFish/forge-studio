@@ -371,6 +371,43 @@ test('POST /api/studio/kbs/:id/drain/cancel — 409 when no active run', async (
   }
 });
 
+// W7 FIX-B-KB (knowledge-14) — the terminal-run 409 must SAY the run is
+// terminal (state + runId), not just "no active drain run": "refuses
+// honestly" means the operator learns WHY there is nothing to cancel.
+test('POST /api/studio/kbs/:id/drain/cancel — the terminal-run 409 names the latest run + its terminal state (knowledge-14, W7 FIX-B-KB)', async () => {
+  const iso = await makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'cx-kb');
+    const runId = 'cx-kb-drain-done2';
+    writeDrainStatus(iso.root, runId, { ...RUNNING_STATUS, state: 'no-progress', updatedAt: new Date().toISOString() });
+    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    assert.equal(res.status, 409, JSON.stringify(res.json));
+    const err = String(res.json['error'] ?? '');
+    assert.ok(err.includes('terminal'), `the 409 reason must say the run is terminal, got "${err}"`);
+    assert.ok(err.includes('no-progress'), `the 409 reason must carry the terminal state, got "${err}"`);
+    assert.equal(res.json['runId'], runId, `the 409 body must name the terminal run, got ${JSON.stringify(res.json)}`);
+    assert.equal(res.json['state'], 'no-progress', `the 409 body must carry the terminal state, got ${JSON.stringify(res.json)}`);
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/studio/kbs/:id/drain/cancel — 409 with the never-dispatched reason when NO run exists at all (W7 FIX-B-KB)', async () => {
+  const iso = await makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'cx-kb');
+    const res = await postJson(iso.url, '/api/studio/kbs/cx-kb/drain/cancel');
+    assert.equal(res.status, 409, JSON.stringify(res.json));
+    const err = String(res.json['error'] ?? '');
+    assert.ok(err.includes('no active drain run'), `got "${err}"`);
+    assert.equal('runId' in res.json, false, `no runId may be fabricated when no run exists, got ${JSON.stringify(res.json)}`);
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // W7-B2 code-review round — the forced-cancel branch must ALSO stake the
 // cancel FLAG. A "stale" status is not proof the loop is DEAD: a drain that

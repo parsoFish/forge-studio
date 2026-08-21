@@ -1345,6 +1345,89 @@ test('LINT_THEME_FILE_CHECKS: declares both new checks AND lintThemeFiles(forgeR
   }
 });
 
+// ---------------------------------------------------------------------------
+// W7 FIX-B-KB — parse-cache poisoning + per-KB checkCategoryScope scope
+// ---------------------------------------------------------------------------
+
+test('lintThemeFiles: frontmatter parsing is order-independent — a prior parse of the same invalid-YAML content must not poison a later read into phantom missing-field findings (W7 FIX-B-KB, kb-maintain consolidate regression)', () => {
+  // gray-matter throws on this description's unquoted `: ` — parseTheme's
+  // lenient fallback recovers the fields. But gray-matter populates its
+  // module-level cache BEFORE the parse throws, so a SECOND parse of the
+  // byte-identical content silently returned `data: {}` from the poisoned
+  // cache and the fallback never ran. Journey sequence that hit this:
+  // checkProjectBrainIndexes parsed the theme first (fallback fine), then
+  // collectKbFindings' own-theme lens re-parsed it and invented five
+  // "missing required frontmatter field" findings for fields plainly
+  // present — three of them agent-tier, so consolidate could never reach
+  // cleared under no-spawn (the kb-maintain "not-cleared" gate failure).
+  const root = mkdtempSync(join(tmpdir(), 'brain-lint-cache-'));
+  try {
+    const themesDir = join(root, 'brain', 'projects', 'poison-kb', 'themes');
+    mkdirSync(themesDir, { recursive: true });
+    const file = join(themesDir, 'colon-desc.md');
+    writeFileSync(file, [
+      '---',
+      'title: Colon description fixture',
+      // Unique per run so a previous process/test never pre-poisons it; the
+      // two reads under test share the SAME content within this test.
+      `description: A scratch lint fixture: unquoted colon makes gray-matter throw (poison-${Date.now()})`,
+      'category: pattern',
+      'created_at: 2026-01-01T00:00:00Z',
+      'updated_at: 2026-01-01T00:00:00Z',
+      '---',
+      '',
+      '# body',
+      '',
+    ].join('\n'));
+    const first = lintThemeFiles(root, [file]).filter((f) => f.check === 'checkFrontmatter');
+    const second = lintThemeFiles(root, [file]).filter((f) => f.check === 'checkFrontmatter');
+    assert.deepEqual(first, [], `first pass must recover every field via the lenient fallback, got ${JSON.stringify(first)}`);
+    assert.deepEqual(second, [], `second pass of the SAME content must match the first — phantom findings here mean a poisoned parse cache, got ${JSON.stringify(second)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('lintThemeFiles: checkCategoryScope governs ONLY the forge sub-wikis — a scratch/band KB\'s own themes are never flagged mis-routed (W7 FIX-B-KB: the auto-tier mover that would drag scratch themes into brain/cycles|forge-dev)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'brain-lint-catscope-'));
+  try {
+    // A category-bearing theme in a top-level NON-forge KB dir (the shape
+    // every flow/band/scratch KB has): the category→sub-wiki routing rule is
+    // a three-brain (ADR 018) convention for the forge brains only, so no
+    // mis-routed finding may fire here — classify() maps it to the AUTO tier
+    // whose fixer git-mv's the file into brain/<sub>/themes/.
+    const scratchThemes = join(root, 'brain', 'scratch-kb', 'themes');
+    mkdirSync(scratchThemes, { recursive: true });
+    const scratchTheme = join(scratchThemes, 'a-pattern.md');
+    writeFileSync(scratchTheme, [
+      '---', 'title: Scratch pattern', 'description: scratch KB theme.', 'category: pattern',
+      'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z', '---', '', '# body', '',
+    ].join('\n'));
+    const scratchFindings = lintThemeFiles(root, [scratchTheme]);
+    assert.ok(
+      !scratchFindings.some((f) => f.check === 'checkCategoryScope'),
+      `a non-forge KB's own theme must never trip checkCategoryScope, got ${JSON.stringify(scratchFindings)}`,
+    );
+
+    // …while a genuinely mis-routed FORGE theme (a decision sitting in
+    // brain/cycles) still gets flagged — the check stays real in its domain.
+    const cyclesThemes = join(root, 'brain', 'cycles', 'themes');
+    mkdirSync(cyclesThemes, { recursive: true });
+    const misrouted = join(cyclesThemes, 'a-decision.md');
+    writeFileSync(misrouted, [
+      '---', 'title: Misrouted decision', 'description: belongs in forge-dev.', 'category: decision',
+      'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z', '---', '', '# body', '',
+    ].join('\n'));
+    const forgeFindings = lintThemeFiles(root, [misrouted]);
+    assert.ok(
+      forgeFindings.some((f) => f.check === 'checkCategoryScope'),
+      `a mis-categorized forge sub-wiki theme must still trip checkCategoryScope, got ${JSON.stringify(forgeFindings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('classifyFinding: checkDanglingEdges/checkDuplicateThemes classify as agent-tier with a non-empty fixHint, and resolutionCounts tallies them under "agent" (kills a classifyFinding that leaves the new checks unhandled, silently falling through to the "user" default)', () => {
   const dangling = classifyFinding(cf('checkDanglingEdges', 'dangling related_themes slug: missing-slug'));
   assert.equal(dangling.kind, 'edge.dangling');
