@@ -333,8 +333,8 @@ test('parseKbLintSummary: positive control — well-formed finite/integer/bounde
 test('buildTriggerDeclaration: flow-complete/merged build {on, target} with no other fields', () => {
   expect(buildTriggerDeclaration('flow-complete', { targetId: 'forge-develop' }))
     .toEqual({ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-develop' } });
-  expect(buildTriggerDeclaration('merged', { targetId: 'forge-reflect' }))
-    .toEqual({ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } });
+  expect(buildTriggerDeclaration('merged', { targetId: 'retro-flow' }))
+    .toEqual({ on: 'merged', target: { kind: 'flow', ref: 'retro-flow' } });
 });
 
 test('buildTriggerDeclaration: missing targetId returns null for every kind', () => {
@@ -567,7 +567,7 @@ test('companion (zyc finding 2): two agent-complete rows with the SAME target AN
 
 test('companion (zyc finding 2): a different target flow is never a duplicate, regardless of agent', () => {
   const existing: FlowTrigger = { on: 'agent-complete', target: { kind: 'flow', ref: 'forge-develop' }, agent: 'developer' };
-  expect(isSameTriggerIdentity(existing, 'agent-complete', 'forge-reflect', 'developer')).toBe(false);
+  expect(isSameTriggerIdentity(existing, 'agent-complete', 'retro-flow', 'developer')).toBe(false);
 });
 
 test('companion (zyc finding 2): every OTHER kind stays (on,target)-only — a differing "agent" argument is never consulted (a second cron/webhook/flow-complete/merged row at the same target IS a real duplicate)', () => {

@@ -28,6 +28,7 @@ import { RuntimePicker } from '@/components/studio/agent-builder/RuntimePicker';
 import { ReadinessPanel } from '@/components/studio/agent-builder/ReadinessPanel';
 import { YamlPreview } from '@/components/studio/agent-builder/YamlPreview';
 import { UsedInFlows } from '@/components/studio/agent-builder/UsedInFlows';
+import { dispatchProvenanceNote } from '@/lib/agent-dispatch-provenance';
 import { RunPanel } from '@/components/studio/agent-builder/RunPanel';
 import { StarterPicker } from '@/components/studio/agent-builder/StarterPicker';
 import { ZoneWrap } from '@/components/studio/agent-builder/ZoneWrap';
@@ -863,7 +864,11 @@ export default function AgentBuilderPage() {
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
           />
-          <UsedInFlows agentSlug={state.slug} flows={flows} />
+          {/* W7-C1 (agents-27): the dispatch-provenance note keeps an agent
+              dispatched OUTSIDE the flow graph (release-finalizer's merge
+              chain, project-scoped-review's operator entry, reflector's
+              on-merged standing trigger) from reading as an orphan. */}
+          <UsedInFlows agentSlug={state.slug} flows={flows} dispatchNote={dispatchProvenanceNote(state.phase || undefined)} />
 
           {/* R6-06 WI-3 — this agent's own run-history ledger, joined across
               all three execution paths (flow-node / standalone / session) by

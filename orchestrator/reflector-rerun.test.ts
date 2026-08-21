@@ -1,5 +1,7 @@
 /**
- * Tests for orchestrator/forge-reflect-rerun.ts — manifest-id resolution.
+ * Tests for orchestrator/reflector-rerun.ts — manifest-id resolution.
+ * (Renamed in W7-C1: the reflect FLOW wrapper was retired; this module
+ * reruns the reflector AGENT.)
  *
  * The cycleId handed to a rerun is usually the timestamped log-dir name
  * (`<ts>_<initiativeId>`), but the manifest is named by initiativeId. Recovering
@@ -13,7 +15,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { resolveInitiativeId } from './forge-reflect-rerun.ts';
+import { resolveInitiativeId } from './reflector-rerun.ts';
 
 test('resolveInitiativeId: reads initiative_id from the cycle event log', () => {
   const logsRoot = mkdtempSync(join(tmpdir(), 'rerun-resolve-'));

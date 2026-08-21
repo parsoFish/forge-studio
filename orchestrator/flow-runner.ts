@@ -297,8 +297,9 @@ export type NodeKind =
  * node carries both agent:'architect' and gate:'plan' and must classify as
  * 'architect'). Extend by adding a row — no control-flow edit.
  *
- * `contract: 'agent'` (R4-18): the onboard-project flow's `contract-check`
- * node carries BOTH `gate:'contract'` and `agent:'contract-check'` (ADR-039
+ * `contract: 'agent'` (R4-18; the OOTB onboard flow wrapper was retired in
+ * W7-C1 — this stays authorable vocabulary): an onboard-shaped flow's
+ * `contract-check` node carries BOTH `gate:'contract'` and `agent:'contract-check'` (ADR-039
  * declared dispatch — no privileged executor enum). Mapping the gate id to
  * the ordinary `'agent'` kind does two things at once: it declares `contract`
  * as known gate vocabulary (so `resolveNodeKind` never falls through to
@@ -1026,7 +1027,8 @@ const execReflect: NodeExecutor = async (ctx) => {
 
 /**
  * onboard-preflight (the `onboard-preflight` band, R4-18/ADR-039): the
- * gate node of the `onboard-project` flow. Runs the REAL forge↔project
+ * `gate: contract` node of an onboard-shaped flow (authorable — the OOTB
+ * wrapper was retired in W7-C1). Runs the REAL forge↔project
  * contract preflight (`runPreflight`, `cli/preflight.ts`) DIRECTLY,
  * orchestrator-side — mirrors `execDemo`'s shape (start event, do the real
  * work, end event carrying `status`) but spawns NO agent at all.

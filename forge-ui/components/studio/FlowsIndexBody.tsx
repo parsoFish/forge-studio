@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { Flow, Project, Run } from '@/lib/studio-client';
 import { FlowCard } from '@/components/studio/LibraryCard';
@@ -54,6 +54,11 @@ export type FlowsIndexBodyProps = {
 const FIRST_FLOW_CTA_STYLE: CSSProperties = { textDecoration: 'none', display: 'inline-block' };
 
 export function FlowsIndexBody({ flows, runs, projects }: FlowsIndexBodyProps) {
+  // W7-C1 (flows-19): a client-side name/goal/id filter — the agents index
+  // precedent. Local UI state only; the true-empty state below renders no
+  // filter (nothing to filter).
+  const [filter, setFilter] = useState('');
+
   if (flows.length === 0) {
     return (
       <div
@@ -82,6 +87,17 @@ export function FlowsIndexBody({ flows, runs, projects }: FlowsIndexBodyProps) {
   // encodes for the library shelf's first-run onramp.
   const hasUserFlow = flows.some((f) => f.origin === 'studio');
 
+  const needle = filter.trim().toLowerCase();
+  const visibleFlows =
+    needle === ''
+      ? flows
+      : flows.filter(
+          (f) =>
+            f.id.toLowerCase().includes(needle) ||
+            f.name.toLowerCase().includes(needle) ||
+            (f.goal ?? '').toLowerCase().includes(needle),
+        );
+
   return (
     <>
       {!hasUserFlow && (
@@ -107,15 +123,48 @@ export function FlowsIndexBody({ flows, runs, projects }: FlowsIndexBodyProps) {
           </Link>
         </div>
       )}
+      {/* W7-C1 (flows-19): filter row — data-flow-visible-count mirrors the
+          post-filter grid so automation never has to count cards. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <input
+          type="search"
+          data-field="flows-filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter flows by name or goal…"
+          aria-label="Filter flows"
+          style={{
+            flex: '0 1 320px',
+            background: 'var(--bg-2)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text)',
+            fontSize: 13,
+            padding: '6px 10px',
+            outline: 'none',
+          }}
+        />
+        {needle !== '' && (
+          <span style={{ fontSize: 12, color: 'var(--dim)' }}>
+            {visibleFlows.length} of {flows.length} flow{flows.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
       <div
         className="card-grid"
         data-component="flows-grid"
+        data-flow-visible-count={visibleFlows.length}
         style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}
       >
-        {flows.map((f, i) => (
+        {visibleFlows.map((f, i) => (
           <FlowCard key={f.id} flow={f} runs={runs} projects={projects} index={i} />
         ))}
       </div>
+      {visibleFlows.length === 0 && (
+        <p data-component="flows-filter-empty" style={{ color: 'var(--dim)', fontSize: 13, padding: '16px 0' }}>
+          No flows match “{filter.trim()}”.
+        </p>
+      )}
     </>
   );
 }

@@ -56,15 +56,15 @@ function withTmp(fn: (queueRoot: string) => void): void {
 test('enqueueFlowRun: a pending manifest is repointed at a non-develop target flow + a cycle_id is minted', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest());
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'enqueued');
-    assert.equal(result.flowId, 'forge-reflect');
+    assert.equal(result.flowId, 'retro-flow');
     assert.ok(result.cycleId && result.cycleId.includes('INIT-2026-06-21-toc'), 'a cycleId is returned');
 
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
-    assert.equal(onDisk.flow_id, 'forge-reflect', 'flow_id is repointed at the target flow on disk');
+    assert.equal(onDisk.flow_id, 'retro-flow', 'flow_id is repointed at the target flow on disk');
     assert.equal(onDisk.phase, 'pending', 'manifest stays claimable (pending)');
     assert.ok(onDisk.cycle_id, 'cycle_id persisted on the manifest');
   });
@@ -78,7 +78,7 @@ test('enqueueFlowRun: an in-flight initiative is left untouched (already-running
   withTmp((queueRoot) => {
     const p = seed(queueRoot, 'in-flight', manifest());
     const before = readFileSync(p, 'utf8');
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'already-running');
     assert.equal(readFileSync(p, 'utf8'), before, 'the in-flight manifest is not mutated');
@@ -91,7 +91,7 @@ test('enqueueFlowRun: a merged initiative is left untouched (already-running —
   withTmp((queueRoot) => {
     const p = seed(queueRoot, 'merged', manifest());
     const before = readFileSync(p, 'utf8');
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'already-running');
     assert.equal(readFileSync(p, 'utf8'), before, 'the merged manifest is not mutated');
@@ -100,8 +100,8 @@ test('enqueueFlowRun: a merged initiative is left untouched (already-running —
 
 test('enqueueFlowRun: ready-for-review with the SAME flow_id as the target → already-running', () => {
   withTmp((queueRoot) => {
-    seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'forge-reflect' }));
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'retro-flow' }));
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'already-running');
     const paths = getPaths(queueRoot);
@@ -115,14 +115,14 @@ test('enqueueFlowRun: ready-for-review with the SAME flow_id as the target → a
 test('enqueueFlowRun: ready-for-review with a DIFFERENT flow_id → enqueued (hand-off fall-through)', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'forge-architect' }));
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);
     assert.ok(existsSync(join(paths.pending, 'INIT-2026-06-21-toc.md')), 'moved into pending');
     assert.ok(!existsSync(join(paths.readyForReview, 'INIT-2026-06-21-toc.md')), 'removed from ready-for-review');
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
-    assert.equal(onDisk.flow_id, 'forge-reflect', 'repointed at the new target flow');
+    assert.equal(onDisk.flow_id, 'retro-flow', 'repointed at the new target flow');
   });
 });
 
@@ -144,15 +144,15 @@ test('enqueueFlowRun: target forge-develop without decomposition evidence → no
   });
 });
 
-test('enqueueFlowRun: target forge-reflect without decomposition evidence → enqueued (gate is develop-specific)', () => {
+test('enqueueFlowRun: target retro-flow without decomposition evidence → enqueued (gate is develop-specific)', () => {
   withTmp((queueRoot) => {
     const m = manifest();
     delete m.specs;
     seed(queueRoot, 'pending', m);
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
 
     assert.equal(result.status, 'enqueued', 'the planned gate only guards forge-develop targets');
-    assert.equal(result.flowId, 'forge-reflect');
+    assert.equal(result.flowId, 'retro-flow');
   });
 });
 
@@ -179,7 +179,7 @@ test('enqueueFlowRun: a path-traversal flow id never escapes the studio flows di
 test('enqueueFlowRun: a stale resume_from is cleared when re-enqueueing for a fresh build', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest({ resume_from: 'demo' }));
-    enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot });
+    enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
     assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the run starts the flow fresh');
@@ -217,12 +217,12 @@ test('enqueueFlowRun: allowFinishedSource re-runs a done manifest (the trigger d
   withTmp((queueRoot) => {
     const donePath = seed(queueRoot, 'done', manifest({ phase: 'done' }));
 
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'forge-reflect', { queueRoot, allowFinishedSource: true });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, allowFinishedSource: true });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
-    assert.equal(onDisk.flow_id, 'forge-reflect');
+    assert.equal(onDisk.flow_id, 'retro-flow');
     assert.equal(existsSync(donePath), false, 'claimed out of done/ exactly as before');
   });
 });

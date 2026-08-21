@@ -11,8 +11,8 @@
  */
 import { test, expect } from 'vitest';
 
-import { deriveKickoffCandidates } from './kickoff-candidates.ts';
-import type { Run } from './studio-client.ts';
+import { deriveKickoffCandidates, canStartFlow } from './kickoff-candidates.ts';
+import type { Flow, Run } from './studio-client.ts';
 
 function run(over: Partial<Run> & Pick<Run, 'id' | 'initiativeId' | 'status'>): Run {
   return {
@@ -56,4 +56,27 @@ test('dedupes by initiative id and never fabricates a project (null when the run
 test('a run without an initiative id (degraded manifest) is skipped, and no runs → no candidates', () => {
   expect(deriveKickoffCandidates([run({ id: 'x', initiativeId: '', status: 'planned' })])).toEqual([]);
   expect(deriveKickoffCandidates([])).toEqual([]);
+});
+
+// ---- W7-C1 (flows-25): canStartFlow — the honest data-can-start derivation ----
+//
+// `data-can-start` on the flow monitor used to be `view.flow ? 'true' :
+// 'false'` — "the flow exists", not "a run can be started". A trigger-only
+// flow renders NO launch surface, so automation reading the attribute was
+// told a start was possible when it was not.
+
+test('canStartFlow: null flow -> false (nothing to start)', () => {
+  expect(canStartFlow(null)).toBe(false);
+});
+
+test('canStartFlow: a trigger-only kickoff renders no launch surface -> false', () => {
+  const flow: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [], kickoff: { kind: 'trigger-only' } };
+  expect(canStartFlow(flow)).toBe(false);
+});
+
+test('canStartFlow: declared launchable kinds AND the generic no-kickoff fallback -> true', () => {
+  const base: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [] };
+  expect(canStartFlow({ ...base, kickoff: { kind: 'idea' } })).toBe(true);
+  expect(canStartFlow({ ...base, kickoff: { kind: 'initiative-select' } })).toBe(true);
+  expect(canStartFlow(base)).toBe(true); // no kickoff: block -> generic Start-Run fallback
 });

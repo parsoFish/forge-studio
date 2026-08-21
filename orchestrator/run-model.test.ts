@@ -1202,27 +1202,30 @@ test('ADR 028 / J5: a custom-flow run surfaces phase statuses on self-named node
 // S9: flow lineage — a threaded spine run surfaces under every flow it traversed
 // ---------------------------------------------------------------------------
 
-test('computeFlowLineage: a threaded spine run surfaces under all three spine flows', () => {
+test('computeFlowLineage: a threaded spine run surfaces under every flow whose unique nodes it executed', () => {
+  // Third entry is a scratch authored flow — the seed set is two flows since
+  // W7-C1, but the derivation stays generic over ANY flow whose unique nodes
+  // a run executed.
   const flowNodeSets = new Map([
     ['forge-architect', new Set(['architect', 'pm'])],
     ['forge-develop', new Set(['dev', 'unifier', 'review'])],
-    ['forge-reflect', new Set(['reflect'])],
+    ['retro-flow', new Set(['retro'])],
   ]);
   // The manifest's flow_id is forge-develop (repointed at the hand-off), but the run
-  // executed architect+pm (architect stage) and reflect (post-merge) too.
+  // executed architect+pm (architect stage) and the authored retro node too.
   const lineage = computeFlowLineage(
-    ['architect', 'pm', 'dev', 'unifier', 'review', 'reflect'],
+    ['architect', 'pm', 'dev', 'unifier', 'review', 'retro'],
     'forge-develop',
     flowNodeSets,
   );
-  assert.deepEqual(lineage, ['forge-architect', 'forge-develop', 'forge-reflect']);
+  assert.deepEqual(lineage, ['forge-architect', 'forge-develop', 'retro-flow']);
 });
 
 test('computeFlowLineage: a run that only executed develop-flow phases carries just forge-develop', () => {
   const flowNodeSets = new Map([
     ['forge-architect', new Set(['architect', 'pm'])],
     ['forge-develop', new Set(['dev', 'unifier', 'review'])],
-    ['forge-reflect', new Set(['reflect'])],
+    ['retro-flow', new Set(['retro'])],
   ]);
   const lineage = computeFlowLineage(['dev', 'unifier', 'review'], 'forge-develop', flowNodeSets);
   assert.deepEqual(lineage, ['forge-develop']);

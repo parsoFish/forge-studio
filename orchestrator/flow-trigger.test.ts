@@ -21,13 +21,13 @@ function t(on: string, ref: string): FlowTrigger {
 test('fires only the triggers whose `on` matches the event', async () => {
   const dispatched: Array<{ ref: string; event: FlowTriggerEvent }> = [];
   const fired = await fireFlowTriggers(
-    flow([t('merged', 'forge-reflect'), t('flow-complete', 'other-flow')]),
+    flow([t('merged', 'retro-flow'), t('flow-complete', 'other-flow')]),
     'merged',
     { dispatch: (tr, event) => { dispatched.push({ ref: tr.target.ref, event }); } },
   );
 
-  assert.deepEqual(fired, [t('merged', 'forge-reflect')]);
-  assert.deepEqual(dispatched, [{ ref: 'forge-reflect', event: 'merged' }]);
+  assert.deepEqual(fired, [t('merged', 'retro-flow')]);
+  assert.deepEqual(dispatched, [{ ref: 'retro-flow', event: 'merged' }]);
 });
 
 test('no matching trigger → dispatch never called, returns []', async () => {
@@ -65,14 +65,14 @@ test('dispatches every matching trigger in declaration order and awaits async di
 test('onFire observability hook runs before each dispatch', async () => {
   const seen: string[] = [];
   await fireFlowTriggers(
-    flow([t('merged', 'forge-reflect')]),
+    flow([t('merged', 'retro-flow')]),
     'merged',
     {
       onFire: (tr) => { seen.push(`fire:${tr.target.ref}`); },
       dispatch: (tr) => { seen.push(`dispatch:${tr.target.ref}`); },
     },
   );
-  assert.deepEqual(seen, ['fire:forge-reflect', 'dispatch:forge-reflect']);
+  assert.deepEqual(seen, ['fire:retro-flow', 'dispatch:retro-flow']);
 });
 
 test('ADR-041 registry: nine kinds, reserved rows have no runtime, merged is an OOTB row', () => {

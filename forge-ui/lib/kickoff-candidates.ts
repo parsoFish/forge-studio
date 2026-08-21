@@ -10,7 +10,7 @@
  * `already-done`; this is the UI half of the same guard). Re-running a
  * failed run is the monitor's own Resume affordance, not the picker.
  */
-import type { Run } from './studio-client';
+import type { Flow, Run } from './studio-client';
 
 /** An initiative the generic kickoff can enqueue onto a flow — derived from
  *  the runs list (one run per queued manifest), never invented. */
@@ -26,4 +26,18 @@ export function deriveKickoffCandidates(runs: Run[]): KickoffCandidate[] {
     out.push({ initiativeId: r.initiativeId, project: r.project ?? null });
   }
   return out;
+}
+
+/**
+ * W7-C1 (flows-25): the HONEST `data-can-start` derivation for the flow
+ * monitor. The old `view.flow ? 'true' : 'false'` meant "the flow exists" —
+ * automation was told a run could be started on flows that render no launch
+ * surface at all. True exactly when the monitor renders a launcher:
+ * a declared launchable kickoff kind (`idea` / `initiative-select`) or the
+ * generic Start-Run fallback (no `kickoff:` block). `trigger-only` renders
+ * only the explanatory note — no start.
+ */
+export function canStartFlow(flow: Flow | null): boolean {
+  if (flow === null) return false;
+  return flow.kickoff?.kind !== 'trigger-only';
 }

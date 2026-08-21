@@ -53,7 +53,7 @@ test('on:flow-complete chain → the REAL default dispatch repoints the source a
     // terminal success (target = a NON-forge-develop flow).
     stageFlowRunRequest(
       {
-        target: { kind: 'flow', ref: 'forge-reflect' },
+        target: { kind: 'flow', ref: 'retro-flow' },
         origin: 'trigger',
         triggeredBy: 'forge-architect',
         sourceInitiativeId: src.initiative_id,
@@ -71,7 +71,7 @@ test('on:flow-complete chain → the REAL default dispatch repoints the source a
     const pendingPath = join(paths.pending, `${src.initiative_id}.md`);
     assert.ok(existsSync(pendingPath), 'source manifest is now in pending/');
     const repointed = parseManifest(readFileSync(pendingPath, 'utf8'));
-    assert.equal(repointed.flow_id, 'forge-reflect', 'repointed at the target flow');
+    assert.equal(repointed.flow_id, 'retro-flow', 'repointed at the target flow');
     assert.equal(repointed.phase, 'pending', 'claimable');
     // Cycle identity preserved (mechanism B): the same cycle_id threads through.
     assert.equal(repointed.cycle_id, src.cycle_id, 'the source cycle_id is preserved (no fork)');

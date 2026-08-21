@@ -980,13 +980,16 @@ test('AT-39: an unmapped studio/starters/ subdir surfaces as an ERROR via runStu
   cleanup(root);
 });
 
-test('AT-40: runStudioLint(process.cwd()) surfaces the 3 real unverifiable-endpoint flags from lintTemplateLibrary (flagCount reflects them)', () => {
+test('AT-40: runStudioLint(process.cwd()) surfaces the 4 real unverifiable-endpoint flags from lintTemplateLibrary (flagCount reflects them)', () => {
   const result = runStudioLint(process.cwd());
   const flags = result.findings.filter((f) => f.check === 'template-library/unverifiable-endpoints');
-  assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags (verdict/work-items/demo-fix-spec), got: ${JSON.stringify(flags)}`);
+  // W7-C1: retiring the onboard-project flow wrapper removed the last DAG
+  // edge that carried "contract", so it joins the honest orchestrator-band
+  // set (verdict/work-items/demo-fix-spec).
+  assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags (verdict/work-items/demo-fix-spec/contract), got: ${JSON.stringify(flags)}`);
   assert.ok(flags.every((f) => f.level === 'flag'));
-  for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
-    assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
+  for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
+    assert.ok(flags.some((f) => f.message.includes(`"${id}"`)), `expected a flag naming "${id}"`);
   }
 });
 

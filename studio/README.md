@@ -5,7 +5,9 @@
 > them. **Rule: never assume a particular managed project.** Validated by
 > `forge studio lint`.
 
-Contents: `flows/` (the `forge-architect` / `forge-develop` / `forge-reflect` DAGs),
+Contents: `flows/` (the `forge-architect` / `forge-develop` DAGs — W7-C1
+retired the reflect + onboard flow wrappers: reflection is a standalone
+post-merge agent run, onboarding is a session),
 `catalog.yaml` (SDKs / models / tools / MCPs / hooks / community skills),
 `artifact-templates/` (per-artifact-type markdown templates: plan / PR /
 verdict / work-items / WI-branches), `demo-elements/` (reusable demo-page

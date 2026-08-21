@@ -83,6 +83,26 @@ export function runsForFlow(flowId: string, runs: Run[]): Run[] {
 }
 
 /**
+ * W7-C1 (flows-21): the flow monitor's own-vs-lineage split, BUILT ON the
+ * same two facts `runsForFlow` matches (never a third predicate): `own` =
+ * runs whose manifest flowId IS this flow; `lineage` = runs that merely
+ * traversed this flow as part of another flow (their ledger rows link to
+ * the run under its own flow). own ∪ lineage = runsForFlow, disjoint by
+ * construction — so the monitor can render the second group under an
+ * explanatory label instead of one undifferentiated 60-row ledger on every
+ * monitor.
+ */
+export function splitRunsForFlow(flowId: string, runs: Run[]): { own: Run[]; lineage: Run[] } {
+  const own: Run[] = [];
+  const lineage: Run[] = [];
+  for (const r of runs) {
+    if (r.flowId === flowId) own.push(r);
+    else if (r.flowLineage.includes(flowId)) lineage.push(r);
+  }
+  return { own, lineage };
+}
+
+/**
  * A flow's live status, built ON `runsForFlow` (never a second, independent
  * predicate). 'active' beats 'gated' when both are present (an active run
  * elsewhere on the flow is the more urgent fact); no matching run at all is

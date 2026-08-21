@@ -1,20 +1,19 @@
 /**
- * Acceptance tests for R4-18 — the `onboard-project` OOTB flow whose gate
- * node executes the REAL preflight (`runPreflight` from `cli/preflight.ts`),
- * orchestrator-side, via a new `onboard-preflight` band guard.
+ * Acceptance tests for the onboard-preflight PLATFORM SEAM (R4-18): a
+ * `gate: contract` flow node executes the REAL preflight (`runPreflight`
+ * from `cli/preflight.ts`), orchestrator-side, via the `onboard-preflight`
+ * band guard.
  *
- * NONE of the production surfaces these tests exercise exist yet:
- *   - studio/flows/onboard-project/flow.yaml (new seed flow)
- *   - skills/contract-check/SKILL.md (new agent def, band-guard: onboard-preflight)
- *   - orchestrator/agent-bands.ts: BAND_GUARD_IDS gains 'onboard-preflight',
- *     BAND_CANONICAL_SLUG['onboard-preflight'] = 'contract-check'
- *   - orchestrator/flow-runner.ts: a new execOnboardPreflight NodeExecutor
- *     registered against 'onboard-preflight', plus GATE_KIND['contract'] = 'agent'
- *   - studio/catalog.yaml: a guards: display row for onboard-preflight
- *
- * Every test below is RED at base for the reason stated in its header
- * comment — usually a missing on-disk file (loadFlowDefinition /
- * loadAgentDefinition throwing ENOENT), sometimes a stale registry row.
+ * W7-C1 (flows-20): the `onboard-project` OOTB flow wrapper was RETIRED —
+ * onboarding's ONE operator surface is the onboarding SESSION
+ * (`POST /api/studio/onboarding/start`, kicked off from
+ * `/sessions/onboarding/new` and the project page). The seam these tests
+ * pin stays fully shipped and authorable: skills/contract-check/SKILL.md,
+ * the band registry rows, GATE_KIND['contract'], and execOnboardPreflight
+ * are all live platform surface a Studio-authored flow can bind. The flow
+ * under test is therefore an AUTHORED FIXTURE of the same two-node shape
+ * (written to a temp dir and loaded through the real loadFlowDefinition),
+ * not an on-disk seed.
  */
 
 import { test } from 'node:test';
@@ -24,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps } from './flow-runner.ts';
+import { runFlow, resolveNodeKind, type FlowRunnerDeps } from './flow-runner.ts';
 import { loadFlowDefinition, loadAgentDefinition, listAgentDefinitions, loadCatalog } from './studio/registry.ts';
 import { validateFlow, validateAgent } from './studio/validate.ts';
 import { skillsDir } from './skill-path.ts';
@@ -72,7 +71,7 @@ function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
 
 /**
  * A FULL FlowRunnerDeps object, every function a tracked no-op. Neither node
- * in the onboard-project flow reaches any of these through its OWN executor:
+ * in the onboard-shaped flow reaches any of these through its OWN executor:
  * `onboard` resolves through execAgent's DIRECT `runAgent` call (suppressed
  * via `withDryBridge`, not a FlowRunnerDeps seam) and `contract-check`
  * resolves through `execOnboardPreflight`'s DIRECT `runPreflight` call (no
@@ -205,24 +204,53 @@ function makePassingPreflightFixture(): { fixtureDir: string; cleanup: () => voi
 }
 
 // ---------------------------------------------------------------------------
-// AT-1 — flow definition, real on-disk
+// The authored onboard-shaped flow fixture (W7-C1: the OOTB wrapper is
+// retired; the seam stays authorable). Written to a temp dir and loaded
+// through the REAL loadFlowDefinition so the parse path is identical to a
+// Studio-authored flow.
 // ---------------------------------------------------------------------------
 
-// Kills: the flow.yaml never being authored at all (loadFlowDefinition
-// throws ENOENT — the base RED reason today); a flow authored with the wrong
-// node count/ids/edge shape; a contract-check node that carries `gate` but
-// NOT `agent` (or vice versa) — the declared-dispatch shape the design
-// requires; an accidentally-added `kickoff:` block; and — via the real
-// validateFlow call — any flow shape `forge studio lint` would reject (e.g.
-// a missing gate anywhere, which zero-gate would catch since this is the
-// flow's only gate node).
-test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow error findings against the real roster', () => {
-  const flowPath = flowPathForId('onboard-project');
-  const flow = loadFlowDefinition(flowPath);
+const ONBOARD_FIXTURE_FLOW_YAML = [
+  'id: onboard-authored',
+  'name: Onboard (authored fixture)',
+  'version: 1',
+  'goal: Authored-flow fixture proving the onboard-preflight gate seam.',
+  'project: null',
+  'kb: cycles',
+  'costCeilingUsd: 5',
+  'origin: studio',
+  'nodes:',
+  '  - { id: onboard, agent: onboarding-agent }',
+  '  - { id: contract-check, agent: contract-check, gate: contract }',
+  'edges:',
+  '  - { from: onboard, to: contract-check, artifact: contract }',
+  'triggers: []',
+  '',
+].join('\n');
+
+function makeOnboardFlowFixture(): { flow: ReturnType<typeof loadFlowDefinition>; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'onboard-flow-fixture-'));
+  const flowPath = join(dir, 'flow.yaml');
+  writeFileSync(flowPath, ONBOARD_FIXTURE_FLOW_YAML);
+  return { flow: loadFlowDefinition(flowPath), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+// ---------------------------------------------------------------------------
+// AT-1 — the authored flow shape validates cleanly against the real roster
+// ---------------------------------------------------------------------------
+
+// Kills: a contract-check node that carries `gate` but NOT `agent` (or vice
+// versa) — the declared-dispatch shape the design requires; and — via the
+// real validateFlow call — any flow shape `forge studio lint` would reject
+// (e.g. a missing gate anywhere, which zero-gate would catch since this is
+// the flow's only gate node). Proves the RETIREMENT left the seam usable: a
+// Studio author can still bind onboarding-agent + the contract gate.
+test('AT-1 authored onboard-shaped flow: loads through the real parse path, and zero validateFlow error findings against the real roster', () => {
+  const { flow, cleanup } = makeOnboardFlowFixture();
+  try {
   const agents = new Map(listAgentDefinitions(skillsDir(REPO_ROOT)).map((a) => [a.slug, a]));
 
-  assert.equal(flow.id, 'onboard-project');
-  assert.equal(flow.origin, 'seed');
+  assert.equal(flow.id, 'onboard-authored');
   assert.equal(flow.nodes.length, 2, `expected exactly 2 nodes, got ${flow.nodes.length}: ${JSON.stringify(flow.nodes)}`);
   assert.deepEqual(
     flow.nodes.map((n) => n.id).sort(),
@@ -261,8 +289,6 @@ test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow 
   assert.equal(flow.edges.length, 1, `expected exactly 1 edge, got ${flow.edges.length}: ${JSON.stringify(flow.edges)}`);
   assert.deepEqual(flow.edges[0], { from: 'onboard', to: 'contract-check', artifact: 'contract' });
 
-  assert.equal(flow.kickoff, undefined, 'onboard-project deliberately declares no kickoff: block');
-
   // What `forge studio lint` gates on: zero error-level findings against the
   // real agent roster.
   const findings = validateFlow(flow, agents);
@@ -270,8 +296,11 @@ test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow 
   assert.deepEqual(
     errors,
     [],
-    `expected zero validateFlow error findings for onboard-project — got: ${JSON.stringify(errors)}`,
+    `expected zero validateFlow error findings for the authored onboard-shaped flow — got: ${JSON.stringify(errors)}`,
   );
+  } finally {
+    cleanup();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -333,11 +362,12 @@ test('AT-2 band registry rows + totality: onboard-preflight is a full 10th citiz
 //     when the agent field is present).
 //  3. (negative control) a fix that turns GATE_KIND into a catch-all instead
 //     of adding one precise row.
-test("AT-3 node-kind dispatch: gate:'contract' resolves 'agent' via the new GATE_KIND row, independent of node.agent", () => {
-  const flow = loadFlowDefinition(flowPathForId('onboard-project'));
+test("AT-3 node-kind dispatch: gate:'contract' resolves 'agent' via the GATE_KIND row, independent of node.agent", () => {
+  const { flow, cleanup } = makeOnboardFlowFixture();
+  cleanup(); // definition already parsed; the temp yaml is no longer needed
   const agents = new Map(listAgentDefinitions(skillsDir(REPO_ROOT)).map((a) => [a.slug, a]));
   const contractCheckNode = flow.nodes.find((n) => n.id === 'contract-check');
-  assert.ok(contractCheckNode, 'expected the real onboard-project flow to carry a "contract-check" node (see AT-1)');
+  assert.ok(contractCheckNode, 'expected the authored onboard-shaped flow to carry a "contract-check" node (see AT-1)');
 
   assert.equal(resolveNodeKind(contractCheckNode!, agents), 'agent');
 
@@ -394,7 +424,9 @@ test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven e
       `fixture precondition: at least one HARD clause must fail — got clauses: ${JSON.stringify(preflightCheck.clauses)}`,
     );
 
-    const flow = loadFlowDefinition(flowPathForId('onboard-project'));
+    const flowFixture = makeOnboardFlowFixture();
+    const flow = flowFixture.flow;
+    flowFixture.cleanup();
     const tracker = { calls: [] as string[] };
     const deps = makeInertDeps(tracker);
     const input = makeInput({ projectRepoPath: fixtureDir, worktreePath: decoy.fixtureDir });
@@ -502,7 +534,9 @@ test("AT-4 companion (GREEN) contract-check gate: a real preflight-PASSING fixtu
       `fixture precondition: this project MUST pass preflight — got clauses: ${JSON.stringify(preflightCheck.clauses)}`,
     );
 
-    const flow = loadFlowDefinition(flowPathForId('onboard-project'));
+    const flowFixture = makeOnboardFlowFixture();
+    const flow = flowFixture.flow;
+    flowFixture.cleanup();
     const tracker = { calls: [] as string[] };
     const deps = makeInertDeps(tracker);
     const input = makeInput({ projectRepoPath: fixtureDir });

@@ -131,7 +131,8 @@ function defaultLoadAgentDef(ref: string): AgentDefinition {
  * Returns the reflect action for that case, else `null` (a flow target, or an
  * agent whose band is not a merge-time handler) so the caller logs it loud +
  * unhandled rather than silently dispatching. Replaces the pre-R4-09 hardcoded
- * `target.ref === 'forge-reflect'` flow-string special case.
+ * reflect-flow-string special case (the flow wrapper itself was retired in
+ * W7-C1 — reflection ships ONLY as this standalone agent dispatch).
  */
 function resolveMergeAgentHandler(
   target: TriggerTarget,

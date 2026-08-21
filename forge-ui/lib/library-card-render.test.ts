@@ -123,7 +123,7 @@ test("FlowCard: the gated/failed 'needs you'/'failed' chips also reflect lineage
   const flow = makeFlow({ id: 'forge-develop' });
   const runs = [
     makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'forge-develop'], status: 'gated' }),
-    makeRun({ id: 'r2', flowId: 'forge-reflect', flowLineage: ['forge-reflect', 'forge-develop'], status: 'failed' }),
+    makeRun({ id: 'r2', flowId: 'other-flow', flowLineage: ['other-flow', 'forge-develop'], status: 'failed' }),
   ];
   const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
   expect(html).toContain('1 needs you');
@@ -146,6 +146,45 @@ test('FlowCard: no matching run at all -> data-flow-status="idle" (never a fabri
   const flow = makeFlow({ id: 'f1' });
   const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs: [], projects: [], index: 0 }));
   expect(html).toContain('data-flow-status="idle"');
+});
+
+// ---- W7-C1 (flows-18): the trigger badge must read as a TRIGGER, not a run
+// ---- status — "MERGED" in the same meta row as "1 failed" reads as "this
+// ---- flow merged". The badge text is prefixed ("on merged") and the full
+// ---- meaning stays on the title attribute. --------------------------------
+
+test('W7-C1 (flows-18): the trigger badge text is "on <kind>", never the bare uppercased kind', () => {
+  const flow = makeFlow({
+    id: 'forge-develop',
+    triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }],
+  });
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs: [], projects: [], index: 0 }));
+  expect(html).toContain('data-trigger-badge="merged"');
+  expect(html).toContain('on merged');
+  // The full "<kind> → <target>" explanation stays on the hover title.
+  expect(html).toContain('merged → reflector');
+});
+
+// ---- W7-C1 (flows-19): a QUEUED (planned) run must produce a visible chip +
+// ---- a numeric data attribute — before this, a waiting initiative produced
+// ---- nothing at all on the flows pillar. ----------------------------------
+
+test('W7-C1 (flows-19): planned runs surface as data-flow-queued-count + an "N queued" chip', () => {
+  const flow = makeFlow({ id: 'forge-develop' });
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'forge-develop', status: 'planned' }),
+    makeRun({ id: 'r2', flowId: 'forge-develop', status: 'complete' }),
+  ];
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
+  expect(html).toContain('data-flow-queued-count="1"');
+  expect(html).toContain('1 queued');
+});
+
+test('W7-C1 (flows-19): zero planned runs -> data-flow-queued-count="0" (always present, never omitted) and no queued chip', () => {
+  const flow = makeFlow({ id: 'forge-develop' });
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs: [], projects: [], index: 0 }));
+  expect(html).toContain('data-flow-queued-count="0"');
+  expect(html).not.toContain('queued</span>');
 });
 
 // ---- FlowCard: data-flow-failed-count / data-flow-gated-count (review round,

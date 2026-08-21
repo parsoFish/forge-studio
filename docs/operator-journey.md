@@ -17,11 +17,13 @@ The journey is centralised on Forge Studio. The operator never leaves it.
 ## The reframe: the platform is the hero
 
 Pre-M8 the journey's hero was one linear cycle (idea → merged PR). Post-M8 the
-forge cycle is **three composable flow definitions** — `studio/flows/forge-architect/`
-(plan + decompose), `studio/flows/forge-develop/` (dev → unifier → review), and
-`studio/flows/forge-reflect/` (retrospective) — interpreted by the node-executor
-registry (ADR-028), with swappable runtime adapters (ADR-029); the KB is
-filesystem-only (ADR-027). So the journey is
+forge cycle is **two composable flow definitions** — `studio/flows/forge-architect/`
+(plan + decompose) and `studio/flows/forge-develop/` (dev → review) — interpreted
+by the node-executor registry (ADR-028), with swappable runtime adapters
+(ADR-029); the KB is filesystem-only (ADR-027). Reflection is a **standalone
+post-merge agent run** (forge-develop's `{on: merged, target: {kind: agent,
+ref: reflector}}` declaration, dispatched by `orchestrator/finalize-merged.ts`
+— W7-C1 retired the vestigial single-node reflect flow wrapper). So the journey is
 organised around the three things the platform now does — **author a flow, run
 it, swap its engine** — with the cycle as the proof case inside RUN.
 

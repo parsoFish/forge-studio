@@ -16,10 +16,11 @@
  *   · scripts/verify-cycle.mjs (`npm run verify:cycle`) — the REAL-capability gate
  *     (a real cycle end-to-end; the honest proof, real-money, operator-gated).
  *
- * THE STORIES (route + differentiator each proves). The forge cycle is three
- * chained flows now — forge-architect → forge-develop → forge-reflect — flow
- * definitions interpreted by the node-executor registry (ADR-028); one threaded
- * run surfaces on all three flow monitors via its flowLineage (Model B).
+ * THE STORIES (route + differentiator each proves). The forge cycle is two
+ * chained flows — forge-architect → forge-develop — plus the standalone
+ * post-merge reflector agent run (W7-C1 retired the reflect flow wrapper);
+ * flow definitions interpreted by the node-executor registry (ADR-028); one
+ * threaded run surfaces on both flow monitors via its flowLineage (Model B).
  *
  *   ACT 1 — AUTHOR  (everything in Studio is data you can edit)
  *     A1  Triage the portfolio — the library (/): flows/agents/projects/KBs as

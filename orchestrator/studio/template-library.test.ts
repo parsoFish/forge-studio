@@ -257,12 +257,14 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     }
   });
 
-  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (4)', () => {
+  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (2)', () => {
     const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'planning');
     assert.ok(entries.length > 0);
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'studio/flows/*/flow.yaml');
-      assert.equal(e.usedByDerivation.scanned, 4, `expected 4 scanned flow files (forge-architect/forge-develop/forge-reflect/onboard-project) for "${e.id}"`);
+      // W7-C1: the reflect + onboard flow wrappers retired — the seed set
+      // is exactly forge-architect + forge-develop.
+      assert.equal(e.usedByDerivation.scanned, 2, `expected 2 scanned flow files (forge-architect/forge-develop) for "${e.id}"`);
     }
   });
 
@@ -377,15 +379,19 @@ describe('D4 — producer/consumer cross-check', () => {
     assert.equal(reviewFindings.declaredConsumer, 'review', 'must stay the bare frontmatter value, not the resolved gate:review form');
   });
 
-  it('AT-26: verdict / work-items / demo-fix-spec have zero edges → endpointsVerified: false + exactly 3 lint flags naming them, 0 errors', () => {
+  it('AT-26: verdict / work-items / demo-fix-spec / contract have zero edges → endpointsVerified: false + exactly 4 lint flags naming them, 0 errors', () => {
+    // W7-C1: `contract` joined this set when the OOTB onboard flow wrapper
+    // (the one DAG edge that carried it) was retired — the template stays
+    // registered for authored flows, so unverifiable-endpoints is the
+    // honest classification, same as the band-re-entry three.
     const entries = listTemplateLibrary(REPO_ROOT);
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.equal(byId(entries, id).endpointsVerified, false, `${id} must be endpointsVerified: false (unverifiable)`);
     }
     const flags = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/unverifiable-endpoints');
-    assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
+    assert.equal(flags.length, 4, `expected 4 unverifiable-endpoints flags, got: ${JSON.stringify(flags)}`);
     assert.ok(flags.every((f) => f.level === 'flag'));
-    for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    for (const id of ['verdict', 'work-items', 'demo-fix-spec', 'contract']) {
       assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
     }
     const errors = lintTemplateLibrary(REPO_ROOT).filter((f) => f.check === 'template-library/endpoint-mismatch' && f.level === 'error');

@@ -6,13 +6,17 @@ import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
 import { SchedulerCard } from '@/components/SchedulerCard';
-import { FetchErrorState } from '@/components/FetchErrorState';
+import { RecentRuns } from '@/components/RecentRuns';
+import { recentRunRowToLedgerRow, RECENT_AGENT_RUNS_LIMIT } from '@/lib/agents-index';
+import type { LedgerRow } from '@/lib/history-ledger';
+import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { FULL_LOAD_SCOPE, afterRefreshFailure, afterRefreshSuccess, scopedFetchError, type ScopedFetchError } from '@/lib/fetch-error-scope';
 import {
   fetchStudioFlows,
   fetchRuns,
   fetchStudioProjects,
+  fetchRecentAgentRunsAggregate,
   type Flow,
   type Project,
   type Run,
@@ -57,6 +61,38 @@ export default function FlowsIndexPage() {
   const [loadKey, setLoadKey] = useState(0);
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
+
+  // W7-C1 (flows-19/flows-32): the UNIFIED recent-runs ledger — one bounded
+  // aggregate read (`kind=all`: flow runs AND standalone agent runs), the
+  // same shared RecentRuns section the agents index and KB health tab mount.
+  // Failure renders the shared error state, never an honest-looking empty
+  // ledger (A1 discipline).
+  const [recentReady, setRecentReady] = useState(false);
+  const [recentRows, setRecentRows] = useState<LedgerRow[]>([]);
+  const [recentError, setRecentError] = useState<{ message: string; status?: number } | null>(null);
+  const [recentKey, setRecentKey] = useState(0);
+  const retryRecent = useCallback(() => setRecentKey((k) => k + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRecent() {
+      try {
+        const rows = await fetchRecentAgentRunsAggregate(RECENT_AGENT_RUNS_LIMIT, 'all');
+        if (cancelled) return;
+        setRecentRows(rows.map(recentRunRowToLedgerRow));
+        setRecentError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const { error: message, status } = fetchErrorPropsFrom(err);
+        setRecentError(status !== undefined ? { message, status } : { message });
+      } finally {
+        if (!cancelled) setRecentReady(true);
+      }
+    }
+    void loadRecent();
+    return () => { cancelled = true; };
+    // re-runs on Retry (recentKey) and full reload (loadKey — bridge recovery).
+  }, [recentKey, loadKey]);
 
   async function loadAll(signal: { cancelled: boolean }): Promise<void> {
     try {
@@ -167,6 +203,23 @@ export default function FlowsIndexPage() {
         ) : (
           <div style={{ color: 'var(--faint)', fontSize: 13, padding: '24px 0' }}>Loading flows…</div>
         )}
+
+        {/* W7-C1 (flows-19/flows-32): recent runs across BOTH execution
+            models — flow runs and standalone agent dispatches — so work
+            started elsewhere (KB drains, agent runs) is visible from the
+            flows pillar. */}
+        <div style={{ marginTop: 32 }}>
+          <RecentRuns
+            section="flow-recent-runs"
+            title="Recent runs"
+            ready={recentReady}
+            rows={recentRows}
+            nowMs={Date.now()}
+            error={recentError}
+            onRetry={retryRecent}
+            limit={RECENT_AGENT_RUNS_LIMIT}
+          />
+        </div>
       </div>
     </main>
   );

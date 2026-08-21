@@ -114,6 +114,23 @@ test('FlowsIndexBody: each flow card links to its OWN /flows/<id> monitor route,
   expect(html).toContain('href="/flows/my-scratch-flow"');
 });
 
+// ---- W7-C1 (flows-19): the index gains a name filter --------------------------
+
+test('W7-C1 (flows-19): with flows present, the index renders a filter field (data-field="flows-filter") and a data-flow-visible-count mirroring the unfiltered grid', () => {
+  const flows = [
+    makeFlow({ id: 'forge-develop', name: 'Forge Develop', origin: 'seed' }),
+    makeFlow({ id: 'my-flow', name: 'My Flow', origin: 'studio' }),
+  ];
+  const html = renderToStaticMarkup(React.createElement(FlowsIndexBody, { flows, runs: [], projects: [] }));
+  expect(html).toContain('data-field="flows-filter"');
+  expect(html).toContain('data-flow-visible-count="2"');
+});
+
+test('W7-C1 (flows-19): the true-empty state renders no filter field (nothing to filter)', () => {
+  const html = renderToStaticMarkup(React.createElement(FlowsIndexBody, { flows: [], runs: [], projects: [] }));
+  expect(html).not.toContain('data-field="flows-filter"');
+});
+
 // ---- connected page shell: data-page ----------------------------------------
 
 vi.mock('next/navigation', () => ({

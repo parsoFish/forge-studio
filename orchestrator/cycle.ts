@@ -223,7 +223,8 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       // retired the forge-cycle monolith — there is NO default flow and NO
       // fallback (forge principles forbid coexistence/fallbacks). Every manifest
       // must name an existing flow: forge-architect (decompose), forge-develop
-      // (build → review → merge), forge-reflect (retrospective). A
+      // (build → review → merge; reflection fires post-merge as a standalone
+      // reflector agent run, not a flow — W7-C1). A
       // missing or unknown flow_id is a terminal, loud error — never silently
       // routed to a stand-in. The outer scaffolding (cycleId, logger,
       // cycle.start/end, failure classification, snapshot, report) stays here.
@@ -231,7 +232,7 @@ export async function runCycle(input: CycleInput): Promise<CycleResult> {
       if (!flowId) {
         throw new Error(
           `manifest ${input.manifestPath} has no flow_id — the forge-cycle default was retired in S8 (DEC-3); ` +
-            `every initiative manifest must name an existing flow (e.g. forge-architect / forge-develop / forge-reflect).`,
+            `every initiative manifest must name an existing flow (e.g. forge-architect / forge-develop).`,
         );
       }
       const flowPath = flowPathForId(flowId);

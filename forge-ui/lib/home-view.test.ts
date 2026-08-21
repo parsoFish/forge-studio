@@ -35,6 +35,7 @@ import {
   // "is not a function" reason.
   buildKbAttention,
   runsForFlow,
+  splitRunsForFlow,
   // W6-IA-4 additions
   GATE_ATTENTION_STATUS_FRAME,
   gateAttentionStatusDot,
@@ -171,7 +172,7 @@ test('deriveFlowStatus: removing the run drops the flow back to "idle"', () => {
 test('deriveFlowStatus: flowLineage path — a threaded run whose flowId is elsewhere still lights up f1', () => {
   // Kills an impl that only checks run.flowId and ignores flowLineage, which
   // would leave a threaded spine run's traversed flows permanently 'idle'.
-  const runs = [makeRun({ id: 'r1', flowId: 'x', flowLineage: ['forge-architect', 'f1', 'forge-reflect'], status: 'active' })];
+  const runs = [makeRun({ id: 'r1', flowId: 'x', flowLineage: ['forge-architect', 'f1'], status: 'active' })];
   expect(deriveFlowStatus('f1', runs)).toBe('active');
 });
 
@@ -348,6 +349,39 @@ test('runsForFlow: matches a run by flowLineage even when flowId is a DIFFERENT 
 test('runsForFlow: excludes a run matching neither flowId nor flowLineage', () => {
   const runs = [makeRun({ id: 'r1', flowId: 'other', flowLineage: ['other'], status: 'active' })];
   expect(runsForFlow('f1', runs)).toEqual([]);
+});
+
+// ---- W7-C1 (flows-21): splitRunsForFlow — the monitor's own-vs-lineage split ----
+//
+// The flow monitor's HISTORY used to render ONE undifferentiated ledger over
+// runsForFlow(), so the architect and develop monitors showed the SAME ~60
+// rows and clicking a row on the architect monitor navigated to a develop run
+// page with no explanation. The split keeps the ONE matcher (built on the same
+// flowId/flowLineage facts) but separates "this flow's own runs" from "runs
+// that traversed this flow as part of another flow" so the monitor can label
+// the second group honestly.
+
+test('W7-C1 (flows-21): splitRunsForFlow puts direct flowId matches in `own` and lineage-only matches in `lineage`', () => {
+  const runs = [
+    makeRun({ id: 'own-1', flowId: 'f1', status: 'complete' }),
+    makeRun({ id: 'lin-1', flowId: 'forge-develop', flowLineage: ['forge-develop', 'f1'], status: 'complete' }),
+    makeRun({ id: 'other', flowId: 'other', flowLineage: ['other'], status: 'complete' }),
+  ];
+  const split = splitRunsForFlow('f1', runs);
+  expect(split.own.map((r) => r.id)).toEqual(['own-1']);
+  expect(split.lineage.map((r) => r.id)).toEqual(['lin-1']);
+});
+
+test('W7-C1 (flows-21): splitRunsForFlow partitions EXACTLY runsForFlow — own ∪ lineage = runsForFlow, own ∩ lineage = ∅ (never a third independent predicate)', () => {
+  const runs = [
+    makeRun({ id: 'own-1', flowId: 'f1', status: 'active' }),
+    makeRun({ id: 'lin-1', flowId: 'forge-develop', flowLineage: ['forge-develop', 'f1'], status: 'gated' }),
+    makeRun({ id: 'other', flowId: 'other', flowLineage: ['other'], status: 'failed' }),
+  ];
+  const split = splitRunsForFlow('f1', runs);
+  const union = [...split.own, ...split.lineage].map((r) => r.id).sort();
+  expect(union).toEqual(runsForFlow('f1', runs).map((r) => r.id).sort());
+  expect(split.own.filter((r) => split.lineage.includes(r))).toEqual([]);
 });
 
 test('deriveFlowStatus agrees with a status hand-computed from runsForFlow() for a lineage-only run — proves deriveFlowStatus is BUILT ON runsForFlow, not a second independent predicate', () => {

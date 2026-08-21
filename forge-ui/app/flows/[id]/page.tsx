@@ -7,7 +7,7 @@ import { subscribe, type EventLogEntry, type ConnectionState, resumeRun } from '
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow, deleteFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
-import { runsForFlow } from '@/lib/home-view';
+import { runsForFlow, splitRunsForFlow } from '@/lib/home-view';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { PageLoadError } from '@/components/PageLoadError';
@@ -23,7 +23,7 @@ import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } fr
 import { builderSnapshot, savedNodesCarryPositions } from '@/lib/flow-builder-dirty';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
-import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
+import { deriveKickoffCandidates, canStartFlow } from '@/lib/kickoff-candidates';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -567,7 +567,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       data-active-run={view.activeRun?.id ?? ''}
       data-page-ready={view.ready ? 'true' : 'false'}
       data-run-count={view.runs.length}
-      data-can-start={view.flow ? 'true' : 'false'}
+      data-can-start={canStartFlow(view.flow) ? 'true' : 'false'}
       data-active-tab={tab}
       data-kickoff-open={kickoffOpen ? 'true' : 'false'}
       style={{ height: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
@@ -874,8 +874,37 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
 
               {/* History ledger — every run this flow has ever had (all six
                   `_queue/` states, already in `view.runs` via `fetchRuns()`;
-                  no additional fetch), not just the currently-active one. */}
-              <HistoryLedger rows={deriveFlowLedgerRows(view.runs)} nowMs={Date.now()} />
+                  no additional fetch), not just the currently-active one.
+                  W7-C1 (flows-21): SPLIT own-vs-lineage. The primary ledger
+                  is runs whose manifest flowId IS this flow; runs that only
+                  traversed it as part of another flow render as a second,
+                  labelled group (their rows link to the run under its own
+                  flow) — no more identical 60-row ledgers on every monitor
+                  with unexplained cross-flow links. */}
+              {(() => {
+                const split = splitRunsForFlow(id, view.runs);
+                return (
+                  <>
+                    <HistoryLedger rows={deriveFlowLedgerRows(split.own)} nowMs={Date.now()} />
+                    {split.lineage.length > 0 && (
+                      <div data-section="history-ledger-lineage" data-count={split.lineage.length}>
+                        <div
+                          style={{
+                            padding: '8px 20px 2px',
+                            fontSize: 11.5,
+                            color: 'var(--faint)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                          }}
+                        >
+                          Ran here as part of another flow — rows open under their own flow
+                        </div>
+                        <HistoryLedger rows={deriveFlowLedgerRows(split.lineage)} nowMs={Date.now()} />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </>
         )}

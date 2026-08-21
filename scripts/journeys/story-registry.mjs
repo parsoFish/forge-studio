@@ -258,10 +258,10 @@ const DECISION_REFLECTOR_NO_LIVE_RUN =
 // NEW row in orchestrator/flow-runner.ts's closed GATE_KIND dispatch table
 // (currently only {plan, verdict}) — an ADR-042 orchestrator-surface
 // increase, ask-first/PARK. R4-09-F1 already retired the single-node
-// forge-reflect flow wrapper as the shipped shape (studio/flows/
-// forge-reflect/flow.yaml is authorable-only, kickoff: trigger-only) — a
-// visible `#/flows/monitor/brain-tune` route and a discrete lint GATE node
-// never existed and will not exist under this ruling. The mockup
+// reflect flow wrapper as the shipped shape, and W7-C1 deleted the
+// authorable-only wrapper entirely (reflection is a standalone post-merge
+// agent run) — a visible `#/flows/monitor/brain-tune` route and a discrete
+// lint GATE node never existed and will not exist under this ruling. The mockup
 // (mockups/studio-endstate-v2/journeys-data.jsx's run-flow-brain-tune
 // entry) is corrected in this same pass to depict the real surface instead
 // of deferring that correction to a port-time exclusion.
@@ -410,64 +410,31 @@ const DECISION_RUN_AGENT_ADV_FICTIONAL_SCENARIO =
   '"ISO-week claim" / "memoization" scenario is fictional content tied to ' +
   'a codebase no roster agent\'s real work touches';
 
-// Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 3
-// exclusion below. orchestrator/studio/types.ts's own FLOW_KICKOFF_KINDS
-// enumeration has exactly three members ('idea', 'initiative-select',
-// 'trigger-only') — no project-target-picker kind. onboard-project
-// deliberately declares no `kickoff:` block at all (studio/flows/
-// onboard-project/flow.yaml's own comment: "the generic Start-Run affordance
-// handles it"), so FlowKickoff.tsx falls through to GenericKickoff — since
-// W7-A3 (flows-02) an INITIATIVE picker (`select[data-field="kickoff-
-// initiative"]`, queued initiatives only per W7-FIX-A3 A3-01) + Start Run;
-// still no project field of any kind. The real onboarding entry point stays
-// the PROJECT page's own "Run onboarding agent" action (R4-02/R4-17, ported
-// at stand-up-onboard's su-onboard-project beat), never a flow-kickoff
-// project selector.
-const DECISION_R4_18_NO_PROJECT_KICKOFF_KIND =
-  'orchestrator/studio/types.ts:256 (`FLOW_KICKOFF_KINDS = ' +
-  "['idea', 'initiative-select', 'trigger-only']` — no project-select kind) " +
-  '+ forge-ui/components/studio/FlowKickoff.tsx GenericKickoff (the ' +
-  'undeclared-kickoff fallback: an initiative picker (W7-A3) + Start Run, no ' +
-  'project field) + studio/flows/onboard-project/flow.yaml\'s own comment ' +
-  '("Deliberately NO kickoff: block — the generic Start-Run affordance handles ' +
-  'it") — there is no 4th kickoff kind and no project-target field anywhere ' +
-  'on the real kickoff surface';
-
-// Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 4
-// exclusion below. Re-measured for W7-FIX-A3 (A3-08): since W7-A3 (flows-02)
-// the generic Start Run is a picker over QUEUED initiatives (planned runs,
-// `lib/kickoff-candidates.ts`) that POSTs the picked initiative to
-// `/api/flows/:id/run` (`enqueueFlowRun(initiativeId, flowId)` — repoints an
-// existing manifest at THIS flow; a shipped `_queue/done` initiative is
-// refused 409 `already-done`). It never mints a fresh initiative and it
-// needs a real queued INIT-… manifest to point at; the mockup's "Start."
-// beat imagines a project-targeted launch that mints an onboard-project run
-// from nothing. No real product path queues an onboard-project-shaped
-// manifest for the picker to offer, so the mockup's click stays excluded —
-// the real load-bearing proof (a run actually reaching the gate) is driven
-// directly through the flow-runner instead, at flows-onboard-gate in this
-// same port; the picker surface itself is asserted at flows-onboard-kickoff
-// (FOB.2).
-const DECISION_R4_18_GENERIC_KICKOFF_NO_DISPATCH =
-  'forge-ui/components/studio/FlowKickoff.tsx GenericKickoff (W7-A3: ' +
-  '`select[data-field="kickoff-initiative"]` over queued initiatives, ' +
-  '`startFlowRun(flowId, initiativeId)` → `POST /api/flows/:id/run`) + ' +
-  'cli/ui-bridge.ts (INIT rule + `enqueueFlowRun`, 409 already-done for a ' +
-  'done/ manifest, 404 for an unqueued id — it repoints an EXISTING queued ' +
-  'manifest, never mints a fresh one) — nothing queues an onboard-project-' +
-  'shaped initiative for the picker to offer, so the mockup\'s project-' +
-  'targeted "Start." is not a real launch here; flows-onboard-gate drives the ' +
-  'real proof directly through the flow-runner instead';
+// W7-C1 (flows-20 / sessions-kinds-01 / crosscut-14) — cited by
+// run-flow-onboard's step 3 + step 4 exclusions below. The onboard-project
+// OOTB flow wrapper was RETIRED (goal-pack C1 decision: keep the SESSION —
+// it is the generic panel's kind). The mockup's project select and Start
+// are now REAL on the kept surface — /sessions/onboarding/new renders the
+// roster project SELECT + [data-action="start-session"], driven by this
+// port's flows-onboard-kickoff / flows-onboard-gate beats; the exclusion
+// objects exist only because story-parity Rule 13 forbids repeating a
+// string beat ref within one entry.
+const DECISION_W7C1_SESSION_IS_THE_SURFACE =
+  '_wave7/goal-packs/wave-C.md §C1 ("keep ONE — decision: the SESSION") + ' +
+  'forge-ui/lib/session-kind-meta.ts (onboarding kickoffHref /sessions/' +
+  'onboarding/new + KICKOFF_SPECS.onboarding, selector: project) + ' +
+  'cli/ui-bridge.ts POST /api/studio/onboarding/start — the flow wrapper is ' +
+  'deleted; the session kickoff carries the real project select and Start ' +
+  'the mockup depicted, asserted at flows-onboard-kickoff/-gate';
 
 // Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 5
 // exclusion below.
 const DECISION_R4_18_NO_INTERVIEW =
   'skills/onboarding-agent/SKILL.md frontmatter ("interactivity: ' +
   'Operator-triggered against one project, then fully autonomous — asks no ' +
-  'questions and never blocks mid-run") — the onboard-project flow\'s ' +
-  '`onboard` node dispatches this exact agent (studio/flows/onboard-project/' +
-  'flow.yaml `{id: onboard, agent: onboarding-agent}`); there is no ' +
-  'interview turn anywhere on this flow\'s real path, mockup framing ' +
+  'questions and never blocks mid-run") — the onboarding SESSION (the one ' +
+  'surface since W7-C1) dispatches this exact agent; there is no interview ' +
+  'turn anywhere on the real onboarding path, mockup framing ' +
   'notwithstanding';
 
 // Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 6
@@ -480,36 +447,26 @@ const DECISION_R4_18_CONTRACT_AUTHOR_CROSS_JOURNEY =
   '(R4-02/R4-17)") + scripts/journeys/stand-up-onboard.mjs su-onboard-session ' +
   '(the contract build-out — contract, instructions, secrets, demo, roadmap, ' +
   'stage by stage — already real and ported there, a DIFFERENT journey from ' +
-  'this entry\'s "flows-onboard") + skills/contract-check/SKILL.md ("this ' +
-  'flow does NOT wrap R4-17\'s independently-dispatched onboarding session ' +
-  '... a SEPARATE, flow-shaped way to run a fresh onboarding pass") — the ' +
-  'contract-authoring CONTENT this mockup step depicts is R4-02/R4-17\'s own ' +
-  'real surface, cross-journey, never rebuilt inside onboard-project\'s flow ' +
-  'path';
+  'this entry\'s "flows-onboard") — the contract-authoring CONTENT this ' +
+  'mockup step depicts is R4-02/R4-17\'s own real surface, cross-journey ' +
+  '(W7-C1: the flow-shaped duplicate path is retired outright)';
 
-// Batch-E journey-sync (T3, R4-18) — cited by run-flow-onboard's step 8
-// exclusion below. flows-onboard-gate already drives R4-18-F1's own
-// load-bearing AC ("a real onboarding run reaches the gate with real
-// preflight output") via the honest RED path a freshly onboarded repo
-// genuinely starts in — see orchestrator/onboard-flow-gate.test.ts AT-4 (the
-// same fixture shape this port's beat reuses). The mirror-image GREEN
-// completion is reachable only through that same test file's AT-4 companion,
-// whose fixture basename MUST be "mdtoc" specifically to reuse the real,
-// already-committed brain/projects/mdtoc/profile.md — a test-infrastructure
-// coupling, not a demo-worthy scenario. Re-running the identical real gate a
-// second time, via that fixture hack, just to stage the opposite verdict
-// would add cost without new evidence about the real product — the same
-// one-real-proof-per-capability reasoning DECISION_ONE_REF_PER_STORY states,
-// applied across the RED/GREEN outcome pair rather than within one beat.
+// Batch-E journey-sync (T3, R4-18; W7-C1 re-grounded) — cited by
+// run-flow-onboard's step 8 exclusion below. The REAL preflight gate
+// (runPreflight behind gate: contract) is proven RED-first — and the
+// mirror-image GREEN — in orchestrator/onboard-flow-gate.test.ts (AT-4 +
+// companion, since W7-C1 against an AUTHORED flow fixture; the OOTB flow
+// wrapper is retired). The GREEN completion remains reachable only through
+// that test's mdtoc-basename fixture hack (it reuses the real, committed
+// brain/projects/mdtoc/profile.md) — a test-infrastructure coupling, not a
+// demo-worthy scenario to re-stage in a journey.
 const DECISION_R4_18_GATE_RED_NOT_GREEN =
-  'orchestrator/onboard-flow-gate.test.ts AT-4 (RED, the fixture shape ' +
-  'flows-onboard-gate reuses for real) + its own AT-4 companion (GREEN, ' +
-  'whose fixture basename MUST be "mdtoc" to reuse the real, ' +
+  'orchestrator/onboard-flow-gate.test.ts AT-4 (RED) + its AT-4 companion ' +
+  '(GREEN, whose fixture basename MUST be "mdtoc" to reuse the real, ' +
   'already-committed brain/projects/mdtoc/profile.md — a test-infrastructure ' +
-  'coupling) — flows-onboard-gate already drives R4-18-F1\'s own load-bearing ' +
-  'AC ("a real onboarding run reaches the gate with real preflight output") ' +
-  'via the honest RED path; re-running the identical real gate a second time ' +
-  'for the mirror-image GREEN outcome would add cost without new evidence';
+  'coupling) — both halves of the real gate stay proven there against an ' +
+  'authored flow fixture (W7-C1 retired the OOTB wrapper); re-staging the ' +
+  'gate in a demo journey would add cost without new evidence';
 
 // R4-21 phase 2 (T3, journey-sync port) — cited by build-skill's step-6
 // exclusion below. The live-capture fixture this port seeds
@@ -1645,31 +1602,31 @@ export const STORY_REGISTRY = [
       beats: [
         'flows-onboard-monitor',
         'flows-onboard-kickoff',
-        { excluded: "select [data-j=kick-project] (\"Target the repo; materials welcome.\") — no project-target field exists anywhere on the real kickoff surface: FLOW_KICKOFF_KINDS declares only idea/initiative-select/trigger-only, onboard-project deliberately declares no kickoff: block (the generic fallback: an initiative picker + Start Run since W7-A3, no project field), and the real onboarding entry point is the PROJECT page's own \"Run onboarding agent\" action (R4-02/R4-17), never a flow-kickoff project picker", decision: DECISION_R4_18_NO_PROJECT_KICKOFF_KIND },
-        { excluded: "click [data-j=start-run] (\"Start.\") — the real [data-action=\"start-run\"] is a picker over QUEUED initiatives that POSTs the picked INIT-… id to /api/flows/onboard-project/run (enqueueFlowRun repoints an existing queued manifest; it never mints one, and a done/ initiative is refused 409) — no product path queues an onboard-project-shaped initiative for the picker to offer, so the mockup's project-targeted launch is not a real click here; the real load-bearing proof (a run actually reaching the gate) is driven directly through the flow-runner instead, at flows-onboard-gate", decision: DECISION_R4_18_GENERIC_KICKOFF_NO_DISPATCH },
-        { excluded: '"Interview: the north star lands first." — the onboard node dispatches onboarding-agent, whose own declared interactivity is fully autonomous once triggered: it asks no questions and never blocks mid-run (skills/onboarding-agent/SKILL.md) — there is no interview turn on this flow\'s real path', decision: DECISION_R4_18_NO_INTERVIEW },
-        { excluded: '"Contract author: AGENTS.md, secrets, demo skill, gates." — real, and already ported: stand-up-onboard.mjs\'s su-onboard-session beat drives the SAME real contract build-out (contract, instructions, secrets, demo, roadmap, stage by stage), cross-journey; R4-18 itself scopes onboarding content out (R4-02/R4-17)', decision: DECISION_R4_18_CONTRACT_AUTHOR_CROSS_JOURNEY },
+        { excluded: 'select [data-j=kick-project] ("Target the repo; materials welcome.") — NOW REAL, on the kept surface: W7-C1 retired the onboard flow wrapper in favour of the onboarding SESSION, whose generic kickoff at /sessions/onboarding/new renders a roster project SELECT (select[data-field="kickoff-project"]) — asserted by the flows-onboard-kickoff beat already cited above (Rule 13 forbids repeating the beat ref for this step)', decision: DECISION_W7C1_SESSION_IS_THE_SURFACE },
+        { excluded: 'click [data-j=start-run] ("Start.") — NOW REAL as [data-action="start-session"] on the session kickoff: flows-onboard-gate (cited below) genuinely clicks it, POSTs /api/studio/onboarding/start and lands on the generic session panel (Rule 13 forbids repeating the beat ref for this step)', decision: DECISION_W7C1_SESSION_IS_THE_SURFACE },
+        { excluded: '"Interview: the north star lands first." — the onboarding-agent\'s own declared interactivity is fully autonomous once triggered: it asks no questions and never blocks mid-run (skills/onboarding-agent/SKILL.md); there is no interview turn on the real onboarding path', decision: DECISION_R4_18_NO_INTERVIEW },
+        { excluded: '"Contract author: AGENTS.md, secrets, demo skill, gates." — real, and already ported: stand-up-onboard.mjs\'s su-onboard-session beat drives the SAME real contract build-out (contract, instructions, secrets, demo, roadmap, stage by stage), cross-journey; onboarding content stays R4-02/R4-17\'s surface', decision: DECISION_R4_18_CONTRACT_AUTHOR_CROSS_JOURNEY },
         'flows-onboard-gate',
-        { excluded: '"Complete — the project lands managed, contract-green." — flows-onboard-gate already drives R4-18-F1\'s own load-bearing AC (a real run reaching the gate with real preflight output) via the honest RED path a freshly onboarded repo genuinely starts in; the mirror-image GREEN completion is reachable only through the acceptance test\'s own mdtoc-basename fixture hack (onboard-flow-gate.test.ts AT-4 companion), a test-infrastructure artifact not worth re-running the real gate a second time to stage', decision: DECISION_R4_18_GATE_RED_NOT_GREEN },
+        { excluded: '"Complete — the project lands managed, contract-green." — the real preflight gate (runPreflight behind gate: contract) stays proven RED-first in orchestrator/onboard-flow-gate.test.ts (AT-4 + companion, now against an AUTHORED flow fixture — W7-C1 retired the OOTB wrapper); the GREEN completion remains reachable only through that test\'s mdtoc-basename fixture hack, a test-infrastructure artifact not worth re-staging in a demo', decision: DECISION_R4_18_GATE_RED_NOT_GREEN },
       ],
     },
     excluded: null,
     note:
-      'R4-18 (journey-sync T3, 2026-08-11) flips this story from pending to ' +
-      'ported. New journey scripts/journeys/flows-onboard.mjs (3 beats): ' +
-      'flows-onboard-monitor + flows-onboard-kickoff read-only-browse the ' +
-      'real onboard-project flow (peer of forge-develop on the library ' +
-      'shelf, its own two-node topology, the generic Start-Run fallback with ' +
-      'no project picker); flows-onboard-gate is the load-bearing beat — it ' +
-      'drives the REAL orchestrator/flow-runner.ts runFlow() over the REAL ' +
-      'onboard-project flow.yaml against a genuinely preflight-RED scratch ' +
-      'fixture (mirroring orchestrator/onboard-flow-gate.test.ts\'s own AT-4 ' +
-      'harness — the onboard node\'s agent spawn suppressed via the same ' +
-      'dry-bridge every other journey beat relies on, but contract-check\'s ' +
-      'gate NOT stubbed: it calls the real runPreflight and the monitor ' +
-      'renders a genuine on-disk event log, never a hand-authored one). 3 of ' +
-      '8 mockup steps ported, 5 excluded (all decision-cited, none an ' +
-      'unbuilt product gap — see each decision above).',
+      'W7-C1 (2026-08-21) reworked this port: the onboard-project OOTB flow ' +
+      'wrapper is RETIRED (flows-20 — it was the broken duplicate of the ' +
+      'onboarding SESSION; goal-pack C1 decision: keep the session). The ' +
+      'journey (same id + beat ids) now drives the kept loop end to end: ' +
+      'flows-onboard-monitor proves the CONSOLIDATED flows pillar (exactly ' +
+      'two seed flows, trigger badges reading "on merged", the flows-19 ' +
+      'filter + unified recent-runs); flows-onboard-kickoff proves ' +
+      '/sessions/onboarding/new is a real kickoff (sessions-kinds-01/' +
+      'crosscut-14: it was a dead end linked from nowhere); flows-onboard-' +
+      'gate clicks Start for real — the staged session dir lands on disk ' +
+      '(dry bridge suppresses only the dispatch) and the generic session ' +
+      'panel renders. The platform preflight-gate seam the old gate beat ' +
+      'drove stays proven in orchestrator/onboard-flow-gate.test.ts against ' +
+      'an authored flow fixture. Two former exclusions (project select, ' +
+      'Start) are now REAL on the session surface.',
   },
   {
     story: 'run-flow-brain-tune',

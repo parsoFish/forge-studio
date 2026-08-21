@@ -1,7 +1,7 @@
 /**
  * Tests for the reflection routes (GET /api/reflect/:cycleId, POST
  * /api/reflect/:cycleId/answer) — the in-UI moment converting the old
- * `/forge-reflect` slash command's answer-submission into an HTTP route.
+ * old reflect slash command's answer-submission into an HTTP route.
  *
  * R5-01-F1 (amended by task A-finalfix FIX 1): POST .../answer is a
  * `stub-actions`-classified dry-bridge route — it does two things, writing

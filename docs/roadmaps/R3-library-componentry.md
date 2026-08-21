@@ -564,7 +564,7 @@ third connection kind above); `npm run parity:stories` exits 0.
     schema validated by `forge studio lint`; both process variants accepted;
     mixed/absent variants rejected with actionable errors.
   - **R3-02-F2 — Generator flow definition.** A flow under `studio/flows/`
-    (peer of `forge-architect`/`forge-develop`/`forge-reflect`) whose single
+    (peer of `forge-architect`/`forge-develop`) whose single
     agent composes the `skill-creator` skill: ingest scope context + process
     input → draft `SKILL.md` (frontmatter: name, description, `library` flag
     default `false`-until-approved, provenance = `generated`, generating run

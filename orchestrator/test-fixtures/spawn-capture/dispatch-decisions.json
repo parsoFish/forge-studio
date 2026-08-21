@@ -301,31 +301,6 @@
           "resolvedKind": "review"
         }
       ]
-    },
-    {
-      "id": "forge-reflect",
-      "nodes": [
-        {
-          "id": "reflect",
-          "agent": "reflector",
-          "resolvedKind": "agent"
-        }
-      ]
-    },
-    {
-      "id": "onboard-project",
-      "nodes": [
-        {
-          "id": "onboard",
-          "agent": "onboarding-agent",
-          "resolvedKind": "agent"
-        },
-        {
-          "id": "contract-check",
-          "agent": "contract-check",
-          "resolvedKind": "agent"
-        }
-      ]
     }
   ]
 }

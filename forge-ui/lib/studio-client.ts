@@ -211,8 +211,8 @@ export type Run = {
   workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   /**
    * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
-   * A threaded spine run carries [forge-architect, forge-develop, forge-reflect] so it
-   * surfaces under all three flow monitors (each rendering its own slice). A single-flow
+   * A threaded spine run carries [forge-architect, forge-develop] so it
+   * surfaces under both flow monitors (each rendering its own slice). A single-flow
    * run carries just its own flow id.
    */
   flowLineage: string[];

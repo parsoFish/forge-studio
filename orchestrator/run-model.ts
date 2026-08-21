@@ -116,7 +116,7 @@ export type Run = {
    * `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event, which
    * `orchestrator/cycle.ts::runCycle` emits exactly once per cycle, strictly
    * BEFORE any out-of-band reflector rerun ever appends to the same log
-   * (`forge-reflect-rerun.ts` only ever emits `phase:'reflection'` events).
+   * (`reflector-rerun.ts` only ever emits `phase:'reflection'` events).
    * Falls back to the last non-`'reflection'` event when no such event exists
    * (a crash-then-requeue tail whose process died before the emit) — the
    * `'reflection'` exclusion matters ONLY on this fallback path, so a
@@ -155,9 +155,11 @@ export type Run = {
   prUrl?: string;
   /**
    * S9 (DEC-2/DEC-3): the seed flows this run traversed (derived from its phases ∩
-   * each flow's nodes). A threaded spine run carries [forge-architect, forge-develop,
-   * forge-reflect] so it surfaces under all three flow monitors, each rendering its
-   * own slice. A single-flow run carries just its own flow id.
+   * each flow's nodes). A threaded spine run carries [forge-architect,
+   * forge-develop] so each flow's monitor renders its own slice (the reflect
+   * flow wrapper was retired in W7-C1 — reflection is a standalone agent
+   * run, not a flow, so it adds no lineage entry). A single-flow run carries
+   * just its own flow id.
    */
   flowLineage: string[];
   /**
@@ -182,7 +184,7 @@ export type Run = {
 // ---------------------------------------------------------------------------
 
 // A run's flow id comes from its manifest's `flow_id` (architect → forge-architect,
-// develop → forge-develop, reflect → forge-reflect). This constant
+// develop → forge-develop). This constant
 // is the fallback ONLY for pre-S8 manifests that predate the flow_id field — the
 // flow they ran (forge-cycle) was retired (S8/DEC-3), so it is honestly labelled
 // 'unknown' rather than pointing at a seed that no longer exists. The M4 edit-lock
@@ -263,7 +265,7 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
  * studio/ directory or any required file is missing.
  *
  * S8/DEC-3: forge-cycle was retired, so this derives from the UNION of EVERY flow
- * under studio/flows/ (forge-architect / forge-develop / forge-reflect)
+ * under studio/flows/ (forge-architect / forge-develop)
  * rather than the single monolith. Each flow node with an
  * `agent` maps SKILL.md[phase] → node.id; the first flow to map a phase wins (all
  * seed flows share the canonical node ids, so the union is unambiguous), and any
@@ -409,7 +411,7 @@ export function buildFlowNodeSets(root: string): Map<string, Set<string>> {
  * S9 (DEC-2/DEC-3): the seed flows this run traversed — every flow at least one of
  * whose nodes the run executed (its phases). A threaded spine run (one cycle_id whose
  * manifest flow_id is repointed architect→develop at the hand-off) therefore surfaces
- * under forge-architect + forge-develop + forge-reflect, so each flow's monitor renders
+ * under forge-architect + forge-develop, so each flow's monitor renders
  * its own slice. The manifest's own flow is always included.
  */
 export function computeFlowLineage(
@@ -687,7 +689,7 @@ function buildRun(args: {
     phaseMeta,
     artifactsReady,
     // S9: surface the run under every flow whose nodes it executed (the threaded
-    // spine shows under forge-architect + forge-develop + forge-reflect).
+    // spine shows under forge-architect + forge-develop).
     flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
     ...(gate !== undefined ? { gate, gateNote } : {}),
     ...(failedAt !== undefined ? { failedAt, failNote } : {}),

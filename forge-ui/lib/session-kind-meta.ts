@@ -32,9 +32,8 @@ export type SessionKindMeta = {
   /** The descriptor's `agent:` — the SKILL slug that drives this kind. */
   agent: string;
   /** Where the operator starts one, or `null` for a kind with no direct
-   *  kickoff surface (onboarding starts from project onboarding). Architect
-   *  keeps its bespoke native entry (`/architect/new`, ADR-043 amendment §4
-   *  — never the generic form). */
+   *  kickoff surface. Architect keeps its bespoke native entry
+   *  (`/architect/new`, ADR-043 amendment §4 — never the generic form). */
   kickoffHref: string | null;
 };
 
@@ -43,7 +42,11 @@ export const SESSION_KIND_META: readonly SessionKindMeta[] = [
   { id: 'instructions', title: 'Instructions session', agent: 'instructions-creator', kickoffHref: '/sessions/instructions/new' },
   { id: 'project-brain', title: 'Brain creation session', agent: 'project-brain-builder', kickoffHref: '/sessions/project-brain/new' },
   { id: 'demo', title: 'Demo capability session', agent: 'demo-builder', kickoffHref: '/sessions/demo/new' },
-  { id: 'onboarding', title: 'Onboarding session', agent: 'onboarding-agent', kickoffHref: null },
+  // W7-C1 (sessions-kinds-01/crosscut-14, flows-20): the onboard-project
+  // FLOW wrapper was retired — the onboarding SESSION is the one surface, so
+  // it gains a real generic kickoff (previously kickoffHref: null, which
+  // left /sessions/onboarding/new a dead end).
+  { id: 'onboarding', title: 'Onboarding session', agent: 'onboarding-agent', kickoffHref: '/sessions/onboarding/new' },
   { id: 'authoring', title: 'Authoring session', agent: 'creation-agent', kickoffHref: '/sessions/authoring/new' },
   { id: 'kb-cleanup', title: 'KB cleanup session', agent: 'brain-maintenance', kickoffHref: '/sessions/kb-cleanup/new' },
   { id: 'community-refresh', title: 'Community refresh session', agent: 'community-refresh', kickoffHref: '/sessions/community-refresh/new' },
@@ -71,8 +74,7 @@ export function sessionKindAgent(kind: string): string | null {
  * agent builder's "open a session" affordance derives its href from HERE,
  * the same parity-pinned table every other kind-level surface reads —
  * the frozen one-entry SESSION_ENTRY_HREF_BY_SLUG map is deleted).
- * Architect's bespoke `/architect/new` rides its own row's `kickoffHref`;
- * onboarding honestly resolves `null` (no direct kickoff surface).
+ * Architect's bespoke `/architect/new` rides its own row's `kickoffHref`.
  */
 export function sessionEntryHrefForAgent(slug: string): string | null {
   return SESSION_KIND_META.find((m) => m.agent === slug)?.kickoffHref ?? null;
@@ -168,6 +170,16 @@ export const KICKOFF_SPECS: Record<string, KickoffKindSpec> = {
     blurb: 'Seeds a per-project brain — explores the repo, stages starter themes, and waits for your review before committing them.',
     agentSlug: 'project-brain-builder',
     artifactLabel: 'Seeded structure',
+    selector: 'project',
+  },
+  // W7-C1 (sessions-kinds-01): the onboarding session's generic kickoff —
+  // project select only; `POST /api/studio/onboarding/start` takes
+  // {project, inputs?} and nothing else (onboarding-agent is strategy:fixed,
+  // so the tier picker renders its read-only chip).
+  onboarding: {
+    blurb: 'Brings the project up to the forge↔project contract — runs the onboarding agent against the repo, then checks the real preflight and reports what still fails.',
+    agentSlug: 'onboarding-agent',
+    artifactLabel: 'Contract report',
     selector: 'project',
   },
   'community-refresh': {
