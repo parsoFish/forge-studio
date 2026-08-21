@@ -41,6 +41,11 @@ export type ParsedThemeFile = {
  * edges — the kb-drain false-green). Entries are trimmed, surrounding
  * single/double quotes stripped, empties dropped (`[]` → []). Everything
  * else stays the raw trimmed string.
+ *
+ * Known limit (declared, accepted): the inline-list split is on bare `,`, so
+ * a QUOTED entry containing a comma (`["a, b"]`) would decode as two entries.
+ * Theme slugs — the only values these list fields carry — never contain
+ * commas, so a quote-aware split is deliberately not built here.
  */
 function decodeFallbackValue(value: string): string | string[] {
   if (value.startsWith('[') && value.endsWith(']')) {

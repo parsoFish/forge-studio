@@ -508,3 +508,71 @@ test('deleteGuidanceFile — throws on path traversal', () => {
     cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7 FIX-B-KB code-review MEDIUM: gray-matter parse-cache poisoning
+// ---------------------------------------------------------------------------
+// `matter(raw)` with NO options uses gray-matter's module-level cache, which
+// caches-then-throws on YAML it rejects (e.g. an unquoted `: ` inside a
+// description value): the FIRST parse throws (parseMd's catch fallback runs,
+// output correct), but every LATER parse of the same content gets the
+// poisoned cache hit `{data: {}, content: FULL RAW}` back WITHOUT throwing —
+// the fallback never runs again and the article body leaks the raw
+// frontmatter block. parseMd must pass `{}` to bypass the cache (same
+// poisoning class as cli/theme-frontmatter.ts).
+
+test('parseMd cache-poisoning regression — second parse of a gray-matter-rejected theme stays clean', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-kb-poison-'));
+  try {
+    const brainDir = join(root, 'brain', 'poison-kb');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(
+      join(brainDir, 'kb.yaml'),
+      'id: poison-kb\nname: Poison KB\nbinding: { kind: unique }\ndesc: Test.\n',
+    );
+    // The unquoted `: ` inside description makes gray-matter THROW. The
+    // random suffix keeps this content unique so no OTHER matter() call in
+    // this test process shares (or pre-poisons) the same cache key.
+    writeFileSync(
+      join(brainDir, 'themes', 'theme-poison.md'),
+      [
+        '---',
+        'title: Poison Theme',
+        `description: Fix: unquoted colon poisons cache (${Math.random().toString(36).slice(2)})`,
+        'category: pattern',
+        'created_at: 2026-01-01',
+        'updated_at: 2026-01-01',
+        '---',
+        '',
+        '# Poison Theme',
+        '',
+        'Body line without frontmatter.',
+        '',
+      ].join('\n'),
+    );
+
+    // First parse: buildKbGraph — this is where an unbypassed cache gets
+    // poisoned. Scalars must still be recovered on the throwing path.
+    const graph = buildKbGraph(root, 'poison-kb');
+    const node = graph.nodes.find((n) => n.id === 'theme-poison');
+    assert.ok(node, 'poison theme node exists');
+    assert.equal(node.title, 'Poison Theme', 'title recovered via line-fields on the throwing parse');
+    assert.equal(node.category, 'pattern', 'category recovered via line-fields on the throwing parse');
+
+    // Second parse of the SAME raw in the same process: getKbNodeArticle
+    // routes through parseMd again. A poisoned cache hit returns the full
+    // raw as content without throwing, leaking frontmatter into the body.
+    const article = getKbNodeArticle(root, 'poison-kb', 'theme-poison');
+    assert.ok(article, 'article resolves');
+    assert.ok(
+      !article.body.includes('description: Fix:'),
+      'article body must NOT leak raw frontmatter (poisoned gray-matter cache hit)',
+    );
+    assert.ok(
+      article.body.includes('Body line without frontmatter.'),
+      'article body keeps the real body',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

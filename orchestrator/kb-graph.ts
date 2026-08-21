@@ -192,7 +192,12 @@ function extractFrontmatterLineFields(raw: string): Record<string, string> {
 
 function parseMd(raw: string): { data: Record<string, unknown>; content: string } {
   try {
-    const { data, content } = matter(raw) as { data: Record<string, unknown>; content: string };
+    // `{}` options bypass gray-matter's module-level parse cache (same
+    // poisoning class as cli/theme-frontmatter.ts, see its module header): a
+    // cache-then-throw on first parse would otherwise return the poisoned
+    // `data: {}` hit on every later build without ever re-throwing, so the
+    // catch fallback below never runs and list fields silently vanish.
+    const { data, content } = matter(raw, {}) as { data: Record<string, unknown>; content: string };
 
     // Supplement gray-matter's output with a line-regex scan of the raw
     // frontmatter block for the known scalar fields.  gray-matter silently

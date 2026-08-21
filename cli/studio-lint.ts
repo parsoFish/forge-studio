@@ -237,7 +237,9 @@ export function runStudioLint(root: string): StudioLintResult {
       // so a `library: false` skill is still checked to prove it's explicit.
       try {
         const raw = readFileSync(skillMdPath, 'utf8');
-        const { data } = matter(raw);
+        // `{}` bypasses gray-matter's parse cache (poisoning class documented
+        // in cli/theme-frontmatter.ts module header).
+        const { data } = matter(raw, {});
         findings.push(...validateLibraryFlag(entryName, data));
       } catch (readErr) {
         findings.push({
