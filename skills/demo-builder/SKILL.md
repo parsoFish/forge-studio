@@ -1,7 +1,7 @@
 ---
 name: demo-builder
 description: Author a project's reusable demo-generation skill — the machinery that showcases an initiative's CHANGES (before/after) as a Forge-styled HTML page — and render a real sample from a recent change, iterating on operator feedback until locked.
-phase: unifier
+phase: demo
 surface: interactive
 # Operator-driven setup helper dispatched by the bridge (like brain-fix), never
 # composed into a flow. `library: false` keeps it out of the Studio agent roster

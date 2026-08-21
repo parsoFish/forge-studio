@@ -291,3 +291,50 @@ test('RED (R1-06 WI-2 group B): committing a KB-scoped hand-off session honors i
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W7-C3 review (A-M9) — the third session kind. `instructions` and `demo`
+// stopped billing `architect`/`unifier` in this PR; project-brain still filed
+// every event under `reflection`, the OOTB reflector's cycle-spine phase, and
+// its test had no `e.phase` assertion at all — so "session kinds log their own
+// phase" was 2 of 3.
+// ---------------------------------------------------------------------------
+
+test("W7-C3 review (A-M9): every event row carries phase 'project-brain' — never 'reflection'", async () => {
+  const { forgeRoot, sessionId, projectRoot, sessionDir } = setup('analyzing');
+  try {
+    const logsRoot = join(forgeRoot, '_logs');
+    await runProjectBrainTurn({
+      sessionId,
+      projectRoot,
+      forgeRoot,
+      logsRoot,
+      queryFn: makeQueryFn(() => {
+        mkdirSync(join(sessionDir, 'themes'), { recursive: true });
+        writeFileSync(join(sessionDir, 'themes', 'structure.md'), '---\nname: structure\n---\n# Structure\n');
+      }),
+    });
+
+    const events = readFileSync(join(logsRoot, `_project-brain-${sessionId}`, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    assert.ok(events.length > 0, 'the turn emitted events');
+    for (const e of events) {
+      assert.equal(
+        e.phase, 'project-brain',
+        `event ${e.event_type} "${e.message}" filed under phase "${e.phase}" — a project-brain session must not bill the reflector's cycle-spine phase`,
+      );
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('ADR-024 (A-M10): the SKILL.md frontmatter phase and the emitted phase agree', () => {
+  // Under ADR-024 the frontmatter is the single source of intent; the runner
+  // emitting something else made the two contradict each other silently (no
+  // live consumer reads PhaseAgentSpec.phase, so nothing failed).
+  assert.equal(projectBrainAgentSpec.phase, 'project-brain');
+  assert.equal(PROJECT_BRAIN_MODEL.length > 0, true);
+});

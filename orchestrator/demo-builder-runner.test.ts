@@ -327,8 +327,11 @@ test('missing status.json throws a clear error', async () => {
   );
 });
 
-test('ADR-024: demoBuilderAgentSpec derives phase (unifier), tier (sonnet), and write tools', () => {
-  assert.equal(demoBuilderAgentSpec.phase, 'unifier');
+test('ADR-024: demoBuilderAgentSpec derives phase (demo), tier (sonnet), and write tools', () => {
+  // W7-C3 review (A-M10): the frontmatter still declared the RETIRED `unifier`
+  // phase while every event row said `demo` (sessions-kinds-26). ADR-024 makes
+  // the frontmatter the source of intent; the two must not contradict.
+  assert.equal(demoBuilderAgentSpec.phase, 'demo');
   assert.equal(demoBuilderAgentSpec.tier, 'sonnet');
   assert.equal(DEMO_BUILDER_MODEL, 'claude-sonnet-4-6');
   assert.ok(demoBuilderAgentSpec.allowedTools.includes('Write'), 'demo-builder writes the machinery + HTML');

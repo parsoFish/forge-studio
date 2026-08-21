@@ -1,7 +1,7 @@
 ---
 name: instructions-creator
 description: Interactively author a project's AGENTS.md (the single agent-instruction file) via a claude-init-style back-and-forth, confirmed by the operator before it is written.
-phase: architect
+phase: instructions
 surface: interactive
 # Operator-driven setup helper dispatched by the bridge (like brain-fix), never
 # composed into a flow. `library: false` keeps it out of the Studio agent roster
