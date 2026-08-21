@@ -260,7 +260,10 @@ function groupConsolidateFindings(forgeRoot: string, findings: readonly AgentFin
  *  read/parse failure — the agent still gets a valid, if bare, link line). */
 function themeDescription(themeFile: string): string {
   try {
-    const { data } = matter(readFileSync(themeFile, 'utf8'));
+    // `{}` — no-cache parse (W7 FIX-B-KB): gray-matter's module-level cache
+    // is poisoned to `data: {}` by any THROWING parse of the same content
+    // elsewhere in this process (see cli/brain-lint.ts parseTheme).
+    const { data } = matter(readFileSync(themeFile, 'utf8'), {});
     return String((data as Record<string, unknown>).description ?? '').replace(/\s+/g, ' ').trim();
   } catch {
     return '';

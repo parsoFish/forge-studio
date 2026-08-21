@@ -3,7 +3,7 @@ cli/architect-plan.ts mkdirSync 2
 cli/architect-plan.ts renameSync 1
 cli/brain-fix-auto.ts execFileSync 2
 cli/brain-fix-auto.ts existsSync 4
-cli/brain-fix-auto.ts readFileSync 4
+cli/brain-fix-auto.ts readFileSync 3
 cli/brain-fix-auto.ts statSync 1
 cli/brain-fix-auto.ts writeFileSync 3
 cli/brain-index.ts existsSync 10
@@ -13,7 +13,7 @@ cli/brain-index.ts statSync 2
 cli/brain-index.ts writeFileSync 1
 cli/brain-lint.ts existsSync 21
 cli/brain-lint.ts readdirSync 10
-cli/brain-lint.ts readFileSync 5
+cli/brain-lint.ts readFileSync 4
 cli/brain-lint.ts statSync 1
 cli/bridge-recovery.ts execFileSync 4
 cli/bridge-recovery.ts existsSync 8
@@ -158,6 +158,7 @@ cli/studio-path-guard.ts readdirSync 1
 cli/studio-path-guard.ts readFileSync 1
 cli/studio-path-guard.ts realpathSync 2
 cli/studio-path-guard.ts writeFileSync 1
+cli/theme-frontmatter.ts readFileSync 1
 cli/ui-bridge.ts existsSync 30
 cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
