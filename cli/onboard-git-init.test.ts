@@ -23,12 +23,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { scaffoldContractArtifacts } from './bridge-studio-writes.ts';
+import { runPreflight, SCRATCH_PATHS, SCAFFOLD_BUILD_OUTPUT_IGNORES } from './preflight.ts';
 
 test('AT-B6-5 (RED, projects-11) onboarding a dir INSIDE an enclosing git work tree still git-inits the project itself', () => {
   const enclosing = mkdtempSync(join(tmpdir(), 'onboard-gitinit-'));
@@ -92,6 +93,82 @@ test('AT-B6-19 (RED, review F4) a subdirectory of an operator\'s REAL cloned rep
   }
 });
 
+test('W7-FIX-B-PROJ (RED, gate A0) a repo THIS call inits gets a C2-covering .gitignore — born contract-green', () => {
+  // Gate regression (stand-up-create A0 / R1-03-F1): B6's own-repo init is
+  // correct, but the freshly-inited repo carried NO ignore rules at all —
+  // preflight C2 (git-truth, now honestly evaluated against the project's OWN
+  // repo) hard-failed every scratch path at birth, so the create-from-nothing
+  // form parked on the failing checklist instead of the project page. The
+  // scaffold that creates the repo must also close C2 at birth.
+  const enclosing = mkdtempSync(join(tmpdir(), 'onboard-gitignore-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: enclosing, stdio: 'ignore' });
+    const projectRoot = join(enclosing, 'projects', 'fresh-green');
+    mkdirSync(projectRoot, { recursive: true });
+
+    const created = scaffoldContractArtifacts(projectRoot, 'fresh green', enclosing);
+
+    assert.ok(created.includes('.gitignore'), 'the created-paths report must include the scaffolded .gitignore');
+    const gi = readFileSync(join(projectRoot, '.gitignore'), 'utf8');
+    for (const p of SCRATCH_PATHS) {
+      assert.ok(gi.includes(p), `.gitignore must cover the C2 scratch path ${p}`);
+    }
+    // W7-FIX-B-PROJ review F4: the build-output globs are single-sourced
+    // from preflight.ts (beside BUILD_ARTIFACT_HINTS) — the scaffold and the
+    // ARTIFACTS advisory/auto-fix must never drift apart.
+    for (const g of SCAFFOLD_BUILD_OUTPUT_IGNORES) {
+      assert.ok(gi.includes(g), `.gitignore must cover the shared build-output glob ${g}`);
+    }
+    // The whole point: C2 green at birth against the project's OWN repo.
+    const r = runPreflight(projectRoot, { forgeRoot: enclosing });
+    const c2 = r.clauses.find((c) => c.clause === 'C2');
+    assert.ok(c2, 'C2 clause present');
+    assert.equal(c2!.pass, true, `C2 must pass at birth: ${c2!.detail}`);
+  } finally {
+    rmSync(enclosing, { recursive: true, force: true });
+  }
+});
+
+test('W7-FIX-B-PROJ (no-clobber) an EXISTING .gitignore in a to-be-inited dir is left byte-identical', () => {
+  // Never clobber an operator file — same idempotency contract as roadmap.md.
+  // A pre-existing .gitignore that misses scratch paths stays the operator's;
+  // the preflight resolution panel + auto-fix own that gap honestly.
+  const enclosing = mkdtempSync(join(tmpdir(), 'onboard-gitignore-keep-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: enclosing, stdio: 'ignore' });
+    const projectRoot = join(enclosing, 'projects', 'keeps-own');
+    mkdirSync(projectRoot, { recursive: true });
+    const original = '# operator-authored\nnode_modules\n';
+    writeFileSync(join(projectRoot, '.gitignore'), original);
+
+    const created = scaffoldContractArtifacts(projectRoot, 'keeps own', enclosing);
+
+    assert.ok(!created.includes('.gitignore'), 'an existing .gitignore must not be reported as created');
+    assert.equal(readFileSync(join(projectRoot, '.gitignore'), 'utf8'), original, 'operator .gitignore must be byte-identical');
+  } finally {
+    rmSync(enclosing, { recursive: true, force: true });
+  }
+});
+
+test('W7-FIX-B-PROJ (own-repo) a project that already IS its own repo gets NO scaffolded .gitignore', () => {
+  // needsInit=false paths (own repo / enclosed by an operator's real repo)
+  // are the operator's territory: hygiene gaps surface through the honest
+  // resolution panel, never through a silent write into their checkout.
+  const root = mkdtempSync(join(tmpdir(), 'onboard-gitignore-own-'));
+  try {
+    const projectRoot = join(root, 'already-repo');
+    mkdirSync(projectRoot, { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: projectRoot, stdio: 'ignore' });
+
+    const created = scaffoldContractArtifacts(projectRoot, 'already repo', root);
+
+    assert.ok(!created.includes('.gitignore'), 'own-repo onboard must not scaffold a .gitignore');
+    assert.ok(!existsSync(join(projectRoot, '.gitignore')), 'no .gitignore file may appear in an own-repo onboard');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AT-B6-20 (green-lock, review F4) a dir in NO repo at all still gets git-inited', () => {
   const base = mkdtempSync(join(tmpdir(), 'onboard-gitinit-none-'));
   try {
@@ -105,6 +182,9 @@ test('AT-B6-20 (green-lock, review F4) a dir in NO repo at all still gets git-in
     const created = scaffoldContractArtifacts(projectRoot, 'fresh', forgeRoot);
     assert.ok(existsSync(join(projectRoot, '.git')), 'no enclosing repo → the project must get its own');
     assert.ok(created.includes('.git/'));
+    // W7-FIX-B-PROJ: the no-repo init branch scaffolds the same C2-covering
+    // .gitignore as the inside-forge branch (both create the repo from nothing).
+    assert.ok(created.includes('.gitignore'), 'a repo created from nothing must also get the C2 .gitignore');
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

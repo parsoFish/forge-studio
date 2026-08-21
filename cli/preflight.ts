@@ -22,7 +22,7 @@
  * skills/demo/SKILL.md.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 
@@ -106,6 +106,25 @@ export const BUILD_ARTIFACT_HINTS: Record<ProjectLanguage, readonly string[]> = 
   rust: ['target'],
   unknown: [],
 };
+
+// W7-FIX-B-PROJ (review F4): the generic, language-agnostic build-output
+// globs the onboarding scaffold writes into a freshly-created repo's
+// .gitignore (`scaffoldContractArtifacts`, cli/bridge-studio-writes.ts). At
+// birth the project dir may be empty, so no language is detectable — this is
+// the deps + common-build-output cover set, kept HERE, beside
+// BUILD_ARTIFACT_HINTS, so the scaffold and the ARTIFACTS advisory (+ its
+// `fixBuildArtifacts` auto-fix) evolve in one file and never drift apart: a
+// scaffolded project must not warn on ARTIFACTS for a shape this list was
+// meant to cover. Each entry is a dir glob; 'dist'/'build'/'out'/'coverage'
+// substring-match the typescript/javascript/python hint rows above
+// (node_modules/ is dependency hygiene, not a build-output hint).
+export const SCAFFOLD_BUILD_OUTPUT_IGNORES: readonly string[] = [
+  'node_modules/',
+  'dist/',
+  'build/',
+  'out/',
+  'coverage/',
+];
 
 export function runPreflight(
   projectDir: string,
@@ -261,6 +280,7 @@ function checkC2(dir: string): ClauseResult {
   const violations: string[] = [];
   for (const p of SCRATCH_PATHS) {
     // Strip trailing slash for git commands (git ls-files doesn't match dirs with /).
+    const isDir = p.endsWith('/');
     const pathArg = p.replace(/\/$/, '');
 
     const isTracked =
@@ -273,13 +293,47 @@ function checkC2(dir: string): ClauseResult {
       continue;
     }
 
-    const isIgnored =
-      spawnSync('git', ['-C', dir, 'check-ignore', '-q', pathArg], {
-        stdio: 'ignore',
-      }).status === 0;
+    // W7-FIX-B-PROJ: a DIRECTORY scratch path is probed via a sentinel CHILD.
+    // git's dir-only ignore patterns (`.forge/work-items/` — the exact form
+    // `fixScratchHygiene` appends) match only paths git can stat as
+    // directories, so probing the dir itself false-fails while the dir does
+    // not exist yet (every fresh onboard — the dev-loop creates it later,
+    // at which point the pattern DOES ignore it). Any pattern that ignores
+    // the dir also ignores its children, and both pattern forms (with and
+    // without the trailing slash) match the child, so the sentinel judges
+    // the future truth without caring about on-disk state.
+    const ignoreProbes = [isDir ? `${pathArg}/.forge-c2-dir-probe` : pathArg];
+    // W7-FIX-B-PROJ review F1: the sentinel child judges the FUTURE dir
+    // truth, but when the path exists on disk as a NON-directory (a stray
+    // regular file, or a symlink — git treats links as link objects and
+    // dir-only patterns match only real directories), the child probe can
+    // pass while the actual on-disk entry is un-ignored and `git add -A`
+    // would sweep it into the PR. lstat deliberately (not stat): a symlink
+    // whose target is a directory is still a link to git. When the entry
+    // exists as a non-directory, the path ITSELF must also be ignored.
+    if (isDir) {
+      let existsAsNonDir = false;
+      try {
+        existsAsNonDir = !lstatSync(join(dir, pathArg)).isDirectory();
+      } catch {
+        // absent (or unreachable, e.g. an ancestor is a file) — the
+        // sentinel child alone judges the future truth.
+      }
+      if (existsAsNonDir) ignoreProbes.push(pathArg);
+    }
+    const notIgnored = ignoreProbes.some(
+      (probe) =>
+        spawnSync('git', ['-C', dir, 'check-ignore', '-q', probe], {
+          stdio: 'ignore',
+        }).status !== 0,
+    );
 
-    if (!isIgnored) {
-      violations.push(`${p} (not ignored by git)`);
+    if (notIgnored) {
+      violations.push(
+        ignoreProbes.length > 1
+          ? `${p} (exists as a non-directory that git does not ignore — remove the stray entry, or ignore the exact path)`
+          : `${p} (not ignored by git)`,
+      );
     }
   }
 
