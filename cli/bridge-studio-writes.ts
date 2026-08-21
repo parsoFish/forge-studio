@@ -45,7 +45,7 @@ import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistr
 import type { CommunityRegistryItem } from '../orchestrator/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath, PathGuardContainmentError } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from './studio-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
@@ -300,10 +300,12 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
   // pre-check so the `.gitignore` guard and the `.gitignore` write can never
   // disagree about when the write happens (review F2).
   const needsInit = needsGitInit(projectRoot, forgeRoot);
+  let repoInited = false;
   if (needsInit) {
     try {
       execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
       created.push('.git/');
+      repoInited = true;
     } catch {
       // git unavailable or dir not writable — preflight will surface C6.
     }
@@ -382,6 +384,31 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
       'utf8',
     );
     created.push(profile.relPath);
+  }
+
+  // projects-37 (S1): a repo THIS call created is UNBORN until something
+  // commits — no HEAD, no branch ref, so `defaultBranch()` returns its literal
+  // 'main' fallback and every project-repo-tx operation is evaluated against a
+  // branch that does not exist (the first "Save project" 500'd; saveProjectRepo
+  // still cannot merge forge-studio into a nonexistent default branch). The
+  // greenfield path (orchestrator/project-create.ts) already commits its
+  // scaffold at birth — the onboard path got no equivalent when W7-B6 WI-1 made
+  // `git init` fire for real here. Identity flags are passed per-invocation so
+  // an unattended host with no global git identity still commits. Best-effort:
+  // ensureStudioBranch's unborn guard is the real fix and backstops a failure
+  // here, so a git hiccup must not fail an otherwise-good onboarding.
+  if (repoInited) {
+    try {
+      execFileSync('git', ['add', '-A'], { cwd: projectRoot, stdio: 'ignore' });
+      execFileSync(
+        'git',
+        ['-c', 'user.name=forge', '-c', 'user.email=forge@localhost', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', `chore: onboard ${name} to forge`],
+        { cwd: projectRoot, stdio: 'ignore' },
+      );
+    } catch {
+      // git unavailable/misconfigured — preflight surfaces C6, and the unborn
+      // guard in ensureStudioBranch keeps Studio writes working regardless.
+    }
   }
 
   return created;
@@ -598,6 +625,44 @@ function applyStarterAgentMaterialisation(
   const materialized: string[] = [];
   for (const { def, destPath } of planned) {
     cpSync(join(forgeRoot, 'studio', 'starters', 'agents', def.slug), destPath, { recursive: true });
+
+    // agents-44: a starter package is a design-time TEMPLATE and declares no
+    // `phase:` — but the copy above lands it in the LIVE, dispatchable roster,
+    // and deriveAgentSpec (runAgent()'s synchronous Step 1, before any spawn)
+    // hard-requires phase. Copied verbatim, every materialised starter was
+    // undispatchable from both the standalone Run button and flow execution,
+    // with no in-Studio recovery (a builder re-save preserves an existing
+    // agent's absent phase verbatim, by design). Stamp the SAME synthesis the
+    // sibling agent-builder PUT path performs for a brand-new mint —
+    // `phase: <slug>` — plus the explicit `library: true` every shipped
+    // roster agent carries. Only ever applied to a FRESH copy: this path runs
+    // exclusively when skills/<slug> did not already exist (see
+    // planStarterAgentMaterialisation), so it can never rewrite an operator's
+    // own agent.
+    // The read/write both go back through the SAME containment guard the
+    // destination came from (leaf included) rather than raw-joining onto
+    // destPath — the SEC-04 leaf-append rule.
+    const skillsRoot = toSkillsDir(forgeRoot);
+    const skillMdPath = guardedFile(skillsRoot, [def.slug, 'SKILL.md'], 'read');
+    if (skillMdPath === null) {
+      throw new Error(`starter "${def.slug}": no readable SKILL.md under skills/${def.slug} after materialisation`);
+    }
+    const copied = loadAgentDefinition(skillMdPath);
+    if (copied.phase === undefined || copied.library === undefined) {
+      const stamped: AgentDefinition = {
+        ...copied,
+        phase: copied.phase ?? copied.slug,
+        library: copied.library ?? true,
+      };
+      // No `originalRaw` fast path on purpose: the frontmatter genuinely
+      // CHANGES here (phase is being added), so the byte-preserving branch
+      // could never apply — passing it would only imply a fidelity guarantee
+      // this write does not have.
+      if (guardedWriteFile(skillsRoot, [def.slug, 'SKILL.md'], serializeAgentDefinition(stamped)) === null) {
+        throw new Error(`starter "${def.slug}": containment rejected the SKILL.md phase stamp`);
+      }
+    }
+
     materialized.push(def.slug);
   }
   return materialized;

@@ -64,10 +64,24 @@ function clampIndex(index: number, length: number): number {
 
 /** Derive tab view-state from a package's files, in package order (the
  *  backend already orders SKILL.md first for a skill package — this is a
- *  passthrough, never a re-sort). */
-export function filePackageTabs(files: readonly PackageFile[]): FilePackageState {
+ *  passthrough, never a re-sort).
+ *
+ *  sessions-kinds-R09 — `preferredPath` (OPTIONAL) selects the tab carrying
+ *  THAT path, by VALUE, never by array position. A polling session route
+ *  (SessionShell's 3s tick) hands `FilePackage` a brand-new `files` array
+ *  every tick, freshly parsed from `res.json()`, even when not one byte
+ *  changed — so an operator's tab selection can only survive if it is looked
+ *  up by the stable `path` field rather than re-derived from whichever array
+ *  reference happened to arrive this tick. Absent, or naming a file no
+ *  longer in the package (it was renamed or dropped between ticks), falls
+ *  back to the first tab exactly like before — never throws.
+ *
+ *  This is the same shape as `generationGalleryView`'s already-ratified
+ *  `preferredNumber` (lib/session-artifact-view.ts, R4-16 pin 2). */
+export function filePackageTabs(files: readonly PackageFile[], preferredPath?: string): FilePackageState {
   const tabs = files.map((f) => ({ path: f.path, label: labelFor(f.path), body: f.body }));
-  return { tabs, activeIndex: clampIndex(0, tabs.length) };
+  const preferredIndex = preferredPath === undefined ? -1 : tabs.findIndex((t) => t.path === preferredPath);
+  return { tabs, activeIndex: clampIndex(preferredIndex >= 0 ? preferredIndex : 0, tabs.length) };
 }
 
 /** Select a tab by index, clamped into range — never throws, and always

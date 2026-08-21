@@ -445,6 +445,18 @@ export function SessionInteractivePanel({
           // enforces via a wire signal — same distinction the label text
           // ("Skill id" vs "Hook id") already relies on.
           const shapeResolved = packageArtifact === null || packageShape !== 'unknown';
+          // community-14 (W7 re-gate, S1) — that advisory is SCOPED to the
+          // kinds it actually speaks for. It only ever meant "the id this
+          // verdict requires is derived from a shape we can't see yet", so
+          // it may gate Approve only when the affordance's OWN `requires`
+          // asks for that id (authoring/kb-cleanup). community-refresh's
+          // staging package is registry.yaml + evidence.* BY DESIGN — no
+          // SKILL.md/hook.yaml will ever land in it — and its awaiting-review
+          // row declares no `requires` at all, so an unconditional
+          // `!shapeResolved` disabled its Approve button forever, with no
+          // matching server-side rule (`handleCommunityRefreshVerdict`
+          // accepts the verdict as-is).
+          const shapeBlocksApprove = requiresFields.includes('id') && !shapeResolved;
           // W7-C2 (library-22) — a client-side ADVISORY mirror of the
           // server's own id rule (the write route now 400s a non-slug id
           // with the same rule text): disable + hint instead of letting the
@@ -452,7 +464,7 @@ export function SessionInteractivePanel({
           // enforcement; this is UX, exactly like `shapeResolved` above.
           const idValue = (providedFields['id'] ?? '').trim();
           const idBadSlug = requiresFields.includes('id') && idValue.length > 0 && !CLIENT_SLUG_RE.test(idValue);
-          const approveDisabled = busy || !requiresSatisfied || !shapeResolved || idBadSlug;
+          const approveDisabled = busy || !requiresSatisfied || shapeBlocksApprove || idBadSlug;
           // W7-C2 (sessions-kinds-23) — the disabled Approve finally SAYS
           // why: name the first unmet requires field (or the bad slug), as
           // an inline hint the operator can act on, not a silent 50%-opacity
@@ -529,7 +541,7 @@ export function SessionInteractivePanel({
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-approve"
-                    {...disabledAttrs(busy ? 'Submitting…' : !shapeResolved ? 'The draft’s shape is still resolving' : !requiresSatisfied ? 'Fill in every field this verdict requires first' : null)}
+                    {...disabledAttrs(busy ? 'Submitting…' : shapeBlocksApprove ? 'The draft’s shape is still resolving' : !requiresSatisfied ? 'Fill in every field this verdict requires first' : null)}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'approve',

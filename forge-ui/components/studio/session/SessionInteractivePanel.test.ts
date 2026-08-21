@@ -17,10 +17,17 @@
 import { test, expect } from 'vitest';
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { resolve } from 'node:path';
 
 import { SessionInteractivePanel } from './SessionInteractivePanel';
 import type { SessionAffordance, SessionArtifactPayload } from '@/lib/session-client';
 import type { EventLogEntry } from '@/lib/bridge-client';
+// community-14 — the real session-kind loader + affordance derivation, so the
+// community-refresh regression test at the bottom of this file drives the
+// SAME wire affordance the bridge sends, not a hand-written stand-in.
+import { loadSessionKinds, deriveSessionAffordances } from '../../../../orchestrator/studio/session-kinds.ts';
+
+const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
 
 function render(props: {
   kind: string;
@@ -602,4 +609,53 @@ test('C2-FIX-A3-3: the per-question interview form carries each question\'s corr
   expect(html).toContain('data-question-index="1"');
   expect(html).toContain('data-question-freetext="0"');
   expect(html).toContain('data-question-freetext="1"');
+});
+
+// ===========================================================================
+// community-14 (W7 re-gate, S1) — the community-refresh registry draft's
+// Approve button was PERMANENTLY disabled, so no refresh could ever be
+// committed from Studio.
+//
+// `shapeResolved` (the SKILL.md/hook.yaml advisory `draftShapeOf` feeds) was
+// ORed into the Approve gate for EVERY file-package artifact, but
+// community-refresh's staging package is `registry.yaml` + `evidence.*` BY
+// DESIGN — it never contains either marker file, so `packageShape` stayed
+// 'unknown' forever. The advisory only ever meant "the id you must type is
+// derived from a shape we can't see yet", so it may only gate a kind whose
+// OWN `meta.requires` actually asks for that id (authoring / kb-cleanup);
+// community-refresh's awaiting-review row declares no `requires` at all, and
+// the server (`handleCommunityRefreshVerdict`) applies no such check.
+//
+// The affordance below is NOT hand-written: it is the real one
+// `deriveSessionAffordances` emits for the real `community-refresh`
+// descriptor in studio/session-kinds.yaml, so this test fails the day that
+// row starts requiring an id (at which point the gate SHOULD return).
+// ===========================================================================
+
+test('community-14: a community-refresh registry draft (registry.yaml + evidence.*, no SKILL.md/hook.yaml) leaves Approve ENABLED — the SKILL.md/hook.yaml shape advisory only gates kinds whose own meta.requires asks for an id', () => {
+  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'community-refresh');
+  expect(descriptor, 'community-refresh must exist in studio/session-kinds.yaml').toBeTruthy();
+  const derived = deriveSessionAffordances(descriptor!, 'awaiting-review');
+  const verdict = derived.find((a) => a.kind === 'verdict');
+  expect(verdict, 'awaiting-review must derive a verdict affordance').toBeTruthy();
+  // Pin the premise this test rests on: the real row asks for NO fields.
+  expect(verdict!.meta?.requires ?? []).toEqual([]);
+  expect(verdict!.meta?.verdicts).toEqual(['approve', 'revise', 'reject']);
+
+  const html = render({
+    kind: 'community-refresh',
+    phase: 'awaiting-review',
+    affordances: [verdict as SessionAffordance],
+    artifact: filePackage([
+      { path: 'registry.yaml', body: 'entries: []' },
+      { path: 'evidence.md', body: '# Evidence' },
+      { path: 'evidence.json', body: '{}' },
+    ]),
+  });
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).not.toContain('disabled=""');
+  expect(tag).not.toContain('data-disabled-reason');
+  // Reject/revise were never blocked — the operator's loop is only whole
+  // once approve joins them.
+  expect(html).toContain('data-action="verdict-reject"');
 });

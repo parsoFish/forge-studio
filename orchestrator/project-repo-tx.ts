@@ -79,6 +79,21 @@ function currentBranch(projectDir: string): string {
 }
 
 /**
+ * True iff the repo has at least one commit. A freshly `git init`'d repo has
+ * an UNBORN HEAD — no commits, and therefore NO branch ref at all, so
+ * `defaultBranch()`'s literal 'main' fallback names something that does not
+ * exist (projects-37).
+ */
+function hasCommits(projectDir: string): boolean {
+  try {
+    git(projectDir, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ensure the project repo is on the persistent `forge-studio` branch (created
  * from the default branch if it doesn't exist yet). No-op for a non-git dir.
  */
@@ -86,6 +101,15 @@ export function ensureStudioBranch(projectDir: string): void {
   if (!isGitRepo(projectDir)) return;
   if (currentBranch(projectDir) === STUDIO_BRANCH) return;
   if (branchExists(projectDir, STUDIO_BRANCH)) git(projectDir, ['checkout', STUDIO_BRANCH]);
+  // projects-37 (S1): an UNBORN repo — `git init` with no commit yet, exactly
+  // what onboarding a brand-new project leaves behind — has no branch ref at
+  // all, so `defaultBranch()` returns its literal 'main' fallback and
+  // `checkout -b forge-studio main` fatals ("'main' is not a commit"). That
+  // throw propagated through withStudioWrite to the PUT
+  // /api/studio/projects/:id route → 500, so the operator's FIRST "Save
+  // project" after onboarding silently discarded the edit, with no in-Studio
+  // remedy. On an unborn HEAD the branch is created with NO start-point.
+  else if (!hasCommits(projectDir)) git(projectDir, ['checkout', '-b', STUDIO_BRANCH]);
   else git(projectDir, ['checkout', '-b', STUDIO_BRANCH, defaultBranch(projectDir)]);
 }
 

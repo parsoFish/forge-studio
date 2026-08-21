@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { filePackageTabs, selectFile, fileLanguage, type PackageFile } from '@/lib/file-package';
+import { useState } from 'react';
+import { filePackageTabs, fileLanguage, type PackageFile } from '@/lib/file-package';
 
 // ---------------------------------------------------------------------------
 // FilePackage — reusable file-package tab-strip renderer (R3-01-F3/F4, WI-3).
@@ -11,16 +11,26 @@ import { filePackageTabs, selectFile, fileLanguage, type PackageFile } from '@/l
 // logic lives in `lib/file-package.ts` — this component just wires that pure
 // state to the DOM-as-metrics contract and renders the active file's body.
 // No data fetching here; the caller owns the fetch and passes `files` down.
+//
+// sessions-kinds-R09 — poll-stable selection: on a session route
+// (SessionShell) the caller refetches every 3s and hands us a BRAND-NEW
+// `files` array each tick even when nothing changed. This component
+// therefore does NOT store the derived state, and keys NO effect on `files`
+// (`useEffect(() => setState(filePackageTabs(files)), [files])` was exactly
+// that defect — it fired every poll tick and snapped the strip back to
+// file[0] within 3s, so a review gating an irreversible brain-write could
+// not be completed for any file past the first). Instead it remembers only
+// the operator's chosen PATH and derives the view fresh on every render,
+// looked up BY VALUE. This is GenerationGallery.tsx's already-ratified shape
+// (R4-16 pin 2 / round 2 pin 3), applied to the tab strip; a new package
+// (navigating to another skill's detail page) no longer carries that path,
+// so `filePackageTabs` falls back to the first tab on its own.
 // ---------------------------------------------------------------------------
 
 export function FilePackage({ files }: { files: PackageFile[] }) {
-  const [state, setState] = useState(() => filePackageTabs(files));
-
-  // Re-derive whenever the caller hands us a new package (e.g. navigating to
-  // a different skill's detail page).
-  useEffect(() => {
-    setState(filePackageTabs(files));
-  }, [files]);
+  // `null` = nothing picked yet; the view's own default (first tab) applies.
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const state = filePackageTabs(files, selectedPath ?? undefined);
 
   const active = state.activeIndex >= 0 ? state.tabs[state.activeIndex] : null;
 
@@ -50,7 +60,7 @@ export function FilePackage({ files }: { files: PackageFile[] }) {
               aria-selected={isActive}
               data-file-tab
               data-file-path={tab.path}
-              onClick={() => setState((s) => selectFile(s, i))}
+              onClick={() => setSelectedPath(tab.path)}
               style={{
                 fontFamily: 'var(--font-mono, monospace)',
                 fontSize: 12,
