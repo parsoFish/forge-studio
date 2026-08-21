@@ -14,7 +14,19 @@
     "node --test' — that is true for orchestrator/cli tests but forge-ui/lib",
     "tests run under VITEST (vitest.config.ts include: lib/components); the",
     "real reason for the exclusion there is keeping tsc/next off the tests,",
-    "which this sibling project now covers."
+    "which this sibling project now covers.",
+    "",
+    "next-env.d.ts and .next/ are EXCLUDED (the base project keeps both).",
+    "Several parity pins deliberately cross-import an orchestrator SSOT module",
+    "(work-item.ts, flow-trigger.ts, config.ts, studio/validate-triggers.ts) so",
+    "the client copy of a vocabulary is checked against the real one. Those",
+    "modules are owned and typechecked by the ROOT tsconfig; pulling Next's",
+    "global augmentations in here would rejudge them under forge-ui's lib —",
+    "Next declares ProcessEnv.NODE_ENV REQUIRED, which the root project does",
+    "not — and report errors on orchestrator code from a forge-ui gate. Worse,",
+    "it made the result depend on whether .next/ happened to be built. next/*",
+    "types the tests actually use (next/link, next/navigation) resolve from",
+    "node_modules either way."
   ],
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -22,6 +34,6 @@
     "incremental": false,
     "types": ["node"]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/**/*.test.ts", "components/**/*.test.ts"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "next-env.d.ts", ".next"]
 }
