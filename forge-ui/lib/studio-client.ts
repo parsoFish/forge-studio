@@ -178,6 +178,12 @@ export type Run = {
    * degraded (corrupt-manifest) run.
    */
   project?: string;
+  /**
+   * W8-A3 (`flows-23`): the architect session that produced this initiative —
+   * mirrors `orchestrator/run-model.ts`'s `Run.architectSessionId`, straight
+   * off the manifest. Absent when the manifest names none; never fabricated.
+   */
+  architectSessionId?: string;
   status: RunStatus;
   /** W7-C3 (forge-cv9): mirrors orchestrator/run-model.ts VALID_ORIGINS —
    *  'triggered' is a real, producible origin since R2-08-F4; the narrower
@@ -1002,6 +1008,11 @@ export function parseRun(raw: unknown): Run {
     // W7-B7 (artifact-plan-17): same guard — the PR artifact page's link
     // depends on prUrl reaching the client.
     ...(r.prUrl !== undefined ? { prUrl: r.prUrl } : {}),
+    // W8-A3 (flows-23): same guard again — the run detail page's link back to
+    // the architect session that produced the initiative. Carried, never
+    // defaulted: an absent key must stay absent so nothing fabricates a
+    // session id for a run that names none.
+    ...(r.architectSessionId !== undefined ? { architectSessionId: r.architectSessionId } : {}),
   };
 }
 
