@@ -144,10 +144,13 @@ test('enqueuePlanRun: a path-traversal id never escapes the queue dir', () => {
   });
 });
 
-test('enqueuePlanRun: a done initiative is re-planned (re-plan parallels re-develop)', () => {
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2): the fixture is a forge-develop manifest, so a
+// re-plan of it is a cross-flow repoint and now needs the operator's answer.
+// The re-plan behaviour this test exists to protect is unchanged.
+test('enqueuePlanRun: a done initiative is re-planned (re-plan parallels re-develop, on a confirmed repoint)', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'done', manifest({ flow_id: DEVELOP_FLOW_ID, phase: 'done' }));
-    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot });
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepointFrom: DEVELOP_FLOW_ID });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);
@@ -181,5 +184,56 @@ test('enqueuePlanRun: a write failure is contained → status error, never throw
     assert.equal(result?.status, 'error');
     assert.equal(result?.initiativeId, 'INIT-2026-06-21-toc');
     assert.ok(result?.detail, 'the underlying filesystem error is surfaced in detail');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-A3 (`flows-37`, review round 1 S2-2) — THE THIRD DOOR.
+//
+// `enqueuePlanRun` is a structural clone of `enqueue-flow-run.ts` that never
+// calls it, so the repoint guard that module grew had to be carried here too or
+// the whole class stayed open one route over: the roadmap's Plan button posts an
+// initiative id the surface never pairs with a flow, exactly like "Start
+// development", and planning an initiative queued under an authored flow takes
+// it off that flow.
+//
+// KILLS: a guard that lives only on `enqueueFlowRun` while this clone keeps
+// rewriting `flow_id` unconditionally.
+// ---------------------------------------------------------------------------
+
+test('flows-37/plan: planning an initiative queued under an AUTHORED flow is refused — manifest byte-unchanged', () => {
+  withTmp((queueRoot) => {
+    const p = seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
+    const before = readFileSync(p, 'utf8');
+
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot });
+
+    assert.equal(result.status, 'repoint-requires-confirm');
+    assert.equal(result.currentFlowId, 'my-authored-flow');
+    assert.equal(readFileSync(p, 'utf8'), before, 'nothing written');
+  });
+});
+
+test('flows-37/plan: an initiative already queued under forge-architect is not a repoint and needs no confirmation', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest({ flow_id: PLAN_FLOW_ID }));
+    assert.equal(enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot }).status, 'enqueued');
+  });
+});
+
+test('flows-37/plan: a manifest with no flow_id has nothing to be taken from — enqueued', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest());
+    assert.equal(enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot }).status, 'enqueued');
+  });
+});
+
+test('flows-37/plan: confirmRepoint performs the move the operator asked for', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepointFrom: 'my-authored-flow' });
+    assert.equal(result.status, 'enqueued');
+    const onDisk = parseManifest(readFileSync(join(getPaths(queueRoot).pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
+    assert.equal(onDisk.flow_id, PLAN_FLOW_ID);
   });
 });

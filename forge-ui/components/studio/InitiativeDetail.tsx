@@ -40,6 +40,7 @@ import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
+import { RepointGate } from '@/components/studio/RepointGate';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -56,10 +57,15 @@ export type InitiativeDetailProps = {
   runCycleIds: string[];
   onOpenDemo?: () => void;
   plan: PlanCardState;
-  onPlan?: (initiativeId: string) => void | Promise<void>;
+  /** W8-A3 (`flows-37`): `confirmRepoint` is the operator's answer to a
+   *  cross-flow move, sent only from the confirmation this card renders. */
+  onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   canStartDevelopment: boolean;
   develop: DevelopCardState;
-  onStart?: (initiativeId: string) => void | Promise<void>;
+  onStart?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
+  /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation without
+   *  dispatching anything — resets that card's transient state to idle. */
+  onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
   attempt: AttemptInfo;
   recoveryDetail: RecoveryInspect | null;
   recoveryBusy: boolean;
@@ -87,6 +93,7 @@ export function InitiativeDetail({
   canStartDevelopment,
   develop,
   onStart,
+  onDismissRepoint,
   attempt,
   recoveryDetail,
   recoveryBusy,
@@ -195,22 +202,37 @@ export function InitiativeDetail({
       )}
 
       {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. */}
+      {/* W8-A3: the gate renders the button OR the confirmation, never both.
+          Review found "the control stays live beside its own confirmation and
+          re-posts unconfirmed" FOUR times on four controls across three rounds;
+          it is structural now rather than a rule each call site must remember. */}
       {unplanned && plan.status !== 'started' && (
-        <button
-          data-action="plan-initiative"
-          data-initiative-id={initiativeId}
-          disabled={plan.status === 'planning' || !onPlan}
-          onClick={() => void onPlan?.(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
-            opacity: plan.status === 'planning' ? 0.6 : 1,
-          }}
+        <RepointGate
+          initiativeId={initiativeId}
+          pending={plan.status === 'needs-confirm' && plan.currentFlowId
+            ? { currentFlowId: plan.currentFlowId, targetFlowId: 'forge-architect' }
+            : null}
+          verb="Plan"
+          onConfirm={(fromFlowId) => void onPlan?.(initiativeId, fromFlowId)}
+          onCancel={() => onDismissRepoint?.('plan', initiativeId)}
+          barStyle={{ marginTop: 4, alignSelf: 'flex-start' }}
         >
-          {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
-        </button>
+          <button
+            data-action="plan-initiative"
+            data-initiative-id={initiativeId}
+            disabled={plan.status === 'planning' || !onPlan}
+            onClick={() => void onPlan?.(initiativeId)}
+            style={{
+              marginTop: 4, alignSelf: 'flex-start',
+              color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
+              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+              fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
+              opacity: plan.status === 'planning' ? 0.6 : 1,
+            }}
+          >
+            {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
+          </button>
+        </RepointGate>
       )}
       {unplanned && plan.status === 'error' && plan.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
@@ -222,22 +244,34 @@ export function InitiativeDetail({
       )}
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
+      {/* Same gate for the develop control — see the plan control above. */}
       {canStartDevelopment && develop.status !== 'started' && (
-        <button
-          data-action="start-development"
-          data-initiative-id={initiativeId}
-          disabled={develop.status === 'starting' || !onStart}
-          onClick={() => void onStart?.(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
-            opacity: develop.status === 'starting' ? 0.6 : 1,
-          }}
+        <RepointGate
+          initiativeId={initiativeId}
+          pending={develop.status === 'needs-confirm' && develop.currentFlowId
+            ? { currentFlowId: develop.currentFlowId, targetFlowId: 'forge-develop' }
+            : null}
+          verb="Start development"
+          onConfirm={(fromFlowId) => void onStart?.(initiativeId, fromFlowId)}
+          onCancel={() => onDismissRepoint?.('develop', initiativeId)}
+          barStyle={{ marginTop: 4, alignSelf: 'flex-start' }}
         >
-          {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
-        </button>
+          <button
+            data-action="start-development"
+            data-initiative-id={initiativeId}
+            disabled={develop.status === 'starting' || !onStart}
+            onClick={() => void onStart?.(initiativeId)}
+            style={{
+              marginTop: 4, alignSelf: 'flex-start',
+              color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
+              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+              fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
+              opacity: develop.status === 'starting' ? 0.6 : 1,
+            }}
+          >
+            {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
+          </button>
+        </RepointGate>
       )}
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>

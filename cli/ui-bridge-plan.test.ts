@@ -62,8 +62,25 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-test('POST /api/initiatives/:id/plan: a pending id → 200 enqueued', async () => {
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2). `pendingManifest` defaults to
+// `flow_id: forge-develop`, so every one of these posts is a cross-flow REPOINT
+// — the same one-click theft flows-37 reproduced, through the third door. The
+// route's happy path is unchanged; it now requires the operator's confirmation
+// to reach it, and the unconfirmed case is pinned directly below.
+test('POST /api/initiatives/:id/plan: an unconfirmed cross-flow repoint → 409, manifest byte-unchanged', async () => {
+  const path = join(forgeRoot, '_queue', 'pending', 'INIT-2026-06-13-alpha.md');
+  const before = readFileSync(path, 'utf8');
   const res = await fetch(`${url}/api/initiatives/INIT-2026-06-13-alpha/plan`, { method: 'POST', headers: CSRF });
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { ok: boolean; status: string; currentFlowId?: string };
+  assert.equal(body.ok, false);
+  assert.equal(body.status, 'repoint-requires-confirm');
+  assert.equal(body.currentFlowId, 'forge-develop');
+  assert.equal(readFileSync(path, 'utf8'), before, 'nothing written — the queued manifest is byte-identical');
+});
+
+test('POST /api/initiatives/:id/plan: a pending id → 200 enqueued', async () => {
+  const res = await fetch(`${url}/api/initiatives/INIT-2026-06-13-alpha/plan`, { method: 'POST', headers: CSRF, body: JSON.stringify({ confirmRepointFrom: 'forge-develop' }) });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { ok: boolean; status: string; initiativeId: string; flowId?: string };
   assert.equal(body.ok, true);
@@ -123,6 +140,9 @@ test('POST /api/initiatives/:id/plan: a write failure → 500, detail surfaced',
     const res = await fetch(`${broken.url}/api/initiatives/INIT-2026-06-13-zeta/plan`, {
       method: 'POST',
       headers: CSRF,
+      // W8-A3 amendment: the fixture is `flow_id: forge-develop`, so the write
+      // path is only reached once the repoint is confirmed.
+      body: JSON.stringify({ confirmRepointFrom: 'forge-develop' }),
     });
     assert.equal(res.status, 500);
     const body = (await res.json()) as { ok: boolean; status: string; detail?: string };
@@ -141,4 +161,34 @@ test('POST /api/initiatives/:id/plan: missing CSRF header → 403', async () => 
     headers: { 'content-type': 'application/json' },
   });
   assert.equal(res.status, 403);
+});
+
+// ---------------------------------------------------------------------------
+// W8-A3 review round 4, finding 7: the retired boolean is pinned dead on the
+// flow and develop doors but was not on this one, so re-adding
+// `body['confirmRepoint'] === true` here would have left the suite green.
+// ---------------------------------------------------------------------------
+
+test('POST /api/initiatives/:id/plan: the retired boolean, a non-string, and the WRONG flow all confirm nothing', async () => {
+  const INIT_R4 = 'INIT-2026-06-13-round4';
+  const path = join(forgeRoot, '_queue', 'pending', `${INIT_R4}.md`);
+  writeFileSync(path, pendingManifest(INIT_R4));
+  const before = readFileSync(path, 'utf8');
+  for (const body of [
+    { confirmRepoint: true },
+    { confirmRepoint: 'forge-develop' },
+    { confirmRepointFrom: true },
+    { confirmRepointFrom: 1 },
+    { confirmRepointFrom: '' },
+    { confirmRepointFrom: 'some-other-flow' },
+  ]) {
+    const res = await fetch(`${url}/api/initiatives/${INIT_R4}/plan`, {
+      method: 'POST',
+      headers: CSRF,
+      body: JSON.stringify(body),
+    });
+    assert.equal(res.status, 409, JSON.stringify(body));
+    assert.equal(((await res.json()) as { status: string }).status, 'repoint-requires-confirm');
+  }
+  assert.equal(readFileSync(path, 'utf8'), before, 'manifest byte-identical after every attempt');
 });

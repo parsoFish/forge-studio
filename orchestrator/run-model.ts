@@ -104,6 +104,14 @@ export type Run = {
    * from.
    */
   project?: string;
+  /**
+   * W8-A3 (`flows-23`): the architect session that produced this initiative,
+   * straight off the manifest's `architect_session_id`. The stuck-plan story
+   * from operator note 4 is "I am looking at a queued run and cannot get back
+   * to the conversation that planned it". Absent when the manifest names none
+   * — never fabricated, and never stored anywhere but the manifest.
+   */
+  architectSessionId?: string;
   status: RunStatus;
   origin: 'architect' | 'human-directed' | 'triggered';
   costUsd: number;
@@ -680,6 +688,7 @@ function buildRun(args: {
     initiativeId: manifest.initiative_id,
     initiative,
     project: manifest.project,
+    ...(manifest.architect_session_id ? { architectSessionId: manifest.architect_session_id } : {}),
     status: reconciledStatus,
     origin: validatedOrigin,
     costUsd,
@@ -881,6 +890,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
     initiativeId: manifest.initiative_id,
     initiative: initiativeTitle(manifest),
     project: manifest.project,
+    ...(manifest.architect_session_id ? { architectSessionId: manifest.architect_session_id } : {}),
     status: 'planned',
     origin,
     costUsd: 0,
