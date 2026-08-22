@@ -167,8 +167,7 @@ async function postRun(flowId: string, body: unknown): Promise<{ status: number;
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };
 }
 
-// TEST-WORLD AMENDMENT — W8-A3 (`flows-37` / `forge-chm`), recorded in
-// `_wave8/lanes/A3-ledger.md`. INIT_PENDING is queued under `forge-architect`,
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37` / `forge-chm`). INIT_PENDING is queued under `forge-architect`,
 // so posting it at `forge-develop` is a cross-flow REPOINT — the exact one-click
 // theft flows-37 reproduced. The route's happy path is unchanged, but it now
 // requires the operator's confirmation to reach it. The unconfirmed case is

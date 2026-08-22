@@ -831,13 +831,18 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   all. `schedulerStrip={false}`: the monitor mounts its own strip
                   directly above. */}
               <div style={{ padding: '0 20px 8px', flexShrink: 0 }}>
-                {/* `key` on the run id (review round 1, S2-5): RunControls holds
-                    per-run state (an armed Abandon, a busy flag, the last error
-                    and the last outcome) and returning null from a render does
-                    NOT unmount it, so without this a confirmation armed for run
-                    A stayed on screen after selecting run B — and its post
-                    would have destroyed B, which the operator never armed. */}
-                <RunControls key={view.activeRun?.id ?? 'none'} run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
+                {/* `key` on the INITIATIVE id (review round 1 S2-5, corrected by
+                    round 2 finding 10): RunControls holds per-run state (an armed
+                    Abandon, a busy flag, the last error and the last outcome) and
+                    returning null from a render does NOT unmount it, so without a
+                    key a confirmation armed for run A stayed on screen after
+                    selecting run B — and its post would have destroyed B, which
+                    the operator never armed. It must NOT be `run.id`: that flips
+                    from the initiative id to the cycle id on every claim and back
+                    on every requeue, so a successful resume remounted the
+                    component and threw away the very outcome line flows-49 exists
+                    to show. The initiative id is the stable handle. */}
+                <RunControls key={view.activeRun?.initiativeId ?? 'none'} run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
               </div>
 
               {/* Summary strip */}

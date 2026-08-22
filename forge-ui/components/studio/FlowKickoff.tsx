@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
+import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
 import { startFlowRun } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import type { KickoffCandidate } from '@/lib/kickoff-candidates';
@@ -227,32 +228,16 @@ function GenericKickoff({
         <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>No queued initiatives yet — plan one with the architect first.</span>
       )}
       {pendingRepoint && (
-        <div
-          data-component="repoint-confirm"
-          data-current-flow={pendingRepoint.currentFlowId}
-          data-target-flow={flowId}
-          style={{ width: '100%', marginTop: 6, padding: '8px 10px', border: '1px solid var(--ember)', borderRadius: 4, background: 'rgba(255,160,60,0.08)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
-        >
-          <span style={{ fontSize: 12, color: 'var(--text)' }}>
-            <strong>{pendingRepoint.initiativeId}</strong> is currently queued under{' '}
-            <strong>{pendingRepoint.currentFlowId}</strong>. Running it here moves it off that flow.
-          </span>
-          <button
-            data-action="confirm-repoint"
-            {...disabledAttrs(submitting ? 'Starting the run…' : null)}
-            onClick={() => void submit(pendingRepoint.initiativeId, true)}
-            style={{ ...launchButtonStyle, background: 'var(--ember)', color: '#fff' }}
-          >
-            Move it here and run
-          </button>
-          <button
-            data-action="cancel-repoint"
-            onClick={() => setPendingRepoint(null)}
-            style={{ fontSize: 12, padding: '3px 12px', background: 'transparent', color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer' }}
-          >
-            Cancel
-          </button>
-        </div>
+        <RepointConfirmBar
+          initiativeId={pendingRepoint.initiativeId}
+          currentFlowId={pendingRepoint.currentFlowId}
+          targetFlowId={flowId}
+          verb="Running it here"
+          busy={submitting}
+          onConfirm={() => void submit(pendingRepoint.initiativeId, true)}
+          onCancel={() => setPendingRepoint(null)}
+          style={{ width: '100%', marginTop: 6 }}
+        />
       )}
       {result?.kind === 'error' && (
         <span data-kickoff-result="error" style={{ fontSize: 12, color: 'var(--red)', width: '100%' }}>{result.message}</span>

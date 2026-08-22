@@ -31,7 +31,8 @@ import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { PageHeader } from '@/components/StudioPage';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
-import { RoadmapCanvas } from '@/components/studio/RoadmapCanvas';
+import { RoadmapCanvas, type DevelopCardState, type PlanCardState } from '@/components/studio/RoadmapCanvas';
+import { developStateFromResult, planStateFromResult } from '@/lib/roadmap-card-state';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -995,33 +996,10 @@ function ProjectOnboardForm() {
 // plan-everything-before-kickoff: per-card develop state, lifted to RoadmapView
 // so the batch "start eligible" button and individual card buttons share one
 // source of truth (both funnel through the same startDevelopment() call).
-type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null; flowId?: string };
-
-/** Map a batch item result onto the per-card develop state. W7-A3
- *  (projects-32): keep the enqueue's flowId so the card links the run. */
-function developStateFromResult(
-  item: { ok: boolean; status?: string; detail?: string; flowId?: string } | undefined,
-  requestError: string | undefined,
-): DevelopCardState {
-  return item?.ok
-    ? { status: 'started', error: null, flowId: item.flowId }
-    : { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
-}
-
-// R4-11-F2: per-card Plan-trigger state, same shape/lift pattern as
-// DevelopCardState above. `planned` (whether `workItems` exists) is server
-// truth from the roadmap fetch, not tracked here — this only tracks the
-// transient client-side request lifecycle of clicking "Plan".
-type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null; flowId?: string };
-
-/** Map a single plan-dispatch result onto the per-card plan state (W7-A3:
- *  flowId kept so the card links the run, projects-32). */
-function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
-  return result.status === 'enqueued'
-    ? { status: 'started', error: null, flowId: result.flowId }
-    : { status: 'error', error: result.detail ?? result.status };
-}
-
+// W8-A3: `DevelopCardState`/`PlanCardState` are imported from RoadmapCanvas
+// rather than re-declared here — two hand-kept copies of one shape is the drift
+// this lane is about, and adding `needs-confirm` to only one of them is exactly
+// how it bites.
 /**
  * shc review finding 1 (BLOCKER, silent-default-as-operator-intent) fix: the
  * develop-start ceiling field's SEND decision. `fieldValue`
@@ -1118,7 +1096,7 @@ function RoadmapView({
     [initiatives, developByInitiative],
   );
 
-  const startOne = useCallback(async (initiativeId: string): Promise<void> => {
+  const startOne = useCallback(async (initiativeId: string, confirmRepoint = false): Promise<void> => {
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
     // shc review finding 1: a single-id start carries the operator's ceiling
     // override ONLY when the operator has explicitly touched the field
@@ -1129,7 +1107,7 @@ function RoadmapView({
     // field also degrades to "no override" — the same "nothing sent rather
     // than a round-tripped 400" convention the agent-run kickoff field uses.
     const ceilingToSend = resolveDevelopStartCeilingToSend(ceilingFieldValue, ceilingTouched);
-    const r = await startDevelopment([initiativeId], ceilingToSend);
+    const r = await startDevelopment([initiativeId], ceilingToSend, { confirmRepoint });
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
@@ -1140,12 +1118,24 @@ function RoadmapView({
   // forge-architect (decompose) flow for a WI-less initiative. Refetches
   // afterwards so `workItems` (and therefore the lock) picks up the new state
   // once the scheduler actually decomposes it.
-  const planOne = useCallback(async (initiativeId: string): Promise<void> => {
+  const planOne = useCallback(async (initiativeId: string, confirmRepoint = false): Promise<void> => {
     setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'planning', error: null } }));
-    const result = await planInitiative(initiativeId);
+    const result = await planInitiative(initiativeId, { confirmRepoint });
     setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: planStateFromResult(result) }));
     await onRefresh();
   }, [onRefresh]);
+
+  // W8-A3 (`flows-37`, review round 2): dismissing a repoint confirmation must
+  // DISPATCH NOTHING — the first cut's cancel handler re-posted the same
+  // unconfirmed request, which simply re-armed the panel. It clears the card's
+  // transient state and leaves the initiative exactly where it is.
+  const dismissRepoint = useCallback((kind: 'plan' | 'develop', initiativeId: string): void => {
+    if (kind === 'plan') {
+      setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'idle', error: null } }));
+    } else {
+      setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'idle', error: null } }));
+    }
+  }, []);
 
   const startEligible = useCallback(async (): Promise<void> => {
     const ids = eligible.map((i) => i.initiativeId);
@@ -1359,6 +1349,7 @@ function RoadmapView({
           planByInitiative={planByInitiative}
           onStart={startOne}
           onPlan={planOne}
+          onDismissRepoint={dismissRepoint}
           onRecoveryDone={onRefresh}
           onOpenDemo={onOpenDemo}
         />

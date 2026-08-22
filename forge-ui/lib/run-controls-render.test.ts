@@ -99,9 +99,13 @@ test('flows-23 (S3-6): the scheduler strip on a run page claims NO queue count �
   // `data-scheduler-queued="1"` regardless of the real queue — a fabricated
   // number on a documented harness attribute, i.e. this change's own dominant
   // defect class inside the change.
+  // KILLS both cuts: the hard-coded `1` (round 1, S3-6) AND the fabricated `0`
+  // the first fix left behind (round 2, finding 5) — SchedulerCard defaulted the
+  // prop and emitted the attribute unconditionally, so a surface that had never
+  // read the queue still asserted a number, and the fix's own test PINNED it.
+  // Absent is a different claim from zero.
   const html = markup(RunControls, { run: run('planned') });
-  expect(html, 'no count was supplied, so none may be asserted').not.toContain('data-scheduler-queued="1"');
-  expect(html).toContain('data-scheduler-queued="0"'); // SchedulerCard's own "no count supplied" default
+  expect(html, 'nothing read the queue, so no count may be asserted at all').not.toMatch(/data-scheduler-queued=/);
   // A caller that DOES know the real number passes it and it is carried verbatim.
   expect(markup(RunControls, { run: run('planned'), queuedCount: 12 })).toContain('data-scheduler-queued="12"');
 });

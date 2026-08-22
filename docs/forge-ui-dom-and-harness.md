@@ -2013,13 +2013,26 @@ inventory rather than one shared page-level contract:
   with the same in-DOM confirmation the flow monitor uses:
   `[data-component="repoint-confirm"][data-current-flow][data-target-flow]` +
   `button[data-action="confirm-repoint"|"cancel-repoint"]`, naming the flow of
-  origin the server reported; changing either select clears it. **Start
-  development deliberately has no confirmation**: it posts a BATCH, so a
-  "confirm everything" button would rubber-stamp N moves the surface cannot
-  show. A refused id is named in the outcome line with the way to move it
-  deliberately (that flow's own monitor). The develop hand-off is auto-authorised
+  origin the server reported; changing either select clears it, and a CONFIRMED
+  dispatch posts the pair the panel NAMED rather than re-deriving it (the
+  defaults move under a refetch). **Start development deliberately has no
+  confirmation here**: it posts a BATCH, so a "confirm everything" button would
+  rubber-stamp N moves the surface cannot show. A refused id is named in the
+  outcome line, pointing at the Roadmap tab's own per-card control, which posts
+  ONE named initiative and does ask. The develop hand-off is auto-authorised
   only from `forge-architect` — see `enqueue-develop-run.ts`'s
   `DEVELOP_HANDOFF_SOURCE_FLOWS`.
+
+  **The roadmap card (`InitiativeDetail`) asks too.** Its `Plan →` and
+  `Start development →` controls each dispatch one named initiative, so a refusal
+  renders `[data-component="repoint-confirm"]` rather than a plain error under a
+  "retry" button that would re-post the identical unconfirmed request. All four
+  repointing surfaces render the SAME component
+  (`components/studio/RepointConfirmBar.tsx`) with the same contract —
+  `[data-component="repoint-confirm"][data-initiative-id][data-current-flow]
+  [data-target-flow]` + `button[data-action="confirm-repoint"|"cancel-repoint"]` —
+  so one selector drives every one of them. `POST /api/develop/start` accepts
+  `confirmRepoint` for that per-card control; the batch button never sends it.
   Ids whose develop dispatch already came back ok THIS SESSION are excluded
   from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
   review F7 — the queue keeps them `pending` until the scheduler claims, so

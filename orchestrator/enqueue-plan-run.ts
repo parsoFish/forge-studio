@@ -146,6 +146,14 @@ export function enqueuePlanRun(
   //
   // `forge-architect` is the no-op case (already the target) and falls through
   // untouched; anything else needs the operator's answer.
+  //
+  // PARITY IS DELIBERATELY PARTIAL, and this is the honest statement of it
+  // (review round 2 finding 7 corrected an earlier claim of full parity):
+  // `enqueueFlowRun` additionally refuses an operator enqueue sourced from
+  // `_queue/done` (`already-done`). This module does NOT, on purpose — re-planning
+  // a shipped initiative re-decomposes it, which parallels re-develop and is
+  // pinned by this module's own test. The repoint rule is what crosses; the
+  // done-source rule is not, and the two modules differ there by design.
   const currentFlowId = manifest.flow_id;
   if (!opts.confirmRepoint && currentFlowId && currentFlowId !== PLAN_FLOW_ID) {
     return {

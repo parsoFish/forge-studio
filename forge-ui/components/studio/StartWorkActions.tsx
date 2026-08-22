@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { planInitiative, startDevelopment, startFlowRun, type ProjectRoadmap } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import { deriveStartWorkState } from '@/lib/start-work-view';
+import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
 
 /**
  * StartWorkActions (W7-B6, operator note 11 / orch-02, projects-18/-20) —
@@ -70,17 +71,23 @@ export function StartWorkActions({
   const chosenFlow = flowId || state.runnableFlows[0]?.id || '';
   const chosenInitiative = initiativeId || state.runCandidates[0]?.initiativeId || '';
 
-  async function onPlan(confirmRepoint = false): Promise<void> {
-    const target = state.unplannedReady[0];
-    if (!target || busy) return;
+  async function onPlan(confirm?: { initiativeId: string }): Promise<void> {
+    // W8-A3 (review round 2 finding 3): a CONFIRMED dispatch posts the id the
+    // confirmation NAMED, never a freshly re-derived one. `unplannedReady[0]`
+    // moves the moment the daemon claims something or the roadmap refetches, so
+    // the first cut could confirm a panel reading INIT-A and repoint INIT-B —
+    // flows-37's exact harm, re-created inside the confirmation built to
+    // prevent it.
+    const initiative = confirm?.initiativeId ?? state.unplannedReady[0]?.initiativeId;
+    if (!initiative || busy) return;
     setBusy('plan');
     setOutcome(null);
     try {
-      const r = await planInitiative(target.initiativeId, { confirmRepoint });
+      const r = await planInitiative(initiative, { confirmRepoint: confirm !== undefined });
       if (r.status === 'repoint-requires-confirm') {
         setPendingRepoint({
           kind: 'plan',
-          initiativeId: target.initiativeId,
+          initiativeId: initiative,
           currentFlowId: r.currentFlowId ?? 'another flow',
           targetFlowId: 'forge-architect',
         });
@@ -89,7 +96,7 @@ export function StartWorkActions({
       setPendingRepoint(null);
       setOutcome(
         r.status === 'enqueued'
-          ? { kind: 'ok', text: `planning ${target.initiativeId} enqueued` }
+          ? { kind: 'ok', text: `planning ${initiative} enqueued` }
           : { kind: 'error', text: r.detail ?? r.status },
       );
       await onChanged();
@@ -126,7 +133,7 @@ export function StartWorkActions({
           : refused.length > 0
             ? {
                 kind: 'error',
-                text: `${refused.map((x) => x.initiativeId).join(', ')} ${refused.length === 1 ? 'is' : 'are'} queued under another flow — start ${refused.length === 1 ? 'it' : 'them'} from that flow's monitor, which names the flow being moved from.`,
+                text: `${refused.map((x) => x.initiativeId).join(', ')} ${refused.length === 1 ? 'is' : 'are'} queued under another flow — open ${refused.length === 1 ? 'it' : 'them'} on the Roadmap tab and use that card's own Start development, which names the flow being moved from and asks first.`,
               }
             : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
       );
@@ -136,25 +143,30 @@ export function StartWorkActions({
     }
   }
 
-  async function onRunFlow(confirmRepoint = false): Promise<void> {
-    if (!chosenFlow || !chosenInitiative || busy) return;
+  async function onRunFlow(confirm?: { flowId: string; initiativeId: string }): Promise<void> {
+    // Review round 2 finding 3, as above: the confirmed dispatch uses the PAIR
+    // the panel named. `chosenFlow`/`chosenInitiative` fall back to
+    // `runnableFlows[0]`/`runCandidates[0]`, which move under a refetch.
+    const flow = confirm?.flowId ?? chosenFlow;
+    const initiative = confirm?.initiativeId ?? chosenInitiative;
+    if (!flow || !initiative || busy) return;
     setBusy('run-flow');
     setOutcome(null);
     try {
-      const r = await startFlowRun(chosenFlow, chosenInitiative, { confirmRepoint });
+      const r = await startFlowRun(flow, initiative, { confirmRepoint: confirm !== undefined });
       if (r.status === 'repoint-requires-confirm') {
         setPendingRepoint({
           kind: 'run-flow',
-          initiativeId: chosenInitiative,
+          initiativeId: initiative,
           currentFlowId: r.currentFlowId ?? 'another flow',
-          targetFlowId: chosenFlow,
+          targetFlowId: flow,
         });
         return;
       }
       setPendingRepoint(null);
       setOutcome(
         r.ok
-          ? { kind: 'ok', text: `${chosenInitiative} enqueued onto ${chosenFlow}`, href: `/flows/${encodeURIComponent(chosenFlow)}/run/${encodeURIComponent(chosenInitiative)}` }
+          ? { kind: 'ok', text: `${initiative} enqueued onto ${flow}`, href: `/flows/${encodeURIComponent(flow)}/run/${encodeURIComponent(initiative)}` }
           : { kind: 'error', text: r.error ?? r.status ?? 'failed to start the flow run' },
       );
       await onChanged();
@@ -273,35 +285,17 @@ export function StartWorkActions({
       </Link>
 
       {pendingRepoint && (
-        <span
-          data-component="repoint-confirm"
-          data-current-flow={pendingRepoint.currentFlowId}
-          data-target-flow={pendingRepoint.targetFlowId}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11.5, padding: '4px 8px', border: '1px solid var(--ember)', borderRadius: 'var(--radius-sm)' }}
-        >
-          <span>
-            <strong>{pendingRepoint.initiativeId}</strong> is queued under{' '}
-            <strong>{pendingRepoint.currentFlowId}</strong>; this moves it to{' '}
-            <strong>{pendingRepoint.targetFlowId}</strong>.
-          </span>
-          <button
-            className="btn btn-sm"
-            data-action="confirm-repoint"
-            disabled={busy !== null}
-            onClick={() => void (pendingRepoint.kind === 'plan' ? onPlan(true) : onRunFlow(true))}
-            style={groupBtn}
-          >
-            Move it and start
-          </button>
-          <button
-            className="btn btn-sm"
-            data-action="cancel-repoint"
-            onClick={() => setPendingRepoint(null)}
-            style={groupBtn}
-          >
-            Cancel
-          </button>
-        </span>
+        <RepointConfirmBar
+          initiativeId={pendingRepoint.initiativeId}
+          currentFlowId={pendingRepoint.currentFlowId}
+          targetFlowId={pendingRepoint.targetFlowId}
+          verb={pendingRepoint.kind === 'plan' ? 'Plan' : 'Run'}
+          busy={busy !== null}
+          onConfirm={() => void (pendingRepoint.kind === 'plan'
+            ? onPlan({ initiativeId: pendingRepoint.initiativeId })
+            : onRunFlow({ flowId: pendingRepoint.targetFlowId, initiativeId: pendingRepoint.initiativeId }))}
+          onCancel={() => setPendingRepoint(null)}
+        />
       )}
 
       {outcome && (

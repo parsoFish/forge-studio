@@ -144,8 +144,7 @@ test('F5: enqueuePlanRun and promoteManifests write state-equivalent decompose-t
       join(queueRootB, 'done', `${INITIATIVE_ID}.md`),
       serializeManifest({ ...doneManifest, flow_id: 'forge-develop', phase: 'done' }),
     );
-    // TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2), recorded in
-    // `_wave8/lanes/A3-ledger.md`: the fixture is a `forge-develop` manifest, so
+    // TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2): the fixture is a `forge-develop` manifest, so
     // re-planning it is a cross-flow repoint and now needs the operator's answer.
     // The state-equivalence this test exists to prove is unchanged.
     const planResult = enqueuePlanRun(INITIATIVE_ID, { queueRoot: queueRootB, confirmRepoint: true });

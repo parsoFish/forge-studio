@@ -21,7 +21,11 @@
  * DOM contract:
  *   [data-component="scheduler-card"][data-scheduler-status="running|paused|stopping|stopped|unknown"]
  *     (`stopping` = W7-FIX-A3: SIGTERM sent, pid alive, draining — no actions)
- *     [data-scheduler-variant="card|strip"][data-scheduler-ready][data-scheduler-queued]
+ *     [data-scheduler-variant="card|strip"][data-scheduler-ready]
+ *     [data-scheduler-queued]  — ONLY when the mounting surface actually read the
+ *       queue. W8-A3 review round 2: it used to default to 0 and always render,
+ *       so a surface that had never read the queue still asserted a number.
+ *       Absent means "not read here", which is a different claim from "zero".
  *     [data-scheduler-pid]  (running only)   [data-scheduler-busy="true"] (while acting)
  *   button[data-action="scheduler-start|scheduler-pause|scheduler-resume|scheduler-stop"]
  *   [data-scheduler-error]  (last action error, verbatim)
@@ -70,7 +74,7 @@ export type SchedulerCardViewProps = {
 export function SchedulerCardView({
   status,
   ready,
-  queuedCount = 0,
+  queuedCount,
   busy = false,
   error = null,
   variant = 'card',
@@ -87,7 +91,7 @@ export function SchedulerCardView({
       data-scheduler-status={state}
       data-scheduler-variant={variant}
       data-scheduler-ready={ready ? 'true' : 'false'}
-      data-scheduler-queued={queuedCount}
+      {...(queuedCount !== undefined ? { 'data-scheduler-queued': queuedCount } : {})}
       {...(state === 'running' && status?.pid ? { 'data-scheduler-pid': status.pid } : {})}
       {...(busy ? { 'data-scheduler-busy': 'true' } : {})}
       aria-label="Scheduler"

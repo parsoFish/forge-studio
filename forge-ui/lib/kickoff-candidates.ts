@@ -32,7 +32,7 @@ import type { Run } from './studio-client';
  * exist — while the server, which sees the undefined `manifest.flow_id`, would
  * call it no repoint at all (adversarial review round 1, S3-8).
  */
-const NO_FLOW_SENTINEL = 'unknown';
+export const NO_FLOW_SENTINEL = 'unknown';
 
 /** An initiative the generic kickoff can enqueue onto a flow — derived from
  *  the runs list (one run per queued manifest), never invented. */

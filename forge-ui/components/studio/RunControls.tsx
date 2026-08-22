@@ -47,7 +47,7 @@ import { useState } from 'react';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { resumeRun, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
-import { armedControl, deriveRunControls, intentForControlClick, runAwaitsScheduler, type RunControl, type RunControlId } from '@/lib/run-controls';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, type RunControl, type RunControlId } from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -83,12 +83,14 @@ export function RunControls({
   onActed?: (initiativeId: string) => void;
   /**
    * The REAL number of queued runs, when the mounting surface knows it. Omitted
-   * where it does not: the run detail page reads one run and never the queue, and
-   * the first cut hard-coded `1` here, which made every run page state "1 queued
-   * run will not start until the scheduler runs" and `data-scheduler-queued="1"`
-   * regardless of the real queue (adversarial review round 1, S3-6 — this
-   * change's own dominant defect class, inside the change). Omitted means the
-   * scheduler card states no count at all rather than a made-up one.
+   * where it does not: the run detail page reads one run and never the queue.
+   *
+   * The first cut hard-coded `1` here (review round 1, S3-6) — every run page
+   * then stated "1 queued run will not start until the scheduler runs" and
+   * `data-scheduler-queued="1"` regardless of the real queue. Round 2 caught the
+   * fix swapping that for a fabricated `0`, because `SchedulerCard` defaulted
+   * the prop and rendered the attribute unconditionally; the attribute is now
+   * OMITTED when nothing read the queue, which is a different claim from zero.
    */
   queuedCount?: number;
   /**
@@ -137,6 +139,11 @@ export function RunControls({
 
   async function act(control: RunControl): Promise<void> {
     if (busy !== null) return;
+    // Defence in depth (review round 2 finding 8): the rule that a destructive
+    // act needs an arming click lives HERE too, not only in the click handler's
+    // ternary below. A future third caller of `act`, or a revert of that
+    // ternary, cannot post an unconfirmed Abandon through this function.
+    if (!mayPostControl(control, pendingDestructive)) return;
     setBusy(control.id);
     setError(null);
     setDone(null);
@@ -184,6 +191,7 @@ export function RunControls({
             data-action={c.action}
             data-run-id={run.id}
             data-initiative-id={initiativeId}
+            data-control-intent={intentForControlClick(c)}
             {...disabledAttrs(busy !== null ? `${busy} in progress…` : null)}
             onClick={() => (intentForControlClick(c) === 'arm' ? arm(c) : void act(c))}
             style={{ ...buttonStyle, background: c.destructive ? 'var(--red, #b62324)' : 'var(--ember)', minWidth: 92 }}

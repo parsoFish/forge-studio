@@ -210,7 +210,10 @@ export function FlowRunDetail({
               resume/requeue/abandon with what each does spelled out, a queued
               run offers the scheduler that is the only thing able to start it,
               and anything else renders nothing. */}
-          <RunControls key={run?.id ?? runId} run={run} />
+          {/* Keyed on the INITIATIVE id, not `run.id` — see the flow monitor's
+              call site: `run.id` flips on every claim and requeue, which would
+              remount this and discard the outcome line on success. */}
+          <RunControls key={run?.initiativeId ?? runId} run={run} />
           <RunTimeline
             rows={rows}
             expandedNodeId={expandedNodeId}

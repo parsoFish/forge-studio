@@ -62,8 +62,7 @@ after(async () => {
   if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
 });
 
-// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2), recorded in
-// `_wave8/lanes/A3-ledger.md`. `pendingManifest` defaults to
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2). `pendingManifest` defaults to
 // `flow_id: forge-develop`, so every one of these posts is a cross-flow REPOINT
 // — the same one-click theft flows-37 reproduced, through the third door. The
 // route's happy path is unchanged; it now requires the operator's confirmation

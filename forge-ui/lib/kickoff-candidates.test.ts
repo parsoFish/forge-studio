@@ -9,7 +9,7 @@
  * of `_queue/done` and re-ran it. Only genuinely startable (queued) runs
  * are candidates; finished/failed/active/gated never are.
  *
- * TEST-WORLD AMENDMENT — W8-A3, recorded in `_wave8/lanes/A3-ledger.md`:
+ * TEST-WORLD AMENDMENT — W8-A3:
  *
  *  - `flows-37` (S1): `deriveKickoffCandidates` now takes the flow being
  *    VIEWED, and every candidate carries the flow it is queued under plus
@@ -22,8 +22,10 @@
  *    rendered markup instead of against a hand-written enumeration.
  */
 import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-import { deriveKickoffCandidates } from './kickoff-candidates.ts';
+import { deriveKickoffCandidates, NO_FLOW_SENTINEL } from './kickoff-candidates.ts';
 import type { Run } from './studio-client.ts';
 
 const VIEWED = 'forge-develop';
@@ -115,4 +117,20 @@ test('flows-37: a run reporting no flow of its own has nothing to be taken from 
   expect(deriveKickoffCandidates(empty, 'retro-flow')[0]).toEqual(
     { initiativeId: 'INIT-2026-08-18-beta', project: null, currentFlowId: null, isRepoint: false },
   );
+});
+
+// ---- W8-A3 (review round 2, finding 9): the client copy of a server constant --
+
+test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', () => {
+  // KILLS: silent drift. `lib/kickoff-candidates.ts` re-declares
+  // `orchestrator/run-model.ts`'s module-private `FALLBACK_FLOW_ID` client-side
+  // (this repo's re-declare convention for orchestrator constants), and the only
+  // thing linking them was a comment. Renaming the server constant's VALUE would
+  // silently re-open the UI/server disagreement about a flowless manifest that
+  // round 1's S3-8 closed — the UI would offer a confirmation to move an
+  // initiative off a flow the server does not think it is on.
+  const src = readFileSync(resolve(__dirname, '..', '..', 'orchestrator', 'run-model.ts'), 'utf8');
+  const match = /const FALLBACK_FLOW_ID = '([^']+)'/.exec(src);
+  expect(match, 'FALLBACK_FLOW_ID must still be declared in orchestrator/run-model.ts').not.toBeNull();
+  expect(NO_FLOW_SENTINEL).toBe(match![1]);
 });

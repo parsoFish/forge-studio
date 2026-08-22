@@ -1321,7 +1321,7 @@ triggers: []
 });
 
 // ---------------------------------------------------------------------------
-// W8-A3 (`flows-23`) — ADDITION, recorded in `_wave8/lanes/A3-ledger.md`.
+// W8-A3 (`flows-23`) — ADDITION.
 //
 // `architect_session_id` is on the manifest and has been since the architect
 // started writing initiatives, but the run model never carried it, so the run

@@ -60,9 +60,11 @@ export type EnqueueFlowRunResult = {
   /** Present on `enqueued` — the target flow. */
   flowId?: string;
   /**
-   * Present on `repoint-requires-confirm` — the flow the initiative is queued
-   * under TODAY, so the caller can name it instead of asking the operator to
-   * confirm something the UI never disclosed (the whole of `flows-37`).
+   * The flow the initiative is queued under TODAY. Present on
+   * `repoint-requires-confirm`, so the caller can name it instead of asking the
+   * operator to confirm something the UI never disclosed (the whole of
+   * `flows-37`) — and on `not-planned`, whose prescribed remediation (plan it)
+   * is itself a cross-flow repoint when the initiative belongs elsewhere.
    */
   currentFlowId?: string;
   detail?: string;
@@ -181,7 +183,15 @@ export function enqueueFlowRun(
     return {
       status: 'not-planned',
       initiativeId,
-      detail: 'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first',
+      // Review round 2 finding 6: the reorder below put this check first, which
+      // is right — but it must not swallow WHICH flow owns the initiative. The
+      // remediation it prescribes (plan it) is itself a cross-flow repoint when
+      // the initiative belongs to another flow, so the caller needs both facts
+      // in one answer.
+      ...(manifest.flow_id ? { currentFlowId: manifest.flow_id } : {}),
+      detail:
+        'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first' +
+        (manifest.flow_id && manifest.flow_id !== flowId ? ` (it is currently queued under "${manifest.flow_id}")` : ''),
     };
   }
 

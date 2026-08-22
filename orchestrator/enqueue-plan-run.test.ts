@@ -144,8 +144,7 @@ test('enqueuePlanRun: a path-traversal id never escapes the queue dir', () => {
   });
 });
 
-// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2), recorded in
-// `_wave8/lanes/A3-ledger.md`: the fixture is a forge-develop manifest, so a
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37`, review round 1 S2-2): the fixture is a forge-develop manifest, so a
 // re-plan of it is a cross-flow repoint and now needs the operator's answer.
 // The re-plan behaviour this test exists to protect is unchanged.
 test('enqueuePlanRun: a done initiative is re-planned (re-plan parallels re-develop, on a confirmed repoint)', () => {

@@ -625,8 +625,16 @@ export type StartDevelopmentResult = {
  * initiative's manifest-derived ceiling untouched, exactly as before this
  * field existed.
  */
-export async function startDevelopment(initiativeIds: string[], costCeilingUsd?: number): Promise<StartDevelopmentResult> {
-  const body = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
+export async function startDevelopment(
+  initiativeIds: string[],
+  costCeilingUsd?: number,
+  /** W8-A3 (`flows-37`): the operator's answer to a repoint. Only the per-card,
+   *  single-initiative control ever sends it — the batch button deliberately
+   *  never does (it cannot show what it would be confirming). */
+  opts: { confirmRepoint?: boolean } = {},
+): Promise<StartDevelopmentResult> {
+  const base = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
+  const body = opts.confirmRepoint === true ? { ...base, confirmRepoint: true } : base;
   const r = await bridgePost('/api/develop/start', body);
   return {
     ok: r.ok,

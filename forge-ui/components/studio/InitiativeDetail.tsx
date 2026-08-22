@@ -40,6 +40,7 @@ import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
+import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -56,10 +57,15 @@ export type InitiativeDetailProps = {
   runCycleIds: string[];
   onOpenDemo?: () => void;
   plan: PlanCardState;
-  onPlan?: (initiativeId: string) => void | Promise<void>;
+  /** W8-A3 (`flows-37`): `confirmRepoint` is the operator's answer to a
+   *  cross-flow move, sent only from the confirmation this card renders. */
+  onPlan?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
   canStartDevelopment: boolean;
   develop: DevelopCardState;
-  onStart?: (initiativeId: string) => void | Promise<void>;
+  onStart?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
+  /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation without
+   *  dispatching anything — resets that card's transient state to idle. */
+  onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
   attempt: AttemptInfo;
   recoveryDetail: RecoveryInspect | null;
   recoveryBusy: boolean;
@@ -87,6 +93,7 @@ export function InitiativeDetail({
   canStartDevelopment,
   develop,
   onStart,
+  onDismissRepoint,
   attempt,
   recoveryDetail,
   recoveryBusy,
@@ -215,6 +222,22 @@ export function InitiativeDetail({
       {unplanned && plan.status === 'error' && plan.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
       )}
+      {/* W8-A3 (flows-37, review round 2 finding 1): planning an initiative
+          queued under another flow MOVES it off that flow. This card names one
+          initiative, so it can ask — and must: without this the refusal
+          rendered as a plain error under a "retry — plan" button that re-posted
+          the identical unconfirmed request forever. */}
+      {unplanned && plan.status === 'needs-confirm' && (
+        <RepointConfirmBar
+          initiativeId={initiativeId}
+          currentFlowId={plan.currentFlowId ?? 'another flow'}
+          targetFlowId="forge-architect"
+          verb="Plan"
+          onConfirm={() => void onPlan?.(initiativeId, true)}
+          onCancel={() => onDismissRepoint?.('plan', initiativeId)}
+          style={{ marginTop: 4, alignSelf: 'flex-start' }}
+        />
+      )}
       {/* W7-A3 (projects-16/32): the enqueue outcome, honest about the
           scheduler and linking the run the enqueue actually returned. */}
       {unplanned && plan.status === 'started' && (
@@ -241,6 +264,22 @@ export function InitiativeDetail({
       )}
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
+      )}
+      {/* W8-A3 (flows-37, review round 2 finding 2): the per-card start posts
+          exactly ONE named initiative, so the "no confirmation on a batch"
+          argument does not apply to it — and before this the route could not be
+          confirmed through at all, so the refusal was an instruction the
+          product could not satisfy. */}
+      {canStartDevelopment && develop.status === 'needs-confirm' && (
+        <RepointConfirmBar
+          initiativeId={initiativeId}
+          currentFlowId={develop.currentFlowId ?? 'another flow'}
+          targetFlowId="forge-develop"
+          verb="Start development"
+          onConfirm={() => void onStart?.(initiativeId, true)}
+          onCancel={() => onDismissRepoint?.('develop', initiativeId)}
+          style={{ marginTop: 4, alignSelf: 'flex-start' }}
+        />
       )}
       {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
           the develop flow does; and the claim + run link are real. */}

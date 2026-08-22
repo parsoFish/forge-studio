@@ -108,3 +108,17 @@ export function armedControl(controls: RunControl[], armedId: RunControlId | nul
   if (armedId === null) return null;
   return controls.find((c) => c.id === armedId) ?? null;
 }
+
+/**
+ * May a POST for `control` proceed, given what is currently armed?
+ *
+ * Review round 2 finding 8: after round 1 the "never post without a
+ * confirmation" rule lived ONLY in the call site's `onClick` ternary — the
+ * inverse of the discipline this same change enforces on the enqueue ("the rule
+ * lives on the primitive, not on the route"). It lives here now as well, so a
+ * third call site of the poster, or a revert of that ternary, cannot abandon a
+ * run without the operator having armed it.
+ */
+export function mayPostControl(control: RunControl, armedId: RunControlId | null): boolean {
+  return !control.destructive || armedId === control.id;
+}

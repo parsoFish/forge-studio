@@ -112,8 +112,7 @@ test('enqueueFlowRun: ready-for-review with the SAME flow_id as the target → a
   });
 });
 
-// TEST-WORLD AMENDMENT — W8-A3 (`flows-37` / `forge-chm`), recorded in
-// `_wave8/lanes/A3-ledger.md`. This test pinned the DIFFERENT-flow hand-off as
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37` / `forge-chm`). This test pinned the DIFFERENT-flow hand-off as
 // an unconditional fall-through, which is precisely the unconditional repoint
 // flows-37 reproduced. The fall-through itself is still correct — a
 // ready-for-review manifest from another flow IS runnable — but it is now a

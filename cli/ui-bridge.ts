@@ -2256,11 +2256,21 @@ async function handleHttp(
         costCeilingUsd = v;
       }
 
+      // W8-A3 (`flows-37`, review round 2 finding 2): the operator's answer to a
+      // repoint, forwarded like the other two doors. Without it NO client could
+      // confirm through this route at all — the per-card "Start development"
+      // control posts exactly ONE named initiative and was left telling the
+      // operator to "confirm the repoint" through a route with no way to.
+      // `=== true`, never truthiness. The roadmap's BATCH button deliberately
+      // never sends it: a confirm-everything on N moves the surface cannot show
+      // is the rubber-stamp shape this lane exists to remove.
+      const developConfirmRepoint = (body as Record<string, unknown>)?.['confirmRepoint'] === true;
+
       const results = initiativeIds.map((initiativeId) => {
         // Per-item isolation: a throw on one item must not 500 away the
         // results of items whose side effects already applied.
         try {
-          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
+          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepoint: developConfirmRepoint });
           if (result.status === 'enqueued' && costCeilingUsd !== undefined) {
             // Single-id-only invariant (checked above) means this fires at
             // most once per request — stamp only when the operator supplied

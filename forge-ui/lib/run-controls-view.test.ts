@@ -27,7 +27,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, runAwaitsScheduler, RUN_CONTROL_ACTIONS } from './run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, RUN_CONTROL_ACTIONS } from './run-controls.ts';
 import type { Run, RunStatus } from './studio-client.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
@@ -124,4 +124,20 @@ test('flows-28 (S3-10): the armed control resolves against what is CURRENTLY off
   expect(armedControl(failed, null)).toBeNull();
   // The same armed id against a run that no longer offers it.
   expect(armedControl(deriveRunControls(run('complete')), 'abandon')).toBeNull();
+});
+
+test('flows-28 (review round 2, S3-8): the poster itself refuses an unconfirmed destructive act', () => {
+  // KILLS: the rule living ONLY in the call site's onClick ternary. Round 2's
+  // point was that a third caller of the poster — or a revert of that one
+  // line — would abandon a run with no confirmation and no test would notice.
+  const controls = deriveRunControls(run('failed'));
+  const abandon = controls.find((c) => c.id === 'abandon')!;
+  const resume = controls.find((c) => c.id === 'resume')!;
+
+  expect(mayPostControl(abandon, null), 'nothing armed → refuse').toBe(false);
+  expect(mayPostControl(abandon, 'requeue'), 'a DIFFERENT control armed → refuse').toBe(false);
+  expect(mayPostControl(abandon, 'abandon'), 'armed by its own confirmation → allow').toBe(true);
+  // Non-destructive controls are never gated on an arming click.
+  expect(mayPostControl(resume, null)).toBe(true);
+  expect(mayPostControl(resume, 'abandon')).toBe(true);
 });
