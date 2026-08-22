@@ -750,14 +750,49 @@ inventory rather than one shared page-level contract:
   {initiativeId}` (`enqueueFlowRun` onto THIS flow; it used to post the flow
   id as an initiativeId — 400, silently; W7-FIX-A3: an initiative whose
   manifest sits in `_queue/done` is refused 409 `already-done` — a shipped
-  initiative is never yanked out and re-run from the picker); the outcome renders
+  initiative is never yanked out and re-run from the picker). **W8-A3
+  (`flows-37`, S1):** every planned initiative on disk carries the flow that
+  produced it, so starting one here MOVES it off that flow — the picker used to
+  do that silently on one click. Each `option` now carries
+  `data-repoint="true"|"false"` (derived per candidate against the flow being
+  viewed, `lib/kickoff-candidates.ts`) and, when true, names the flow of origin
+  in its label. Starting a repoint renders
+  `[data-component="repoint-confirm"][data-current-flow][data-target-flow]`
+  with `button[data-action="confirm-repoint"]` /
+  `button[data-action="cancel-repoint"]` and posts **nothing** until confirmed;
+  the confirmation rides to the bridge as `confirmRepoint: true` and the rule
+  itself lives on `enqueueFlowRun`, which answers 409
+  `repoint-requires-confirm` (body carries `currentFlowId`) to any caller that
+  omits it — so the same panel is reached from the server's refusal too. The
+  outcome renders
   `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
   through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
   [data-needs-scheduler-start]` line (`a[data-action="open-kickoff-run"]` to
   the run, and a `strip` SchedulerCard with `[data-action="scheduler-start"]`
   when the daemon is stopped). Clicking Start with nothing picked renders
   `[data-kickoff-result="error"]` and sends nothing. The monitor column also
-  mounts a `strip` SchedulerCard (see Home) above the summary. The summary
+  mounts a `strip` SchedulerCard (see Home) above the summary, and — **W8-A3
+  (`flows-28`/`flows-49`/`flows-23`)** — the shared `RunControls`
+  (`components/studio/RunControls.tsx`, derived by `lib/run-controls.ts` from
+  the run's status alone, so nothing stores which controls a run offers):
+  `[data-section="run-controls"][data-run-status][data-run-id][data-control-count]`.
+  A **failed** run offers all three actions the bridge implements —
+  `button[data-action="resume-run"|"requeue-run"|"abandon-run"]` — each beside
+  `[data-component="run-control-detail"][data-control=<id>]` saying what it does
+  (Resume re-enters at the demo node against the preserved branch; Requeue
+  re-runs from the start on a fresh worktree; Abandon deletes worktree and
+  branch). Before this the monitor carried Resume alone, with no disclosure and
+  no else branch — a refused POST was invisible. Abandon confirms in the DOM
+  first: `[data-component="abandon-confirm"]` +
+  `button[data-action="confirm-abandon"|"cancel-abandon"]`. A failure renders
+  `[data-component="run-control-error"]` verbatim; a success renders
+  `[data-component="run-control-outcome"][data-outcome-control=<id>]` wrapping
+  the shared scheduler-aware `[data-component="enqueue-outcome"]` line, so
+  "the scheduler is stopped, nothing will run" is stated with Start right
+  there. A **queued** (`planned`) run has no run-scoped control and instead
+  mounts the `strip` SchedulerCard, which is the only thing that can start it
+  (`schedulerStrip={false}` on the monitor, which mounts its own strip already).
+  Any other status renders nothing at all. The summary
   strip's ELAPSED stops at `run.completedAt` for a finished run
   (`[data-elapsed-final="true"]`, `lib/run-elapsed.ts`); the event tail's
   empty copy is keyed on the run's STATUS via `[data-tail-state="live|
@@ -793,10 +828,17 @@ inventory rather than one shared page-level contract:
   (traversed this flow as part of another flow) render under a labelled
   second group, `[data-section="history-ledger-lineage"][data-count]`, whose
   rows open under their own flow. `data-can-start` on
-  `main[data-page="flow-monitor"]` is derived from the kickoff kind
-  (`canStartFlow`, W7-C1 flows-25): `"false"` for a missing flow OR a
-  `trigger-only` kickoff (no launch surface), `"true"` otherwise — no longer
-  "the flow exists". Each row is a real anchor —
+  `main[data-page="flow-monitor"]` is derived from the kickoff SURFACE the
+  monitor actually renders (`canStartFlow`, `lib/kickoff-surface.ts`; W7-C1
+  flows-25, re-cured **W8-A3**): `"false"` for a missing flow, a `trigger-only`
+  kickoff, **or an `initiative-select` kickoff** — that surface's whole body is
+  a note and a `/projects` link, so `/flows/forge-develop` advertised a start it
+  did not offer. `"true"` for `idea` and for the generic Start-Run fallback.
+  The W7-C1 fix was a second hand-kept enumeration living in a different file
+  from the dispatch, which is why it drifted; there is now ONE table
+  (`KICKOFF_SURFACES`), the component dispatches on it, `canStartFlow` reads
+  `launches` off the same row, and `lib/flow-kickoff-render.test.ts` renders
+  every row and fails if a row claims a launch control it does not draw. Each row is a real anchor —
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
   [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]` — whose
   `href` is its `/flows/[id]/run/[runId]` detail page. Notes on the vocabulary,
@@ -1814,6 +1856,17 @@ inventory rather than one shared page-level contract:
   → `/flows/<flowId>`, and for a found run `a[data-action="open-artifacts"]`
   → `/artifact?run=<run.id>&type=plan&mode=view` plus `a[data-action="open-project"]`
   → `/projects/<project>` when the run carries a project (never fabricated).
+  **W8-A3 (`flows-23`):** plus `a[data-action="open-architect-session"]`
+  → `/sessions/architect/<architectSessionId>` when the run's manifest names
+  one — the way back to the conversation that planned a stuck initiative,
+  carried on `Run.architectSessionId` (`orchestrator/run-model.ts`, through
+  `parseRun` under the same declared-data-fails-open guard as `trigger`/
+  `prUrl`) and absent, never fabricated, when the manifest names none. The
+  header also carries `[data-component="run-status-chip"][data-run-status]`:
+  the run's status was previously only a `data-*` attribute on the landmark,
+  so a human reading the page could not see it. And the page mounts the shared
+  `[data-section="run-controls"]` (see the flow-monitor entry above) — before
+  W8-A3 this route rendered zero buttons in every state.
   **W7-FIX-A3 (A3-02/03/11 + the walkthrough gate):** the URL segment is the
   INITIATIVE id (the stable handle since W7-A3), so every id-keyed call is made
   with the RESOLVED run id — the breadcrumb href, the header's id line, and the
