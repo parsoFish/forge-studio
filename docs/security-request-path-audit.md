@@ -579,9 +579,14 @@ branch is itself pinned, by mutation, in `orchestrator/manifest-path-fields.test
 "a guard that cannot fail is not a guard" rule turned on a guard's own refusal
 path.
 
-**NOT CLOSED, disclosed rather than silently assumed away — the same divergence
-survives ACROSS PROCESSES at `writeSessionTerminalPhase` (`cli/agent-run.ts:194`),
-and the round-4 sweep did not reach it.** The bridge creates the session dir under
+**GUARD MECHANISM CLOSED, PRODUCER WIRING NOT YET CLOSED (bead forge-c6h /
+R4-17 round-4)** — disclosed precisely rather than rounded up to a flat
+"closed": the guard-side fix described below is complete and tested, but the
+one real caller that actually exercises this defect (`POST /api/studio/
+onboarding/start`) was not yet rewired to use it — see the "Disclosure, not
+overclaim" paragraph below for exactly what remains. The same divergence
+survived ACROSS PROCESSES at `writeSessionTerminalPhase` (`cli/agent-run.ts:194`), and
+the round-4 sweep did not reach it at the time this row was first written. The bridge creates the session dir under
 its snapshot root and spawns `forge agent dispatch --session-dir <abs>` as a
 detached subprocess; that subprocess re-derives the projects root at write time
 (`:204`) and has no snapshot to be handed. **Reproduced `[exec]`** by driving the
@@ -597,11 +602,48 @@ parent's environment verbatim (verified by reading the spawn call) — so this n
 a `forge.config.json` edit landing inside one run's window, not merely a
 configured `projectsDir`. Second, the guard fails **closed**: it refuses the
 write, so the failure direction is a false rejection and an operator-visible,
-recoverable stale `phase`, never a write outside the root. Not fixed in R4-17
-because the only fix consistent with the round-4 ruling is to PASS the bridge's
-snapshot into the subprocess (a new `--projects-root` flag on `agent dispatch`),
-which makes the guard's own root an argv input and deserves its own acceptance
-tests and review round rather than a tail-of-batch edit. **A guard that resolves its
+recoverable stale `phase`, never a write outside the root. Not fixed in the
+original R4-17 round-4 sweep, because the only fix consistent with that
+round's own ruling is to PASS the bridge's snapshot into the subprocess (a new
+`--projects-root` flag on `agent dispatch`), which makes the guard's own root
+an argv input and deserved its own acceptance tests and review round rather
+than a tail-of-batch edit.
+
+**The fix, landed**: `forge agent dispatch` gained `--projects-root <abs>`
+(`cli/agent-run.ts`'s `parseAgentDispatchArgs`/`checkProjectsRootFlag`). When
+present it is validated at the argv boundary — must be an ABSOLUTE path
+(a relative one is rejected, never silently resolved against `cwd`/
+`forgeRoot`); must EXIST and be a DIRECTORY; must be CONTAINED within
+`forgeRoot` (the same realpath + `startsWith(root + sep)` shape used
+throughout this document) — and on ANY rejection the dispatch fails loudly
+(stderr + exit 2) BEFORE any project resolution or dispatch attempt, never
+falling back to the derived root (the exact silent-fallback shape that would
+have reintroduced this defect). When accepted, the validated, realpath-resolved
+root is threaded into `writeSessionTerminalPhase` as `trustedProjectsRoot` and
+honoured VERBATIM — no `forge.config.json`/env re-derivation for that call at
+all. Omitting the flag leaves every existing caller byte-identical to before.
+`cli/ui-bridge.ts`'s `spawnAgentDispatch` (and its pure argv builder,
+`buildAgentDispatchArgs`) now thread the bridge's own snapshot `ctx.projectsRoot`
+through as this flag on the generic `POST /api/agents/:slug/run` call site
+(`:2782`). **Disclosure, not overclaim**: that specific call site never passes
+`--session-dir` (it is `undefined` there), so the new flag is inert on it —
+`POST /api/studio/onboarding/start`'s call site (`:5384`), the ONE real
+producer of `--session-dir` and therefore the actual repro path this row
+describes, was NOT rewired to pass `--projects-root` in this pass (a
+fenced-off region of the same file this round); it still relies on
+`writeSessionTerminalPhase`'s self-resolving default. The CLI-side mechanism
+and its accept/reject contract are fully landed and tested; wiring the
+onboarding-start call site is the one remaining step to close the loop for
+its real-world trigger.
+Pinned by `cli/agent-run-dispatch.test.ts` (the bead forge-c6h characterization
+test, which keeps the pre-fix divergence pinned WITHOUT the flag as a permanent
+regression control; the bead forge-c6h fix test, ACCEPT with the flag; REJECT
+tests for a relative path, a path outside `forgeRoot` — asserted via a planted
+sentinel file proven byte-unchanged, "the most important test" for this fix —
+and a non-existent path; and an ACCEPT control for a valid, contained root) and
+`cli/ui-bridge-agent-dispatch-projects-root.test.ts` (the argv-builder seam:
+`buildAgentDispatchArgs` emits the flag, and the parse/build round-trip through
+`parseAgentDispatchArgs` survives it unchanged). **A guard that resolves its
 root differently from the producer of the thing it guards is a false-rejection
 generator** — the failure mode is invisible, because a refused write looks
 exactly like a run that has not finished. The

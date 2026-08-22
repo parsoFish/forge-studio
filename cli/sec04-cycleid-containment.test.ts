@@ -195,6 +195,28 @@ test('positive control: GET /api/work-item/<real>/WI-1 returns the in-root work 
   assert.ok(r.body.includes('LEGIT-WI-BODY'), 'the real work-item body should be served');
 });
 
+// W8-A1 (ON-7): the route's charset gate widened with WORK_ITEM_ID_PATTERN to
+// admit a SPLIT id (`WI-4a`). It stays a strict allowlist — no separator, no
+// dot, no case variation can enter — so the SEC-04 containment story above is
+// unchanged; this pins both directions at the route, not just in the validator.
+test('positive control: GET /api/work-item/<real>/WI-4a serves a SPLIT work item', async () => {
+  const cid = 'real-split-wi-cycle';
+  mkdirSync(join(logsRoot, cid, 'work-items-snapshot'), { recursive: true });
+  writeFileSync(join(logsRoot, cid, 'work-items-snapshot', 'WI-4a.md'), workItemMd('SPLIT-WI-BODY'));
+  const r = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/work-item/${cid}/WI-4a` });
+  assert.equal(r.status, 200, `a split work item must return 200 — got ${r.status}: ${r.body}`);
+  assert.ok(r.body.includes('SPLIT-WI-BODY'), 'the split work-item body should be served');
+});
+
+test('negative control: GET /api/work-item/<real>/<malformed> still 400s at the charset gate', async () => {
+  const cid = 'real-split-wi-cycle-neg';
+  mkdirSync(join(logsRoot, cid, 'work-items-snapshot'), { recursive: true });
+  for (const bad of ['WI-4a1', 'WI-4-a', 'wi-4a', 'WI-4A', 'WI-4ab', 'WI-', 'UWI-1']) {
+    const r = await rawRequest(bridgeUrl, { method: 'GET', path: `/api/work-item/${cid}/${bad}` });
+    assert.equal(r.status, 400, `wiId "${bad}" must be refused at the gate — got ${r.status}`);
+  }
+});
+
 test('positive control: POST /api/reflect/<real>/answer writes user-feedback.md in root', async () => {
   const cid = 'real-reflect-cycle';
   mkdirSync(join(logsRoot, cid), { recursive: true });
