@@ -306,7 +306,8 @@ This work fits two rows, cleanly, and the split follows the map rather than conv
 
 ## Reconciliation with the write-time origin stamp
 
-An existing bead proposes closing the provenance gap by **stamping an `origin:` field at write time**
+An existing bead (`forge-ymx`) proposes closing the provenance gap by **stamping an `origin:` field at
+write time**
 (`PUT /api/studio/agents/:slug` and `POST /api/studio/hooks` write `origin: 'studio'`; the shipped
 OOTB `SKILL.md` / `hook.yaml` files get `origin: seed` committed), after which `AGENT_PROVENANCE`
 flips from a constant to a derivation. It was deliberately deferred because it is a data-model change
@@ -358,8 +359,8 @@ single riskiest thing in this ADR and is why §B's terminus is a PR — the blas
 "an unwanted PR", not "an unwanted merge to main".
 
 **The pending-change surface will look worse before it looks better, and that is the point.** Turning
-on a five-root dirty check against a repo that has been accumulating uncommitted Studio writes will
-surface a backlog. Showing it is the deliverable.
+the dirty check on across the whole declared set, against a repo that has been accumulating
+uncommitted Studio writes, will surface a backlog. Showing it is the deliverable.
 
 **This ADR closes two standing walkthrough findings that had no design home.**
 `docs/roadmaps/wave-7-walkthrough-findings.md` records `library-07` (*"Studio writes authored skills
