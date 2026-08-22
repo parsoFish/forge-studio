@@ -831,7 +831,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   all. `schedulerStrip={false}`: the monitor mounts its own strip
                   directly above. */}
               <div style={{ padding: '0 20px 8px', flexShrink: 0 }}>
-                <RunControls run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
+                {/* `key` on the run id (review round 1, S2-5): RunControls holds
+                    per-run state (an armed Abandon, a busy flag, the last error
+                    and the last outcome) and returning null from a render does
+                    NOT unmount it, so without this a confirmation armed for run
+                    A stayed on screen after selecting run B — and its post
+                    would have destroyed B, which the operator never armed. */}
+                <RunControls key={view.activeRun?.id ?? 'none'} run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
               </div>
 
               {/* Summary strip */}

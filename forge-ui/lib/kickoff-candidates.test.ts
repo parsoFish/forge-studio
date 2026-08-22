@@ -96,8 +96,23 @@ test('flows-37: the repoint fact is DERIVED per viewed flow — the same run ans
 });
 
 test('flows-37: a run reporting no flow of its own has nothing to be taken from → not a repoint', () => {
-  const runs: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: '' })];
-  expect(deriveKickoffCandidates(runs, 'retro-flow')).toEqual([
+  // The REAL shape (review round 1, S3-8): `Run.flowId` is already defaulted to
+  // `orchestrator/run-model.ts`'s FALLBACK_FLOW_ID for a manifest that carries no
+  // `flow_id`, so `'unknown'` — not `''` — is what a flowless manifest produces
+  // over the wire. The first cut of this test pinned `flowId: ''`, an input the
+  // product cannot emit, so the branch that mattered was never exercised: the UI
+  // said "queued under unknown" and offered a confirmation while the server, which
+  // sees the undefined `manifest.flow_id`, called it no repoint at all.
+  //
+  // KILLS: a derivation that reads `r.flowId` raw and disagrees with the server.
+  const flowless: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'unknown' })];
+  expect(deriveKickoffCandidates(flowless, 'retro-flow')).toEqual([
     { initiativeId: 'INIT-2026-08-18-alpha', project: null, currentFlowId: null, isRepoint: false },
   ]);
+
+  // And the degenerate empty string stays safe too.
+  const empty: Run[] = [run({ id: 'INIT-2026-08-18-beta', initiativeId: 'INIT-2026-08-18-beta', status: 'planned', flowId: '' })];
+  expect(deriveKickoffCandidates(empty, 'retro-flow')[0]).toEqual(
+    { initiativeId: 'INIT-2026-08-18-beta', project: null, currentFlowId: null, isRepoint: false },
+  );
 });

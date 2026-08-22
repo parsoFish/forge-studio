@@ -31,7 +31,10 @@
  * DOM contract:
  *   [data-section="run-controls"][data-run-status][data-control-count][data-run-id]
  *     [data-component="run-control-detail"][data-control=<id>]
- *     button[data-action="resume-run"|"requeue-run"|"abandon-run"][data-run-id]
+ *     button[data-action="resume-run"|"requeue-run"|"abandon-run"]
+ *       [data-run-id]         the run handle shown in the UI (a cycle id once claimed)
+ *       [data-initiative-id]  the id these routes actually take (INIT_ID_RE) — a
+ *                             harness driving the API keys on THIS one
  *     [data-component="abandon-confirm"] + [data-action="confirm-abandon"|"cancel-abandon"]
  *     [data-component="run-control-error"]      (verbatim failure text)
  *     [data-component="run-control-outcome"][data-outcome-control=<id>]
@@ -44,7 +47,7 @@ import { useState } from 'react';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { resumeRun, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
-import { deriveRunControls, runAwaitsScheduler, type RunControl, type RunControlId } from '@/lib/run-controls';
+import { armedControl, deriveRunControls, intentForControlClick, runAwaitsScheduler, type RunControl, type RunControlId } from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -74,9 +77,20 @@ export function RunControls({
   run,
   onActed,
   schedulerStrip = true,
+  queuedCount,
 }: {
   run: Run | null;
   onActed?: (initiativeId: string) => void;
+  /**
+   * The REAL number of queued runs, when the mounting surface knows it. Omitted
+   * where it does not: the run detail page reads one run and never the queue, and
+   * the first cut hard-coded `1` here, which made every run page state "1 queued
+   * run will not start until the scheduler runs" and `data-scheduler-queued="1"`
+   * regardless of the real queue (adversarial review round 1, S3-6 — this
+   * change's own dominant defect class, inside the change). Omitted means the
+   * scheduler card states no count at all rather than a made-up one.
+   */
+  queuedCount?: number;
   /**
    * Whether to mount the scheduler strip for a QUEUED run. A rendering-context
    * switch, not state: the run detail page has no other scheduler surface and
@@ -96,16 +110,33 @@ export function RunControls({
 
   const initiativeId = run.initiativeId;
 
+  /**
+   * The armed destructive control, DERIVED — so a run that leaves `failed` while
+   * the panel is open (a poll tick, a selection change) drops the panel instead
+   * of leaving a button that silently does nothing (review round 1, S3-10).
+   */
+  const armed = armedControl(controls, pendingDestructive);
+
+  /**
+   * ARM ONLY. A destructive control's click never posts, on any click, ever —
+   * the post lives in `act()` and is reachable solely from `confirm-abandon`.
+   *
+   * Review round 1, S2-4: the first cut armed and posted from the same function,
+   * gated on `pendingDestructive !== control.id`. The arming click set no `busy`,
+   * so the button was never disabled, and the confirm panel renders BELOW the
+   * rows so the button does not move — a double-click re-entered with the guard
+   * already false and abandoned the run, deleting its worktree and branch,
+   * without the operator ever seeing the panel. Deterministic, not a race.
+   */
+  function arm(control: RunControl): void {
+    if (busy !== null) return;
+    setError(null);
+    setDone(null);
+    setPendingDestructive(control.id);
+  }
+
   async function act(control: RunControl): Promise<void> {
     if (busy !== null) return;
-    // A destructive act is confirmed IN THE DOM before anything is posted —
-    // never a window.confirm the harness cannot see and the operator cannot
-    // read the consequences from.
-    if (control.destructive && pendingDestructive !== control.id) {
-      setError(null);
-      setPendingDestructive(control.id);
-      return;
-    }
     setBusy(control.id);
     setError(null);
     setDone(null);
@@ -152,8 +183,9 @@ export function RunControls({
           <button
             data-action={c.action}
             data-run-id={run.id}
+            data-initiative-id={initiativeId}
             {...disabledAttrs(busy !== null ? `${busy} in progress…` : null)}
-            onClick={() => void act(c)}
+            onClick={() => (intentForControlClick(c) === 'arm' ? arm(c) : void act(c))}
             style={{ ...buttonStyle, background: c.destructive ? 'var(--red, #b62324)' : 'var(--ember)', minWidth: 92 }}
           >
             {busy === c.id ? '…' : c.label}
@@ -164,7 +196,7 @@ export function RunControls({
         </div>
       ))}
 
-      {pendingDestructive !== null && (
+      {armed !== null && (
         <div
           data-component="abandon-confirm"
           data-run-id={run.id}
@@ -176,10 +208,7 @@ export function RunControls({
           <button
             data-action="confirm-abandon"
             {...disabledAttrs(busy !== null ? 'Abandoning…' : null)}
-            onClick={() => {
-              const control = controls.find((c) => c.id === pendingDestructive);
-              if (control) void act(control);
-            }}
+            onClick={() => void act(armed)}
             style={{ ...buttonStyle, background: 'var(--red, #b62324)' }}
           >
             Abandon it
@@ -214,7 +243,7 @@ export function RunControls({
 
       {/* flows-23: a QUEUED run's control is the daemon, not a run-scoped button. */}
       {awaitsScheduler && (
-        <SchedulerCard variant="strip" queuedCount={1} />
+        <SchedulerCard variant="strip" {...(queuedCount !== undefined ? { queuedCount } : {})} />
       )}
     </section>
   );

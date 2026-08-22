@@ -23,6 +23,17 @@ import { deriveStartWorkState } from '@/lib/start-work-view';
  * (crosscut-25). data-* contract: `data-section="start-work"`,
  * `data-action="start-work-{plan|develop|run-flow|architect}"`,
  * `data-start-work-outcome` on the result line.
+ *
+ * W8-A3 (`flows-37`, review round 1 S2-3): Plan, Start development and Run a
+ * flow all repoint a manifest's `flow_id`, and this surface pairs an initiative
+ * with a target without ever showing which flow it is queued under — the roadmap
+ * payload carries no flow id at all. The enqueue therefore refuses an
+ * unconfirmed cross-flow move (409 `repoint-requires-confirm`), and this group
+ * answers it the same way the flow monitor's picker does: an in-DOM
+ * confirmation, `[data-component="repoint-confirm"]` +
+ * `[data-action="confirm-repoint"|"cancel-repoint"]`, naming the flow of origin
+ * the server reported. Without it these controls would 409 forever with no way
+ * to proceed.
  */
 export function StartWorkActions({
   projectId,
@@ -47,6 +58,11 @@ export function StartWorkActions({
     [roadmap, flows, dispatchedDevelop],
   );
   const [busy, setBusy] = useState<'plan' | 'develop' | 'run-flow' | null>(null);
+  // W8-A3 (flows-37): the repoint the server refused, awaiting the operator's
+  // answer. Non-null ⇒ the confirmation is on screen and nothing has been moved.
+  const [pendingRepoint, setPendingRepoint] = useState<
+    { kind: 'plan' | 'run-flow'; initiativeId: string; currentFlowId: string; targetFlowId: string } | null
+  >(null);
   const [outcome, setOutcome] = useState<{ kind: 'ok' | 'error'; text: string; href?: string } | null>(null);
   const [flowId, setFlowId] = useState('');
   const [initiativeId, setInitiativeId] = useState('');
@@ -54,13 +70,23 @@ export function StartWorkActions({
   const chosenFlow = flowId || state.runnableFlows[0]?.id || '';
   const chosenInitiative = initiativeId || state.runCandidates[0]?.initiativeId || '';
 
-  async function onPlan(): Promise<void> {
+  async function onPlan(confirmRepoint = false): Promise<void> {
     const target = state.unplannedReady[0];
     if (!target || busy) return;
     setBusy('plan');
     setOutcome(null);
     try {
-      const r = await planInitiative(target.initiativeId);
+      const r = await planInitiative(target.initiativeId, { confirmRepoint });
+      if (r.status === 'repoint-requires-confirm') {
+        setPendingRepoint({
+          kind: 'plan',
+          initiativeId: target.initiativeId,
+          currentFlowId: r.currentFlowId ?? 'another flow',
+          targetFlowId: 'forge-architect',
+        });
+        return;
+      }
+      setPendingRepoint(null);
       setOutcome(
         r.status === 'enqueued'
           ? { kind: 'ok', text: `planning ${target.initiativeId} enqueued` }
@@ -84,10 +110,25 @@ export function StartWorkActions({
       // `pending`) roadmap can't re-arm the button with the same ids. Failed
       // ids stay eligible — a retry is legitimate for them.
       if (okIds.length > 0) setDispatchedDevelop((prev) => [...prev, ...okIds]);
+      // W8-A3 (`flows-37`, review round 1 S1-1): this button posts a BATCH and the
+      // roadmap carries no flow id, so it cannot disclose a flow of origin — which
+      // is exactly why the develop hand-off is auto-authorised ONLY from
+      // `forge-architect`. An initiative queued under an authored flow is refused
+      // here on purpose, and it is deliberately NOT offered a batch "confirm
+      // everything": rubber-stamping N destructive moves the surface cannot show
+      // is the shape this whole lane exists to remove. It is named, with the way
+      // to move it deliberately — the flow monitor's picker, which discloses the
+      // flow of origin per candidate.
+      const refused = (r.results ?? []).filter((x) => x.status === 'repoint-requires-confirm');
       setOutcome(
         okIds.length > 0
           ? { kind: 'ok', text: `${okIds.length}/${ids.length} initiative${ids.length === 1 ? '' : 's'} enqueued for development` }
-          : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
+          : refused.length > 0
+            ? {
+                kind: 'error',
+                text: `${refused.map((x) => x.initiativeId).join(', ')} ${refused.length === 1 ? 'is' : 'are'} queued under another flow — start ${refused.length === 1 ? 'it' : 'them'} from that flow's monitor, which names the flow being moved from.`,
+              }
+            : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
       );
       await onChanged();
     } finally {
@@ -95,12 +136,22 @@ export function StartWorkActions({
     }
   }
 
-  async function onRunFlow(): Promise<void> {
+  async function onRunFlow(confirmRepoint = false): Promise<void> {
     if (!chosenFlow || !chosenInitiative || busy) return;
     setBusy('run-flow');
     setOutcome(null);
     try {
-      const r = await startFlowRun(chosenFlow, chosenInitiative);
+      const r = await startFlowRun(chosenFlow, chosenInitiative, { confirmRepoint });
+      if (r.status === 'repoint-requires-confirm') {
+        setPendingRepoint({
+          kind: 'run-flow',
+          initiativeId: chosenInitiative,
+          currentFlowId: r.currentFlowId ?? 'another flow',
+          targetFlowId: chosenFlow,
+        });
+        return;
+      }
+      setPendingRepoint(null);
       setOutcome(
         r.ok
           ? { kind: 'ok', text: `${chosenInitiative} enqueued onto ${chosenFlow}`, href: `/flows/${encodeURIComponent(chosenFlow)}/run/${encodeURIComponent(chosenInitiative)}` }
@@ -166,7 +217,7 @@ export function StartWorkActions({
             <select
               data-field="start-work-flow"
               value={chosenFlow}
-              onChange={(e) => setFlowId(e.target.value)}
+              onChange={(e) => { setFlowId(e.target.value); setPendingRepoint(null); }}
               aria-label="Flow to run"
               style={selectStyle}
             >
@@ -177,7 +228,7 @@ export function StartWorkActions({
             <select
               data-field="start-work-initiative"
               value={chosenInitiative}
-              onChange={(e) => setInitiativeId(e.target.value)}
+              onChange={(e) => { setInitiativeId(e.target.value); setPendingRepoint(null); }}
               aria-label="Initiative to enqueue"
               style={selectStyle}
             >
@@ -220,6 +271,38 @@ export function StartWorkActions({
       >
         Architect →
       </Link>
+
+      {pendingRepoint && (
+        <span
+          data-component="repoint-confirm"
+          data-current-flow={pendingRepoint.currentFlowId}
+          data-target-flow={pendingRepoint.targetFlowId}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11.5, padding: '4px 8px', border: '1px solid var(--ember)', borderRadius: 'var(--radius-sm)' }}
+        >
+          <span>
+            <strong>{pendingRepoint.initiativeId}</strong> is queued under{' '}
+            <strong>{pendingRepoint.currentFlowId}</strong>; this moves it to{' '}
+            <strong>{pendingRepoint.targetFlowId}</strong>.
+          </span>
+          <button
+            className="btn btn-sm"
+            data-action="confirm-repoint"
+            disabled={busy !== null}
+            onClick={() => void (pendingRepoint.kind === 'plan' ? onPlan(true) : onRunFlow(true))}
+            style={groupBtn}
+          >
+            Move it and start
+          </button>
+          <button
+            className="btn btn-sm"
+            data-action="cancel-repoint"
+            onClick={() => setPendingRepoint(null)}
+            style={groupBtn}
+          >
+            Cancel
+          </button>
+        </span>
+      )}
 
       {outcome && (
         <span data-start-work-outcome={outcome.kind} style={{ fontSize: 11.5, color: outcome.kind === 'ok' ? 'var(--green, #3fb950)' : 'var(--red, #f87171)' }}>

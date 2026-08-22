@@ -210,7 +210,7 @@ export function FlowRunDetail({
               resume/requeue/abandon with what each does spelled out, a queued
               run offers the scheduler that is the only thing able to start it,
               and anything else renders nothing. */}
-          <RunControls run={run} />
+          <RunControls key={run?.id ?? runId} run={run} />
           <RunTimeline
             rows={rows}
             expandedNodeId={expandedNodeId}

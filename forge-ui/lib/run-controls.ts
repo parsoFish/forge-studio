@@ -76,3 +76,35 @@ export function deriveRunControls(run: Run | null): RunControl[] {
 export function runAwaitsScheduler(run: Run | null): boolean {
   return run !== null && run.status === 'planned';
 }
+
+/**
+ * What a click on a control's OWN button must do.
+ *
+ * Review round 1, S2-4. The first cut asked "is this control destructive AND not
+ * already armed?", which meant the SECOND click on a destructive button posted:
+ * the arming click set no busy flag, so the button was never disabled, and the
+ * confirmation renders below the row so the button does not move under the
+ * cursor. A double-click therefore abandoned a run — deleting its worktree and
+ * branch, irreversibly — without the operator ever seeing the panel.
+ *
+ * The rule is now unconditional: a destructive control's own button ONLY arms,
+ * on every click, forever. The post is reachable solely from the confirmation's
+ * own button.
+ */
+export function intentForControlClick(control: RunControl): 'arm' | 'post' {
+  return control.destructive ? 'arm' : 'post';
+}
+
+/**
+ * The armed destructive control, resolved against the controls currently on
+ * offer — `null` when the armed id is no longer among them.
+ *
+ * Review round 1, S3-10: a run that leaves `failed` while the confirmation is
+ * open (a poll tick, a rail selection change) used to leave the panel rendered
+ * over a button that silently did nothing. Deriving the panel from this means
+ * the panel simply goes away with the control.
+ */
+export function armedControl(controls: RunControl[], armedId: RunControlId | null): RunControl | null {
+  if (armedId === null) return null;
+  return controls.find((c) => c.id === armedId) ?? null;
+}

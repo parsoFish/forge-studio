@@ -20,8 +20,8 @@ export type EnqueueDevelopStatus =
   | 'enqueued'
   | 'not-found'
   | 'already-developing'
-  /** W8-A3 (`flows-37`): reachable only when a caller explicitly passes
-   *  `confirmRepoint: false` — the develop hand-off defaults to confirmed. */
+  /** W8-A3 (`flows-37`): the manifest is queued under a flow OTHER than
+   *  `forge-architect` and the caller did not confirm moving it. */
   | 'repoint-requires-confirm'
   /** W7-FIX-A3 (round-2 finding 6): the manifest is in `_queue/done` — a
    *  shipped initiative is never re-run from an operator action. */
@@ -36,27 +36,39 @@ export type EnqueueDevelopResult = {
   cycleId?: string;
   /** Present on `enqueued` — always `forge-develop`. */
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
 /** Enqueue a develop run — `enqueueFlowRun(id, 'forge-develop')` with the
  *  historical `already-developing` status name preserved. Never throws. */
+/**
+ * The ONE source flow this delegate may repoint from without asking.
+ *
+ * W8-A3 (`flows-37`), corrected after adversarial review round 1 (S1-1). The
+ * first cut defaulted `confirmRepoint` to `true` here, reasoning that the
+ * roadmap's "Start development" names both the initiative and the target. That
+ * is false for the surface that actually drives this route:
+ * `StartWorkActions.onDevelop` posts a BATCH of every eligible initiative id on
+ * one click, and `RoadmapInitiative` carries no flow id at all — so the roadmap
+ * cannot disclose the flow of origin even in principle, and an initiative
+ * queued under an authored flow was taken by a button that never named it.
+ * Byte-for-byte flows-37, one route over.
+ *
+ * `forge-architect → forge-develop` IS the designed lifecycle transition and is
+ * what the button means. Anything else is a repoint like any other and gets the
+ * refusal.
+ */
+const DEVELOP_HANDOFF_SOURCE_FLOWS = ['forge-architect'] as const;
+
 export function enqueueDevelopRun(
   initiativeId: string,
   opts: { queueRoot?: string; allowFinishedSource?: boolean; confirmRepoint?: boolean } = {},
 ): EnqueueDevelopResult {
-  // W8-A3 (`flows-37`): the architect→develop hand-off is the ONE operator
-  // transition where the repoint IS the request. The roadmap surface that
-  // reaches here ("Start development" on a specific planned initiative) names
-  // both the initiative and the target flow, so the operator has already
-  // confirmed exactly what `confirmRepoint` asks about — unlike the generic
-  // Start-Run picker, which disclosed neither. It is a defaulted PARAMETER, not
-  // a hard-coded bypass: a caller that wants the guard passes
-  // `confirmRepoint: false` and gets the refusal (pinned in
-  // enqueue-flow-run-repoint.test.ts).
   const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, {
     ...opts,
-    confirmRepoint: opts.confirmRepoint ?? true,
+    allowRepointFrom: DEVELOP_HANDOFF_SOURCE_FLOWS,
   });
   return { ...r, status: r.status === 'already-running' ? 'already-developing' : r.status };
 }

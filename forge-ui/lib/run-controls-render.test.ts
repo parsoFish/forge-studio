@@ -93,6 +93,29 @@ test('a failed run carrying a failNote shows it rather than a bare "Run failed."
 
 // ---- flows-23: the queued run's control is the scheduler --------------------
 
+test('flows-23 (S3-6): the scheduler strip on a run page claims NO queue count — the surface never read the queue', () => {
+  // KILLS: the first cut's hard-coded `queuedCount={1}`, which made every run
+  // page state "1 queued run will not start until the scheduler runs" and
+  // `data-scheduler-queued="1"` regardless of the real queue — a fabricated
+  // number on a documented harness attribute, i.e. this change's own dominant
+  // defect class inside the change.
+  const html = markup(RunControls, { run: run('planned') });
+  expect(html, 'no count was supplied, so none may be asserted').not.toContain('data-scheduler-queued="1"');
+  expect(html).toContain('data-scheduler-queued="0"'); // SchedulerCard's own "no count supplied" default
+  // A caller that DOES know the real number passes it and it is carried verbatim.
+  expect(markup(RunControls, { run: run('planned'), queuedCount: 12 })).toContain('data-scheduler-queued="12"');
+});
+
+test('flows-28/49 (S3-11): each control advertises BOTH ids — the run handle and the initiative id the routes take', () => {
+  // KILLS: advertising only `data-run-id` (a cycle id once claimed) on buttons
+  // that post `run.initiativeId`; a harness reading the documented attribute and
+  // calling /api/recovery/<that>/abandon gets a 400 (INIT_ID_RE).
+  const r = run('failed');
+  const html = markup(RunControls, { run: r });
+  expect(html).toContain(`data-run-id="${r.id}"`);
+  expect(html).toContain(`data-initiative-id="${r.initiativeId}"`);
+});
+
 test('flows-23: a QUEUED run renders the scheduler strip — the only thing that can start it', () => {
   const html = markup(RunControls, { run: run('planned') });
   expect(html).toContain('data-component="scheduler-card"');

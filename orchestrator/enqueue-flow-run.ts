@@ -94,7 +94,21 @@ export type EnqueueFlowRunResult = {
 export function enqueueFlowRun(
   initiativeId: string,
   flowId: string,
-  opts: { queueRoot?: string; allowFinishedSource?: boolean; confirmRepoint?: boolean } = {},
+  opts: {
+    queueRoot?: string;
+    allowFinishedSource?: boolean;
+    /** The operator answered the repoint question for THIS request. */
+    confirmRepoint?: boolean;
+    /**
+     * Source flows this caller has standing authority to repoint FROM, because
+     * the transition is the designed lifecycle and its surface states it.
+     * Narrow on purpose: a blanket `confirmRepoint: true` default on a delegate
+     * re-opens `flows-37` through that delegate's own route (adversarial review
+     * round 1, S1-1 — `POST /api/develop/start` batches N initiative ids on one
+     * click and the roadmap carries no flow id to disclose).
+     */
+    allowRepointFrom?: readonly string[];
+  } = {},
 ): EnqueueFlowRunResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
@@ -156,34 +170,6 @@ export function enqueueFlowRun(
     return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
   }
 
-  // W8-A3 (`flows-37` / `forge-chm`, S1 — data corruption). Repointing an
-  // initiative that is queued under ANOTHER flow takes it away from that flow.
-  // Every planned initiative on disk carries the flow that produced it
-  // (`flow_id: forge-architect`), so the generic Start-Run picker's one click
-  // silently stole real queued work. The rule lives HERE and not on a route:
-  // the operator-facing `POST /api/flows/:id/run` and `POST /api/develop/start`
-  // are two doors onto this one primitive, and W7-FIX-A3 (round-2 finding 6)
-  // already learned what a route-local pre-check leaves open.
-  //
-  // A blanket refusal is NOT available: it would refuse every candidate the
-  // picker can legitimately offer. The contract is an EXPLICIT confirmation
-  // that DEFAULTS CLOSED, opted into by the two callers for which a repoint is
-  // the point — the trigger drain's flow-complete chaining (which repoints on
-  // every hop by design) and the architect→develop hand-off
-  // (`enqueue-develop-run.ts`, whose roadmap surface names both the initiative
-  // and the target, so the operator has already confirmed the transition).
-  const currentFlowId = manifest.flow_id;
-  if (!opts.confirmRepoint && currentFlowId && currentFlowId !== flowId) {
-    return {
-      status: 'repoint-requires-confirm',
-      initiativeId,
-      currentFlowId,
-      detail:
-        `${initiativeId} is currently queued under "${currentFlowId}" — running it on "${flowId}" ` +
-        `moves it off that flow. Confirm the repoint to proceed.`,
-    };
-  }
-
   // known-gaps §9 (defense-in-depth, closed with ADR 040) — DEVELOP-specific:
   // the dev-loop hard-fails on an empty WI dir, so dispatching an undecomposed
   // initiative at forge-develop wastes a cycle. Other flows (architect, reflect,
@@ -198,6 +184,47 @@ export function enqueueFlowRun(
       detail: 'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first',
     };
   }
+
+  // W8-A3 (`flows-37` / `forge-chm`, S1 — data corruption). Repointing an
+  // initiative that is queued under ANOTHER flow takes it away from that flow.
+  // Every planned initiative on disk carries the flow that produced it
+  // (`flow_id: forge-architect`), so the generic Start-Run picker's one click
+  // silently stole real queued work. The rule lives HERE and not on a route:
+  // the operator-facing `POST /api/flows/:id/run` and `POST /api/develop/start`
+  // are two doors onto this one primitive, and W7-FIX-A3 (round-2 finding 6)
+  // already learned what a route-local pre-check leaves open. The THIRD door,
+  // `POST /api/initiatives/:id/plan`, is a structural clone that never reaches
+  // this module — `enqueue-plan-run.ts` carries the same rule in its own terms
+  // (review round 1, S2-2).
+  //
+  // A blanket refusal is NOT available: it would refuse every candidate the
+  // picker can legitimately offer. The contract is an EXPLICIT confirmation
+  // that DEFAULTS CLOSED. Two callers hold standing authority instead:
+  //   · the trigger drain's flow-complete chaining, which repoints on every hop
+  //     by design (`confirmRepoint: true`);
+  //   · the architect→develop hand-off, and ONLY from `forge-architect`
+  //     (`allowRepointFrom`). A blanket default on that delegate is what review
+  //     round 1 found re-opening flows-37: `POST /api/develop/start` takes a
+  //     BATCH of ids from a roadmap that carries no flow id to disclose, so an
+  //     initiative queued under an authored flow was taken by one click on a
+  //     button that never named it.
+  //
+  // Ordered AFTER the develop `not-planned` precondition (review round 1, S3-7):
+  // asking the operator to confirm a move that the very next check refuses is a
+  // question with no right answer. Cheap precondition first, authorisation second.
+  const currentFlowId = manifest.flow_id;
+  const preAuthorised = (opts.allowRepointFrom ?? []).includes(currentFlowId ?? '');
+  if (!opts.confirmRepoint && !preAuthorised && currentFlowId && currentFlowId !== flowId) {
+    return {
+      status: 'repoint-requires-confirm',
+      initiativeId,
+      currentFlowId,
+      detail:
+        `${initiativeId} is currently queued under "${currentFlowId}" — running it on "${flowId}" ` +
+        `moves it off that flow. Confirm the repoint to proceed.`,
+    };
+  }
+
 
   // Repoint at the target flow + reset to a fresh, claimable build. resume_from
   // is cleared so the scheduler runs the flow's full spine, not a drain re-entry.

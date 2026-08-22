@@ -27,7 +27,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { deriveRunControls, runAwaitsScheduler, RUN_CONTROL_ACTIONS } from './run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, runAwaitsScheduler, RUN_CONTROL_ACTIONS } from './run-controls.ts';
 import type { Run, RunStatus } from './studio-client.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
@@ -92,4 +92,36 @@ test('the control set is derived per read — the same run object answers by its
   const failed = run('failed');
   expect(deriveRunControls(failed)).toHaveLength(3);
   expect(deriveRunControls({ ...failed, status: 'complete' })).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial review round 1 — the two rules the first cut got wrong.
+// ---------------------------------------------------------------------------
+
+test('flows-28 REGRESSION (S2-4): a destructive control\'s OWN button only ever arms — a second click can never post', () => {
+  // KILLS: `control.destructive && pendingDestructive !== control.id`, the
+  // first cut's rule. That made the second click post, and because the arming
+  // click set no busy flag the button was never disabled and the confirmation
+  // panel renders BELOW the row (the button does not move), so a plain
+  // double-click deleted a run's worktree and branch without the operator ever
+  // seeing the panel. Deterministic, not a timing race.
+  const controls = deriveRunControls(run('failed'));
+  const abandon = controls.find((c) => c.id === 'abandon')!;
+  expect(intentForControlClick(abandon)).toBe('arm');
+  // Unconditional: there is no state in which this button posts.
+  expect(intentForControlClick({ ...abandon, destructive: true })).toBe('arm');
+  // The non-destructive ones still act immediately — no ceremony added.
+  for (const c of controls.filter((x) => !x.destructive)) {
+    expect(intentForControlClick(c), c.id).toBe('post');
+  }
+});
+
+test('flows-28 (S3-10): the armed control resolves against what is CURRENTLY offered, so a status change drops the panel', () => {
+  // KILLS: a confirmation panel left rendered over a dead button after the run
+  // leaves `failed` (a poll tick, or a rail selection change on the monitor).
+  const failed = deriveRunControls(run('failed'));
+  expect(armedControl(failed, 'abandon')?.id).toBe('abandon');
+  expect(armedControl(failed, null)).toBeNull();
+  // The same armed id against a run that no longer offers it.
+  expect(armedControl(deriveRunControls(run('complete')), 'abandon')).toBeNull();
 });

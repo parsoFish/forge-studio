@@ -777,14 +777,24 @@ inventory rather than one shared page-level contract:
   the run's status alone, so nothing stores which controls a run offers):
   `[data-section="run-controls"][data-run-status][data-run-id][data-control-count]`.
   A **failed** run offers all three actions the bridge implements —
-  `button[data-action="resume-run"|"requeue-run"|"abandon-run"]` — each beside
+  `button[data-action="resume-run"|"requeue-run"|"abandon-run"]`, each carrying
+  BOTH `data-run-id` (the run handle the UI shows — a cycle id once claimed) and
+  `data-initiative-id` (**the id these routes actually take**: the recovery
+  routes match `INIT_ID_RE`, so a harness driving the API keys on this one) —
+  each beside
   `[data-component="run-control-detail"][data-control=<id>]` saying what it does
   (Resume re-enters at the demo node against the preserved branch; Requeue
   re-runs from the start on a fresh worktree; Abandon deletes worktree and
   branch). Before this the monitor carried Resume alone, with no disclosure and
   no else branch — a refused POST was invisible. Abandon confirms in the DOM
   first: `[data-component="abandon-confirm"]` +
-  `button[data-action="confirm-abandon"|"cancel-abandon"]`. A failure renders
+  `button[data-action="confirm-abandon"|"cancel-abandon"]`. The Abandon button
+  itself **only ever arms** — on every click, unconditionally — and the panel is
+  derived from the controls currently on offer, so a run that leaves `failed`
+  while it is open drops the panel rather than leaving a dead button. The
+  component is `key`ed on the run id at both call sites, so an armed
+  confirmation cannot survive a rail selection change and fire against a
+  different run. A failure renders
   `[data-component="run-control-error"]` verbatim; a success renders
   `[data-component="run-control-outcome"][data-outcome-control=<id>]` wrapping
   the shared scheduler-aware `[data-component="enqueue-outcome"]` line, so
@@ -1996,6 +2006,20 @@ inventory rather than one shared page-level contract:
   `[data-action="start-work-architect"]` (a link carrying the project ID).
   Disabled actions carry `data-disabled-reason` + a visible hint
   (crosscut-25); outcomes land on `[data-start-work-outcome="ok"|"error"]`.
+  **W8-A3 (`flows-37`):** Plan and Run-a-flow both repoint a manifest's
+  `flow_id`, and this group pairs an initiative with a target without ever
+  showing which flow it is queued under — the roadmap payload carries no flow id
+  at all. Both therefore answer the enqueue's 409 `repoint-requires-confirm`
+  with the same in-DOM confirmation the flow monitor uses:
+  `[data-component="repoint-confirm"][data-current-flow][data-target-flow]` +
+  `button[data-action="confirm-repoint"|"cancel-repoint"]`, naming the flow of
+  origin the server reported; changing either select clears it. **Start
+  development deliberately has no confirmation**: it posts a BATCH, so a
+  "confirm everything" button would rubber-stamp N moves the surface cannot
+  show. A refused id is named in the outcome line with the way to move it
+  deliberately (that flow's own monitor). The develop hand-off is auto-authorised
+  only from `forge-architect` — see `enqueue-develop-run.ts`'s
+  `DEVELOP_HANDOFF_SOURCE_FLOWS`.
   Ids whose develop dispatch already came back ok THIS SESSION are excluded
   from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
   review F7 — the queue keeps them `pending` until the scheduler claims, so

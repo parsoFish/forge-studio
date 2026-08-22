@@ -591,9 +591,17 @@ export type DevelopStartItemResult = {
    *  an operator action) and `not-planned` (the develop decomposition gate)
    *  were both reachable on the wire while absent from the type, so a
    *  `never`-checked switch would silently drop them. */
-  status?: 'enqueued' | 'not-found' | 'already-developing' | 'already-done' | 'not-planned' | 'error';
+  status?: 'enqueued' | 'not-found' | 'already-developing' | 'already-done' | 'not-planned'
+    /** W8-A3 (`flows-37`): the initiative is queued under a flow OTHER than
+     *  `forge-architect`, and this batch route cannot disclose which — the
+     *  roadmap payload carries no flow id — so the hand-off is refused rather
+     *  than performed blind. */
+    | 'repoint-requires-confirm'
+    | 'error';
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -630,10 +638,16 @@ export async function startDevelopment(initiativeIds: string[], costCeilingUsd?:
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
 
 export type PlanInitiativeResult = {
-  status: 'enqueued' | 'not-found' | 'already-running' | 'error';
+  status: 'enqueued' | 'not-found' | 'already-running'
+    /** W8-A3 (`flows-37`): the initiative is queued under a flow other than
+     *  `forge-architect` and the operator has not confirmed moving it off it. */
+    | 'repoint-requires-confirm'
+    | 'error';
   initiativeId: string;
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -649,11 +663,16 @@ export type PlanInitiativeResult = {
  * generic non-2xx handling only preserves a bare `error` string, so this
  * reads the JSON body directly instead of going through that envelope.
  */
-export async function planInitiative(initiativeId: string): Promise<PlanInitiativeResult> {
+export async function planInitiative(
+  initiativeId: string,
+  /** W8-A3 (`flows-37`): the operator's answer to the repoint question. */
+  opts: { confirmRepoint?: boolean } = {},
+): Promise<PlanInitiativeResult> {
   try {
     const res = await bridgeFetch(`/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
       method: 'POST',
-      headers: { 'x-forge-csrf': '1' },
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ confirmRepoint: opts.confirmRepoint === true }),
     });
     const body = (await res.json()) as Partial<PlanInitiativeResult> & { error?: string };
     if (body.status) {
@@ -662,6 +681,7 @@ export async function planInitiative(initiativeId: string): Promise<PlanInitiati
         initiativeId,
         cycleId: body.cycleId,
         flowId: body.flowId,
+        currentFlowId: body.currentFlowId,
         detail: body.detail,
       };
     }

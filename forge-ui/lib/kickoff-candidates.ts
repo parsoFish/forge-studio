@@ -24,6 +24,16 @@
  */
 import type { Run } from './studio-client';
 
+/**
+ * `orchestrator/run-model.ts`'s `FALLBACK_FLOW_ID`, re-declared client-side by
+ * this file's convention (see `studio-client.ts`'s type headers). `Run.flowId`
+ * is ALREADY defaulted to it for a manifest that carries no `flow_id`, so
+ * reading `r.flowId` raw would report a repoint away from a flow that does not
+ * exist — while the server, which sees the undefined `manifest.flow_id`, would
+ * call it no repoint at all (adversarial review round 1, S3-8).
+ */
+const NO_FLOW_SENTINEL = 'unknown';
+
 /** An initiative the generic kickoff can enqueue onto a flow — derived from
  *  the runs list (one run per queued manifest), never invented. */
 export type KickoffCandidate = {
@@ -48,7 +58,7 @@ export function deriveKickoffCandidates(runs: Run[], flowId: string): KickoffCan
     if (r.status !== 'planned') continue;
     if (!r.initiativeId || seen.has(r.initiativeId)) continue;
     seen.add(r.initiativeId);
-    const currentFlowId = r.flowId || null;
+    const currentFlowId = r.flowId && r.flowId !== NO_FLOW_SENTINEL ? r.flowId : null;
     out.push({
       initiativeId: r.initiativeId,
       project: r.project ?? null,

@@ -2826,12 +2826,22 @@ async function handleHttp(
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
       return;
     }
+    // W8-A3 (`flows-37`, review round 1 S2-2): the third door onto a repoint.
+    // Same forward as `POST /api/flows/:id/run` — `=== true`, never truthiness —
+    // and the rule itself lives on `enqueuePlanRun`.
+    let planBody: unknown;
     try {
-      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot });
+      planBody = await readJson(req);
+    } catch {
+      planBody = {};
+    }
+    const planConfirmRepoint = (planBody as Record<string, unknown>)?.['confirmRepoint'] === true;
+    try {
+      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepoint: planConfirmRepoint });
       const httpStatus =
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :
-        result.status === 'already-running' ? 409 :
+        result.status === 'already-running' || result.status === 'repoint-requires-confirm' ? 409 :
         500;
       sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {

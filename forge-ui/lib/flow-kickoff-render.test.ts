@@ -81,8 +81,13 @@ test('flows-25: EVERY kickoff surface renders a launch control if and only if it
         .toContain(`data-action="${surface.launchAction}"`);
     } else {
       expect(surface.launchAction, `${id}: a non-launching surface names no control`).toBeNull();
-      // Nothing that starts anything: neither launcher's action may appear.
-      for (const action of ['start-run', 'start-architect']) {
+      // Nothing that starts anything: NO launcher's action may appear — the set
+      // is read off the table itself, so adding a fifth surface with a new
+      // launch action cannot silently narrow this check (review round 1).
+      const everyLaunchAction = Object.values(KICKOFF_SURFACES)
+        .map((sfc) => sfc.launchAction)
+        .filter((a): a is string => a !== null);
+      for (const action of everyLaunchAction) {
         expect(markup, `${id}: launches:false but the markup carries [data-action="${action}"]`)
           .not.toContain(`data-action="${action}"`);
       }

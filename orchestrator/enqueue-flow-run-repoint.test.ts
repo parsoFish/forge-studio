@@ -171,20 +171,58 @@ test('flows-37: the trigger drain\'s flow-complete chaining still repoints on ev
   });
 });
 
-test('flows-37: the architect→develop hand-off (enqueueDevelopRun) is the named exemption — and it is a real parameter, not a bypass', () => {
+test('flows-37: the architect→develop hand-off enqueues without a flag — that transition IS what the roadmap button means', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect' }));
-    // The roadmap's per-initiative "Start development" names both the
-    // initiative and the target, so the operator HAS confirmed the transition.
     assert.equal(enqueueDevelopRun(INIT, { queueRoot }).status, 'enqueued');
   });
+});
+
+test('flows-37 REGRESSION (review round 1, S1-1): "Start development" must NOT take an initiative queued under an authored flow', () => {
+  // The first cut of this fix defaulted `confirmRepoint: true` inside
+  // enqueueDevelopRun, reasoning that the roadmap names the initiative and the
+  // target. It does not: `StartWorkActions.onDevelop` posts a BATCH of every
+  // eligible id on one click, and RoadmapInitiative carries no flow id at all,
+  // so the button cannot disclose the flow of origin even in principle. That
+  // left flows-37 fully reachable one route over.
+  //
+  // KILLS: any re-introduction of a blanket repoint default on this delegate.
   withTmp((queueRoot) => {
-    seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect' }));
-    // Prove the default is a parameter the caller can close, not a constant:
-    // if the exemption were hard-coded, this would still enqueue.
+    const src = seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
+    const before = readFileSync(src, 'utf8');
+
+    const result = enqueueDevelopRun(INIT, { queueRoot });
+
+    assert.equal(result.status, 'repoint-requires-confirm');
+    assert.equal(result.currentFlowId, 'my-authored-flow');
+    assert.equal(readFileSync(src, 'utf8'), before, 'the authored flow\'s queued manifest is byte-identical');
+    assert.equal(existsSync(join(getPaths(queueRoot).pending, `${INIT}.md`)), true);
+    const onDisk = parseManifest(readFileSync(src, 'utf8'));
+    assert.equal(onDisk.flow_id, 'my-authored-flow', 'still queued under the flow it belongs to');
+  });
+});
+
+test('flows-37: the develop hand-off exemption is scoped to the SOURCE flow, not to the caller — an explicit confirm still works', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
+    // The operator CAN move it, having been asked; the exemption is about who
+    // may skip the question, not about who may perform the move.
+    assert.equal(enqueueDevelopRun(INIT, { queueRoot, confirmRepoint: true }).status, 'enqueued');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ordering (review round 1, S3-7)
+// ---------------------------------------------------------------------------
+
+test('flows-37: an undecomposed initiative answers `not-planned`, not a confirmation it could never satisfy', () => {
+  withTmp((queueRoot) => {
+    // No `specs`, no WI snapshot, no worktree — the develop precondition fails.
+    seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect', specs: [] }));
+    const result = enqueueFlowRun(INIT, 'forge-develop', { queueRoot });
     assert.equal(
-      enqueueDevelopRun(INIT, { queueRoot, confirmRepoint: false }).status,
-      'repoint-requires-confirm',
+      result.status, 'not-planned',
+      'the cheap precondition answers first — confirming a repoint that then 409s is a question with no right answer',
     );
   });
 });
