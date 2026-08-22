@@ -27,6 +27,20 @@ writes lands in a **git-tracked path inside the forge repo itself**:
 | Hook | `studio/hooks/<id>/{hook.yaml,scripts/run.sh}` (`cli/bridge-studio-hooks.ts`, create + edit routes) | tracked |
 | Knowledge base | `brain/<id>/{kb.yaml,themes/,_raw/}` (`cli/bridge-studio-kbs.ts`, the KB create route) | tracked |
 | Community registry rows | `studio/community/registry.yaml` (`cli/bridge-studio-writes.ts` CRUD + `commitRegistryDraft` in `orchestrator/interactive-finalizers.ts`) | tracked |
+| Templates / demo elements | `studio/artifact-templates/<id>.md`, `studio/demo-elements/<id>.md` (`cli/bridge-studio-templates.ts`) | tracked |
+| Skill packages, installs, approvals | `skills/<id>/**` (`cli/bridge-studio-skills.ts`, `installSkillPackage` / `approveSkillDraft` in `orchestrator/studio/skill-library.ts`, `installCommunityHookPackage` in `orchestrator/studio/community-install.ts`) | tracked |
+| Per-machine install ledger + hook approvals | `studio/installed-skills.yaml`, `studio/hook-approvals.yaml` | tracked directory, files **not** gitignored |
+
+That table is representative, not exhaustive — the full set is wider than the five paths the
+operator-facing story starts from, which is precisely why §C below insists the declared set be data
+with a drift guard rather than a hand-maintained list. Two useful pieces of negative evidence: Studio
+writes **nothing** under `docs/`, and `studio/catalog.yaml` and `studio/session-kinds.yaml` have no
+write path at all — they are hand-edited by design ([ADR 027](./027-studio-object-model.md) §5,
+restated in `orchestrator/studio/registry.ts`). And one adjacent gap found while enumerating:
+`_template-staging/` (`cli/bridge-studio-templates.ts`) is **not** gitignored, unlike its siblings
+`_skill-staging/` and `_interactive-library/`. It is cleaned in a `finally`, so the leak is latent —
+but a crash mid-request leaves an untracked directory sitting next to exactly the pending state this
+ADR is about.
 
 Studio **never** runs `git add` or `git commit` against the forge repo, and that is deliberate. The
 policy is written down in `docs/community-registry-writes.md`:
@@ -40,6 +54,14 @@ That incident is why `cli/dry-bridge.ts` exists at all; its module docstring nam
 Studio bridge self-merged a forge PR with the operator's real gh token during a `ui:journey` harness
 run"), and `docs/roadmaps/README.md` §"wave 0" cites it as the reason safety work was sequenced first.
 **The no-auto-commit decision is correct and this ADR does not reverse it.**
+
+One honest exception, stated so this ADR does not overclaim: `fixMisRouted` (`cli/brain-fix-auto.ts`),
+reachable from Studio's "apply auto-fixes" button, runs `git -C <forgeRoot> mv` to relocate a
+mis-categorised brain theme while preserving its history. `git mv` **stages** — so exactly one Studio
+path today writes the forge repo's index. It is gated on a clean worktree first (a read-only
+`git status --porcelain`) and there is no follow-up `commit`, so it stops one step short: the operator
+is left with a *staged* change that, like every other Studio write, no surface reports. It is the
+exception that proves the shape of the problem rather than a counter-example to it.
 
 The problem is what the decision left unbuilt. Four things follow from "write the tree, tell nobody":
 
@@ -113,12 +135,23 @@ neither has been built:
 - **Promote-to-core** — an edit I made to the platform that *should* enter forge's shared history,
   reviewed like any other change to forge. Not committing these is the bug.
 
-Forge is not starting from nothing on either half. `forge.config.json` is already gitignored
-(`.gitignore`) — non-committed operator settings exist today at the root-config level and simply
-never extended to Studio objects. `_connections/` is gitignored as an on-demand install root. And
-`resolveKbBrainDir` (`orchestrator/brain-paths.ts`) already resolves a KB id across **two ordered
-containment roots** with the realpath guard intact on each — the multi-root pattern is proven in
-production code.
+Forge is not starting from nothing on either half — every ingredient of the decision below already
+runs in production, just never pointed at this problem:
+
+- **Gitignored operator settings, with a tracked template and a first-run scaffold.**
+  `forge.config.json` is gitignored while `forge.config.json.example` is tracked, and `ensureLayout`
+  (`orchestrator/init.ts`) writes a default if the real file is absent. `*.env` / `.env.example` and
+  `brain/.obsidian/` follow the same pattern. Non-committed operator settings are an established
+  house convention that simply never extended to Studio objects.
+- **A gitignored staging root that authoring already writes to instead of the tracked tree.**
+  `_interactive-library/` holds drafted skill and hook packages, and `runInteractiveTurn`'s
+  `libraryRootGuard` (`orchestrator/interactive-runner.ts`) is explicitly *"a dedicated, NON-scanned
+  root, never `skillsDir`/`hooksDir`"*. Only the finalizer's `copyStagingToLibrary` moves a package
+  into the tracked tree. `_connections/` is the same idea for installed packages.
+- **Ordered multi-root resolution with the containment guard re-applied per root.**
+  `resolveKbBrainDir` (`orchestrator/brain-paths.ts`) already resolves a KB id across
+  `[brain/, brain/projects/]`, first hit wins, `resolveGuardedPath` per root, with a deliberate
+  collapse of "rejected" and "absent" so no probe oracle leaks.
 
 ## Decision
 
