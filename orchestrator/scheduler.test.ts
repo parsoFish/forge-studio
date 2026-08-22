@@ -611,3 +611,150 @@ test('annotateManifest: replaces folded >- scalar without leaving continuation l
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// w8-A1 Change 3: a deterministic PM failure (hidden coupling / invalid work
+// items) classifies TERMINAL — the same decomposition re-run repeats the
+// same violation, so retrying is guaranteed to fail again. Both tests below
+// drive the REAL classifyCycleFailure (not a hand-authored terminal event)
+// so they are a genuine RED against today's `T('transient', …)`
+// classification: today the manifest retries; post-w8-A1 it must not.
+// ---------------------------------------------------------------------------
+
+test('decideAutoRetry: a real PM hidden-coupling failure classifies terminal (w8-A1 Change 3) → zero auto-retries', async () => {
+  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { dir, paths } = setupQueue();
+  try {
+    writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm', 0);
+    const logDir = mkdtempSync(join(tmpdir(), 'forge-log-'));
+    const logPath = join(logDir, 'events.jsonl');
+    try {
+      // The real event shape a PM hidden-coupling failure logs.
+      const pmErrorEvent = {
+        event_id: 'EV_pm_err',
+        cycle_id: 'cycle-test',
+        initiative_id: 'INIT-2026-05-10-pmterm',
+        started_at: new Date().toISOString(),
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'pm.end',
+        metadata: {
+          hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }],
+          per_item_error_count: 0,
+        },
+      };
+      // The failure_classification event the orchestrator actually derives
+      // from it (cycle.ts's emitFailureClassification calls
+      // classifyCycleFailure and stamps ITS kind/recoverable) — not a
+      // hand-authored terminal event.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cls = classifyCycleFailure([pmErrorEvent] as any);
+      const classificationEvent = {
+        event_id: 'EV_fc',
+        cycle_id: 'cycle-test',
+        initiative_id: 'INIT-2026-05-10-pmterm',
+        started_at: new Date().toISOString(),
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'failure_classification',
+        metadata: { cycle_id: 'cycle-test', failure_mode: cls.kind, recoverable: cls.recoverable },
+      };
+      writeFileSync(
+        logPath,
+        [pmErrorEvent, classificationEvent].map((e) => JSON.stringify(e)).join('\n') + '\n',
+      );
+
+      const decision = decideAutoRetry('INIT-2026-05-10-pmterm.md', paths, logPath);
+      assert.equal(
+        decision.retry,
+        false,
+        `expected zero auto-retries for a deterministic PM failure, got ${JSON.stringify(decision)}`,
+      );
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('dispatchTerminalStatus: a real PM per-item-validation failure never retries — manifest lands in failed/, never back in pending/ (w8-A1 Change 3, the money test)', async () => {
+  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { dir, paths } = setupQueue();
+  try {
+    writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm2', 0);
+    const logDir = mkdtempSync(join(tmpdir(), 'forge-log-'));
+    const logPath = join(logDir, 'events.jsonl');
+    try {
+      // The sibling deterministic PM signature — schema-invalid work items.
+      const pmErrorEvent = {
+        event_id: 'EV_pm_err2',
+        cycle_id: 'cycle-test-2',
+        initiative_id: 'INIT-2026-05-10-pmterm2',
+        started_at: new Date().toISOString(),
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'pm.end',
+        metadata: { per_item_error_count: 3, hidden_coupling_violations: [] },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cls = classifyCycleFailure([pmErrorEvent] as any);
+      const classificationEvent = {
+        event_id: 'EV_fc2',
+        cycle_id: 'cycle-test-2',
+        initiative_id: 'INIT-2026-05-10-pmterm2',
+        started_at: new Date().toISOString(),
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'failure_classification',
+        metadata: { cycle_id: 'cycle-test-2', failure_mode: cls.kind, recoverable: cls.recoverable },
+      };
+      writeFileSync(
+        logPath,
+        [pmErrorEvent, classificationEvent].map((e) => JSON.stringify(e)).join('\n') + '\n',
+      );
+
+      const calls: NotifyEvent[] = [];
+      const out = await dispatchTerminalStatus(
+        {
+          filename: 'INIT-2026-05-10-pmterm2.md',
+          manifest: { initiativeId: 'INIT-2026-05-10-pmterm2', project: 'demo' },
+          result: { status: 'failed', log_path: logPath },
+        },
+        { paths, notifyFn: async (e) => { calls.push(e); } },
+      );
+
+      assert.equal(
+        out.moved,
+        'failed',
+        `expected the manifest to land in failed/ (never pending/), got moved=${JSON.stringify(out.moved)}`,
+      );
+      assert.equal(
+        out.retry_decision?.retry,
+        false,
+        `expected zero auto-retries, got ${JSON.stringify(out.retry_decision)}`,
+      );
+      assert.ok(existsSync(join(paths.failed, 'INIT-2026-05-10-pmterm2.md')), 'manifest must be in _queue/failed/');
+      assert.ok(
+        !existsSync(join(paths.pending, 'INIT-2026-05-10-pmterm2.md')),
+        'manifest must NOT be back in _queue/pending/',
+      );
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

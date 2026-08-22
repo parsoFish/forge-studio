@@ -456,3 +456,91 @@ test('gateRequiredPaths: falls back to files_in_scope when neither declared', ()
   const w = fixture({ creates: undefined, verification_artifact: undefined, files_in_scope: ['pkg/auth.go', 'pkg/auth_test.go'] });
   assert.deepEqual([...gateRequiredPaths(w)], ['pkg/auth.go', 'pkg/auth_test.go']);
 });
+
+// ----- w8-A1 Change 1: WORK_ITEM_ID_PATTERN widens to accept a single -----
+// ----- lowercase split suffix (WI-<n>[a-z]?) -----
+// Both directions pinned at each of validateWorkItem's two enforcement
+// sites (own id + each depends_on entry) and validateWorkItemSet's knownIds
+// resolution. detectHiddenCoupling's reachability walk is string-keyed (no
+// id-shape gating), so a depends_on edge to a split-suffix sibling is
+// recognised there already — pinned below as a regression lock, not a
+// new-behaviour pin (see the comment on that test).
+
+const ACCEPTED_SPLIT_IDS = ['WI-1', 'WI-4a', 'WI-12z', 'UWI-2'];
+const REJECTED_SPLIT_IDS = ['WI-', 'WI-4a1', 'WI-4-a', 'wi-4a', 'WI-4A', 'WI-4ab', 'WI4', 'WIa'];
+
+test('validateWorkItem: accepts split-suffix work_item_id shapes (WI-<n>[a-z]?, U-prefixed too)', () => {
+  for (const id of ACCEPTED_SPLIT_IDS) {
+    const errors = validateWorkItem(fixture({ work_item_id: id }));
+    assert.ok(
+      !errors.some((e) => e.includes('work_item_id')),
+      `expected ${id} to be a valid work_item_id, got ${JSON.stringify(errors)}`,
+    );
+  }
+});
+
+test('validateWorkItem: rejects malformed split-suffix work_item_id shapes', () => {
+  for (const id of REJECTED_SPLIT_IDS) {
+    const errors = validateWorkItem(fixture({ work_item_id: id }));
+    assert.ok(
+      errors.some((e) => e.includes('work_item_id')),
+      `expected ${JSON.stringify(id)} to be rejected as work_item_id, got ${JSON.stringify(errors)}`,
+    );
+  }
+});
+
+test('validateWorkItem: depends_on accepts a split-suffix sibling id (WI-4a)', () => {
+  const errors = validateWorkItem(fixture({ depends_on: ['WI-4a'] }));
+  assert.deepEqual(errors, [], `expected a clean depends_on entry, got ${JSON.stringify(errors)}`);
+});
+
+test('validateWorkItem: depends_on rejects malformed split-suffix shapes', () => {
+  for (const id of REJECTED_SPLIT_IDS) {
+    const errors = validateWorkItem(fixture({ depends_on: [id] }));
+    assert.ok(
+      errors.some((e) => e.includes('depends_on entry malformed')),
+      `expected depends_on entry ${JSON.stringify(id)} to be rejected as malformed, got ${JSON.stringify(errors)}`,
+    );
+  }
+});
+
+test('validateWorkItemSet: a depends_on referencing a split-suffix sibling id resolves (no unknown-work-item error)', () => {
+  const a = fixture({ work_item_id: 'WI-4a', files_in_scope: ['a.ts'], creates: ['a.ts'] });
+  const b = fixture({ work_item_id: 'WI-5', depends_on: ['WI-4a'], files_in_scope: ['b.ts'], creates: ['b.ts'] });
+  const { perItem } = validateWorkItemSet([a, b]);
+  assert.deepEqual(perItem['WI-5'], [], `WI-5 must resolve WI-4a as known, got ${JSON.stringify(perItem['WI-5'])}`);
+  assert.deepEqual(perItem['WI-4a'], []);
+});
+
+// NOTE: detectHiddenCoupling's reachability walk (lines ~485-550) is
+// string-keyed adjacency with NO WORK_ITEM_ID_PATTERN gating anywhere in it
+// — it never rejects an id shape, so a suffixed id already flows through
+// correctly today. This is a regression lock (must stay green across the
+// change), not a red-before/green-after pin.
+test('detectHiddenCoupling: a depends_on edge to a split-suffix sibling id is recognised (regression lock — no id-shape gating in the reachability walk)', () => {
+  const a = fixture({ work_item_id: 'WI-4a', files_in_scope: ['shared.ts'] });
+  const b = fixture({ work_item_id: 'WI-5', files_in_scope: ['shared.ts'], depends_on: ['WI-4a'] });
+  assert.deepEqual(detectHiddenCoupling([a, b]), []);
+});
+
+test('WORK_ITEM_ID_PATTERN / WORK_ITEM_FILE_PATTERN: exported and match split-suffix ids/filenames both directions', async () => {
+  // Dynamic import (not a static named import) so a not-yet-exported symbol
+  // fails THIS test's assertions rather than crashing the whole file at
+  // load time (module-namespace property access on a missing export is
+  // `undefined`, not a throw).
+  const mod = await import('./work-item.ts');
+  const idPattern = (mod as unknown as { WORK_ITEM_ID_PATTERN?: RegExp }).WORK_ITEM_ID_PATTERN;
+  const filePattern = (mod as unknown as { WORK_ITEM_FILE_PATTERN?: RegExp }).WORK_ITEM_FILE_PATTERN;
+
+  assert.ok(idPattern instanceof RegExp, 'WORK_ITEM_ID_PATTERN must be exported as a RegExp from work-item.ts');
+  assert.ok(filePattern instanceof RegExp, 'WORK_ITEM_FILE_PATTERN must be exported as a RegExp from work-item.ts');
+
+  for (const id of ACCEPTED_SPLIT_IDS) {
+    assert.ok(idPattern!.test(id), `WORK_ITEM_ID_PATTERN should accept ${id}`);
+    assert.ok(filePattern!.test(`${id}.md`), `WORK_ITEM_FILE_PATTERN should accept ${id}.md`);
+  }
+  for (const id of REJECTED_SPLIT_IDS) {
+    assert.ok(!idPattern!.test(id), `WORK_ITEM_ID_PATTERN should reject ${id}`);
+    assert.ok(!filePattern!.test(`${id}.md`), `WORK_ITEM_FILE_PATTERN should reject ${id}.md`);
+  }
+});
