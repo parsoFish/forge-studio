@@ -880,3 +880,165 @@ test('C8 coverage (R1-04-F1): a bare runner prefix does NOT falsely cover an unr
     p.cleanup();
   }
 });
+
+// ── C1 (HARD): package-manager-shaped gates must resolve from the project
+// dir itself, no upward walk (w8-a1 regression: a declared `npm test` with no
+// package.json in the project dir false-passed, then npm's ancestor-walk ran
+// FORGE's own root package.json instead of the project's) ──
+
+/** A minimal C1-only fixture — no happyProject scaffolding, just a dir. */
+function bareProjectDir(): { dir: string; cleanup: () => void } {
+  const dir = tmp();
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+function withProjectJson(dir: string, cmd: string[]): void {
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ testProcess: { local: { cmd } } }));
+}
+
+test('C1 (HARD) regression: declared `npm test` with NO package.json in the project dir fails, names package.json', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npm', 'test']);
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, false, 'npm test with no package.json must NOT silently resolve against an ancestor package.json');
+    assert.match(c1.detail, /package\.json/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): `npm test` with a package.json that HAS a "test" script passes', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npm', 'test']);
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { test: 'node --test' } }));
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r, 'C1').pass, true, clause(r, 'C1').detail);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): `npm test` with a package.json that has NO "test" script fails', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npm', 'test']);
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'tsc' } }));
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, false);
+    assert.match(c1.detail, /test/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): `npm run lint:fast` passes when the script exists, fails when it does not', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npm', 'run', 'lint:fast']);
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { 'lint:fast': 'eslint --quiet' } }));
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r, 'C1').pass, true, clause(r, 'C1').detail);
+
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'tsc' } }));
+    const r2 = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r2, 'C1');
+    assert.equal(c1.pass, false);
+    assert.match(c1.detail, /lint:fast/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): a malformed package.json with an npm-shaped gate fails closed, detail carries the parse error', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npm', 'test']);
+    writeFileSync(join(p.dir, 'package.json'), '{ not valid json');
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, false);
+    assert.match(c1.detail, /package\.json/);
+    assert.match(c1.detail, /JSON|Unexpected|token|position/i);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD) negative control: `go test ./...` with no package.json still passes (rule is scoped to pm gates)', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['go', 'test', './...']);
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, true, c1.detail);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): chained-command rejection still fires before the package-manager check', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['bash', '-c', 'npm test && echo done']);
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, false);
+    assert.match(c1.detail, /chains multiple commands/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): slow-marker rejection still fires before the package-manager check', () => {
+  const p = bareProjectDir();
+  try {
+    // npm-shaped AND contains a slow marker, no package.json at all — the
+    // slow-marker verdict must win, not the package.json-missing verdict.
+    withProjectJson(p.dir, ['npm', 'run', 'test:e2e']);
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    const c1 = clause(r, 'C1');
+    assert.equal(c1.pass, false);
+    assert.match(c1.detail, /slow|e2e/i);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): `yarn <script>` shorthand (not a known yarn subcommand) resolves to that script', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['yarn', 'unit']);
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { unit: 'vitest run' } }));
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r, 'C1').pass, true, clause(r, 'C1').detail);
+
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'tsc' } }));
+    const r2 = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r2, 'C1').pass, false);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C1 (HARD): `npx`-shaped gate only requires package.json to exist, no invented script check', () => {
+  const p = bareProjectDir();
+  try {
+    withProjectJson(p.dir, ['npx', 'jest']);
+    // package.json exists but has NO scripts at all — npx isn't script-backed,
+    // so this must pass on presence alone.
+    writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x' }));
+    const r = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r, 'C1').pass, true, clause(r, 'C1').detail);
+
+    rmSync(join(p.dir, 'package.json'));
+    const r2 = runPreflight(p.dir, { forgeRoot: p.dir });
+    assert.equal(clause(r2, 'C1').pass, false, 'npx-shaped still requires package.json to exist in the project dir');
+  } finally {
+    p.cleanup();
+  }
+});

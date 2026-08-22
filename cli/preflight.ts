@@ -209,7 +209,106 @@ function checkC1(dir: string, cfg: ProjectConfig | null, cfgError: string | null
         'The per-iteration gate must be ~≤10s — split a fast unit suite out as the test command.',
     };
   }
+  // w8-a1: a package-manager-shaped gate (npm/yarn/pnpm/npx/bun/bunx …) must
+  // be RESOLVABLE from the project dir itself, with no upward walk. A
+  // syntactically-fine `npm test` in a project dir with no package.json was
+  // false-passing here, then npm's own ancestor-package.json walk resolved
+  // the command against FORGE's ROOT package.json at runtime — the dev-loop
+  // silently ran (and "passed") forge's ~2000-test suite instead of the
+  // project's. This check never executes the command — pure fs + JSON read.
+  if (isPackageManagerShaped(cmd)) {
+    const pkgPath = join(dir, 'package.json');
+    if (!existsSync(pkgPath)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          `${source} ("${cmd}") is npm/yarn/pnpm-shaped, but ${dir} has no package.json. ` +
+          'Without one there, the package manager resolves the command against an ANCESTOR ' +
+          "package.json outside the project dir (e.g. forge's own root) — a false green on the wrong repo. " +
+          `Add a package.json at ${pkgPath}, or declare a gate that does not shell out to a package manager.`,
+      };
+    }
+    let pkgRaw: string;
+    try {
+      pkgRaw = readFileSync(pkgPath, 'utf8');
+    } catch (err) {
+      return {
+        ...base,
+        pass: false,
+        detail: `${pkgPath} exists but could not be read — ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    let pkg: { scripts?: Record<string, unknown> };
+    try {
+      pkg = JSON.parse(pkgRaw) as { scripts?: Record<string, unknown> };
+    } catch (err) {
+      return {
+        ...base,
+        pass: false,
+        detail: `${pkgPath} is not valid JSON, cannot verify the declared gate resolves — ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const scriptName = resolveScriptName(cmd);
+    if (scriptName !== null) {
+      const scripts = pkg && typeof pkg === 'object' && pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+      const script = (scripts as Record<string, unknown>)[scriptName];
+      if (typeof script !== 'string' || script.trim() === '') {
+        return {
+          ...base,
+          pass: false,
+          detail:
+            `${source} ("${cmd}") declares package.json script "${scriptName}", but ${pkgPath}'s ` +
+            `"scripts" has no such entry — the gate would fail (or resolve elsewhere) the moment it actually ran.`,
+        };
+      }
+    }
+  }
   return { ...base, pass: true, detail: `${source}: "${cmd}" (single command, no slow-suite marker)` };
+}
+
+/** Package-manager binaries whose commands resolve relative to a package.json (npm's/yarn's/pnpm's own upward-walk semantics). */
+const PACKAGE_MANAGER_TOKENS = new Set(['npm', 'yarn', 'pnpm', 'npx', 'bun', 'bunx']);
+
+/** True iff `cmd`'s first token invokes a package manager (case-insensitive). */
+function isPackageManagerShaped(cmd: string): boolean {
+  const first = cmd.trim().split(/\s+/)[0] ?? '';
+  return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
+}
+
+// pm-native verbs that a bare `yarn <token>` / `pnpm <token>` must NOT be
+// mistaken for a project script name — yarn/pnpm proxy any UNRECOGNIZED verb
+// to a package.json script, so this set only needs the manager's own real
+// subcommands (an actual script named e.g. "build" or "start" still resolves
+// as a script, matching real yarn/pnpm behaviour).
+const PM_NATIVE_SUBCOMMANDS = new Set([
+  'run', 'install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'update', 'upgrade', 'up',
+  'exec', 'dlx', 'init', 'publish', 'link', 'unlink', 'list', 'ls', 'outdated', 'audit', 'why',
+  'info', 'view', 'config', 'cache', 'prune', 'pack', 'create', 'dedupe', 'patch', 'patch-commit',
+  'patch-remove', 'deploy', 'rebuild', 'store', 'server', 'root', 'licenses', 'doctor', 'setup',
+  'tag', 'team', 'owner', 'policies', 'import', 'global', 'node', 'env', 'workspace', 'workspaces',
+  'login', 'logout', 'whoami', 'version', 'versions', 'help', '-v', '--version', '-h', '--help',
+]);
+
+/**
+ * Resolves the package.json `scripts` key a declared gate would invoke, or
+ * `null` when the shape can't be mapped to one — callers must then do the
+ * package.json-EXISTENCE check only, never invent a script-name guess.
+ * Mapped shapes: bare `npm test` / `yarn test` / `pnpm test` → "test";
+ * `npm run <name>` / `yarn run <name>` / `pnpm run <name>` → "<name>";
+ * `yarn <name>` / `pnpm <name>` (name not a known pm subcommand) → "<name>".
+ * `npx`/`bunx`/`bun` and anything else → null (not script-backed).
+ */
+function resolveScriptName(cmd: string): string | null {
+  const toks = cmd.trim().split(/\s+/).filter(Boolean);
+  const runner = (toks[0] ?? '').toLowerCase();
+  if (runner !== 'npm' && runner !== 'yarn' && runner !== 'pnpm') return null;
+  const first = (toks[1] ?? '').toLowerCase();
+  if (!first) return null;
+  if (first === 'test') return 'test';
+  if (first === 'run') return toks[2] ?? null;
+  if (runner !== 'npm' && !PM_NATIVE_SUBCOMMANDS.has(first)) return toks[1]!;
+  return null;
 }
 
 // --- C2: scratch hygiene (HARD) ---
