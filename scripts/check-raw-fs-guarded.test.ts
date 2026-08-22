@@ -26,6 +26,8 @@ import {
   targetModules,
   ALLOWLIST,
   RAW_FS_SINKS,
+  SINK_PATH_ARG_INDICES,
+  GUARD_PRODUCERS,
   REQUEST_TAINT_BARE,
   DIR_PARAM_NAMES,
 } from './check-raw-fs-guarded.mjs';
@@ -533,4 +535,221 @@ test('the export surface is present (registry probes)', () => {
   for (const n of ['sessionDir', 'projectRoot', 'projectDir', 'dir', 'root', 'base', 'repoPath']) {
     assert.ok(DIR_PARAM_NAMES.has(n), `dir-shaped param "${n}" is recognized`);
   }
+});
+
+// =============================================================================
+// Group F — W8-C2a (forge-5kh): the PATH-FIRST MUTATING sink families. The
+// six buffer-API names plus openSync covered reads, writes and directory
+// creation, but the whole DESTRUCTIVE half of node:fs — append, rename, rm,
+// unlink, cp/copyFile, symlink, createWriteStream — was structurally invisible.
+// forge-5kh proved it by probe: a module containing an unguarded
+// `openSync(join(ctx.logsRoot, body.cycleId, 'stderr.log'))` was caught, while
+// appendFileSync/copyFileSync/renameSync/rmSync/unlinkSync/symlinkSync/cpSync/
+// createWriteStream on the IDENTICAL request-derived path ALL passed silently.
+// A ratchet whose whole purpose is "fail when a new unguarded sink appears"
+// could not see the families that DELETE and OVERWRITE.
+//
+// The second half of this group covers the argument-position problem the first
+// six sinks never had: renameSync/cpSync/copyFileSync take TWO real paths and
+// symlinkSync's path is its SECOND argument (the first is the link target
+// string, which this process never opens). A first-argument-only scan of those
+// is not partial coverage, it is a wrong answer — see SINK_PATH_ARG_INDICES.
+// =============================================================================
+
+test('F1 (RED): every path-first mutating sink on a request-derived path is a finding', () => {
+  // Kills: the pre-forge-5kh sink list. Each of these is the SAME tainted path
+  // expression that E1 proves is caught for openSync — only the sink differs,
+  // so a red here can be caused by nothing but the sink list.
+  const cases: Array<[string, string]> = [
+    ['appendFileSync', "appendFileSync(join(logsRoot, body.runId, 'x.log'), 'line');"],
+    ['rmSync', "rmSync(join(logsRoot, body.runId), { recursive: true });"],
+    ['rmdirSync', 'rmdirSync(join(logsRoot, body.runId));'],
+    ['unlinkSync', "unlinkSync(join(logsRoot, body.runId, 'x.log'));"],
+    ['createWriteStream', "createWriteStream(join(logsRoot, body.runId, 'x.log'));"],
+  ];
+  for (const [sink, call] of cases) {
+    const text = fn('export function handle(body) {', `  ${call}`, '}');
+    const findings = analyzeModule(text, 'cli/ui-bridge.ts');
+    assert.equal(findings.length, 1, `${sink}: exactly one finding, got ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].sink, sink);
+    assert.equal(findings[0].kind, 'tainted');
+  }
+});
+
+test('F2 (GREEN twin): the SAME mutating calls routed through the guard are NOT findings', () => {
+  // The swap-the-fix proof for F1: identical bodies, guard added, nothing else.
+  const cases = [
+    "appendFileSync(p, 'line');",
+    'rmSync(p, { recursive: true });',
+    'rmdirSync(p);',
+    'unlinkSync(p);',
+    'createWriteStream(p);',
+  ];
+  for (const call of cases) {
+    const text = fn(
+      'export function handle(body) {',
+      "  const p = guardedFile(logsRoot, [body.runId, 'x.log'], 'write');",
+      '  if (p === null) return;',
+      `  ${call}`,
+      '}',
+    );
+    assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), [], `guarded ${call} must not fire`);
+  }
+});
+
+test('F3 (RED): a TWO-PATH sink is scanned on BOTH ends — a tainted DESTINATION is caught even when the source is trusted', () => {
+  // Kills: adding rename/cp to the sink list but leaving the scan first-argument
+  // only. The destination of a rename/copy is where bytes LAND; a first-arg-only
+  // scan reports clean on the more dangerous half.
+  for (const sink of ['renameSync', 'cpSync', 'copyFileSync']) {
+    const text = fn(
+      'export function handle(body) {',
+      "  const src = join(logsRoot, 'template.json');",
+      `  ${sink}(src, join(projectsRoot, body.project, 'out.json'));`,
+      '}',
+    );
+    const findings = analyzeModule(text, 'cli/ui-bridge.ts');
+    assert.equal(findings.length, 1, `${sink} destination: exactly one finding, got ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].sink, sink);
+    assert.match(findings[0].why, /body\.project/);
+  }
+});
+
+test('F4 (RED): a TWO-PATH sink is caught on its SOURCE end too, and both ends tainted yields two findings', () => {
+  const src = fn(
+    'export function handle(body) {',
+    `  renameSync(join(logsRoot, body.runId, 'a'), join(logsRoot, 'archive', 'a'));`,
+    '}',
+  );
+  const one = analyzeModule(src, 'cli/ui-bridge.ts');
+  assert.equal(one.length, 1, `tainted source: one finding, got ${JSON.stringify(one)}`);
+
+  const both = fn(
+    'export function handle(body) {',
+    `  renameSync(join(logsRoot, body.runId, 'a'), join(projectsRoot, body.project, 'a'));`,
+    '}',
+  );
+  const two = analyzeModule(both, 'cli/ui-bridge.ts');
+  assert.equal(two.length, 2, `both ends tainted: two findings, got ${JSON.stringify(two)}`);
+});
+
+test('F5 (RED): symlinkSync is scanned on its SECOND argument — the path CREATED, not the link target string', () => {
+  // Kills: a naive first-arg scan of symlinkSync. Argument 0 is the target the
+  // link will POINT AT (a string this process never opens); argument 1 is the
+  // path actually created on disk. Scanning arg 0 would flag the wrong value and
+  // miss the real one — a wrong answer dressed as coverage.
+  const tainted = fn(
+    'export function handle(body) {',
+    "  symlinkSync('/etc/passwd', join(projectsRoot, body.project, 'link'));",
+    '}',
+  );
+  const findings = analyzeModule(tainted, 'cli/ui-bridge.ts');
+  assert.equal(findings.length, 1, `one finding, got ${JSON.stringify(findings)}`);
+  assert.equal(findings[0].sink, 'symlinkSync');
+  assert.match(findings[0].why, /body\.project/);
+
+  // The mirror: a tainted arg-0 (the link TARGET) with a trusted created path is
+  // NOT a containment finding for this lint — nothing is opened through it here.
+  const targetOnly = fn(
+    'export function handle(body) {',
+    "  symlinkSync(join(projectsRoot, body.project), join(logsRoot, 'fixed-link'));",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(targetOnly, 'cli/ui-bridge.ts'), [], 'arg-0 link target is not the path sink');
+});
+
+test('F6 (GREEN twin): guarded two-path calls do NOT fire on either end', () => {
+  const text = fn(
+    'export function handle(body) {',
+    "  const s = guardedFile(logsRoot, [body.runId, 'a'], 'read');",
+    "  const d = guardedFile(projectsRoot, [body.project, 'a'], 'write');",
+    '  if (s === null || d === null) return;',
+    '  renameSync(s, d);',
+    '  copyFileSync(s, d);',
+    '  cpSync(s, d);',
+    "  symlinkSync('/tmp/whatever', d);",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
+});
+
+test('F7: the sink list names the mutating families, records each one\'s PATH ARGUMENT POSITIONS, and states what it deliberately excludes', () => {
+  for (const s of [
+    'appendFileSync', 'renameSync', 'rmSync', 'rmdirSync', 'unlinkSync',
+    'cpSync', 'copyFileSync', 'symlinkSync', 'createWriteStream',
+  ]) {
+    assert.ok(RAW_FS_SINKS.includes(s), `${s} is a path sink and must be scanned (forge-5kh)`);
+  }
+  // Argument positions are DATA, not an assumption baked into the scanner.
+  assert.deepEqual(SINK_PATH_ARG_INDICES.renameSync, [0, 1]);
+  assert.deepEqual(SINK_PATH_ARG_INDICES.cpSync, [0, 1]);
+  assert.deepEqual(SINK_PATH_ARG_INDICES.copyFileSync, [0, 1]);
+  assert.deepEqual(SINK_PATH_ARG_INDICES.symlinkSync, [1]);
+  // Sinks absent from the map are first-argument sinks; that default must hold.
+  assert.equal(SINK_PATH_ARG_INDICES.readFileSync, undefined);
+  // DELIBERATE EXCLUSION, pinned so a future widener has to argue with a test:
+  // realpathSync IS the containment primitive these modules call to CONTAIN a
+  // path. Flagging it fires on every manual-containment site — i.e. on the code
+  // doing the right thing — which is the prove-trusted polarity this lint's own
+  // header rejects because it trains blind allowlist regeneration.
+  assert.ok(!RAW_FS_SINKS.includes('realpathSync'), 'realpathSync is the containment primitive, not a sink to flag');
+});
+
+test('F8: resolveKbBrainDir is a guard producer — a value bound from it is guard-terminal', () => {
+  // Kills: the three hand-written allowlist rows that each asserted, in prose,
+  // "dir = resolveKbBrainDir(...) runs the per-segment realpath identity walk".
+  // A reason repeated in three places is a stale copy waiting to happen; the
+  // scanner now knows the fact instead of three comments claiming it.
+  assert.ok(GUARD_PRODUCERS.includes('resolveKbBrainDir'));
+  const text = fn(
+    'export function handleDelete(url) {',
+    '  const id = decodeURIComponent(url.split("/")[4]);',
+    '  const dir = resolveKbBrainDir(forgeRoot, id);',
+    '  if (!dir) return;',
+    '  rmSync(dir, { recursive: true, force: true });',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/bridge-studio-kbs.ts'), []);
+});
+
+test('F9: the new producer is NOT a blanket hole — an inline leaf appended below it still fires', () => {
+  // The attack-the-fix test. Granting resolveKbBrainDir guard status must give
+  // it EXACTLY the semantics the other five producers have, not an exemption:
+  // the leaf below a guarded dir is still unguarded and must still be caught.
+  const text = fn(
+    'export function handleList(url) {',
+    '  const id = decodeURIComponent(url.split("/")[4]);',
+    '  const dir = resolveKbBrainDir(forgeRoot, id);',
+    '  readdirSync(join(dir, "_guidance"));',
+    '}',
+  );
+  const findings = analyzeModule(text, 'cli/bridge-studio-kbs.ts');
+  assert.equal(findings.length, 1, `leaf-append below the new producer must fire, got ${JSON.stringify(findings)}`);
+  assert.equal(findings[0].kind, 'leaf-append');
+
+  // Parity control: the SAME shape below an ESTABLISHED producer fires
+  // identically. If this ever diverges, the new producer was given special
+  // treatment and this test is the thing that says so.
+  const twin = fn(
+    'export function handleList(url) {',
+    '  const id = decodeURIComponent(url.split("/")[4]);',
+    '  const dir = guardedFile(brainRoot, [id], "read");',
+    '  readdirSync(join(dir, "_guidance"));',
+    '}',
+  );
+  const twinFindings = analyzeModule(twin, 'cli/bridge-studio-kbs.ts');
+  assert.equal(twinFindings.length, 1);
+  assert.equal(twinFindings[0].kind, findings[0].kind, 'new producer must behave exactly like an established one');
+});
+
+test('F10: argAt returns absent (not a bogus expression) when a call has fewer arguments than the sink\'s path positions', () => {
+  // Kills: an off-by-one that made `rmSync(p)` (one argument) report a phantom
+  // second path, or that made a two-path sink silently scan argument 0 twice.
+  const oneArg = fn(
+    'export function handle(body) {',
+    "  renameSync(join(logsRoot, body.runId, 'a'));",
+    '}',
+  );
+  const findings = analyzeModule(oneArg, 'cli/ui-bridge.ts');
+  assert.equal(findings.length, 1, `a 1-arg renameSync yields exactly one finding, got ${JSON.stringify(findings)}`);
 });

@@ -114,7 +114,61 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  *  openSync with O_NOFOLLOW on a guard-produced path is guard-terminal like
  *  any other sink — the flags are a containment mechanism, credited, never
  *  blanket-flagged. */
-export const RAW_FS_SINKS = ['readFileSync', 'writeFileSync', 'readdirSync', 'existsSync', 'statSync', 'mkdirSync', 'openSync'];
+export const RAW_FS_SINKS = [
+  // Buffer-API reads/writes and directory creation (the original six).
+  'readFileSync', 'writeFileSync', 'readdirSync', 'existsSync', 'statSync', 'mkdirSync',
+  // fd-based family (W7-C3, forge-i9w) — see the note above.
+  'openSync',
+  // W8-C2a (forge-5kh): the MUTATING families. Every one of these was proven
+  // blind by probe — a module carrying them on the SAME request-derived path
+  // that openSync is caught on passed silently. These are the sinks that
+  // DELETE and OVERWRITE, so their absence was the most consequential half of
+  // the gap, not the least.
+  'appendFileSync',      // append (write)
+  'renameSync',          // rename/move  — TWO paths, see SINK_PATH_ARG_INDICES
+  'rmSync', 'rmdirSync', // remove
+  'unlinkSync',          // remove
+  'cpSync', 'copyFileSync', // copy      — TWO paths
+  'symlinkSync',         // link create  — path is arg 1, NOT arg 0
+  'createWriteStream',   // streaming write
+];
+
+/** PATH ARGUMENT POSITIONS, as DATA rather than an assumption baked into the
+ *  scanner. Every sink not named here is a first-argument sink (`[0]`).
+ *
+ *  W8-C2a (forge-5kh). The original seven sinks all took their path first, so
+ *  a `firstArg`-only scan was correct by accident. The mutating families break
+ *  that:
+ *    - `renameSync(oldPath, newPath)`, `cpSync(src, dest)`,
+ *      `copyFileSync(src, dest)` — BOTH arguments are real filesystem paths.
+ *      The DESTINATION is where bytes land, so a first-argument-only scan
+ *      reports clean on the more dangerous half of a move/copy.
+ *    - `symlinkSync(target, path)` — argument 0 is the string the link will
+ *      POINT AT (this process never opens it); argument 1 is the path actually
+ *      created on disk. Scanning argument 0 here is not partial coverage, it is
+ *      the wrong answer: it flags a value that is never opened and misses the
+ *      one that is.
+ *
+ *  DELIBERATELY NOT IN RAW_FS_SINKS, with cause:
+ *    - `realpathSync` / `lstatSync` — `realpathSync` IS the containment
+ *      primitive these modules call in order to CONTAIN a path (every manual-
+ *      containment site is built on it), and `lstatSync` is its symlink-aware
+ *      companion in exactly those sites. Flagging them fires on the code doing
+ *      the right thing, which is the prove-trusted polarity this file's own
+ *      header rejects because it forces a large allowlist and trains blind
+ *      regeneration.
+ *    - the fd-consuming half (`readSync`/`writeSync`/`fstatSync`/`closeSync`) —
+ *      takes a descriptor, not a path; the path dimension is carried entirely
+ *      by the `openSync` that produced the fd (see the RAW_FS_SINKS note).
+ *    - `fs/promises` and namespace-qualified calls — unchanged pre-existing
+ *      limits, stated in the header's WHAT THIS PROVABLY DOES NOT COVER. */
+export const SINK_PATH_ARG_INDICES = {
+  renameSync: [0, 1],
+  cpSync: [0, 1],
+  copyFileSync: [0, 1],
+  symlinkSync: [1],
+};
+
 
 /** Guard producers — a binding assigned from any of these (or a `.realPath`
  *  member) sanitizes the path for its OWN value (guard-terminal). See the
@@ -125,6 +179,24 @@ export const GUARD_PRODUCERS = [
   'guardedReadFile',
   'guardedWriteFile',
   'guardedReadDir',
+  // W8-C2a (forge-5kh). `resolveKbBrainDir` (orchestrator/brain-paths.ts:97) is
+  // a guard producer in fact, not by courtesy: it passes `kbId` as its OWN
+  // `segments[]` element to `resolveGuardedPath` against two fixed
+  // forgeRoot-derived roots, and returns `dirname(guarded.realPath)` — the
+  // identity-verified real directory — or null. Three allowlist rows
+  // (kbs.ts pinned-guidance existsSync/readdirSync and the DELETE-route
+  // existsSync) each hand-wrote that exact sentence as their audited reason;
+  // naming the producer here makes the scanner KNOW it instead, and those three
+  // rows were deleted as the dead weight they became. A prose reason repeated
+  // in three places is a stale copy waiting to happen.
+  //
+  // This grants it EXACTLY the semantics the other five have — no more: a value
+  // bound from it is guard-terminal, and an INLINE leaf appended below it still
+  // fires as `leaf-append` (pinned by F9). The via-const-binding blind spot
+  // (`const g = join(d, 'x'); readdirSync(g)`) is a PRE-EXISTING, uniform limit
+  // of `identIsGuardBound` shared by all six producers — measured, not
+  // introduced here — and is stated in the header's DOES-NOT-COVER section.
+  'resolveKbBrainDir',
 ];
 
 /** Path-combinator names that are safe scaffolding, not taint. `dirname` is
@@ -353,19 +425,28 @@ function offsetToLine(starts, off) {
 /** Extract the balanced first argument text starting at `open` (index of the
  *  char right after the sink's `(`), from the CLEANED text. Returns the arg
  *  substring (trimmed) or null. */
-function firstArg(cleaned, open) {
+function argAt(cleaned, open, index) {
   let depth = 0;
   let i = open;
   const n = cleaned.length;
-  const start = i;
+  let argIdx = 0;
+  let start = i;
   for (; i < n; i++) {
     const c = cleaned[i];
     if (c === '(' || c === '[' || c === '{') depth += 1;
     else if (c === ')' || c === ']' || c === '}') {
       if (depth === 0) break; // closing ) of the sink call
       depth -= 1;
-    } else if (c === ',' && depth === 0) break; // end of first argument
+    } else if (c === ',' && depth === 0) {
+      if (argIdx === index) return cleaned.slice(start, i).trim();
+      argIdx += 1;
+      start = i + 1;
+    }
   }
+  // Ran out of arguments before reaching `index` — the call has fewer args than
+  // the sink's path positions describe (a 1-arg rmSync-style call, or a
+  // malformed/multi-line shape the cleaner collapsed). Absent, not empty.
+  if (argIdx !== index) return '';
   return cleaned.slice(start, i).trim();
 }
 
@@ -539,7 +620,11 @@ export function analyzeModule(text, relFile) {
     const orig = origLines[lineIdx] ?? '';
     const trimmed = orig.trimStart();
     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*') || trimmed.startsWith('import')) continue;
-    const path = firstArg(cleaned, openIdx);
+    // W8-C2a (forge-5kh): a sink may carry MORE THAN ONE path argument, and its
+    // path may not be argument 0 at all. Positions come from data
+    // (SINK_PATH_ARG_INDICES), defaulting to first-argument.
+    for (const argIndex of SINK_PATH_ARG_INDICES[sink] ?? [0]) {
+    const path = argAt(cleaned, openIdx, argIndex);
     if (!path) continue;
     // GUARD-TERMINAL — the sink opens the guard's own output. Always safe.
     if (isGuardTerminal(path, lineIdx, cleanedLines)) continue;
@@ -565,6 +650,7 @@ export function analyzeModule(text, relFile) {
         ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
         : `leaf-append onto unresolved dir-shaped param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
     findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind, why });
+    }
   }
   return findings;
 }
@@ -810,12 +896,22 @@ export const ALLOWLIST = [
   // ---- RETAIN: symlink-blind internal _logs event-log reads (disclosed residual) ----
   // ---- GUARD-NEXT: route the FULL path (incl. leaf) through the guard ----
   // ---- RETAIN: contained by a mechanism the scanner can\'t see (confirm next stage) ----
-  { file: 'cli/bridge-studio-kbs.ts', line: 1275, sink: 'existsSync',
-    reason: 'RETAIN (contained + boolean, W7-B2 knowledge-29): the kb-detail route\'s pinned-guidance queue listing — gDir = resolveKbBrainDir(forgeRoot, kbId) (the per-segment realpath identity walk, choke-point containment; kbId KB_ID_RE-gated at the route) + the literal `_guidance` leaf; existsSync is a boolean probe, no bytes flow. Same containment category as the DELETE route\'s existsSync row below. (Line-drift remap from 1224 -- W7-B2 code-review round: approveKbCleanup\'s draft-write try/catch + failure surfacing and the approve-path consolidate\'s synchronous _brainfix log-dir stake-out added +37 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1261 -- W7 FIX-B-KB: themeDescription cache-bypass comment added +3 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Merge remap: W7-FIX-B-PROJ (fix/w7-bfix-projects) merged with parsoFish/main\'s W7-FIX-B-KB (#196); the two branches touched disjoint regions of cli/bridge-studio-kbs.ts, so main\'s already-remapped line carries through unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 1264 -- W7-C2 T1 review: cli/ui-bridge.ts\'s spawnAgentTurn now RETURNS a SpawnTurnOutcome instead of swallowing (A7) and the per-kind broadcast mapping was hoisted into one shared local (A12); cli/bridge-studio-kbs.ts\'s approveKbCleanup writes the finalized produce-pointer (P0-4). Same function, same guard/probe, byte-for-byte unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.)' },
-  { file: 'cli/bridge-studio-kbs.ts', line: 1276, sink: 'readdirSync',
-    reason: 'RETAIN (contained + names-only, W7-B2 knowledge-29): same gDir as the row above — readdirSync enumerates entry NAMES only (filtered to `*.md`, returned as display strings); no file contents flow and no name is joined back into any further fs path. (Line-drift remap from 1225 -- W7-B2 code-review round: approveKbCleanup\'s draft-write try/catch + failure surfacing and the approve-path consolidate\'s synchronous _brainfix log-dir stake-out added +37 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1262 -- W7 FIX-B-KB: themeDescription cache-bypass comment added +3 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Merge remap: W7-FIX-B-PROJ (fix/w7-bfix-projects) merged with parsoFish/main\'s W7-FIX-B-KB (#196); the two branches touched disjoint regions of cli/bridge-studio-kbs.ts, so main\'s already-remapped line carries through unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 1265 -- W7-C2 T1 review: cli/ui-bridge.ts\'s spawnAgentTurn now RETURNS a SpawnTurnOutcome instead of swallowing (A7) and the per-kind broadcast mapping was hoisted into one shared local (A12); cli/bridge-studio-kbs.ts\'s approveKbCleanup writes the finalized produce-pointer (P0-4). Same function, same guard/probe, byte-for-byte unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.)' },
-  { file: 'cli/bridge-studio-kbs.ts', line: 1526, sink: 'existsSync',
-    reason: 'RETAIN (contained + boolean): DELETE /api/studio/kbs/:id — id is URL-derived (newly tainted) but SLUG_RE-gated earlier in the route (blocks / and ..), and dir = resolveKbBrainDir(forgeRoot, id) runs the per-segment realpath identity walk (choke-point containment; see resolveKbBrainDir + resolveGuardedPath in orchestrator/brain-paths.ts) returning null on any escape; existsSync(dir) is a boolean 404 probe, no bytes flow. Same manifest-path-guard category as the isContainedWorktreePath rows above. (Line-drift remap from 1232 — R4-19-F2 WI-2\'s kb-cleanup session support (feat: kb-cleanup session as turnSpec DATA) plus its fail-open-join fix inserted ~69 lines earlier in the file; same function, same guard, unchanged — verified by sed -n "1301p" cli/bridge-studio-kbs.ts.) (Further remap from 1301 — UI-H merged parsoFish/main c45e3892 into feat/ui-h-honesty; forge-2am had already moved the findings-scoping + per-check itemization helpers to cli/kb-lint-summary.ts. Sink expression and enclosing function re-verified at the new line: handleStudioKbRoutes DELETE /api/studio/kbs/:id.) (Further remap from 1197 — W6-P2, same cause as the rows above, +1 line. Further remap from 1198 — W6-P2 round 2 (reviewer-flagged completeness fix — a 6-line comment block ahead of the post-mutation re-lint call), +6 lines — verified by sed -n "1204p" cli/bridge-studio-kbs.ts.) (Merge remap: parsoFish/main P1 (run-list cache) + B1 merged into feat/w6-p2-kb-lint-memo; neither touched cli/bridge-studio-kbs.ts, so this line is UNCHANGED by the merge — re-verified against the merged tree at 1204.) (Merge remap to 1325 -- reconciling feat/w6-b11-sessions-index with parsoFish feat/w6-b8-migrate-cleanup-authoring fix-round commit d5dafa6f (W6-B9 own cli/bridge-studio-kbs.ts remap composing with this branch own parsoFish/main merge, which independently touched earlier parts of the file); same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run against the merged tree.) (Line-drift remap from 1325 -- W7-A4 (one id rule: KB_ID_RE gates + isReservedId on the create route + kb-sites enumeration in loadKbDescriptors), +6 lines; same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run.) (Line-drift remap from 1331 — W7-FIX-A4 (W7A4-04) added the unroutableKbReason comment in loadKbDescriptors + the unroutable[] diagnostic on GET /api/studio/kbs, +21 lines earlier in the file (loader signature + onUnroutable sink + list-route diagnostic); same route, same guard, unchanged.) (Line-drift remap from 1352 -- W7-B2 (knowledge-05/22/24/29): kb-job-state import + active-job 409 wiring, create-route collision/seeding-anchor additions, guidance-queue listing and per-KB runs support added above; same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1475 -- W7-B2 code-review round: approveKbCleanup\'s draft-write try/catch + failure surfacing and the approve-path consolidate\'s synchronous _brainfix log-dir stake-out added +37 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1512 -- W7 FIX-B-KB: themeDescription cache-bypass comment added +3 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Merge remap: W7-FIX-B-PROJ (fix/w7-bfix-projects) merged with parsoFish/main\'s W7-FIX-B-KB (#196); the two branches touched disjoint regions of cli/bridge-studio-kbs.ts, so main\'s already-remapped line carries through unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 1515 -- W7-C2 T1 review: cli/ui-bridge.ts\'s spawnAgentTurn now RETURNS a SpawnTurnOutcome instead of swallowing (A7) and the per-kind broadcast mapping was hoisted into one shared local (A12); cli/bridge-studio-kbs.ts\'s approveKbCleanup writes the finalized produce-pointer (P0-4). Same function, same guard/probe, byte-for-byte unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.)' },
+  // ---- W8-C2a (forge-5kh): sites made VISIBLE by the mutating-sink families ----
+  // Every row below audits a call that existed unchanged before this lane and
+  // was invisible only because its sink name was not in RAW_FS_SINKS. Each one
+  // is the SECOND HALF of a write whose FIRST half already carries an audited
+  // row a few lines above it, so the trust chain is not newly asserted here —
+  // it is the same chain, re-verified at the sibling line. None is a new hole;
+  // none is a rubber stamp either: each names its sibling row explicitly so a
+  // future reader can check the pair moves together.
+  { file: 'cli/bridge-studio-kb-drain.ts', line: 266, sink: 'renameSync',
+    reason: 'LOGDIR-WRITE, ATOMIC-RENAME HALF (TRUSTED-AT-CONSTRUCTION): writeKbDrainStatus\'s `renameSync(tmpPath, finalPath)` is the completing half of the temp+rename atomic write whose `writeFileSync(tmpPath, ...)` carries the audited row at line 265, one line above; BOTH arguments are derived from the SAME `logDir = kbDrainLogDir(forgeRoot, runId)` that the audited `mkdirSync` row at line 262 covers, and BOTH leaves are literals (`status.json` and that name + `.tmp`) — no request data reaches either leaf. `runId` is server-built as `${kbId}-drain-${Date.now().toString(36)}` with `kbId` KB_ID_RE-gated at the route strictly before the drain dispatches, or read back at the GET routes via `isSafeRunId` PLUS an explicit `${kbId}-drain-` prefix check (never charset alone) — the construction documented in this module\'s own kbDrainLogDir docstring and in docs/security-request-path-audit.md. Two findings land on this line because renameSync carries two path arguments (SINK_PATH_ARG_INDICES); this single row audits both, and both are the same value family. Rename does not widen the blast radius over the writeFileSync already accepted at 265: it moves a file the same call just created, within the same directory, to a literal sibling name.' },
+  { file: 'cli/bridge-studio-kbs.ts', line: 192, sink: 'appendFileSync',
+    reason: 'LOGDIR-APPEND (TRUSTED-AT-CONSTRUCTION): writeConsolidateTerminalEvent\'s `appendFileSync(join(logDir, \'events.jsonl\'), ...)` writes into the very directory whose `mkdirSync(logDir)` carries the audited row at line 184, eight lines above and in the SAME function — same `logDir = join(forgeRoot, \'_logs\', `_brainfix-${runId}`)`, same `runId` trust chain (server-built `${kbId}-consolidate-${Date.now().toString(36)}`, kbId SLUG_RE-gated at POST /api/studio/kbs/:id/maintenance strictly before consolidate dispatch). The appended LEAF is the string literal `events.jsonl`: no request-derived value reaches it, so this is not the SEC-04 leaf-append shape, it is the write the audited mkdir exists to make possible. Content is a server-serialized JSON event, never client bytes.' },
+  { file: 'cli/bridge-studio-kbs.ts', line: 219, sink: 'appendFileSync',
+    reason: 'LOGDIR-APPEND (TRUSTED-AT-CONSTRUCTION): writeConsolidateErrorTerminalEvent — byte-for-byte the same shape as the row above for line 192, in the error-terminal sibling function, whose own `mkdirSync(logDir)` carries the audited row at line 212 seven lines above. Same logDir construction, same runId trust chain, same literal `events.jsonl` leaf, same server-serialized content. Both this call and the mkdir above it are wrapped in try/catch by design (a terminal event that never lands would otherwise leave the run reporting \'running\' forever) — the catch swallows an fs error, never a containment decision.' },
+  { file: 'cli/bridge-studio-runs.ts', line: 852, sink: 'renameSync',
+    reason: 'QUEUE-WRITE, ATOMIC-RENAME HALF: the requeue route\'s `renameSync(tmpPath, toPath)` completes the temp+rename atomic manifest move whose `writeFileSync(tmpPath, ...)` carries the audited row at line 851, one line above. `toPath = join(queuePaths.pending, filename)` and `tmpPath = toPath + \'.tmp\'`, where `filename` is `${initiativeId}.md` and `initiativeId` is INIT_ID_RE-gated earlier in the route before any path construction — a single validated segment under the trusted, config-derived `queuePaths.pending`, exactly the basis the sibling row and the four QUEUE-PROBE rows above it already stand on. Two findings land here because renameSync carries two path arguments; this row audits both, and both are the same `toPath` value.' },
   { file: 'cli/bridge-studio-kbs.ts', line: 1443, sink: 'mkdirSync',
     reason: 'CREATE-LITERAL-SUBDIR: kbDir = kbGuard.realPath (resolveGuardedPath) and the route 409s if kbGuard.exists, so this runs only create-mode on a FRESH dir; the appended leaf `themes` is a literal — a just-created dir cannot host a pre-planted symlink. (Line-drift remap from 1157 — R4-19-F2 WI-2, same +69 cause as the row above.) (Further remap from 1226 — UI-H merged parsoFish/main c45e3892 into feat/ui-h-honesty; forge-2am had already moved the findings-scoping + per-check itemization helpers to cli/kb-lint-summary.ts. Sink expression and enclosing function re-verified at the new line: handleStudioKbRoutes create-mode literal `themes` subdir.) (Further remap from 1117 — W6-P2, same cause as the rows above, +1 line. Further remap from 1118 — W6-P2 round 2, same cause as the row above, +6 lines — verified by sed -n "1124p" cli/bridge-studio-kbs.ts.) (Merge remap: parsoFish/main P1+B1 merged into feat/w6-p2-kb-lint-memo, unchanged — same cause as the row above.) (Merge remap to 1245 -- reconciling feat/w6-b11-sessions-index with parsoFish feat/w6-b8-migrate-cleanup-authoring fix-round commit d5dafa6f (W6-B9 own cli/bridge-studio-kbs.ts remap composing with this branch own parsoFish/main merge, which independently touched earlier parts of the file); same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run against the merged tree.) (Line-drift remap from 1245 -- W7-A4 (one id rule: KB_ID_RE gates + isReservedId on the create route + kb-sites enumeration in loadKbDescriptors), +6 lines; same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run.) (Line-drift remap from 1251 — W7-FIX-A4 (W7A4-04), same +21 cause as the DELETE row; same route, same guard, unchanged.) (Line-drift remap from 1272 -- W7-B2 (knowledge-05/22/24/29): kb-job-state import + active-job 409 wiring, create-route collision/seeding-anchor additions, guidance-queue listing and per-KB runs support added above; same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1392 -- W7-B2 code-review round: approveKbCleanup\'s draft-write try/catch + failure surfacing and the approve-path consolidate\'s synchronous _brainfix log-dir stake-out added +37 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 1429 -- W7 FIX-B-KB: themeDescription cache-bypass comment added +3 lines earlier in the file; same function, same guard, same sink expression, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Merge remap: W7-FIX-B-PROJ (fix/w7-bfix-projects) merged with parsoFish/main\'s W7-FIX-B-KB (#196); the two branches touched disjoint regions of cli/bridge-studio-kbs.ts, so main\'s already-remapped line carries through unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 1432 -- W7-C2 T1 review: cli/ui-bridge.ts\'s spawnAgentTurn now RETURNS a SpawnTurnOutcome instead of swallowing (A7) and the per-kind broadcast mapping was hoisted into one shared local (A12); cli/bridge-studio-kbs.ts\'s approveKbCleanup writes the finalized produce-pointer (P0-4). Same function, same guard/probe, byte-for-byte unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.)' },
   { file: 'cli/bridge-studio-kbs.ts', line: 1444, sink: 'mkdirSync',
