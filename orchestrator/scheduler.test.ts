@@ -541,7 +541,13 @@ test('classifyCycleFailure: empty events → terminal (unrecognised)', async () 
   assert.match(cls.reason, /could not be classified/i);
 });
 
-test('classifyCycleFailure: pm per_item_error_count > 0 → transient', async () => {
+// AMENDED W8-A1 (ON-7), 2026-08-23. This test previously asserted
+// `transient` / `recoverable: true` — it PINNED THE DEFECT. A per-item
+// validation error is deterministic: the same decomposition re-runs the same
+// errors, so `transient` bought INIT-2026-08-14-betterado-gap-registry the full
+// MAX_AUTO_RETRIES and three byte-identical ~$2.40 runs. The contract is now
+// terminal / zero retries (ADR 015 + ADR 037 2026-08-23 amendments).
+test('classifyCycleFailure: pm per_item_error_count > 0 → terminal (deterministic, no auto-retry)', async () => {
   const { classifyCycleFailure } = await import('./failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'project-manager', skill: 'project-manager', event_type: 'error', input_refs: [], output_refs: [], message: 'pm.end', metadata: { work_item_count: 3, per_item_error_count: 1, hidden_coupling_violations: [] } },
@@ -549,8 +555,9 @@ test('classifyCycleFailure: pm per_item_error_count > 0 → transient', async ()
   ];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cls = classifyCycleFailure(events as any);
-  assert.equal(cls.kind, 'transient');
-  assert.equal(cls.recoverable, true);
+  assert.equal(cls.kind, 'terminal');
+  assert.equal(cls.recoverable, false);
+  assert.equal(cls.environment, false);
   assert.ok(cls.evidence_event_ids.includes('e1'));
 });
 
@@ -607,6 +614,153 @@ test('annotateManifest: replaces folded >- scalar without leaving continuation l
 
     const reparsed = parseManifest(readFileSync(p, 'utf8'));
     assert.equal(reparsed.worktree_path, longPath);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// w8-A1 Change 3: a deterministic PM failure (hidden coupling / invalid work
+// items) classifies TERMINAL — the same decomposition re-run repeats the
+// same violation, so retrying is guaranteed to fail again. Both tests below
+// drive the REAL classifyCycleFailure (not a hand-authored terminal event)
+// so they are a genuine RED against today's `T('transient', …)`
+// classification: today the manifest retries; post-w8-A1 it must not.
+// ---------------------------------------------------------------------------
+
+test('decideAutoRetry: a real PM hidden-coupling failure classifies terminal (w8-A1 Change 3) → zero auto-retries', async () => {
+  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { dir, paths } = setupQueue();
+  try {
+    writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm', 0);
+    const logDir = mkdtempSync(join(tmpdir(), 'forge-log-'));
+    const logPath = join(logDir, 'events.jsonl');
+    try {
+      // The real event shape a PM hidden-coupling failure logs.
+      const pmErrorEvent = {
+        event_id: 'EV_pm_err',
+        cycle_id: 'cycle-test',
+        initiative_id: 'INIT-2026-05-10-pmterm',
+        started_at: new Date().toISOString(),
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'pm.end',
+        metadata: {
+          hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }],
+          per_item_error_count: 0,
+        },
+      };
+      // The failure_classification event the orchestrator actually derives
+      // from it (cycle.ts's emitFailureClassification calls
+      // classifyCycleFailure and stamps ITS kind/recoverable) — not a
+      // hand-authored terminal event.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cls = classifyCycleFailure([pmErrorEvent] as any);
+      const classificationEvent = {
+        event_id: 'EV_fc',
+        cycle_id: 'cycle-test',
+        initiative_id: 'INIT-2026-05-10-pmterm',
+        started_at: new Date().toISOString(),
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'failure_classification',
+        metadata: { cycle_id: 'cycle-test', failure_mode: cls.kind, recoverable: cls.recoverable },
+      };
+      writeFileSync(
+        logPath,
+        [pmErrorEvent, classificationEvent].map((e) => JSON.stringify(e)).join('\n') + '\n',
+      );
+
+      const decision = decideAutoRetry('INIT-2026-05-10-pmterm.md', paths, logPath);
+      assert.equal(
+        decision.retry,
+        false,
+        `expected zero auto-retries for a deterministic PM failure, got ${JSON.stringify(decision)}`,
+      );
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('dispatchTerminalStatus: a real PM per-item-validation failure never retries — manifest lands in failed/, never back in pending/ (w8-A1 Change 3, the money test)', async () => {
+  const { classifyCycleFailure } = await import('./failure-classifier.ts');
+  const { dir, paths } = setupQueue();
+  try {
+    writeManifestWithRetry(paths.inFlight, 'INIT-2026-05-10-pmterm2', 0);
+    const logDir = mkdtempSync(join(tmpdir(), 'forge-log-'));
+    const logPath = join(logDir, 'events.jsonl');
+    try {
+      // The sibling deterministic PM signature — schema-invalid work items.
+      const pmErrorEvent = {
+        event_id: 'EV_pm_err2',
+        cycle_id: 'cycle-test-2',
+        initiative_id: 'INIT-2026-05-10-pmterm2',
+        started_at: new Date().toISOString(),
+        phase: 'project-manager',
+        skill: 'project-manager',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'pm.end',
+        metadata: { per_item_error_count: 3, hidden_coupling_violations: [] },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cls = classifyCycleFailure([pmErrorEvent] as any);
+      const classificationEvent = {
+        event_id: 'EV_fc2',
+        cycle_id: 'cycle-test-2',
+        initiative_id: 'INIT-2026-05-10-pmterm2',
+        started_at: new Date().toISOString(),
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'failure_classification',
+        metadata: { cycle_id: 'cycle-test-2', failure_mode: cls.kind, recoverable: cls.recoverable },
+      };
+      writeFileSync(
+        logPath,
+        [pmErrorEvent, classificationEvent].map((e) => JSON.stringify(e)).join('\n') + '\n',
+      );
+
+      const calls: NotifyEvent[] = [];
+      const out = await dispatchTerminalStatus(
+        {
+          filename: 'INIT-2026-05-10-pmterm2.md',
+          manifest: { initiativeId: 'INIT-2026-05-10-pmterm2', project: 'demo' },
+          result: { status: 'failed', log_path: logPath },
+        },
+        { paths, notifyFn: async (e) => { calls.push(e); } },
+      );
+
+      assert.equal(
+        out.moved,
+        'failed',
+        `expected the manifest to land in failed/ (never pending/), got moved=${JSON.stringify(out.moved)}`,
+      );
+      assert.equal(
+        out.retry_decision?.retry,
+        false,
+        `expected zero auto-retries, got ${JSON.stringify(out.retry_decision)}`,
+      );
+      assert.ok(existsSync(join(paths.failed, 'INIT-2026-05-10-pmterm2.md')), 'manifest must be in _queue/failed/');
+      assert.ok(
+        !existsSync(join(paths.pending, 'INIT-2026-05-10-pmterm2.md')),
+        'manifest must NOT be back in _queue/pending/',
+      );
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -101,7 +101,7 @@ import {
 } from './bridge-studio-runs.ts';
 import { runReleaseFinalize } from '../orchestrator/phases/release-finalize.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
-import { parseWorkItem } from '../orchestrator/work-item.ts';
+import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '../orchestrator/work-item.ts';
 import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '../orchestrator/daemon.ts';
 import { mergePullRequest } from '../orchestrator/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
@@ -1892,8 +1892,8 @@ async function handleHttp(
     }
     const cycleId = rest.slice(0, slash);
     const wiId = rest.slice(slash + 1);
-    if (!cycleId || !wiId || !/^WI-\d+$/.test(wiId)) {
-      sendJson(res, 400, { error: 'cycleId and a WI-<n> wiId are required' }, origin);
+    if (!cycleId || !wiId || !DEV_WORK_ITEM_ID_PATTERN.test(wiId)) {
+      sendJson(res, 400, { error: 'cycleId and a WI-<n>[<letter>] wiId are required' }, origin);
       return;
     }
     // SEC-04 (bd forge-ebj) — cycleId is request-derived and was folded raw
@@ -2779,7 +2779,11 @@ async function handleHttp(
           },
         });
       }
-      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd);
+      // Bead forge-c6h — thread the bridge's own snapshot projects root
+      // through as --projects-root so a dispatch carrying a --session-dir
+      // (none on this generic route today — sessionDir is `undefined` here;
+      // the flag is inert without it) never has to re-derive it downstream.
+      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd, ctx.projectsRoot);
       // agents-20: start streaming this run's log to connected WS clients
       // now that events.jsonl exists (ensureTailFor no-ops on a missing
       // file, which is why the t0 event above must land first). The status
@@ -3483,6 +3487,16 @@ export function buildAgentDispatchArgs(
    *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
    *  before this is ever called. */
   costCeilingUsd?: number,
+  /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.projectsRoot` (resolved
+   *  once at `startBridge`), threaded through as `forge agent dispatch`'s
+   *  `--projects-root <abs>` so the spawned subprocess's
+   *  `writeSessionTerminalPhase` (cli/agent-run.ts) can honour THIS exact
+   *  root verbatim instead of re-deriving its own from `forge.config.json`/
+   *  env at write time — the re-derivation was the defect (see that
+   *  function's docstring). `cmdAgentDispatch` re-validates this value
+   *  itself (absolute/exists/contained-in-forgeRoot) before trusting it, so
+   *  no extra validation is needed at this spawn-arg boundary. */
+  projectsRoot?: string,
 ): string[] {
   const args = [slug, '--run-id', runId];
   if (project) args.push('--project', project);
@@ -3492,6 +3506,7 @@ export function buildAgentDispatchArgs(
   }
   if (sessionDir) args.push('--session-dir', sessionDir);
   if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
+  if (projectsRoot) args.push('--projects-root', projectsRoot);
   return args;
 }
 
@@ -3511,12 +3526,14 @@ function spawnAgentDispatch(
   inputs?: Record<string, string>,
   sessionDir?: string,
   costCeilingUsd?: number,
+  /** Bead forge-c6h — see `buildAgentDispatchArgs`'s matching parameter. */
+  projectsRoot?: string,
 ): void {
   // Argv construction is pure (no I/O, no side effects) — safe to build
   // above the spawn-suppression early-return below, so it stays observable
   // as ordinary function composition rather than something only a real spawn
   // attempt could exercise.
-  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd);
+  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
     console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
@@ -5381,7 +5398,13 @@ async function handleDemoBuilder(
         message: 'agent-run.dispatched',
         metadata: { agent_slug: 'onboarding-agent', project },
       });
-      spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir);
+      // Bead forge-c6h: THIS is the route that actually produces a --session-dir,
+      // so it is the one the projects-root snapshot has to reach. The session dir
+      // was created under ctx.projectsRoot (resolved once at startBridge); handing
+      // the same snapshot down means the subprocess's containment guard checks the
+      // root the dir was created under, instead of re-deriving one from a config
+      // file that may have changed inside this run's window.
+      spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir, undefined, ctx.projectsRoot);
       // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
       // for this route (cli/dry-bridge.ts) claims the agent dispatch is
       // "skipped with marker + event, exactly as the generic run host" — this

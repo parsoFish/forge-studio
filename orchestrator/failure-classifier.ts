@@ -337,9 +337,19 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / budget) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then re-run', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 
+  // W8-A1 (ON-7): a PM decomposition defect is DETERMINISTIC, not transient.
+  // The same initiative body, re-decomposed, produces the same overlap and the
+  // same schema violation — an auto-retry re-runs the identical failure at the
+  // identical cost. INIT-2026-08-14-betterado-gap-registry proved it: three
+  // byte-identical runs at ~$2.40 and ~14m each, all three reporting "4 per-item
+  // validation errors; 5 hidden-coupling pair(s)", because `transient` here
+  // bought it the full MAX_AUTO_RETRIES. Terminal ⇒ `recoverable: false` ⇒
+  // `decideAutoRetry` grants ZERO retries and the manifest lands in failed/ on
+  // the first failure, where an operator can see it.
+  if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
+  if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see the per-item errors on the project-manager error event) and re-dispatch', evidence);
+
   // Transient — auto-retry within MAX_AUTO_RETRIES.
-  if (pmHiddenCoupling) return T('transient', 'PM emitted overlapping WIs (hidden coupling)', evidence);
-  if (pmInvalidWorkItems) return T('transient', 'PM emitted schema-invalid WIs', evidence);
   if (brainSkipped) return T('transient', 'agent skipped brain reads', evidence);
   if (trivialPass) return T('transient', 'gate passed before any iteration — F-26 forces ≥1 iteration on retry', evidence);
 

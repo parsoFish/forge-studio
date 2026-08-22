@@ -39,6 +39,18 @@ export type CycleInput = {
   worktreePath: string;
   cycleId?: string;
   dryRun?: boolean;
+  /**
+   * R2-08 (forge-f9g fix, W8-A1): the manifest's own `project` binding,
+   * threaded through so a merge-time `on: merged` trigger dispatch — which
+   * fires INLINE from finalize-merged.ts, never through the staged-request
+   * queue — has an event project to scope-check against, via the SAME
+   * `decideTriggerProjectScope` choke point `drainFlowRunRequests` already
+   * uses for every other trigger kind (flow-run-requests.ts). Absent/null ⇒
+   * unresolved (a manifest whose project could not be determined) — a
+   * scoped `on: merged` trigger fails closed rather than silently
+   * dispatching.
+   */
+  project?: string | null;
   /** R4-09-F3: reflect mode for a merge-dispatched reflect. Absent ⇒ interactive. */
   mode?: ReflectMode;
   /**

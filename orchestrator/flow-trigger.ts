@@ -22,7 +22,7 @@
  * tests assert firing without touching the queue or spawning an agent.
  */
 import type { FlowDefinition, FlowTrigger } from './studio/types.ts';
-import { stageFlowRunRequest } from './flow-run-requests.ts';
+import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-requests.ts';
 
 /**
  * The trigger-kind registry (ADR-041): rows-as-data, one per `on:` vocabulary
@@ -81,6 +81,42 @@ export type FireFlowTriggersDeps = {
   dispatch: (trigger: FlowTrigger, event: FlowTriggerEvent) => void | Promise<void>;
   /** Observability hook fired just before each matching trigger dispatches. */
   onFire?: (trigger: FlowTrigger) => void;
+  /**
+   * R2-08 (forge-f9g fix, W8-A1) — opt-in fire-time project-scope
+   * enforcement: the choke point for dispatch mechanisms that never reach
+   * `drainFlowRunRequests` (the staged-request path's own enforcement
+   * point, `orchestrator/flow-run-requests.ts`). `finalize-merged.ts`'s
+   * inline `on: merged` dispatch is the motivating case — it never stages a
+   * `FlowRunRequest`, so without this the drain's scope check simply never
+   * ran for it (the exact gap the R2-08 addendum,
+   * docs/decisions/027-studio-object-model.md, worked around by making
+   * `projects:` unauthorable on `on: merged` — withdrawn now that this
+   * choke point exists). Both this and the drain call the SAME
+   * `decideTriggerProjectScope` predicate — one implementation of the rule.
+   *
+   * Gating is OPT-IN via the KEY's presence on this deps object, not its
+   * value — `{ dispatch, eventProject: undefined }` opts IN (resolution was
+   * attempted and failed, so a declared scope fails closed); a deps object
+   * that never mentions `eventProject` at all opts OUT (no fire-time
+   * gating — every matching trigger dispatches unconditionally, exactly the
+   * pre-existing behaviour). The flow-runner's `flow-complete` firing site
+   * (`orchestrator/flow-runner.ts`) deliberately omits this key: T1's
+   * round-4 ruling requires that path to stage EVERY trigger
+   * unconditionally (including an out-of-scope one) and enforce scope ONLY
+   * at `drainFlowRunRequests` — filtering at THIS fire site would make the
+   * drain's `skipped-out-of-scope` status unreachable for staged requests
+   * (pinned by `orchestrator/flow-runner.test.ts`'s round-4 test). An
+   * unscoped trigger (`projects:` absent) always dispatches regardless of
+   * whether this key is present.
+   */
+  eventProject?: string | null;
+  /**
+   * Observability for a fire-time scope skip (forge-f9g). Called instead of
+   * `onFire`/`dispatch` for an out-of-scope trigger; that trigger is never
+   * pushed onto the returned `fired` array — never a silent drop. Only
+   * reachable when `eventProject` is present in `deps` (gating opted in).
+   */
+  onSkip?: (trigger: FlowTrigger, reason: string) => void;
 };
 
 /**
@@ -88,6 +124,11 @@ export type FireFlowTriggersDeps = {
  * those whose `on` matches `event`, dispatches each via the injected `dispatch`
  * (awaited in declaration order), and returns the triggers that fired. A flow
  * with no matching trigger fires nothing — the empty, expected case.
+ *
+ * When `deps.eventProject` is present (opted in — see the field doc), each
+ * matching trigger is first checked via `decideTriggerProjectScope`; an
+ * out-of-scope one is skipped (never dispatched, never pushed onto `fired`)
+ * and reported through `deps.onSkip` instead.
  */
 export async function fireFlowTriggers(
   flow: Pick<FlowDefinition, 'id' | 'triggers'>,
@@ -95,8 +136,16 @@ export async function fireFlowTriggers(
   deps: FireFlowTriggersDeps,
 ): Promise<FlowTrigger[]> {
   const fired: FlowTrigger[] = [];
+  const scopeGated = Object.prototype.hasOwnProperty.call(deps, 'eventProject');
   for (const trigger of flow.triggers) {
     if (trigger.on !== event) continue;
+    if (scopeGated) {
+      const verdict = decideTriggerProjectScope(trigger.projects, deps.eventProject);
+      if (!verdict.inScope) {
+        deps.onSkip?.(trigger, verdict.reason);
+        continue;
+      }
+    }
     deps.onFire?.(trigger);
     await deps.dispatch(trigger, event);
     fired.push(trigger);

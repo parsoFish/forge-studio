@@ -150,6 +150,8 @@ had fixed it and the row still said otherwise.
 | `cli/bridge-studio-writes.ts` `scaffoldContractArtifacts` + `checkContractArtifactContainment` (W7-FIX-B-PROJ, born-contract-green) | `existsSync` ×2, `writeFileSync` ×1 | `POST /api/studio/projects` body `repoPath` (via `projectRoot`) | guarded `[exec]` | The C2 hygiene `.gitignore` written ONLY on the two branches that `git init` a repo from nothing, ONLY when absent (never clobbers an operator file). Both `existsSync` calls are boolean "already there, skip" probes; the write goes through `resolveGuardedPath(projectRoot, ['.gitignore']).realPath`, which rejects a symlinked or dangling leaf (the SEC-03 Finding-B roadmap.md idiom, mirrored — a dangling symlink at `.gitignore` reads absent to `existsSync` but is refused by the guard before the write). Content is server-constant (`SCRATCH_PATHS` + `SCAFFOLD_BUILD_OUTPUT_IGNORES`, both exported by `cli/preflight.ts`); the Phase-1 pure pre-check gained the matching `.gitignore` guard so no write on the route can be attempted before every path it may touch is proven safe. Review round (W7-FIX-B-PROJ F2): the pre-check's `.gitignore` guard is CONDITIONAL on the shared `needsGitInit` predicate — the exact condition under which the scaffold writes the file — so an own-repo / operator-enclosed checkout (whose `.gitignore` is never written, dangling symlink or not) is no longer false-rejected; check/write parity is kept by both sites calling the same predicate. |
 | `cli/bridge-studio-writes.ts` `scaffoldContractArtifacts` (W7-D fix round, projects-37) | `execFileSync('git', add/commit)` ×2 | `POST /api/studio/projects` body `repoPath` (via `projectRoot`), body `name` | guarded `[read]` | The initial commit the onboard path was missing — the greenfield sibling (`orchestrator/project-create.ts`, row above) has always made one, and the asymmetry is what left an UNBORN repo whose every subsequent Studio write 500'd (projects-37, S1). Runs ONLY on the branch that just `git init`'d a repo from nothing, gated by the same `repoInited` flag the `init` itself sets, so it can never touch an operator's own checkout. Fixed argv, no shell (`execFileSync` never invokes one); the only request-derived bytes are `cwd: projectRoot` — the SAME already-audited value the `git init` at this site uses, validated by the caller's `isContainedProjectRepoPath` before this function runs — and `name`, which rides as a single argv element inside the commit MESSAGE and never reaches a path, a shell or an env var. Identity is passed per-invocation (`-c user.name=forge -c user.email=forge@localhost -c commit.gpgsign=false`) so an unattended host with no global git identity still commits, and `stdio:'ignore'` keeps request text out of the server log. Best-effort by design: a git failure is swallowed because `ensureStudioBranch`'s unborn guard (`orchestrator/project-repo-tx.ts`) is the real fix and backstops it — a git hiccup must not fail an otherwise-good onboarding. Pinned `[exec]` by `cli/onboard-first-save.test.ts` (the FIRST `PUT /api/studio/projects/:id` after a from-nothing onboard returns 200). |
 | `cli/preflight.ts` `checkC2` (W7-FIX-B-PROJ review F1) | `lstatSync` ×1 | bridge preflight routes (via the validated project dir) | guarded `[read]` | Boolean "does the dir-shaped scratch path exist as a NON-directory" probe on `join(dir, pathArg)` — `dir` is the route-validated project dir and `pathArg` comes from the server-constant `SCRATCH_PATHS`, never from the request. `lstat` deliberately (not `stat`): a symlink at e.g. `.forge/work-items` is a link object to git, so dir-only ignore patterns never match it and the sentinel-child probe alone would false-PASS C2 while `git add -A` swept the stray entry into the PR. The probe's only consequence is adding the path itself to the `git check-ignore` probe set — a fail-safe strictly toward REFUSAL (C2 violation), never a read/write through the path; a throwing `lstat` (absent path, ancestor-is-a-file) falls back to the sentinel child alone. Pinned by `cli/preflight.test.ts` (stray-FILE red pin, symlink pin, real-dir green-lock). |
+| `cli/preflight.ts` `checkC1` (W8-A1, bead forge-7pa / regate projects-12) | `existsSync` ×1, `readFileSync` ×1 | bridge preflight routes (via the validated project dir) | guarded `[read]` | `join(dir, 'package.json')` — `dir` is the route-validated project dir (`runPreflight` resolves it once and every clause receives that same value) and the leaf is the **server constant** `'package.json'`; nothing from the request reaches the join, so no `..`, `/` or `\` can be introduced at this site. Same shape and same trust boundary as the `checkC2` row directly above. The read is content-bearing (unlike `checkC2`'s boolean probe) but its only consequence is a C1 verdict: the parsed JSON is inspected for a `scripts` key and then discarded — nothing is echoed back and nothing is written. A throwing or malformed read fails **closed** (C1 `pass:false` with the parse error in the detail), never open, so a hostile filesystem condition can only cost a false rejection. The declared gate command is **never executed** — this closes the ancestor-`package.json` false-green without adding an exec sink. Pinned by `cli/preflight.test.ts` (no-package.json red pin, missing-script pin, malformed-JSON fail-closed pin, and a `go test ./...` negative control proving the rule is scoped to package-manager gates). |
+| `cli/bridge-studio-writes.ts` `needsPackageJsonScaffold` + `scaffoldContractArtifacts` (W8-A1, bead forge-7pa) | `existsSync` ×1, `writeFileSync` ×1 | `POST /api/studio/projects` body `repoPath` (via `projectRoot`) | guarded `[exec]` | The scaffold's CONDITIONAL FOURTH write target, mirroring the C2 hygiene `.gitignore` precedent exactly. A minimal `package.json` is written only when the declared quality gate is package-manager-shaped, no `package.json` exists, AND `needsGitInit` is true — i.e. only when the scaffold is itself establishing the repo; an operator's own checkout is never written into. All three conjuncts live in ONE predicate (`needsPackageJsonScaffold`) called by both the Phase-1 pure pre-check and the write site, so check/write parity cannot drift — the same single-predicate rule review F2 imposed on `.gitignore`. The `existsSync` is a boolean probe on `join(projectRoot, 'package.json')`: `projectRoot` is `isContainedProjectRepoPath`-validated at the route and the leaf is a server constant, so nothing request-derived reaches the join. The write goes through `resolveGuardedPath(projectRoot, ['package.json']).realPath`, which refuses a symlinked or dangling leaf — pinned by a test that plants a `package.json` symlink pointing OUTSIDE the project root and asserts the outside target is **byte-unchanged**, not merely that the response was non-200. Content is server-constructed (name/version/private + the one script the declared gate names); the `test` script body is npm's own `echo "Error: no test specified" && exit 1`, chosen because it exits NON-ZERO — a placeholder that exited 0 would recreate the false green this whole change closes, one layer down. Implementation note worth keeping: `needsGitInit` is evaluated ONCE, before the scaffold's own `git init` side effect, and the boolean is reused at the write site — recomputing it after `git init` would silently answer false and disable the scaffold for the exact from-nothing case it exists to serve. |
 
 ### Fixed in this sweep
 
@@ -590,9 +592,14 @@ branch is itself pinned, by mutation, in `orchestrator/manifest-path-fields.test
 "a guard that cannot fail is not a guard" rule turned on a guard's own refusal
 path.
 
-**NOT CLOSED, disclosed rather than silently assumed away — the same divergence
-survives ACROSS PROCESSES at `writeSessionTerminalPhase` (`cli/agent-run.ts:194`),
-and the round-4 sweep did not reach it.** The bridge creates the session dir under
+**GUARD MECHANISM CLOSED, PRODUCER WIRING NOT YET CLOSED (bead forge-c6h /
+R4-17 round-4)** — disclosed precisely rather than rounded up to a flat
+"closed": the guard-side fix described below is complete and tested, but the
+one real caller that actually exercises this defect (`POST /api/studio/
+onboarding/start`) was not yet rewired to use it — see the "Disclosure, not
+overclaim" paragraph below for exactly what remains. The same divergence
+survived ACROSS PROCESSES at `writeSessionTerminalPhase` (`cli/agent-run.ts:194`), and
+the round-4 sweep did not reach it at the time this row was first written. The bridge creates the session dir under
 its snapshot root and spawns `forge agent dispatch --session-dir <abs>` as a
 detached subprocess; that subprocess re-derives the projects root at write time
 (`:204`) and has no snapshot to be handed. **Reproduced `[exec]`** by driving the
@@ -608,11 +615,48 @@ parent's environment verbatim (verified by reading the spawn call) — so this n
 a `forge.config.json` edit landing inside one run's window, not merely a
 configured `projectsDir`. Second, the guard fails **closed**: it refuses the
 write, so the failure direction is a false rejection and an operator-visible,
-recoverable stale `phase`, never a write outside the root. Not fixed in R4-17
-because the only fix consistent with the round-4 ruling is to PASS the bridge's
-snapshot into the subprocess (a new `--projects-root` flag on `agent dispatch`),
-which makes the guard's own root an argv input and deserves its own acceptance
-tests and review round rather than a tail-of-batch edit. **A guard that resolves its
+recoverable stale `phase`, never a write outside the root. Not fixed in the
+original R4-17 round-4 sweep, because the only fix consistent with that
+round's own ruling is to PASS the bridge's snapshot into the subprocess (a new
+`--projects-root` flag on `agent dispatch`), which makes the guard's own root
+an argv input and deserved its own acceptance tests and review round rather
+than a tail-of-batch edit.
+
+**The fix, landed**: `forge agent dispatch` gained `--projects-root <abs>`
+(`cli/agent-run.ts`'s `parseAgentDispatchArgs`/`checkProjectsRootFlag`). When
+present it is validated at the argv boundary — must be an ABSOLUTE path
+(a relative one is rejected, never silently resolved against `cwd`/
+`forgeRoot`); must EXIST and be a DIRECTORY; must be CONTAINED within
+`forgeRoot` (the same realpath + `startsWith(root + sep)` shape used
+throughout this document) — and on ANY rejection the dispatch fails loudly
+(stderr + exit 2) BEFORE any project resolution or dispatch attempt, never
+falling back to the derived root (the exact silent-fallback shape that would
+have reintroduced this defect). When accepted, the validated, realpath-resolved
+root is threaded into `writeSessionTerminalPhase` as `trustedProjectsRoot` and
+honoured VERBATIM — no `forge.config.json`/env re-derivation for that call at
+all. Omitting the flag leaves every existing caller byte-identical to before.
+`cli/ui-bridge.ts`'s `spawnAgentDispatch` (and its pure argv builder,
+`buildAgentDispatchArgs`) now thread the bridge's own snapshot `ctx.projectsRoot`
+through as this flag on the generic `POST /api/agents/:slug/run` call site
+(`:2782`). **Disclosure, not overclaim**: that specific call site never passes
+`--session-dir` (it is `undefined` there), so the new flag is inert on it —
+`POST /api/studio/onboarding/start`'s call site (`:5384`), the ONE real
+producer of `--session-dir` and therefore the actual repro path this row
+describes, was NOT rewired to pass `--projects-root` in this pass (a
+fenced-off region of the same file this round); it still relies on
+`writeSessionTerminalPhase`'s self-resolving default. The CLI-side mechanism
+and its accept/reject contract are fully landed and tested; wiring the
+onboarding-start call site is the one remaining step to close the loop for
+its real-world trigger.
+Pinned by `cli/agent-run-dispatch.test.ts` (the bead forge-c6h characterization
+test, which keeps the pre-fix divergence pinned WITHOUT the flag as a permanent
+regression control; the bead forge-c6h fix test, ACCEPT with the flag; REJECT
+tests for a relative path, a path outside `forgeRoot` — asserted via a planted
+sentinel file proven byte-unchanged, "the most important test" for this fix —
+and a non-existent path; and an ACCEPT control for a valid, contained root) and
+`cli/ui-bridge-agent-dispatch-projects-root.test.ts` (the argv-builder seam:
+`buildAgentDispatchArgs` emits the flag, and the parse/build round-trip through
+`parseAgentDispatchArgs` survives it unchanged). **A guard that resolves its
 root differently from the producer of the thing it guards is a false-rejection
 generator** — the failure mode is invisible, because a refused write looks
 exactly like a run that has not finished. The

@@ -69,7 +69,7 @@ cli/bridge-studio-templates.ts rmSync 2
 cli/bridge-studio-templates.ts writeFileSync 3
 cli/bridge-studio-writes.ts cpSync 1
 cli/bridge-studio-writes.ts execFileSync 5
-cli/bridge-studio-writes.ts existsSync 17
+cli/bridge-studio-writes.ts existsSync 18
 cli/bridge-studio-writes.ts mkdirSync 8
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 4
@@ -78,7 +78,7 @@ cli/bridge-studio-writes.ts renameSync 1
 cli/bridge-studio-writes.ts rmSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts unlinkSync 1
-cli/bridge-studio-writes.ts writeFileSync 8
+cli/bridge-studio-writes.ts writeFileSync 9
 cli/bridge-studio.ts existsSync 7
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
@@ -140,10 +140,10 @@ cli/preflight-fix-auto.ts mkdirSync 1
 cli/preflight-fix-auto.ts readFileSync 1
 cli/preflight-fix-auto.ts writeFileSync 3
 cli/preflight.ts execFileSync 1
-cli/preflight.ts existsSync 15
+cli/preflight.ts existsSync 16
 cli/preflight.ts lstatSync 1
 cli/preflight.ts readdirSync 1
-cli/preflight.ts readFileSync 7
+cli/preflight.ts readFileSync 8
 cli/preflight.ts spawnSync 3
 cli/reflect-reconcile.ts existsSync 4
 cli/reflect-reconcile.ts readdirSync 1

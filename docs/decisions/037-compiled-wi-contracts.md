@@ -33,6 +33,47 @@ north star. **Re-entry condition:** a real cycle demonstrably needs a
 constraint the deterministic selector cannot express. (Mirrors the wave-1
 R2-01-F3 deferral pattern.)
 
+## 2026-08-23 amendment (W8-A1, ON-7): split work-item ids, and how they order
+
+**The work-item id contract widens from `WI-<n>` to `WI-<n>[<letter>]`.**
+`WORK_ITEM_ID_PATTERN` becomes `/^U?WI-\d+[a-z]?$/` — a single optional
+lowercase suffix, and nothing else. `WI-4a` is a valid id; `WI-4a1`,
+`WI-4-a`, `wi-4a`, `WI-4A` and `WI-4ab` remain invalid.
+
+**Why.** The plan agent already splits a work item when it judges one too
+large, and it names the halves `WI-4a` / `WI-4b` — the obvious convention,
+and the one it reaches for unprompted. The contract did not admit it, so
+`INIT-2026-08-14-betterado-gap-registry` failed **three byte-identical
+times** at ~$2.40 and ~14m each: four per-item validation errors (two
+malformed ids, two `depends_on` entries pointing at them) plus five
+hidden-coupling pairs. Narrowing the *producer* to `WI-<n>` was the
+alternative; widening the *contract* was chosen because the split itself is
+correct behaviour and the naming is the natural one.
+
+**Ordering (this ADR's live concern).** The 2026-07-18 as-built above ships
+hidden-coupling **reject→compile**: a shared-file overlap with no
+`depends_on` edge is resolved by deriving one from WI-id numeric order. That
+derivation read `/^WI-(\d+)$/`, so a split id had *no derivable order* and
+every pair touching one fell through to `unresolved` — the reject path. The
+derivation now reads the numeric **stem** and keeps the existing tie-break:
+
+- different stems → the higher stem becomes the dependent (`WI-4a depends_on WI-2`);
+- **equal stems → deterministic lexicographic comparison of the full id**, the
+  greater id becoming the dependent — so a split **chains**:
+  `WI-4b depends_on WI-4a`, and `WI-4a depends_on WI-4`.
+
+Chaining is the point. A split is two halves of one unit of work; they share
+the file they were split out of, and serialising them is what makes that
+safe. `detectHiddenCoupling` is **not** relaxed to accommodate split ids —
+the five pairs the failed run reported were correct, and the regression test
+pins that the unchained input still reports exactly five. The producer is
+fixed (an order is derived, an edge is written, the pass continues); the
+check is untouched.
+
+**Consequence.** The compiler's "non-derivable id shape → reject" fallback
+still exists and still fires for an id outside `WI-<n>[<letter>]` — it was
+widened, not disabled.
+
 ## Context
 
 ADR 010 makes the project-manager the **sole encoding point** for brain

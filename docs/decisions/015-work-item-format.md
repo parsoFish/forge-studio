@@ -25,7 +25,7 @@ Brain themes consulted: [`spec-driven-work-items`](../../brain/forge/themes/spec
 
 ### 1. Work-item ID — `WI-<n>` per-initiative numbering
 
-Format: `WI-<n>` where `<n>` is a 1-indexed integer, contiguous within a single initiative. Numbering restarts at 1 for every new initiative.
+Format: `WI-<n>[<letter>]` where `<n>` is a 1-indexed integer, contiguous within a single initiative, and `<letter>` is an **optional single lowercase split suffix**. Numbering restarts at 1 for every new initiative. See the 2026-08-23 amendment below for the suffix.
 
 **Rationale.** Per-initiative locality keeps grep hits scoped (`grep -r 'WI-3' projects/<name>/.forge/work-items/` returns one match per initiative directory). Global ULIDs add cross-initiative joinability we don't currently need — the JSONL event log (ADR 008) already provides `(initiative_id, work_item_id)` pairs for that. The format already appears in the SKILL.md prompt and phase-doc examples, and `brain/projects/env-optimiser/themes/specify-driven-features.md` mandates `WI-N` IDs flow through to `tasks.md`. Switching to ULID now would invalidate that brain theme.
 
@@ -57,7 +57,7 @@ graph TD
 
 ```yaml
 ---
-work_item_id: WI-3                              # /^WI-\d+$/, unique within initiative
+work_item_id: WI-3                              # /^WI-\d+[a-z]?$/, unique within initiative
 feature_id: FEAT-2                              # (removed 2026-06-04 — R1; see amendment) was /^FEAT-\d+$/, must exist in initiative manifest
 initiative_id: INIT-2026-05-08-add-oauth        # REQUIRED parent ref; matches manifest's initiative_id
 status: pending                                 # pending | in-progress | complete | failed
@@ -171,3 +171,34 @@ The schema fields locked in §1-3 (`work_item_id`, `feature_id`, `initiative_id`
 ## 2026-07-18 (R4-05-F2): initiative manifest gains a `specs:` back-reference
 
 The initiative manifest gains a `specs: string[]` back-reference listing the work_item_ids the plan agent produced. The WI IS the spec; this is the initiative→specs linkage.
+
+## 2026-08-23 amendment (W8-A1, ON-7) — an optional single-letter split suffix
+
+§1's ID format widens from `WI-<n>` to **`WI-<n>[<letter>]`**: one optional
+lowercase letter, and nothing else. The canonical regex is
+`/^U?WI-\d+[a-z]?$/` (the `U?` is ADR 026's unifier queue, unchanged).
+
+- **Valid:** `WI-1`, `WI-4a`, `WI-12z`, `UWI-2`.
+- **Invalid:** `WI-`, `WI-4a1`, `WI-4-a`, `wi-4a`, `WI-4A`, `WI-4ab`, `WI4`.
+
+**Why.** The plan agent splits a work item when it judges one too large and
+names the halves `WI-4a` / `WI-4b` — unprompted, because it is the obvious
+convention. The contract did not admit it, so
+`INIT-2026-08-14-betterado-gap-registry` failed three byte-identical times
+(~$2.40 and ~14m each) with four per-item validation errors and five
+hidden-coupling pairs. The split is correct behaviour; the contract was too
+narrow. §1's per-initiative-locality rationale is untouched — a suffixed id
+is still locally meaningful and still cheap to grep.
+
+**Single source of truth.** `WORK_ITEM_ID_PATTERN` (and the filename form
+`WORK_ITEM_FILE_PATTERN`) are exported from
+[`orchestrator/work-item.ts`](../../orchestrator/work-item.ts). Six narrower
+hand-rolled copies of the regex existed across `orchestrator/`, `cli/` and
+`loops/` at the time of this amendment; every one of them broke on a split id
+and all six now import the exported pattern. **A second copy of this regex is
+a defect, not a style choice.**
+
+**Ordering.** How two split siblings order against each other — and therefore
+how [ADR 037](./037-compiled-wi-contracts.md)'s hidden-coupling
+reject→compile derives the `depends_on` edge that chains them — is specified
+in ADR 037's 2026-08-23 amendment, not here.

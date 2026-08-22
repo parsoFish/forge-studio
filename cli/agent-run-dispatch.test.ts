@@ -501,3 +501,159 @@ test('cmdAgentDispatch: R4-17 AT-D7-9 (pin 4, item 1, ACCEPT — forge.config.js
     rmSync(unrelatedCwd, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Bead forge-c6h / R4-17 round-4 — `--projects-root <abs>`. The bridge
+// creates a session dir under its SNAPSHOT `ctx.projectsRoot` (resolved once
+// at `startBridge`) and spawns this dispatch detached; `writeSessionTerminalPhase`
+// re-derives the projects root from `forge.config.json`/env AT WRITE TIME, so
+// the two can silently disagree (the exact symptom AT-D7-9 above threads
+// `forgeRoot` explicitly to avoid conflating with `process.cwd()` — this is
+// the SAME class of drift, but via the CONFIG FILE's `projectsDir`, not the
+// process's cwd). `--projects-root` closes it: honoured VERBATIM when given
+// (round-4 ruling — "the root is PASSED, not re-derived"), so the caller's
+// own already-resolved root always wins over whatever the config says at
+// write time.
+// ---------------------------------------------------------------------------
+
+test('cmdAgentDispatch: bead forge-c6h CHARACTERIZATION (today\'s bug, pinned on purpose) — a forgeRoot whose forge.config.json names a projectsDir DIFFERENT from where the session dir actually lives: WITHOUT --projects-root, the terminal phase is silently NOT written (status.json keeps its pre-run "running" phase forever)', async () => {
+  const priorSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const configForgeRoot = mkdtempSync(join(tmpdir(), 'r4-c6h-forgeroot-'));
+  // The REAL location the session dir lives under (default <forgeRoot>/projects
+  // shape) — contained within forgeRoot, exactly like the bridge's own
+  // ctx.projectsRoot snapshot in the default-config case.
+  const realProjectsRoot = join(configForgeRoot, 'projects');
+  const sessionDir = join(realProjectsRoot, 'someproj', '_onboarding', '_r4-c6h-mismatch-fixture');
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'running' }), 'utf8');
+  // forge.config.json claims a DIFFERENT projectsDir — the mismatch the bead
+  // reproduces (an operator/config change between the bridge's snapshot and
+  // this subprocess's own config read).
+  const mismatchedProjectsDir = mkdtempSync(join(tmpdir(), 'r4-c6h-mismatched-configured-root-'));
+  writeFileSync(join(configForgeRoot, 'forge.config.json'), JSON.stringify({ projectsDir: mismatchedProjectsDir }), 'utf8');
+  symlinkSync(join(ROOT, 'skills'), join(configForgeRoot, 'skills'), 'dir');
+
+  const runId = '_agent-cli-c6h-characterization-test';
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir], configForgeRoot);
+    assert.equal(r.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(
+      status.phase, 'running',
+      `characterizing today's bug: without --projects-root, writeSessionTerminalPhase re-derives from the MISMATCHED forge.config.json and refuses the write — got status.json: ${JSON.stringify(status)}`,
+    );
+  } finally {
+    if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(configForgeRoot, { recursive: true, force: true });
+    rmSync(mismatchedProjectsDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: bead forge-c6h FIX — the SAME mismatched-config setup, but WITH --projects-root <the real snapshot root>: the terminal phase IS written, because the passed root is honoured verbatim instead of re-derived', async () => {
+  const priorSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const configForgeRoot = mkdtempSync(join(tmpdir(), 'r4-c6h-forgeroot-fix-'));
+  const realProjectsRoot = join(configForgeRoot, 'projects');
+  const sessionDir = join(realProjectsRoot, 'someproj', '_onboarding', '_r4-c6h-mismatch-fix-fixture');
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'running' }), 'utf8');
+  const mismatchedProjectsDir = mkdtempSync(join(tmpdir(), 'r4-c6h-mismatched-configured-root-fix-'));
+  writeFileSync(join(configForgeRoot, 'forge.config.json'), JSON.stringify({ projectsDir: mismatchedProjectsDir }), 'utf8');
+  symlinkSync(join(ROOT, 'skills'), join(configForgeRoot, 'skills'), 'dir');
+
+  const runId = '_agent-cli-c6h-fix-test';
+  try {
+    const r = await run(
+      ['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir, '--projects-root', realProjectsRoot],
+      configForgeRoot,
+    );
+    assert.equal(r.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(
+      status.phase, 'complete',
+      `--projects-root must be honoured VERBATIM (never re-derived from the mismatched forge.config.json) — got status.json: ${JSON.stringify(status)}`,
+    );
+  } finally {
+    if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(configForgeRoot, { recursive: true, force: true });
+    rmSync(mismatchedProjectsDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: --projects-root RELATIVE path is refused loudly (exit 2) — status.json keeps its pre-run phase, never touched', async () => {
+  const runId = '_agent-cli-projectsroot-relative-test';
+  const sessionDir = makeSessionDirFixture('projectsroot-relative');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir, '--projects-root', 'relative/not/allowed']);
+    assert.equal(r.exitCode, 2, 'a relative --projects-root must fail the dispatch loudly, never fall back silently');
+    assert.match(r.err, /--projects-root/);
+    assert.match(r.err, /absolute/i);
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'running', 'a rejected --projects-root must never reach writeSessionTerminalPhase at all');
+  } finally {
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: --projects-root OUTSIDE forgeRoot is refused — the most important test: nothing under that outside directory is EVER written, proven with a planted sentinel file that must stay byte-unchanged', async () => {
+  const runId = '_agent-cli-projectsroot-outside-test';
+  const sessionDir = makeSessionDirFixture('projectsroot-outside-session');
+  const outsideDir = mkdtempSync(join(tmpdir(), 'r4-c6h-outside-forgeroot-'));
+  const sentinelPath = join(outsideDir, 'sentinel.txt');
+  writeFileSync(sentinelPath, 'do-not-touch', 'utf8');
+  const sentinelBefore = readFileSync(sentinelPath, 'utf8');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir, '--projects-root', outsideDir]);
+    assert.equal(r.exitCode, 2, 'a --projects-root outside forgeRoot must fail the dispatch loudly');
+    assert.match(r.err, /--projects-root/);
+    assert.match(r.err, /forgeRoot/i);
+    const sentinelAfter = readFileSync(sentinelPath, 'utf8');
+    assert.equal(sentinelAfter, sentinelBefore, 'a --projects-root pointing outside forgeRoot must never become a containment bypass — nothing under it may ever be written');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'running', 'the legitimate session dir must also be left untouched — the whole dispatch is refused before it runs');
+  } finally {
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: --projects-root naming a NON-EXISTENT path is refused loudly (exit 2) — status.json keeps its pre-run phase', async () => {
+  const runId = '_agent-cli-projectsroot-nonexistent-test';
+  const sessionDir = makeSessionDirFixture('projectsroot-nonexistent');
+  const nonExistentRoot = join(ROOT, '_logs', `_r4-c6h-does-not-exist-${Date.now()}`);
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir, '--projects-root', nonExistentRoot]);
+    assert.equal(r.exitCode, 2, 'a non-existent --projects-root must fail the dispatch loudly');
+    assert.match(r.err, /--projects-root/);
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'running');
+  } finally {
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: --projects-root ACCEPT control — a valid absolute, existing, forgeRoot-contained root (the same default location a session dir already lives under) still writes the terminal phase normally, proving the new flag is not a blanket refusal', async () => {
+  const prior = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const runId = '_agent-cli-projectsroot-accept-test';
+  const sessionDir = makeSessionDirFixture('projectsroot-accept');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir, '--projects-root', join(ROOT, 'projects')]);
+    assert.equal(r.exitCode, null, 'a valid --projects-root must not fail the dispatch');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'complete', `a valid, contained --projects-root must still result in the terminal phase being written — got status.json: ${JSON.stringify(status)}`);
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});

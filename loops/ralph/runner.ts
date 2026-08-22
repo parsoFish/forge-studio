@@ -14,6 +14,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEV_WORK_ITEM_ID_PATTERN } from '../../orchestrator/work-item.ts';
 import {
   autoCommitWorktreeIfDirty,
   branchHasAllCreates,
@@ -337,10 +338,19 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
   }
 }
 
-/** Pulls `WI-N` out of a workItemSpecPath like `.forge/work-items/WI-3.md`. */
+/**
+ * Pulls the work-item id out of a workItemSpecPath like
+ * `.forge/work-items/WI-3.md` (or `WI-4a.md`).
+ *
+ * `DEV_WORK_ITEM_ID_PATTERN` is the exported SSOT (orchestrator/work-item.ts) —
+ * the narrower local `/(WI-\d+)\.md$/` this replaces returned `undefined` for a
+ * split spec, so the dev-loop lost the WI id for every event it emitted.
+ */
 function deriveWorkItemId(specPath: string): string | undefined {
-  const m = specPath.match(/(WI-\d+)\.md$/);
-  return m ? m[1] : undefined;
+  const base = specPath.split(/[/\\]/).pop() ?? '';
+  if (!base.endsWith('.md')) return undefined;
+  const id = base.slice(0, -'.md'.length);
+  return DEV_WORK_ITEM_ID_PATTERN.test(id) ? id : undefined;
 }
 
 function ensureScaffolded(
