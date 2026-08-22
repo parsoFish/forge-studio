@@ -73,7 +73,7 @@ runtime:
   model: claude-sonnet-4-6
 budgets: {}
 allowed-tools: []
-disallowed-tools: []
+disallowed-tools: [Task, Agent]
 ---
 ## Process
 
@@ -536,7 +536,7 @@ runtime:
   loopStrategy: one-shot
 budgets: {maxTurns: 10, maxBudgetUsd: 1}
 allowed-tools: []
-disallowed-tools: []
+disallowed-tools: [Task, Agent]
 ---
 ## Process
 
@@ -724,7 +724,7 @@ runtime:
   model: claude-sonnet-4-6
 budgets: {}
 allowed-tools: []
-disallowed-tools: []
+disallowed-tools: [Task, Agent]
 ---
 ## Process
 

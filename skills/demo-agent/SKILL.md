@@ -18,7 +18,7 @@ runtime:
 brainAccess: advisory
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Grep, Glob, Write, Edit]
-disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {maxTurns: 60, maxBudgetUsd: 2.0, maxBudgetUsdShare: 0.15}
 ---
 

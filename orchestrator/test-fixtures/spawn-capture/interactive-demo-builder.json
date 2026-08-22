@@ -16,7 +16,9 @@
       "disallowedTools": [
         "NotebookEdit",
         "WebFetch",
-        "WebSearch"
+        "WebSearch",
+        "Task",
+        "Agent"
       ],
       "maxTurns": 24,
       "abortController": "<AbortController>"

@@ -23,7 +23,7 @@ runtime:
 brainAccess: none
 interactivity: Operator-driven; asks what the package should do, drafts it, and revises on direct feedback until the operator saves.
 allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]
-disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 materials: []
 ---

@@ -22,7 +22,7 @@ runtime:
 brainAccess: none
 interactivity: Fully autonomous; never blocks on the operator. Runs at most once per architect session, at FINALIZE.
 allowed-tools: []
-disallowed-tools: [Read, Write, Edit, MultiEdit, NotebookEdit, Bash, Grep, Glob, WebFetch, WebSearch]
+disallowed-tools: [Read, Write, Edit, MultiEdit, NotebookEdit, Bash, Grep, Glob, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 

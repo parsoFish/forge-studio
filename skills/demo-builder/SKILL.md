@@ -22,7 +22,7 @@ runtime:
 brainAccess: none
 interactivity: Operator-driven; builds the demo skill, renders a sample, and revises on direct feedback until the operator locks it.
 allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]
-disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 

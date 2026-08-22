@@ -59,6 +59,10 @@
           ]
         }
       },
+      "disallowedTools": [
+        "Task",
+        "Agent"
+      ],
       "abortController": "<AbortController>"
     }
   },

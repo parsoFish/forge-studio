@@ -74,6 +74,7 @@ import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types
 import { listFlowBandIds } from './flow-band-vocab.ts';
 import { kbReadPolicyViolation } from './kb-read-policy.ts';
 import { unroutableKbReason } from './kb-sites.ts';
+import { lintSkillToolFence } from './studio-lint-tool-fence.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -680,6 +681,18 @@ export function runStudioLint(root: string): StudioLintResult {
 
   findings.push(...lintSkillTrust(root));
   findings.push(...lintSkillRefs(root));
+
+  // ------------------------------------------------------------------
+  // 6b. Tool-fence sweep — a roster SKILL.md that declares tool frontmatter
+  //     (`allowed-tools:`/`disallowed-tools:`) must list `Task` and `Agent`
+  //     in `disallowed-tools`. `allowed-tools` is advisory only (no
+  //     production spawn site sets `options.tools`); `disallowed-tools` is
+  //     the only field that actually removes the subagent-spawn tool from a
+  //     skill's reach. Local to this file (not `orchestrator/studio/`) per
+  //     ADR 042 boundary 1/4 — its only production caller is this module.
+  // ------------------------------------------------------------------
+
+  findings.push(...lintSkillToolFence(root));
 
   // ------------------------------------------------------------------
   // 7. Template library (R3-06) — union registry over artifact-templates/,

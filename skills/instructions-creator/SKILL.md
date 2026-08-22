@@ -22,7 +22,7 @@ runtime:
 brainAccess: none
 interactivity: Operator-driven; asks clarifying questions one round at a time and writes only after the operator approves.
 allowed-tools: [Read, Grep, Glob, Bash]
-disallowed-tools: [Write, Edit, NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [Write, Edit, NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 

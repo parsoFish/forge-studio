@@ -19,7 +19,7 @@ runtime:
 brainAccess: none
 interactivity: Operator-triggered; runs unattended once kicked off, then stops for the operator's approve/reject verdict on the drafted diff.
 allowed-tools: [Read, Grep, Glob, Write, WebFetch, WebSearch]
-disallowed-tools: [Edit, Bash, NotebookEdit]
+disallowed-tools: [Edit, Bash, NotebookEdit, Task, Agent]
 # W7-B3 (community-13): a REAL sonnet run died at exactly 16 tool calls — the
 # generic interactive spine's old hardcoded default — with zero writes left
 # for the three staging files. A full pass is ~2 fetches per registry item

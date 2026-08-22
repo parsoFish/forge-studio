@@ -21,7 +21,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './studio-path-guard.ts';
 // gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
 // cli/brain-fix-auto.ts, which import it the same way.
@@ -145,8 +145,22 @@ function spawnBrainFix(
 
 /** Read a brain-fix run's terminal state from its event log. */
 function readBrainFixState(forgeRoot: string, runId: string): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean } {
-  const evPath = join(forgeRoot, '_logs', `_brainfix-${runId}`, 'events.jsonl');
-  if (!existsSync(evPath)) return { state: 'running', cleared: false };
+  // Containment (forge-2zz): `runId` reaching here is only SAFE_ID_RE-gated
+  // (charset only, never realpath) at the calling routes — route it through
+  // the shared resolveGuardedPath so a symlinked `_logs/_brainfix-<runId>`
+  // cannot be read through. `_brainfix-<runId>` and 'events.jsonl' are each
+  // single, separator-free components, so this is a legal segments[] list —
+  // the fixed `<forgeRoot>/_logs` stays the trusted root; runId only ever
+  // enters as its OWN segment, never folded into root (see
+  // studio-path-guard.ts's CONTRACT section).
+  const guarded = resolveGuardedPath(join(forgeRoot, '_logs'), [`_brainfix-${runId}`, 'events.jsonl']);
+  // Fail-soft by design, unchanged: this helper has no error channel to its
+  // callers (both GET routes above spread its return straight into a 200
+  // response), so a guard rejection collapses into the SAME 'running' shape
+  // a not-yet-started run reports — never a distinct error, which would
+  // leak an oracle for exactly the attacker iterating on this guard.
+  if (!guarded.ok || !guarded.exists) return { state: 'running', cleared: false };
+  const evPath = guarded.realPath;
   let raw: string;
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
@@ -1848,12 +1862,49 @@ export async function handleStudioKbRoutes(
         if (!file || !check || !kind) { sendJson(res, 400, { error: 'fix-agent requires file, check, kind' }, origin); return true; }
         // Path-guard: the target file MUST be under brain/ (no traversal).
         const abs = resolve(file);
-        if (abs !== file || !abs.startsWith(resolve(ctx.forgeRoot, 'brain') + sep)) {
+        // Keep the existing rejection as-is — it refuses a path that is not
+        // exactly what it declares (any relative segment or '..' that
+        // resolve() would silently normalize away before the comparison
+        // below ever ran).
+        if (abs !== file) {
+          sendJson(res, 400, { error: 'file must be an absolute path under brain/' }, origin); return true;
+        }
+        // forge-2zz: below this point the OLD check was
+        // `abs.startsWith(resolve(forgeRoot,'brain') + sep)` — a LEXICAL
+        // prefix test on an already-normalized-but-unresolved path, with no
+        // realpath anywhere. An already-normalized path through a SYMLINKED
+        // INTERMEDIATE segment under brain/ (a real brain/<kb>/ whose, say,
+        // `_raw/` is itself a symlinked directory pointing outside) passes
+        // that check and reaches a spawned `brain fix --file` process that
+        // WRITES to it. The client (forge-ui, out of this lane's scope)
+        // still supplies a full absolute path — the request shape is
+        // unchanged; this fix is entirely server-side. Convert the absolute
+        // path to a relative tail against the fixed brain/ root and route
+        // THAT through the same per-segment realpath-identity guard every
+        // other studio route uses.
+        const brainRoot = resolve(ctx.forgeRoot, 'brain');
+        const rel = relative(brainRoot, abs);
+        // `rel` splits into an empty single segment when abs === brainRoot,
+        // and into a leading '..' segment when abs falls entirely outside
+        // brainRoot (relative() legitimately returns a '..'-prefixed path in
+        // that case) — resolveGuardedPath's isSafeSegment rejects both
+        // BEFORE any filesystem call, so no stat is ever attempted on a
+        // path outside the root.
+        const guardedTarget = resolveGuardedPath(brainRoot, rel.split(sep));
+        // Require BOTH containment (ok) AND that the target already exists —
+        // a fix targets a file that is genuinely there; create-mode has no
+        // meaning for "go fix this finding".
+        if (!guardedTarget.ok || !guardedTarget.exists) {
           sendJson(res, 400, { error: 'file must be an absolute path under brain/' }, origin); return true;
         }
         const runId = `${kbId}-${Date.now().toString(36)}`;
         try {
-          spawnBrainFix(ctx.forgeRoot, { kbId, file: abs, check, kind, fixHint, message, runId });
+          // Pass the guard's OWN realPath, never the caller's original `abs`
+          // string — reusing the caller's string after validating it leaves
+          // a TOCTOU window open for no reason; resolveGuardedPath already
+          // paid for the realpath walk, so its output is what gets forwarded
+          // to the spawned process.
+          spawnBrainFix(ctx.forgeRoot, { kbId, file: guardedTarget.realPath, check, kind, fixHint, message, runId });
         } catch (err) {
           sendJson(res, 500, { error: `failed to dispatch agent fix: ${sanitizeError(err)}` }, origin); return true;
         }

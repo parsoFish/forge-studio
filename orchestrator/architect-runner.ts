@@ -1403,6 +1403,7 @@ async function runStructured<T>(args: {
     schema: args.schema,
     model: resolveSessionModel(architectAgentSpec, args.modelTier),
     allowedTools: architectAgentSpec.allowedTools,
+    disallowedTools: architectAgentSpec.disallowedTools,
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,
     onText: args.onText,

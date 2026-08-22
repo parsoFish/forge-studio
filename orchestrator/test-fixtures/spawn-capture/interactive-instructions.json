@@ -29,6 +29,15 @@
           ]
         }
       },
+      "disallowedTools": [
+        "Write",
+        "Edit",
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch",
+        "Task",
+        "Agent"
+      ],
       "abortController": "<AbortController>"
     }
   },
