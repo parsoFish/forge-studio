@@ -1448,10 +1448,7 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
   if (!existsSync(dir)) return null;
   let files: string[];
   try {
-    // WORK_ITEM_FILE_PATTERN is the exported SSOT (orchestrator/work-item.ts).
-    // The narrower local regex this replaces silently dropped split work items
-    // (WI-4a.md) from the roadmap card's WI list.
-    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f));
+    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: orchestrator/work-item.ts
   } catch {
     return null;
   }
