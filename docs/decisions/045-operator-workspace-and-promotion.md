@@ -31,9 +31,9 @@ writes lands in a **git-tracked path inside the forge repo itself**:
 | Skill packages, installs, approvals | `skills/<id>/**` (`cli/bridge-studio-skills.ts`, `installSkillPackage` / `approveSkillDraft` in `orchestrator/studio/skill-library.ts`, `installCommunityHookPackage` in `orchestrator/studio/community-install.ts`) | tracked |
 | Per-machine install ledger + hook approvals | `studio/installed-skills.yaml`, `studio/hook-approvals.yaml` | tracked directory, files **not** gitignored |
 
-That table is representative, not exhaustive — the full set is wider than the five paths the
-operator-facing story starts from, which is precisely why §C below insists the declared set be data
-with a drift guard rather than a hand-maintained list. Two useful pieces of negative evidence: Studio
+That table is representative, not exhaustive — every enumeration of it so far has come back longer
+than the last, which is precisely why §C below insists the declared set be data with a drift guard
+rather than a hand-maintained list. Two useful pieces of negative evidence: Studio
 writes **nothing** under `docs/`, and `studio/catalog.yaml` and `studio/session-kinds.yaml` have no
 write path at all — they are hand-edited by design ([ADR 027](./027-studio-object-model.md) §5,
 restated in `orchestrator/studio/registry.ts`). And one adjacent gap found while enumerating:
@@ -52,7 +52,8 @@ policy is written down in `docs/community-registry-writes.md`:
 
 That incident is why `cli/dry-bridge.ts` exists at all; its module docstring names it directly ("the
 Studio bridge self-merged a forge PR with the operator's real gh token during a `ui:journey` harness
-run"), and `docs/roadmaps/README.md` §"wave 0" cites it as the reason safety work was sequenced first.
+run"), and `docs/roadmaps/README.md`'s driving-order table cites it as the reason safety work was sequenced
+first, in wave 0.
 **The no-auto-commit decision is correct and this ADR does not reverse it.**
 
 One honest exception, stated so this ADR does not overclaim: `fixMisRouted` (`cli/brain-fix-auto.ts`),
@@ -250,8 +251,10 @@ on `/community`.
 Two constraints, both learned the expensive way:
 
 - **The declared set is data with a drift guard**, in the shape of `BRIDGE_ROUTE_CLASSIFICATION` — a
-  typed exported table consumed by a test. A hand-maintained list of five paths that nothing
-  enforces is the same defect as today's one path, with four more places to rot. This is the
+  typed exported table consumed by a test. A hand-maintained list of the paths, enforced nowhere, is
+  the same defect as today's one path with more places to rot — and the enumeration behind this ADR
+  came back longer every time it was run, which is what a hand-maintained list would silently miss.
+  This is the
   `declared-data-fails-open` class, and the constructive fix is that the set of Studio-written
   tracked roots and the set of paths the dirty check covers must be **the same object**.
 - **`null` stays a third state.** `communityIndexMeta` already returns `true`/`false`/`null` for
