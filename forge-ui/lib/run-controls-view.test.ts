@@ -148,8 +148,9 @@ test('flows-49 (review round 3, S2-5): a successful action keeps the section mou
   // flow monitor (schedulerStrip=false) that unmounted the whole section and
   // discarded the scheduler-aware outcome line — "the scheduler is stopped,
   // nothing will run, Start it here" — which is the entire point of flows-49.
-  expect(runControlsShouldRender(0, false, false), 'nothing to say → render nothing').toBe(false);
-  expect(runControlsShouldRender(0, false, true), 'an outcome to show → stay mounted').toBe(true);
-  expect(runControlsShouldRender(3, false, false), 'controls to offer → render').toBe(true);
-  expect(runControlsShouldRender(0, true, false), 'a queued run needs the scheduler → render').toBe(true);
+  expect(runControlsShouldRender(0, false, null, null), 'nothing to say → render nothing').toBe(false);
+  expect(runControlsShouldRender(0, false, 'resume', null), 'a success to show → stay mounted').toBe(true);
+  expect(runControlsShouldRender(0, false, null, 'boom'), 'a failure to show → stay mounted').toBe(true);
+  expect(runControlsShouldRender(3, false, null, null), 'controls to offer → render').toBe(true);
+  expect(runControlsShouldRender(0, true, null, null), 'a queued run needs the scheduler → render').toBe(true);
 });

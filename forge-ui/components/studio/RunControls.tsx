@@ -114,8 +114,7 @@ export function RunControls({
   // return null and threw away the scheduler-aware outcome line — the very thing
   // `flows-49` ("make the outcome observable") exists to show. The `key` fix
   // alone could never have covered this: the early return is the other cause.
-  const hasOutcome = done !== null || error !== null;
-  if (run === null || !runControlsShouldRender(controls.length, awaitsScheduler, hasOutcome)) return null;
+  if (run === null || !runControlsShouldRender(controls.length, awaitsScheduler, done, error)) return null;
 
   const initiativeId = run.initiativeId;
 

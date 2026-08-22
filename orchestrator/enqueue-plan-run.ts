@@ -159,7 +159,10 @@ export function enqueuePlanRun(
   //      matches the TARGET flow; this module's fires only for `forge-develop`,
   //      so a `forge-architect` manifest parked in review stays re-plannable here
   //      (also pinned by this module's own test).
-  // The repoint rule is what crosses between them; neither of those does.
+  //   3. it carries two options this module has no use for: `allowRepointFrom`
+  //      (standing authority for a named source flow — only the develop hand-off
+  //      needs it) and `allowFinishedSource` (only the trigger drain does).
+  // The repoint rule is what crosses between them; none of those three does.
   //
   // The confirmation is a COMPARE-AND-SWAP against the flow the operator was
   // shown (review round 3, S2-3) — see `enqueue-flow-run.ts` for why a boolean

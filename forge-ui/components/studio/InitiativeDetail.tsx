@@ -40,7 +40,7 @@ import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
-import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
+import { RepointGate } from '@/components/studio/RepointGate';
 
 export type InitiativeDetailProps = {
   /** Visual toggle only — this component is ALWAYS mounted (see AT5 note
@@ -202,47 +202,40 @@ export function InitiativeDetail({
       )}
 
       {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. */}
-      {/* W8-A3 review round 3, S1-1: `!== 'started'` also matched `needs-confirm`,
-          so the ENABLED, unconfirmed button rendered directly above the
-          confirmation it had just raised — and re-posted the identical
-          unconfirmed request forever. It is the permanently-409 no-op round 1
-          removed, re-shipped inside the round-2 fix for it, wearing a friendlier
-          label. While a confirmation is pending, the confirmation IS the control. */}
-      {unplanned && plan.status !== 'started' && plan.status !== 'needs-confirm' && (
-        <button
-          data-action="plan-initiative"
-          data-initiative-id={initiativeId}
-          disabled={plan.status === 'planning' || !onPlan}
-          onClick={() => void onPlan?.(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
-            opacity: plan.status === 'planning' ? 0.6 : 1,
-          }}
+      {/* W8-A3: the gate renders the button OR the confirmation, never both.
+          Review found "the control stays live beside its own confirmation and
+          re-posts unconfirmed" FOUR times on four controls across three rounds;
+          it is structural now rather than a rule each call site must remember. */}
+      {unplanned && plan.status !== 'started' && (
+        <RepointGate
+          initiativeId={initiativeId}
+          pending={plan.status === 'needs-confirm' && plan.currentFlowId
+            ? { currentFlowId: plan.currentFlowId, targetFlowId: 'forge-architect' }
+            : null}
+          verb="Plan"
+          onConfirm={(fromFlowId) => void onPlan?.(initiativeId, fromFlowId)}
+          onCancel={() => onDismissRepoint?.('plan', initiativeId)}
+          barStyle={{ marginTop: 4, alignSelf: 'flex-start' }}
         >
-          {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
-        </button>
+          <button
+            data-action="plan-initiative"
+            data-initiative-id={initiativeId}
+            disabled={plan.status === 'planning' || !onPlan}
+            onClick={() => void onPlan?.(initiativeId)}
+            style={{
+              marginTop: 4, alignSelf: 'flex-start',
+              color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
+              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+              fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
+              opacity: plan.status === 'planning' ? 0.6 : 1,
+            }}
+          >
+            {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
+          </button>
+        </RepointGate>
       )}
       {unplanned && plan.status === 'error' && plan.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
-      )}
-      {/* W8-A3 (flows-37, review round 2 finding 1): planning an initiative
-          queued under another flow MOVES it off that flow. This card names one
-          initiative, so it can ask — and must: without this the refusal
-          rendered as a plain error under a "retry — plan" button that re-posted
-          the identical unconfirmed request forever. */}
-      {unplanned && plan.status === 'needs-confirm' && (
-        <RepointConfirmBar
-          initiativeId={initiativeId}
-          currentFlowId={plan.currentFlowId ?? 'another flow'}
-          targetFlowId="forge-architect"
-          verb="Plan"
-          onConfirm={() => void onPlan?.(initiativeId, plan.currentFlowId)}
-          onCancel={() => onDismissRepoint?.('plan', initiativeId)}
-          style={{ marginTop: 4, alignSelf: 'flex-start' }}
-        />
       )}
       {/* W7-A3 (projects-16/32): the enqueue outcome, honest about the
           scheduler and linking the run the enqueue actually returned. */}
@@ -251,42 +244,37 @@ export function InitiativeDetail({
       )}
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
-      {/* Round 3 S1-1, as above. */}
-      {canStartDevelopment && develop.status !== 'started' && develop.status !== 'needs-confirm' && (
-        <button
-          data-action="start-development"
-          data-initiative-id={initiativeId}
-          disabled={develop.status === 'starting' || !onStart}
-          onClick={() => void onStart?.(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
-            opacity: develop.status === 'starting' ? 0.6 : 1,
-          }}
+      {/* Same gate for the develop control — see the plan control above. */}
+      {canStartDevelopment && develop.status !== 'started' && (
+        <RepointGate
+          initiativeId={initiativeId}
+          pending={develop.status === 'needs-confirm' && develop.currentFlowId
+            ? { currentFlowId: develop.currentFlowId, targetFlowId: 'forge-develop' }
+            : null}
+          verb="Start development"
+          onConfirm={(fromFlowId) => void onStart?.(initiativeId, fromFlowId)}
+          onCancel={() => onDismissRepoint?.('develop', initiativeId)}
+          barStyle={{ marginTop: 4, alignSelf: 'flex-start' }}
         >
-          {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
-        </button>
+          <button
+            data-action="start-development"
+            data-initiative-id={initiativeId}
+            disabled={develop.status === 'starting' || !onStart}
+            onClick={() => void onStart?.(initiativeId)}
+            style={{
+              marginTop: 4, alignSelf: 'flex-start',
+              color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
+              border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+              fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
+              opacity: develop.status === 'starting' ? 0.6 : 1,
+            }}
+          >
+            {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
+          </button>
+        </RepointGate>
       )}
       {develop.status === 'error' && develop.error && (
         <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
-      )}
-      {/* W8-A3 (flows-37, review round 2 finding 2): the per-card start posts
-          exactly ONE named initiative, so the "no confirmation on a batch"
-          argument does not apply to it — and before this the route could not be
-          confirmed through at all, so the refusal was an instruction the
-          product could not satisfy. */}
-      {canStartDevelopment && develop.status === 'needs-confirm' && (
-        <RepointConfirmBar
-          initiativeId={initiativeId}
-          currentFlowId={develop.currentFlowId ?? 'another flow'}
-          targetFlowId="forge-develop"
-          verb="Start development"
-          onConfirm={() => void onStart?.(initiativeId, develop.currentFlowId)}
-          onCancel={() => onDismissRepoint?.('develop', initiativeId)}
-          style={{ marginTop: 4, alignSelf: 'flex-start' }}
-        />
       )}
       {/* W7-A3 (projects-16/17/32): no more "the unifier will open a PR" —
           the develop flow does; and the claim + run link are real. */}

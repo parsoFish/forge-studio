@@ -760,10 +760,17 @@ inventory rather than one shared page-level contract:
   `[data-component="repoint-confirm"][data-current-flow][data-target-flow]`
   with `button[data-action="confirm-repoint"]` /
   `button[data-action="cancel-repoint"]` and posts **nothing** until confirmed;
-  the confirmation rides to the bridge as `confirmRepoint: true` and the rule
-  itself lives on `enqueueFlowRun`, which answers 409
+  the confirmation rides to the bridge as
+  `confirmRepointFrom: "<the flow the operator was shown>"` — a compare-and-swap,
+  not a boolean — and the rule itself lives on `enqueueFlowRun`, which answers 409
   `repoint-requires-confirm` (body carries `currentFlowId`) to any caller that
-  omits it — so the same panel is reached from the server's refusal too. The
+  omits it, sends a non-string, or names a flow the initiative has since left. So
+  the same panel is reached from the server's refusal too, and a confirmation that
+  went stale under a poll or a chained trigger fails closed rather than moving the
+  initiative off a flow nobody was shown. The Start-Run control itself does not
+  render while its confirmation is open (`components/studio/RepointGate.tsx` —
+  the control and the bar are one component, so a second click cannot re-post
+  unconfirmed). The
   outcome renders
   `[data-kickoff-result="enqueued"|"error"]` — an error verbatim, a success
   through the shared `[data-component="enqueue-outcome"][data-enqueue-kind]
@@ -2170,7 +2177,7 @@ inventory rather than one shared page-level contract:
   `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
   prior attempt. Each pending initiative also carries `[data-plan-state="unplanned"
-  |"planning"|"planned"|"error"]` (`unplanned` = the R4-05
+  |"planning"|"planned"|"needs-confirm"|"error"]` (`unplanned` = the R4-05
   `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
   has run yet; this attribute lives on the CARD itself, so it's queryable
   without opening the drawer): the drawer renders the

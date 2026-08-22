@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
-import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
+import { RepointGate } from '@/components/studio/RepointGate';
 import { startFlowRun } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import type { KickoffCandidate } from '@/lib/kickoff-candidates';
@@ -221,23 +221,26 @@ function GenericKickoff({
           </option>
         ))}
       </select>
-      <button data-action="start-run" {...disabledAttrs(submitting ? 'Starting the run…' : null)} onClick={() => void start()} style={launchButtonStyle}>
-        {submitting ? 'Starting…' : 'Start Run'}
-      </button>
+      {/* W8-A3 round 4, S2-2: the control and its confirmation are one gate.
+          Re-clicking Start Run while a bar was open re-posted UNCONFIRMED
+          whenever the refusal had come from the server rather than from the
+          client's own `isRepoint` derivation — the path this component's own
+          comment says exists. */}
+      <RepointGate
+        initiativeId={pendingRepoint?.initiativeId ?? ''}
+        pending={pendingRepoint ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: flowId } : null}
+        verb="Run"
+        busy={submitting}
+        onConfirm={(fromFlowId) => void submit(pendingRepoint!.initiativeId, fromFlowId)}
+        onCancel={() => setPendingRepoint(null)}
+        barStyle={{ width: '100%', marginTop: 6 }}
+      >
+        <button data-action="start-run" {...disabledAttrs(submitting ? 'Starting the run…' : null)} onClick={() => void start()} style={launchButtonStyle}>
+          {submitting ? 'Starting…' : 'Start Run'}
+        </button>
+      </RepointGate>
       {candidates.length === 0 && (
         <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>No queued initiatives yet — plan one with the architect first.</span>
-      )}
-      {pendingRepoint && (
-        <RepointConfirmBar
-          initiativeId={pendingRepoint.initiativeId}
-          currentFlowId={pendingRepoint.currentFlowId}
-          targetFlowId={flowId}
-          verb="Run"
-          busy={submitting}
-          onConfirm={() => void submit(pendingRepoint.initiativeId, pendingRepoint.currentFlowId)}
-          onCancel={() => setPendingRepoint(null)}
-          style={{ width: '100%', marginTop: 6 }}
-        />
       )}
       {result?.kind === 'error' && (
         <span data-kickoff-result="error" style={{ fontSize: 12, color: 'var(--red)', width: '100%' }}>{result.message}</span>

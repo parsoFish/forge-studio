@@ -13,6 +13,13 @@
  * They live here rather than inline in the page for one reason: inline they had
  * no test, and "an untested mapper silently dropped a status" is the same
  * `declared-data-fails-open` shape the rest of this lane is about.
+ *
+ * A refusal that names NO flow does not become `needs-confirm` (review round 4,
+ * finding 8). The confirmation is a compare-and-swap against the flow the
+ * operator was shown, so a refusal with nothing to show is not confirmable — an
+ * earlier cut defaulted it to the literal `'another flow'`, which the UI would
+ * then have DISPLAYED and SENT, guaranteeing an unsatisfiable loop. It falls to
+ * `error` with the server's own detail instead.
  */
 import type { DevelopCardState, PlanCardState } from '@/components/studio/RoadmapCanvas';
 import type { PlanInitiativeResult } from './bridge-client';
@@ -33,8 +40,8 @@ export function developStateFromResult(
   requestError: string | undefined,
 ): DevelopCardState {
   if (item?.ok) return { status: 'started', error: null, flowId: item.flowId };
-  if (item?.status === 'repoint-requires-confirm') {
-    return { status: 'needs-confirm', error: null, currentFlowId: item.currentFlowId ?? 'another flow' };
+  if (item?.status === 'repoint-requires-confirm' && item.currentFlowId) {
+    return { status: 'needs-confirm', error: null, currentFlowId: item.currentFlowId };
   }
   return { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
 }
@@ -43,8 +50,8 @@ export function developStateFromResult(
  *  flowId kept so the card links the run, projects-32). */
 export function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
   if (result.status === 'enqueued') return { status: 'started', error: null, flowId: result.flowId };
-  if (result.status === 'repoint-requires-confirm') {
-    return { status: 'needs-confirm', error: null, currentFlowId: result.currentFlowId ?? 'another flow' };
+  if (result.status === 'repoint-requires-confirm' && result.currentFlowId) {
+    return { status: 'needs-confirm', error: null, currentFlowId: result.currentFlowId };
   }
   return { status: 'error', error: result.detail ?? result.status };
 }

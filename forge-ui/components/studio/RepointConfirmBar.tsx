@@ -18,6 +18,12 @@
  * defect it was closing — three copies of one rule drift, and two of them
  * shipped with no test until review round 2 said so.
  *
+ * NOTHING SHOULD MOUNT THIS DIRECTLY. Mount `RepointGate`, which renders either
+ * this bar or the originating control and never both — review found "the control
+ * stays live beside its own confirmation and re-posts unconfirmed" on FOUR
+ * separate controls across three fix rounds, because suppression-by-convention
+ * is a rule someone has to remember N times.
+ *
  * `verb` is the acting control's own word, so the copy reads as that control's
  * consequence rather than as generic ceremony.
  *

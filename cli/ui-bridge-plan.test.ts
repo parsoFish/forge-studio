@@ -162,3 +162,33 @@ test('POST /api/initiatives/:id/plan: missing CSRF header → 403', async () => 
   });
   assert.equal(res.status, 403);
 });
+
+// ---------------------------------------------------------------------------
+// W8-A3 review round 4, finding 7: the retired boolean is pinned dead on the
+// flow and develop doors but was not on this one, so re-adding
+// `body['confirmRepoint'] === true` here would have left the suite green.
+// ---------------------------------------------------------------------------
+
+test('POST /api/initiatives/:id/plan: the retired boolean, a non-string, and the WRONG flow all confirm nothing', async () => {
+  const INIT_R4 = 'INIT-2026-06-13-round4';
+  const path = join(forgeRoot, '_queue', 'pending', `${INIT_R4}.md`);
+  writeFileSync(path, pendingManifest(INIT_R4));
+  const before = readFileSync(path, 'utf8');
+  for (const body of [
+    { confirmRepoint: true },
+    { confirmRepoint: 'forge-develop' },
+    { confirmRepointFrom: true },
+    { confirmRepointFrom: 1 },
+    { confirmRepointFrom: '' },
+    { confirmRepointFrom: 'some-other-flow' },
+  ]) {
+    const res = await fetch(`${url}/api/initiatives/${INIT_R4}/plan`, {
+      method: 'POST',
+      headers: CSRF,
+      body: JSON.stringify(body),
+    });
+    assert.equal(res.status, 409, JSON.stringify(body));
+    assert.equal(((await res.json()) as { status: string }).status, 'repoint-requires-confirm');
+  }
+  assert.equal(readFileSync(path, 'utf8'), before, 'manifest byte-identical after every attempt');
+});

@@ -43,9 +43,20 @@ test('plan: same, on the sibling mapper — the one round 2 found still open aft
   expect(state.error).toBeNull();
 });
 
-test('a refusal that names no flow degrades to a readable placeholder, never to undefined in the copy', () => {
-  expect(developStateFromResult({ ok: false, status: 'repoint-requires-confirm' }, undefined).currentFlowId).toBe('another flow');
-  expect(planStateFromResult({ status: 'repoint-requires-confirm', initiativeId: ID }).currentFlowId).toBe('another flow');
+test('a refusal that names NO flow is not confirmable — it is an error, not a confirmation the operator cannot satisfy', () => {
+  // Review round 4, finding 8. The confirmation is a compare-and-swap against
+  // the flow the operator was shown, so a refusal with nothing to show cannot be
+  // confirmed. An earlier cut defaulted it to the literal 'another flow', which
+  // the UI would then have DISPLAYED and SENT as `confirmRepointFrom` —
+  // guaranteeing a bar the operator can click forever and never satisfy.
+  //
+  // KILLS: `currentFlowId: x.currentFlowId ?? 'another flow'`.
+  const dev = developStateFromResult({ ok: false, status: 'repoint-requires-confirm', detail: 'queued elsewhere' }, undefined);
+  expect(dev.status).toBe('error');
+  expect(dev.error).toBe('queued elsewhere');
+  const plan = planStateFromResult({ status: 'repoint-requires-confirm', initiativeId: ID, detail: 'queued elsewhere' });
+  expect(plan.status).toBe('error');
+  expect(plan.error).toBe('queued elsewhere');
 });
 
 test('every OTHER refusal is still an error, with its detail preserved — the new branch must not swallow them', () => {

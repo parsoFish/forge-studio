@@ -33,7 +33,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
 import { RoadmapCanvas, type DevelopCardState, type PlanCardState } from '@/components/studio/RoadmapCanvas';
 import { developStateFromResult, planStateFromResult } from '@/lib/roadmap-card-state';
-import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
+import { RepointGate } from '@/components/studio/RepointGate';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -1246,10 +1246,10 @@ function RoadmapView({
               // this they rendered no confirmation and no error at all — the
               // click did nothing, said nothing, and could be repeated forever.
               const repoint =
-                row.kind === 'plan' && plan === 'needs-confirm'
-                  ? { kind: 'plan' as const, currentFlowId: planState?.currentFlowId ?? 'another flow', targetFlowId: 'forge-architect' }
-                  : row.kind === 'start' && dev === 'needs-confirm'
-                    ? { kind: 'develop' as const, currentFlowId: devState?.currentFlowId ?? 'another flow', targetFlowId: 'forge-develop' }
+                row.kind === 'plan' && plan === 'needs-confirm' && planState?.currentFlowId
+                  ? { currentFlowId: planState.currentFlowId, targetFlowId: 'forge-architect' }
+                  : row.kind === 'start' && dev === 'needs-confirm' && devState?.currentFlowId
+                    ? { currentFlowId: devState.currentFlowId, targetFlowId: 'forge-develop' }
                     : null;
               const rowError = row.kind === 'plan' ? planState?.error : row.kind === 'start' ? devState?.error : null;
               return (
@@ -1261,37 +1261,41 @@ function RoadmapView({
                 >
                   <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.initiativeId}</span>
                   <span style={{ color: 'var(--faint)', flex: 1, minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</span>
-                  {row.kind === 'plan' && repoint === null && (
-                    <button
-                      className="btn btn-sm"
-                      data-action="actionable-plan"
-                      disabled={plan === 'planning' || plan === 'started'}
-                      onClick={() => void planOne(row.initiativeId)}
-                    >
-                      {plan === 'planning' ? 'Planning…' : plan === 'started' ? 'Plan enqueued' : 'Plan →'}
-                    </button>
-                  )}
-                  {row.kind === 'start' && repoint === null && (
-                    <button
-                      className="btn btn-sm btn-primary"
-                      data-action="actionable-start"
-                      {...disabledAttrs(dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Already started — open the run to follow it' : null)}
-                      onClick={() => void startOne(row.initiativeId)}
-                    >
-                      {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
-                    </button>
-                  )}
-                  {repoint !== null && (
-                    <RepointConfirmBar
+                  {row.kind === 'plan' && (
+                    <RepointGate
                       initiativeId={row.initiativeId}
-                      currentFlowId={repoint.currentFlowId}
-                      targetFlowId={repoint.targetFlowId}
-                      verb={repoint.kind === 'plan' ? 'Plan' : 'Start development'}
-                      onConfirm={() => void (repoint.kind === 'plan'
-                        ? planOne(row.initiativeId, repoint.currentFlowId)
-                        : startOne(row.initiativeId, repoint.currentFlowId))}
-                      onCancel={() => dismissRepoint(repoint.kind, row.initiativeId)}
-                    />
+                      pending={repoint}
+                      verb="Plan"
+                      onConfirm={(fromFlowId) => void planOne(row.initiativeId, fromFlowId)}
+                      onCancel={() => dismissRepoint('plan', row.initiativeId)}
+                    >
+                      <button
+                        className="btn btn-sm"
+                        data-action="actionable-plan"
+                        disabled={plan === 'planning' || plan === 'started'}
+                        onClick={() => void planOne(row.initiativeId)}
+                      >
+                        {plan === 'planning' ? 'Planning…' : plan === 'started' ? 'Plan enqueued' : 'Plan →'}
+                      </button>
+                    </RepointGate>
+                  )}
+                  {row.kind === 'start' && (
+                    <RepointGate
+                      initiativeId={row.initiativeId}
+                      pending={repoint}
+                      verb="Start development"
+                      onConfirm={(fromFlowId) => void startOne(row.initiativeId, fromFlowId)}
+                      onCancel={() => dismissRepoint('develop', row.initiativeId)}
+                    >
+                      <button
+                        className="btn btn-sm btn-primary"
+                        data-action="actionable-start"
+                        {...disabledAttrs(dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Already started — open the run to follow it' : null)}
+                        onClick={() => void startOne(row.initiativeId)}
+                      >
+                        {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
+                      </button>
+                    </RepointGate>
                   )}
                   {rowError && (
                     <span data-component="actionable-error" style={{ color: 'var(--red, #f87171)', fontSize: 11.5 }}>{rowError}</span>

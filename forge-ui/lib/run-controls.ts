@@ -137,7 +137,13 @@ export function mayPostControl(control: RunControl, armedId: RunControlId | null
 export function runControlsShouldRender(
   controlCount: number,
   awaitsScheduler: boolean,
-  hasOutcome: boolean,
+  /** The component's own outcome state, forwarded — NOT a boolean the call site
+   *  computed. Review round 4, finding 6: a `hasOutcome: boolean` parameter left
+   *  the caller free to pass `false` forever, with every test in the repo green
+   *  and the flows-49 outcome line invisible again. Taking the values removes
+   *  that failure mode from the call site entirely. */
+  done: RunControlId | null,
+  error: string | null,
 ): boolean {
-  return controlCount > 0 || awaitsScheduler || hasOutcome;
+  return controlCount > 0 || awaitsScheduler || done !== null || error !== null;
 }

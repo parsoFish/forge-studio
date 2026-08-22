@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { planInitiative, startDevelopment, startFlowRun, type ProjectRoadmap } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import { deriveStartWorkState } from '@/lib/start-work-view';
-import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
+import { RepointGate } from '@/components/studio/RepointGate';
 
 /**
  * StartWorkActions (W7-B6, operator note 11 / orch-02, projects-18/-20) —
@@ -196,17 +196,32 @@ export function StartWorkActions({
       </span>
 
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <button
-          className="btn btn-sm"
-          data-action="start-work-plan"
-          disabled={busy !== null || state.planDisabledReason !== null}
-          onClick={() => void onPlan()}
-          {...(state.planDisabledReason ? { 'data-disabled-reason': state.planDisabledReason, title: state.planDisabledReason } : {})}
-          style={groupBtn}
+        {/* W8-A3 round 4, S1-1: the control and its confirmation are one gate.
+            Previously the button stayed live beside the bar (it is disabled only
+            by `busy`, which the `finally` clears before the bar renders), so a
+            second click re-posted unconfirmed — and re-derived
+            `unplannedReady[0]`, so it could raise a bar for a DIFFERENT
+            initiative and silently replace the one on screen. */}
+        <RepointGate
+          initiativeId={pendingRepoint?.initiativeId ?? ''}
+          pending={pendingRepoint?.kind === 'plan' ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: pendingRepoint.targetFlowId } : null}
+          verb="Plan"
+          busy={busy !== null}
+          onConfirm={(fromFlowId) => void onPlan({ initiativeId: pendingRepoint!.initiativeId, fromFlowId })}
+          onCancel={() => setPendingRepoint(null)}
         >
-          {busy === 'plan' ? 'Planning…' : `Plan${state.unplannedReady.length > 0 ? ` (${state.unplannedReady.length})` : ''}`}
-        </button>
-        {state.planDisabledReason && <span style={hint}>{state.planDisabledReason}</span>}
+          <button
+            className="btn btn-sm"
+            data-action="start-work-plan"
+            disabled={busy !== null || state.planDisabledReason !== null}
+            onClick={() => void onPlan()}
+            {...(state.planDisabledReason ? { 'data-disabled-reason': state.planDisabledReason, title: state.planDisabledReason } : {})}
+            style={groupBtn}
+          >
+            {busy === 'plan' ? 'Planning…' : `Plan${state.unplannedReady.length > 0 ? ` (${state.unplannedReady.length})` : ''}`}
+          </button>
+        </RepointGate>
+        {state.planDisabledReason && pendingRepoint?.kind !== 'plan' && <span style={hint}>{state.planDisabledReason}</span>}
       </span>
 
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -248,15 +263,24 @@ export function StartWorkActions({
                 <option key={i.initiativeId} value={i.initiativeId}>{i.initiativeId}</option>
               ))}
             </select>
-            <button
-              className="btn btn-sm"
-              data-action="start-work-run-flow"
-              disabled={busy !== null}
-              onClick={() => void onRunFlow()}
-              style={groupBtn}
+            <RepointGate
+              initiativeId={pendingRepoint?.initiativeId ?? ''}
+              pending={pendingRepoint?.kind === 'run-flow' ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: pendingRepoint.targetFlowId } : null}
+              verb="Run"
+              busy={busy !== null}
+              onConfirm={(fromFlowId) => void onRunFlow({ flowId: pendingRepoint!.targetFlowId, initiativeId: pendingRepoint!.initiativeId, fromFlowId })}
+              onCancel={() => setPendingRepoint(null)}
             >
-              {busy === 'run-flow' ? 'Enqueuing…' : 'Run a flow'}
-            </button>
+              <button
+                className="btn btn-sm"
+                data-action="start-work-run-flow"
+                disabled={busy !== null}
+                onClick={() => void onRunFlow()}
+                style={groupBtn}
+              >
+                {busy === 'run-flow' ? 'Enqueuing…' : 'Run a flow'}
+              </button>
+            </RepointGate>
           </>
         ) : (
           <>
@@ -283,20 +307,6 @@ export function StartWorkActions({
       >
         Architect →
       </Link>
-
-      {pendingRepoint && (
-        <RepointConfirmBar
-          initiativeId={pendingRepoint.initiativeId}
-          currentFlowId={pendingRepoint.currentFlowId}
-          targetFlowId={pendingRepoint.targetFlowId}
-          verb={pendingRepoint.kind === 'plan' ? 'Plan' : 'Run'}
-          busy={busy !== null}
-          onConfirm={() => void (pendingRepoint.kind === 'plan'
-            ? onPlan({ initiativeId: pendingRepoint.initiativeId, fromFlowId: pendingRepoint.currentFlowId })
-            : onRunFlow({ flowId: pendingRepoint.targetFlowId, initiativeId: pendingRepoint.initiativeId, fromFlowId: pendingRepoint.currentFlowId }))}
-          onCancel={() => setPendingRepoint(null)}
-        />
-      )}
 
       {outcome && (
         <span data-start-work-outcome={outcome.kind} style={{ fontSize: 11.5, color: outcome.kind === 'ok' ? 'var(--green, #3fb950)' : 'var(--red, #f87171)' }}>
