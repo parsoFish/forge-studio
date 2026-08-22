@@ -435,7 +435,8 @@ third connection kind above); `npm run parity:stories` exits 0.
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
   surface pattern), R4-21 (F3's FilePackage renderer + F4's install/palette
   pipeline receive its authored packages), R5-05 (skills-palette residue
-  cross-references here, not duplicated).
+  cross-references here, not duplicated), R3-08 (the shared resolver is what
+  gains a second, operator-owned root).
 - **Context:** Three converging findings: [known-gaps §4.11](../known-gaps.md)
   (UI-created skills invisible to the agent builder's palette — the S5b demo
   rebuild broke its create-skill→compose-into-agent throughline on this),
@@ -1054,13 +1055,17 @@ third connection kind above); `npm run parity:stories` exits 0.
 
 - **Status:** planned  ·  **Wave:** unsequenced — the wave-8 ON-2 spike shipped
   design only, by operator decision
-- **Depends on:** R3-01 (the shared skill resolver + unified registry this adds
-  a second root to), R3-03 (`hooksDir` is one of the root helpers that changes),
-  R3-07 (`studio/community/registry.yaml` is one of the tracked write targets).
-- **Depended on by:** R3-09 (promotion needs a workspace to promote *from*);
-  R6-10 (the pending surface's job shrinks to core-only once operator authoring
-  stops dirtying the repo); R8-01 *(soft — an installable forge must survive an
-  upgrade without clobbering operator edits)*.
+- **Depends on:** R3-01 (the shared skill resolver + unified registry is what
+  gains a second, operator-owned root). Nothing blocks this: R3-01, R3-03 and
+  R3-07 all reached `implemented`, and this initiative extends their shipped
+  machinery — `hooksDir` (R3-03) is one of the root helpers that changes, and
+  `studio/community/registry.yaml` (R3-07) is one of the tracked write targets —
+  rather than waiting on any of them.
+- **Depended on by:** R3-09 (promotion needs a workspace to promote *from*),
+  R6-10 *(soft — the pending surface's job shrinks to core-only once operator
+  authoring stops dirtying the repo; it is landable first regardless)*, R8-01
+  *(soft — an installable forge must survive an upgrade without clobbering
+  operator edits)*.
 - **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §A.
   Every object an operator authors in Studio lands in a **git-tracked path inside
   the forge repo**: `skills/<slug>/SKILL.md`, `studio/flows/<id>/flow.yaml`,

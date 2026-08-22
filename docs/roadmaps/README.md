@@ -153,6 +153,16 @@ edges in italics):**
 | R4-15/16/17 Session alignments | R2-10 (+R4-02 for R4-17) | Render through the shared session shell. |
 | R4-18 Onboard-project flow | R4-17 | Wraps the staged session. |
 | R4-19 Brain agents | R2-10, R1-06 | Session shell; band-scoped binding must exist. |
+
+**Wave-8 edges (2026-08-23 — minted from [ADR 045](../decisions/045-operator-workspace-and-promotion.md);
+recorded on both sides in the files; soft edges in italics):**
+
+| Depender | Depends on | Reason |
+|----------|-----------|--------|
+| R3-08 Operator workspace | R3-01 | The shared skill resolver + unified registry is what gains a second, operator-owned root. R3-01/03/07 are all implemented, so nothing blocks R3-08. |
+| R3-09 Promotion into forge core | R3-08, *R5-01* | Promotion needs a workspace to promote *from*, and a provenance signal to know what is promotable; the route registers in `BRIDGE_ROUTE_CLASSIFICATION` as `git-remote`/`refuse`. |
+| R6-10 Pending platform changes | *R3-08*, *R3-09* | Both soft only — R3-08 shrinks what the surface has to show, R3-09 gives its rows somewhere to go. Neither blocks it; R6-10 is landable first. |
+| R8-01 Packaging | *R3-08* | An installable forge must survive an upgrade without clobbering the operator's own Studio-authored objects. |
 | R4-20 Brain-tune flow | R4-09, *R2-08-F2* | Reflect agent; on-completion chaining. |
 
 ```mermaid

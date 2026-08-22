@@ -675,8 +675,9 @@ through the live `aggregateRun` rather than invented.
 
 - **Status:** planned  ·  **Wave:** unsequenced — independent of R3-08/R3-09 and
   landable first
-- **Depends on:** — (independent; R3-08 shrinks what this surface has to show,
-  and R3-09 gives its rows somewhere to go, but neither blocks it).
+- **Depends on:** — hard: none. *R3-08 (soft — shrinks what this surface has to
+  show, once operator authoring stops dirtying the repo)*, *R3-09 (soft — gives
+  its rows somewhere to go)*. Neither blocks it; this is landable first.
 - **Depended on by:** —
 - **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C.
   There is exactly **one** pending-change signal in all of Studio and it is
