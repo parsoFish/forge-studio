@@ -64,7 +64,7 @@ const DEVELOP_HANDOFF_SOURCE_FLOWS = ['forge-architect'] as const;
 
 export function enqueueDevelopRun(
   initiativeId: string,
-  opts: { queueRoot?: string; allowFinishedSource?: boolean; confirmRepoint?: boolean } = {},
+  opts: { queueRoot?: string; allowFinishedSource?: boolean; confirmRepointFrom?: string; confirmRepoint?: boolean } = {},
 ): EnqueueDevelopResult {
   const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, {
     ...opts,

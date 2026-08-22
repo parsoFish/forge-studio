@@ -27,7 +27,7 @@
  */
 import { test, expect } from 'vitest';
 
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, RUN_CONTROL_ACTIONS } from './run-controls.ts';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, RUN_CONTROL_ACTIONS } from './run-controls.ts';
 import type { Run, RunStatus } from './studio-client.ts';
 
 function run(status: RunStatus, over: Partial<Run> = {}): Run {
@@ -140,4 +140,16 @@ test('flows-28 (review round 2, S3-8): the poster itself refuses an unconfirmed 
   // Non-destructive controls are never gated on an arming click.
   expect(mayPostControl(resume, null)).toBe(true);
   expect(mayPostControl(resume, 'abandon')).toBe(true);
+});
+
+test('flows-49 (review round 3, S2-5): a successful action keeps the section mounted so its outcome stays observable', () => {
+  // KILLS: `controls.length === 0 && !awaitsScheduler → null`. A successful
+  // Resume flips the run failed → planned, which empties the control set; on the
+  // flow monitor (schedulerStrip=false) that unmounted the whole section and
+  // discarded the scheduler-aware outcome line — "the scheduler is stopped,
+  // nothing will run, Start it here" — which is the entire point of flows-49.
+  expect(runControlsShouldRender(0, false, false), 'nothing to say → render nothing').toBe(false);
+  expect(runControlsShouldRender(0, false, true), 'an outcome to show → stay mounted').toBe(true);
+  expect(runControlsShouldRender(3, false, false), 'controls to offer → render').toBe(true);
+  expect(runControlsShouldRender(0, true, false), 'a queued run needs the scheduler → render').toBe(true);
 });

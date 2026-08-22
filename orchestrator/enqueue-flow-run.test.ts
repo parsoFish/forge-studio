@@ -122,7 +122,7 @@ test('enqueueFlowRun: ready-for-review with the SAME flow_id as the target → a
 test('enqueueFlowRun: ready-for-review with a DIFFERENT flow_id → enqueued (hand-off fall-through, on a confirmed repoint)', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'forge-architect' }));
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, confirmRepoint: true });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, confirmRepointFrom: 'forge-architect' });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);

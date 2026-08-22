@@ -2026,13 +2026,40 @@ inventory rather than one shared page-level contract:
   **The roadmap card (`InitiativeDetail`) asks too.** Its `Plan →` and
   `Start development →` controls each dispatch one named initiative, so a refusal
   renders `[data-component="repoint-confirm"]` rather than a plain error under a
-  "retry" button that would re-post the identical unconfirmed request. All four
-  repointing surfaces render the SAME component
+  "retry" button that would re-post the identical unconfirmed request. Every
+  repointing surface renders the SAME component
   (`components/studio/RepointConfirmBar.tsx`) with the same contract —
   `[data-component="repoint-confirm"][data-initiative-id][data-current-flow]
   [data-target-flow]` + `button[data-action="confirm-repoint"|"cancel-repoint"]` —
-  so one selector drives every one of them. `POST /api/develop/start` accepts
-  `confirmRepoint` for that per-card control; the batch button never sends it.
+  so one selector drives every one of them, and the control that RAISED a
+  confirmation is not rendered beside it (it would re-post unconfirmed).
+
+  **The full inventory — nine controls across five surfaces** (an earlier
+  revision of this paragraph claimed four, and missed the "Actionable now" rows
+  entirely): the flow monitor's `start-run`; Start-work's `start-work-plan`,
+  `start-work-run-flow` and `start-work-develop`; the roadmap card drawer's
+  `plan-initiative` and `start-development`; the roadmap's `kickoff-eligible`;
+  and the actionable rows' `actionable-plan` and `actionable-start`. The two
+  BATCH controls (`start-work-develop`, `kickoff-eligible`) deliberately never
+  confirm — a batch cannot show N moves — and instead name the refused ids
+  (`[data-component="batch-repoint-refusal"][data-refused-count]` on the roadmap;
+  the outcome line on Start-work). Every one of the other seven asks, and the
+  actionable rows additionally render `[data-component="actionable-error"]`,
+  which they previously had no way to show at all.
+
+  **The confirmation is a compare-and-swap, not a boolean.** The body field is
+  `confirmRepointFrom: "<the flow the operator was shown>"`, and the enqueue
+  proceeds only if the manifest is still on exactly that flow; a confirmation
+  that went stale under a refetch, a poll or a chained trigger fails closed with
+  its own message. All three routes take it, a non-string reads as no
+  confirmation, and `POST /api/develop/start` **refuses it outright on a
+  multi-id batch** (400, before any enqueue) — the same shape `costCeilingUsd`
+  uses in that handler.
+
+  `[data-plan-state]` on a roadmap node carries `needs-confirm` as its own value
+  (it used to fall through to `unplanned`, making a refused card byte-identical
+  in the DOM to one nobody had touched, while the sibling `[data-develop-state]`
+  passed the same status through raw).
   Ids whose develop dispatch already came back ok THIS SESSION are excluded
   from the develop-eligible set (`deriveStartWorkState`'s third arg, W7-B6
   review F7 — the queue keeps them `pending` until the scheduler claims, so

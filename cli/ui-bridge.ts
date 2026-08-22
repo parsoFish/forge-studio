@@ -2261,16 +2261,32 @@ async function handleHttp(
       // confirm through this route at all — the per-card "Start development"
       // control posts exactly ONE named initiative and was left telling the
       // operator to "confirm the repoint" through a route with no way to.
-      // `=== true`, never truthiness. The roadmap's BATCH button deliberately
-      // never sends it: a confirm-everything on N moves the surface cannot show
-      // is the rubber-stamp shape this lane exists to remove.
-      const developConfirmRepoint = (body as Record<string, unknown>)?.['confirmRepoint'] === true;
+      //
+      // Review round 3, S2-4: it is REFUSED for a multi-id batch, before any
+      // enqueue runs — the same shape `costCeilingUsd` uses 30 lines above, and
+      // for the same reason. A confirmation that accompanies N ids rubber-stamps
+      // N moves the calling surface cannot show, which is the shape this lane
+      // exists to remove; leaving that as a client-side convention while the
+      // route accepted it is precisely the doctrine this module writes down and
+      // would then have violated.
+      const developConfirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+        ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
+        : undefined;
+      if (developConfirmRepointFrom !== undefined && initiativeIds.length > 1) {
+        sendJson(
+          res,
+          400,
+          { error: 'confirmRepointFrom is only valid for a single-initiative request — a batch cannot confirm a move it cannot show' },
+          origin,
+        );
+        return;
+      }
 
       const results = initiativeIds.map((initiativeId) => {
         // Per-item isolation: a throw on one item must not 500 away the
         // results of items whose side effects already applied.
         try {
-          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepoint: developConfirmRepoint });
+          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: developConfirmRepointFrom });
           if (result.status === 'enqueued' && costCeilingUsd !== undefined) {
             // Single-id-only invariant (checked above) means this fires at
             // most once per request — stamp only when the operator supplied
@@ -2837,17 +2853,19 @@ async function handleHttp(
       return;
     }
     // W8-A3 (`flows-37`, review round 1 S2-2): the third door onto a repoint.
-    // Same forward as `POST /api/flows/:id/run` — `=== true`, never truthiness —
-    // and the rule itself lives on `enqueuePlanRun`.
+    // Same compare-and-swap forward as `POST /api/flows/:id/run`; the rule
+    // itself lives on `enqueuePlanRun`.
     let planBody: unknown;
     try {
       planBody = await readJson(req);
     } catch {
       planBody = {};
     }
-    const planConfirmRepoint = (planBody as Record<string, unknown>)?.['confirmRepoint'] === true;
+    const planConfirmRepointFrom = typeof (planBody as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+      ? ((planBody as Record<string, unknown>)['confirmRepointFrom'] as string)
+      : undefined;
     try {
-      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepoint: planConfirmRepoint });
+      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: planConfirmRepointFrom });
       const httpStatus =
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :
@@ -2892,12 +2910,14 @@ async function handleHttp(
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
       return;
     }
-    // W8-A3 (`flows-37`): the operator's confirmation of a cross-flow repoint,
-    // forwarded verbatim. `=== true` and not a truthiness test — a guard that
-    // accepts whatever JSON happens to be truthy ("true", 1, {}) is one an
-    // accidental client serialization walks straight through. The RULE is the
-    // enqueue's; this line only carries the operator's answer to it.
-    const confirmRepoint = (body as Record<string, unknown>)?.['confirmRepoint'] === true;
+    // W8-A3 (`flows-37`): the operator's confirmation, forwarded verbatim as the
+    // FLOW they were shown — a compare-and-swap, not a boolean override (review
+    // round 3, S2-3). A non-string is carried as `undefined`, i.e. no
+    // confirmation at all, so an accidental client serialization fails closed.
+    // The RULE is the enqueue's; this line only carries the operator's answer.
+    const confirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
+      ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
+      : undefined;
     try {
       // W7-FIX-A3 (A3-01, round-2 finding 6): the OPERATOR route refuses a
       // shipped initiative — and the rule now lives ON `enqueueFlowRun`
@@ -2907,7 +2927,7 @@ async function handleHttp(
       // still yanking a merged manifest out of `done/`. The route only maps
       // the status onto its HTTP code; the id rule + the fs probe are the
       // enqueue's own (one INIT predicate, no third copy of the regex here).
-      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot, confirmRepoint });
+      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot, confirmRepointFrom });
       const httpStatus =
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :

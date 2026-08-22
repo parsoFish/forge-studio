@@ -33,6 +33,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
 import { RoadmapCanvas, type DevelopCardState, type PlanCardState } from '@/components/studio/RoadmapCanvas';
 import { developStateFromResult, planStateFromResult } from '@/lib/roadmap-card-state';
+import { RepointConfirmBar } from '@/components/studio/RepointConfirmBar';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -1096,7 +1097,7 @@ function RoadmapView({
     [initiatives, developByInitiative],
   );
 
-  const startOne = useCallback(async (initiativeId: string, confirmRepoint = false): Promise<void> => {
+  const startOne = useCallback(async (initiativeId: string, confirmRepointFrom?: string): Promise<void> => {
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
     // shc review finding 1: a single-id start carries the operator's ceiling
     // override ONLY when the operator has explicitly touched the field
@@ -1107,7 +1108,7 @@ function RoadmapView({
     // field also degrades to "no override" — the same "nothing sent rather
     // than a round-tripped 400" convention the agent-run kickoff field uses.
     const ceilingToSend = resolveDevelopStartCeilingToSend(ceilingFieldValue, ceilingTouched);
-    const r = await startDevelopment([initiativeId], ceilingToSend, { confirmRepoint });
+    const r = await startDevelopment([initiativeId], ceilingToSend, confirmRepointFrom !== undefined ? { confirmRepointFrom } : {});
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
@@ -1118,9 +1119,9 @@ function RoadmapView({
   // forge-architect (decompose) flow for a WI-less initiative. Refetches
   // afterwards so `workItems` (and therefore the lock) picks up the new state
   // once the scheduler actually decomposes it.
-  const planOne = useCallback(async (initiativeId: string, confirmRepoint = false): Promise<void> => {
+  const planOne = useCallback(async (initiativeId: string, confirmRepointFrom?: string): Promise<void> => {
     setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'planning', error: null } }));
-    const result = await planInitiative(initiativeId, { confirmRepoint });
+    const result = await planInitiative(initiativeId, confirmRepointFrom !== undefined ? { confirmRepointFrom } : {});
     setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: planStateFromResult(result) }));
     await onRefresh();
   }, [onRefresh]);
@@ -1136,6 +1137,10 @@ function RoadmapView({
       setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'idle', error: null } }));
     }
   }, []);
+
+  // W8-A3 (round 3, S3-9): ids the batch refused because they belong to another
+  // flow — named on screen rather than left to be discovered in the drawer.
+  const [batchRepointRefusals, setBatchRepointRefusals] = useState<string[]>([]);
 
   const startEligible = useCallback(async (): Promise<void> => {
     const ids = eligible.map((i) => i.initiativeId);
@@ -1155,6 +1160,13 @@ function RoadmapView({
       return next;
     });
     setBatchStarting(false);
+    // W8-A3 review round 3, S3-9: this button used to refuse in TOTAL silence —
+    // the per-card state was set but nothing on screen said so, and the operator
+    // is not in the drawer. It deliberately sends no confirmation (a batch cannot
+    // show N moves), so it names the refused ids and points at the control that
+    // CAN ask, which is each card's own.
+    const refusedIds = ids.filter((id) => r.results?.find((x) => x.initiativeId === id)?.status === 'repoint-requires-confirm');
+    setBatchRepointRefusals(refusedIds);
     // Refetch (success or partial) so eligibility + statuses reflect reality.
     await onRefresh();
   }, [eligible, onRefresh]);
@@ -1224,8 +1236,22 @@ function RoadmapView({
           </div>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {actionable.map((row) => {
-              const dev = developByInitiative[row.initiativeId]?.status ?? 'idle';
-              const plan = planByInitiative[row.initiativeId]?.status ?? 'idle';
+              const devState = developByInitiative[row.initiativeId];
+              const planState = planByInitiative[row.initiativeId];
+              const dev = devState?.status ?? 'idle';
+              const plan = planState?.status ?? 'idle';
+              // W8-A3 review round 3, S1-2: this list is a FIFTH repointing
+              // surface, and it was in none of the branch's claims. Its two
+              // buttons reach the same routes as the roadmap card's, and before
+              // this they rendered no confirmation and no error at all — the
+              // click did nothing, said nothing, and could be repeated forever.
+              const repoint =
+                row.kind === 'plan' && plan === 'needs-confirm'
+                  ? { kind: 'plan' as const, currentFlowId: planState?.currentFlowId ?? 'another flow', targetFlowId: 'forge-architect' }
+                  : row.kind === 'start' && dev === 'needs-confirm'
+                    ? { kind: 'develop' as const, currentFlowId: devState?.currentFlowId ?? 'another flow', targetFlowId: 'forge-develop' }
+                    : null;
+              const rowError = row.kind === 'plan' ? planState?.error : row.kind === 'start' ? devState?.error : null;
               return (
                 <li
                   key={row.initiativeId}
@@ -1235,7 +1261,7 @@ function RoadmapView({
                 >
                   <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.initiativeId}</span>
                   <span style={{ color: 'var(--faint)', flex: 1, minWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</span>
-                  {row.kind === 'plan' && (
+                  {row.kind === 'plan' && repoint === null && (
                     <button
                       className="btn btn-sm"
                       data-action="actionable-plan"
@@ -1245,7 +1271,7 @@ function RoadmapView({
                       {plan === 'planning' ? 'Planning…' : plan === 'started' ? 'Plan enqueued' : 'Plan →'}
                     </button>
                   )}
-                  {row.kind === 'start' && (
+                  {row.kind === 'start' && repoint === null && (
                     <button
                       className="btn btn-sm btn-primary"
                       data-action="actionable-start"
@@ -1254,6 +1280,21 @@ function RoadmapView({
                     >
                       {dev === 'starting' ? 'Starting…' : dev === 'started' ? 'Started' : 'Start development →'}
                     </button>
+                  )}
+                  {repoint !== null && (
+                    <RepointConfirmBar
+                      initiativeId={row.initiativeId}
+                      currentFlowId={repoint.currentFlowId}
+                      targetFlowId={repoint.targetFlowId}
+                      verb={repoint.kind === 'plan' ? 'Plan' : 'Start development'}
+                      onConfirm={() => void (repoint.kind === 'plan'
+                        ? planOne(row.initiativeId, repoint.currentFlowId)
+                        : startOne(row.initiativeId, repoint.currentFlowId))}
+                      onCancel={() => dismissRepoint(repoint.kind, row.initiativeId)}
+                    />
+                  )}
+                  {rowError && (
+                    <span data-component="actionable-error" style={{ color: 'var(--red, #f87171)', fontSize: 11.5 }}>{rowError}</span>
                   )}
                   {row.kind === 'failed' && (
                     <>
@@ -1341,6 +1382,18 @@ function RoadmapView({
               {batchStarting ? 'starting…' : `Start eligible (${eligible.length}) →`}
             </button>
           </div>
+          {batchRepointRefusals.length > 0 && (
+            <div
+              data-component="batch-repoint-refusal"
+              data-refused-count={batchRepointRefusals.length}
+              style={{ fontSize: 11.5, color: 'var(--ember, #9e6a03)', marginTop: 6 }}
+            >
+              {batchRepointRefusals.join(', ')} {batchRepointRefusals.length === 1 ? 'is' : 'are'} queued
+              under another flow. A batch cannot confirm a move it cannot show — open{' '}
+              {batchRepointRefusals.length === 1 ? 'it' : 'them'} below and use that card&apos;s own
+              Start development, which names the flow being moved from and asks first.
+            </div>
+          )}
         </div>
         <RoadmapCanvas
           roadmap={roadmap}

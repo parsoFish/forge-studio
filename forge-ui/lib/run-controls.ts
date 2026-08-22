@@ -122,3 +122,22 @@ export function armedControl(controls: RunControl[], armedId: RunControlId | nul
 export function mayPostControl(control: RunControl, armedId: RunControlId | null): boolean {
   return !control.destructive || armedId === control.id;
 }
+
+/**
+ * Should the run-controls section render at all?
+ *
+ * Review round 3, S2-5. The first cut returned `null` whenever the run offered
+ * no controls, which is exactly what a SUCCESSFUL resume produces: the run flips
+ * `failed → planned`, the control set empties, and on the flow monitor (which
+ * mounts its own scheduler strip, so `schedulerStrip` is false there) the whole
+ * section unmounted — throwing away the scheduler-aware outcome line that
+ * `flows-49` ("make the outcome observable") exists to show. The `key` fix could
+ * never have covered that: the early return is a second, independent cause.
+ */
+export function runControlsShouldRender(
+  controlCount: number,
+  awaitsScheduler: boolean,
+  hasOutcome: boolean,
+): boolean {
+  return controlCount > 0 || awaitsScheduler || hasOutcome;
+}

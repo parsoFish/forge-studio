@@ -628,13 +628,15 @@ export type StartDevelopmentResult = {
 export async function startDevelopment(
   initiativeIds: string[],
   costCeilingUsd?: number,
-  /** W8-A3 (`flows-37`): the operator's answer to a repoint. Only the per-card,
-   *  single-initiative control ever sends it — the batch button deliberately
-   *  never does (it cannot show what it would be confirming). */
-  opts: { confirmRepoint?: boolean } = {},
+  /** W8-A3 (`flows-37`): the operator's answer — the flow they were shown. Only
+   *  the per-card, single-initiative control ever sends it; the route REFUSES it
+   *  outright on a multi-id batch, so this is enforced rather than conventional. */
+  opts: { confirmRepointFrom?: string } = {},
 ): Promise<StartDevelopmentResult> {
   const base = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
-  const body = opts.confirmRepoint === true ? { ...base, confirmRepoint: true } : base;
+  const body = opts.confirmRepointFrom !== undefined
+    ? { ...base, confirmRepointFrom: opts.confirmRepointFrom }
+    : base;
   const r = await bridgePost('/api/develop/start', body);
   return {
     ok: r.ok,
@@ -673,14 +675,14 @@ export type PlanInitiativeResult = {
  */
 export async function planInitiative(
   initiativeId: string,
-  /** W8-A3 (`flows-37`): the operator's answer to the repoint question. */
-  opts: { confirmRepoint?: boolean } = {},
+  /** W8-A3 (`flows-37`): the operator's answer — the flow they were shown. */
+  opts: { confirmRepointFrom?: string } = {},
 ): Promise<PlanInitiativeResult> {
   try {
     const res = await bridgeFetch(`/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ confirmRepoint: opts.confirmRepoint === true }),
+      body: JSON.stringify(opts.confirmRepointFrom !== undefined ? { confirmRepointFrom: opts.confirmRepointFrom } : {}),
     });
     const body = (await res.json()) as Partial<PlanInitiativeResult> & { error?: string };
     if (body.status) {
@@ -730,16 +732,22 @@ export type StartFlowRunResult = {
 export async function startFlowRun(
   flowId: string,
   initiativeId: string,
-  /** W8-A3 (`flows-37`): the operator's answer to the repoint confirmation.
-   *  Omitted (or false) is what an un-answered start sends — the bridge then
-   *  refuses a cross-flow repoint rather than performing it silently. */
-  opts: { confirmRepoint?: boolean } = {},
+  /** W8-A3 (`flows-37`): the operator's answer — the FLOW they were shown and
+   *  confirmed moving it off (a compare-and-swap; see `enqueue-flow-run.ts`).
+   *  Omitted is what an un-answered start sends, and a confirmation that has
+   *  gone stale under a refetch fails closed at the enqueue rather than moving
+   *  the initiative off a flow the operator was never shown. */
+  opts: { confirmRepointFrom?: string } = {},
 ): Promise<StartFlowRunResult> {
   try {
     const res = await bridgeFetch(`/api/flows/${encodeURIComponent(flowId)}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ initiativeId, confirmRepoint: opts.confirmRepoint === true }),
+      body: JSON.stringify(
+        opts.confirmRepointFrom !== undefined
+          ? { initiativeId, confirmRepointFrom: opts.confirmRepointFrom }
+          : { initiativeId },
+      ),
     });
     const body = (await res.json()) as Partial<StartFlowRunResult> & { error?: string; detail?: string };
     if (body.status) {

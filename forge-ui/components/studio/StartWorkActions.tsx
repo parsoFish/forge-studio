@@ -71,7 +71,7 @@ export function StartWorkActions({
   const chosenFlow = flowId || state.runnableFlows[0]?.id || '';
   const chosenInitiative = initiativeId || state.runCandidates[0]?.initiativeId || '';
 
-  async function onPlan(confirm?: { initiativeId: string }): Promise<void> {
+  async function onPlan(confirm?: { initiativeId: string; fromFlowId: string }): Promise<void> {
     // W8-A3 (review round 2 finding 3): a CONFIRMED dispatch posts the id the
     // confirmation NAMED, never a freshly re-derived one. `unplannedReady[0]`
     // moves the moment the daemon claims something or the roadmap refetches, so
@@ -83,7 +83,7 @@ export function StartWorkActions({
     setBusy('plan');
     setOutcome(null);
     try {
-      const r = await planInitiative(initiative, { confirmRepoint: confirm !== undefined });
+      const r = await planInitiative(initiative, confirm ? { confirmRepointFrom: confirm.fromFlowId } : {});
       if (r.status === 'repoint-requires-confirm') {
         setPendingRepoint({
           kind: 'plan',
@@ -143,7 +143,7 @@ export function StartWorkActions({
     }
   }
 
-  async function onRunFlow(confirm?: { flowId: string; initiativeId: string }): Promise<void> {
+  async function onRunFlow(confirm?: { flowId: string; initiativeId: string; fromFlowId: string }): Promise<void> {
     // Review round 2 finding 3, as above: the confirmed dispatch uses the PAIR
     // the panel named. `chosenFlow`/`chosenInitiative` fall back to
     // `runnableFlows[0]`/`runCandidates[0]`, which move under a refetch.
@@ -153,7 +153,7 @@ export function StartWorkActions({
     setBusy('run-flow');
     setOutcome(null);
     try {
-      const r = await startFlowRun(flow, initiative, { confirmRepoint: confirm !== undefined });
+      const r = await startFlowRun(flow, initiative, confirm ? { confirmRepointFrom: confirm.fromFlowId } : {});
       if (r.status === 'repoint-requires-confirm') {
         setPendingRepoint({
           kind: 'run-flow',
@@ -292,8 +292,8 @@ export function StartWorkActions({
           verb={pendingRepoint.kind === 'plan' ? 'Plan' : 'Run'}
           busy={busy !== null}
           onConfirm={() => void (pendingRepoint.kind === 'plan'
-            ? onPlan({ initiativeId: pendingRepoint.initiativeId })
-            : onRunFlow({ flowId: pendingRepoint.targetFlowId, initiativeId: pendingRepoint.initiativeId }))}
+            ? onPlan({ initiativeId: pendingRepoint.initiativeId, fromFlowId: pendingRepoint.currentFlowId })
+            : onRunFlow({ flowId: pendingRepoint.targetFlowId, initiativeId: pendingRepoint.initiativeId, fromFlowId: pendingRepoint.currentFlowId }))}
           onCancel={() => setPendingRepoint(null)}
         />
       )}

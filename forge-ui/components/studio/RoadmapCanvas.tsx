@@ -97,9 +97,15 @@ const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
 
 const DEFAULT_ATTEMPT: AttemptInfo = { attemptCount: 1, priorCycleIds: [] };
 
-/** planStateAttr — unchanged from RV-1 (mirrored byte-for-byte). */
-export function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'unplanned' {
+/** planStateAttr — mirrored from RV-1, plus W8-A3's fifth status (see below). */
+export function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'needs-confirm' | 'unplanned' {
   if (!unplanned) return 'planned';
+  // W8-A3 review round 3, S3-7: `needs-confirm` used to fall through to
+  // 'unplanned', so a card whose plan was REFUSED was byte-identical in the DOM
+  // to one nobody had touched — while the sibling `data-develop-state` passed the
+  // same status through raw. Two card attributes disagreeing about whether a
+  // status exists is the drift extracting the mappers was meant to prevent.
+  if (plan.status === 'needs-confirm') return 'needs-confirm';
   if (plan.status === 'error') return 'error';
   if (plan.status === 'planning' || plan.status === 'started') return 'planning';
   return 'unplanned';
@@ -111,8 +117,8 @@ export type RoadmapCanvasProps = {
   cycleGroups: InitiativeGroup[];
   developByInitiative?: Record<string, DevelopCardState>;
   planByInitiative?: Record<string, PlanCardState>;
-  onStart?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
-  onPlan?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
+  onStart?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
+  onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation on a card. */
   onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
   /** called after a successful requeue/abandon to refetch roadmap + cycle groups. */
@@ -672,8 +678,8 @@ function RoadmapDrawer({
   plan: PlanCardState;
   attempt: AttemptInfo;
   onClose: () => void;
-  onStart?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
-  onPlan?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
+  onStart?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
+  onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation on a card. */
   onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
   onRecoveryDone?: () => void | Promise<void>;

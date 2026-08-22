@@ -91,7 +91,7 @@ export type EnqueuePlanResult = {
  */
 export function enqueuePlanRun(
   initiativeId: string,
-  opts: { queueRoot?: string; confirmRepoint?: boolean } = {},
+  opts: { queueRoot?: string; confirmRepointFrom?: string; confirmRepoint?: boolean } = {},
 ): EnqueuePlanResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
@@ -147,22 +147,36 @@ export function enqueuePlanRun(
   // `forge-architect` is the no-op case (already the target) and falls through
   // untouched; anything else needs the operator's answer.
   //
-  // PARITY IS DELIBERATELY PARTIAL, and this is the honest statement of it
-  // (review round 2 finding 7 corrected an earlier claim of full parity):
-  // `enqueueFlowRun` additionally refuses an operator enqueue sourced from
-  // `_queue/done` (`already-done`). This module does NOT, on purpose — re-planning
-  // a shipped initiative re-decomposes it, which parallels re-develop and is
-  // pinned by this module's own test. The repoint rule is what crosses; the
-  // done-source rule is not, and the two modules differ there by design.
+  // PARITY IS DELIBERATELY PARTIAL, and this is the full statement of it (round 2
+  // corrected a claim of total parity; round 3 found the correction itself named
+  // only one of the two divergences). `enqueueFlowRun` differs here in TWO ways,
+  // both on purpose:
+  //   1. it refuses an operator enqueue sourced from `_queue/done`
+  //      (`already-done`). This module does not — re-planning a shipped
+  //      initiative re-decomposes it, which parallels re-develop and is pinned by
+  //      this module's own test.
+  //   2. its `ready-for-review` short-circuit fires when the parked manifest
+  //      matches the TARGET flow; this module's fires only for `forge-develop`,
+  //      so a `forge-architect` manifest parked in review stays re-plannable here
+  //      (also pinned by this module's own test).
+  // The repoint rule is what crosses between them; neither of those does.
+  //
+  // The confirmation is a COMPARE-AND-SWAP against the flow the operator was
+  // shown (review round 3, S2-3) — see `enqueue-flow-run.ts` for why a boolean
+  // override was the wrong primitive.
   const currentFlowId = manifest.flow_id;
-  if (!opts.confirmRepoint && currentFlowId && currentFlowId !== PLAN_FLOW_ID) {
+  if (currentFlowId && currentFlowId !== PLAN_FLOW_ID && !opts.confirmRepoint
+      && opts.confirmRepointFrom !== currentFlowId) {
+    const stale = opts.confirmRepointFrom !== undefined;
     return {
       status: 'repoint-requires-confirm',
       initiativeId,
       currentFlowId,
-      detail:
-        `${initiativeId} is currently queued under "${currentFlowId}" — planning it moves it off that flow. ` +
-        'Confirm the repoint to proceed.',
+      detail: stale
+        ? `${initiativeId} moved to "${currentFlowId}" while you were being asked about ` +
+          `"${opts.confirmRepointFrom}" — confirm again against the flow it is on now.`
+        : `${initiativeId} is currently queued under "${currentFlowId}" — planning it moves it off that flow. ` +
+          'Confirm the repoint to proceed.',
     };
   }
 

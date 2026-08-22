@@ -47,7 +47,7 @@ import { useState } from 'react';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { resumeRun, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, type RunControl, type RunControlId } from '@/lib/run-controls';
+import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, type RunControl, type RunControlId } from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -108,7 +108,14 @@ export function RunControls({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RunControlId | null>(null);
 
-  if (run === null || (controls.length === 0 && !awaitsScheduler)) return null;
+  // W8-A3 review round 3, S2-5: `done`/`error` must keep the section mounted.
+  // A successful Resume flips the run `failed → planned`, which empties
+  // `controls`; on the flow monitor (`schedulerStrip={false}`) that made this
+  // return null and threw away the scheduler-aware outcome line — the very thing
+  // `flows-49` ("make the outcome observable") exists to show. The `key` fix
+  // alone could never have covered this: the early return is the other cause.
+  const hasOutcome = done !== null || error !== null;
+  if (run === null || !runControlsShouldRender(controls.length, awaitsScheduler, hasOutcome)) return null;
 
   const initiativeId = run.initiativeId;
 

@@ -150,7 +150,7 @@ test('enqueuePlanRun: a path-traversal id never escapes the queue dir', () => {
 test('enqueuePlanRun: a done initiative is re-planned (re-plan parallels re-develop, on a confirmed repoint)', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'done', manifest({ flow_id: DEVELOP_FLOW_ID, phase: 'done' }));
-    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepoint: true });
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepointFrom: DEVELOP_FLOW_ID });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);
@@ -231,7 +231,7 @@ test('flows-37/plan: a manifest with no flow_id has nothing to be taken from —
 test('flows-37/plan: confirmRepoint performs the move the operator asked for', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
-    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepoint: true });
+    const result = enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot, confirmRepointFrom: 'my-authored-flow' });
     assert.equal(result.status, 'enqueued');
     const onDisk = parseManifest(readFileSync(join(getPaths(queueRoot).pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
     assert.equal(onDisk.flow_id, PLAN_FLOW_ID);

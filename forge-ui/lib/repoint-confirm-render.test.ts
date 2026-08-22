@@ -113,7 +113,14 @@ test('flows-37 (review round 2, finding 1): a refused PLAN renders the confirmat
   expect(html).toContain('data-component="repoint-confirm"');
   expect(html).toContain('data-current-flow="my-authored-flow"');
   expect(html).toContain('data-target-flow="forge-architect"');
-  expect(html, 'the refusal is not an error and must not relabel the button as a retry').not.toContain('retry — plan');
+  // Review round 3, S1-1 + S3-13: the FIRST version of this assertion checked
+  // that the label "retry — plan" was absent — which is true whether or not the
+  // unconfirmed control renders, because on `needs-confirm` the ternary yields
+  // "Plan →". The implementation that shipped (bar rendered, button still live
+  // and enabled directly above it) passed it. Assert the CONTROL's absence.
+  expect(html, 'the unconfirmed control must not stay live beside the confirmation it raised')
+    .not.toContain('data-action="plan-initiative"');
+  expect(html).not.toContain('retry — plan');
 });
 
 test('flows-37 (review round 2, finding 2): a refused per-card START renders the confirmation — this control names ONE initiative, so it can ask', () => {
@@ -127,10 +134,16 @@ test('flows-37 (review round 2, finding 2): a refused per-card START renders the
   }));
   expect(html).toContain('data-component="repoint-confirm"');
   expect(html).toContain('data-target-flow="forge-develop"');
+  // Round 3, S1-1 + S3-13, as above.
+  expect(html, 'the unconfirmed control must not stay live beside the confirmation it raised')
+    .not.toContain('data-action="start-development"');
   expect(html).not.toContain('retry — start development');
 });
 
-test('flows-37: an idle card renders no confirmation at all', () => {
+test('flows-37: an idle card renders its control and no confirmation', () => {
   const html = markup(InitiativeDetail, card());
   expect(html).not.toContain('data-component="repoint-confirm"');
+  // The positive control: hiding the button on `needs-confirm` must not hide it
+  // in the state the operator actually starts from.
+  expect(html).toContain('data-action="plan-initiative"');
 });

@@ -59,10 +59,10 @@ export type InitiativeDetailProps = {
   plan: PlanCardState;
   /** W8-A3 (`flows-37`): `confirmRepoint` is the operator's answer to a
    *  cross-flow move, sent only from the confirmation this card renders. */
-  onPlan?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
+  onPlan?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   canStartDevelopment: boolean;
   develop: DevelopCardState;
-  onStart?: (initiativeId: string, confirmRepoint?: boolean) => void | Promise<void>;
+  onStart?: (initiativeId: string, confirmRepointFrom?: string) => void | Promise<void>;
   /** W8-A3 (`flows-37`): dismiss a pending repoint confirmation without
    *  dispatching anything — resets that card's transient state to idle. */
   onDismissRepoint?: (kind: 'plan' | 'develop', initiativeId: string) => void;
@@ -202,7 +202,13 @@ export function InitiativeDetail({
       )}
 
       {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. */}
-      {unplanned && plan.status !== 'started' && (
+      {/* W8-A3 review round 3, S1-1: `!== 'started'` also matched `needs-confirm`,
+          so the ENABLED, unconfirmed button rendered directly above the
+          confirmation it had just raised — and re-posted the identical
+          unconfirmed request forever. It is the permanently-409 no-op round 1
+          removed, re-shipped inside the round-2 fix for it, wearing a friendlier
+          label. While a confirmation is pending, the confirmation IS the control. */}
+      {unplanned && plan.status !== 'started' && plan.status !== 'needs-confirm' && (
         <button
           data-action="plan-initiative"
           data-initiative-id={initiativeId}
@@ -233,7 +239,7 @@ export function InitiativeDetail({
           currentFlowId={plan.currentFlowId ?? 'another flow'}
           targetFlowId="forge-architect"
           verb="Plan"
-          onConfirm={() => void onPlan?.(initiativeId, true)}
+          onConfirm={() => void onPlan?.(initiativeId, plan.currentFlowId)}
           onCancel={() => onDismissRepoint?.('plan', initiativeId)}
           style={{ marginTop: 4, alignSelf: 'flex-start' }}
         />
@@ -245,7 +251,8 @@ export function InitiativeDetail({
       )}
 
       {/* S7: start-development trigger — only on a decomposed, not-yet-developing initiative. */}
-      {canStartDevelopment && develop.status !== 'started' && (
+      {/* Round 3 S1-1, as above. */}
+      {canStartDevelopment && develop.status !== 'started' && develop.status !== 'needs-confirm' && (
         <button
           data-action="start-development"
           data-initiative-id={initiativeId}
@@ -276,7 +283,7 @@ export function InitiativeDetail({
           currentFlowId={develop.currentFlowId ?? 'another flow'}
           targetFlowId="forge-develop"
           verb="Start development"
-          onConfirm={() => void onStart?.(initiativeId, true)}
+          onConfirm={() => void onStart?.(initiativeId, develop.currentFlowId)}
           onCancel={() => onDismissRepoint?.('develop', initiativeId)}
           style={{ marginTop: 4, alignSelf: 'flex-start' }}
         />

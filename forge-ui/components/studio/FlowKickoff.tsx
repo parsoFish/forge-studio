@@ -160,12 +160,12 @@ function GenericKickoff({
     | null
   >(null);
 
-  async function submit(id: string, confirmRepoint: boolean): Promise<void> {
+  async function submit(id: string, confirmRepointFrom?: string): Promise<void> {
     if (submitting) return;
     setSubmitting(true);
     setResult(null);
     try {
-      const r = await startFlowRun(flowId, id, { confirmRepoint });
+      const r = await startFlowRun(flowId, id, confirmRepointFrom !== undefined ? { confirmRepointFrom } : {});
       if (r.ok) {
         setPendingRepoint(null);
         setResult({ kind: 'enqueued', initiativeId: id, flowId: r.flowId ?? flowId });
@@ -201,7 +201,7 @@ function GenericKickoff({
       setPendingRepoint({ initiativeId, currentFlowId: picked.currentFlowId });
       return;
     }
-    await submit(initiativeId, false);
+    await submit(initiativeId);
   }
 
   return (
@@ -232,9 +232,9 @@ function GenericKickoff({
           initiativeId={pendingRepoint.initiativeId}
           currentFlowId={pendingRepoint.currentFlowId}
           targetFlowId={flowId}
-          verb="Running it here"
+          verb="Run"
           busy={submitting}
-          onConfirm={() => void submit(pendingRepoint.initiativeId, true)}
+          onConfirm={() => void submit(pendingRepoint.initiativeId, pendingRepoint.currentFlowId)}
           onCancel={() => setPendingRepoint(null)}
           style={{ width: '100%', marginTop: 6 }}
         />

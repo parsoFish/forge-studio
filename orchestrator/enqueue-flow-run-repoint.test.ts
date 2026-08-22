@@ -119,7 +119,7 @@ test('flows-37: a ready-for-review hand-off from ANOTHER flow is a repoint too �
     assert.equal(enqueueFlowRun(INIT, 'retro-flow', { queueRoot }).status, 'repoint-requires-confirm');
     assert.equal(readFileSync(src, 'utf8'), before);
 
-    const confirmed = enqueueFlowRun(INIT, 'retro-flow', { queueRoot, confirmRepoint: true });
+    const confirmed = enqueueFlowRun(INIT, 'retro-flow', { queueRoot, confirmRepointFrom: 'forge-architect' });
     assert.equal(confirmed.status, 'enqueued');
   });
 });
@@ -149,7 +149,7 @@ test('flows-37: a manifest with NO flow_id has nothing to steal — enqueued wit
 test('flows-37: confirmRepoint:true performs the repoint the operator asked for', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect' }));
-    const result = enqueueFlowRun(INIT, 'some-authored-flow', { queueRoot, confirmRepoint: true });
+    const result = enqueueFlowRun(INIT, 'some-authored-flow', { queueRoot, confirmRepointFrom: 'forge-architect' });
 
     assert.equal(result.status, 'enqueued');
     assert.equal(result.flowId, 'some-authored-flow');
@@ -206,8 +206,9 @@ test('flows-37: the develop hand-off exemption is scoped to the SOURCE flow, not
   withTmp((queueRoot) => {
     seed(queueRoot, 'pending', manifest({ flow_id: 'my-authored-flow' }));
     // The operator CAN move it, having been asked; the exemption is about who
-    // may skip the question, not about who may perform the move.
-    assert.equal(enqueueDevelopRun(INIT, { queueRoot, confirmRepoint: true }).status, 'enqueued');
+    // may skip the question, not about who may perform the move. The confirmation
+    // names the flow they were SHOWN, which is the flow it is actually on.
+    assert.equal(enqueueDevelopRun(INIT, { queueRoot, confirmRepointFrom: 'my-authored-flow' }).status, 'enqueued');
   });
 });
 
@@ -223,6 +224,53 @@ test('flows-37: an undecomposed initiative answers `not-planned`, not a confirma
     assert.equal(
       result.status, 'not-planned',
       'the cheap precondition answers first — confirming a repoint that then 409s is a question with no right answer',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// COMPARE-AND-SWAP (adversarial review round 3, S2-3) — the class-level cure.
+//
+// `confirmRepoint: boolean` was an unconditional override that carried no
+// evidence of WHAT was confirmed. Two consequences, both reproduced by round 3:
+// a client snapshot that goes stale under a poll, a chained trigger or a second
+// tab still authorised a move off a flow the operator was never shown; and a
+// caller that never asked anything could send `true`.
+//
+// KILLS: any reintroduction of a boolean confirmation on an operator door.
+// ---------------------------------------------------------------------------
+
+test('flows-37 CAS: a confirmation naming the flow the initiative is actually on proceeds', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect' }));
+    const r = enqueueFlowRun(INIT, 'some-authored-flow', { queueRoot, confirmRepointFrom: 'forge-architect' });
+    assert.equal(r.status, 'enqueued');
+  });
+});
+
+test('flows-37 CAS: a STALE confirmation is refused — the initiative moved while the operator was being asked', () => {
+  withTmp((queueRoot) => {
+    // The panel was rendered while it sat on forge-architect; by the time the
+    // operator clicked, a flow-complete trigger had chained it onto retro-flow.
+    const src = seed(queueRoot, 'pending', manifest({ flow_id: 'retro-flow' }));
+    const before = readFileSync(src, 'utf8');
+
+    const r = enqueueFlowRun(INIT, 'some-authored-flow', { queueRoot, confirmRepointFrom: 'forge-architect' });
+
+    assert.equal(r.status, 'repoint-requires-confirm');
+    assert.equal(r.currentFlowId, 'retro-flow', 'the refusal reports where it actually is now');
+    assert.match(r.detail ?? '', /moved to "retro-flow"/, 'and says the confirmation went stale');
+    assert.match(r.detail ?? '', /forge-architect/, 'naming what the operator had been asked about');
+    assert.equal(readFileSync(src, 'utf8'), before, 'nothing written on a stale confirmation');
+  });
+});
+
+test('flows-37 CAS: an empty-string confirmation confirms nothing', () => {
+  withTmp((queueRoot) => {
+    seed(queueRoot, 'pending', manifest({ flow_id: 'forge-architect' }));
+    assert.equal(
+      enqueueFlowRun(INIT, 'some-authored-flow', { queueRoot, confirmRepointFrom: '' }).status,
+      'repoint-requires-confirm',
     );
   });
 });

@@ -173,7 +173,7 @@ async function postRun(flowId: string, body: unknown): Promise<{ status: number;
 // requires the operator's confirmation to reach it. The unconfirmed case is
 // pinned in cli/ui-bridge-flow-run-repoint.test.ts (409, manifest byte-unchanged).
 test('POST /api/flows/:id/run: enqueues a real initiative onto THAT flow (200, cycleId + flowId echoed, manifest repointed)', async () => {
-  const r = await postRun('forge-develop', { initiativeId: INIT_PENDING, confirmRepoint: true });
+  const r = await postRun('forge-develop', { initiativeId: INIT_PENDING, confirmRepointFrom: 'forge-architect' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.ok, true);
   assert.equal(r.json.status, 'enqueued');

@@ -80,7 +80,7 @@ test('POST /api/initiatives/:id/plan: an unconfirmed cross-flow repoint → 409,
 });
 
 test('POST /api/initiatives/:id/plan: a pending id → 200 enqueued', async () => {
-  const res = await fetch(`${url}/api/initiatives/INIT-2026-06-13-alpha/plan`, { method: 'POST', headers: CSRF, body: JSON.stringify({ confirmRepoint: true }) });
+  const res = await fetch(`${url}/api/initiatives/INIT-2026-06-13-alpha/plan`, { method: 'POST', headers: CSRF, body: JSON.stringify({ confirmRepointFrom: 'forge-develop' }) });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { ok: boolean; status: string; initiativeId: string; flowId?: string };
   assert.equal(body.ok, true);
@@ -142,7 +142,7 @@ test('POST /api/initiatives/:id/plan: a write failure → 500, detail surfaced',
       headers: CSRF,
       // W8-A3 amendment: the fixture is `flow_id: forge-develop`, so the write
       // path is only reached once the repoint is confirmed.
-      body: JSON.stringify({ confirmRepoint: true }),
+      body: JSON.stringify({ confirmRepointFrom: 'forge-develop' }),
     });
     assert.equal(res.status, 500);
     const body = (await res.json()) as { ok: boolean; status: string; detail?: string };

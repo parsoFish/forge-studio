@@ -99,7 +99,28 @@ export function enqueueFlowRun(
   opts: {
     queueRoot?: string;
     allowFinishedSource?: boolean;
-    /** The operator answered the repoint question for THIS request. */
+    /**
+     * COMPARE-AND-SWAP. The flow the operator was SHOWN and confirmed moving
+     * this initiative OFF. The enqueue proceeds only if the manifest is still
+     * on exactly that flow; if it has moved since the question was asked, the
+     * confirmation is stale and is refused.
+     *
+     * Adversarial review round 3, S2-3 — and it is the cure for the CLASS, not
+     * for a call site. `confirmRepoint: boolean` was an unconditional override
+     * carrying no evidence of what was confirmed, so (a) every client's
+     * snapshot could go stale under a poll, a chained trigger or a second tab
+     * and still authorise a move off a flow the operator was never shown, and
+     * (b) a caller that never asked anything could send `true`. A named source
+     * flow cannot do either: a control that forgets to ask has nothing to send,
+     * and a control whose display went stale fails closed.
+     */
+    confirmRepointFrom?: string;
+    /**
+     * Unconditional override, for the ONE caller that repoints by design and
+     * has no operator to ask: the trigger drain's flow-complete chaining, where
+     * every hop moves the initiative to the next flow. No operator-facing route
+     * forwards this — they forward `confirmRepointFrom`.
+     */
     confirmRepoint?: boolean;
     /**
      * Source flows this caller has standing authority to repoint FROM, because
@@ -223,16 +244,27 @@ export function enqueueFlowRun(
   // asking the operator to confirm a move that the very next check refuses is a
   // question with no right answer. Cheap precondition first, authorisation second.
   const currentFlowId = manifest.flow_id;
-  const preAuthorised = (opts.allowRepointFrom ?? []).includes(currentFlowId ?? '');
-  if (!opts.confirmRepoint && !preAuthorised && currentFlowId && currentFlowId !== flowId) {
-    return {
-      status: 'repoint-requires-confirm',
-      initiativeId,
-      currentFlowId,
-      detail:
-        `${initiativeId} is currently queued under "${currentFlowId}" — running it on "${flowId}" ` +
-        `moves it off that flow. Confirm the repoint to proceed.`,
-    };
+  if (currentFlowId && currentFlowId !== flowId) {
+    const preAuthorised = (opts.allowRepointFrom ?? []).includes(currentFlowId);
+    const confirmedFromThisFlow = opts.confirmRepointFrom === currentFlowId;
+    const staleConfirmation =
+      opts.confirmRepointFrom !== undefined && opts.confirmRepointFrom !== currentFlowId;
+
+    if (!opts.confirmRepoint && !preAuthorised && !confirmedFromThisFlow) {
+      return {
+        status: 'repoint-requires-confirm',
+        initiativeId,
+        currentFlowId,
+        detail: staleConfirmation
+          // The compare-and-swap earning its keep: the operator answered a
+          // question about a flow this initiative is no longer on, so the answer
+          // does not authorise the move that would actually happen.
+          ? `${initiativeId} moved to "${currentFlowId}" while you were being asked about ` +
+            `"${opts.confirmRepointFrom}" — confirm again against the flow it is on now.`
+          : `${initiativeId} is currently queued under "${currentFlowId}" — running it on "${flowId}" ` +
+            `moves it off that flow. Confirm the repoint to proceed.`,
+      };
+    }
   }
 
 

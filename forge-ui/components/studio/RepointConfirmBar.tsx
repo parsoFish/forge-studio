@@ -4,12 +4,19 @@
  * RepointConfirmBar — the ONE confirmation every surface that can move an
  * initiative between flows renders (W8-A3, `flows-37`).
  *
- * Four controls in Studio repoint a queued manifest's `flow_id`: the flow
- * monitor's generic Start-Run picker, the project page's Start-work group (Plan
- * and Run-a-flow) and the roadmap card's own Plan / Start development. The first
- * cut of this lane grew a hand-copied panel per surface, which is the same
- * shape as the defect it was closing — three copies of one rule drift, and two
- * of them shipped with no test at all until adversarial review round 2 said so.
+ * SEVEN controls in Studio can repoint a queued manifest's `flow_id` and ask
+ * before doing it: the flow monitor's generic Start-Run picker; the project
+ * page's Start-work Plan and Run-a-flow; the roadmap card drawer's Plan and
+ * Start development; and the "Actionable now" rows' Plan and Start development.
+ * (Two more — the two BATCH buttons — deliberately do not ask, and name their
+ * refused ids instead; a batch cannot show N moves.)
+ *
+ * Earlier revisions of this comment said "four", which is how review round 3
+ * found two live controls with no confirmation and no error at all: the
+ * enumeration was the defect, not any one call site. The first cut of this lane
+ * also grew a hand-copied panel per surface, which is the same shape as the
+ * defect it was closing — three copies of one rule drift, and two of them
+ * shipped with no test until review round 2 said so.
  *
  * `verb` is the acting control's own word, so the copy reads as that control's
  * consequence rather than as generic ceremony.
