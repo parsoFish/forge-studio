@@ -137,3 +137,99 @@ test('(RED) [F2 #10] agent-complete TRIGGER_KINDS row is shipped, not reserved',
     `expected agent-complete's status to be "shipped" (ADR-027's R2-08 amendment: "agent-complete (R2-08-F2) likewise flips status: reserved → shipped") — got "${row!.status}"`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (forge-f9g fix, W8-A1) — the fire-time project-scope gate.
+// `fireFlowTriggers` is the SAME function driving BOTH the flow-runner's
+// `flow-complete` staging path AND finalize-merged's inline `on: merged`
+// dispatch. Gating is opt-in via the PRESENCE of `eventProject` on the deps
+// object (not its value) — a caller that never mentions the key gets today's
+// unconditional-dispatch behaviour, unaffected. See flow-trigger.ts's
+// `FireFlowTriggersDeps.eventProject` doc for the full rationale (the
+// flow-runner's own `flow-complete` firing site deliberately never opts in,
+// preserving T1's round-4 ruling pinned in flow-runner.test.ts).
+// ---------------------------------------------------------------------------
+
+function scopedTrigger(on: string, ref: string, projects: string[] | undefined): FlowTrigger {
+  return { on, target: { kind: 'flow', ref }, ...(projects !== undefined ? { projects } : {}) } as FlowTrigger;
+}
+
+test('(RED) [forge-f9g] a scoped on:merged trigger fires when the event project is a declared member', async () => {
+  const dispatched: string[] = [];
+  const fired = await fireFlowTriggers(
+    flow([scopedTrigger('merged', 'reflect', ['a'])]),
+    'merged',
+    { dispatch: (tr) => { dispatched.push(tr.target.ref); }, eventProject: 'a' },
+  );
+  assert.deepEqual(dispatched, ['reflect']);
+  assert.equal(fired.length, 1);
+});
+
+test('(RED) [forge-f9g] a scoped on:merged trigger does NOT fire for an out-of-scope event project, and the skip is observable with a reason', async () => {
+  const dispatched: string[] = [];
+  const skips: Array<{ ref: string; reason: string }> = [];
+  const fired = await fireFlowTriggers(
+    flow([scopedTrigger('merged', 'reflect', ['a'])]),
+    'merged',
+    {
+      dispatch: (tr) => { dispatched.push(tr.target.ref); },
+      eventProject: 'b',
+      onSkip: (tr, reason) => { skips.push({ ref: tr.target.ref, reason }); },
+    },
+  );
+  assert.deepEqual(dispatched, [], 'out-of-scope trigger must not dispatch');
+  assert.deepEqual(fired, [], 'out-of-scope trigger must not be pushed onto fired');
+  assert.equal(skips.length, 1, 'the skip must be observable via onSkip');
+  assert.equal(skips[0].ref, 'reflect');
+  assert.ok(skips[0].reason.length > 0, 'the skip must carry a non-empty reason');
+});
+
+test('(RED) [forge-f9g] an unresolved event project against a declared scope fails closed (no dispatch)', async () => {
+  const dispatched: string[] = [];
+  const skips: string[] = [];
+  await fireFlowTriggers(
+    flow([scopedTrigger('merged', 'reflect', ['a'])]),
+    'merged',
+    {
+      dispatch: (tr) => { dispatched.push(tr.target.ref); },
+      eventProject: undefined,
+      onSkip: (tr) => { skips.push(tr.target.ref); },
+    },
+  );
+  assert.deepEqual(dispatched, [], 'an unresolved event project must never dispatch a declared scope');
+  assert.deepEqual(skips, ['reflect']);
+});
+
+test('(RED) [forge-f9g] projects: [] never fires regardless of the event project', async () => {
+  const dispatched: string[] = [];
+  await fireFlowTriggers(
+    flow([scopedTrigger('merged', 'reflect', [])]),
+    'merged',
+    { dispatch: (tr) => { dispatched.push(tr.target.ref); }, eventProject: 'a' },
+  );
+  assert.deepEqual(dispatched, [], 'projects: [] is a declared scope of nothing — must never dispatch');
+});
+
+test('(green-on-arrival) [forge-f9g] no projects: declared → dispatches regardless of eventProject (no-regression control)', async () => {
+  const dispatched: string[] = [];
+  await fireFlowTriggers(
+    flow([scopedTrigger('merged', 'reflect', undefined)]),
+    'merged',
+    { dispatch: (tr) => { dispatched.push(tr.target.ref); }, eventProject: 'anything' },
+  );
+  assert.deepEqual(dispatched, ['reflect'], 'an unscoped trigger must dispatch regardless of the event project');
+});
+
+test('(green-on-arrival) [forge-f9g] a caller that never mentions eventProject gets NO fire-time gating — every matching trigger dispatches unconditionally, even a scoped one (the flow-runner flow-complete contract)', async () => {
+  const dispatched: string[] = [];
+  await fireFlowTriggers(
+    flow([scopedTrigger('flow-complete', 'downstream', [])]),
+    'flow-complete',
+    { dispatch: (tr) => { dispatched.push(tr.target.ref); } },
+  );
+  assert.deepEqual(
+    dispatched,
+    ['downstream'],
+    'omitting eventProject entirely must opt OUT of fire-time gating — this is the flow-runner\'s flow-complete contract (T1 round-4 ruling): scope is enforced only at drainFlowRunRequests for that path',
+  );
+});

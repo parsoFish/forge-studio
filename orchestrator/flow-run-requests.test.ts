@@ -9,6 +9,7 @@ import {
   listFlowRunRequests,
   drainFlowRunRequests,
   flowRunsDir,
+  decideTriggerProjectScope,
   type FlowRunRequest,
 } from './flow-run-requests.ts';
 import { getPaths } from './queue.ts';
@@ -214,6 +215,88 @@ test('drain does NOT skip an origination request when the active triggered run t
 // agent-complete-trigger.test.ts), which stages `target.kind: 'flow'`
 // requests, not agent ones.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (forge-f9g fix, W8-A1) — `decideTriggerProjectScope` is
+// the SINGLE extracted predicate `drainFlowRunRequests` above AND
+// `fireFlowTriggers` (orchestrator/flow-trigger.ts, the inline `on: merged`
+// path) both consult. Direct unit coverage of the pure function's full
+// matrix, plus a no-regression assertion that extracting it out of
+// `drainFlowRunRequests` left the drain's own observable behaviour
+// unchanged (status + notify text).
+// ---------------------------------------------------------------------------
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: declaredProjects undefined → always in scope, regardless of eventProject', () => {
+  assert.deepEqual(decideTriggerProjectScope(undefined, 'gitpulse'), { inScope: true });
+  assert.deepEqual(decideTriggerProjectScope(undefined, null), { inScope: true });
+  assert.deepEqual(decideTriggerProjectScope(undefined, undefined), { inScope: true });
+});
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: declaredProjects [] → never in scope, even with a resolved eventProject', () => {
+  const verdict = decideTriggerProjectScope([], 'gitpulse');
+  assert.equal(verdict.inScope, false);
+  assert.ok((verdict as { reason: string }).reason.length > 0);
+});
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: a member eventProject → in scope', () => {
+  assert.deepEqual(decideTriggerProjectScope(['gitpulse', 'betterado'], 'gitpulse'), { inScope: true });
+});
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: a non-member eventProject → out of scope, typed reason', () => {
+  const verdict = decideTriggerProjectScope(['gitpulse'], 'betterado');
+  assert.equal(verdict.inScope, false);
+  assert.match((verdict as { reason: string }).reason, /betterado/);
+  assert.match((verdict as { reason: string }).reason, /gitpulse/);
+});
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: unresolved eventProject (null or undefined) against a declared scope fails closed', () => {
+  assert.equal(decideTriggerProjectScope(['gitpulse'], null).inScope, false);
+  assert.equal(decideTriggerProjectScope(['gitpulse'], undefined).inScope, false);
+});
+
+test('(RED) [forge-f9g] decideTriggerProjectScope: strict identity — no prefix/substring/case-insensitive match', () => {
+  for (const nearMiss of ['gitpulse-evil', 'x/gitpulse', 'gitpulseX', 'GITPULSE']) {
+    assert.equal(
+      decideTriggerProjectScope(['gitpulse'], nearMiss).inScope,
+      false,
+      `expected "${nearMiss}" to be treated as a non-member of ["gitpulse"]`,
+    );
+  }
+});
+
+test('(no-regression) [forge-f9g] drainFlowRunRequests out-of-scope status + notify text are unchanged after the decideTriggerProjectScope extraction', () => {
+  const root = setup();
+  try {
+    stageFlowRunRequest(
+      {
+        target: { kind: 'flow', ref: 'demo-runner-flow' },
+        origin: 'trigger',
+        triggeredBy: 'no-regression-fixture',
+        sourceInitiativeId: 'INIT-no-regression',
+        projects: ['gitpulse'],
+        eventProject: 'betterado',
+        createdAt: '2026-08-23T00-00-00',
+      },
+      { queueRoot: root },
+    );
+    const notifications: string[] = [];
+    const results = drainFlowRunRequests({
+      queueRoot: root,
+      startFlowRun: () => { throw new Error('must not be called'); },
+      notify: (m) => notifications.push(m),
+    });
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'skipped-out-of-scope');
+    assert.ok(
+      notifications.some((m) =>
+        m === 'flow-trigger: no-regression-fixture → flow:demo-runner-flow SKIPPED (out of scope — event project "betterado" not in [gitpulse])',
+      ),
+      `notify text must be byte-identical to the pre-extraction message — got ${JSON.stringify(notifications)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('(green-on-arrival) [F2 #13] target.kind: "agent" with no injected startAgentRun returns status "error" and RETAINS the request file on disk', () => {
   const root = setup();

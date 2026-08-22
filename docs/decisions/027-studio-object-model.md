@@ -626,6 +626,44 @@ with the re-entry condition being an actual per-project `merged` story.
 **Scope of this addendum:** `projects:` remains kind-independent for every shipped
 kind except `merged`. Nothing else in the amendment changes.
 
+### Addendum (2026-08-23, W8-A1): the exclusion above is withdrawn — a single structural choke point now closes the gap
+
+**WI forge-f9g.** The addendum above made `projects:` unauthorable on `on: merged`
+because that kind's inline dispatch (`orchestrator/finalize-merged.ts`, via
+`resolveMergeAgentHandler`) never reached the staged-request seam
+`drainFlowRunRequests` scope-checks. Its own text named the durable fix and
+explicitly declined to take it at the time: *"route `merged` through the
+claimable-request seam, or give the guarantee a single structural choke point
+every dispatch mechanism must pass."*
+
+That choke point now exists. The scope predicate is extracted into one
+exported, pure function — `decideTriggerProjectScope`
+(`orchestrator/flow-run-requests.ts`) — and there are exactly two call sites,
+both consulting the SAME implementation:
+
+- `drainFlowRunRequests` (unchanged path — the staged-request seam
+  cron/webhook/pr-merged/issue-raised/agent-complete/flow-complete all reach).
+- `fireFlowTriggers` (`orchestrator/flow-trigger.ts`), which now accepts an
+  opt-in `eventProject` dep. `finalize-merged.ts`'s inline `on: merged`
+  dispatch opts in, threading the merged manifest's own `project` binding
+  (`CycleInput.project`) as the event project; an out-of-scope trigger is
+  skipped before the merge-time handler runs and the skip is recorded as a
+  `finalize.trigger-skipped-out-of-scope` event (mirroring the existing
+  `finalize.trigger-firing` shape) — never a silent drop.
+
+The flow-runner's `flow-complete` firing site deliberately does **not** opt
+in: T1's round-4 ruling (pinned by `orchestrator/flow-runner.test.ts`) requires
+that path to stage every trigger unconditionally and enforce scope only at the
+drain, so gating it a second time at fire time would make the drain's
+`skipped-out-of-scope` status unreachable for staged requests. The asymmetry is
+therefore deliberate and per-mechanism-appropriate, not a residual gap: both
+mechanisms enforce scope exactly once, at whichever point is THEIR real
+dispatch boundary, through the one shared predicate.
+
+`forge studio lint`'s `trigger-projects` check no longer special-cases
+`on: merged` — a scoped `on: merged` trigger now falls through to the same
+shape + membership checks every other kind gets (`orchestrator/studio/validate-triggers.ts`).
+
 ## Amendment (R1-06, 2026-08-09): `band?:` qualifier on a `{kind: flow}` binding
 
 R1-01 (above) made the KB binding `{ kind: 'flow', ref } | { kind: 'project', ref
