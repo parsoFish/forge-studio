@@ -528,8 +528,22 @@ function readPreflightFixState(
   forgeRoot: string,
   runId: string,
 ): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean } {
-  const evPath = join(forgeRoot, '_logs', `_preflight-fix-${runId}`, 'events.jsonl');
-  if (!existsSync(evPath)) return { state: 'running', cleared: false };
+  // Containment (forge-2zz): `runId` reaching here is only SAFE_ID_RE-gated
+  // (charset only, never realpath) at the calling route above — route it
+  // through the shared resolveGuardedPath so a symlinked
+  // `_logs/_preflight-fix-<runId>` cannot be read through. `_preflight-fix-
+  // <runId>` and 'events.jsonl' are each single, separator-free components,
+  // so this is a legal segments[] list — the fixed `<forgeRoot>/_logs` stays
+  // the trusted root; runId only ever enters as its OWN segment, never
+  // folded into root (see studio-path-guard.ts's CONTRACT section).
+  const guarded = resolveGuardedPath(join(forgeRoot, '_logs'), [`_preflight-fix-${runId}`, 'events.jsonl']);
+  // Fail-soft by design, unchanged: this helper has no error channel to its
+  // caller (spread straight into a 200 response above), so a guard
+  // rejection collapses into the SAME 'running' shape a not-yet-started run
+  // reports — never a distinct error, which would leak an oracle for
+  // exactly the attacker iterating on this guard.
+  if (!guarded.ok || !guarded.exists) return { state: 'running', cleared: false };
+  const evPath = guarded.realPath;
   let raw: string;
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
@@ -637,19 +651,46 @@ export async function handleStudioRoutes(
       // That made a live cycle parse its own event log twice per event. The
       // literal probe is one existsSync; the resolution semantics are
       // unchanged for every id that does not have its own log dir.
-      const literalPath = resolve(safeLogsBase, runId, 'events.jsonl');
-      const literalHit = literalPath.startsWith(safeLogsBase + sep) && existsSync(literalPath);
+      //
+      // forge-2zz: this route had NO charset gate at all (unlike every sibling
+      // route in this file) and its lexical `resolve()`+`startsWith()` check
+      // ran on an UNRESOLVED path — two distinct holes. (a) the route regex
+      // `([^/]+)` matches the RAW url, and `decodeURIComponent` (line ~600,
+      // above) runs AFTER — so `%2F..%2F` becomes a real separator only once
+      // the regex has already approved it; reachable only via a raw request
+      // whose percent-encoding a normalizing client would never send verbatim.
+      // (b) `resolve()` follows a symlinked `_logs/<charset-valid-id>` straight
+      // through, no identity check. Both branches (the literal probe AND the
+      // findRun-resolved fallback) now go through `resolveGuardedPath`:
+      // `isSafeSegment` rejects any segment containing a separator (closes (a)
+      // structurally — a decoded `/` can never become a legal segment), and
+      // the realpath identity walk rejects a symlinked/hardlinked leaf dir
+      // (closes (b)). The literal-probe-first PERFORMANCE behaviour above is
+      // preserved unchanged — guard the literal probe, don't remove it.
+      const literalGuard = resolveGuardedPath(safeLogsBase, [runId, 'events.jsonl']);
+      const literalHit = literalGuard.ok && literalGuard.exists;
       const resolvedRunId = literalHit ? runId : (findRun(ctx.forgeRoot, runId)?.id ?? runId);
 
-      const eventsPath = literalHit ? literalPath : resolve(safeLogsBase, resolvedRunId, 'events.jsonl');
-      if (!eventsPath.startsWith(safeLogsBase + sep)) {
+      const guarded = literalHit ? literalGuard : resolveGuardedPath(safeLogsBase, [resolvedRunId, 'events.jsonl']);
+
+      // Preserve the EXISTING status codes exactly (do not "improve" them): a
+      // guard REJECTION (bad charset, encoded separator, symlink/hardlink
+      // escape, identity mismatch, ...) reads as the pre-existing 400 'invalid
+      // run id'; a guard ACCEPTANCE whose leaf does not exist reads as the
+      // pre-existing 404. Collapsing 400/404 into one status would close a
+      // small existence-probe oracle (whether resolvedRunId was even
+      // well-formed vs. merely absent) but that is a deliberate, separate,
+      // client-visible change this containment fix does NOT make here — a
+      // journey may assert today's codes.
+      if (!guarded.ok) {
         sendJson(res, 400, { error: 'invalid run id' }, origin);
         return true;
       }
-      if (!existsSync(eventsPath)) {
+      if (!guarded.exists) {
         sendJson(res, 404, { error: 'no events.jsonl for run', runId }, origin);
         return true;
       }
+      const eventsPath = guarded.realPath;
 
       // Build node mapping to resolve phase → nodeId. R2-01-F4: also build the
       // agent-slug map so a generic-agent node's events (phase:'orchestrator'
