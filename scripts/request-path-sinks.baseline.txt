@@ -39,7 +39,7 @@ cli/bridge-studio-kb-drain.ts renameSync 1
 cli/bridge-studio-kb-drain.ts rmSync 1
 cli/bridge-studio-kb-drain.ts writeFileSync 3
 cli/bridge-studio-kbs.ts appendFileSync 2
-cli/bridge-studio-kbs.ts existsSync 6
+cli/bridge-studio-kbs.ts existsSync 5
 cli/bridge-studio-kbs.ts mkdirSync 9
 cli/bridge-studio-kbs.ts openSync 1
 cli/bridge-studio-kbs.ts readdirSync 5
@@ -79,7 +79,7 @@ cli/bridge-studio-writes.ts rmSync 2
 cli/bridge-studio-writes.ts spawn 1
 cli/bridge-studio-writes.ts unlinkSync 1
 cli/bridge-studio-writes.ts writeFileSync 8
-cli/bridge-studio.ts existsSync 10
+cli/bridge-studio.ts existsSync 7
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
 cli/contract-stages.ts realpathSync 2
@@ -130,7 +130,9 @@ cli/kb-lint-summary.ts statSync 1
 cli/kb-sites.ts existsSync 2
 cli/kb-sites.ts readdirSync 1
 cli/materials-staging.ts mkdirSync 1
-cli/materials-staging.ts writeFileSync 1
+cli/materials-staging.ts statSync 2
+cli/materials-staging.ts unlinkSync 1
+cli/materials-staging.ts writeFileSync 2
 cli/metrics.ts existsSync 1
 cli/metrics.ts readdirSync 1
 cli/preflight-fix-auto.ts existsSync 3

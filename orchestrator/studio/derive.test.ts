@@ -4,6 +4,17 @@
  * tautology. This test replaces it: assert each derived spec deep-equals an
  * EXPLICIT expected literal (the known-good values). Any frontmatter regression
  * (wrong tool list, wrong tier/model, wrong phase key) will surface here.
+ *
+ * W8-C2a (bead `forge-eip`): the three literals below gained `Task, Agent` in
+ * `disallowedTools`. That is the lock working, not the lock being weakened —
+ * the SKILL.md frontmatter genuinely changed, and this test is what forced the
+ * change to be deliberate rather than incidental. `allowed-tools` is advisory
+ * (the SDK auto-approves from it but never restricts), so `disallowed-tools` is
+ * the only declarative fence against the subagent-spawn tool; both the SDK's
+ * permission name (`Task`) and this harness's external name (`Agent`) must be
+ * listed. A future edit that drops either name from a roster SKILL.md now trips
+ * BOTH this literal and `skill-tool-fence/task-agent-not-disallowed` in
+ * `forge studio lint`, which CI runs.
  */
 
 import { test } from 'node:test';
@@ -26,7 +37,7 @@ test('deriveAgentSpec: project-manager spec matches known-good literal', () => {
     skill: 'skills/project-manager/SKILL.md',
     tier: 'sonnet',
     allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit'],
-    disallowedTools: ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch'],
+    disallowedTools: ['Bash', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
     sdk: 'claude',
   });
 });
@@ -37,7 +48,7 @@ test('deriveAgentSpec: developer-loop spec matches known-good literal', () => {
     skill: 'skills/developer-ralph/SKILL.md',
     tier: 'sonnet',
     allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
-    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
     sdk: 'claude',
   });
 });
@@ -48,7 +59,7 @@ test('deriveAgentSpec: reflector spec matches known-good literal', () => {
     skill: 'skills/reflector/SKILL.md',
     tier: 'sonnet',
     allowedTools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash'],
-    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
+    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
     sdk: 'claude',
   });
 });

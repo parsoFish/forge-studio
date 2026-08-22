@@ -68,7 +68,7 @@ import {
 } from '../orchestrator/studio/validate.ts';
 import { validateConnections } from '../orchestrator/studio/connection-validate.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { listSkillDirs, listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
