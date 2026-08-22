@@ -16,7 +16,7 @@ runtime:
 brainAccess: mandatory
 interactivity: Operator-driven; blocks on interview answers and the PLAN-gate verdict.
 allowed-tools: [Read, Grep, Glob, Bash]
-disallowed-tools: []
+disallowed-tools: [Task, Agent]
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling — the most
   # expensive planner (sonnet; real flow-node runs have reached ~$4.79).

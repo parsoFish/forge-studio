@@ -239,8 +239,18 @@ export type StructuredResult<T> = {
 /**
  * Run one structured-output SDK turn and return the parsed object.
  *
- * Read-only is enforced by the `allowedTools` whitelist (no Write/Edit), NOT by
- * plan mode. Two F-W5-1 regressions (2026-05-30) are guarded here permanently:
+ * Read-only is enforced ONLY when a caller passes `disallowedTools` (below):
+ * that value threads straight into the SDK's own `disallowedTools` option,
+ * which per the SDK's runtimeTypes.d.ts is what actually removes a tool from
+ * the model's context — the real fence, same mechanism `runAgentTurn` and
+ * every generic spawn site in this repo rely on. `allowedTools` on its own is
+ * NOT a fence: it is auto-allow-without-prompting, not a restriction (see the
+ * module-level comment above) — a caller relying on `allowedTools` alone gets
+ * no code-level enforcement at all, only prompt/schema design. This function
+ * still carries no `canUseTool`/`writeRoots` fence of its own; `disallowedTools`
+ * is the only enforcement lever it offers. It is deliberately NOT plan mode,
+ * though — that was tried and reverted; two F-W5-1 regressions (2026-05-30)
+ * are guarded here permanently:
  *   1. `outputFormat` MUST be `{ type: 'json_schema', schema }` — the bare schema
  *      silently disables structured output (the result never carries
  *      `structured_output`, so this returns null and the caller starves).
@@ -256,8 +266,15 @@ export async function runStructuredTurn<T>(args: {
   schema: unknown;
   /** Concrete model id (each runner resolves it from its SKILL.md spec). */
   model: string;
-  /** Read-only tool allow-list (from the runner's SKILL.md frontmatter). */
+  /** Read-only tool allow-list (from the runner's SKILL.md frontmatter).
+   *  Advisory only — see the doc comment above; pass `disallowedTools` too
+   *  for actual enforcement. */
   allowedTools: readonly string[];
+  /** Block-list (from the runner's SKILL.md frontmatter) — the SDK's real
+   *  enforcement lever. Honest-absent: when omitted or empty, the options
+   *  object carries no `disallowedTools` key at all (byte-identical prior
+   *  behaviour for callers that don't pass it). */
+  disallowedTools?: readonly string[];
   /** Stream tool_use blocks to the live hex. */
   onToolUse?: (d: ToolUseLiveDetail) => void;
   /** Called at most once per HEARTBEAT_THROTTLE_MS during the stream. */
@@ -276,6 +293,9 @@ export async function runStructuredTurn<T>(args: {
     allowedTools: args.allowedTools,
     outputFormat: { type: 'json_schema', schema: args.schema },
   };
+  if (args.disallowedTools !== undefined && args.disallowedTools.length > 0) {
+    options.disallowedTools = args.disallowedTools;
+  }
   const abortController = new AbortController();
   options.abortController = abortController;
 

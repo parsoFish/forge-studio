@@ -17,7 +17,9 @@
       "NotebookEdit",
       "Bash",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Task",
+      "Agent"
     ],
     "maxTurns": 25,
     "maxBudgetUsd": 3.5

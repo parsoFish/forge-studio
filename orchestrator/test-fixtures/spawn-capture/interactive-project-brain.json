@@ -16,7 +16,9 @@
         "WebFetch",
         "WebSearch",
         "Bash",
-        "Edit"
+        "Edit",
+        "Task",
+        "Agent"
       ],
       "maxTurns": 30,
       "abortController": "<AbortController>"

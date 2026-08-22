@@ -25,7 +25,7 @@ budgets:
   # Operator-overridable per kickoff. See docs/agent-cost-ceilings.md.
   maxBudgetUsd: 5
 allowed-tools: [Read, Grep, Glob, Edit, Write, Bash]
-disallowed-tools: [MultiEdit, NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [MultiEdit, NotebookEdit, WebFetch, WebSearch, Task, Agent]
 ---
 
 # Onboarding agent

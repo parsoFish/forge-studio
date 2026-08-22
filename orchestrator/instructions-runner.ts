@@ -378,6 +378,7 @@ async function runInterviewStep(args: {
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
     queryFn, prompt, schema: INTERVIEW_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
+    disallowedTools: instructionsAgentSpec.disallowedTools,
     onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
@@ -444,6 +445,7 @@ async function runDraftStep(args: {
   const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
     queryFn, prompt, schema: DRAFT_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
+    disallowedTools: instructionsAgentSpec.disallowedTools,
     onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
 

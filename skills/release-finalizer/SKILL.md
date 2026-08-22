@@ -17,7 +17,7 @@ runtime:
 brainAccess: none
 interactivity: Autonomous one-shot finalisation; no operator round.
 allowed-tools: [Read, Edit, Bash, Grep, Glob]
-disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (sonnet,
   # bounded finalize work). Operator-overridable per kickoff. See

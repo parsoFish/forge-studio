@@ -253,6 +253,7 @@ export async function runCompletenessCritic(
       schema: FINDINGS_SCHEMA,
       model: COMPLETENESS_CRITIC_MODEL,
       allowedTools: completenessCriticAgentSpec.allowedTools,
+      disallowedTools: completenessCriticAgentSpec.disallowedTools,
       onToolUse: input.onToolUse,
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,

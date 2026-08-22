@@ -18,7 +18,7 @@ runtime:
 brainAccess: advisory
 interactivity: Never runs on the flow path — the orchestrator-band executor (execOnboardPreflight) intercepts the node before runAgent and performs the gate directly. A standalone dispatch (forge agent dispatch / POST /api/agents/contract-check/run) is not intercepted and would spawn it, same as any other band-guard def.
 allowed-tools: []
-disallowed-tools: [Bash, Edit, MultiEdit, NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [Bash, Edit, MultiEdit, NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {maxTurns: 1, maxBudgetUsd: 0}
 ---
 

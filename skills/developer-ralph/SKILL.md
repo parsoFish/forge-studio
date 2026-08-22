@@ -31,7 +31,7 @@ fanout:
 brainAccess: advisory
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Write, Edit, MultiEdit, Bash, Grep, Glob]
-disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
+disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 

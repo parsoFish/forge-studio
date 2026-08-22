@@ -191,8 +191,10 @@ test('F-W5-1: structured interview/draft steps must NOT run the SDK in plan mode
   // validation run): `permissionMode: 'plan'` made the real draft agent end its
   // turn by calling `ExitPlanMode` (presenting a prose plan) instead of emitting
   // the `outputFormat` structured result, so `structured_output` came back empty
-  // and `runDraftStep` threw "draft step returned no initiatives". Read-only must
-  // be enforced by the allowedTools whitelist alone, never plan mode.
+  // and `runDraftStep` threw "draft step returned no initiatives". Structured
+  // output must come from `outputFormat`, never plan mode — `allowedTools`
+  // isn't a read-only fence either way (see interactive-session.ts's
+  // `runStructuredTurn` doc comment for what actually is/isn't enforced).
   const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
   writeFileSync(
     join(sessionDir, 'answers.json'),
@@ -1164,7 +1166,7 @@ test('ADR-024: architectAgentSpec derives phase, tier, and tool lists from SKILL
   assert.equal(architectAgentSpec.phase, 'architect');
   assert.equal(architectAgentSpec.tier, 'sonnet');
   assert.deepEqual([...architectAgentSpec.allowedTools], ['Read', 'Grep', 'Glob', 'Bash']);
-  assert.deepEqual([...architectAgentSpec.disallowedTools], []);
+  assert.deepEqual([...architectAgentSpec.disallowedTools], ['Task', 'Agent']);
   assert.equal(architectAgentSpec.skill, 'skills/architect/SKILL.md');
 });
 
@@ -1223,6 +1225,14 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
       o.allowedTools,
       architectAgentSpec.allowedTools,
       'allowedTools must be set from architectAgentSpec',
+    );
+    // The real enforcement lever (see interactive-session.ts's runStructuredTurn
+    // doc comment) — proves the fix actually reaches the SDK options, not just
+    // the derived spec object.
+    assert.deepEqual(
+      o.disallowedTools,
+      architectAgentSpec.disallowedTools,
+      'disallowedTools must be set from architectAgentSpec (the real fence)',
     );
   }
 });

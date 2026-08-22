@@ -17,7 +17,7 @@ runtime:
 brainAccess: mandatory
 interactivity: Unattended; operator supplies source identifier + optional category/project target; agent runs to completion without human input.
 allowed-tools: [Read, Write, Edit, Bash]
-disallowed-tools: []
+disallowed-tools: [Task, Agent]
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling (haiku-tier
   # ingest turns are cheap; $2 is generous headroom). Operator-overridable
