@@ -24,7 +24,7 @@ import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/p
 import { runContractComplianceLoop, formatComplianceReport } from '../cli/contract-compliance-loop.ts';
 import { composeAgentsMd } from './agents-md-compose.ts';
 import { authorConstraintBlocks } from './constraint-author.ts';
-import { scaffoldGreenfieldProject, listProjectStarters } from './project-create.ts';
+import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from './project-create.ts';
 import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
@@ -529,16 +529,30 @@ async function cmdProjectBrainRun(rest: string[]): Promise<void> {
 }
 
 /**
- * `forge create --name <name> --app-type <type> [--language ts] --north-star
- * <text> [--architecture <notes>]` (R4-03) — the creation interview as CLI
- * flags → a typed manifest → scaffold a greenfield project from its framework
- * template + seed the central brain, then preflight. Exits 0 iff contract-green
- * (ready for the first architect run).
+ * `forge create` (R4-03) — decision core, extracted from `cmdCreate` below
+ * (forge-qb5) so it can be driven hermetically: parse flags → build a typed
+ * manifest → scaffold a greenfield project from its framework template + seed
+ * the central brain, then preflight — all returned as data. Pure-ish (its
+ * only side effects are the ones `forge create` exists to have — writing the
+ * scaffolded project + brain stub via `scaffoldGreenfieldProject`): it never
+ * calls `process.exit` and never writes to stdout/stderr for control flow, so
+ * a test can assert on the returned result instead of process exit codes.
+ * `forgeRoot` is an injected parameter (defaulting to the module's
+ * `FORGE_ROOT`), so a test can point it at a throwaway temp directory instead
+ * of the real install root. ADR 042 boundary 3: a pure function with an
+ * explicit error contract may be exported for direct tests even though its
+ * only production caller (`cmdCreate`) lives in this same module.
  */
-function cmdCreate(rest: string[]): void {
+export type CreateResult =
+  | { ok: true; kind: 'list'; appTypes: string[] }
+  | { ok: true; kind: 'scaffolded'; exitCode: 0 | 1; out: ScaffoldResult }
+  | { ok: false; kind: 'invalid-args'; exitCode: 2; appTypes: string[] }
+  | { ok: false; kind: 'error'; exitCode: 1; message: string };
+
+export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): CreateResult {
+  const forgeRoot = opts.forgeRoot ?? FORGE_ROOT;
   if (rest[0] === 'list' || rest.includes('--list')) {
-    console.log(`available app types: ${listProjectStarters(FORGE_ROOT).join(', ') || '(none)'}`);
-    return;
+    return { ok: true, kind: 'list', appTypes: listProjectStarters(forgeRoot) };
   }
   const flag = (name: string): string | undefined => {
     const i = rest.indexOf(`--${name}`);
@@ -549,10 +563,7 @@ function cmdCreate(rest: string[]): void {
   const appType = flag('app-type');
   const northStar = flag('north-star');
   if (!name || !appType || !northStar) {
-    console.error('forge create: requires --name <name> --app-type <type> --north-star <text> [--language ts] [--architecture <notes>]');
-    console.error(`  app types: ${listProjectStarters(FORGE_ROOT).join(', ') || '(none)'}  (or: forge create list)`);
-    process.exit(2);
-    return;
+    return { ok: false, kind: 'invalid-args', exitCode: 2, appTypes: listProjectStarters(forgeRoot) };
   }
   try {
     const out = scaffoldGreenfieldProject({
@@ -563,18 +574,49 @@ function cmdCreate(rest: string[]): void {
         northStar,
         ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
       },
-      forgeRoot: FORGE_ROOT,
+      forgeRoot,
     });
-    console.log(`create: scaffolded "${out.id}" (${out.appType}) at ${out.projectDir} — ${out.filesWritten.length} file(s)`);
-    if (out.hardGreen) {
-      console.log('create: contract-green — ready for the first architect run.');
-    } else {
-      console.log(`create: NOT contract-green — failing hard clauses: ${out.failingClauses.map((c) => c.clause).join(', ')}`);
-    }
-    process.exit(out.hardGreen ? 0 : 1);
+    return { ok: true, kind: 'scaffolded', exitCode: out.hardGreen ? 0 : 1, out };
   } catch (err) {
-    console.error(`forge create: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    return { ok: false, kind: 'error', exitCode: 1, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * `forge create --name <name> --app-type <type> [--language ts] --north-star
+ * <text> [--architecture <notes>]` (R4-03) — the creation interview as CLI
+ * flags → a typed manifest → scaffold a greenfield project from its framework
+ * template + seed the central brain, then preflight. Exits 0 iff contract-green
+ * (ready for the first architect run). Thin CLI edge over `runCreate`: maps
+ * its result onto the exact same console output + exit codes this command
+ * always produced (forge-qb5 — behaviour-preserving extraction).
+ */
+function cmdCreate(rest: string[]): void {
+  const result = runCreate(rest, { forgeRoot: FORGE_ROOT });
+  switch (result.kind) {
+    case 'list':
+      console.log(`available app types: ${result.appTypes.join(', ') || '(none)'}`);
+      return;
+    case 'invalid-args':
+      console.error('forge create: requires --name <name> --app-type <type> --north-star <text> [--language ts] [--architecture <notes>]');
+      console.error(`  app types: ${result.appTypes.join(', ') || '(none)'}  (or: forge create list)`);
+      process.exit(result.exitCode);
+      return;
+    case 'scaffolded': {
+      const out = result.out;
+      console.log(`create: scaffolded "${out.id}" (${out.appType}) at ${out.projectDir} — ${out.filesWritten.length} file(s)`);
+      if (out.hardGreen) {
+        console.log('create: contract-green — ready for the first architect run.');
+      } else {
+        console.log(`create: NOT contract-green — failing hard clauses: ${out.failingClauses.map((c) => c.clause).join(', ')}`);
+      }
+      process.exit(result.exitCode);
+      return;
+    }
+    case 'error':
+      console.error(`forge create: ${result.message}`);
+      process.exit(result.exitCode);
+      return;
   }
 }
 
