@@ -40,8 +40,8 @@ feature initiative is stranded unmerged in `_queue/done/`.
 
 ## Sources
 
-- [`2026-05-16_trafficgame-arc-reflection.md`](../../../_raw/cycles/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: structural-prerequisite synthesis.
-- [`retro.md`](../../../../_logs/2026-05-16_trafficgame-arc-reflection/retro.md) — §3 contract clauses C1–C6 derived from trafficGame.
+- [`2026-05-16_trafficgame-arc-reflection.md`](../../../../_logs/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: structural-prerequisite synthesis.
+- [`2026-05-16_trafficgame-arc-reflection.md`](../../../../_logs/2026-05-16_trafficgame-arc-reflection.md) — §3 contract clauses C1–C6 derived from trafficGame.
 
 ## Related
 

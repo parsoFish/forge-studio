@@ -106,7 +106,7 @@ made the IDM elevation-lookahead extension obvious).
 ## Why this layer works
 
 The grading-frontier layer is the project-local instance of forge's
-[eval-driven development](../../../forge/themes/eval-driven-development.md)
+[eval-driven development](../../../cycles/themes/eval-driven-development.md)
 principle. Before it existed, the operator had to:
 
 - Hand-draw each design

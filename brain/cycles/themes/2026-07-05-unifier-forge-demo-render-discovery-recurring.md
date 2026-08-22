@@ -35,7 +35,7 @@ This is at minimum the 6th cycle with this exact re-derivation.
 
 ## Fix (not yet applied)
 
-Add to `skills/developer-unifier/SKILL.md` (or its AGENT.md in the worktree):
+Add to `agents/unifier/AGENT.md`:
 
 ```
 ## Demo render invocation
