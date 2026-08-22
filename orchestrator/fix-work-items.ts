@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import {
+  devWorkItemIdStem,
   gateIsShellPipeline,
   readWorkItemsFromDir,
   topologicalOrder,
@@ -122,13 +123,20 @@ export class FixLoopCapError extends Error {}
 /** Thrown on a malformed concern (HTTP 400); the queue is never touched. */
 export class FixConcernInvalidError extends Error {}
 
-/** Next free `WI-<n>` id over the initiative queue (append-only; never renumber). */
+/**
+ * Next free `WI-<n>` id over the initiative queue (append-only; never renumber).
+ *
+ * Counts from the numeric STEM, so a split sibling is visible here: with
+ * `WI-4a` / `WI-4b` on disk the next id is `WI-5`, not a `WI-4` sitting
+ * confusingly beside them. `devWorkItemIdStem` is the exported SSOT
+ * (orchestrator/work-item.ts) — this used to carry its own narrower `/^WI-(\d+)$/`.
+ */
 export function nextDevWorkItemId(worktreePath: string): string {
   const { items } = readWorkItemsFromDir(devWorkItemsDir(worktreePath));
   let max = 0;
   for (const wi of items) {
-    const m = /^WI-(\d+)$/.exec(wi.work_item_id);
-    if (m) max = Math.max(max, Number(m[1]));
+    const stem = devWorkItemIdStem(wi.work_item_id);
+    if (stem !== null) max = Math.max(max, stem);
   }
   return `WI-${max + 1}`;
 }

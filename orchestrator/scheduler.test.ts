@@ -541,7 +541,13 @@ test('classifyCycleFailure: empty events → terminal (unrecognised)', async () 
   assert.match(cls.reason, /could not be classified/i);
 });
 
-test('classifyCycleFailure: pm per_item_error_count > 0 → transient', async () => {
+// AMENDED W8-A1 (ON-7), 2026-08-23. This test previously asserted
+// `transient` / `recoverable: true` — it PINNED THE DEFECT. A per-item
+// validation error is deterministic: the same decomposition re-runs the same
+// errors, so `transient` bought INIT-2026-08-14-betterado-gap-registry the full
+// MAX_AUTO_RETRIES and three byte-identical ~$2.40 runs. The contract is now
+// terminal / zero retries (ADR 015 + ADR 037 2026-08-23 amendments).
+test('classifyCycleFailure: pm per_item_error_count > 0 → terminal (deterministic, no auto-retry)', async () => {
   const { classifyCycleFailure } = await import('./failure-classifier.ts');
   const events = [
     { event_id: 'e1', cycle_id: 'c', initiative_id: 'i', started_at: '', phase: 'project-manager', skill: 'project-manager', event_type: 'error', input_refs: [], output_refs: [], message: 'pm.end', metadata: { work_item_count: 3, per_item_error_count: 1, hidden_coupling_violations: [] } },
@@ -549,8 +555,9 @@ test('classifyCycleFailure: pm per_item_error_count > 0 → transient', async ()
   ];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cls = classifyCycleFailure(events as any);
-  assert.equal(cls.kind, 'transient');
-  assert.equal(cls.recoverable, true);
+  assert.equal(cls.kind, 'terminal');
+  assert.equal(cls.recoverable, false);
+  assert.equal(cls.environment, false);
   assert.ok(cls.evidence_event_ids.includes('e1'));
 });
 

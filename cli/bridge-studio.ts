@@ -64,7 +64,7 @@ import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
 import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
-import { parseWorkItem } from '../orchestrator/work-item.ts';
+import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
 import { getPaths } from '../orchestrator/queue.ts';
@@ -1448,7 +1448,10 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
   if (!existsSync(dir)) return null;
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => /^WI-\d+\.md$/.test(f));
+    // WORK_ITEM_FILE_PATTERN is the exported SSOT (orchestrator/work-item.ts).
+    // The narrower local regex this replaces silently dropped split work items
+    // (WI-4a.md) from the roadmap card's WI list.
+    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f));
   } catch {
     return null;
   }
