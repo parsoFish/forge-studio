@@ -1339,7 +1339,7 @@ test('listRuns: a planned manifest carries its architect_session_id through as a
     });
     writeManifest(root, 'pending', 'INIT-2026-08-14-no-session');
 
-    const runs = listRuns(root);
+    const runs = listRuns(root, Date.now());
     const withSession = runs.find((r) => r.initiativeId === 'INIT-2026-08-14-with-session');
     const without = runs.find((r) => r.initiativeId === 'INIT-2026-08-14-no-session');
 
@@ -1370,7 +1370,7 @@ test('listRuns: an aggregated (claimed) run carries architectSessionId too — n
       },
     ]);
 
-    const run = listRuns(root).find((r) => r.initiativeId === 'INIT-2026-08-14-claimed');
+    const run = listRuns(root, Date.now()).find((r) => r.initiativeId === 'INIT-2026-08-14-claimed');
     assert.equal(run?.architectSessionId, '2026-08-14T15-26-59-072e0775');
   } finally {
     cleanup(root);
