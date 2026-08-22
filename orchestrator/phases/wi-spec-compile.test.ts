@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { InitiativeManifest } from '../manifest.ts';
-import type { WorkItem } from '../work-item.ts';
+import { detectHiddenCoupling, type WorkItem } from '../work-item.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import type { ConstraintBlock } from '../constraint-blocks.ts';
 import {
@@ -947,5 +947,113 @@ test('compileWorkItemSpecs: nonexistent projectRoot is a loud CONFIG error in co
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(workItemsDir, { recursive: true, force: true });
     rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+// ---------- w8-A1 Change 2: compileHiddenCoupling derives an order for ----------
+// ---------- split-suffix ids (WI_NUMERIC_ID widens; a split pair chains) ----------
+
+test('compileHiddenCoupling: split pair WI-4a / WI-4b — WI-4b depends_on WI-4a (lexicographic tie-break on the shared numeric stem), persisted to disk', () => {
+  const dir = mkTmp('forge-wi-coupling-');
+  try {
+    const items = [
+      fixture({ work_item_id: 'WI-4a', files_in_scope: ['shared.ts'], creates: ['a.ts'] }),
+      fixture({ work_item_id: 'WI-4b', files_in_scope: ['shared.ts'], creates: ['b.ts'] }),
+    ];
+    const result = compileHiddenCoupling(dir, items);
+
+    assert.deepEqual(result.unresolved, [], `expected the split pair to resolve, got ${JSON.stringify(result.unresolved)}`);
+    assert.deepEqual(result.writeErrors, []);
+    assert.equal(result.compiledEdges.length, 1);
+    assert.deepEqual(result.compiledEdges[0], { dependent: 'WI-4b', prerequisite: 'WI-4a', sharedFiles: ['shared.ts'] });
+
+    const wi4b = result.items.find((i) => i.work_item_id === 'WI-4b')!;
+    assert.deepEqual(wi4b.depends_on, ['WI-4a']);
+    const wi4a = result.items.find((i) => i.work_item_id === 'WI-4a')!;
+    assert.deepEqual(wi4a.depends_on, []);
+
+    const onDisk = readFileSync(join(dir, 'WI-4b.md'), 'utf8');
+    assert.match(onDisk, /depends_on:\s*\n\s*-\s*WI-4a/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('compileHiddenCoupling: numeric-stem mismatch — WI-2 & WI-4a → WI-4a depends_on WI-2 (higher stem is the dependent)', () => {
+  const dir = mkTmp('forge-wi-coupling-');
+  try {
+    const items = [
+      fixture({ work_item_id: 'WI-2', files_in_scope: ['shared.ts'], creates: ['a.ts'] }),
+      fixture({ work_item_id: 'WI-4a', files_in_scope: ['shared.ts'], creates: ['b.ts'] }),
+    ];
+    const result = compileHiddenCoupling(dir, items);
+
+    assert.deepEqual(result.unresolved, [], `expected WI-2/WI-4a to resolve, got ${JSON.stringify(result.unresolved)}`);
+    assert.equal(result.compiledEdges.length, 1);
+    assert.deepEqual(result.compiledEdges[0], { dependent: 'WI-4a', prerequisite: 'WI-2', sharedFiles: ['shared.ts'] });
+    assert.deepEqual(result.items.find((i) => i.work_item_id === 'WI-4a')!.depends_on, ['WI-2']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// THE REGRESSION: the exact shape of the initiative that failed three times —
+// a fan-out (WI-1 feeds WI-2/WI-3/WI-4a/WI-4b) then a fan-in (WI-5 depends on
+// all four), all sharing one file, with the split pair WI-4a/WI-4b never
+// linked to WI-2/WI-3 by any explicit depends_on edge. Asserts the check
+// itself is still REAL (exactly 5 hidden pairs on the raw input — the fix
+// must not have relaxed detectHiddenCoupling), that the compiler resolves
+// every one of them, and that re-detecting on the compiled result reports
+// zero pairs — the whole lane's regression lock.
+test('compileHiddenCoupling: THE REGRESSION — six-item WI-4a/WI-4b split fan-in/fan-out collapses all 5 hidden-coupling pairs to zero', () => {
+  const dir = mkTmp('forge-wi-coupling-');
+  try {
+    const items = [
+      fixture({ work_item_id: 'WI-1', depends_on: [], files_in_scope: ['docs/gap-registry.md'], creates: ['n1.ts'] }),
+      fixture({ work_item_id: 'WI-2', depends_on: ['WI-1'], files_in_scope: ['docs/gap-registry.md'], creates: ['n2.ts'] }),
+      fixture({ work_item_id: 'WI-3', depends_on: ['WI-1', 'WI-2'], files_in_scope: ['docs/gap-registry.md'], creates: ['n3.ts'] }),
+      fixture({ work_item_id: 'WI-4a', depends_on: ['WI-1'], files_in_scope: ['docs/gap-registry.md'], creates: ['n4a.ts'] }),
+      fixture({ work_item_id: 'WI-4b', depends_on: ['WI-1'], files_in_scope: ['docs/gap-registry.md'], creates: ['n4b.ts'] }),
+      fixture({ work_item_id: 'WI-5', depends_on: ['WI-2', 'WI-3', 'WI-4a', 'WI-4b'], files_in_scope: ['docs/gap-registry.md'], creates: ['n5.ts'] }),
+    ];
+
+    // The check is still REAL: exactly 5 pairs on the raw input.
+    const inputPairs = detectHiddenCoupling(items);
+    const inputPairKeys = inputPairs.map((p) => `${p.a}|${p.b}`).sort();
+    assert.deepEqual(
+      inputPairKeys,
+      ['WI-2|WI-4a', 'WI-2|WI-4b', 'WI-3|WI-4a', 'WI-3|WI-4b', 'WI-4a|WI-4b'],
+      `expected exactly 5 hidden-coupling pairs on the input, got ${JSON.stringify(inputPairKeys)}`,
+    );
+    assert.equal(inputPairs.length, 5);
+
+    // The compiler resolves every one of them.
+    const result = compileHiddenCoupling(dir, items);
+    assert.deepEqual(result.unresolved, [], `expected zero unresolved, got ${JSON.stringify(result.unresolved)}`);
+    assert.deepEqual(result.writeErrors, []);
+
+    // Whole-lane regression lock: re-detecting on the compiled result is clean.
+    const resultPairs = detectHiddenCoupling(result.items);
+    assert.deepEqual(resultPairs, [], `expected zero pairs after compile, got ${JSON.stringify(resultPairs)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('compileHiddenCoupling: a genuinely non-derivable id (WI-X, no numeric stem) still lands in unresolved — the compiler was widened, not disabled', () => {
+  const dir = mkTmp('forge-wi-coupling-');
+  try {
+    const items = [
+      fixture({ work_item_id: 'WI-2', files_in_scope: ['shared.ts'], creates: ['a.ts'] }),
+      fixture({ work_item_id: 'WI-X', files_in_scope: ['shared.ts'], creates: ['b.ts'] }),
+    ];
+    const result = compileHiddenCoupling(dir, items);
+    assert.deepEqual(result.compiledEdges, []);
+    assert.equal(result.unresolved.length, 1);
+    assert.deepEqual(result.unresolved[0], { a: 'WI-2', b: 'WI-X', sharedFiles: ['shared.ts'] });
+    assert.deepEqual(result.items.find((i) => i.work_item_id === 'WI-2')!.depends_on, []);
+    assert.deepEqual(result.items.find((i) => i.work_item_id === 'WI-X')!.depends_on, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

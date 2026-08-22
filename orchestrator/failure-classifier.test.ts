@@ -629,3 +629,51 @@ test('classifyCycleFailure: execAdversarialReview throw → terminal "adversaria
   assert.match(c.reason, /adversarial-review pipeline failed/i);
   assert.doesNotMatch(c.reason, /reviewer-Ralph/i);
 });
+
+// ---------------------------------------------------------------------------
+// w8-A1 Change 3: a deterministic PM failure (hidden coupling / invalid work
+// items) is now TERMINAL, with ZERO auto-retries. The same decomposition
+// re-run reproduces the same violation, so the previous
+// `T('transient', …)` classification just burned a retry on a guaranteed
+// repeat. Was pmHiddenCoupling/pmInvalidWorkItems → transient; now terminal.
+// ---------------------------------------------------------------------------
+
+test('classifyCycleFailure: pmHiddenCoupling (non-empty hidden_coupling_violations) → terminal, non-recoverable, non-environment', () => {
+  const events = [
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.end',
+      metadata: {
+        hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }],
+        per_item_error_count: 0,
+      },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.equal(c.environment, false);
+  assert.ok(typeof c.reason === 'string' && c.reason.length > 0);
+});
+
+test('classifyCycleFailure: pmInvalidWorkItems (per_item_error_count > 0) → terminal, non-recoverable, non-environment', () => {
+  const events = [
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.end',
+      metadata: {
+        per_item_error_count: 2,
+        hidden_coupling_violations: [],
+      },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.equal(c.environment, false);
+  assert.ok(typeof c.reason === 'string' && c.reason.length > 0);
+});

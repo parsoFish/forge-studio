@@ -167,6 +167,100 @@ test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (
   }
 });
 
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (forge-f9g fix, W8-A1) — a scoped `on: merged` trigger now
+// enforces `projects:` at the SAME structural choke point
+// (`decideTriggerProjectScope`) every other trigger kind reaches, even
+// though this dispatch is inline (never staged through
+// `drainFlowRunRequests`). `writeManifest` always writes `project: demo`
+// (the fixture's project binding), so scoping the trigger to `['demo']` is
+// in-scope and scoping it to a different project is out-of-scope.
+// ---------------------------------------------------------------------------
+
+test('finalize: [forge-f9g] a scoped on:merged trigger fires reflect when the manifest project is a declared member', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'projects', 'demo', 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-08-23-inscope', wt);
+    const reflectCalls: string[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async (input) => { reflectCalls.push(input.initiativeId); },
+      loadFlowTriggers: () => [
+        { on: 'merged', target: { kind: 'agent', ref: 'reflector' }, projects: ['demo'] } as never,
+      ],
+    });
+    assert.deepEqual(results.map((r) => r.status), ['finalized']);
+    assert.deepEqual(
+      reflectCalls,
+      ['INIT-2026-08-23-inscope'],
+      'the manifest project ("demo") is a declared member of projects: ["demo"] — reflect must fire',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('finalize: [forge-f9g] an out-of-scope on:merged trigger does NOT fire reflect, and the skip lands in the cycle event log (typed, observable, never silent)', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'projects', 'demo', 'wt');
+    mkdirSync(wt, { recursive: true });
+    const id = 'INIT-2026-08-23-oos';
+    const cycleId = `2026-08-23T00-00-00_${id}`;
+    const body = [
+      '---',
+      `initiative_id: ${id}`,
+      'project: demo',
+      `project_repo_path: ${join(root, 'projects', 'demo')}`,
+      "created_at: '2026-08-23T00:00:00.000Z'",
+      'iteration_budget: 2',
+      'cost_budget_usd: 1',
+      'phase: pending',
+      'origin: architect',
+      `worktree_path: ${wt}`,
+      `cycle_id: ${cycleId}`,
+      '---',
+      `# ${id}`,
+      '',
+    ].join('\n');
+    writeFileSync(join(queueRoot, 'ready-for-review', `${id}.md`), body);
+
+    const logsRoot = join(root, '_logs');
+    let reflected = false;
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot,
+      confirmMerge: () => true,
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async () => { reflected = true; },
+      loadFlowTriggers: () => [
+        { on: 'merged', target: { kind: 'agent', ref: 'reflector' }, projects: ['some-other-project'] } as never,
+      ],
+    });
+
+    assert.deepEqual(results.map((r) => r.status), ['finalized'], 'still finalizes (merge confirmed) — only reflect is skipped');
+    assert.equal(reflected, false, 'the manifest project ("demo") is NOT a member of projects: ["some-other-project"] — reflect must not fire');
+
+    const eventsPath = join(logsRoot, cycleId, 'events.jsonl');
+    assert.ok(existsSync(eventsPath), 'cycle events.jsonl exists');
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter((l) => l.trim());
+    const skip = lines
+      .map((l) => JSON.parse(l) as { message?: string; event_type?: string; metadata?: Record<string, unknown> })
+      .find((e) => e.message === 'finalize.trigger-skipped-out-of-scope');
+    assert.ok(skip, `expected a finalize.trigger-skipped-out-of-scope event in the cycle log — got messages: ${JSON.stringify(lines.map((l) => JSON.parse(l).message))}`);
+    assert.equal(skip!.metadata?.on, 'merged');
+    assert.equal(skip!.metadata?.event_project, 'demo');
+    assert.deepEqual(skip!.metadata?.projects, ['some-other-project']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 026 lineage)', async () => {
   const { root, queueRoot } = setup();
   try {

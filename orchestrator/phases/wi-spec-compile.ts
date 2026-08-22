@@ -28,6 +28,7 @@ import type { EventLogger } from '../logging.ts';
 import type { InitiativeManifest } from '../manifest.ts';
 import {
   detectHiddenCoupling,
+  devWorkItemIdStem,
   serializeWorkItem,
   validateWorkItemSet,
   type CouplingPair,
@@ -242,15 +243,20 @@ export type CouplingCompileResult = {
   writeErrors: string[];
 };
 
-const WI_NUMERIC_ID = /^WI-(\d+)$/;
+
 
 /**
  * `detectHiddenCoupling` upgraded from reject-only to compile-when-derivable
  * (ADR 037). A shared-file overlap with no `depends_on` edge is resolved by
  * WI-id numeric order — the higher-numbered WI gets `depends_on` the lower
- * ("WI-2 gets depends_on WI-1"); on a numeric TIE (e.g. `WI-05` vs `WI-5`,
- * both 5) the order falls back to deterministic LEXICOGRAPHIC id comparison,
- * the greater id becoming the dependent. The edge is persisted to the spec
+ * ("WI-2 gets depends_on WI-1"); on a numeric TIE the order falls back to
+ * deterministic LEXICOGRAPHIC id comparison, the greater id becoming the
+ * dependent. The tie arm carries two cases: zero-padding (`WI-05` vs `WI-5`,
+ * both stem 5) and — since ADR 037's 2026-08-23 amendment — a SPLIT PAIR
+ * (`WI-4a` vs `WI-4b`, both stem 4), which is why `WI-4b depends_on WI-4a`
+ * and a split CHAINS instead of fanning out. Chaining is the point: two halves
+ * of one unit of work share the file they were split out of, and serialising
+ * them is what makes that safe. The edge is persisted to the spec
  * file and the pass continues. Reject remains the fallback for pairs the
  * compiler can't resolve unambiguously: an id outside the `WI-<n>` shape has
  * no derivable order, and if applying the derived batch would close a
@@ -271,21 +277,23 @@ export function compileHiddenCoupling(
   const derived: CompiledCouplingEdge[] = [];
   const unresolved: CouplingPair[] = [];
   for (const pair of pairs) {
-    const na = WI_NUMERIC_ID.exec(pair.a);
-    const nb = WI_NUMERIC_ID.exec(pair.b);
-    if (!na || !nb) {
+    // Stem, not whole id: `WI-4a` and `WI-4b` both stem 4, so a split pair
+    // reaches the lexicographic tie arm below instead of falling through to
+    // reject. `devWorkItemIdStem` is the exported SSOT (orchestrator/work-item.ts).
+    const numA = devWorkItemIdStem(pair.a);
+    const numB = devWorkItemIdStem(pair.b);
+    if (numA === null || numB === null) {
       unresolved.push(pair); // non-derivable id shape → reject (pre-ADR-037 behavior)
       continue;
     }
-    const numA = Number(na[1]);
-    const numB = Number(nb[1]);
     let dependent: string;
     let prerequisite: string;
     if (numA !== numB) {
       [dependent, prerequisite] = numA > numB ? [pair.a, pair.b] : [pair.b, pair.a];
     } else {
-      // Numeric tie (zero-padding: WI-05 vs WI-5) → deterministic
-      // lexicographic id order; the greater id becomes the dependent.
+      // Numeric-stem tie — zero-padding (WI-05 vs WI-5) or a SPLIT PAIR
+      // (WI-4a vs WI-4b) → deterministic lexicographic id order; the greater
+      // id becomes the dependent, so WI-4b depends_on WI-4a.
       [dependent, prerequisite] = pair.a > pair.b ? [pair.a, pair.b] : [pair.b, pair.a];
     }
     derived.push({ dependent, prerequisite, sharedFiles: pair.sharedFiles });

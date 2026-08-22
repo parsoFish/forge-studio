@@ -296,7 +296,7 @@ export function checkFlowTriggers(
       findings.push(...checkTargetProject(obj, 'trigger-agent-complete', flow, trigger.target, opts));
     }
 
-    // trigger-projects (R2-08-F1): `projects:` is kind-independent. SHAPE is
+    // trigger-projects (R2-08-F1): `projects:` is kind-independent — SHAPE is
     // checked UNCONDITIONALLY — independent of `opts.projectIds` — mirroring
     // `trigger-agent-complete` twelve lines above: a hand-crafted PUT body
     // (e.g. a bare string) must be refused even by a caller that never learns
@@ -305,28 +305,23 @@ export function checkFlowTriggers(
     // against a malformed value, or a single bad string emits one nonsense
     // finding per letter instead of one type error.
     //
-    // EXCLUSION (R2-08 addendum, 2026-08-07, WI forge-f9g,
-    // docs/decisions/027-studio-object-model.md): `on: merged` is EXCLUDED
-    // from `projects:` scoping entirely — checked FIRST, before shape/
-    // membership, and exclusively (an `on:merged` row never falls through to
-    // those checks). `on: merged` dispatches INLINE from
-    // `orchestrator/finalize-merged.ts` via `resolveMergeAgentHandler` — it
-    // never stages a claimable `FlowRunRequest`, so `drainFlowRunRequests`'s
-    // scope enforcement (the ONE enforcement point every other kind reaches)
-    // never runs for it. A declared scope here — including `projects: []`,
-    // still a DECLARED scope, not an absent one — would therefore be
-    // silently unenforced, so it is made UNAUTHORABLE rather than left
-    // fail-open. Every OTHER kind (cron/webhook/pr-merged/issue-raised/
-    // agent-complete/flow-complete) all reach the drain and are unaffected.
-    if (trigger.projects !== undefined && trigger.on === 'merged') {
-      findings.push(
-        err(
-          obj,
-          'trigger-projects',
-          `"projects:" cannot be declared on an on:"merged" trigger — on:merged dispatches INLINE from finalize-merged.ts (resolveMergeAgentHandler), never staging a claimable request, so drainFlowRunRequests's "projects:" enforcement never runs for it; a declared scope (including an empty "projects: []") would be silently unenforced. Tracked as forge-f9g — remove "projects:", or use on:"pr-merged" (drain-enforced, per-project) instead.`,
-        ),
-      );
-    } else if (trigger.projects !== undefined) {
+    // WITHDRAWN EXCLUSION (R2-08 addendum, 2026-08-07, WI forge-f9g,
+    // docs/decisions/027-studio-object-model.md — withdrawn 2026-08-23, W8-A1):
+    // this used to special-case `on: merged` OUT of `projects:` scoping
+    // entirely, because that kind dispatches INLINE from
+    // `orchestrator/finalize-merged.ts` (`resolveMergeAgentHandler`) and never
+    // staged a claimable `FlowRunRequest`, so `drainFlowRunRequests`'s scope
+    // enforcement never ran for it — a declared scope would have been
+    // silently unenforced. That gap is now closed at the SOURCE rather than
+    // by making the declaration unauthorable: `decideTriggerProjectScope`
+    // (`orchestrator/flow-run-requests.ts`) is a single exported, pure
+    // predicate that BOTH `drainFlowRunRequests` (the staged-request path)
+    // and `fireFlowTriggers` (`orchestrator/flow-trigger.ts`, the inline
+    // `on: merged` path finalize-merged.ts drives) consult before dispatch —
+    // one structural choke point every dispatch mechanism passes through,
+    // inline dispatch included. `on: merged` therefore falls through to the
+    // SAME shape + membership checks every other kind gets, below.
+    if (trigger.projects !== undefined) {
       const shapeOk = Array.isArray(trigger.projects) && trigger.projects.every((p) => typeof p === 'string');
       if (!shapeOk) {
         findings.push(

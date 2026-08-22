@@ -1161,25 +1161,23 @@ describe('validateFlow — trigger-projects (R2-08-F1)', () => {
 });
 
 /**
- * ACCEPTANCE TESTS (T3, R2-08 addendum, 2026-08-07) — `on: merged` is
- * EXCLUDED from `projects:` scoping. `on: merged` dispatches INLINE from
- * `orchestrator/finalize-merged.ts` via `resolveMergeAgentHandler` — it
- * never stages a `FlowRunRequest`, so `drainFlowRunRequests`'s scope
- * enforcement (the ONE enforcement point every other kind reaches) never
- * sees it. A `projects:`-scoped `on: merged` trigger would therefore be
- * silently unenforced. Ruling (docs/decisions/027-studio-object-model.md,
- * the addendum committed at 604cfe42): rather than wire a third
- * per-mechanism patch (the third dispatch mechanism to diverge from the
- * staged-request seam), the gap is made UNAUTHORABLE — `forge studio lint`
- * errors when `projects:` is declared on an `on: merged` trigger, tracked
- * as WI **forge-f9g**.
+ * ACCEPTANCE TESTS (T3, forge-f9g fix, W8-A1) — the R2-08 addendum
+ * (2026-08-07) that made `projects:` unauthorable on `on: merged` is
+ * WITHDRAWN (docs/decisions/027-studio-object-model.md, addendum dated
+ * 2026-08-23). Scope is now enforced at a single structural choke point —
+ * `decideTriggerProjectScope` (`orchestrator/flow-run-requests.ts`) —
+ * consulted both by `drainFlowRunRequests` (the staged-request path) and by
+ * `fireFlowTriggers` (`orchestrator/flow-trigger.ts`, the inline `on: merged`
+ * path finalize-merged.ts drives). `on: merged` therefore now falls through
+ * to the SAME shape + membership checks every other kind gets — it is no
+ * longer special-cased at all.
  *
  * Check id: reuses `trigger-projects` — the SAME check id the block above
  * already uses for shape/membership. This is one more `projects:` validity
  * rule in that same family, not a new concern needing its own id.
  */
-describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendum, 2026-08-07, WI forge-f9g)', () => {
-  it('(RED) projects: on an on:merged trigger → error trigger-projects naming BOTH the inline-dispatch reason AND forge-f9g', () => {
+describe('validateFlow — trigger-projects on on:merged (R2-08 addendum withdrawn, 2026-08-23, WI forge-f9g)', () => {
+  it('a validly-scoped on:merged trigger (real project ids) is now VALID — zero findings — the exclusion is withdrawn now that scope is enforced at a single structural choke point every dispatch mechanism passes through, inline dispatch included', () => {
     const flow = makeFlow({
       triggers: [
         { on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
@@ -1189,16 +1187,11 @@ describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendu
       flowIds: new Set(['my-flow', 'other-flow']),
       projectIds: new Set(['gitpulse']),
     } as unknown as Parameters<typeof validateFlow>[2]);
-    const f = findings.find((x) => x.check === 'trigger-projects');
-    assert.ok(f, `expected a trigger-projects finding for a scoped on:merged trigger — got ${JSON.stringify(findings)}`);
-    assert.equal(f!.level, 'error');
-    assert.match(f!.message, /merged/i, 'message must name the kind');
-    assert.match(
-      f!.message,
-      /inline/i,
-      'message must name the REASON — on:merged dispatches inline from finalize-merged.ts, never reaching the drain enforcement point',
+    assert.deepEqual(
+      findings,
+      [],
+      `expected zero findings for a validly-scoped on:merged trigger — got ${JSON.stringify(findings)}`,
     );
-    assert.match(f!.message, /forge-f9g/, 'message must name the filed WI id so an operator knows where this is tracked');
   });
 
   it('(green-on-arrival) an on:merged trigger with NO projects: is still perfectly valid — zero findings — kills an implementation that rejects ALL merged triggers regardless of projects:', () => {
@@ -1216,7 +1209,49 @@ describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendu
     );
   });
 
-  it('(green-on-arrival) projects: on the DRAIN-ENFORCED kinds (cron/webhook/pr-merged/issue-raised/agent-complete/flow-complete) is still valid — kills "blanket-rejected projects: everywhere"', () => {
+  it('projects: [] on an on:merged trigger is a valid declared-empty scope, same as every other kind — zero findings (the empty array trivially satisfies both the shape and membership checks) — kills a fix that special-cases merged to still reject the empty array', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: [] } as unknown as FlowTrigger],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    assert.deepEqual(
+      findings,
+      [],
+      `expected zero findings for projects: [] on on:merged — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('a malformed projects: value on an on:merged trigger emits the SAME trigger-projects shape finding every other kind gets', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: 'gitpulse' } as unknown as FlowTrigger],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-projects');
+    assert.ok(f, `expected a trigger-projects finding for a malformed projects: value on on:merged — got ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.match(f!.message, /array of strings/i);
+  });
+
+  it('a non-member project id in projects: on an on:merged trigger emits the SAME trigger-projects membership finding every other kind gets', () => {
+    const flow = makeFlow({
+      triggers: [
+        { on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: ['not-a-real-project'] } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    const f = findings.find((x) => x.check === 'trigger-projects');
+    assert.ok(f, `expected a trigger-projects finding for a non-member project id on on:merged — got ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.match(f!.message, /not-a-real-project/);
+  });
+
+  it('projects: on EVERY shipped kind (including merged) is treated uniformly — kills a fix that keeps merged special-cased in either direction', () => {
     const cases: FlowTrigger[] = [
       {
         on: 'cron',
@@ -1245,6 +1280,7 @@ describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendu
         projects: ['gitpulse'],
       } as unknown as FlowTrigger,
       { on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
+      { on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
     ];
     for (const trigger of cases) {
       const flow = makeFlow({ triggers: [trigger] });
@@ -1253,27 +1289,10 @@ describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendu
         projectIds: new Set(['gitpulse']),
       } as unknown as Parameters<typeof validateFlow>[2]);
       assert.ok(
-        !findings.some((x) => /forge-f9g/.test(x.message)),
-        `expected on:"${trigger.on}" (drain-enforced) to be unaffected by the on:merged exclusion — got ${JSON.stringify(findings)}`,
+        !findings.some((x) => x.check === 'trigger-projects'),
+        `expected on:"${trigger.on}" with a validly-scoped, real-project projects: to be finding-free — got ${JSON.stringify(findings)}`,
       );
     }
-  });
-
-  it('(RED) projects: [] on an on:merged trigger is ALSO an error — the empty scope is still a declared scope — kills a fix that only checks non-empty arrays', () => {
-    const flow = makeFlow({
-      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: [] } as unknown as FlowTrigger],
-    });
-    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
-      flowIds: new Set(['my-flow', 'other-flow']),
-      projectIds: new Set(['gitpulse']),
-    } as unknown as Parameters<typeof validateFlow>[2]);
-    const f = findings.find((x) => x.check === 'trigger-projects');
-    assert.ok(
-      f,
-      `expected a trigger-projects finding for projects: [] on on:merged (the empty scope is still a DECLARED scope) — got ${JSON.stringify(findings)}`,
-    );
-    assert.equal(f!.level, 'error');
-    assert.match(f!.message, /forge-f9g/, 'message must name the filed WI id');
   });
 });
 

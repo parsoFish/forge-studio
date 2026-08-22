@@ -178,6 +178,14 @@ function makeDefaultFinalizeOne(
       { id: flowId, triggers: loadFlowTriggers(flowId) },
       'merged',
       {
+        // R2-08 (forge-f9g fix, W8-A1): opt this inline dispatch INTO
+        // fireFlowTriggers' scope gate — the choke point the flow-complete
+        // staging path reaches via drainFlowRunRequests, which this inline
+        // path structurally never touches. `input.project` is the manifest's
+        // own project binding (threaded above); `?? null` keeps the key
+        // present (opted in) even when it's unresolved, so a scoped trigger
+        // fails closed rather than silently dispatching.
+        eventProject: input.project ?? null,
         onFire: (t) =>
           logger.emit({
             initiative_id: input.initiativeId,
@@ -188,6 +196,24 @@ function makeDefaultFinalizeOne(
             output_refs: [],
             message: 'finalize.trigger-firing',
             metadata: { on: t.on, target: t.target, source_flow: flowId },
+          }),
+        onSkip: (t, reason) =>
+          logger.emit({
+            initiative_id: input.initiativeId,
+            phase: 'orchestrator',
+            skill: 'finalize-merged',
+            event_type: 'log',
+            input_refs: [],
+            output_refs: [],
+            message: 'finalize.trigger-skipped-out-of-scope',
+            metadata: {
+              on: t.on,
+              target: t.target,
+              source_flow: flowId,
+              event_project: input.project ?? null,
+              projects: t.projects,
+              reason,
+            },
           }),
         dispatch: async (t) => {
           // R4-09-F1: resolve the declared target to its standalone merge-time
@@ -347,7 +373,19 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       // dir the cycle used; fall back to the latest matching dir for legacy
       // manifests that never persisted one.
       const logger = createLogger(cycleId, logsRoot);
-      const input: CycleInput = { initiativeId, manifestPath: inFlightPath, projectRepoPath, worktreePath, cycleId };
+      // R2-08 (forge-f9g fix, W8-A1): thread the manifest's own `project`
+      // binding through — `makeDefaultFinalizeOne` reads `input.project` as
+      // the event project for its `on: merged` scope check (fireFlowTriggers'
+      // opt-in gate). `m.project` is a required manifest field (manifest.ts);
+      // `?? null` only guards a legacy/malformed manifest that somehow lost it.
+      const input: CycleInput = {
+        initiativeId,
+        manifestPath: inFlightPath,
+        projectRepoPath,
+        worktreePath,
+        cycleId,
+        project: m.project ?? null,
+      };
 
       // ADR-027: a confirmed GitHub merge is an implicit approve — persist the
       // verdict artifact (the operator merged silently, no UI verdict) so the

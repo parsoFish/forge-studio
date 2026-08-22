@@ -166,6 +166,46 @@ export type FlowRunDrainResult = {
   detail?: string;
 };
 
+/**
+ * The scope predicate (R2-08-F1 / forge-f9g fix, W8-A1) — the SINGLE choke
+ * point that decides whether a trigger's declared `projects:` scope covers a
+ * given event's resolved project. Pure and side-effect-free so any dispatch
+ * mechanism can consult it, not just this module's own drain:
+ * `drainFlowRunRequests` below (the staged-request path) and
+ * `fireFlowTriggers` (orchestrator/flow-trigger.ts — the inline `on: merged`
+ * path finalize-merged.ts drives) both call this SAME function. Before this
+ * extraction, the logic lived inlined in `drainFlowRunRequests` only, and the
+ * R2-08 addendum (docs/decisions/027-studio-object-model.md) worked around
+ * `on: merged` never reaching it by making `projects:` unauthorable on that
+ * kind (WI forge-f9g). That exclusion is withdrawn now that this function is
+ * a structural choke point every dispatch mechanism can pass through.
+ *
+ * Semantics (byte-identical to the pre-extraction inline logic):
+ *   - `declaredProjects === undefined` → unscoped → always in scope.
+ *   - A DECLARED scope — including `[]`, itself a declared "scoped to
+ *     nothing" — requires a resolved `eventProject` that is a STRICT
+ *     IDENTITY member of the list (plain `Array.includes` on strings; never
+ *     prefix, substring, or case-insensitive). Anything else — an
+ *     unresolved (`null`/`undefined`) event project, or a resolved one that
+ *     is not a member — fails closed with a typed reason naming both.
+ */
+export type TriggerScopeVerdict = { inScope: true } | { inScope: false; reason: string };
+
+export function decideTriggerProjectScope(
+  declaredProjects: string[] | undefined,
+  eventProject: string | null | undefined,
+): TriggerScopeVerdict {
+  if (declaredProjects === undefined) return { inScope: true };
+  if (eventProject !== undefined && eventProject !== null && declaredProjects.includes(eventProject)) {
+    return { inScope: true };
+  }
+  const reason =
+    eventProject === undefined || eventProject === null
+      ? `event project unresolved against declared scope [${declaredProjects.join(', ')}]`
+      : `event project "${eventProject}" is not a member of declared scope [${declaredProjects.join(', ')}]`;
+  return { inScope: false, reason };
+}
+
 export type DrainFlowRunDeps = {
   queueRoot?: string;
   /** Forge root for the origination mint (flow defs + projects + _logs).
@@ -206,7 +246,11 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
     }
     // R2-08-F1 (ADR-027 amendment) — per-project scope, enforced at the
     // dispatch point (rule 2: "the dispatch point is the enforcement point;
-    // lint is defense in depth"). `projects === undefined` ⇒ unscoped, the
+    // lint is defense in depth"), via the SINGLE extracted predicate
+    // `decideTriggerProjectScope` above (forge-f9g fix, W8-A1) — this is the
+    // ONLY call site for this staged-request path; `fireFlowTriggers`
+    // (orchestrator/flow-trigger.ts) is the sibling call site for the inline
+    // `on: merged` path. `projects === undefined` ⇒ unscoped, the
     // pre-existing cross-project behaviour, completely unaffected. A DECLARED
     // scope (including `[]`) requires a resolved `eventProject` that is an
     // IDENTITY match (never prefix/substring/case-insensitive — plain
@@ -216,13 +260,12 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
     // identity comparison, not a path operation: an out-of-scope
     // `eventProject` is never folded into a filesystem path (rule 5).
     if (req.projects !== undefined) {
-      const eventProject = req.eventProject;
-      const inScope = eventProject !== undefined && eventProject !== null && req.projects.includes(eventProject);
-      if (!inScope) {
+      const verdict = decideTriggerProjectScope(req.projects, req.eventProject);
+      if (!verdict.inScope) {
         out.push({ target: req.target, sourceInitiativeId: req.sourceInitiativeId, status: 'skipped-out-of-scope' });
         deps.notify?.(
           `flow-trigger: ${req.triggeredBy} → ${req.target.kind}:${req.target.ref} SKIPPED (out of scope — event project ` +
-            `${eventProject == null ? '(unresolved)' : `"${eventProject}"`} not in [${req.projects.join(', ')}])`,
+            `${req.eventProject == null ? '(unresolved)' : `"${req.eventProject}"`} not in [${req.projects.join(', ')}])`,
         );
         rmSync(path, { force: true });
         continue;

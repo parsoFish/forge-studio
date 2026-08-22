@@ -264,6 +264,10 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     manifestBullet,
     `- Worktree: \`${input.worktreeRelPath}\` — your current working directory. All \`files_in_scope\` paths resolve here.`,
     `- Write work items to \`.forge/work-items/WI-<n>.md\` and the graph to \`.forge/work-items/_graph.md\`.`,
+    // ON-7 / ADR 015 2026-08-23: the split suffix, stated in the invocation as
+    // well as in the skill, because the split is decided HERE (mid-decomposition)
+    // and an id the contract rejects fails the whole pass.
+    '- If you split a work item because it is too large, name the halves `WI-<n>a`, `WI-<n>b` (ONE lowercase letter — `WI-4a1` / `WI-4-a` / `WI-4A` are invalid) and CHAIN them: `WI-4b` must `depends_on` `WI-4a`. Split halves share the file they were split out of, so an unchained fan-out is a hidden-coupling violation.',
     `- Set \`initiative_id: ${input.initiativeId}\` exactly on every WI frontmatter.`,
     ...(input.manifestContent
       ? ['', MANIFEST_SECTION_HEADER, '', '```markdown', input.manifestContent.trim(), '```']

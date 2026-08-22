@@ -24,6 +24,7 @@ import {
   type InitiativeManifest,
 } from './manifest.ts';
 import { getPaths } from './queue.ts';
+import { WORK_ITEM_FILE_PATTERN } from './work-item.ts';
 // W7-FIX-A3 (round-2 finding 6): ONE predicate for the manifest id
 // convention. This module, `POST /api/flows/:id/run`'s own pre-check and
 // `enqueue-plan-run.ts` each carried a hand-copied regex for the same rule
@@ -193,10 +194,15 @@ function firstExisting(candidates: string[]): string | null {
   return null;
 }
 
-/** True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc). */
+/**
+ * True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc).
+ * `WORK_ITEM_FILE_PATTERN` is the exported SSOT (orchestrator/work-item.ts) —
+ * this used to carry its own narrower `/^WI-\d+\.md$/`, which read a
+ * split-only decomposition (`WI-4a.md`, `WI-4b.md`) as an EMPTY directory.
+ */
 function hasWorkItemFiles(dir: string): boolean {
   try {
-    return readdirSync(dir).some((f) => /^WI-\d+\.md$/.test(f));
+    return readdirSync(dir).some((f) => WORK_ITEM_FILE_PATTERN.test(f));
   } catch {
     return false;
   }
