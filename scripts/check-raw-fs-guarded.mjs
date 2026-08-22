@@ -624,19 +624,19 @@ export function analyzeModule(text, relFile) {
     // path may not be argument 0 at all. Positions come from data
     // (SINK_PATH_ARG_INDICES), defaulting to first-argument.
     for (const argIndex of SINK_PATH_ARG_INDICES[sink] ?? [0]) {
-    const path = argAt(cleaned, openIdx, argIndex);
-    if (!path) continue;
-    // GUARD-TERMINAL — the sink opens the guard's own output. Always safe.
-    if (isGuardTerminal(path, lineIdx, cleanedLines)) continue;
-    const idents = governingIdents(path);
-    if (idents.length === 0) continue; // pure literal path
-    // (2) LEAF-APPEND — a guard-bound value with something appended below it
-    // (path is not guard-terminal, yet a governing ident is guard-bound).
-    let guardBase = null;
-    let taintTok = null;
-    for (const id of idents) {
-      if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
-      if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines)) taintTok = id.full;
+      const path = argAt(cleaned, openIdx, argIndex);
+      if (!path) continue;
+      // GUARD-TERMINAL — the sink opens the guard's own output. Always safe.
+      if (isGuardTerminal(path, lineIdx, cleanedLines)) continue;
+      const idents = governingIdents(path);
+      if (idents.length === 0) continue; // pure literal path
+      // (2) LEAF-APPEND — a guard-bound value with something appended below it
+      // (path is not guard-terminal, yet a governing ident is guard-bound).
+      let guardBase = null;
+      let taintTok = null;
+      for (const id of idents) {
+        if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
+        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines)) taintTok = id.full;
     }
     // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
     // an unresolved dir-shaped param (the caller laundered the request id into
