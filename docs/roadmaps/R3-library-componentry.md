@@ -1050,6 +1050,184 @@ third connection kind above); `npm run parity:stories` exits 0.
   R3-01/R3-03/R3-04); live hub API crawling (future decision); publishing
   forge content *to* hubs (R8 territory).
 
+### R3-08 Operator workspace — the `_local/` root and provenance by root
+
+- **Status:** planned  ·  **Wave:** unsequenced — the wave-8 ON-2 spike shipped
+  design only, by operator decision
+- **Depends on:** R3-01 (the shared skill resolver + unified registry this adds
+  a second root to), R3-03 (`hooksDir` is one of the root helpers that changes),
+  R3-07 (`studio/community/registry.yaml` is one of the tracked write targets).
+- **Depended on by:** R3-09 (promotion needs a workspace to promote *from*);
+  R6-10 (the pending surface's job shrinks to core-only once operator authoring
+  stops dirtying the repo); R8-01 *(soft — an installable forge must survive an
+  upgrade without clobbering operator edits)*.
+- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §A.
+  Every object an operator authors in Studio lands in a **git-tracked path inside
+  the forge repo**: `skills/<slug>/SKILL.md`, `studio/flows/<id>/flow.yaml`,
+  `studio/hooks/<id>/`, `brain/<id>/`, `studio/community/registry.yaml`. Studio
+  never commits any of it — deliberately, per
+  [`docs/community-registry-writes.md`](../community-registry-writes.md) and the
+  2026-07-16 bridge-self-merge incident that `cli/dry-bridge.ts` exists to prevent.
+  The consequences are live and named:
+  `docs/roadmaps/wave-7-walkthrough-findings.md` `library-07` (*"Studio writes
+  authored skills straight into the live forge working tree with no commit — they
+  show up as untracked churn"*); `cli/studio-provenance.ts`'s `AGENT_PROVENANCE`
+  and `PROJECT_PROVENANCE` hard-coded to `'unknown'` because an OOTB and an
+  operator-authored `SKILL.md` are byte-indistinguishable on disk; and two
+  machine-local files — `studio/installed-skills.yaml`
+  (`orchestrator/studio/skill-install-ledger.ts`) and `studio/hook-approvals.yaml`
+  (`orchestrator/studio/hook-scan.ts`) — written into the tracked `studio/` tree
+  and not gitignored. Forge already has both halves of the answer in production:
+  `forge.config.json` and `_connections/` are gitignored operator-local state, and
+  `resolveKbBrainDir` (`orchestrator/brain-paths.ts`) already resolves an id
+  across two ordered containment roots with the realpath guard re-applied per root.
+- **Features:**
+  - **R3-08-F1 — The `_local/` root, declared and ignored.** A single gitignored
+    root mirroring the shape of the tracked trees it shadows: `_local/skills/`,
+    `_local/studio/flows/`, `_local/studio/hooks/`. Added to `.gitignore` beside
+    `_connections/` with the same house rationale comment. The name deliberately
+    avoids *workspace*, which already means an npm workspace in this repo
+    (`forge-ui`). Acceptance: `git check-ignore -v _local/` resolves to the new
+    rule; a fresh clone has no `_local/`; `forge studio lint` runs clean against a
+    tree with and without it.
+  - **R3-08-F2 — Ordered root resolution at the per-kind helpers.** Each per-kind
+    root helper — `hooksDir(forgeRoot)`
+    (`orchestrator/studio/hook-library.ts`) and its skill/flow siblings — becomes
+    an ordered resolver in the shape `resolveKbBrainDir` already uses: try
+    `_local/<kind>/`, then `<kind>/`, first hit wins, **`resolveGuardedPath`
+    re-applied per root**. The guard is not generalized, hoisted, or relaxed;
+    each root keeps its own call. Acceptance: a `_local/` object resolves and
+    renders in the library; a tracked object still resolves unchanged; a planted
+    symlink in either root is refused with the same answer as an absent object
+    (the existing probe-oracle discipline); every helper's resolution is unit-tested
+    per root in isolation.
+  - **R3-08-F3 — Studio writes default to `_local/`.** Create routes write to
+    `_local/`. Editing an object that resolved from a tracked root is a **core
+    edit** and is R3-09's business — it does not silently write the tracked tree.
+    This inverts today's default, which is the defect. Acceptance: creating an
+    agent/flow/hook from Studio leaves `git status` on the forge repo clean;
+    an edit to an OOTB object returns an explicit, typed response naming the
+    promotion path rather than writing and going quiet.
+  - **R3-08-F4 — Provenance derived from the root.** `_local/` ⇒ `operator`; a
+    tracked root ⇒ `ootb`. `AGENT_PROVENANCE` and `PROJECT_PROVENANCE`
+    (`cli/studio-provenance.ts`) stop being constants and become derivations over
+    the resolved root — the `derive-status-don't-store-it` posture
+    ([ADR 044](../decisions/044-read-path-memoization.md)) applied to provenance:
+    no field is added in which a stale copy could drift. The n/a-invariant
+    survives — `'unknown'` remains the answer for anything neither root attests.
+    Acceptance: `ProvenanceBadge` shows `operator` for a `_local/` agent and
+    `ootb` for a shipped one, with **no** `origin:` field added to any `SKILL.md`;
+    the existing per-type provenance tests are extended, not replaced.
+  - **R3-08-F5 — Machine-local state leaves the tracked tree.**
+    `studio/installed-skills.yaml` and `studio/hook-approvals.yaml` move to
+    `_local/studio/`. Both are per-machine (an install ledger and hook approval
+    verdicts) and must never enter shared history. Acceptance: both write paths
+    resolve under `_local/`; a tree that carries the old tracked-adjacent files is
+    migrated on read with a one-line notice, not silently ignored; `git status` is
+    clean after an install and after a hook approval.
+  - **R3-08-F6 — Shadowing is surfaced, never silent.** An id present in both
+    roots is a real hazard (a `_local/` object masking an OOTB one). `forge studio
+    lint` gains a check naming every shadowed id and both paths, and the library
+    surface labels a shadowed object rather than hiding the conflict. Acceptance:
+    a deliberately shadowed fixture produces a named lint flag and a visible
+    label; an unshadowed tree produces neither.
+- **Session sizing:** ~3 operator-run agent sessions — (1) F1+F2 the root and the
+  resolvers, with the per-root guard tests; (2) F3+F5 the write-default inversion
+  and the machine-local move; (3) F4+F6 provenance derivation, the shadow check,
+  and library-surface coverage.
+- **Out of scope:** moving `brain/` out of the forge repo —
+  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) decided it lives
+  there and stands, so `brain/` writes stay tracked and stay visible via R6-10.
+  Promotion of anything out of `_local/` (R3-09). Any change to what `forge studio
+  lint` validates beyond the new shadow check. Multi-operator or shared workspaces
+  — `docs/roadmaps/README.md` §2 records multi-operator as deliberately absent.
+
+### R3-09 Promotion into forge core — a branch and a pull request
+
+- **Status:** planned  ·  **Wave:** unsequenced — follows R3-08
+- **Depends on:** R3-08 (promotion needs a workspace to promote *from*, and a
+  provenance signal to know what is promotable), R5-01 *(soft — the dry-bridge
+  route classification this must register in)*.
+- **Depended on by:** R6-10 *(soft — a pending row is only actionable if there is
+  somewhere for it to go)*.
+- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §B.
+  The operator's ask is *"a way to roll changes I make to the platform back into
+  forge core seamlessly."* Forge already runs exactly this transaction — against
+  **managed project repos**. `orchestrator/project-repo-tx.ts` carries
+  `STUDIO_BRANCH = 'forge-studio'`, `ensureStudioBranch`, `commitStudioChange`,
+  `withStudioWrite`, `saveProjectRepo` (merge + push) and `hasPendingStudioChanges`,
+  surfaced end-to-end through `GET /api/studio/projects/:id/repo-status`
+  (`cli/bridge-studio.ts`) and `fetchRepoStatus` (`forge-ui/lib/studio-client.ts`).
+  Forge's own repo gets none of it. This initiative closes the asymmetry — with
+  three deliberate differences from the project-repo transaction, because forge
+  core is not a forge-controlled, CI-free config file.
+- **Features:**
+  - **R3-09-F1 — Promotion runs in a temporary worktree, never the live checkout.**
+    Promotion builds its branch in a `git worktree` off the tracked remote head,
+    applies the object, commits, and removes the worktree. It never runs `git
+    checkout` in the forge root. Two reasons, both already recorded in forge's own
+    code: `isGitRepo` (`orchestrator/project-repo-tx.ts`) documents a caller
+    moving an **ancestor** repo's HEAD by checking out a nested directory; and the
+    forge root hosts a live `forge serve` scheduler and the Studio bridge, both
+    reading that checkout. Acceptance: promotion leaves `git rev-parse
+    --abbrev-ref HEAD` in the forge root unchanged; a promotion during an
+    in-flight cycle does not disturb it; the worktree is removed on both the
+    success and failure paths.
+  - **R3-09-F2 — The terminus is an open PR. Nothing merges.** `saveProjectRepo`
+    merges into the default branch precisely because project config is
+    *"forge-controlled, non-structural"* and CI-free; forge core is neither. The
+    promote route pushes a branch and opens a PR, authored with the operator's own
+    identity and credentials, and stops. CI and human review are the gate.
+    Acceptance: a promotion produces exactly one branch and one open PR; no code
+    path in Studio can merge a forge PR; a test asserts the absence of a merge call
+    on this path.
+  - **R3-09-F3 — Classified and refused under dry-bridge.** The route is
+    registered in `BRIDGE_ROUTE_CLASSIFICATION` (`cli/dry-bridge.ts`) as
+    `classification: 'refuse'`, `action: 'git-remote'`, alongside
+    `POST /api/studio/projects/:id/save-repo` and the recovery/requeue routes, so
+    `FORGE_DRY_BRIDGE=1` refuses it with a typed 409 plus a JSONL event. The
+    existing route-coverage drift-guard tests make this enforceable: an
+    unclassified promote route fails the guard. Acceptance: the drift guard goes
+    red if the row is removed; a dry-bridge run cannot open a PR; the refusal
+    emits both the typed response and the event, never a silent skip.
+  - **R3-09-F4 — Preview before push.** Promotion shows the operator the exact
+    diff, the target branch name, and the files that will be included, and
+    requires an explicit confirm. This is the affordance whose absence
+    `docs/roadmaps/wave-7-walkthrough-findings.md` `library-14` and `community-19`
+    both record for other real-acting buttons. Acceptance: the preview renders the
+    real diff (not a summary of it) for a `_local/` object and for an uncommitted
+    edit to a tracked path; cancelling leaves no branch, no worktree and no PR.
+  - **R3-09-F5 — The write-time origin stamp, scoped to promotion.** Promotion
+    stamps `origin: 'studio'` on the object it lands in the tracked root, and the
+    shipped OOTB objects get `origin: seed` committed. This is the residue R3-08-F4
+    cannot cover: once an object moves into a tracked root its root reads `ootb`,
+    and the stamp is the only thing that preserves the fact an operator wrote it.
+    Scoping the stamp to the promotion path — rather than to every Studio write —
+    is what removes the reason it was deferred (a data-model change across the
+    concurrently-edited `skills/` tree). Acceptance: a promoted object reads
+    `operator` after promotion; `provenanceOfOrigin` is unchanged; the stamp is
+    written by the promotion path only.
+  - **R3-09-F6 — Path-sink hardening for the new derivations.** An operator-supplied
+    object id becomes a filesystem read, a temporary worktree path, a branch name
+    and a PR title. Branch names and worktree paths derived from an id are a new
+    sink family. Load the `adversarial-containment-review` skill before building;
+    extend `scripts/check-request-path-sinks.mjs` and re-baseline. Acceptance: the
+    sink scanner covers the new families; the baseline does not grow un-classified;
+    the escape-shape catalogue is exercised against the branch-name derivation.
+- **Session sizing:** ~3 operator-run agent sessions — (1) F1+F2 the worktree
+  transaction and the PR terminus; (2) F3+F6 the safety classification and the
+  sink ratchet, with an adversarial review round (this is a real-acting route on
+  the surface that once self-merged a forge PR); (3) F4+F5 the preview affordance,
+  the origin stamp, and journey coverage.
+- **Out of scope:** merging a forge PR from Studio, ever
+  ([ADR 045](../decisions/045-operator-workspace-and-promotion.md) §D). Bulk or
+  automatic promotion — one object, one PR, one operator confirm. A bot identity
+  for forge. Publishing or distributing operator-authored objects to anyone else
+  (R3-07 owns the community browser; R8-01 owns packaging). Promotion of
+  `brain/` content, which is produced by cycles under
+  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) and is surfaced,
+  not promoted, by R6-10.
+
 ## Deferred
 
 No R3 deferred initiatives as of 2026-07-17 (the canonical skeleton mints
@@ -1321,3 +1499,18 @@ rather than deferred within it:
   status line gains a note on the CR-1..3 evolution (registry.yaml as the
   new source of truth, sorts + freshness honesty, the community-refresh
   agent) — the initiative's own F1-F3 acceptance criteria are unaffected.
+- 2026-08-23 — **R3-08 and R3-09 minted** (planned) from
+  [ADR 045](../decisions/045-operator-workspace-and-promotion.md), the wave-8
+  ON-2 platform-round-trip design spike. R3-08 gives the library registries a
+  second, gitignored `_local/` root and makes an object's root its provenance;
+  R3-09 turns an operator edit into a branch and a PR against forge — never a
+  commit on the operator's checkout, never a merge. Routed to R3 by
+  `docs/roadmaps/README.md` §2's coverage map (*"Capability libraries — skills,
+  hooks, tools/MCPs, instructions"*) and R3's own charter, which already names
+  the library *machinery* (registries, resolvers, surfaces, protections),
+  *"editable (where safe)"*, and *provenance* as its scope. These are the first
+  specs for the standing findings `library-07` and `community-23` in
+  `docs/roadmaps/wave-7-walkthrough-findings.md`, which had no design home. The
+  companion operator-facing surface is R6-10. Both new initiatives are **design
+  only so far** — the wave-8 spike shipped an ADR, roadmap entries and beads by
+  explicit operator decision, and no production code.

@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **045**).
+number (next free: **046**).
 
 ## Active
 
@@ -49,6 +49,7 @@ number (next free: **045**).
 | [042](./042-surface-cap-scope-and-testability.md) | Scope of the `orchestrator/` surface cap: `cli/` not capped, additive-optional fields disclose-not-park, export-for-testability | The wave-5 batch-C ratification (13-item queue) |
 | [043](./043-generic-interactive-surface.md) | The generic interactive-surface primitive: one `turnSpec` descriptor field + one generic `interactive-runner.ts` behind a dispatch fork — the one-time ADR-042 generalization that dissolves the recurring per-agent-runner park (Accepted 2026-08-10) | Batch-D D→E bridge; the ADR-042 per-runner park recurred 3× (R4-18/R4-19-F2/R4-21) |
 | [044](./044-read-path-memoization.md) | Read-path memoization: mtime-keyed memos of the single derivation (memory-only, fail-open, byte-identical proof) | The wave-6 perf posture — the derived-never-stored corollary |
+| [045](./045-operator-workspace-and-promotion.md) | The operator workspace (`_local/`, provenance by root) and promotion into forge core (branch + PR, never a commit or a merge) | The ON-2 round-trip design — splits non-committed settings from promote-to-core; re-ratifies no-auto-commit |
 
 ## Retired / folded (numbers stay reserved)
 
