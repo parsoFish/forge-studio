@@ -20,6 +20,9 @@ export type EnqueueDevelopStatus =
   | 'enqueued'
   | 'not-found'
   | 'already-developing'
+  /** W8-A3 (`flows-37`): reachable only when a caller explicitly passes
+   *  `confirmRepoint: false` — the develop hand-off defaults to confirmed. */
+  | 'repoint-requires-confirm'
   /** W7-FIX-A3 (round-2 finding 6): the manifest is in `_queue/done` — a
    *  shipped initiative is never re-run from an operator action. */
   | 'already-done'
@@ -40,9 +43,21 @@ export type EnqueueDevelopResult = {
  *  historical `already-developing` status name preserved. Never throws. */
 export function enqueueDevelopRun(
   initiativeId: string,
-  opts: { queueRoot?: string; allowFinishedSource?: boolean } = {},
+  opts: { queueRoot?: string; allowFinishedSource?: boolean; confirmRepoint?: boolean } = {},
 ): EnqueueDevelopResult {
-  const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, opts);
+  // W8-A3 (`flows-37`): the architect→develop hand-off is the ONE operator
+  // transition where the repoint IS the request. The roadmap surface that
+  // reaches here ("Start development" on a specific planned initiative) names
+  // both the initiative and the target flow, so the operator has already
+  // confirmed exactly what `confirmRepoint` asks about — unlike the generic
+  // Start-Run picker, which disclosed neither. It is a defaulted PARAMETER, not
+  // a hard-coded bypass: a caller that wants the guard passes
+  // `confirmRepoint: false` and gets the refusal (pinned in
+  // enqueue-flow-run-repoint.test.ts).
+  const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, {
+    ...opts,
+    confirmRepoint: opts.confirmRepoint ?? true,
+  });
   return { ...r, status: r.status === 'already-running' ? 'already-developing' : r.status };
 }
 

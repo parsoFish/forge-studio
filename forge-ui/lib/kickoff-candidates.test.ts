@@ -8,11 +8,25 @@
  * indistinguishable from a live one and one click yanked its manifest out
  * of `_queue/done` and re-ran it. Only genuinely startable (queued) runs
  * are candidates; finished/failed/active/gated never are.
+ *
+ * TEST-WORLD AMENDMENT — W8-A3, recorded in `_wave8/lanes/A3-ledger.md`:
+ *
+ *  - `flows-37` (S1): `deriveKickoffCandidates` now takes the flow being
+ *    VIEWED, and every candidate carries the flow it is queued under plus
+ *    whether selecting it is a repoint. The old signature could not express
+ *    the difference, which is why the picker could not disclose it.
+ *  - `flows-25` (S2): the three `canStartFlow` cases that lived at the bottom
+ *    of this file MOVED to `lib/flow-kickoff-render.test.ts`, and one of them
+ *    was pinning the defect — it asserted `initiative-select -> true` while
+ *    that surface renders no launcher at all. It is now asserted against the
+ *    rendered markup instead of against a hand-written enumeration.
  */
 import { test, expect } from 'vitest';
 
-import { deriveKickoffCandidates, canStartFlow } from './kickoff-candidates.ts';
-import type { Flow, Run } from './studio-client.ts';
+import { deriveKickoffCandidates } from './kickoff-candidates.ts';
+import type { Run } from './studio-client.ts';
+
+const VIEWED = 'forge-develop';
 
 function run(over: Partial<Run> & Pick<Run, 'id' | 'initiativeId' | 'status'>): Run {
   return {
@@ -36,8 +50,8 @@ test('only PLANNED (queued) runs are candidates — complete/failed/active/gated
     run({ id: '2026-08-03T00-00-00_INIT-2026-08-03-live', initiativeId: 'INIT-2026-08-03-live', status: 'active' }),
     run({ id: '2026-08-04T00-00-00_INIT-2026-08-04-gated', initiativeId: 'INIT-2026-08-04-gated', status: 'gated' }),
   ];
-  expect(deriveKickoffCandidates(runs)).toEqual([
-    { initiativeId: 'INIT-2026-08-18-add-version-flag', project: 'demo-project' },
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([
+    { initiativeId: 'INIT-2026-08-18-add-version-flag', project: 'demo-project', currentFlowId: 'forge-develop', isRepoint: false },
   ]);
 });
 
@@ -47,36 +61,43 @@ test('dedupes by initiative id and never fabricates a project (null when the run
     run({ id: 'INIT-2026-08-18-a', initiativeId: 'INIT-2026-08-18-a', status: 'planned', flowId: 'onboard-project' }),
     run({ id: 'INIT-2026-08-18-b', initiativeId: 'INIT-2026-08-18-b', status: 'planned', project: 'mdtoc' }),
   ];
-  expect(deriveKickoffCandidates(runs)).toEqual([
-    { initiativeId: 'INIT-2026-08-18-a', project: null },
-    { initiativeId: 'INIT-2026-08-18-b', project: 'mdtoc' },
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([
+    { initiativeId: 'INIT-2026-08-18-a', project: null, currentFlowId: 'forge-develop', isRepoint: false },
+    { initiativeId: 'INIT-2026-08-18-b', project: 'mdtoc', currentFlowId: 'forge-develop', isRepoint: false },
   ]);
 });
 
 test('a run without an initiative id (degraded manifest) is skipped, and no runs → no candidates', () => {
-  expect(deriveKickoffCandidates([run({ id: 'x', initiativeId: '', status: 'planned' })])).toEqual([]);
-  expect(deriveKickoffCandidates([])).toEqual([]);
+  expect(deriveKickoffCandidates([run({ id: 'x', initiativeId: '', status: 'planned' })], VIEWED)).toEqual([]);
+  expect(deriveKickoffCandidates([], VIEWED)).toEqual([]);
 });
 
-// ---- W7-C1 (flows-25): canStartFlow — the honest data-can-start derivation ----
+// ---- W8-A3 (flows-37): the repoint fact, derived per candidate --------------
 //
-// `data-can-start` on the flow monitor used to be `view.flow ? 'true' :
-// 'false'` — "the flow exists", not "a run can be started". A trigger-only
-// flow renders NO launch surface, so automation reading the attribute was
-// told a start was possible when it was not.
+// Every planned initiative on disk carries `flow_id: forge-architect`, so on
+// ANY authored flow's monitor every candidate is a repoint. The picker could
+// not say so, because the candidate had nowhere to carry it.
 
-test('canStartFlow: null flow -> false (nothing to start)', () => {
-  expect(canStartFlow(null)).toBe(false);
+test('flows-37: a candidate queued under another flow is marked isRepoint, and names that flow', () => {
+  const runs: Run[] = [
+    run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'forge-architect' }),
+    run({ id: 'INIT-2026-08-18-beta', initiativeId: 'INIT-2026-08-18-beta', status: 'planned', flowId: 'my-authored-flow' }),
+  ];
+  expect(deriveKickoffCandidates(runs, 'my-authored-flow')).toEqual([
+    { initiativeId: 'INIT-2026-08-18-alpha', project: null, currentFlowId: 'forge-architect', isRepoint: true },
+    { initiativeId: 'INIT-2026-08-18-beta', project: null, currentFlowId: 'my-authored-flow', isRepoint: false },
+  ]);
 });
 
-test('canStartFlow: a trigger-only kickoff renders no launch surface -> false', () => {
-  const flow: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [], kickoff: { kind: 'trigger-only' } };
-  expect(canStartFlow(flow)).toBe(false);
+test('flows-37: the repoint fact is DERIVED per viewed flow — the same run answers differently on two monitors', () => {
+  const runs: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'forge-architect' })];
+  expect(deriveKickoffCandidates(runs, 'forge-architect')[0].isRepoint).toBe(false);
+  expect(deriveKickoffCandidates(runs, 'retro-flow')[0].isRepoint).toBe(true);
 });
 
-test('canStartFlow: declared launchable kinds AND the generic no-kickoff fallback -> true', () => {
-  const base: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [] };
-  expect(canStartFlow({ ...base, kickoff: { kind: 'idea' } })).toBe(true);
-  expect(canStartFlow({ ...base, kickoff: { kind: 'initiative-select' } })).toBe(true);
-  expect(canStartFlow(base)).toBe(true); // no kickoff: block -> generic Start-Run fallback
+test('flows-37: a run reporting no flow of its own has nothing to be taken from → not a repoint', () => {
+  const runs: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: '' })];
+  expect(deriveKickoffCandidates(runs, 'retro-flow')).toEqual([
+    { initiativeId: 'INIT-2026-08-18-alpha', project: null, currentFlowId: null, isRepoint: false },
+  ]);
 });

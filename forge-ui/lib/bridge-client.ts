@@ -680,9 +680,15 @@ export type StartFlowRunResult = {
    *  `startFlowRun` passes `body.status` straight through — the union said it
    *  was impossible, so any exhaustive switch fell to its default branch and a
    *  `never` check could not catch the omission. */
-  status?: 'enqueued' | 'not-found' | 'already-running' | 'already-done' | 'not-planned' | 'error';
+  status?: 'enqueued' | 'not-found' | 'already-running' | 'already-done' | 'not-planned'
+    /** W8-A3 (`flows-37`): the initiative is queued under another flow and the
+     *  operator has not confirmed moving it. Nothing was written. */
+    | 'repoint-requires-confirm'
+    | 'error';
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   error?: string;
 };
 
@@ -693,12 +699,19 @@ export type StartFlowRunResult = {
  * every outcome onto a real HTTP status and every field is meaningful on every
  * outcome — the generic envelope would drop `status`/`detail`).
  */
-export async function startFlowRun(flowId: string, initiativeId: string): Promise<StartFlowRunResult> {
+export async function startFlowRun(
+  flowId: string,
+  initiativeId: string,
+  /** W8-A3 (`flows-37`): the operator's answer to the repoint confirmation.
+   *  Omitted (or false) is what an un-answered start sends — the bridge then
+   *  refuses a cross-flow repoint rather than performing it silently. */
+  opts: { confirmRepoint?: boolean } = {},
+): Promise<StartFlowRunResult> {
   try {
     const res = await bridgeFetch(`/api/flows/${encodeURIComponent(flowId)}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ initiativeId }),
+      body: JSON.stringify({ initiativeId, confirmRepoint: opts.confirmRepoint === true }),
     });
     const body = (await res.json()) as Partial<StartFlowRunResult> & { error?: string; detail?: string };
     if (body.status) {
@@ -707,6 +720,7 @@ export async function startFlowRun(flowId: string, initiativeId: string): Promis
         status: body.status,
         cycleId: body.cycleId,
         flowId: body.flowId,
+        currentFlowId: body.currentFlowId,
         error: body.status === 'enqueued' ? undefined : (body.detail ?? body.error ?? body.status),
       };
     }

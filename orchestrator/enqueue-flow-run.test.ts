@@ -112,10 +112,18 @@ test('enqueueFlowRun: ready-for-review with the SAME flow_id as the target → a
   });
 });
 
-test('enqueueFlowRun: ready-for-review with a DIFFERENT flow_id → enqueued (hand-off fall-through)', () => {
+// TEST-WORLD AMENDMENT — W8-A3 (`flows-37` / `forge-chm`), recorded in
+// `_wave8/lanes/A3-ledger.md`. This test pinned the DIFFERENT-flow hand-off as
+// an unconditional fall-through, which is precisely the unconditional repoint
+// flows-37 reproduced. The fall-through itself is still correct — a
+// ready-for-review manifest from another flow IS runnable — but it is now a
+// repoint like any other and needs the caller to confirm it. The state guard
+// (ready-for-review does not short-circuit to `already-running` for a different
+// flow) is what this test exists to protect, and it still does.
+test('enqueueFlowRun: ready-for-review with a DIFFERENT flow_id → enqueued (hand-off fall-through, on a confirmed repoint)', () => {
   withTmp((queueRoot) => {
     seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'forge-architect' }));
-    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, confirmRepoint: true });
 
     assert.equal(result.status, 'enqueued');
     const paths = getPaths(queueRoot);

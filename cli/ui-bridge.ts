@@ -2872,6 +2872,12 @@ async function handleHttp(
       sendJson(res, 400, { error: 'initiativeId required' }, origin);
       return;
     }
+    // W8-A3 (`flows-37`): the operator's confirmation of a cross-flow repoint,
+    // forwarded verbatim. `=== true` and not a truthiness test — a guard that
+    // accepts whatever JSON happens to be truthy ("true", 1, {}) is one an
+    // accidental client serialization walks straight through. The RULE is the
+    // enqueue's; this line only carries the operator's answer to it.
+    const confirmRepoint = (body as Record<string, unknown>)?.['confirmRepoint'] === true;
     try {
       // W7-FIX-A3 (A3-01, round-2 finding 6): the OPERATOR route refuses a
       // shipped initiative — and the rule now lives ON `enqueueFlowRun`
@@ -2881,11 +2887,12 @@ async function handleHttp(
       // still yanking a merged manifest out of `done/`. The route only maps
       // the status onto its HTTP code; the id rule + the fs probe are the
       // enqueue's own (one INIT predicate, no third copy of the regex here).
-      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot });
+      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot, confirmRepoint });
       const httpStatus =
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :
-        result.status === 'already-running' || result.status === 'already-done' || result.status === 'not-planned' ? 409 :
+        result.status === 'already-running' || result.status === 'already-done' ||
+          result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ? 409 :
         500;
       sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {

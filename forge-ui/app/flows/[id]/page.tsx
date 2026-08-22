@@ -23,7 +23,8 @@ import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } fr
 import { builderSnapshot, savedNodesCarryPositions } from '@/lib/flow-builder-dirty';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
-import { deriveKickoffCandidates, canStartFlow } from '@/lib/kickoff-candidates';
+import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
+import { canStartFlow } from '@/lib/kickoff-surface';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -451,7 +452,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // (planned) initiatives; a finished or failed one is never offered (the
   // picker used to list merged initiatives, and Start Run silently yanked
   // them out of _queue/done — see lib/kickoff-candidates.ts).
-  const kickoffCandidates: KickoffCandidate[] = deriveKickoffCandidates(allQueueRuns);
+  // W8-A3 (flows-37): the viewed flow id is what tells a candidate queued
+  // under ANOTHER flow apart from one of this flow's own.
+  const kickoffCandidates: KickoffCandidate[] = deriveKickoffCandidates(allQueueRuns, id);
 
   const handleResumeRun = useCallback(async () => {
     if (!activeRun) return;
