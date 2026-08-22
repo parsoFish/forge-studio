@@ -174,6 +174,107 @@ function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
   }
 }
 
+// ---------------------------------------------------------------------------
+// w8-a1 (bead forge-7pa) — the package.json CONDITIONAL FOURTH scaffold
+// target.
+//
+// cli/preflight.ts's checkC1 (READ ONLY from this module — that file is
+// outside this worker's fence) now fails a package-manager-shaped quality
+// gate (`npm`/`yarn`/`pnpm`/`npx`/`bun`/`bunx` as the first token) when the
+// project dir has no package.json: with none there, npm's own ancestor-
+// package.json walk resolves the command against an ENCLOSING package.json
+// (forge's own root, when the project lives under forge's `projects/`) — a
+// false green on the wrong repo, the exact defect this campaign closes. The
+// onboarding form's own default gate is `npm test`, so tightening C1 alone
+// left every from-scratch JS project born hard-failing (bd forge-7pa,
+// `cli/onboard-born-green.test.ts`).
+//
+// `isPackageManagerShaped`/`resolveScriptName` below are DELIBERATE,
+// byte-for-byte mirrors of the same-named functions in `cli/preflight.ts`
+// (its own `checkC1`, `PACKAGE_MANAGER_TOKENS`, `PM_NATIVE_SUBCOMMANDS`).
+// preflight.ts does not export either — it is outside this worker's fence
+// and must not be edited — so this is a deliberate, narrow duplication
+// rather than a shared import; a drift between the two would silently
+// re-break the invariant (the scaffold writing a package.json C1 doesn't
+// recognise, or a C1-recognised shape the scaffold fails to script-name).
+const PACKAGE_MANAGER_TOKENS = new Set(['npm', 'yarn', 'pnpm', 'npx', 'bun', 'bunx']);
+
+/** True iff `cmd`'s first token invokes a package manager (case-insensitive).
+ *  Mirrors `cli/preflight.ts`'s `isPackageManagerShaped` exactly. */
+function isPackageManagerShaped(cmd: string): boolean {
+  const first = cmd.trim().split(/\s+/)[0] ?? '';
+  return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
+}
+
+// pm-native verbs a bare `yarn <token>` / `pnpm <token>` must NOT be mistaken
+// for a project script name. Mirrors `cli/preflight.ts`'s
+// `PM_NATIVE_SUBCOMMANDS` exactly.
+const PM_NATIVE_SUBCOMMANDS = new Set([
+  'run', 'install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'update', 'upgrade', 'up',
+  'exec', 'dlx', 'init', 'publish', 'link', 'unlink', 'list', 'ls', 'outdated', 'audit', 'why',
+  'info', 'view', 'config', 'cache', 'prune', 'pack', 'create', 'dedupe', 'patch', 'patch-commit',
+  'patch-remove', 'deploy', 'rebuild', 'store', 'server', 'root', 'licenses', 'doctor', 'setup',
+  'tag', 'team', 'owner', 'policies', 'import', 'global', 'node', 'env', 'workspace', 'workspaces',
+  'login', 'logout', 'whoami', 'version', 'versions', 'help', '-v', '--version', '-h', '--help',
+]);
+
+/**
+ * Resolves the package.json `scripts` key a declared gate would invoke, or
+ * `null` when the shape can't be mapped to one. Mirrors `cli/preflight.ts`'s
+ * `resolveScriptName` exactly — SAME mapped shapes: bare `npm test`/
+ * `yarn test`/`pnpm test` → "test"; `npm run <name>`/`yarn run <name>`/
+ * `pnpm run <name>` → "<name>"; `yarn <name>`/`pnpm <name>` (name not a known
+ * pm subcommand) → "<name>". `npx`/`bunx`/`bun` and anything else → null.
+ */
+function resolveScriptName(cmd: string): string | null {
+  const toks = cmd.trim().split(/\s+/).filter(Boolean);
+  const runner = (toks[0] ?? '').toLowerCase();
+  if (runner !== 'npm' && runner !== 'yarn' && runner !== 'pnpm') return null;
+  const first = (toks[1] ?? '').toLowerCase();
+  if (!first) return null;
+  if (first === 'test') return 'test';
+  if (first === 'run') return toks[2] ?? null;
+  if (runner !== 'npm' && !PM_NATIVE_SUBCOMMANDS.has(first)) return toks[1]!;
+  return null;
+}
+
+/**
+ * True iff `scaffoldContractArtifacts` would write a package.json at
+ * `projectRoot`'s root for the given declared quality-gate argv. SHARED
+ * between the writer (its own write site, below) and
+ * `checkContractArtifactContainment` (the pure pre-check) — the SAME
+ * predicate the `.gitignore`/`needsGitInit` precedent uses, so the guard and
+ * the write can never disagree about when this file is created:
+ *
+ *   - no declared gate, or its command is NOT package-manager-shaped → false
+ *     (scoped to the C1 npm/yarn/pnpm/npx/bun/bunx shape — never a blanket
+ *     "every project gets a package.json");
+ *   - `projectRoot/package.json` already exists                     → false
+ *     (never clobber an operator's file — same rule as roadmap.md);
+ *   - `needsGitInit(projectRoot, forgeRoot)` is false                → false
+ *     (the THIRD conjunct — never litter into a repo forge did not itself
+ *     just create: an operator onboarding their OWN existing checkout — own
+ *     work-tree root, or enclosed by their own non-forge repo — with the
+ *     onboarding form's JS-shaped default gate left in place must get C1's
+ *     honest, actionable failure ("add a package.json … or declare a gate
+ *     that does not shell out to a package manager"), not a fabricated
+ *     package.json dropped into a repo whose language it may not even
+ *     match. Mirrors the SAME `.gitignore` precedent one bullet up — that
+ *     hygiene file is likewise written ONLY on the branches that create the
+ *     repo);
+ *   - otherwise                                                      → true.
+ */
+function needsPackageJsonScaffold(
+  projectRoot: string,
+  forgeRoot: string,
+  qualityGateCmd: readonly string[] | undefined,
+): boolean {
+  if (!qualityGateCmd || qualityGateCmd.length === 0) return false;
+  if (!isPackageManagerShaped(qualityGateCmd.join(' '))) return false;
+  if (existsSync(join(projectRoot, 'package.json'))) return false;
+  return needsGitInit(projectRoot, forgeRoot);
+}
+
 /**
  * PURE containment pre-check (SEC-03 round 4, T1's two-phase
  * check-then-write ruling) for every path `POST /api/studio/projects`
@@ -182,11 +283,13 @@ function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
  * scaffold's `needsGitInit` decision says the repo would be created by this
  * onboard, the sole condition under which the scaffold writes it; review F2:
  * guarding it unconditionally false-rejected own-repo checkouts carrying a
- * dangling-symlink `.gitignore` the route was never going to touch), plus
- * `scaffoldContractArtifacts`'s two unconditional targets (`roadmap.md`,
- * `<artifactRoot>/brain/profile.md`), computed via the SAME
- * `contractArtifactTargets` `scaffoldContractArtifacts` itself uses. Zero
- * side effects: no `mkdirSync`, no `writeFileSync`.
+ * dangling-symlink `.gitignore` the route was never going to touch), the
+ * w8-a1 conditional `package.json` (`needsPackageJsonScaffold` — same
+ * shared-predicate shape as `.gitignore`), plus `scaffoldContractArtifacts`'s
+ * two unconditional targets (`roadmap.md`, `<artifactRoot>/brain/
+ * profile.md`), computed via the SAME `contractArtifactTargets`
+ * `scaffoldContractArtifacts` itself uses. Zero side effects: no
+ * `mkdirSync`, no `writeFileSync`.
  *
  * When `projectRoot` does not exist yet (the common brand-new-onboard
  * case), nothing beneath it could carry a pre-planted symlink —
@@ -200,7 +303,7 @@ function needsGitInit(projectRoot: string, forgeRoot: string): boolean {
  * class the write-time guards throw, so one catch clause at the call site
  * covers both.
  */
-function checkContractArtifactContainment(projectRoot: string, forgeRoot: string): void {
+function checkContractArtifactContainment(projectRoot: string, forgeRoot: string, qualityGateCmd?: readonly string[]): void {
   if (!existsSync(projectRoot)) return;
 
   const forgeJsonPath = join(projectRoot, '.forge', 'project.json');
@@ -220,6 +323,20 @@ function checkContractArtifactContainment(projectRoot: string, forgeRoot: string
   if (needsGitInit(projectRoot, forgeRoot) && !existsSync(join(projectRoot, '.gitignore'))) {
     const guard = resolveGuardedPath(projectRoot, ['.gitignore']);
     if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking .gitignore');
+  }
+
+  // w8-a1: `package.json` joined the scaffold's write set as its CONDITIONAL
+  // FOURTH target — written only when `needsPackageJsonScaffold` says so
+  // (the declared gate is package-manager-shaped, no package.json already
+  // exists, AND the scaffold would itself be creating the repo — never into
+  // an operator's own pre-existing checkout). Same Finding-B rule as
+  // `.gitignore` immediately above: guard ONLY the paths the route may
+  // actually write, via the SAME shared predicate the write site uses, so a
+  // project whose package.json will never be written is never false-rejected
+  // here.
+  if (needsPackageJsonScaffold(projectRoot, forgeRoot, qualityGateCmd)) {
+    const guard = resolveGuardedPath(projectRoot, ['package.json']);
+    if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking package.json');
   }
 
   const { roadmap, profile } = contractArtifactTargets(projectRoot);
@@ -273,10 +390,28 @@ function checkContractArtifactContainment(projectRoot: string, forgeRoot: string
  * never reaches `resolveGuardedPath` at all, so it can never be
  * false-rejected for a write that was never going to happen.
  *
+ * w8-a1 (bd forge-7pa): a CONDITIONAL FOURTH target, `package.json`, joins
+ * the write set — mirroring the `.gitignore` precedent exactly rather than
+ * `roadmap.md`/`profile.md`'s unconditional pair: written only when
+ * `needsPackageJsonScaffold(projectRoot, forgeRoot, opts.qualityGateCmd)`
+ * says so (the declared gate is package-manager-shaped, no package.json
+ * already exists, AND this call is itself the one creating the repo — the
+ * SAME `needsGitInit` conjunct `.gitignore` uses, so an operator's own
+ * pre-existing checkout never gets a fabricated package.json), guarded
+ * inline at its own write site through the SAME
+ * `resolveGuardedPath(projectRoot, ['package.json'])` call every other
+ * leaf here uses (the leaf itself included — a dangling or symlinked
+ * package.json is REFUSED, never written through).
+ *
  * Returns the list of relative paths actually created (empty if everything was
  * already present), so the caller can tell the operator what it touched.
  */
-export function scaffoldContractArtifacts(projectRoot: string, name: string, forgeRoot: string): string[] {
+export function scaffoldContractArtifacts(
+  projectRoot: string,
+  name: string,
+  forgeRoot: string,
+  opts: { id?: string; qualityGateCmd?: readonly string[] } = {},
+): string[] {
   const created: string[] = [];
 
   // git init decision — three-way, not a boolean. W7-B6 (projects-11): the
@@ -300,6 +435,15 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
   // pre-check so the `.gitignore` guard and the `.gitignore` write can never
   // disagree about when the write happens (review F2).
   const needsInit = needsGitInit(projectRoot, forgeRoot);
+  // w8-a1: decided HERE, before the mutating `git init` a few lines below —
+  // `needsPackageJsonScaffold` calls `needsGitInit` internally, and calling
+  // it again AFTER `git init` has already run would see `projectRoot` as
+  // its OWN repo by then (the "already its own repo" branch) and silently
+  // flip to false, even on the from-nothing onboard this whole change exists
+  // to fix. Cached once, at the same pre-mutation instant `needsInit` above
+  // was computed, and reused verbatim at the write site below — never
+  // re-queried after the side effect.
+  const scaffoldPackageJson = needsPackageJsonScaffold(projectRoot, forgeRoot, opts.qualityGateCmd);
   let repoInited = false;
   if (needsInit) {
     try {
@@ -384,6 +528,46 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string, for
       'utf8',
     );
     created.push(profile.relPath);
+  }
+
+  // package.json (w8-a1, bd forge-7pa) — the CONDITIONAL FOURTH target,
+  // mirroring the `.gitignore` precedent exactly (not folded into
+  // `contractArtifactTargets`, whose docstring reserves that function for
+  // the two UNCONDITIONAL targets only). Written ONLY when
+  // `needsPackageJsonScaffold` said so — see that function's docstring for
+  // the shared-predicate rule with `checkContractArtifactContainment`
+  // above, including its third conjunct (never litter a package.json into
+  // an operator's own pre-existing repo — only when THIS call is itself
+  // creating the repo). `scaffoldPackageJson` is the CACHED decision from
+  // above — not a fresh call — see that variable's own comment for why.
+  // Placed before the `repoInited` commit below so a repo this call creates
+  // carries the package.json in its first commit too.
+  if (scaffoldPackageJson) {
+    const pkgGuard = resolveGuardedPath(projectRoot, ['package.json']);
+    if (!pkgGuard.ok) throw new ScaffoldContainmentError('path containment check failed while scaffolding package.json');
+    // Derive the script name the SAME way checkC1 does (resolveScriptName,
+    // mirrored above) so C1's script-existence check is satisfied by
+    // construction. A shape C1 cannot map to a script name (`npx …`,
+    // `bunx …`, bare `bun …`) still gets the file — the package.json-exists
+    // half alone is what stops npm's ancestor walk — with an empty
+    // `scripts` object; inventing a script name C1 would never look for
+    // would be dishonest content, not a fix.
+    const scriptName = resolveScriptName(opts.qualityGateCmd!.join(' '));
+    const scripts: Record<string, string> = {};
+    if (scriptName !== null) {
+      // Fail HONESTLY rather than exit 0: a freshly scaffolded project has
+      // no tests. A script that silently passed would recreate, one layer
+      // down, the exact false-green this whole change closes — package.json
+      // would resolve locally, but "pass" nothing. This is npm init's own
+      // long-standing placeholder body, not a bespoke string.
+      scripts[scriptName] = 'echo "Error: no test specified" && exit 1';
+    }
+    writeFileSync(
+      pkgGuard.realPath,
+      `${JSON.stringify({ name: opts.id ?? name, version: '0.0.0', private: true, scripts }, null, 2)}\n`,
+      'utf8',
+    );
+    created.push('package.json');
   }
 
   // projects-37 (S1): a repo THIS call created is UNBORN until something
@@ -1580,7 +1764,7 @@ export async function handleStudioWriteRoutes(
       // safe, so `seedProjectBrain` can be restored to writing where it
       // always made most sense — after the project directory exists.
       try {
-        checkContractArtifactContainment(projectRoot, ctx.forgeRoot);
+        checkContractArtifactContainment(projectRoot, ctx.forgeRoot, qualityGate);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
@@ -1634,7 +1818,7 @@ export async function handleStudioWriteRoutes(
       // below), never surface it as an unrelated 500.
       let scaffoldedLocal: string[];
       try {
-        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot);
+        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name, ctx.forgeRoot, { id, qualityGateCmd: qualityGate });
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
