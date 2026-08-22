@@ -753,3 +753,39 @@ test('F10: argAt returns absent (not a bogus expression) when a call has fewer a
   const findings = analyzeModule(oneArg, 'cli/ui-bridge.ts');
   assert.equal(findings.length, 1, `a 1-arg renameSync yields exactly one finding, got ${JSON.stringify(findings)}`);
 });
+
+test('F11: argAt survives the shapes real code actually uses — multi-line calls, trailing commas, nested call arguments', () => {
+  // Kills: an argAt that splits on commas naively. Real bridge code writes
+  // two-path calls across several lines and nests join()/resolve() inside the
+  // argument, both of which contain commas at a deeper paren depth. A scanner
+  // that mis-parses these reports a wrong path expression and silently
+  // mis-classifies, which is worse than not scanning the sink at all.
+  const multiLine = fn(
+    'export function handle(body) {',
+    '  renameSync(',
+    '    join(logsRoot, "template.json"),',
+    '    join(projectsRoot, body.project, "out.json"),',
+    '  );',
+    '}',
+  );
+  const ml = analyzeModule(multiLine, 'cli/ui-bridge.ts');
+  assert.equal(ml.length, 1, `multi-line two-path: the tainted DESTINATION only, got ${JSON.stringify(ml)}`);
+  assert.equal(ml[0].sink, 'renameSync');
+  assert.match(ml[0].why, /body\.project/);
+
+  const trailingComma = fn(
+    'export function handle(body) {',
+    '  rmSync(join(logsRoot, body.runId), { recursive: true, force: true },);',
+    '}',
+  );
+  assert.equal(analyzeModule(trailingComma, 'cli/ui-bridge.ts').length, 1, 'a trailing comma does not invent an extra path argument');
+
+  const nestedArgs = fn(
+    'export function handle(body) {',
+    '  cpSync(resolve(a, join(b, "x")), join(projectsRoot, body.project));',
+    '}',
+  );
+  const na = analyzeModule(nestedArgs, 'cli/ui-bridge.ts');
+  assert.equal(na.length, 1, `commas nested inside a call argument do not shift the split, got ${JSON.stringify(na)}`);
+  assert.equal(na[0].sink, 'cpSync');
+});
