@@ -21,7 +21,6 @@ related_themes:
   - holistic-metrics-onboarding
   - parametric-design-search
   - human-directed-work-as-initiatives
-  - forge-current-architecture-as-built
 ---
 
 # Exploration vs implementation initiatives

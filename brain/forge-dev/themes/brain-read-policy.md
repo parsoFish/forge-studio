@@ -60,11 +60,7 @@ rationale no longer applies. Brain 3 is *supplemental context* (project
 file layout, testing norms); the WI/manifest remains the single source
 of *intent*. Advisory, not mandatory — no runtime gate added.
 
-**Path correction (2026-07-17, R5-07-F6):** at the time of that amendment
-Brain 3 lived inside the managed project's repo at `projects/<name>/brain/`;
-[ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md)
-(2026-06-20) centralised it into the forge repo at
-`brain/projects/<name>/themes/` — the location the dev-loop/reviewer now read.
+**Path correction (2026-07-17, R5-07-F6):** [ADR 035](../../../docs/decisions/035-forge-owned-central-artifacts.md) centralised Brain 3 into the forge repo at `brain/projects/<name>/themes/`.
 
 **How reads are bounded (guardrail).** Every permitted brain read must
 go through the built navigation metadata first — `INDEX.md`, the
@@ -81,7 +77,7 @@ advisory). Reflector ↔ brain.
 
 > **R1-01 (2026-07-19):** the KB `binding` contract changed KB *scoping*, not this asymmetric who-reads-what policy (ADR-010, Q5-B) — guarded by `orchestrator/kb-read-policy-guard.test.ts`.
 
-> **R1-06 (2026-08-09):** band-scoped KB bindings DO change who-reads-what — deliberately. `review-band` KBs grant the reviewer a per-KB advisory read; Studio creation/maintenance sessions are a second, structure-only write class (no ingest — decision 3). Guarded by the descriptor-driven extension of `orchestrator/kb-read-policy-guard.test.ts`. See ADR-010 (2026-08-09 amendment) + ADR-027 (R1-06 amendment).
+> **R1-06 (2026-08-09):** `review-band` KBs grant reviewers advisory read; see ADR-010 + ADR-027.
 
 ## Sources
 
