@@ -206,6 +206,14 @@ function isPackageManagerShaped(cmd: string): boolean {
   return PACKAGE_MANAGER_TOKENS.has(first.toLowerCase());
 }
 
+/** forge-hoq — type guard for a PUT body's `allowedTools`/`disallowedTools`:
+ *  an array of strings, nothing looser. Used to reject a malformed explicit
+ *  value (400) rather than silently downgrading it to "field omitted" —
+ *  same rigor as the `materials` field's explicit-shape check above. */
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
 // pm-native verbs a bare `yarn <token>` / `pnpm <token>` must NOT be mistaken
 // for a project script name. Mirrors `cli/preflight.ts`'s
 // `PM_NATIVE_SUBCOMMANDS` exactly.
@@ -1481,6 +1489,37 @@ export async function handleStudioWriteRoutes(
         ? (b['materials'] as string[])
         : existing?.materials;
 
+      // forge-hoq — allowedTools/disallowedTools: SAME inherit-when-omitted /
+      // explicit-replaces convention as `materials` above. `disallowed-tools`
+      // is the only real fence against a skill reaching the subagent-spawn
+      // tool (cli/studio-lint-tool-fence.ts) — this is a security control, not
+      // cosmetic state, so a malformed explicit value is REJECTED (400, file
+      // byte-unchanged) rather than silently downgraded to "omitted" (the
+      // same declared-data-fails-open shape `materials` already guards
+      // against). The field must be read from the body at all: a BRAND-NEW
+      // agent (starter-derived via applyStarter, or duplicateAgentState) has
+      // no `existing` to inherit from, so `existing?.disallowedTools ?? []`
+      // alone silently strips the fence on every new-agent save — forge-ui's
+      // buildAgentPutBody now sends both fields on every save specifically so
+      // this path has something to read.
+      for (const field of ['allowedTools', 'disallowedTools'] as const) {
+        if (b[field] !== undefined && !isStringArray(b[field])) {
+          sendJson(
+            res,
+            400,
+            { error: `${field} must be an array of strings, got ${b[field] === null ? 'null' : typeof b[field]}` },
+            origin,
+          );
+          return true;
+        }
+      }
+      const allowedTools: string[] = isStringArray(b['allowedTools'])
+        ? b['allowedTools']
+        : existing?.allowedTools ?? [];
+      const disallowedTools: string[] = isStringArray(b['disallowedTools'])
+        ? b['disallowedTools']
+        : existing?.disallowedTools ?? [];
+
       const merged: AgentDefinition = {
         slug,
         name,
@@ -1510,8 +1549,8 @@ export async function handleStudioWriteRoutes(
         brainAccess,
         interactivity,
         budgets: existing?.budgets ?? {},
-        allowedTools: existing?.allowedTools ?? [],
-        disallowedTools: existing?.disallowedTools ?? [],
+        allowedTools,
+        disallowedTools,
         body: body_text,
         // 2026-08-05 adversarial-review round 2, finding C/10 claimed
         // `existing?.library ?? true` "silently flips" an agent whose on-disk

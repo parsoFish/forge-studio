@@ -230,6 +230,92 @@ test('PUT /api/studio/agents/write-agent preserves allowedTools even when not in
 });
 
 // ---------------------------------------------------------------------------
+// forge-hoq — the Agent Builder round trip must not strip disallowed-tools
+// (the ONLY real fence against Task/Agent subagent-spawn — see
+// cli/studio-lint-tool-fence.ts). T1's ruling (_wave8/ledger.md): not
+// rendering the field in the builder UI is a UI choice; deleting it on save
+// is data loss. forge-ui's buildAgentPutBody now sends allowedTools/
+// disallowedTools on every save (forge-hoq fix); the bridge must actually
+// consume them for a BRAND-NEW agent (no `existing` to fall back to — the
+// applyStarter / duplicateAgentState paths), while still preserving the
+// on-disk value when the body omits the field (an older/other client).
+// ---------------------------------------------------------------------------
+
+test('PUT /api/studio/agents/new-fenced-agent (create:true) with disallowedTools in body writes the fence to a BRAND-NEW agent (forge-hoq)', async () => {
+  // Mirrors forge-ui's applyStarter → parseAgentToState → buildAgentPutBody:
+  // a new slug, no existing SKILL.md, but the request body carries the
+  // fenced starter's disallowed-tools.
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/new-fenced-agent`,
+    makePutAgentBody({
+      create: true,
+      allowedTools: ['WebFetch', 'WebSearch'],
+      disallowedTools: ['WebFetch', 'WebSearch', 'Task', 'Agent'],
+    }),
+  );
+  assert.equal(res.status, 200, await res.text());
+
+  const skillMd = readFileSync(join(forgeRoot, 'skills', 'new-fenced-agent', 'SKILL.md'), 'utf8');
+  const parsed = matter(skillMd);
+  assert.deepEqual(parsed.data['disallowed-tools'], ['WebFetch', 'WebSearch', 'Task', 'Agent'], 'disallowed-tools carried to the new agent');
+  assert.deepEqual(parsed.data['allowed-tools'], ['WebFetch', 'WebSearch'], 'allowed-tools carried to the new agent');
+});
+
+test('PUT /api/studio/agents/write-agent explicit disallowedTools in body is READ (not just coincidentally matched to existing)', async () => {
+  // On-disk starts with an EMPTY fence; the body explicitly declares one.
+  // If the bridge were still ignoring the body (falling back to `existing`
+  // unconditionally, the pre-fix behaviour), this would stay [].
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/write-agent`,
+    makePutAgentBody({ disallowedTools: ['Task', 'Agent'] }),
+  );
+  assert.equal(res.status, 200, await res.text());
+
+  const skillMd = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  const parsed = matter(skillMd);
+  assert.deepEqual(parsed.data['disallowed-tools'], ['Task', 'Agent'], 'the body-declared fence is written, not silently discarded');
+});
+
+test('PUT /api/studio/agents/write-agent — the exact load → edit unrelated field → save round trip preserves a fence already on disk', async () => {
+  // Reset to a fixture that actually carries a fence, so this test can
+  // distinguish "preserved" from "coincidentally empty on both sides".
+  writeFileSync(
+    join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'),
+    makeAgentSkillMd().replace('disallowed-tools: []', 'disallowed-tools:\n  - Task\n  - Agent'),
+  );
+
+  // The exact builder flow: load (disallowedTools: [Task, Agent] arrives via
+  // GET), edit something UNRELATED (purpose, via makePutAgentBody's default
+  // override), save. The saved body carries disallowedTools unchanged from
+  // what was loaded — this is what buildAgentPutBody now does on every save.
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/write-agent`,
+    makePutAgentBody({ disallowedTools: ['Task', 'Agent'] }),
+  );
+  assert.equal(res.status, 200, await res.text());
+
+  const skillMd = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  const parsed = matter(skillMd);
+  assert.deepEqual(parsed.data['disallowed-tools'], ['Task', 'Agent'], 'the fence survives an edit of an unrelated field');
+});
+
+test('PUT /api/studio/agents/write-agent with a malformed disallowedTools (not an array) → 400, file UNCHANGED', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const originalContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/write-agent`,
+    makePutAgentBody({ disallowedTools: 'Task' }),
+  );
+  assert.equal(res.status, 400);
+
+  const afterContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  assert.equal(afterContent, originalContent, 'SKILL.md must be unchanged after a malformed disallowedTools 400');
+});
+
+// ---------------------------------------------------------------------------
 // PUT /api/studio/agents/:slug — invalid body → 400, file UNCHANGED
 // ---------------------------------------------------------------------------
 

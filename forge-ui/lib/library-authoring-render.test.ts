@@ -213,3 +213,45 @@ test('duplicateAgentState clears the slug and marks the name as a copy', () => {
   expect(dup.name).toBe('Source Agent (copy)');
   expect(dup.skills).toEqual(['s1']);
 });
+
+// ---------------------------------------------------------------------------
+// forge-hoq — the builder must PRESERVE disallowed-tools (and allowed-tools)
+// across a full round trip, whether or not it renders them (ReadOnlyFields
+// deliberately does not — that is a UI choice; dropping the field on save is
+// data loss, per T1's ruling in _wave8/ledger.md). Before this fix,
+// buildAgentPutBody omitted both fields from the PUT body entirely, so a new
+// agent authored from a fenced starter (applyStarter → parseAgentToState →
+// buildAgentPutBody, forge-ui/app/agents/[id]/page.tsx:245-250/460) or a
+// duplicate of a fenced agent (duplicateAgentState) landed on disk UNFENCED
+// — cli/studio-lint-tool-fence.ts's disallowed-tools rule has nothing to
+// find, because the field never reached the bridge at all.
+const FENCED_AGENT_FIXTURE: Agent = {
+  ...AGENT_FIXTURE,
+  id: 'fenced-source-agent',
+  name: 'Fenced Source Agent',
+  allowedTools: ['WebFetch', 'WebSearch'],
+  disallowedTools: ['WebFetch', 'WebSearch', 'Task', 'Agent'],
+} as unknown as Agent;
+
+test('buildAgentPutBody carries allowedTools/disallowedTools through on a plain edit (create:false)', () => {
+  const state = parseAgentToState(FENCED_AGENT_FIXTURE);
+  const body = buildAgentPutBody(state, { create: false });
+  expect(body['allowedTools']).toEqual(['WebFetch', 'WebSearch']);
+  expect(body['disallowedTools']).toEqual(['WebFetch', 'WebSearch', 'Task', 'Agent']);
+});
+
+test('buildAgentPutBody carries allowedTools/disallowedTools through on a starter-derived new agent (create:true) — the applyStarter path', () => {
+  // Mirrors forge-ui/app/agents/[id]/page.tsx's applyStarter(): the builder
+  // state is seeded from a fenced starter with the slug cleared, then saved
+  // as a brand-new agent.
+  const state = { ...parseAgentToState(FENCED_AGENT_FIXTURE), slug: '' };
+  const body = buildAgentPutBody(state, { create: true });
+  expect(body['create']).toBe(true);
+  expect(body['disallowedTools']).toEqual(['WebFetch', 'WebSearch', 'Task', 'Agent']);
+});
+
+test('duplicateAgentState + buildAgentPutBody carries disallowedTools through on a duplicate save', () => {
+  const dup = duplicateAgentState(FENCED_AGENT_FIXTURE);
+  const body = buildAgentPutBody(dup, { create: true });
+  expect(body['disallowedTools']).toEqual(['WebFetch', 'WebSearch', 'Task', 'Agent']);
+});

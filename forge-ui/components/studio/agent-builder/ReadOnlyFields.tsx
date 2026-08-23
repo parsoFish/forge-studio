@@ -11,8 +11,19 @@
 type Props = {
   phase: string;
   allowedTools: string[];
-  // A4: disallowed-tools are no longer surfaced — anything not allowed is
-  // implicitly disallowed, so a separate list only added confusion.
+  // A4: disallowed-tools are not RENDERED here — that half of the original
+  // claim ("a separate list only added confusion") still holds as a UI
+  // choice. The other half does not: forge-hoq (2026-08-23) found the old
+  // wording here — "anything not allowed is implicitly disallowed" — is
+  // false at runtime. No production spawn site sets `options.tools`
+  // (cli/studio-lint-tool-fence.ts's docstring verifies this at every
+  // enforcement site), so `allowed-tools` is advisory only and NOTHING is
+  // implicitly disallowed; `disallowed-tools` is the only field that
+  // actually removes a tool (notably Task/Agent, the subagent-spawn tool)
+  // from an agent's reach. Not rendering the field is fine; the builder's
+  // save path (agent-authoring-view.ts's buildAgentPutBody) must still
+  // carry it through on every save so a round trip can never silently
+  // strip it.
 };
 
 export function ReadOnlyFields({ phase, allowedTools }: Props) {

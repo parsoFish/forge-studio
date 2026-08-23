@@ -91,7 +91,21 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
 
 /** Flat builder state → the PUT body. `create: true` rides ONLY when the
  *  caller is minting a new agent — an update must never carry it (a stray
- *  create flag on an edit would 409 every save of an existing agent). */
+ *  create flag on an edit would 409 every save of an existing agent).
+ *
+ *  forge-hoq: `allowedTools`/`disallowedTools` ride on EVERY save, not just
+ *  edits — these are SKILL.md-authored, read-only in the builder UI (ADR-027
+ *  A4: not surfaced for editing), but "not editable" is a UI choice and
+ *  "not preserved" is data loss. Before this fix the PUT body omitted both
+ *  fields entirely, so a brand-new agent minted from a fenced starter
+ *  (applyStarter, forge-ui/app/agents/[id]/page.tsx) or a duplicate of a
+ *  fenced agent (duplicateAgentState below) landed on disk with NO
+ *  disallowed-tools — the bridge's PUT merge (cli/bridge-studio-writes.ts)
+ *  has nothing in the body to fall back to `existing` FROM, because there is
+ *  no `existing` for a brand-new slug. The bridge still decides
+ *  explicit-body-value-wins vs inherit-when-omitted (same convention as
+ *  `materials`); this function's job is only to make sure the value the
+ *  builder loaded is actually offered. */
 export function buildAgentPutBody(state: AgentBuilderState, opts: { create: boolean }): Record<string, unknown> {
   return {
     ...(opts.create ? { create: true } : {}),
@@ -101,6 +115,8 @@ export function buildAgentPutBody(state: AgentBuilderState, opts: { create: bool
     interactivity: state.interactivity,
     brainAccess: state.brainAccess,
     materials: state.materials,
+    allowedTools: state.allowedTools,
+    disallowedTools: state.disallowedTools,
     composition: {
       skills: state.skills,
       tools: state.tools,
