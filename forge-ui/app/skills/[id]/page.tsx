@@ -303,7 +303,7 @@ export default function SkillDetailPage() {
 // SkillDetailBody
 // ---------------------------------------------------------------------------
 
-function SkillDetailBody({
+export function SkillDetailBody({
   detail,
   approving,
   approveError,
@@ -380,7 +380,17 @@ function SkillDetailBody({
         </section>
       )}
 
-      {detail.trust === 'draft' && detail.scan && (
+      {/* W8-B4 (library-36): this used to be `detail.trust === 'draft' &&
+          detail.scan` — the SECOND half of that guard is why widening only
+          the trust check would not have been enough: the bridge only ever
+          populates `scan` for a draft (cli/bridge-studio-skills.ts, "the scan
+          is drafts-only"), so `needs-review` NEVER carries one. The scan
+          preview/report below stays scan-gated (draft-only, by design); the
+          Approve control itself is gated on TRUST alone so a needs-review
+          skill — dropped after an edit, a hash drift, or a tampered/
+          unregistered install — gets the same way back to composable a draft
+          always had, mirroring `app/hooks/[id]/page.tsx`'s `!resolved` gate. */}
+      {(detail.trust === 'draft' || detail.trust === 'needs-review') && (
         <section
           data-section="approval-gate"
           style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}
@@ -388,34 +398,38 @@ function SkillDetailBody({
           <div>
             <SectionLabel>Approval gate</SectionLabel>
             <p style={{ fontSize: 12.5, color: 'var(--dim)', margin: '0 0 10px', lineHeight: 1.6 }}>
-              This is an installed draft — quarantined, not palette-visible, and not runnable as an
-              agent (D4). Read the full SKILL.md below, review the inventory, then approve if you
-              trust it.
+              {detail.trust === 'draft'
+                ? 'This is an installed draft — quarantined, not palette-visible, and not runnable as an agent (D4). Read the full SKILL.md below, review the inventory, then approve if you trust it.'
+                : 'This skill dropped out of the palette (see the reason above) — quarantined and not runnable as an agent until re-approved. Approving re-pins the content hash to what is on disk right now.'}
             </p>
-            <pre style={{ margin: 0, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>
-              <code>{detail.scan.body}</code>
-            </pre>
+            {detail.scan && (
+              <pre style={{ margin: 0, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>
+                <code>{detail.scan.body}</code>
+              </pre>
+            )}
           </div>
 
-          <div
-            data-section="scan-report"
-            data-quarantined-count={detail.scan.quarantinedKeys.length}
-            data-executable-count={detail.scan.executableFiles.length}
-          >
-            <SectionLabel>Scan — an inventory, not a verdict</SectionLabel>
-            <p style={{ fontSize: 11.5, color: 'var(--faint)', margin: '0 0 8px', fontStyle: 'italic' }}>
-              This lists facts for you to read before approving — it does not judge the skill safe
-              or clean. Real security scanning applies to hooks, not skills.
-            </p>
-            <dl className="kv" style={{ fontSize: 12.5 }}>
-              <dt>files</dt>
-              <dd>{detail.scan.fileCount} ({detail.scan.totalBytes} bytes)</dd>
-              <dt>quarantined keys</dt>
-              <dd>{detail.scan.quarantinedKeys.length > 0 ? detail.scan.quarantinedKeys.join(', ') : 'none'}</dd>
-              <dt>executable-extension files</dt>
-              <dd>{detail.scan.executableFiles.length > 0 ? detail.scan.executableFiles.join(', ') : 'none'}</dd>
-            </dl>
-          </div>
+          {detail.scan && (
+            <div
+              data-section="scan-report"
+              data-quarantined-count={detail.scan.quarantinedKeys.length}
+              data-executable-count={detail.scan.executableFiles.length}
+            >
+              <SectionLabel>Scan — an inventory, not a verdict</SectionLabel>
+              <p style={{ fontSize: 11.5, color: 'var(--faint)', margin: '0 0 8px', fontStyle: 'italic' }}>
+                This lists facts for you to read before approving — it does not judge the skill safe
+                or clean. Real security scanning applies to hooks, not skills.
+              </p>
+              <dl className="kv" style={{ fontSize: 12.5 }}>
+                <dt>files</dt>
+                <dd>{detail.scan.fileCount} ({detail.scan.totalBytes} bytes)</dd>
+                <dt>quarantined keys</dt>
+                <dd>{detail.scan.quarantinedKeys.length > 0 ? detail.scan.quarantinedKeys.join(', ') : 'none'}</dd>
+                <dt>executable-extension files</dt>
+                <dd>{detail.scan.executableFiles.length > 0 ? detail.scan.executableFiles.join(', ') : 'none'}</dd>
+              </dl>
+            </div>
+          )}
 
           <div>
             <button

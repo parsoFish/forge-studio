@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // LibraryItemActions — the shared Edit / Delete action bar every library
@@ -76,14 +77,21 @@ export function LibraryItemActions({
       {extra}
 
       {!confirming && (
+        // `btn-primary`: Delete is this bar's other primary, consequential
+        // action (alongside Edit) — adding the class keeps it inside
+        // `scripts/check-disabled-reason.mjs`'s scan (W8-B4, library-46: a
+        // hand-written `disabled`/`title` pair here was an undetected ratchet
+        // blind spot; `RepointConfirmBar.tsx` set this exact precedent for a
+        // `btn-sm` control that needed the same coverage). The inline
+        // background/border override below keeps it reading as a danger
+        // action, not `.btn-primary`'s affirmative ember gradient.
         <button
           type="button"
-          className="btn btn-sm"
+          className="btn btn-sm btn-primary"
           data-action={`delete-${kind}`}
-          disabled={blocked || deleting}
-          title={blocked ? deleteBlockReason ?? undefined : undefined}
+          {...disabledAttrs(blocked ? deleteBlockReason : deleting ? 'Deleting…' : null)}
           onClick={() => setConfirming(true)}
-          style={{ color: blocked ? undefined : '#f87171' }}
+          style={{ background: 'transparent', borderColor: 'var(--line-2)', color: blocked ? undefined : '#f87171' }}
         >
           Delete
         </button>
