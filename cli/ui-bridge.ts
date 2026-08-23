@@ -1895,6 +1895,21 @@ function findSessionKindDescriptorSafe(forgeRoot: string, kind: string): Session
 function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
+  // W8-B3 (sessions-kinds-R06/31) — resolved ONCE PER KIND for this request,
+  // not once per row. The tier is a property of the KIND's agent, so a
+  // per-row lookup would re-read the same SKILL.md for every session of that
+  // kind — 24+ file reads on today's corpus, on a polled index route, for at
+  // most 8 distinct answers. Request-scoped and thrown away afterwards, so it
+  // is still derived at read time and a re-pointed SKILL.md is picked up on
+  // the very next request; nothing is cached across requests.
+  const tierByKind = new Map<string, string | null>();
+  const fixedTierFor = (descriptor: SessionKindDescriptor): string | null => {
+    const hit = tierByKind.get(descriptor.id);
+    if (hit !== undefined) return hit;
+    const resolved = fixedTierForSessionKind(ctx.forgeRoot, descriptor);
+    tierByKind.set(descriptor.id, resolved);
+    return resolved;
+  };
 
   const pushRow = (
     descriptor: SessionKindDescriptor,
@@ -1914,7 +1929,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // MODEL column and the session's own chip can never disagree about what a
     // fixed-tier kind ran on. The index used to show "—" for every architect
     // and project-brain row for exactly this reason.
-    const resolvedTier = modelTier ?? fixedTierForSessionKind(ctx.forgeRoot, descriptor);
+    const resolvedTier = modelTier ?? fixedTierFor(descriptor);
     rows.push({
       kind: descriptor.id,
       sessionId,
