@@ -170,7 +170,14 @@ export interface SdkHooksForAgentInput {
    *  the handle every spawn site already holds. The bindings are re-derived
    *  from it, so no caller ever passes (or stores) a hook list. */
   skill: string;
-  logger: EventLogger;
+  /**
+   * The run's event logger, or a thunk producing one. The thunk form exists
+   * because several spawn sites would otherwise have to CREATE a logger (and
+   * therefore an `_logs/<id>/` directory) for every spawn, including the
+   * overwhelmingly common case of an agent that binds no hook at all. The
+   * thunk is invoked at most once, and only after a real binding is found.
+   */
+  logger: EventLogger | (() => EventLogger);
   initiativeId: string;
   forgeRoot?: string;
 }
@@ -294,6 +301,9 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
   }
   if (hookIds.length === 0) return undefined;
 
+  // Resolved only now that a real binding exists — see the field's own doc.
+  const logger = typeof input.logger === 'function' ? input.logger() : input.logger;
+
   const byEvent = new Map<HookLifecycleEvent, SdkHookMatcher[]>();
   for (const hookId of hookIds) {
     let event: HookLifecycleEvent;
@@ -301,7 +311,7 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
       event = loadHookDefinition(hookId, forgeRoot).on;
     } catch (e) {
       emitHookError(
-        input.logger,
+        logger,
         input.initiativeId,
         hookId,
         `Agent "${input.skill}" binds hook "${hookId}", which could not be loaded — it will not fire: ${(e as Error).message}`,
@@ -310,7 +320,7 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
       continue;
     }
     const list = byEvent.get(event) ?? [];
-    list.push({ hooks: [makeCallback(hookId, event, forgeRoot, input.logger, input.initiativeId)] });
+    list.push({ hooks: [makeCallback(hookId, event, forgeRoot, logger, input.initiativeId)] });
     byEvent.set(event, list);
   }
 
