@@ -442,7 +442,18 @@ export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
 // ---------- checkSourceLinks ----------
 
 /** Extract relative-link targets and wikilink slugs from a theme body. */
-function extractLinks(body: string): { relLinks: string[]; wikilinks: string[] } {
+/**
+ * Every on-disk link target a body names: relative markdown link targets
+ * (anchors stripped, `http(s)`/`mailto:`/bare-`#` skipped) and wikilink slugs,
+ * in document order.
+ *
+ * Exported because the KB drain's edit-soundness audit
+ * (cli/kb-drain-edit-soundness.ts) must extract link targets EXACTLY the way
+ * `checkSourceLinks` does — a second extractor that disagreed about what
+ * counts as a link would let the audit miss the very repoint it exists to
+ * refuse.
+ */
+export function extractLinks(body: string): { relLinks: string[]; wikilinks: string[] } {
   const relLinks: string[] = [];
   const wikilinks: string[] = [];
 
@@ -874,22 +885,29 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
 // ---------- checkDanglingEdges / checkDuplicateThemes (R4-19-F2) ----------
 
 /**
- * Slug universe for dangling-edge resolution: the basenames (sans `.md`) of
- * EVERY theme file anywhere under `brain/**\/themes/` — both forge sub-wikis
- * (`cycles/`, `forge-dev/`) AND every project brain (`brain/projects/*\/themes/`).
- * A `cycles` theme legitimately points at a `forge-dev` theme (and vice
- * versa), so the universe must span both forge sub-wikis even though the
- * SOURCE iteration for the full-scope check stays forge-only (see
- * `checkDanglingEdges` below) — narrowing this to "the same sub-wiki" is
- * exactly the naive shape a pinned test kills.
+ * Slug universe for dangling-edge resolution, as slug -> the absolute file(s)
+ * carrying it: EVERY theme file anywhere under `brain/**\/themes/` — both forge
+ * sub-wikis (`cycles/`, `forge-dev/`) AND every project brain
+ * (`brain/projects/*\/themes/`). A `cycles` theme legitimately points at a
+ * `forge-dev` theme (and vice versa), so the universe must span both forge
+ * sub-wikis even though the SOURCE iteration for the full-scope check stays
+ * forge-only (see `checkDanglingEdges` below) — narrowing this to "the same
+ * sub-wiki" is exactly the naive shape a pinned test kills.
+ *
+ * A slug can legitimately map to MORE THAN ONE file (the same basename in two
+ * sub-wikis), so the value is a list — a caller acting on a target must decide
+ * what a non-unique match means instead of silently taking the first.
  */
-function collectAllThemeSlugs(brainRoot: string): Set<string> {
-  const slugs = new Set<string>();
+export function collectThemeSlugTargets(brainRoot: string): Map<string, string[]> {
+  const targets = new Map<string, string[]>();
   const addDir = (dir: string): void => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir)) {
       if (entry === 'README.md' || !entry.endsWith('.md')) continue;
-      slugs.add(basename(entry, '.md'));
+      const slug = basename(entry, '.md');
+      const list = targets.get(slug);
+      if (list) list.push(join(dir, entry));
+      else targets.set(slug, [join(dir, entry)]);
     }
   };
   for (const sub of THEME_SUBDIRS) {
@@ -902,7 +920,21 @@ function collectAllThemeSlugs(brainRoot: string): Set<string> {
       addDir(join(projectsRoot, name, 'themes'));
     }
   }
-  return slugs;
+  return targets;
+}
+
+/**
+ * The same universe as a bare slug SET.
+ *
+ * DERIVED from `collectThemeSlugTargets`, never a second walk: the KB drain's
+ * edit-soundness audit (cli/kb-drain-edit-soundness.ts) needs the target PATHS
+ * to decide whether an edit destroyed a real edge, and a second, narrower
+ * derivation answering "does this theme exist?" is exactly how drain-to-green
+ * came to delete a valid `related_themes` edge whose target sat in the same
+ * directory (forge-d8l). One walk, two views.
+ */
+function collectAllThemeSlugs(brainRoot: string): Set<string> {
+  return new Set(collectThemeSlugTargets(brainRoot).keys());
 }
 
 /**
