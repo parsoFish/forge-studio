@@ -297,6 +297,91 @@ test('a verified-but-identical source is reported "unchanged" and still gets a f
   assert.equal(res.nextRegistry.sources['github:obra/superpowers'].fetchedAt, NOW.toISOString());
 });
 
+// ---------------------------------------------------------------------------
+// W8-B5 adversarial review, FINDING 2 — `archived` / `topics` / `version` are
+// NOT surfaced anywhere in the UI, but they are NOT dead data either: they are
+// change-detection inputs read by `sameFacts`. A repo that flipped to
+// archived, retitled its topics, or shipped a new version IS a changed source
+// and must read `refreshed`, not `unchanged`.
+//
+// These tests convert that doc claim into an enforced one — the actual cure
+// for `declared-data-fails-open`. Each holds EVERY other fact identical, so
+// only the named field can be what flips the status. Delete the matching
+// comparison from `sameFacts` and the corresponding test goes red.
+// ---------------------------------------------------------------------------
+
+/** A registry whose single GitHub source already carries the exact facts the
+ *  stub is about to return, so the pass is `unchanged` by default and any
+ *  reported `refreshed` is attributable to the ONE field under test. */
+function identicalGithubRegistry(over: Record<string, unknown> = {}) {
+  return registry({
+    sources: {
+      'github:obra/superpowers': {
+        stars: 276412,
+        starsDisplay: '276k',
+        upstreamUpdatedAt: '2026-08-19T17:33:23Z',
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        fetchedBy: 'api:github',
+        archived: false,
+        topics: ['ai', 'skills'],
+        ...over,
+      },
+    },
+  });
+}
+
+function githubStatus(reg: CommunityRegistry, body: Record<string, unknown>): Promise<string> {
+  const { fetchImpl } = stub(() => json(body));
+  return refreshCommunityRegistry({ registry: reg, fetchImpl, token: TOKEN, now: NOW }).then(
+    (res) => res.outcomes.find((o) => o.id === 'superpowers-tdd')!.status,
+  );
+}
+
+test('CONTROL: with every fetched fact identical the source reads "unchanged" (so the three tests below isolate one field each)', async () => {
+  assert.equal(await githubStatus(identicalGithubRegistry(), GH_OK), 'unchanged');
+});
+
+test('a source that flipped to ARCHIVED reads "refreshed", not "unchanged" — archived is a change-detection input', async () => {
+  assert.equal(await githubStatus(identicalGithubRegistry(), { ...GH_OK, archived: true }), 'refreshed');
+});
+
+test('a source whose TOPICS changed reads "refreshed", not "unchanged" — topics is a change-detection input', async () => {
+  assert.equal(await githubStatus(identicalGithubRegistry(), { ...GH_OK, topics: ['ai', 'skills', 'agents'] }), 'refreshed');
+});
+
+test('a source whose VERSION changed reads "refreshed", not "unchanged" — version is a change-detection input', async () => {
+  const reg = registry({
+    sources: {
+      'npm:js-yaml': {
+        stars: null,
+        starsDisplay: null,
+        upstreamUpdatedAt: '2026-01-01T00:00:00Z',
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        fetchedBy: 'api:npm',
+        version: '1.0.0',
+      },
+    },
+    items: [
+      {
+        id: 'superpowers-tdd',
+        kind: 'skill',
+        name: 'TDD',
+        category: 'testing',
+        sourceUrl: 'https://www.npmjs.com/package/js-yaml',
+        provenance: 'npm',
+        signals: { attributedTo: 'npm' },
+      },
+    ],
+  });
+  const npmBody = { 'dist-tags': { latest: '1.0.0' }, time: { modified: '2026-01-01T00:00:00Z' } };
+  assert.equal(await githubStatus(reg, npmBody), 'unchanged', 'control: an identical npm answer must read unchanged');
+  assert.equal(
+    await githubStatus(reg, { ...npmBody, 'dist-tags': { latest: '2.0.0' } }),
+    'refreshed',
+    'a new published version is a real change',
+  );
+});
+
 test('the input registry is NEVER mutated (immutability: return a new object)', async () => {
   const before = registry();
   const snapshot = structuredClone(before);

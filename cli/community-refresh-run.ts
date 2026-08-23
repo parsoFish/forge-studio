@@ -38,6 +38,29 @@
  *      behind. The destination is a FIXED, server-owned path
  *      (`communityRegistryPath(forgeRoot)`) with nothing request-derived in
  *      it, so no path guard applies and none is faked.
+ *
+ * CONCURRENCY (W8-B5 security review, FINDING 1). This file, the CRUD routes
+ * and `commitRegistryDraft` are three independent read-modify-write callers
+ * of the same document; before the fix none of them locked, so the last
+ * `rename` won and the loser's update vanished with no error surfaced to
+ * either caller. This lane made that materially worse: the window here is
+ * NETWORK-bound (timeoutMs x N distinct sources — minutes for a large
+ * registry), not the sub-millisecond fs window every earlier writer had.
+ *
+ * The cure is OPTIMISTIC CONCURRENCY, not a lock held across the network — a
+ * lock spanning the fetches would block every curation edit for minutes,
+ * trading a rare lost update for a common stall. So: fetch outside any lock,
+ * THEN take the registry mutex (cli/community-registry-lock.ts), RE-LOAD the
+ * document from disk under it, apply the freshly-verified facts onto that
+ * re-loaded document, write, release.
+ *
+ * THAT COMPOSES ONLY BECAUSE OF SCHEMA v2's SHAPE, and this is the reason the
+ * design is safe: a refresh writes ONLY the `sources` map and
+ * `meta.lastRefresh`; CRUD writes ONLY `items`. Under a re-load-under-lock
+ * the two therefore MERGE — a curation edit made while the fetches were in
+ * flight survives, and so do the facts this pass verified. Under v1, where
+ * both facts lived on the item rows, no such merge existed and one side would
+ * have had to lose.
  */
 
 import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -57,6 +80,9 @@ import {
   loadCommunityRegistry,
   serializeCommunityRegistry,
 } from '../orchestrator/studio/registry.ts';
+import { communitySourceKey } from '../orchestrator/studio/community-source-url.ts';
+import type { CommunityRegistry, CommunityRegistrySource } from '../orchestrator/studio/types.ts';
+import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 
 /** Per-status tallies, computed once here so the CLI's printed tally and the
  *  route's JSON body cannot disagree about what happened. */
@@ -81,6 +107,7 @@ export type CommunityRefreshRunReason =
   | 'refresh-refused'
   | 'registry-missing'
   | 'registry-invalid'
+  | 'registry-locked'
   | 'all-sources-failed'
   | 'write-failed';
 
@@ -149,6 +176,8 @@ export function communityRefreshRemedy(reason: CommunityRefreshRunReason): strin
       return 'This forge install has no community registry to refresh. Nothing was created — a refresh verifies an existing curated list, it does not seed one.';
     case 'registry-invalid':
       return 'Fix the registry by hand (or with `forge studio lint`) and re-run. A refresh never half-trusts a document the loader refuses.';
+    case 'registry-locked':
+      return 'Another writer (a curation edit, a draft commit, or a second refresh) holds the registry lock. Nothing was written — the verified facts of this pass were discarded rather than raced onto a document someone else is mid-way through changing. Re-run in a moment.';
     case 'all-sources-failed':
       return 'Nothing was written: no source produced a verified answer, so stamping the file would have made an unverified registry look freshly checked. Re-run once the upstreams answer.';
     case 'write-failed':
@@ -196,6 +225,84 @@ function writeRegistryAtomically(destPath: string, serialized: string): void {
   }
 }
 
+/**
+ * The ONE load of the registry this module performs — used both for the
+ * pre-network snapshot and for the re-read under the lock, so the two cannot
+ * disagree about what "missing" or "invalid" means, and so this file keeps a
+ * single `existsSync` call site (scripts/check-request-path-sinks.mjs counts
+ * them). `loadCommunityRegistry` throws bare on a missing file, which is why
+ * the existence check leads.
+ */
+function loadRegistryOrReason(
+  path: string,
+):
+  | { ok: true; registry: CommunityRegistry }
+  | { ok: false; reason: 'registry-missing' | 'registry-invalid'; message: string } {
+  if (!existsSync(path)) return { ok: false, reason: 'registry-missing', message: `no community registry at ${path}` };
+  try {
+    return { ok: true, registry: loadCommunityRegistry(path) };
+  } catch (err) {
+    return { ok: false, reason: 'registry-invalid', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * The `sources` map to write, computed from the registry AS RE-LOADED UNDER
+ * THE LOCK plus the facts THIS pass actually verified.
+ *
+ * Only VERIFIED keys are applied. A source whose fetch failed is deliberately
+ * NOT carried over from this pass's own starting snapshot: that snapshot is
+ * now stale by definition (another refresh may have landed real facts for it
+ * while we were on the network), and re-writing our older copy over it would
+ * be the very clobber this whole design removes. Such a key falls through to
+ * `current.sources[key]` — whatever is on disk right now — untouched.
+ *
+ * Three concurrent-edit cases, each resolved deliberately:
+ *
+ *  - An item ADDED while the fetches were in flight simply has no verified
+ *    facts this pass. It keeps whatever row the disk holds for its key
+ *    (usually none). That is correct, not an error — a refresh reports on
+ *    what it queried, and it never queried this one.
+ *  - An item DELETED while the fetches were in flight takes its source row
+ *    with it: the row is now referenced by nothing, and an unreferenced row
+ *    is PRUNED. That matches the pruning `refreshCommunityRegistry` already
+ *    performs by construction and the `community-registry/orphan-source`
+ *    rule `forge studio lint` enforces — an unread repo fact under a key
+ *    nothing resolves is exactly what schema v2 exists to remove.
+ *  - An item whose `sourceUrl` was EDITED resolves to a different key, so it
+ *    reads as an add plus a delete, handled by the two rules above.
+ */
+function mergeVerifiedSources(
+  current: CommunityRegistry,
+  verifiedSources: Readonly<Record<string, CommunityRegistrySource>>,
+): Record<string, CommunityRegistrySource> {
+  const merged: Record<string, CommunityRegistrySource> = {};
+  for (const item of current.items) {
+    const key = communitySourceKey(item.sourceUrl);
+    if (key === null) continue; // no queryable upstream — nothing to key a row on
+    const row = verifiedSources[key] ?? current.sources[key];
+    if (row !== undefined) merged[key] = row;
+  }
+  return merged;
+}
+
+/** The subset of this pass's `sources` map that was genuinely VERIFIED —
+ *  derived from the per-item outcomes rather than from a second declared
+ *  list, so it cannot drift from what the operator is shown. */
+function verifiedSourcesOf(
+  outcomes: readonly CommunityRefreshOutcome[],
+  sources: Readonly<Record<string, CommunityRegistrySource>>,
+): Record<string, CommunityRegistrySource> {
+  const out: Record<string, CommunityRegistrySource> = {};
+  for (const o of outcomes) {
+    if (o.source === null) continue;
+    if (o.status !== 'refreshed' && o.status !== 'unchanged') continue;
+    const row = sources[o.source];
+    if (row !== undefined) out[o.source] = row;
+  }
+  return out;
+}
+
 export type RunCommunityRefreshOptions = {
   forgeRoot: string;
   /** Injected in every test; production passes nothing and the fetch core
@@ -220,16 +327,9 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   const path = communityRegistryPath(opts.forgeRoot);
   const dryRun = opts.dryRun === true;
 
-  if (!existsSync(path)) {
-    return { ok: false, reason: 'registry-missing', path, message: `no community registry at ${path}` };
-  }
-
-  let registry;
-  try {
-    registry = loadCommunityRegistry(path);
-  } catch (err) {
-    return { ok: false, reason: 'registry-invalid', path, message: err instanceof Error ? err.message : String(err) };
-  }
+  const initial = loadRegistryOrReason(path);
+  if (!initial.ok) return { ok: false, reason: initial.reason, path, message: initial.message };
+  const registry = initial.registry;
 
   // The ONE place either surface reads the credential out of the environment.
   // An empty string is treated as absent by the fetch core, so a blanked
@@ -278,15 +378,51 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   const shouldWrite = verified > 0 && !dryRun;
 
   if (shouldWrite) {
+    // ---- The critical section. Everything above ran WITHOUT the lock (the
+    // network phase is the whole point); everything below re-derives from the
+    // document as it stands RIGHT NOW, so a curation edit that landed while
+    // we were fetching is merged, never overwritten.
+    let release: (() => Promise<void>) | null = null;
     try {
+      release = await lockCommunityRegistry(opts.forgeRoot);
+    } catch (err) {
+      if (err instanceof CommunityRegistryLockError) {
+        return { ok: false, reason: 'registry-locked', path, message: err.message, counts, outcomes: result.outcomes, errors: result.errors };
+      }
+      throw err; // a real I/O fault taking the lock is not a retryable refusal
+    }
+    try {
+      // The document may have changed — or vanished — since the load at the
+      // top of this function. Re-read it here and NOWHERE else: a lock around
+      // a stale in-memory copy serialises the writes but still loses the
+      // other writer's update, which is the defect this closes.
+      const reloaded = loadRegistryOrReason(path);
+      if (!reloaded.ok) {
+        return {
+          ok: false,
+          reason: reloaded.reason,
+          path,
+          // Named as "while this refresh was fetching" so an operator reads a
+          // concurrent removal/corruption as what it is, not as a state the
+          // registry was already in when the pass started.
+          message: `${reloaded.message} (detected while committing a completed refresh — nothing was written)`,
+          counts,
+          outcomes: result.outcomes,
+          errors: result.errors,
+        };
+      }
+      const current = reloaded.registry;
       writeRegistryAtomically(
         path,
         serializeCommunityRegistry({
-          schemaVersion: result.nextRegistry.schemaVersion,
+          // schemaVersion / items / leadingComments are the RE-LOADED
+          // document's own: a refresh is not a curation edit and owns none of
+          // them. Only `sources` and `lastRefresh` below are this pass's.
+          schemaVersion: current.schemaVersion,
           lastRefresh: result.nextRegistry.lastRefresh,
-          sources: result.nextRegistry.sources,
-          items: result.nextRegistry.items,
-          leadingComments: result.nextRegistry.leadingComments,
+          sources: mergeVerifiedSources(current, verifiedSourcesOf(result.outcomes, result.nextRegistry.sources)),
+          items: current.items,
+          leadingComments: current.leadingComments,
         }),
       );
     } catch (err) {
@@ -299,6 +435,8 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
         outcomes: result.outcomes,
         errors: result.errors,
       };
+    } finally {
+      await release();
     }
   }
 

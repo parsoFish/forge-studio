@@ -55,6 +55,7 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 
 import { FINALIZERS, resolveFinalizer, commitRegistryDraft } from './interactive-finalizers.ts';
+import { lockCommunityRegistry } from '../cli/community-registry-lock.ts';
 
 type Scratch = {
   base: string;
@@ -537,6 +538,57 @@ test('containment: a symlinked staging/registry.yaml pointing outside the sessio
     assertNamedThrow(caught, 'symlinked staging draft');
     assert.equal(readFileSync(s.registryPath, 'utf8'), beforeRaw, 'the live registry must be untouched');
     assert.doesNotMatch(readFileSync(s.registryPath, 'utf8'), /exfiltrated-secret/, 'the secret content must never reach the live registry');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5 security review, FINDING 1 — commitRegistryDraft is the THIRD writer
+// of studio/community/registry.yaml, and must participate in the same mutex
+// as the refresh and the CRUD routes. A lock only two of three writers honour
+// is not a lock: this finalizer's own load → stamp → rename would still
+// silently discard whatever the third writer landed in between.
+// ---------------------------------------------------------------------------
+
+test('commitRegistryDraft REFUSES (named error, zero bytes written) while another writer holds the registry lock', async () => {
+  const s = mkScratch('cr-locked-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
+    const before = readFileSync(s.registryPath, 'utf8');
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: { ...ALPHA_LIVE_SOURCE, stars: 999, starsDisplay: '999' } });
+    writeEvidence(s, { alpha: { status: 'verified' } });
+
+    const release = await lockCommunityRegistry(s.forgeRoot);
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    } finally {
+      await release();
+    }
+    assertNamedThrow(caught, 'registry locked by another writer');
+    assert.match((caught as Error).message, /lock/i);
+    assert.equal(readFileSync(s.registryPath, 'utf8'), before, 'a lock-refused commit must leave the live registry byte-identical');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('commitRegistryDraft RELEASES the lock on success — a second commit is not wedged by the first', async () => {
+  const s = mkScratch('cr-lock-release-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: { ...ALPHA_LIVE_SOURCE, stars: 999, starsDisplay: '999' } });
+    writeEvidence(s, { alpha: { status: 'verified' } });
+
+    await commitRegistryDraft(ctxFor(s));
+    await commitRegistryDraft(ctxFor(s));
+    // And the mutex is genuinely free afterwards, not merely re-entrant.
+    const release = await lockCommunityRegistry(s.forgeRoot);
+    await release();
+    assert.equal(readLive(s).sources[ALPHA_KEY].stars, 999);
   } finally {
     cleanup(s.base);
   }

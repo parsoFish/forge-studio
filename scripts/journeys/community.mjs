@@ -4,6 +4,11 @@ import yaml from 'js-yaml';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { FORGE_ROOT, caption, THINK } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
+import {
+  loadCommunityRegistryDoc,
+  communitySourceRowFor,
+  topStarredCommunitySource,
+} from '../lib/journey-community-registry.mjs';
 
 // ── R3-07 helpers: real, disk-derived cross-checks ──────────────────────────
 // Mirrors connections.mjs's own module header precedent exactly: every count
@@ -24,8 +29,22 @@ function loadCatalogDoc() {
 // W6-CR-1: community skills moved from studio/catalog.yaml's `community-skills:`
 // section to studio/community/registry.yaml — read that file directly rather
 // than re-deriving from the (now community-skills-less) catalog doc.
+// W8-B5: the raw-YAML read + the schema-v2 `sourceUrl -> sources[key]`
+// resolution live in ../lib/journey-community-registry.mjs, shared with
+// skills.mjs — see that module's header for why the harness re-derives the
+// mapping instead of importing production's own resolver.
 function loadRegistryDoc() {
-  return yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'registry.yaml'), 'utf8'));
+  return loadCommunityRegistryDoc(FORGE_ROOT);
+}
+
+/** The repo-level facts (stars / starsDisplay / fetchedAt / fetchedBy /
+ *  upstreamUpdatedAt) for one registry item, resolved through its `sourceUrl`
+ *  — `null` when the row names no recognised upstream (the registry's
+ *  `pre-impl-interview` row points at a blog post, so it has no source row at
+ *  all and reads honestly unrefreshed). Schema v2: the item itself carries
+ *  none of these, by construction. */
+function realSourceRowFor(item) {
+  return communitySourceRowFor(loadRegistryDoc(), item);
 }
 
 function loadHubsDoc() {
@@ -84,6 +103,12 @@ function realCommunityItems() {
 
 function realKindCount(kind) { return realCommunityItems().filter((i) => i.kind === kind).length; }
 function realHubItemCount(hubId) { return realCommunityItems().filter((i) => i.hub?.id === hubId).length; }
+/** Both filters at once — the count a view carrying BOTH `?kind=` and `?hub=`
+ *  must show. Kept separate from realHubItemCount so a beat asserting a
+ *  two-filter view can never quietly compare it against a one-filter total. */
+function realHubKindItemCount(hubId, kind) {
+  return realCommunityItems().filter((i) => i.hub?.id === hubId && i.kind === kind).length;
+}
 function realTotalCount() { return realCommunityItems().length; }
 
 /** Collapse runs of whitespace (including a markdown-authored line wrap) to a
@@ -103,16 +128,38 @@ function realCommunitySkillEntry(id) {
 
 // ── W6-CR-2 helpers: sort + freshness, re-derived from the real registry ────
 
-/** The registry-sourced item with the HIGHEST numeric signals.stars —
- *  independently recomputed off studio/community/registry.yaml, never a
- *  re-read of the page's own claimed sort order. Used to assert that
- *  switching the sort to stars/desc genuinely reorders the DOM against real
- *  data, not just against whatever the page happened to render first. */
-function realTopStarsRegistryEntry() {
-  const doc = loadRegistryDoc();
-  const withStars = (doc.items ?? []).filter((i) => typeof i.signals?.stars === 'number');
-  if (withStars.length === 0) throw new Error('community journey: expected at least one registry item with a numeric signals.stars value');
-  return withStars.reduce((best, cur) => (cur.signals.stars > best.signals.stars ? cur : best));
+/** The HIGHEST numeric star count in the registry, and the `sources:` key
+ *  that holds it — independently recomputed off studio/community/registry.yaml,
+ *  never a re-read of the page's own claimed sort order.
+ *
+ *  SCHEMA v2 (W8-B5): stars are a REPO fact keyed by `sourceUrl`, not a field
+ *  on an item, so this reads the `sources:` map rather than `i.signals.stars`
+ *  (the v1 shape this helper used to read — the harness stayed a v1 reader
+ *  through the schema change and only the gate said so). Three items share
+ *  the top-starred repo, so the star count alone can no longer name a single
+ *  card: the expected FIRST card is derived from the bridge's own item list
+ *  by `sortItemsByStarsDescLocal` below, and cross-checked against this
+ *  number so the YAML and the wire have to agree. */
+function realTopStarsSource() {
+  return topStarredCommunitySource(loadRegistryDoc());
+}
+
+/** Sorts a bridge-fetched item list the SAME way sortCommunityItems('stars',
+ *  'desc') does: descending on the item's own `signals.starsNumeric`, nulls
+ *  LAST regardless of direction (an honest absence is never a zero), and —
+ *  because `Array.prototype.sort` is stable — ties keep the bridge's original
+ *  order, which is exactly the tie-break the page gets. Same precedent as
+ *  sortItemsByNameAscLocal below: a local recomputation over the bridge's own
+ *  real facts, never a re-read of the DOM's own claimed order. */
+function sortItemsByStarsDescLocal(items) {
+  return [...items].sort((a, b) => {
+    const av = a.signals?.starsNumeric ?? null;
+    const bv = b.signals?.starsNumeric ?? null;
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return bv - av;
+  });
 }
 
 /** Sorts a bridge-fetched item list the SAME way sortCommunityItems('name',
@@ -174,6 +221,49 @@ const CM_MCP_ID = 'memory'; // shared fixture with connections.mjs — see its o
 // solely to demonstrate a CATALOG-sourced community card's real hub +
 // signals — the honest contrast to CM_SKILL_ID's vendored signals:null.
 const CM_CATALOG_SKILL_ID = 'systematic-debugging';
+
+// ── W8-B5 fixtures (exit rows E9 / E11 / E14 / E15 / E16) ──────────────────
+// Each is a REAL fact of this checkout, asserted as such by its beat's own
+// sanity check rather than assumed: skills.sh genuinely indexes nothing,
+// "memory" is genuinely a registry CATEGORY that no other searchable field of
+// the matching row carries, and no registry row genuinely has the missing id.
+const CM_DECLARED_ONLY_HUB_ID = 'skills-sh';
+const CM_URL_STATE_HUB_ID = 'superpowers';
+const CM_SEARCH_CATEGORY = 'memory';
+const CM_MISSING_REGISTRY_ID = 'journey-no-such-registry-item';
+
+/** Registry rows the query can ONLY reach through their `category` —
+ *  recomputed off the raw YAML against every OTHER fact filterCommunityItems
+ *  searches (id, name, desc, provenance/attribution, sourceUrl, hub label).
+ *  This is what makes the search beat a proof that CATEGORY reaches the
+ *  client at all (E11: `category` was absent from the wire, so adding the
+ *  search term alone would have been a no-op) rather than an accident of a
+ *  word that also appears in some name. */
+function realCategoryOnlyMatchIds(query) {
+  const q = query.trim().toLowerCase();
+  const hubs = realHubs();
+  return (loadRegistryDoc().items ?? [])
+    .filter((i) => String(i.category ?? '').toLowerCase().includes(q))
+    .filter((i) => ![
+      i.id, i.name, i.desc ?? '', i.provenance ?? '', i.sourceUrl ?? '',
+      i.signals?.attributedTo ?? '', resolveHubLocal(i.sourceUrl ?? '', hubs)?.name ?? '',
+    ].some((field) => String(field).toLowerCase().includes(q)))
+    .map((i) => i.id)
+    .sort();
+}
+
+/** Open the browse shelf at an explicit URL state (or the bare default) and
+ *  wait for its own readiness signal. Every beat below starts from a fresh
+ *  goto rather than inheriting the previous beat's filters: since W8-B5 the
+ *  browse state IS the URL, so a bare /community deterministically resets
+ *  kind/hub/query/sort — which is what keeps these beats self-contained under
+ *  a scoped `--journey community` run. */
+async function gotoCommunityBrowser(page, watch, search = '') {
+  await page.goto(watch.uiUrl + '/community' + search, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-page-ready') === 'true',
+    null, { timeout: 20000 }).catch(() => {});
+}
 
 const CM_LEDGER_PATH = join(FORGE_ROOT, 'studio', 'installed-skills.yaml');
 
@@ -285,7 +375,11 @@ export const journey = defineJourney({
         const realHub = resolveHubLocal(real.sourceUrl, realHubs());
         check(domHub === realHub?.id, `CM-2: data-skill-hub matches the registry sourceUrl's real resolved hub (dom="${domHub}", real="${realHub?.id}")`);
         const domHasSignals = await card.getAttribute('data-skill-has-signals');
-        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries real stars (${real.signals?.starsDisplay ?? 'n/a'}) (got "${domHasSignals}")`);
+        // Schema v2: the star display string is a fact about the item's SOURCE
+        // repo, resolved through its sourceUrl — the item itself has no such
+        // field to read (and reading the retired one silently printed "n/a").
+        const realSource = realSourceRowFor(real);
+        check(domHasSignals === 'true', `CM-2: data-skill-has-signals="true" — ${CM_CATALOG_SKILL_ID} carries the real stars of its source repo (${realSource?.starsDisplay ?? 'n/a'}) (got "${domHasSignals}")`);
         await frame(page, 'cm-1-skills-card-signals', 'Part 2 (community) — a community card already carries its derived hub + signals on the /skills shelf', { key: true });
       },
     },
@@ -426,19 +520,33 @@ export const journey = defineJourney({
         check(firstCardId === expectedFirstByName.id, `CM-4b: the default (name/asc) first card matches the independently-recomputed name order (dom="${firstCardId}", real="${expectedFirstByName.id}")`);
 
         // Switch to stars, then flip to descending — the first card must
-        // change to the REAL highest-signals.stars registry entry.
+        // change to the item carrying the REAL highest star count.
+        //
+        // Schema v2 (W8-B5): stars belong to the SOURCE repo, and three items
+        // share the top-starred one, so the number alone no longer names a
+        // single card. The expected first card is therefore recomputed from
+        // the bridge's own item list with the page's own null-last, stable
+        // ordering (sortItemsByStarsDescLocal) — and cross-checked against the
+        // raw YAML's `sources:` map, so a wire that disagreed with the file
+        // would fail here rather than agree with itself.
         await page.locator('select[data-community-sort]').selectOption('stars').catch(() => {});
         await page.locator('[data-action="toggle-sort-direction"]').click().catch(() => {});
         await page.waitForFunction(
           () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-dir') === 'desc',
           null, { timeout: 5000 }).catch(() => {});
-        const realTopStars = realTopStarsRegistryEntry();
+        const topSource = realTopStarsSource();
+        const starsRes = await fetch(watch.bridgeUrl + '/api/studio/community');
+        const starsBody = await starsRes.json().catch(() => ({ items: [] }));
+        const expectedFirstByStars = sortItemsByStarsDescLocal(starsBody.items ?? [])[0];
+        check(!!expectedFirstByStars, 'CM-4b: (sanity) the bridge index has at least one item to sort by stars');
+        check((expectedFirstByStars?.signals?.starsNumeric ?? null) === topSource.stars,
+          `CM-4b: the bridge's own top star count matches the raw registry's "${topSource.key}" sources row (wire=${expectedFirstByStars?.signals?.starsNumeric ?? 'null'}, yaml=${topSource.stars})`);
         const starsFirstCard = page.locator('[data-card-type="community-item"]').first();
         await page.waitForFunction(
           (expectedId) => document.querySelector('[data-card-type="community-item"]')?.getAttribute('data-item-id') === expectedId,
-          realTopStars.id, { timeout: 5000 }).catch(() => {});
+          expectedFirstByStars?.id ?? '', { timeout: 5000 }).catch(() => {});
         const starsFirstId = await starsFirstCard.getAttribute('data-item-id');
-        check(starsFirstId === realTopStars.id, `CM-4b: changing sort to stars/desc reorders the first card to the REAL highest-starred registry entry "${realTopStars.id}" (${realTopStars.signals.stars} stars) (got "${starsFirstId}")`);
+        check(starsFirstId === expectedFirstByStars?.id, `CM-4b: changing sort to stars/desc reorders the first card to the independently-recomputed top-starred item "${expectedFirstByStars?.id}" (${topSource.stars} stars, from "${topSource.key}") (got "${starsFirstId}")`);
         await frame(page, 'cm-2b-sort-stars', 'Part 2 (community) — sorted by stars/desc: the first card reorders to the real highest-starred entry', { key: true });
 
         // A seed item (this checkout's registry has never had a real refresh
@@ -452,7 +560,14 @@ export const journey = defineJourney({
           () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-sort-dir') === 'asc',
           null, { timeout: 5000 }).catch(() => {});
         const seedEntry = realCommunitySkillEntry(CM_CATALOG_SKILL_ID);
-        check(seedEntry.fetchedAt === null, `CM-4b: (sanity) the real registry entry for "${CM_CATALOG_SKILL_ID}" genuinely has fetchedAt: null`);
+        // Schema v2: "when did forge last verify this row" is a fact about the
+        // SOURCE repo, so the sanity check reads the resolved `sources:` row.
+        // Reading the retired per-item field evaluated `undefined === null`
+        // (false) and would have failed this beat even after the crash above
+        // was fixed — the honest state has to be read where it now lives.
+        const seedSource = realSourceRowFor(seedEntry);
+        check(seedSource !== null, `CM-4b: (sanity) "${CM_CATALOG_SKILL_ID}" resolves to a real sources row — its freshness comes from the repo, not from the item`);
+        check(seedSource?.fetchedAt === null, `CM-4b: (sanity) that sources row genuinely has fetchedAt: null — never actually refreshed (got ${JSON.stringify(seedSource?.fetchedAt)})`);
         const seedCard = page.locator(`[data-card-type="community-item"][data-item-id="${CM_CATALOG_SKILL_ID}"][data-item-kind="skill"]`);
         check(await seedCard.count() > 0, `CM-4b: the seed item "${CM_CATALOG_SKILL_ID}" card is present`);
         const hasFetchedAtAttr = await seedCard.evaluate((el) => el.hasAttribute('data-fetched-at'));
@@ -1159,6 +1274,18 @@ export const journey = defineJourney({
           'CM-24: NO numeric star-count input exists — hand-entered star counts are fabricated signals');
         check((await page.locator('[data-action="submit-registry-item"]').isDisabled().catch(() => false)) === true,
           'CM-24: Add is disabled until the required fields are filled');
+        // W8-B5 (community-29 / exit row E10): the reason used to be a
+        // hand-typed sentence that disagreed with the predicate beside it —
+        // it named "description" (not required) and "upstream" (not a field
+        // here) while omitting category and provenance, the two most often
+        // left blank. It is now DERIVED from the one required-field list, so
+        // the empty form names exactly the five fields the bridge enforces.
+        const disabledReason = await page.locator('[data-action="submit-registry-item"]').getAttribute('data-disabled-reason');
+        check(disabledReason === 'Fill in id, name, category, source URL and provenance first',
+          `CM-24: the disabled reason names the REAL required set (got "${disabledReason}")`);
+        for (const label of ['id', 'name', 'category', 'source URL', 'provenance']) {
+          check((disabledReason ?? '').includes(label), `CM-24: it names "${label}" — a required field the operator must fill`);
+        }
         await frame(page, 'cm-24-registry-form', 'Part 2 (community) — the registry add form: curated fields only, no invented signals', { key: true });
 
         // A registry-origin row's detail page carries Edit + a two-step
@@ -1183,6 +1310,247 @@ export const journey = defineJourney({
           null, { timeout: 5000 }).catch(() => {});
         check((await removeBtn.getAttribute('data-confirming')) === 'false', 'CM-24: abort disarms — nothing was deleted');
         await frame(page, 'cm-24-registry-row-actions', 'Part 2 (community) — Edit + two-step Remove on a registry row, armed then aborted', { key: true });
+      },
+    },
+    {
+      id: 'community-hub-declared-only-empty',
+      title: 'A declared-only hub says so — the specific empty state, not "nothing matches"',
+      narration:
+        'W8-B5 (community-36 / exit row E14): the hub chip already knew ' +
+        'skills.sh is a DECLARED source forge indexes nothing from, and said ' +
+        'so in its own tooltip — but the block under the grid collapsed every ' +
+        'zero-result view to "Nothing matches this filter.", so selecting it ' +
+        'read as a failed search rather than as the honest state of that ' +
+        'source. Classic declared-data-fails-open: a value parsed and ' +
+        'surfaced, then enforced nowhere downstream. The empty block now ' +
+        'consumes the SAME derived predicate the chip does, so the two can no ' +
+        'longer disagree about the same hub. Its zero is real — recomputed ' +
+        'off hubs.yaml + the vendored trees here, never read back off the ' +
+        'page.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log(`\n[CM-25] ${CM_DECLARED_ONLY_HUB_ID} → the declared-only empty state`);
+        await gotoCommunityBrowser(page, watch);
+
+        const zeroReal = realHubItemCount(CM_DECLARED_ONLY_HUB_ID);
+        check(zeroReal === 0, `CM-25: (sanity) ${CM_DECLARED_ONLY_HUB_ID} genuinely indexes zero items in this checkout — the declared-only case this beat proves (real=${zeroReal})`);
+        const chip = page.locator(`[data-action="filter-hub"][data-hub-id="${CM_DECLARED_ONLY_HUB_ID}"]`);
+        check((await chip.getAttribute('data-hub-declared-only')) === 'true',
+          `CM-25: the chip carries data-hub-declared-only="true" — the fact the empty block below must consume`);
+        await chip.click().catch(() => {});
+        await page.waitForFunction(
+          (hubId) => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter') === hubId,
+          CM_DECLARED_ONLY_HUB_ID, { timeout: 5000 }).catch(() => {});
+        const domHub = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter'));
+        check(domHub === CM_DECLARED_ONLY_HUB_ID, `CM-25: the hub filter is applied (data-hub-filter="${domHub}")`);
+        const domCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10));
+        check(domCount === 0, `CM-25: the filtered index is genuinely empty (dom=${domCount}, real=${zeroReal})`);
+
+        const empty = page.locator('[data-component="community-empty"]');
+        check(await empty.count() > 0, 'CM-25: the empty block renders');
+        const emptyState = await empty.getAttribute('data-empty-state');
+        check(emptyState === 'hub-declared-only',
+          `CM-25: data-empty-state="hub-declared-only" — the SPECIFIC state, never the generic "no-match" a real failed search would carry (got "${emptyState}")`);
+        await caption(page, 'skills.sh is a declared source forge indexes nothing from — the empty block says exactly that, not "nothing matches".');
+        await frame(page, 'cm-25-hub-declared-only-empty', 'Part 2 (community) — a declared-only hub gets its own honest empty state, not a failed-search message', { key: true });
+      },
+    },
+    {
+      id: 'community-search-category',
+      title: 'Search reaches the registry\'s own category — the word rows are filed under',
+      narration:
+        'W8-B5 (community-05 / exit row E11): the search box advertised ' +
+        '"category" and could never match one — `category` was never on the ' +
+        'wire at all, so adding the search term alone would have been a ' +
+        'silent no-op. This beat types a real registry CATEGORY and asserts a ' +
+        'row that is reachable ONLY through that field comes back: its id, ' +
+        'name, description, provenance, source URL and hub label are all ' +
+        'independently checked here NOT to contain the word, so a match can ' +
+        'only have come from the category itself.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log(`\n[CM-26] search "${CM_SEARCH_CATEGORY}" — the category field`);
+        await gotoCommunityBrowser(page, watch);
+        const total = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10));
+
+        const categoryOnly = realCategoryOnlyMatchIds(CM_SEARCH_CATEGORY);
+        check(categoryOnly.length > 0,
+          `CM-26: (sanity) "${CM_SEARCH_CATEGORY}" is genuinely a registry category no other searchable field of its own rows carries (${categoryOnly.join(', ') || 'none'})`);
+
+        await page.locator('[data-field="community-search"]').fill(CM_SEARCH_CATEGORY).catch(() => {});
+        await page.waitForFunction(
+          (n) => {
+            const c = parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10);
+            return c >= 0 && c < n;
+          },
+          total, { timeout: 5000 }).catch(() => {});
+        const domCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10));
+        check(domCount > 0, `CM-26: searching a category word matches real rows (dom=${domCount} of ${total})`);
+        check(domCount < total, `CM-26: it genuinely NARROWS the index — a search that matched everything would prove nothing (dom=${domCount}, unfiltered=${total})`);
+
+        for (const id of categoryOnly) {
+          const card = page.locator(`[data-card-type="community-item"][data-item-id="${id}"]`);
+          check(await card.count() > 0, `CM-26: "${id}" — reachable ONLY through its category — is in the results`);
+          const domCategory = await card.getAttribute('data-item-category');
+          check((domCategory ?? '').toLowerCase().includes(CM_SEARCH_CATEGORY),
+            `CM-26: and its card carries the real registry category that matched (data-item-category="${domCategory}")`);
+        }
+
+        // The search box is the one control mirrored to the URL on a debounce
+        // with router.REPLACE (a typing burst must not become a burst of Back
+        // steps) — so the address bar catches up a moment after the list does.
+        await page.waitForFunction(
+          (q) => new URLSearchParams(location.search).get('q') === q,
+          CM_SEARCH_CATEGORY, { timeout: 5000 }).catch(() => {});
+        const urlQuery = await page.evaluate(() => new URLSearchParams(location.search).get('q'));
+        check(urlQuery === CM_SEARCH_CATEGORY, `CM-26: the query lands in the URL as ?q= — a linkable, shareable view (got "${urlQuery}")`);
+        await caption(page, 'Search matches the registry’s own category — the word a row is filed under, now actually on the wire.');
+        await frame(page, 'cm-26-search-category', 'Part 2 (community) — searching a registry category, the field that never reached the client before', { key: true });
+      },
+    },
+    {
+      id: 'community-url-state-back',
+      title: 'The browse state IS the URL — open a card, press Back, the view is still there',
+      narration:
+        'W8-B5 (community-35 / exit row E15): kind, hub, search and sort lived ' +
+        'in five component `useState`s and this page never touched the router. ' +
+        'Open a card, press Back, and every one of them was gone — and the ' +
+        'view could be neither linked nor shared. They now read from the query ' +
+        'string and are written back through it, so the address bar and the ' +
+        'DOM contract can never disagree. This beat filters twice, opens a ' +
+        'card for real, presses the browser\'s own Back, and asserts the ' +
+        'filters came back — from the URL, not from a remembered component.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[CM-27] filter → open a card → Back → the filters survive');
+        await gotoCommunityBrowser(page, watch);
+
+        await page.locator('[data-action="filter-kind"][data-kind="skill"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-kind-filter') === 'skill',
+          null, { timeout: 5000 }).catch(() => {});
+        await page.locator(`[data-action="filter-hub"][data-hub-id="${CM_URL_STATE_HUB_ID}"]`).click().catch(() => {});
+        await page.waitForFunction(
+          (hubId) => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter') === hubId,
+          CM_URL_STATE_HUB_ID, { timeout: 5000 }).catch(() => {});
+
+        const searchBefore = await page.evaluate(() => location.search);
+        check(/kind=skill/.test(searchBefore) && new RegExp(`hub=${CM_URL_STATE_HUB_ID}`).test(searchBefore),
+          `CM-27: both filters are in the address bar — a linkable view, not hidden component state (location.search="${searchBefore}")`);
+        const filteredCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="community-browser"]')?.getAttribute('data-item-count') ?? '-1', 10));
+        check(filteredCount === realHubKindItemCount(CM_URL_STATE_HUB_ID, 'skill'),
+          `CM-27: (sanity) the doubly-filtered view shows the hub's real SKILL count, recomputed off disk (dom=${filteredCount}, real=${realHubKindItemCount(CM_URL_STATE_HUB_ID, 'skill')})`);
+        await frame(page, 'cm-27-url-state-filtered', 'Part 2 (community) — two filters applied, both carried in the URL', { key: true });
+
+        const openedId = await page.locator('[data-card-type="community-item"]').first().getAttribute('data-item-id');
+        check(!!openedId, 'CM-27: (sanity) the filtered view has a card to open');
+        await page.locator('[data-card-type="community-item"]').first().click().catch(() => {});
+        await page.waitForURL('**/community/skill/**', { timeout: 10000 }).catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-detail"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('main[data-page="community-detail"]').count() > 0, `CM-27: the card genuinely navigated to ${openedId}'s detail page`);
+
+        await page.goBack().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        const kindAfter = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-kind-filter'));
+        const hubAfter = await page.evaluate(() => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-hub-filter'));
+        check(kindAfter === 'skill', `CM-27: after Back the kind filter is still applied (data-kind-filter="${kindAfter}")`);
+        check(hubAfter === CM_URL_STATE_HUB_ID, `CM-27: after Back the hub filter is still applied (data-hub-filter="${hubAfter}")`);
+        const searchAfter = await page.evaluate(() => location.search);
+        check(searchAfter === searchBefore, `CM-27: and the URL is byte-identical to the one Back returned to (before="${searchBefore}", after="${searchAfter}")`);
+        await caption(page, 'The browse state is the URL — open a card, press Back, and the filtered view is exactly where it was.');
+        await frame(page, 'cm-27-url-state-restored', 'Part 2 (community) — Back restores the filtered view, because the view lives in the URL', { key: true });
+      },
+    },
+    {
+      id: 'community-mcp-connection-link',
+      title: 'A not-installed connection still links its own page — beside the install, never instead of it',
+      narration:
+        'W8-B5 (community-18 / exit row E16): an INSTALLED connection already ' +
+        'linked its own page; a NOT-installed one — the most common state, and ' +
+        'exactly when an operator most needs the env vars, the probe ' +
+        'explanation and how forge talks to it — had no route there at all. ' +
+        'The link is now rendered BESIDE whatever the install decision was, ' +
+        'never in place of it: this beat asserts both, because a "fix" that ' +
+        'replaced the install action would have satisfied the link check and ' +
+        'broken the pipeline. The connection is genuinely not installed — ' +
+        'checked against the real _connections/ tree on disk, and nothing here ' +
+        'installs it (D7).',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log(`\n[CM-28] /community/mcp/${CM_MCP_ID} — the connection-page link on a not-installed row`);
+        check(realMemoryNotInstalledOnDisk(), `CM-28: (sanity) ${CM_MCP_ID} is genuinely absent from the real _connections/ tree — the not-installed arm this beat proves`);
+        await page.goto(watch.uiUrl + `/community/mcp/${CM_MCP_ID}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-detail"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        const installState = await page.evaluate(() => document.querySelector('[data-page="community-detail"]')?.getAttribute('data-install-state'));
+        check(installState === 'not-installed', `CM-28: the page reads data-install-state="not-installed" (got "${installState}")`);
+
+        const install = page.locator('[data-section="install"]');
+        check(await install.count() > 0, 'CM-28: [data-section="install"] renders');
+        check((await install.getAttribute('data-connection-link')) === 'true',
+          'CM-28: it carries data-connection-link="true" — the section itself declares that the secondary route is there');
+        const link = page.locator('[data-component="connection-page-link"]');
+        check(await link.count() > 0, 'CM-28: [data-component="connection-page-link"] renders the route to the connection\'s own page');
+        const href = await link.locator('a[data-action="open-owning-page"]').getAttribute('href');
+        check(href === `/connections/${CM_MCP_ID}`, `CM-28: it points at the real owning page (got "${href}")`);
+
+        // The load-bearing half: the link is ADDITIVE. A not-installed npm
+        // connection must still offer its own two-step install confirm.
+        const action = await install.getAttribute('data-install-action');
+        check(action === 'install-confirm', `CM-28: the install decision is untouched — still the two-step npm confirm (data-install-action="${action}")`);
+        check(await page.locator('[data-action="install-community-item"]').count() > 0,
+          'CM-28: the install action is STILL rendered — the connection link is additive, never a replacement for the pipeline');
+        await caption(page, 'Not installed, and still one click from its connection page — the link sits beside the install, never instead of it.');
+        await frame(page, 'cm-28-connection-page-link', 'Part 2 (community) — a not-installed connection links its own page beside the install action', { key: true });
+      },
+    },
+    {
+      id: 'community-registry-edit-unknown',
+      title: 'Editing a registry id that does not exist — the shared not-found, not a form for a ghost',
+      narration:
+        'W8-B5 (community-30 / exit row E9): `?edit=` an id that is not in the ' +
+        'registry and Studio rendered the whole edit form with a red banner ' +
+        'over it — an editor for a row that does not exist. It now renders ' +
+        'the SHARED NotFound treatment every other unknown id in Studio gets. ' +
+        'The honest limit this beat owns: it proves the genuine 404 ONLY. "The ' +
+        'row does not exist" and "the bridge never answered" are different ' +
+        'facts, and a down bridge deliberately still keeps the banner — ' +
+        'rendering a confident absence claim out of a transport failure is the ' +
+        'defect, not the fix — so that second path is a different code arm ' +
+        'this beat does not exercise.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log(`\n[CM-29] /community/new?edit=${CM_MISSING_REGISTRY_ID} → the shared not-found`);
+        const realIds = (loadRegistryDoc().items ?? []).map((i) => i.id);
+        check(!realIds.includes(CM_MISSING_REGISTRY_ID),
+          `CM-29: (sanity) "${CM_MISSING_REGISTRY_ID}" is genuinely absent from studio/community/registry.yaml's ${realIds.length} rows — a real 404, not a staged one`);
+
+        await page.goto(watch.uiUrl + `/community/new?edit=${encodeURIComponent(CM_MISSING_REGISTRY_ID)}`, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="not-found"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('main[data-page="not-found"]').count() > 0, 'CM-29: the shared [data-page="not-found"] renders');
+        const kind = await page.evaluate(() => document.querySelector('[data-page="not-found"]')?.getAttribute('data-not-found-kind'));
+        check(kind === 'registry item', `CM-29: data-not-found-kind="registry item" — it names what was actually asked for (got "${kind}")`);
+        const notFoundId = await page.evaluate(() => document.querySelector('[data-page="not-found"]')?.getAttribute('data-not-found-id'));
+        check(notFoundId === CM_MISSING_REGISTRY_ID, `CM-29: data-not-found-id echoes the id verbatim (got "${notFoundId}")`);
+        const variant = await page.evaluate(() => document.querySelector('[data-page="not-found"]')?.getAttribute('data-not-found-variant'));
+        check(variant === 'unknown', `CM-29: data-not-found-variant="unknown" — an id nobody registered, never "retired" (got "${variant}")`);
+        check(await page.locator('[data-page="community-registry-form"]').count() === 0,
+          'CM-29: NO edit form renders behind it — a form for a row that does not exist is the defect this closed');
+        const backHref = await page.locator('[data-action="not-found-back"]').getAttribute('href');
+        check(backHref === '/community', `CM-29: there is always a way back, to the browser that linked here (got "${backHref}")`);
+        await caption(page, 'An unknown registry id gets Studio’s one not-found treatment — never an edit form for a row that does not exist.');
+        await frame(page, 'cm-29-registry-edit-not-found', 'Part 2 (community) — editing an unknown registry id renders the shared not-found', { key: true });
       },
     },
   ],

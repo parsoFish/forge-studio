@@ -5,14 +5,18 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving): home → skills → hooks → templates → connections →
+ * interleaving). The 17 journeys, in that order:
+ * home → sessions-index → skills → hooks → templates → connections →
  * stand-up-onboard → stand-up-create → knowledge → agents → flows-author →
  * flows-run → flows-onboard → roadmap → demo-showcase → demo-builder →
- * community
- * (R3-07 — deliberately
+ * community (R3-07 — deliberately
  * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
  * real hook, mutating /skills, /hooks and the agent-builder palette counts
  * every earlier journey's own beats pin).
+ * (W8-B5: that list had DRIFTED — it narrated 16 journeys and omitted
+ * sessions-index, which has been 2nd in the live array since W6-B11, in the
+ * very file that documents the ordering contract. It is now derived by
+ * parsing the array below, never by re-reading the prose.)
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -434,4 +438,17 @@ export const RUN_ORDER = [
   // nothing (arm-then-abort on Remove; the add form is never submitted), so
   // it is safe dead-last like everything else in this journey.
   ['community', 'community-registry-crud-affordances'],
+  // W8-B5 (exit rows E14 / E11 / E15 / E16 / E9): the five behaviours that
+  // shipped in this branch with no beat driving them. All five are READ-ONLY
+  // — filter clicks, a search, a Back press, two page loads; none installs,
+  // writes or submits anything (CM-28 asserts the install action is present
+  // and deliberately never clicks it). Each starts from its own goto, so they
+  // are self-contained under a scoped `--journey community` run and carry no
+  // ordering risk to anything before them — which is what lets them sit here,
+  // after the journey that already runs last.
+  ['community', 'community-hub-declared-only-empty'],
+  ['community', 'community-search-category'],
+  ['community', 'community-url-state-back'],
+  ['community', 'community-mcp-connection-link'],
+  ['community', 'community-registry-edit-unknown'],
 ];

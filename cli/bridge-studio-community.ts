@@ -585,6 +585,13 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
  * - `registry-missing` → **404** (there is no such document to refresh).
  * - `registry-invalid` / `refresh-refused` → **409** (a local document or a
  *   guard the operator must resolve).
+ * - `registry-locked` → **503** (W8-B5 security review, FINDING 1): another
+ *   writer — a curation edit, a draft commit, a second refresh — holds the
+ *   registry mutex, so this pass discarded its verified facts rather than race
+ *   them onto a document someone else is mid-way through changing. Transient
+ *   and retryable, the same status the verdict mutex in
+ *   cli/bridge-studio-runs.ts answers for its own contention, and deliberately
+ *   NOT a 500: nothing is broken and nothing was written.
  * - `write-failed` → **500**: an unexpected I/O condition, and the only reason
  *   here that genuinely is a server fault. The registry on disk is untouched.
  */
@@ -592,6 +599,8 @@ function statusForRefreshReason(reason: CommunityRefreshRunReason): number {
   switch (reason) {
     case 'rate-limited':
       return 429;
+    case 'registry-locked':
+      return 503;
     case 'registry-missing':
       return 404;
     case 'all-sources-failed':

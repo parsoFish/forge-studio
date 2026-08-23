@@ -576,8 +576,28 @@ export type CommunityRegistrySource = {
   /** Where the recorded facts came from: "seed" (hand-curated, never fetched)
    *  or `api:github` / `api:npm` / `api:mcp-registry`. */
   fetchedBy: string;
-  /** GitHub only: the upstream is archived. Real decay a community registry
-   *  exists to surface. Omitted when unknown. */
+  // W8-B5 adversarial review, FINDING 2 — what the three fields below are
+  // actually FOR, corrected from a doc comment that promised a surfacing that
+  // does not exist.
+  //
+  // They are CHANGE-DETECTION INPUTS, and that is their whole current job:
+  // read by `sameFacts` (orchestrator/studio/community-refresh-api.ts), the
+  // comparison that decides whether a verified source is reported `refreshed`
+  // or `unchanged` — and by nothing else. `toCommunitySkill`
+  // (orchestrator/studio/registry.ts) does not project them, so they reach
+  // neither `CommunityItem`, nor `forge-ui/lib/community-client.ts`, nor any
+  // page. A repo that flipped to archived, retitled its topics, or shipped a
+  // new version IS a genuinely changed source and must not read `unchanged`;
+  // that consumer is what earns each of them a place in the persisted schema,
+  // and `community-refresh-api.test.ts` pins one test per field so the claim
+  // is enforced rather than merely written here.
+  //
+  // Surfacing `archived` in the UI is worth doing and is deliberately NOT done
+  // here: a newly rendered field needs its `data-*` attribute, a
+  // `docs/forge-ui-dom-and-harness.md` entry and a journey beat in the same
+  // change (the `journey-sync` contract) — its own piece of work.
+
+  /** GitHub only: the upstream repository is archived. Omitted when unknown. */
   archived?: boolean;
   /** GitHub `topics`. Omitted when unknown/empty. */
   topics?: string[];

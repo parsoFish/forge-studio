@@ -51,6 +51,7 @@ import type { CommunityRegistryItem, CommunityRegistrySource } from '../orchestr
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from './studio-path-guard.ts';
+import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
@@ -995,50 +996,83 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
  *  from `mutate` means "refused, write NOTHING" — the file stays
  *  byte-identical (a 409/404 must never reformat the registry as a side
  *  effect). Throws on a malformed EXISTING registry (never half-trusts a
- *  corrupt file) and on a produced document the loader itself refuses. */
-function mutateCommunityRegistry(
+ *  corrupt file) and on a produced document the loader itself refuses.
+ *
+ *  W8-B5 security review, FINDING 1: the WHOLE read-modify-write runs under
+ *  the shared registry mutex (cli/community-registry-lock.ts), and the load
+ *  below happens INSIDE it — the same lock, on the same path, that
+ *  `runCommunityRefresh` and `commitRegistryDraft` take. A lock only one of
+ *  three writers honours is not a lock, which is why there is exactly one
+ *  helper and all three call it. Contention throws
+ *  `CommunityRegistryLockError`, which every arm below renders as a 503;
+ *  nothing is written on that path. The critical section is fs-only and
+ *  sub-millisecond — no caller of this function does network I/O while
+ *  holding it. */
+async function mutateCommunityRegistry(
   forgeRoot: string,
   mutate: (items: CommunityRegistryItem[]) => CommunityRegistryItem[] | null,
-): void {
+): Promise<void> {
   const destPath = communityRegistryPath(forgeRoot);
-  const existing = existsSync(destPath)
-    ? loadCommunityRegistry(destPath)
-    : {
-        schemaVersion: COMMUNITY_REGISTRY_SCHEMA_VERSION as number,
-        lastRefresh: null as string | null,
-        sources: {} as Record<string, CommunityRegistrySource>,
-        items: [] as CommunityRegistryItem[],
-        leadingComments: '',
-      };
-  const nextItems = mutate([...existing.items]);
-  if (nextItems === null) return;
-  // W8-B5 (exit row E4): `leadingComments` threads the file's curation header
-  // through the ONE shared serializer, so a CRUD write no longer destroys it.
-  // `sources` is carried forward untouched — a CRUD edit is curation, never a
-  // refresh, and must not disturb a repo fact (nor prune a source row a
-  // re-added item would want back).
-  const serialized = serializeCommunityRegistry({
-    schemaVersion: existing.schemaVersion,
-    lastRefresh: existing.lastRefresh,
-    sources: existing.sources,
-    items: nextItems,
-    leadingComments: existing.leadingComments,
-  });
-
+  // Ahead of the lock, not after the mutate: the mutex is taken on
+  // studio/community/ itself, so on a fresh forge root the directory has to
+  // exist before two concurrent creators have anything to serialise on.
   mkdirSync(dirname(destPath), { recursive: true });
-  const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
-  writeFileSync(tempPath, serialized, 'utf8');
+  const release = await lockCommunityRegistry(forgeRoot);
   try {
-    loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
-    renameSync(tempPath, destPath);
-  } catch (err) {
+    const existing = existsSync(destPath)
+      ? loadCommunityRegistry(destPath)
+      : {
+          schemaVersion: COMMUNITY_REGISTRY_SCHEMA_VERSION as number,
+          lastRefresh: null as string | null,
+          sources: {} as Record<string, CommunityRegistrySource>,
+          items: [] as CommunityRegistryItem[],
+          leadingComments: '',
+        };
+    const nextItems = mutate([...existing.items]);
+    if (nextItems === null) return;
+    // W8-B5 (exit row E4): `leadingComments` threads the file's curation header
+    // through the ONE shared serializer, so a CRUD write no longer destroys it.
+    // `sources` is carried forward untouched — a CRUD edit is curation, never a
+    // refresh, and must not disturb a repo fact (nor prune a source row a
+    // re-added item would want back). That split is also what makes the
+    // refresh's re-load-under-lock merge safe: CRUD owns `items`, a refresh
+    // owns `sources` + `lastRefresh`, and neither writes the other's half.
+    const serialized = serializeCommunityRegistry({
+      schemaVersion: existing.schemaVersion,
+      lastRefresh: existing.lastRefresh,
+      sources: existing.sources,
+      items: nextItems,
+      leadingComments: existing.leadingComments,
+    });
+
+    const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
+    writeFileSync(tempPath, serialized, 'utf8');
     try {
-      unlinkSync(tempPath);
-    } catch {
-      /* best-effort cleanup */
+      loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
+      renameSync(tempPath, destPath);
+    } catch (err) {
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        /* best-effort cleanup */
+      }
+      throw err;
     }
-    throw err;
+  } finally {
+    await release();
   }
+}
+
+/** W8-B5 security review, FINDING 1: lock contention is a 503 ("another
+ *  writer holds the registry, retry"), never the 500 every other failure in
+ *  these arms renders. Kept as one helper so the three CRUD arms cannot drift
+ *  into answering the same condition three different ways. */
+function sendRegistryWriteFailure(res: ServerResponse, err: unknown, origin: string): void {
+  if (err instanceof CommunityRegistryLockError) {
+    sendJson(res, 503, { error: err.message, reason: 'registry-locked' }, origin);
+    return;
+  }
+  sendJson(res, 500, { error: sanitizeError(err) }, origin);
 }
 
 export async function handleStudioWriteRoutes(
@@ -1082,7 +1116,7 @@ export async function handleStudioWriteRoutes(
         return true;
       }
       let conflict = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         if (items.some((i) => i.id === parsed.item.id)) {
           conflict = true;
           return null; // refused — the file stays byte-identical
@@ -1095,7 +1129,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id: parsed.item.id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }
@@ -1120,7 +1154,7 @@ export async function handleStudioWriteRoutes(
         return true;
       }
       let found = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         const next = items.map((i) => {
           if (i.id !== id) return i;
           found = true;
@@ -1140,7 +1174,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }
@@ -1150,7 +1184,7 @@ export async function handleStudioWriteRoutes(
       const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
       if (id === null) return true;
       let found = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         const next = items.filter((i) => {
           if (i.id === id) {
             found = true;
@@ -1166,7 +1200,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }

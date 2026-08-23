@@ -130,6 +130,7 @@ import { join, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { lockCommunityRegistry } from '../cli/community-registry-lock.ts';
 import { loadCommunityRegistry, serializeCommunityRegistry } from './studio/registry.ts';
 import { communitySourceKey } from './studio/community-source-url.ts';
 import type { CommunityRegistryItem, CommunityRegistrySource } from './studio/types.ts';
@@ -526,11 +527,31 @@ function loadCommunityRefreshEvidence(evidencePath: string): CommunityRefreshEvi
   return out;
 }
 
-export function commitRegistryDraft(ctx: FinalizerContext): string[] {
+/**
+ * W8-B5 security review, FINDING 1: this is the THIRD read-modify-write
+ * caller of `studio/community/registry.yaml`, alongside `runCommunityRefresh`
+ * (cli/community-refresh-run.ts) and the CRUD routes' `mutateCommunityRegistry`
+ * (cli/bridge-studio-writes.ts). It therefore takes the SAME mutex on the SAME
+ * path — a lock only two of three writers honour is not a lock, and this
+ * finalizer's own load → stamp → rename would otherwise still discard whatever
+ * the third writer landed in between.
+ *
+ * ASYNC ON PURPOSE. `proper-lockfile`'s sync API forbids retries outright, so
+ * `lockSync` would turn every brush with a concurrent writer into an immediate
+ * refusal. `FinalizerFn` already admits `Promise<string[]>` and
+ * `orchestrator/interactive-runner.ts` already awaits the call, so nothing
+ * downstream changes.
+ *
+ * The lock is taken AFTER the staged draft + evidence are validated (Phase 1
+ * touches only this session's own staging/ directory and no shared file) and
+ * released in a `finally`, so the critical section is the shortest one that
+ * still contains the live-registry read AND the write.
+ */
+export async function commitRegistryDraft(ctx: FinalizerContext): Promise<string[]> {
   const { sessionDir, forgeRoot } = ctx;
 
   // ---- Phase 1: locate + validate the staged draft + evidence. Zero
-  // writes. -----------------------------------------------------------------
+  // writes, and no shared file touched — so no lock is held yet. ------------
   const draftGuard = resolveGuardedPath(sessionDir, ['staging', 'registry.yaml']);
   if (!draftGuard.ok) {
     throw new InteractiveFinalizerError(
@@ -568,6 +589,29 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
   }
   const evidence = loadCommunityRefreshEvidence(evidenceGuard.realPath);
 
+  // ---- The critical section (FINDING 1). Phase 1 above read only this
+  // session's own staging/ files; from here on the SHARED registry is read
+  // AND written, so the mutex is taken now and released in the `finally` —
+  // the shortest window that still contains both the live-registry read and
+  // the write it is derived from.
+  const release = await lockCommunityRegistry(forgeRoot);
+  try {
+    return commitRegistryDraftLocked(sessionDir, forgeRoot, draft, evidence);
+  } finally {
+    await release();
+  }
+}
+
+/** The locked half of `commitRegistryDraft`: read the live registry, derive
+ *  the stamped document from the already-validated draft + evidence, write it.
+ *  Split out purely so the lock's `try/finally` stays one line rather than
+ *  re-indenting eighty. NEVER call this without holding the registry mutex. */
+function commitRegistryDraftLocked(
+  sessionDir: string,
+  forgeRoot: string,
+  draft: ReturnType<typeof loadCommunityRegistry>,
+  evidence: CommunityRefreshEvidence,
+): string[] {
   // ---- Phase 1b: the live registry — the fallback source for every
   // unverified row + the write target, resolved ONCE. A fresh forge root
   // with no registry.yaml yet is a legitimate first-ever-commit —
