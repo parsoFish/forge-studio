@@ -197,6 +197,7 @@
  */
 import { journey as home } from './home.mjs';
 import { journey as sessionsIndex } from './sessions-index.mjs';
+import { journey as projects } from './projects.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
@@ -216,6 +217,7 @@ import { journey as community } from './community.mjs';
 export const JOURNEYS = [
   home,
   sessionsIndex,
+  projects,
   skills,
   hooks,
   templates,
@@ -248,6 +250,31 @@ export const RUN_ORDER = [
   // flows-run before roadmap) untouched.
   ['sessions-index', 'sessions-index-home-strip'],
   ['sessions-index', 'sessions-index-overflow'],
+
+  // W8-C3 — the projects index's own story (health / activity / filter-sort-
+  // search / honest skill bindings). Self-contained: three throwaway scratch
+  // projects (journey-projects-broken / -unfinished / -ready, projects.mjs —
+  // never mdtoc, never J4_PROJECT, never home.mjs's own HOME_* fixtures) are
+  // seeded by projects-index-health behind its own crash-safe leading sweep
+  // and swept by projects-skill-bindings' finally, the last beat that needs
+  // them — mirroring home's own cross-beat seed/sweep shape. Placed here
+  // because it is the earliest slot that disturbs NEITHER hard ordering
+  // (stand-up-onboard before flows-author; flows-run before roadmap), and
+  // because home's own home-projects-index beat has already asserted the
+  // index's baseline contract by this point.
+  //
+  // NOTE for whoever registers the NEXT journey: this file's header prose
+  // still narrates "The 17 journeys" and lists them by name. That count is
+  // now stale by one (this entry), and W8-B5 recorded that the same prose had
+  // ALREADY drifted once before — which is why the runner derives the list by
+  // parsing the array below rather than by reading the prose. It is left
+  // untouched here on an explicit W8 coordinator instruction to keep this
+  // file's diff to the two array hunks while a concurrent lane registers its
+  // own journey; the correct fix is one edit by whichever lane lands last,
+  // covering both new journeys at once.
+  ['projects', 'projects-index-health'],
+  ['projects', 'projects-index-filter'],
+  ['projects', 'projects-skill-bindings'],
 
   ['skills', 'skills-library'],
   ['skills', 'skills-detail-package'],
