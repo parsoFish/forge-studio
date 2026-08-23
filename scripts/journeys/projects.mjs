@@ -302,6 +302,14 @@ export const journey = defineJourney({
           ).catch(() => {});
           await sleep(READ);
 
+          // Scroll the Relevant Skills panel into view before the frame — the
+          // editor column scrolls, and a clip whose payoff is off-screen shows
+          // the operator nothing (entry -> progression -> PAYOFF).
+          await page.evaluate(() => {
+            document.querySelector('[data-accepts="skill"]')?.scrollIntoView({ block: 'center' });
+          });
+          await sleep(ACT);
+
           const bindings = await page.evaluate(({ local, ghost }) => {
             const chip = (id) => document.querySelector(`.chip[data-kind="skill"][data-skill-id="${id}"]`);
             const offered = (id) => document.querySelector(`[data-skill-id="${id}"][data-skill-source]:not(.chip)`);
