@@ -377,13 +377,31 @@ point.
    passes **no** `parentEnv`, so `buildHookChildEnv`'s narrow
    `HOOK_ENV_BASE_ALLOWLIST` — never `AGENT_ENV_ALLOWLIST` — still governs the child.
    Neither guard is relaxed to make dispatch work; that was a stated park-point.
+   **Both guards were STRENGTHENED in the same lane (2026-08-24), after a hostile
+   review attacked exactly the sinks this dispatch made reachable.** The env fence
+   turned out to be a two-layer composition enforced on one layer: a manifest that
+   declared `ANTHROPIC_API_KEY` in `permissions.env` received the real value, because
+   those names become `buildChildEnv` `overrides`, which apply unconditionally by
+   design. `HOOK_ENV_CREDENTIAL_EXCLUSIONS` is now consulted by both layers, and a
+   refused grant is emitted rather than silently dropped. The approval gate gained
+   real teeth for a lone capability grant: `computeVerdict` blocks on ANY `critical`
+   finding, retiring an env-read + network-egress PAIRING whose second half was
+   evadable through the egress detector's own documented blind spots. The gates were
+   older than this dispatch and unchanged by it — but they were INERT until it, which
+   is why this lane both made them live and closed them.
 
 5. **The exit-code contract is Claude Code's, adopted rather than invented.** `0`
    allows; `2` blocks (on `PreToolUse` as a real `permissionDecision: 'deny'` carrying
    the hook's stderr, elsewhere as `{continue:false, stopReason}`); any other non-zero
    is a recorded non-blocking error. A refusal, spawn failure or timeout is recorded
    and the run continues — **an unapproved hook never gains a veto it was not
-   granted**, and a broken hook must not wedge an operator's cycle.
+   granted**, and a broken hook must not wedge an operator's cycle. Those three are
+   recorded as three DISTINCT outcomes (2026-08-24): `runHookScript` throws a typed
+   reason and the dispatch event carries `metadata.failure` of
+   `not-runnable | timeout | spawn-failed`. One line saying "refused or failed to
+   spawn" answered neither of an operator's two questions — did I forget to approve
+   this, or did my script hang and (the spawn being synchronous) stall the daemon for
+   thirty seconds — which have opposite fixes.
 
 6. **The declared `matcher` is enforced in forge's syntax, not the SDK's.** The SDK's
    `HookCallbackMatcher.matcher` is a tool-NAME pattern; forge's authored matcher is
@@ -394,7 +412,15 @@ point.
    SDK-side matcher is left absent and forge matches inside the callback: absent ⇒
    every occurrence; `Tool` ⇒ tool-name equality; `Tool(prefix)` ⇒ tool name plus a
    `tool_input.command` prefix. A matcher on a tool-less event cannot be honoured, so
-   it does not fire, and `forge studio lint` reports it.
+   it does not fire, and `forge studio lint` reports it. A matcher that cannot PARSE
+   at all is a third state (2026-08-24): `Bash(gh pr create` — one missing paren —
+   used to fall through to "the whole string is a tool name", which no tool is ever
+   called, so the hook was authored, approved, displayed as carried, and never fired
+   with no log on any fire. Malformed now fails closed and is refused by all five
+   write paths at the one predicate they share (`hookTriggerError`, which reuses
+   dispatch's own parse rather than retyping its regex). It deliberately does NOT
+   collapse into "absent": absent means fire-always, so folding a typo into it would
+   hand a broken guard a veto over every tool call.
 
 ### Stated limits, not overclaimed
 
