@@ -157,3 +157,68 @@ test('forge-ui/lib/home-view.ts is a pure derivation module: no fetch, no /api/,
   assert.ok(!/\bawait\b/.test(src), 'home-view.ts must not await anything — a derivation with async I/O is not pure');
   assert.ok(!/\bsubscribe\(/.test(src), 'home-view.ts must not subscribe — live-refresh wiring belongs to the page, not the derivation');
 });
+
+// ---------------------------------------------------------------------------
+// W8-B1 — the Monitor pillar rides the SAME rails.
+//
+// `/monitor` is the second surface to aggregate "everything running". A guard
+// that backstops only Home would have let Monitor invent exactly the shortcut
+// this file exists to rule out (its own poll loop, its own aggregate endpoint,
+// a fetch hidden inside the "pure" derivation) — a lint that does not mirror
+// what it backstops is decoration. So the same four structural checks now
+// apply to the Monitor page, to the lifted merged-ledger hook both surfaces
+// read, and to the pure monitor derivation.
+// ---------------------------------------------------------------------------
+
+const MONITOR_PAGE = join(ROOT, 'forge-ui', 'app', 'monitor', 'page.tsx');
+const MONITOR_VIEW = join(ROOT, 'forge-ui', 'lib', 'monitor-view.ts');
+const EVERYTHING_LEDGER_HOOK = join(ROOT, 'forge-ui', 'lib', 'use-everything-ledger.ts');
+
+test('forge-ui/app/monitor/page.tsx exists (the Monitor pillar surface)', () => {
+  readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+});
+
+test('app/monitor/page.tsx sources its data via the SHARED hooks, not a bespoke client of its own', () => {
+  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  assert.ok(src.includes('useStudioHomeData'), 'Monitor must source its cross-object reads through the shared hook');
+  assert.ok(
+    src.includes('useEverythingLedger'),
+    'Monitor must read the merged flow+agent ledger through the lifted hook — a second copy of that fetch/merge is how two surfaces start disagreeing about what ran',
+  );
+});
+
+test('app/monitor/page.tsx does not run its own setInterval poll loop', () => {
+  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  assert.ok(!src.includes('setInterval('), 'Monitor must not spin its own polling loop — live refresh comes from subscribe() (SSE)');
+});
+
+test('app/monitor/page.tsx does not open its own WebSocket transport', () => {
+  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  assert.ok(!src.includes('new WebSocket('), 'Monitor must not open a bespoke WebSocket — subscribe() is the one live-refresh transport');
+});
+
+test('app/monitor/page.tsx does not make a raw fetch() call', () => {
+  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  assert.ok(!/\bfetch\(/.test(src), 'Monitor must not call raw fetch() — all reads must be through the existing typed wrappers');
+});
+
+test('app/monitor/page.tsx does not reference a new /api/ literal (no bespoke aggregate endpoint)', () => {
+  const src = readOrFail(MONITOR_PAGE, 'forge-ui/app/monitor/page.tsx');
+  assert.ok(!src.includes("'/api/"), "Monitor must not hardcode a new '/api/...' endpoint — compose the existing reads instead");
+});
+
+test('lib/use-everything-ledger.ts adds no transport of its own (no interval, no socket, no raw fetch, no /api/ literal)', () => {
+  const src = readOrFail(EVERYTHING_LEDGER_HOOK, 'forge-ui/lib/use-everything-ledger.ts');
+  assert.ok(!src.includes('setInterval('), 'the lifted ledger hook must not spin a polling loop');
+  assert.ok(!src.includes('new WebSocket('), 'the lifted ledger hook must not open a bespoke WebSocket');
+  assert.ok(!/\bfetch\(/.test(src), 'the lifted ledger hook must not call raw fetch() — it composes the existing typed reads');
+  assert.ok(!src.includes("'/api/"), "the lifted ledger hook must not hardcode an '/api/...' path — the literal lives inside the read wrapper");
+});
+
+test('forge-ui/lib/monitor-view.ts is a pure derivation module: no fetch, no /api/, no await, no subscribe', () => {
+  const src = readOrFail(MONITOR_VIEW, 'forge-ui/lib/monitor-view.ts');
+  assert.ok(!/\bfetch\(/.test(src), 'monitor-view.ts must not fetch — it derives from data passed in, callers do the fetching');
+  assert.ok(!src.includes('/api/'), 'monitor-view.ts must not reference an API path — it is pure derivation, not a data-access layer');
+  assert.ok(!/\bawait\b/.test(src), 'monitor-view.ts must not await anything — a derivation with async I/O is not pure');
+  assert.ok(!/\bsubscribe\(/.test(src), 'monitor-view.ts must not subscribe — live-refresh wiring belongs to the page, not the derivation');
+});
