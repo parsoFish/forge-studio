@@ -10,8 +10,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildNodeMeta, deriveWorkItems, findDelivered, eventToNodeId, deriveNodeStatuses } from './run-model-derive.ts';
+import { buildNodeMeta, deriveWorkItems, findDelivered, eventToNodeId, deriveNodeStatuses, findFailure, deriveStopOnBudget } from './run-model-derive.ts';
 import type { EventLogEntry, Phase } from './logging.ts';
+import type { RunPhaseStatus } from './run-model.ts';
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -440,4 +441,103 @@ test('buildNodeMeta: a generic execAgent/runAgent node carries its real cost onc
     Math.abs(meta.costUsd - 0.42) < 0.000001,
     `audit node cost should be ~0.42 (from its end event), got ${meta.costUsd}`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 1): findFailure's no-classification fallback must not
+// leave a failed run with NO failNote at all when the raw error text is
+// sitting one event away.
+// ---------------------------------------------------------------------------
+
+test('findFailure: no failure_classification event — failNote derives from the last error event message (kills the silent-undefined fallback)', () => {
+  const events = [
+    ev('orchestrator', 'start', {}),
+    ev('developer-loop', 'error', { message: "ENOENT: no such file or directory, open '/tmp/x'" }),
+  ];
+  const { failedAt, failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failedAt, 'developer-loop');
+  assert.equal(failNote, "ENOENT: no such file or directory, open '/tmp/x'");
+});
+
+test('findFailure: a failure_classification event still wins its reason over the raw error text (no regression, kills a naive "always use the raw error" implementation)', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'raw crash text that must NOT surface' }),
+    ev('orchestrator', 'log', {
+      message: 'failure_classification',
+      metadata: { reason: 'PM emitted overlapping WIs (hidden coupling)' },
+    }),
+  ];
+  const { failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failNote, 'PM emitted overlapping WIs (hidden coupling)');
+});
+
+test('findFailure: an expected_fail error event is still skipped by the fallback (existing behavior preserved)', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'expected failure, ignore me', metadata: { expected_fail: true } }),
+  ];
+  const { failedAt, failNote } = findFailure(events, new Map(), new Map());
+  assert.equal(failedAt, undefined);
+  assert.equal(failNote, undefined);
+});
+
+test('findFailure: an unusually long raw error message is truncated, keeping the leading (most informative) text', () => {
+  const longMsg = 'FATAL: ' + 'x'.repeat(500);
+  const events = [ev('developer-loop', 'error', { message: longMsg })];
+  const { failNote } = findFailure(events, new Map(), new Map());
+  assert.ok(failNote !== undefined);
+  assert.ok(failNote.length < longMsg.length, `truncated failNote must be shorter than the raw ${longMsg.length}-char message, got ${failNote.length}`);
+  assert.ok(
+    longMsg.startsWith(failNote.replace(/…$/, '')),
+    'the KEPT text must be a literal prefix of the original message (leading, most-informative part preserved)',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 2b): deriveStopOnBudget — a distinct terminal outcome,
+// derived at read time from events + the run's own workItems tally. No
+// stored field to go stale.
+// ---------------------------------------------------------------------------
+
+test('deriveStopOnBudget: a cost-ceiling stop event + all work items complete derives the outcome with the right tally', () => {
+  const events = [
+    ev('orchestrator', 'log', {
+      message: 'flow.cost-ceiling-stop',
+      metadata: { spentUsd: 80.8324, ceilingUsd: 52, pct: 155.4, stoppedBeforeNode: null },
+    }),
+    ev('orchestrator', 'error', {
+      message: 'cost-ceiling: flow spent $80.8324 which meets or exceeds the $52.00 ceiling — stopping at a clean phase boundary (resumable).',
+    }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [
+    { status: 'complete' }, { status: 'complete' }, { status: 'complete' },
+    { status: 'complete' }, { status: 'complete' }, { status: 'complete' },
+  ];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.notEqual(result, null);
+  assert.equal(result?.spentUsd, 80.8324);
+  assert.equal(result?.ceilingUsd, 52);
+  assert.equal(result?.resumable, true);
+  assert.equal(result?.completedWorkItems, 6);
+  assert.equal(result?.totalWorkItems, 6);
+});
+
+test('deriveStopOnBudget: an ordinary crash (no cost-ceiling event) with zero work items complete does NOT derive a stop-on-budget outcome', () => {
+  const events = [
+    ev('developer-loop', 'error', { message: 'agent_threw: some unrelated crash' }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [{ status: 'failed' }, { status: 'pending' }];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.equal(result, null);
+});
+
+test('deriveStopOnBudget: negative control — an ordinary terminal PM hidden-coupling failure does not derive stop-on-budget', () => {
+  const events = [
+    ev('project-manager', 'error', {
+      message: 'pm.end',
+      metadata: { hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }] },
+    }),
+  ];
+  const workItems: { status: RunPhaseStatus }[] = [{ status: 'complete' }];
+  const result = deriveStopOnBudget(events, workItems);
+  assert.equal(result, null);
 });

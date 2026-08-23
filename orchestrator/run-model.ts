@@ -38,6 +38,7 @@ import {
   deriveNodeMeta,
   deriveWorkItems,
   deriveArtifacts,
+  deriveStopOnBudget,
   findGateNodeId,
   findGateNote,
   findFailure,
@@ -141,6 +142,19 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;                 // node id
   failNote?: string;
+  /**
+   * ON-7 defect 2 (W8-A2): a cost-ceiling stop is a DIFFERENT terminal
+   * outcome from an ordinary crash — the flow hit its budget at a clean,
+   * resumable phase boundary with real work already done, not zero.
+   * `status` stays 'failed' (no new queue state — that's an ask-first
+   * architectural change, parked); this is additive context alongside it,
+   * same pattern as `gate`/`gateNote` and `reflectionLost` below. Derived
+   * from the run's own `flow.cost-ceiling-stop` event + its already-derived
+   * `workItems` tally (see `deriveStopOnBudget` in run-model-derive.ts) —
+   * nothing stored, so there is no settable "stopped on budget" field for a
+   * future writer to forget to flip (`derive-status-dont-store-it`).
+   */
+  stopOnBudget?: { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number };
   /**
    * 2.10 reflector pipeline honesty: set when the cycle merged/closed but its
    * reflection was lost (reflector crash, budget/turn exhaustion, or killed —
@@ -630,6 +644,12 @@ function buildRun(args: {
   // --- Failure ---
   const { failedAt, failNote } = findFailure(events, nodeMapping, agentSlugToNodeId);
 
+  // --- Stop-on-budget (ON-7 defect 2b, W8-A2): derived from this same
+  // events array + the workItems already computed above — see the
+  // deriveStopOnBudget doc comment in run-model-derive.ts. Computed in this
+  // same pass, alongside failure/gate/reflection derivation, not stored. ---
+  const stopOnBudget = deriveStopOnBudget(events, workItems);
+
   // --- Initiative title: manifest metadata (title: / initiative_id), W7-A4 ---
   const initiative = initiativeTitle(manifest);
 
@@ -702,6 +722,7 @@ function buildRun(args: {
     flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
     ...(gate !== undefined ? { gate, gateNote } : {}),
     ...(failedAt !== undefined ? { failedAt, failNote } : {}),
+    ...(stopOnBudget !== null ? { stopOnBudget } : {}),
     ...(reflectionLoss !== undefined
       ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }
       : {}),
