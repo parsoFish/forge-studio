@@ -7,6 +7,7 @@ import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createTemplate } from '@/lib/template-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { CATEGORY_LABEL, writableCategoryNames, type WritableCategory } from '@/lib/template-authoring-view';
 
 // ---------------------------------------------------------------------------
 // Template builder — /templates/new (W7-B4, library-17/library-01). A
@@ -31,27 +32,9 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 // derivation pin.
 // ---------------------------------------------------------------------------
 
-export type WritableCategory = 'planning' | 'demo-output';
-
-export const CATEGORY_LABEL: Record<WritableCategory, string> = {
-  planning: 'Planning (studio/artifact-templates)',
-  'demo-output': 'Demo output (studio/demo-elements)',
-};
-
-/**
- * The authoring-launcher's "what can it draft" guidance is DERIVED from
- * this map — never a second literal list of writable categories (that is
- * exactly the two-lists-can-disagree, declared-data-fails-open shape this
- * campaign keeps closing). A category label added to `CATEGORY_LABEL` (and
- * therefore to `WritableCategory`) flows into the offered set automatically;
- * `project-scaffold` is excluded by omission, not by a filter, because it
- * was never added there. Exported as a pure function so the derivation
- * mechanism itself can be pinned independently of what `CATEGORY_LABEL`
- * happens to contain today (see `AuthoringLauncher.test.ts`).
- */
-export function writableCategoryNames(labels: Record<string, string>): string[] {
-  return Object.values(labels);
-}
+// `WritableCategory` / `CATEGORY_LABEL` / `writableCategoryNames` live in
+// `@/lib/template-authoring-view` — a Next.js page.tsx may only export the
+// framework's whitelisted names.
 
 function seedContent(category: WritableCategory, id: string): string {
   const safeId = id || 'my-template';

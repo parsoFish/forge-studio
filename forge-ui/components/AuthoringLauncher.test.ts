@@ -117,7 +117,7 @@ test('app/templates/new/page.tsx: the pre-existing hand-authoring controls still
 });
 
 test('app/templates/new/page.tsx: the authoring-launcher guard derives from CATEGORY_LABEL — today it never offers project-scaffold (pin 3, half 1)', async () => {
-  const { CATEGORY_LABEL, writableCategoryNames } = await import('@/app/templates/new/page');
+  const { CATEGORY_LABEL, writableCategoryNames } = await import('@/lib/template-authoring-view');
   expect(Object.keys(CATEGORY_LABEL)).not.toContain('project-scaffold');
   const names = writableCategoryNames(CATEGORY_LABEL);
   expect(names).toEqual(Object.values(CATEGORY_LABEL));
@@ -125,7 +125,7 @@ test('app/templates/new/page.tsx: the authoring-launcher guard derives from CATE
 });
 
 test('app/templates/new/page.tsx: the derivation is generic, not a second hard-coded list — a category added to the labels map flows through automatically (pin 3, half 2)', async () => {
-  const { CATEGORY_LABEL, writableCategoryNames } = await import('@/app/templates/new/page');
+  const { CATEGORY_LABEL, writableCategoryNames } = await import('@/lib/template-authoring-view');
   const hypothetical: Record<string, string> = {
     ...CATEGORY_LABEL,
     'project-scaffold': 'Project scaffold (hypothetical — proves no second list filters this)',

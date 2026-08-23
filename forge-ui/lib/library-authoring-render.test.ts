@@ -34,7 +34,7 @@ import { TemplateEditor } from '@/components/studio/TemplateEditor';
 import { sessionEntryHrefForAgent, SESSION_KIND_META } from './session-kind-meta';
 import { buildAgentPutBody, parseAgentToState, duplicateAgentState } from './agent-authoring-view';
 import type { Agent } from './studio-client';
-import { SkillDetailBody } from '@/app/skills/[id]/page';
+import { SkillDetailBody } from '@/components/studio/SkillDetailBody';
 import type { SkillDetail, SkillTrust } from './skill-client';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
