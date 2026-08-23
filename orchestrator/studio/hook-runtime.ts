@@ -54,6 +54,15 @@
  * `hookRunState(...).runnable`, i.e. approved, with the approval still covering
  * the current script, permissions and trigger hashes.
  *
+ * A refusal, a spawn failure and a TIMEOUT are three different outcomes, and
+ * since W8-B6 FIX-3 they are reported as three. `runHookScript` throws a
+ * `HookRunError` carrying a typed `reason`
+ * (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a caller distinguishes
+ * "the approval gate said no" from "the operator's script hung and, because
+ * this spawn is synchronous, stalled the daemon for the whole budget" —
+ * without string-matching a message. Both used to surface as "refused or
+ * failed to spawn", which is prose that answers neither question.
+ *
  * It did not always. The gate used to read `verdict === 'blocked' && !runnable`,
  * so `runnable`/`needsReview` were consulted ONLY for an already-blocked hook,
  * and anything scoring clean or findings ran without ever having been approved.
@@ -172,6 +181,17 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
 // runHookScript — real spawn, real stdio capture, bounded cwd + timeout.
 // ---------------------------------------------------------------------------
 
+export type HookRunFailureReason = 'not-runnable' | 'timeout' | 'spawn-failed';
+
+export class HookRunError extends Error {
+  readonly reason: HookRunFailureReason;
+  constructor(reason: HookRunFailureReason, message: string) {
+    super(message);
+    this.name = 'HookRunError';
+    this.reason = reason;
+  }
+}
+
 export interface RunHookScriptInput {
   forgeRoot: string;
   id: string;
@@ -179,6 +199,15 @@ export interface RunHookScriptInput {
   initiativeId: string;
   /** Defaults to `process.env` — pure/testable per D-K (never mutates it). */
   parentEnv?: NodeJS.ProcessEnv;
+  /**
+   * Wall-clock budget for this one invocation, defaulting to
+   * `HOOK_SPAWN_TIMEOUT_MS` (30s). Additive and optional: no production caller
+   * passes it — `hook-dispatch.ts` deliberately calls `runHookScript`
+   * unmodified, so every dispatched hook gets the standard budget — and it
+   * exists so the timeout path can be exercised in milliseconds rather than
+   * making a test suite wait 30 seconds to prove one branch.
+   */
+  timeoutMs?: number;
 }
 
 export interface HookRunResult {
@@ -194,7 +223,7 @@ export interface HookRunResult {
 const HOOK_SPAWN_TIMEOUT_MS = 30_000;
 
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
-  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env } = input;
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
 
   // BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST): the gate
   // used to be `verdict === 'blocked' && !runnable`, which only ever
@@ -209,7 +238,8 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
   // re-deriving a narrower rule here.
   const state = hookRunState(forgeRoot, id);
   if (!state.runnable) {
-    throw new Error(
+    throw new HookRunError(
+      'not-runnable',
       `runHookScript: hook "${id}" is not runnable (verdict "${state.verdict}", needsReview: ${state.needsReview}) — refusing to spawn until it is approved (see approveHook/overrideHookBlock)`,
     );
   }
@@ -264,13 +294,28 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
   const result = spawnSync('bash', [scriptPath], {
     env: childEnv,
     cwd: dir,
-    timeout: HOOK_SPAWN_TIMEOUT_MS,
+    timeout: timeoutMs,
     encoding: 'utf8',
   });
   const durationMs = Date.now() - start;
 
   if (result.error) {
-    throw new Error(`runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
+    // W8-B6 FIX-3: spawnSync reports an exceeded `timeout` as an ordinary
+    // `result.error` — same field a genuine spawn failure (ENOENT, EACCES)
+    // arrives in — so both used to be thrown as "failed to spawn". They are
+    // opposite problems with opposite fixes: one means the operator's hook
+    // package is broken, the other means their script hung and, because the
+    // spawn is synchronous, stalled the daemon for the whole budget. The
+    // discriminator is `code`, and the reason travels as a TYPED field rather
+    // than as words in a message a caller would have to re-parse.
+    const code = (result.error as NodeJS.ErrnoException).code;
+    if (code === 'ETIMEDOUT') {
+      throw new HookRunError(
+        'timeout',
+        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${result.error.message})`,
+      );
+    }
+    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
   }
 
   logger.emit({

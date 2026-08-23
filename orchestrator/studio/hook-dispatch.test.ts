@@ -50,7 +50,8 @@ import { createLogger, type EventLogEntry, type EventLogger } from '../logging.t
 import { approveHook } from './hook-scan.ts';
 import type { HookLifecycleEvent, HookPermissionManifest } from './hook-library.ts';
 
-import { sdkHooksForAgent, type SdkHooksOption } from './hook-dispatch.ts';
+import { describeHookRunFailure, sdkHooksForAgent, type SdkHooksOption } from './hook-dispatch.ts';
+import { HookRunError } from './hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers — a real on-disk forge root: skills/<slug>/SKILL.md +
@@ -285,6 +286,40 @@ describe('sdkHooksForAgent: the approval gate holds at the dispatch point', () =
     assert.ok(refusals.length >= 1, 'the refusal must be recorded, not silent');
   });
 
+  // -------------------------------------------------------------------
+  // W8-B6 FIX-3 (2026-08-24 hostile review): the catch below this call used to
+  // log "refused or failed to spawn" for BOTH an approval-gate refusal and a
+  // hook that blew its 30s budget. Those are opposite problems — one says the
+  // operator never approved the package, the other says their script hung and
+  // (the spawn being synchronous) stalled the daemon for thirty seconds — and
+  // an operator reading the event log could not tell which had happened.
+  // -------------------------------------------------------------------
+  it('an approval-gate refusal is logged AS a refusal, naming the gate, and carries a typed failure reason (kills: conflating a refusal with a hung script)', async () => {
+    const root = makeRoot('hook-dispatch-refusal-reason-');
+    const marker = join(makeRoot('hook-dispatch-refusal-reason-mark-'), 'must-not-exist.txt');
+    writeHook(root, 'refusal-reason-hook', { on: 'SessionEnd', script: touchScript(marker) });
+    // deliberately NOT approved
+    const skill = writeAgent(root, 'refusal-reason-agent', ['refusal-reason-hook']);
+    const { logger, entries } = makeLogger('c-refusal-reason');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+    await fire(hooks, 'SessionEnd');
+
+    const dispatchErrors = entries().filter((e) => (e.metadata as { kind?: string } | undefined)?.kind === 'hook-dispatch');
+    assert.equal(dispatchErrors.length, 1, `expected exactly one dispatch error, got ${JSON.stringify(dispatchErrors)}`);
+    assert.equal(
+      (dispatchErrors[0]!.metadata as { failure?: string }).failure,
+      'not-runnable',
+      'the reason must travel as a TYPED metadata field, not be recoverable only by re-parsing prose',
+    );
+    assert.doesNotMatch(
+      dispatchErrors[0]!.message ?? '',
+      /failed to spawn/i,
+      'an unapproved hook did not fail to spawn — it was never allowed to try, and saying otherwise sends an operator to debug the wrong thing',
+    );
+    assert.match(dispatchErrors[0]!.message ?? '', /approval/i, 'the message must point at the approval gate');
+  });
+
   it('editing the script after approval re-locks it — the stale approval does not carry (kills: caching the approval verdict across a fire)', async () => {
     const root = makeRoot('hook-dispatch-stale-');
     const marker = join(makeRoot('hook-dispatch-stale-mark-'), 'must-not-exist.txt');
@@ -369,6 +404,41 @@ describe('sdkHooksForAgent: the hook exit code is enforced', () => {
     assert.ok(recorded, 'the non-zero exit must be recorded');
     assert.equal((recorded!.metadata as Record<string, unknown>)['exitCode'], 1);
     assert.equal((recorded!.metadata as Record<string, unknown>)['blocking'], false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 FIX-3 — the three failure modes map to three distinct descriptions.
+// Tested directly (ADR 042: a pure function with an explicit error contract
+// may be exported for direct test) rather than through four real spawns, one
+// of which would make this suite wait out a real 30-second timeout to prove
+// one branch.
+// ---------------------------------------------------------------------------
+
+describe('describeHookRunFailure: three failure modes, three answers', () => {
+  it('each typed reason gets its own description, and none of them says "failed to spawn" unless it did', () => {
+    const refusal = describeHookRunFailure(new HookRunError('not-runnable', 'x'));
+    assert.equal(refusal.failure, 'not-runnable');
+    assert.match(refusal.description, /approval/i);
+    assert.doesNotMatch(refusal.description, /spawn/i);
+
+    const timeout = describeHookRunFailure(new HookRunError('timeout', 'x'));
+    assert.equal(timeout.failure, 'timeout');
+    assert.match(timeout.description, /budget|timed out|killed/i);
+    assert.doesNotMatch(timeout.description, /approval/i);
+
+    const spawnFailed = describeHookRunFailure(new HookRunError('spawn-failed', 'x'));
+    assert.equal(spawnFailed.failure, 'spawn-failed');
+    assert.match(spawnFailed.description, /spawn/i);
+
+    const all = [refusal.description, timeout.description, spawnFailed.description];
+    assert.equal(new Set(all).size, 3, 'three modes must produce three DISTINCT descriptions — that is the entire point of the fix');
+  });
+
+  it('an unrecognised throw is reported as unknown, never silently attributed to one of the three', () => {
+    const out = describeHookRunFailure(new Error('something else entirely'));
+    assert.equal(out.failure, 'unknown');
+    assert.doesNotMatch(out.description, /approval|budget/i, 'guessing is worse than admitting the reason is not known');
   });
 });
 

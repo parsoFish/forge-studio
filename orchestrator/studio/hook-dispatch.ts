@@ -82,9 +82,16 @@
  *                  on any other event, `{continue: false, stopReason}`.
  *   - any other  → non-blocking error: recorded, run continues. A broken hook
  *                  must not wedge an operator's cycle.
- *   - refusal / spawn failure / timeout → recorded, run continues. An
- *                  unapproved hook gains no power over the run; that would
- *                  hand an un-reviewed package a veto it was never granted.
+ *   - refusal / spawn failure / timeout → recorded, run continues, and
+ *                  recorded AS THREE DISTINCT THINGS (W8-B6 FIX-3): the event
+ *                  carries `metadata.failure` of
+ *                  `not-runnable` | `timeout` | `spawn-failed` and a message
+ *                  that names which. "Refused or failed to spawn" answered
+ *                  neither of an operator's two questions — did I forget to
+ *                  approve it, or did my script hang and stall the daemon for
+ *                  30 seconds? An unapproved hook still gains no power over
+ *                  the run; that would hand an un-reviewed package a veto it
+ *                  was never granted.
  *
  * ## HONEST LIMITS, stated rather than left to be inferred
  *
@@ -137,7 +144,7 @@ import type { EventLogger } from '../logging.ts';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from './hook-library.ts';
-import { runHookScript } from './hook-runtime.ts';
+import { HookRunError, runHookScript, type HookRunFailureReason } from './hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Structural mirrors of the SDK's hook option types. Deliberately declared
@@ -251,6 +258,36 @@ function emitHookError(
   });
 }
 
+/**
+ * W8-B6 FIX-3 — turn a `runHookScript` throw into the distinction an operator
+ * actually needs, from the error's TYPED reason rather than by re-parsing its
+ * message.
+ *
+ * The catch that used this said "refused or failed to spawn" for all three
+ * outcomes. An approval-gate refusal and a hung script are opposite problems:
+ * one is fixed by approving the package, the other by fixing a script that —
+ * because the spawn is synchronous (limit 1 above) — held the daemon for the
+ * whole 30s budget. Sending an operator to the wrong one is worse than saying
+ * nothing.
+ *
+ * A pure function with an explicit contract, exported for direct test per
+ * ADR 042; the alternative is proving four mappings through four real spawns,
+ * one of which would make the suite wait out a real timeout.
+ */
+export function describeHookRunFailure(e: unknown): { failure: HookRunFailureReason | 'unknown'; description: string } {
+  if (e instanceof HookRunError) {
+    switch (e.reason) {
+      case 'not-runnable':
+        return { failure: 'not-runnable', description: 'was refused by the approval gate' };
+      case 'timeout':
+        return { failure: 'timeout', description: 'exceeded its wall-clock budget and was killed' };
+      case 'spawn-failed':
+        return { failure: 'spawn-failed', description: 'failed to spawn' };
+    }
+  }
+  return { failure: 'unknown', description: 'failed for an unrecognised reason' };
+}
+
 function makeCallback(
   hookId: string,
   event: HookLifecycleEvent,
@@ -292,8 +329,10 @@ function makeCallback(
       // must never widen what a hook child can see.
       result = runHookScript({ forgeRoot, id: hookId, logger, initiativeId });
     } catch (e) {
-      emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" refused or failed to spawn — not fired: ${(e as Error).message}`, {
+      const { failure, description } = describeHookRunFailure(e);
+      emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" ${description} — not fired: ${(e as Error).message}`, {
         event,
+        failure,
       });
       return { continue: true };
     }

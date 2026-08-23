@@ -162,6 +162,7 @@ import {
   detectUndeclaredEnvRefs,
   runHookScript,
   buildHookApprovalGateView,
+  HookRunError,
   type HookRunResult,
 } from './hook-runtime.ts';
 
@@ -592,6 +593,66 @@ describe('detectUndeclaredEnvRefs: static, pre-spawn scan', () => {
     const script = `#!/usr/bin/env bash\necho "$PATH $HOME"\n`;
     const refs = detectUndeclaredEnvRefs(script, NO_ENV);
     assert.deepEqual(refs, [], 'PATH/HOME are genuinely always present for a hook (HOOK_ENV_BASE_ALLOWLIST), unlike ANTHROPIC_API_KEY');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 FIX-3 (2026-08-24 hostile review) — a refusal, a spawn failure and a
+// TIMEOUT are three different things and were reported as one.
+//
+// A hook exceeding HOOK_SPAWN_TIMEOUT_MS makes spawnSync set `result.error`
+// with `code: 'ETIMEDOUT'`. runHookScript threw that as
+// "failed to spawn hook ..." and hook-dispatch.ts's catch logged
+// "refused or failed to spawn" — so an operator reading the event log could
+// not tell "the approval gate said no" from "your script hung for 30 seconds
+// and stalled the daemon", which are opposite problems with opposite fixes.
+//
+// The reason is TYPED and carried on the error, not recoverable by
+// string-matching a message — a message is prose that gets reworded, and a
+// caller keying off its wording is a bug waiting for the next edit.
+// ---------------------------------------------------------------------------
+
+describe('W8-B6 FIX-3: runHookScript distinguishes its three failure modes', () => {
+  it('an approval-gate refusal carries reason "not-runnable"', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'fix3-unapproved-hook', '#!/usr/bin/env bash\nexit 0\n', NO_ENV);
+    const logger = createLogger('fix3-unapproved-cycle', makeLogsDir());
+
+    try {
+      runHookScript({ forgeRoot: root, id: 'fix3-unapproved-hook', logger, initiativeId: 'INIT-test' });
+      assert.fail('expected runHookScript to refuse an unapproved hook');
+    } catch (e) {
+      assert.ok(e instanceof HookRunError, `expected a HookRunError, got ${Object.prototype.toString.call(e)}`);
+      assert.equal((e as HookRunError).reason, 'not-runnable');
+    }
+  });
+
+  it('a hook that exceeds its wall-clock budget carries reason "timeout", and the message says so rather than blaming the spawn', () => {
+    const root = makeForgeRoot();
+    // `timeoutMs` keeps this test fast; the real default is unchanged and
+    // dispatch never overrides it (see RunHookScriptInput's own doc).
+    writeHookPackage(root, 'fix3-hanging-hook', '#!/usr/bin/env bash\nsleep 30\n', NO_ENV);
+    approveHook({ forgeRoot: root, id: 'fix3-hanging-hook' });
+    const logger = createLogger('fix3-hanging-cycle', makeLogsDir());
+
+    try {
+      runHookScript({ forgeRoot: root, id: 'fix3-hanging-hook', logger, initiativeId: 'INIT-test', timeoutMs: 200 });
+      assert.fail('expected runHookScript to throw when the hook exceeded its budget');
+    } catch (e) {
+      assert.ok(e instanceof HookRunError, `expected a HookRunError, got ${Object.prototype.toString.call(e)}`);
+      assert.equal((e as HookRunError).reason, 'timeout', 'a hung script is NOT a spawn failure and NOT an approval refusal');
+      assert.match((e as HookRunError).message, /timed out|exceeded/i, 'the message must name the real problem, not "failed to spawn"');
+      assert.match((e as HookRunError).message, /200/, 'and it must name the budget that was exceeded');
+    }
+  });
+
+  it('a hook that finishes inside its budget is unaffected — the timeout path must not fire for an ordinary run', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'fix3-fast-hook', '#!/usr/bin/env bash\necho ok\nexit 0\n', NO_ENV);
+    approveHook({ forgeRoot: root, id: 'fix3-fast-hook' });
+    const logger = createLogger('fix3-fast-cycle', makeLogsDir());
+    const result = runHookScript({ forgeRoot: root, id: 'fix3-fast-hook', logger, initiativeId: 'INIT-test', timeoutMs: 10_000 });
+    assert.equal(result.exitCode, 0);
   });
 });
 
