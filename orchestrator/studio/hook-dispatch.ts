@@ -71,14 +71,33 @@
  *                  unapproved hook gains no power over the run; that would
  *                  hand an un-reviewed package a veto it was never granted.
  *
- * ## HONEST LIMIT, stated rather than left to be inferred
+ * ## HONEST LIMITS, stated rather than left to be inferred
  *
- * Hook stdout is captured and logged but is NOT injected into the agent's
+ * **1. The spawn is SYNCHRONOUS, so a firing hook blocks the event loop.**
+ * `runHookScript` uses `spawnSync` with a 30s cap (`hook-runtime.ts:194`), and
+ * this module calls it unmodified — deliberately, because splitting that
+ * primitive would mean a second spawn path beside its approval gate and env
+ * fence, and duplicating a security gate to gain responsiveness is the wrong
+ * trade. The consequence is real and belongs stated here rather than
+ * discovered: inside `forge serve`, a `PostToolUse` hook fires on every tool
+ * call and stalls the daemon — scheduler and Studio bridge included — for the
+ * hook's whole duration. A well-behaved hook returns in milliseconds; a slow
+ * or hanging one makes the bridge look wedged for up to 30 seconds. No shipped
+ * agent binds a hook today, so nothing currently pays this. Making the spawn
+ * non-blocking means giving `hook-runtime.ts` an async tail that SHARES the one
+ * approval gate rather than copying it; filed as its own piece of work.
+ *
+ * **2. Hook stdout is captured and logged but is NOT injected into the agent's
  * context (`hookSpecificOutput.additionalContext`). Doing so would route
  * third-party script output straight into a model prompt; that is a
  * prompt-injection surface that deserves its own review round, not a
  * free-rider on this one. Both OOTB hooks only print, and both say in their
  * own headers that they never block, so nothing shipped depends on it.
+ *
+ * **3. Dispatch is claude-side.** `loops/_adapters/gemini/index.ts` has no
+ * equivalent hook mechanism, so a hook bound to an agent whose `runtime.sdk` is
+ * non-claude does not fire. Nothing pretends otherwise: the bag is only ever
+ * built into a claude options record.
  */
 
 import { resolve } from 'node:path';
