@@ -194,12 +194,103 @@ test('WI-1a-2 [project-brain]: GET /api/project-brain/sessions carries lifecycle
 });
 
 // ---------------------------------------------------------------------------
-// staleMs collapse: derived from the SAME idleMs fact, not recomputed.
+// staleMs and idleMs answer DIFFERENT questions — this assertion originally
+// pinned them as equal, which pinned a defect.
+//
+// The first cut of this lane collapsed `staleMs` into `lifecycle.idleMs` and
+// asserted the equality here as if it were the contract. It is not: idleMs
+// folds in `status.json`'s MTIME, so it reports a dead runner as fresh the
+// moment anything rewrites that file. The flows-run stall cameo caught it;
+// the two tests below pin the real contract in both directions.
+//
+// What IS still true and worth pinning: on a row whose ONLY liveness signal
+// is the log dir (no heartbeat, and an `updated_at` that agrees with the file
+// on disk), the two agree — the crashed fixture is exactly that shape. The
+// assertion is kept as an agreement check on that fixture, not as a claim
+// that staleMs is DEFINED as idleMs.
 // ---------------------------------------------------------------------------
 
-test('WI-1a: staleMs on the crashed architect row reflects the SAME idleMs the lifecycle derived (the three hand-written heartbeat-or-updated_at calcs collapse into one)', async () => {
+test('WI-1a: staleMs and idleMs answer DIFFERENT questions and may legitimately disagree on a crashed row', async () => {
   const body = await expectJson<{ sessions: Array<Record<string, unknown>> }>(await fetch(`${bridgeUrl}/api/architect/sessions`));
   const row = body.sessions.find((s) => s.sessionId === ARCH_SID)!;
   const lifecycle = row.lifecycle as { idleMs: number | null };
-  assert.equal(row.staleMs, lifecycle.idleMs ?? 0);
+  const staleMs = row.staleMs as number;
+  const idleMs = lifecycle.idleMs ?? 0;
+
+  // The crashed fixture: `updated_at` is 10 min old (the runner's last CLAIM
+  // of progress) but stderr.log was written 8 min ago (the crash output — real
+  // on-disk activity). Both numbers are right; they measure different things.
+  //   staleMs -> how long since the RUNNER said it was making progress
+  //   idleMs  -> how long since ANYTHING touched this session's files
+  // A crash is disk activity, so idleMs is necessarily the smaller of the two
+  // here. Asserting them equal is what pinned the collapse defect.
+  assert.ok(staleMs > 9 * MIN, `staleMs tracks the runner's own updated_at (~10min); got ${staleMs}`);
+  assert.ok(idleMs > 7 * MIN && idleMs < 9 * MIN, `idleMs tracks last on-disk activity, i.e. the crash output (~8min); got ${idleMs}`);
+  assert.ok(idleMs < staleMs, 'the crash wrote to disk AFTER the runner last claimed progress, so idleMs must be the smaller');
+});
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7) — `staleMs` must come from the runner's OWN signals, never from
+// `status.json`'s mtime.
+//
+// Regression pin for a defect this lane INTRODUCED and the flows-run stall
+// cameo caught. Wiring the four bespoke routes to the shared lifecycle, the
+// first cut also collapsed `staleMs` into `lifecycle.idleMs`. But idleMs is
+// `now - max(status.json MTIME, .heartbeat, events.jsonl)`, and the runner
+// rewrites status.json on EVERY phase transition — so a dead runner whose file
+// was merely touched reported `staleMs: 0` and the StuckWarning never rendered.
+// A fail-open exactly inverse to this lane's purpose, in the lane's own fix.
+//
+// The fixture is the stall cameo's, reduced: status.json written NOW (fresh
+// mtime) carrying an `updated_at` well past the 120s threshold, and NO
+// heartbeat. Under the idleMs collapse this returns ~0; it must return >120s.
+//
+// KILLS: `staleMs = lifecycle.idleMs ?? 0`.
+// ---------------------------------------------------------------------------
+
+const STALE_CLAIM_SID = '2026-08-23T00-00-05-staleclaim';
+
+test('architect staleMs comes from the runner\'s updated_at, not status.json mtime (fresh file, old claim, no heartbeat)', async () => {
+  // Written NOW — fresh mtime, deliberately — with a 200s-old claim.
+  writeStatus(
+    join(projectsRoot, 'proja', '_architect', STALE_CLAIM_SID),
+    {
+      session_id: STALE_CLAIM_SID, project: 'proja', project_repo_path: join(projectsRoot, 'proja'),
+      phase: 'drafting', round: 2, idea: 'stale claim', updated_at: new Date(Date.now() - 200_000).toISOString(),
+    },
+  );
+
+  const body = await expectJson<{ sessions: { sessionId: string; staleMs: number }[] }>(
+    await fetch(`${bridgeUrl}/api/architect/sessions`),
+  );
+  const row = body.sessions.find((s) => s.sessionId === STALE_CLAIM_SID);
+  assert.ok(row, 'the session is listed');
+  assert.ok(
+    row.staleMs > 120_000,
+    `staleMs must exceed the 120s StuckWarning threshold (isSessionStale/STALE_THRESHOLD_MS); got ${row.staleMs}. ` +
+      'A near-zero value means staleMs is reading status.json\'s mtime instead of the runner\'s own updated_at.',
+  );
+});
+
+test('a LIVE heartbeat outranks an old updated_at — no false stall warning on a runner that is still beating', async () => {
+  const sid = '2026-08-23T00-00-06-beating';
+  writeStatus(
+    join(projectsRoot, 'proja', '_architect', sid),
+    {
+      session_id: sid, project: 'proja', project_repo_path: join(projectsRoot, 'proja'),
+      phase: 'drafting', round: 2, idea: 'beating', updated_at: new Date(Date.now() - 200_000).toISOString(),
+    },
+  );
+  // A fresh heartbeat: the runner IS alive, it just has not changed phase.
+  writeLog('architect', sid, { '.heartbeat': '' });
+
+  const body = await expectJson<{ sessions: { sessionId: string; staleMs: number }[] }>(
+    await fetch(`${bridgeUrl}/api/architect/sessions`),
+  );
+  const row = body.sessions.find((s) => s.sessionId === sid);
+  assert.ok(row, 'the session is listed');
+  assert.ok(
+    row.staleMs < 120_000,
+    `a beating runner must NOT be reported stale; got ${row.staleMs}. This is the negative control — ` +
+      'without it, "always use updated_at" would raise a false stall on every long drafting phase.',
+  );
 });

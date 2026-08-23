@@ -86,7 +86,7 @@ import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import {
-  deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun,
+  deriveSessionLifecycleFor, sessionLogDirName, sessionHeartbeatMtimeMs, killTrackedRun,
   type SessionLifecycleState, type SessionLifecycle,
   // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
   // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
@@ -1805,6 +1805,44 @@ function readGuardedSessionIndexSummary(
  * `pushRow` already computed them, just callable from five places instead
  * of copy-pasted or reinvented at four of them.
  */
+/**
+ * W8-A2 (ON-7) — `staleMs` for the bespoke per-kind session panels: ms since
+ * the last sign of life, preferring the runner's OWN signals over the status
+ * file's mtime.
+ *
+ * Order, and why:
+ *   1. `.heartbeat` mtime — written only while a runner is genuinely alive,
+ *      so it is the strongest positive evidence. Without this, an architect
+ *      legitimately sitting in `drafting` for minutes while heartbeating
+ *      would raise a FALSE stall warning.
+ *   2. the runner's own `updated_at` — its CLAIM about when it last made
+ *      progress. This is what the panel has always used, and it is the signal
+ *      the flows-run stall cameo exercises.
+ *   3. `lifecycle.idleMs` — last resort only.
+ *
+ * `lifecycle.idleMs` is deliberately NOT the primary source: it is
+ * `now - max(status.json MTIME, .heartbeat, events.jsonl)`, and the runner
+ * rewrites status.json on every phase transition, so a dead runner whose file
+ * was merely touched reads FRESH — a fail-open exactly inverse to this lane's
+ * purpose. (Falling back to idleMs also fixes the pre-existing
+ * `Date.now() - 0` bug in the old hand-rolled version, which reported ~56
+ * years of staleness for an unparseable `updated_at`.)
+ */
+function sessionStaleMs(
+  ctx: { logsRoot: string },
+  kind: string,
+  sessionId: string,
+  updatedAt: string | undefined,
+  lifecycle: SessionLifecycle | null,
+): number {
+  const now = Date.now();
+  const heartbeatMs = sessionHeartbeatMtimeMs(ctx.logsRoot, kind, sessionId);
+  if (heartbeatMs !== null) return Math.max(0, now - heartbeatMs);
+  const claimed = updatedAt !== undefined ? Date.parse(updatedAt) : Number.NaN;
+  if (!Number.isNaN(claimed)) return Math.max(0, now - claimed);
+  return lifecycle?.idleMs ?? 0;
+}
+
 function deriveRowLifecycle(
   ctx: { projectsRoot: string; logsRoot: string },
   descriptor: SessionKindDescriptor,
@@ -4180,18 +4218,25 @@ async function handleArchitect(
       // idleMs/cancellable): the SAME derivation the aggregate `/api/studio/
       // sessions` index already carried per row — this dedicated route never
       // called it before (`deriveSessionLifecycleFor` was imported once,
-      // called once, by that other route alone). `staleMs` now DERIVES from
-      // the same `idleMs` fact (`lifecycle.idleMs ?? 0`) instead of an
-      // independently hand-rolled "heartbeat mtime else updated_at"
-      // calculation — kept only for wire compatibility with
-      // `isSessionStale` (forge-ui/lib/architect-hex.ts), which still reads
-      // `session.staleMs`. `idleMs === null` (no log dir at all — an honest
-      // "no liveness signal", never a guess) falls back to `0`, matching
-      // this field's pre-existing "always a number" wire contract.
+      // called once, by that other route alone).
+      //
+      // `staleMs` deliberately does NOT come from `lifecycle.idleMs`.
+      // Collapsing it into idleMs was tried and REVERTED: idleMs is
+      // `now - max(status.json MTIME, .heartbeat, events.jsonl)`, and the
+      // runner rewrites status.json on every phase transition, so a dead
+      // runner whose file was merely touched reads FRESH. The runner's own
+      // `updated_at` is its CLAIM about when it last made progress, which is
+      // the honest signal and the one this panel has always used; the file's
+      // mtime is a weaker proxy that fails OPEN. Caught by the flows-run
+      // stall cameo, whose fixture writes status.json NOW with an
+      // `updated_at` 200s old and deletes the heartbeat — precisely the
+      // divergence. `isSessionStale` (forge-ui/lib/architect-hex.ts) reads
+      // this field against STALE_THRESHOLD_MS (120s), matched by
+      // STALL_CEILING_MS_BY_KIND.architect.
       const rowLifecycle = architectDescriptor
         ? deriveRowLifecycle(ctx, architectDescriptor, s.phase, s.project, s.session_id).lifecycle
         : null;
-      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
+      const staleMs = sessionStaleMs(ctx, 'architect', s.session_id, s.updated_at, rowLifecycle);
 
       return {
         sessionId: s.session_id,
@@ -4559,13 +4604,13 @@ async function handleInstructions(
         ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
         : null;
 
-      // W8-A2 (ON-7 defect 1) — see the architect route's identical comment:
-      // the derived lifecycle, and `staleMs` derived from its `idleMs`
-      // rather than an independent heartbeat-or-updated_at calculation.
+      // W8-A2 (ON-7 defect 1) — see the architect route: the derived lifecycle,
+      // and `staleMs` from the runner's own heartbeat/`updated_at`, never the
+      // status file's mtime.
       const rowLifecycle = instructionsDescriptor
         ? deriveRowLifecycle(ctx, instructionsDescriptor, s.phase, s.project, s.session_id).lifecycle
         : null;
-      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
+      const staleMs = sessionStaleMs(ctx, 'instructions', s.session_id, s.updated_at, rowLifecycle);
 
       // Surface the current AGENTS.md so the briefing screen can show the file
       // the operator is editing (and the read-only context for their notes).
@@ -5165,13 +5210,14 @@ async function handleDemoBuilder(
         .filter((f) => f.endsWith('.html'))
         .map((f) => f.slice(0, -'.html'.length));
 
-      // W8-A2 (ON-7 defect 1) — see the architect route's identical comment:
-      // the derived lifecycle, and `staleMs` derived from its `idleMs`
-      // rather than an independent heartbeat-or-updated_at calculation.
+      // W8-A2 (ON-7 defect 1) — see the architect route: the derived lifecycle,
+      // and `staleMs` from the runner's own heartbeat/`updated_at`, never the
+      // status file's mtime. NOTE the on-disk log dir for this kind is
+      // `_demo-<sid>`, not `_demo-builder-<sid>`.
       const rowLifecycle = demoDescriptor
         ? deriveRowLifecycle(ctx, demoDescriptor, s.phase, s.project, s.session_id).lifecycle
         : null;
-      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
+      const staleMs = sessionStaleMs(ctx, 'demo', s.session_id, s.updated_at, rowLifecycle);
 
       return {
         sessionId: s.session_id,

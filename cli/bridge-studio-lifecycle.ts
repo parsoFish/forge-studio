@@ -207,6 +207,18 @@ export function sessionLogDirName(kind: string, sessionId: string): string {
   return `_${kind}-${sessionId}`;
 }
 
+/**
+ * W8-A2 (ON-7) — the session's own `.heartbeat` mtime, guarded, or null when
+ * absent. Exposed because the bespoke per-kind session panels need the
+ * HEARTBEAT specifically, not `SessionLifecycle.idleMs`: idleMs folds in
+ * `status.json`'s mtime, and the runner rewrites status.json on every phase
+ * transition, so a dead runner whose file was merely touched reads fresh.
+ * The heartbeat is written only while a runner is genuinely alive.
+ */
+export function sessionHeartbeatMtimeMs(logsRoot: string, kind: string, sessionId: string): number | null {
+  return guardedMtime(logsRoot, [sessionLogDirName(kind, sessionId), '.heartbeat']);
+}
+
 function guardedMtime(root: string, segments: readonly string[]): number | null {
   const guarded = resolveGuardedPath(root, segments);
   if (!guarded.ok || !guarded.exists) return null;
