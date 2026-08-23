@@ -468,17 +468,16 @@ describe('deriveSessionTranscript — stage machinery is genuinely exercised (fa
 describe('deriveSessionTranscript — empty session honesty', () => {
   it('AT-23: an empty session dir → {ok:true, turns:[]} with sourcesScanned NON-empty, naming the files it looked for', () => {
     const sessionDir = makeTmpDir('transcript-empty-');
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as {
-      ok: true;
-      turns: unknown[];
-      sourcesScanned: string[];
-    };
-    assert.equal(result.ok, true);
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
     assert.deepEqual(result.turns, []);
     assert.ok(Array.isArray(result.sourcesScanned) && result.sourcesScanned.length > 0, 'sourcesScanned must never be silently empty — it names what was scanned even when nothing was found');
     for (const name of ['idea.md', 'answers.json', 'questions.json', 'feedback.md']) {
       assert.ok(result.sourcesScanned.some((s) => s.includes(name)), `sourcesScanned must name "${name}"`);
     }
+    // W8-B3 (ON-5): scanned names what we LOOKED for; found names what was
+    // there. An empty dir must report the second as empty, never conflate them.
+    assert.deepEqual([...result.sourcesFound], []);
   });
 });
 
