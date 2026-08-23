@@ -113,6 +113,19 @@ const HOME_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', HOME_ACTIVE_CYCLE_ID);
 // discovered the SAME way the real gitpulse/mdtoc/etc. project brains are
 // (cli/bridge-studio-kbs.ts's loadKbDescriptors walks brain/projects/*/kb.yaml)
 // — .gitignore carries its own dedicated entry (never committed).
+// W8-B2 (ON-4) — a REAL parked kb-cleanup draft: the on-disk shape
+// `mintKbCleanupDraftSession` (cli/bridge-studio-kb-drain.ts) writes when the
+// drain gates an edit, under the SAME `.kb-<id>` dot-anchor project a
+// unique-binding KB's drafts land in. `awaiting-approval` is non-terminal and
+// awaits a verdict (studio/session-kinds.yaml), so the bridge derives
+// needsYou:true for it — which is the ONLY condition buildKbDraftAttention
+// reads. Nothing here pokes an attention count.
+const HOME_DRAFT_KB = 'home-fixture-draft-kb';
+const HOME_DRAFT_ANCHOR = `.kb-${HOME_DRAFT_KB}`;
+const HOME_DRAFT_SID = `${HOME_DATE}T09-00-00-home8b2`;
+const HOME_DRAFT_ANCHOR_DIR = join(FORGE_ROOT, 'projects', HOME_DRAFT_ANCHOR);
+const HOME_DRAFT_SESSION_DIR = join(HOME_DRAFT_ANCHOR_DIR, '_kb-cleanup', HOME_DRAFT_SID);
+
 export const HOME_LINT_KB = 'home-fixture-lint-kb';
 const HOME_LINT_KB_DIR = join(FORGE_ROOT, 'brain', 'projects', HOME_LINT_KB);
 
@@ -138,6 +151,7 @@ function cleanHomeFixture() {
   try { rmSync(HOME_ACTIVE_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_ACTIVE_LOG_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_LINT_KB_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_DRAFT_ANCHOR_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   cleanInstructionsSession(HOME_SESSION_SID); // W6-B11 — the strip's own session fixture
 }
 
@@ -267,8 +281,40 @@ function writeHomeLintKbFixture() {
   ].join('\n'));
 }
 
+/** The parked drain draft (W8-B2/ON-4). Mirrors the real writer's fields —
+ *  phase, kb_id, draft_apply, origin — so the sessions index reads a genuine
+ *  kb-cleanup row, not a shape invented for this test. */
+function writeHomeDraftSession() {
+  mkdirSync(join(HOME_DRAFT_SESSION_DIR, 'drafts'), { recursive: true });
+  mkdirSync(join(HOME_DRAFT_SESSION_DIR, 'plan'), { recursive: true });
+  writeFileSync(join(HOME_DRAFT_SESSION_DIR, 'status.json'), JSON.stringify({
+    session_id: HOME_DRAFT_SID,
+    project: HOME_DRAFT_ANCHOR,
+    phase: 'awaiting-approval',
+    kb_id: HOME_DRAFT_KB,
+    kb_binding: { kind: 'unique' },
+    findings: [{ kind: 'length.soft-cap', check: 'checkLengthSoftCap', file: 'brain/projects/home-fixture-draft-kb/themes/sample-theme.md', message: 'theme over soft cap' }],
+    draft_apply: [{ file: 'brain/projects/home-fixture-draft-kb/themes/sample-theme.md', draft: 'drafts/0.md' }],
+    origin: 'kb-drain',
+    updated_at: new Date().toISOString(),
+  }, null, 2));
+  writeFileSync(join(HOME_DRAFT_SESSION_DIR, 'drafts', '0.md'), '# Sample theme\n\nJourney-seeded proposed rewrite; never applied, swept every run.\n');
+  writeFileSync(join(HOME_DRAFT_SESSION_DIR, 'plan', 'cleanup-plan.md'), [
+    '# Drain-gated prose edit (journey-seeded)',
+    '',
+    '```diff',
+    '--- a/brain/projects/home-fixture-draft-kb/themes/sample-theme.md',
+    '+++ b/brain/projects/home-fixture-draft-kb/themes/sample-theme.md',
+    '-Journey-seeded scratch content.',
+    '+Journey-seeded scratch content, condensed.',
+    '```',
+    '',
+  ].join('\n'));
+}
+
 function writeHomeFixture() {
   writeHomeGatedManifest();
+  writeHomeDraftSession();
   writeHomeActiveManifest();
   writeHomeLintKbFixture();
   // W6-B11 — the active-sessions strip's own fixture (see HOME_SESSION_SID's
@@ -575,7 +621,7 @@ export const journey = defineJourney({
     {
       id: 'home-attention',
       title: 'The attention strip — what needs the operator right now',
-      narration: 'The attention strip fires ONLY on a real condition — never on mere existence (home-view.ts\'s buildHomeAttention/buildKbAttention). Two independent sources feed it here: the seeded gated project (a real ready-for-review PR) and a REAL per-KB lint flag from a genuinely unindexed project brain — every row tagged data-attention-kind so gate and KB rows are told apart, and every row links straight through to its own owning surface.',
+      narration: 'The attention strip fires ONLY on a real condition — never on mere existence (home-view.ts\'s buildHomeAttention/buildKbAttention/buildKbDraftAttention). THREE independent sources feed it here: the seeded gated project (a real ready-for-review PR), a REAL per-KB lint flag from a genuinely unindexed project brain, and — new in wave 8 (B2, operator note ON-4) — a brain edit the drain has already made and parked for approval. That last one used to appear in no Home row at all: a KB holding an unreviewed, unapplied rewrite of a real theme looked exactly like one that had never been drained, and the only way to find it was an 11px text link buried in a finding row on that KB\'s Health tab. It fires off the bridge\'s own needs-you verdict for the kb-cleanup session and links where the operator can actually decide. Every row is tagged data-attention-kind so gate, KB-lint and parked-draft rows are told apart, and every row links straight through to its own owning surface.',
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[HOME.2] Home — attention strip');
@@ -611,7 +657,40 @@ export const journey = defineJourney({
         // Both the gate row (seeded project) and the KB row (seeded lint
         // flag) must be counted — this rose from >=1 to >=2 once the KB row
         // was added to this beat.
-        check(parseInt(attentionCountAttr, 10) >= 2, `HOME.2: data-attention-count ≥2 (gate row + KB row; got "${attentionCountAttr}")`);
+        check(parseInt(attentionCountAttr, 10) >= 3, `HOME.2: data-attention-count ≥3 (gate row + KB row + the W8-B2 parked-draft row; got "${attentionCountAttr}")`);
+
+        // ── W8-B2 (ON-4) — a brain edit parked for review is LOUD on Home.
+        // Before this it appeared in no Home row at all, so a KB holding an
+        // unreviewed, unapplied rewrite of a real theme looked identical to one
+        // that had never been drained. The row fires off the bridge's own
+        // needs-you verdict for the seeded kb-cleanup session, and links to the
+        // session — the only place the operator can actually approve or reject.
+        const draftStrip = await page.evaluate(() => {
+          const el = document.querySelector('section[data-section="brain-edits-awaiting-review"]');
+          if (!el) return null;
+          const row = el.querySelector('a[data-attention-item][data-attention-kind="kb-draft"]');
+          return {
+            heading: el.querySelector('h2')?.textContent ?? '',
+            status: row?.getAttribute('data-attention-status') ?? '',
+            session: row?.getAttribute('data-attention-session') ?? '',
+            href: row?.getAttribute('href') ?? '',
+            cta: row?.querySelector('span:last-child')?.textContent ?? '',
+            action: row?.getAttribute('data-action') ?? '',
+          };
+        });
+        check(draftStrip !== null, 'HOME.2 (W8-B2/ON-4): [data-section="brain-edits-awaiting-review"] renders — the seeded parked kb-cleanup draft fired it');
+        check((draftStrip?.heading ?? '').includes('Brain edits awaiting your review'),
+          `HOME.2 (ON-4): the strip carries its visible h2 (got "${draftStrip?.heading}")`);
+        check(draftStrip?.status === 'gated', `HOME.2 (ON-4): the row's status is the derived "gated" (got "${draftStrip?.status}")`);
+        check(draftStrip?.session === HOME_DRAFT_SID,
+          `HOME.2 (ON-4): the row names the REAL seeded session id, not a placeholder (got "${draftStrip?.session}")`);
+        check((draftStrip?.href ?? '').startsWith('/sessions/kb-cleanup/'),
+          `HOME.2 (ON-4): the row links to the SESSION — the only place the edit can be approved or rejected (got "${draftStrip?.href}")`);
+        check((draftStrip?.cta ?? '').includes('Review the diff'),
+          `HOME.2 (ON-4): the row SAYS where the click goes (got "${(draftStrip?.cta ?? '').slice(0, 40)}")`);
+        check(draftStrip?.action === 'review-brain-draft',
+          `HOME.2 (ON-4): the row carries its own data-action, distinct from the lint strip's kb-drain-link (got "${draftStrip?.action}")`);
+        await frame(page, 'home-2b-brain-edits-awaiting-review', 'Home — a brain edit parked for review is now its own attention row (ON-4)', { key: true });
 
         const item = await page.evaluate((projectId) => {
           const el = document.querySelector(`a[data-attention-item][data-attention-project="${projectId}"]`);
