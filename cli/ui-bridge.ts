@@ -166,6 +166,7 @@ import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from './studio-path-guard.ts';
+import { fixedTierForSessionKind } from './session-model-tier.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -1908,6 +1909,12 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // definition, needs nothing further from the operator; `deriveRowLifecycle`
     // derives `terminal` before `lifecycle` so that is true structurally.
     const { terminal, lifecycle } = deriveRowLifecycle(ctx, descriptor, phase, project, sessionId);
+    // W8-B3 (sessions-kinds-R06/31) — the SAME read-time fixed-tier fallback
+    // the session shell applies (cli/session-model-tier.ts), so the index
+    // MODEL column and the session's own chip can never disagree about what a
+    // fixed-tier kind ran on. The index used to show "—" for every architect
+    // and project-brain row for exactly this reason.
+    const resolvedTier = modelTier ?? fixedTierForSessionKind(ctx.forgeRoot, descriptor);
     rows.push({
       kind: descriptor.id,
       sessionId,
@@ -1918,7 +1925,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       state: lifecycle.state,
       error: lifecycle.error,
       idleMs: lifecycle.idleMs,
-      modelTier,
+      modelTier: resolvedTier,
       updatedAt,
       href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
     });

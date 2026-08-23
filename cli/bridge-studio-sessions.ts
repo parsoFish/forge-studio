@@ -119,6 +119,7 @@ import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
+import { fixedTierForSessionKind } from './session-model-tier.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -802,7 +803,17 @@ export async function handleStudioSessionsRoutes(
         // note. Read directly off the already-parsed `statusParsed`, the
         // SAME realpath-guarded read every other field on this envelope
         // comes from; never a second, unguarded status read.
-        modelTier: typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null,
+        // W8-B3 (sessions-kinds-R06/31) — when the session recorded no tier,
+        // fall back to the kind's agent's FIXED tier, derived live off its
+        // SKILL.md. Scoped to `strategy:fixed` on purpose: such an agent has
+        // exactly one legal tier, so a session of that kind provably ran on
+        // it; a `strategy:range` agent's untiered session ran on whatever the
+        // default was at the time, which today's default may no longer be, so
+        // "not recorded" stays the honest answer there. Never stored — a
+        // skill re-pointed at a different model cannot leave a stale copy.
+        modelTier: typeof statusParsed.modelTier === 'string'
+          ? statusParsed.modelTier
+          : fixedTierForSessionKind(ctx.forgeRoot, descriptor),
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
         // used internally to gate `ensureSessionTail` (this file's header),
         // now also threaded onto the wire (ALWAYS present, never omitted —

@@ -124,3 +124,35 @@ test('allowedTiersFromCapability: fixed / null / undefined all return []', () =>
   expect(allowedTiersFromCapability(null)).toEqual([]);
   expect(allowedTiersFromCapability(undefined)).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// W8-B3 (sessions-kinds-R06) — a fixed-tier agent still HAS a tier; name it.
+// This chip printed the literal string "fixed · read-only" for every
+// fixed-strategy agent, which is why the three fixed-tier session kinds
+// (architect, project-brain, onboarding) never named their model anywhere in
+// the product — "fixed · read-only" at kickoff, "not recorded" on the session,
+// "—" in the index.
+// ---------------------------------------------------------------------------
+
+test('R06: a fixed-strategy capability NAMES its tier in the read-only chip, and exposes it as a data attribute', () => {
+  const html = render({
+    capability: { interactive: true, runtimeSdks: ['claude-code'], fanoutCapable: false, materials: [], costCeilingEnforceable: true, fixedTier: 'opus' },
+  });
+  expect(html).toContain('data-model-tier-picker="fixed"');
+  expect(html).toContain('data-model-tier="opus"');
+  expect(html).toContain('opus');
+  expect(html).not.toContain('fixed · read-only');
+});
+
+test('R06: a capability with no resolvable tier keeps the honest read-only chip — never an invented tier', () => {
+  const html = render({
+    capability: { interactive: true, runtimeSdks: ['claude-code'], fanoutCapable: false, materials: [], costCeilingEnforceable: true },
+  });
+  expect(html).toContain('fixed · read-only');
+  expect(html).toContain('data-model-tier=""');
+});
+
+test('R06: a NOT-YET-LOADED capability keeps the read-only chip — the picker must not claim a tier it has not been told', () => {
+  const html = render({ capability: null });
+  expect(html).toContain('fixed · read-only');
+});
