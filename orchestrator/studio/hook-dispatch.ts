@@ -94,7 +94,23 @@
  * free-rider on this one. Both OOTB hooks only print, and both say in their
  * own headers that they never block, so nothing shipped depends on it.
  *
- * **3. Dispatch is claude-side.** `loops/_adapters/gemini/index.ts` has no
+ * **3. A matcher is a PREFIX TEST on the literal command string, not command
+ * analysis.** `Bash(gh pr create)` fires for `gh pr create --draft`, and does
+ * NOT fire for `sh -c 'gh pr create'`, ` gh pr create` (leading space),
+ * `cd /x && gh pr create`, or `GH_TOKEN=… gh pr create`. That is the same
+ * property Claude Code's own permission rules have, so forge is inheriting the
+ * platform's semantics rather than inventing a weaker one — but it must be
+ * said out loud now that a hook can BLOCK (exit 2), because an operator could
+ * otherwise read a matcher as an airtight guard. **A hook is a customisation,
+ * not a security boundary against a determined agent.** Both OOTB hooks are
+ * advisory and say so in their own script headers.
+ *
+ * The `Tool(prefix)` form is read as a PREFIX rather than an exact match on
+ * purpose: for a guard-shaped hook, firing on more commands than the operator
+ * literally typed is the safe direction, and `Bash(gh pr create)` obviously
+ * means "a gh-pr-create command", not "that exact string and no flags".
+ *
+ * **4. Dispatch is claude-side.** `loops/_adapters/gemini/index.ts` has no
  * equivalent hook mechanism, so a hook bound to an agent whose `runtime.sdk` is
  * non-claude does not fire. Nothing pretends otherwise: the bag is only ever
  * built into a claude options record.
