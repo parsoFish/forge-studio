@@ -11,17 +11,116 @@
  * summary strip and CLICKS the new Monitor pillar. The nav click is the
  * trigger this journey proves — never opening /monitor cold.
  *
- * NO NEW FIXTURES. This journey deliberately seeds nothing: its assertions
- * are structural (every promised section renders) and RELATIONAL (the numbers
- * on one surface equal the numbers on the other, and the summary equals the
- * list it summarises). Those hold on an empty install and on a busy one,
- * which is the point — the defect being pinned shut is two derivations
- * disagreeing, not a particular row count. A seeded fixture here would prove
- * less and would have to be swept out of a shared project.
+ * FIXTURE (self-contained, disjoint from every other journey's ids — never
+ * mdtoc's own queue, never home.mjs's HOME_* scratch projects). Two throwaway
+ * scratch projects with REAL `_queue/` manifests, mirroring the shape
+ * home.mjs's own HOME_ACTIVE fixture already uses:
+ *   - MONITOR_ACTIVE_PROJECT — a real `_queue/in-flight/<id>.md` naming the
+ *     always-shipped `forge-develop` flow, plus a seeded
+ *     `_logs/<cycleId>/events.jsonl` carrying one OPEN developer-loop start
+ *     event. `QUEUE_STATE_TO_RUN_STATUS` maps `in-flight` -> run status
+ *     `active`, so this is a genuinely in-flight run, not a poked count.
+ *   - MONITOR_FAILED_PROJECT — a real `_queue/failed/<id>.md`, which the same
+ *     table maps to run status `failed`.
+ * The fixture exists for ONE reason: the relational assertions below (the
+ * summary equals the list it summarises; Home and Monitor agree) are TRUE but
+ * VACUOUS on an empty install — 0 === 0 passes against a completely broken
+ * derivation. A check that cannot fail is not a check. With one active and
+ * one failed run on disk, every identity below has to survive real numbers.
+ *
+ * Seed/cleanup discipline (home.mjs's own shape): `monitor-pillar-entry`
+ * seeds behind a crash-safe leading sweep; `monitor-counts-agree` — the last
+ * beat that needs it — sweeps in a try/finally.
  */
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
-import { caption, ACT, READ } from '../lib/journey-fixtures.mjs';
+import { FORGE_ROOT, caption, ACT, READ } from '../lib/journey-fixtures.mjs';
 import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
+
+// ── MONITOR fixture identity — local to this journey, disjoint from every
+// other journey's seeded ids (HOME_*/J4/J5/SK_*/HK_*/SHOWCASE_*/…) ──
+const MON_DATE = new Date().toISOString().slice(0, 10);
+const MON_STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+
+const MON_ACTIVE_PROJECT = 'monitor-fixture-active-project';
+const MON_ACTIVE_PROJECT_DIR = join(FORGE_ROOT, 'projects', MON_ACTIVE_PROJECT);
+const MON_ACTIVE_INIT = `INIT-${MON_DATE}-monitor-fixture-active`;
+const MON_ACTIVE_CYCLE_ID = `${MON_STAMP}_${MON_ACTIVE_INIT}`;
+const MON_ACTIVE_MANIFEST = join(FORGE_ROOT, '_queue', 'in-flight', `${MON_ACTIVE_INIT}.md`);
+const MON_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', MON_ACTIVE_CYCLE_ID);
+
+const MON_FAILED_PROJECT = 'monitor-fixture-failed-project';
+const MON_FAILED_PROJECT_DIR = join(FORGE_ROOT, 'projects', MON_FAILED_PROJECT);
+const MON_FAILED_INIT = `INIT-${MON_DATE}-monitor-fixture-failed`;
+const MON_FAILED_CYCLE_ID = `${MON_STAMP}_${MON_FAILED_INIT}`;
+const MON_FAILED_MANIFEST = join(FORGE_ROOT, '_queue', 'failed', `${MON_FAILED_INIT}.md`);
+
+/** Minimal `.forge/project.json` — enough for the project to read like a real
+ *  one; never dispatched, swept every run. */
+function writeMonProjectConfig(dir, name, northStar) {
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+    $comment: 'journey-seeded scratch project (scripts/journeys/monitor.mjs) — never dispatched, swept every run.',
+    name, northStar,
+  }, null, 2));
+}
+
+function manifestBody(initiativeId, project, projectDir, phase, cycleId, note) {
+  return [
+    '---',
+    `initiative_id: ${initiativeId}`,
+    `project: ${project}`,
+    `project_repo_path: ${projectDir}`,
+    `created_at: '${new Date().toISOString()}'`,
+    'iteration_budget: 10',
+    'cost_budget_usd: 6',
+    `phase: ${phase}`,
+    'origin: architect',
+    `cycle_id: ${cycleId}`,
+    'flow_id: forge-develop',
+    '---',
+    '',
+    `# Monitor fixture — ${note} (journey-seeded)`,
+    '',
+    'A throwaway scratch project this journey creates and destroys itself — ' +
+      'never mdtoc\'s own queue, never another journey\'s fixture.',
+    '',
+  ].join('\n');
+}
+
+function seedMonitorFixture() {
+  mkdirSync(join(FORGE_ROOT, '_queue', 'in-flight'), { recursive: true });
+  mkdirSync(join(FORGE_ROOT, '_queue', 'failed'), { recursive: true });
+
+  writeMonProjectConfig(MON_ACTIVE_PROJECT_DIR, 'Fixture: Monitor active build',
+    'A journey-seeded scratch project proving Monitor counts a genuinely in-flight run.');
+  writeFileSync(MON_ACTIVE_MANIFEST, manifestBody(
+    MON_ACTIVE_INIT, MON_ACTIVE_PROJECT, MON_ACTIVE_PROJECT_DIR, 'in-flight', MON_ACTIVE_CYCLE_ID, 'active build'));
+  // One OPEN developer-loop start event — the same in-flight shape home.mjs's
+  // own active fixture uses, so the run aggregates as genuinely running.
+  mkdirSync(MON_ACTIVE_LOG_DIR, { recursive: true });
+  writeFileSync(join(MON_ACTIVE_LOG_DIR, 'events.jsonl'), JSON.stringify({
+    event_id: 'EV_monitor_1', cycle_id: MON_ACTIVE_CYCLE_ID, initiative_id: MON_ACTIVE_INIT,
+    started_at: new Date().toISOString(), phase: 'developer-loop', skill: 'developer-ralph',
+    event_type: 'start', input_refs: [], output_refs: [],
+    message: 'developer-loop.start', metadata: {},
+  }) + '\n');
+
+  writeMonProjectConfig(MON_FAILED_PROJECT_DIR, 'Fixture: Monitor failed build',
+    'A journey-seeded scratch project proving a failed run reads as failed on Monitor.');
+  writeFileSync(MON_FAILED_MANIFEST, manifestBody(
+    MON_FAILED_INIT, MON_FAILED_PROJECT, MON_FAILED_PROJECT_DIR, 'failed', MON_FAILED_CYCLE_ID, 'failed build'));
+}
+
+function cleanMonitorFixture() {
+  for (const path of [MON_ACTIVE_PROJECT_DIR, MON_FAILED_PROJECT_DIR, MON_ACTIVE_LOG_DIR]) {
+    try { rmSync(path, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
+  for (const path of [MON_ACTIVE_MANIFEST, MON_FAILED_MANIFEST]) {
+    try { rmSync(path, { force: true }); } catch { /* best-effort */ }
+  }
+}
 
 /** goto `/` and wait for Home's real readiness signal — never a fixed sleep. */
 async function gotoHomeReady(page, watch) {
@@ -77,7 +176,15 @@ export const journey = defineJourney({
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[MONITOR.1] Home — the summary strip and the new pillar');
+        cleanMonitorFixture(); // crash-safe leading sweep — a prior interrupted run's leftovers
+        seedMonitorFixture();
 
+        // The `_queue/` manifests this fixture writes are in the SHARED queue
+        // dir, and the harness's own daemon guard REFUSES to run with a stray
+        // manifest present — so a leak here does not just pollute a later
+        // beat, it blocks the next run outright. Hence a try/catch that sweeps
+        // before the error propagates, on top of the leading sweep above.
+        try {
         await gotoHomeReady(page, watch);
         await caption(page, 'Home leads with "What is running" — counts derived from the very ledger printed below them.');
         await sleep(READ);
@@ -98,6 +205,16 @@ export const journey = defineJourney({
           (homeSummary?.tiles ?? []).every((t) => Number.isInteger(t.count)),
           'MONITOR.1: each tile declares its own count as data-count',
         );
+        // NON-VACUOUS: the seeded fixture puts one genuinely in-flight run and
+        // one failed run on disk, so these identities are exercised against
+        // real numbers. On an empty install every relation below is 0 === 0,
+        // which passes against a completely broken derivation.
+        check((homeSummary?.live ?? 0) >= 1,
+          `MONITOR.1: the seeded in-flight run is COUNTED as live — the strip reads the real run-model (got ${homeSummary?.live})`);
+        check((homeSummary?.failed ?? 0) >= 1,
+          `MONITOR.1: the seeded failed run is counted as failed (got ${homeSummary?.failed})`);
+        check((homeSummary?.total ?? 0) >= 2,
+          `MONITOR.1: both seeded runs reached the merged ledger the counts are derived from (got ${homeSummary?.total})`);
 
         // The contradiction this lane closes, asserted directly: the page's
         // own data-live-count and the strip's live count are ONE number.
@@ -144,6 +261,10 @@ export const journey = defineJourney({
         await checkHonestPillarRead(page, check, 'monitor', 'MONITOR.1');
 
         await frame(page, 'monitor-1-landed', 'One click from Home — the Monitor pillar, active, with its own honest read', { key: true });
+        } catch (err) {
+          cleanMonitorFixture(); // shared `_queue/` — never leak a manifest that would block the next run
+          throw err;
+        }
       },
     },
     {
@@ -190,15 +311,19 @@ export const journey = defineJourney({
           };
         });
         check(runs !== null, 'MONITOR.2: the flow-runs section carries data-run-count');
-        if ((runs?.count ?? 0) > 0) {
-          check(runs.groups.length > 0, `MONITOR.2: ${runs.count} flow runs render grouped by status (got ${JSON.stringify(runs.groups)})`);
-          check(runs.cards > 0, `MONITOR.2: run cards render, each carrying its own data-run-status (got ${runs.cards})`);
-        } else {
-          check(
-            (runs?.empty ?? '').includes('No flow runs recorded yet'),
-            `MONITOR.2: with no runs, Monitor states its OWN empty case — never the rail's "no runs yet for this flow", which is false on a cross-flow surface (got "${runs?.empty}")`,
-          );
-        }
+        check((runs?.count ?? 0) >= 2,
+          `MONITOR.2: both seeded runs reach the rail — this beat is NOT allowed to fall through to the empty state (got ${runs?.count})`);
+        check((runs?.groups ?? []).length > 0,
+          `MONITOR.2: runs render grouped by the rail's own status vocabulary (got ${JSON.stringify(runs?.groups)})`);
+        check((runs?.cards ?? 0) > 0,
+          `MONITOR.2: run cards render, each carrying its own data-run-status (got ${runs?.cards})`);
+        const groupOf = (status) => (runs?.groups ?? []).find((g) => g.status === status)?.count ?? 0;
+        check(groupOf('active') >= 1,
+          `MONITOR.2: the seeded in-flight run lands in the ACTIVE group (got ${groupOf('active')})`);
+        check(groupOf('failed') >= 1,
+          `MONITOR.2: a failed run READS as failed on Monitor — the rail's own FAILED group, same treatment the flow page gives it (got ${groupOf('failed')})`);
+        check((runs?.empty ?? null) === null,
+          'MONITOR.2: with runs present the empty state is absent (it exists for the honest zero case, and says Monitor\'s own sentence rather than the rail\'s "no runs yet for this flow")');
 
         // The merged ledger is the same shared component every other surface
         // uses, paged rather than truncated.
@@ -225,6 +350,7 @@ export const journey = defineJourney({
         const { page, watch, check, frame } = ctx;
         console.log('\n[MONITOR.3] the summary and the list agree');
 
+        try {
         await page.goto(watch.uiUrl + '/monitor', { waitUntil: 'domcontentloaded' });
         await waitMonitorReady(page);
         const monitorSummary = await readSummary(page);
@@ -243,10 +369,14 @@ export const journey = defineJourney({
           monitorSummary?.total === observed.ledgerTotal,
           `MONITOR.3: the summary's declared total IS the ledger's row total — the summary summarises the list it is printed above (summary ${monitorSummary?.total} vs ledger ${observed.ledgerTotal})`,
         );
+        check(observed.railFailed >= 1,
+          `MONITOR.3: the seeded failed run is in the rail, so the next check is exercised against a real number, not 0 >= 0 (got ${observed.railFailed})`);
         check(
           (monitorSummary?.failed ?? 0) >= observed.railFailed,
           `MONITOR.3: every failed run in the rail is counted in the failed headline (rail ${observed.railFailed}, headline ${monitorSummary?.failed})`,
         );
+        check((monitorSummary?.total ?? 0) >= 2,
+          `MONITOR.3: the identity above is checked against a NON-EMPTY ledger (total ${monitorSummary?.total})`);
         check(
           (monitorSummary?.live ?? -1) === (monitorSummary?.runsLive ?? 0) + (monitorSummary?.sessionsLive ?? 0),
           `MONITOR.3: live is exactly runs-in-flight plus live sessions — no double count, no third source (${monitorSummary?.live} vs ${monitorSummary?.runsLive}+${monitorSummary?.sessionsLive})`,
@@ -269,6 +399,9 @@ export const journey = defineJourney({
 
         await caption(page, 'Home and Monitor agree, because there is only one ledger and one derivation behind both.');
         await frame(page, 'monitor-4-home-agrees', 'Back on Home — the same numbers, because the depth and the glance share one derivation', { key: true });
+        } finally {
+          cleanMonitorFixture(); // the LAST beat that needs the fixture
+        }
       },
     },
   ],
