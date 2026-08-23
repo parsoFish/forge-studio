@@ -18,6 +18,16 @@
  *   [data-section="run-trigger"][data-trigger-kind][data-trigger-source][data-trigger-scope]
  *   [data-section="review-findings"]                      ReviewFindingsPanel's OWN contract
  *
+ * W8-A3 (`flows-23`) — the page was a timeline and a breadcrumb: zero buttons,
+ * no visible status, no scheduler card, and no way back to the architect
+ * session that produced the initiative. An operator sent here from Home or the
+ * run rail to deal with a stuck plan could do nothing at all. Added, all
+ * composed from surfaces that already exist rather than forked here:
+ *   [data-component="run-status-chip"][data-run-status]   the status, VISIBLE
+ *   a[data-action="open-architect-session"]               only when the run names one
+ *   [data-section="run-controls"]                         RunControls' OWN contract
+ *     (failed → resume/requeue/abandon; queued → the scheduler strip)
+ *
  * R6-01 WI-3 (F5) — node click-through, ADDITIVE, only when `expandedNodeId`
  * matches a row's own nodeId:
  *   [data-section="node-detail"][data-detail-for-node]     the expanded panel
@@ -50,6 +60,7 @@ import Link from 'next/link';
 
 import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import { RunLog } from '@/components/studio/RunLog';
+import { RunControls } from '@/components/studio/RunControls';
 import type { Flow, Run } from '@/lib/studio-client';
 import type { FlowRunTimelineRow } from '@/lib/flow-run-timeline';
 import type { RunLogLine } from '@/lib/run-log-line';
@@ -144,12 +155,35 @@ export function FlowRunDetail({
             project {run.project} →
           </Link>
         )}
+        {/* W8-A3 (flows-23): back to the conversation that planned this. Rendered
+            only when the manifest actually names a session — never fabricated. */}
+        {found && run?.architectSessionId && (
+          <Link
+            href={`/sessions/architect/${encodeURIComponent(run.architectSessionId)}`}
+            data-action="open-architect-session"
+            style={{ color: 'var(--c-session, var(--violet))', textDecoration: 'none' }}
+          >
+            architect session →
+          </Link>
+        )}
       </nav>
       <header style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {/* W7-C3 (crosscut-18/agents-35): the page's ONE h1 — was an h2. */}
         <h1 style={{ margin: 0, fontSize: 15 }}>{run?.initiative || runId}</h1>
-        <div style={{ fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-          {run?.id ?? runId} · flow {flowId || '—'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+          {/* W8-A3 (flows-23): the run's status was only ever a data-* attribute
+              on the page landmark. A human reading the page could not see it. */}
+          {found && run && (
+            <span
+              data-component="run-status-chip"
+              data-run-status={run.status}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '1px 8px', border: '1px solid var(--line)', borderRadius: 999 }}
+            >
+              <span className="status-dot" data-status={run.status} />
+              {run.status}
+            </span>
+          )}
+          <span>{run?.id ?? runId} · flow {flowId || '—'}</span>
         </div>
       </header>
 
@@ -171,6 +205,15 @@ export function FlowRunDetail({
       ) : (
         <>
           <RunTrigger run={run} />
+          {/* W8-A3 (flows-28/49/23): the run's own recovery controls, from the
+              SAME derivation the flow monitor renders — a failed run offers
+              resume/requeue/abandon with what each does spelled out, a queued
+              run offers the scheduler that is the only thing able to start it,
+              and anything else renders nothing. */}
+          {/* Keyed on the INITIATIVE id, not `run.id` — see the flow monitor's
+              call site: `run.id` flips on every claim and requeue, which would
+              remount this and discard the outcome line on success. */}
+          <RunControls key={run?.initiativeId ?? runId} run={run} />
           <RunTimeline
             rows={rows}
             expandedNodeId={expandedNodeId}

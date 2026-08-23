@@ -591,9 +591,17 @@ export type DevelopStartItemResult = {
    *  an operator action) and `not-planned` (the develop decomposition gate)
    *  were both reachable on the wire while absent from the type, so a
    *  `never`-checked switch would silently drop them. */
-  status?: 'enqueued' | 'not-found' | 'already-developing' | 'already-done' | 'not-planned' | 'error';
+  status?: 'enqueued' | 'not-found' | 'already-developing' | 'already-done' | 'not-planned'
+    /** W8-A3 (`flows-37`): the initiative is queued under a flow OTHER than
+     *  `forge-architect`, and this batch route cannot disclose which — the
+     *  roadmap payload carries no flow id — so the hand-off is refused rather
+     *  than performed blind. */
+    | 'repoint-requires-confirm'
+    | 'error';
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -617,8 +625,18 @@ export type StartDevelopmentResult = {
  * initiative's manifest-derived ceiling untouched, exactly as before this
  * field existed.
  */
-export async function startDevelopment(initiativeIds: string[], costCeilingUsd?: number): Promise<StartDevelopmentResult> {
-  const body = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
+export async function startDevelopment(
+  initiativeIds: string[],
+  costCeilingUsd?: number,
+  /** W8-A3 (`flows-37`): the operator's answer — the flow they were shown. Only
+   *  the per-card, single-initiative control ever sends it; the route REFUSES it
+   *  outright on a multi-id batch, so this is enforced rather than conventional. */
+  opts: { confirmRepointFrom?: string } = {},
+): Promise<StartDevelopmentResult> {
+  const base = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
+  const body = opts.confirmRepointFrom !== undefined
+    ? { ...base, confirmRepointFrom: opts.confirmRepointFrom }
+    : base;
   const r = await bridgePost('/api/develop/start', body);
   return {
     ok: r.ok,
@@ -630,10 +648,16 @@ export async function startDevelopment(initiativeIds: string[], costCeilingUsd?:
 // ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
 
 export type PlanInitiativeResult = {
-  status: 'enqueued' | 'not-found' | 'already-running' | 'error';
+  status: 'enqueued' | 'not-found' | 'already-running'
+    /** W8-A3 (`flows-37`): the initiative is queued under a flow other than
+     *  `forge-architect` and the operator has not confirmed moving it off it. */
+    | 'repoint-requires-confirm'
+    | 'error';
   initiativeId: string;
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -649,11 +673,16 @@ export type PlanInitiativeResult = {
  * generic non-2xx handling only preserves a bare `error` string, so this
  * reads the JSON body directly instead of going through that envelope.
  */
-export async function planInitiative(initiativeId: string): Promise<PlanInitiativeResult> {
+export async function planInitiative(
+  initiativeId: string,
+  /** W8-A3 (`flows-37`): the operator's answer — the flow they were shown. */
+  opts: { confirmRepointFrom?: string } = {},
+): Promise<PlanInitiativeResult> {
   try {
     const res = await bridgeFetch(`/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
       method: 'POST',
-      headers: { 'x-forge-csrf': '1' },
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(opts.confirmRepointFrom !== undefined ? { confirmRepointFrom: opts.confirmRepointFrom } : {}),
     });
     const body = (await res.json()) as Partial<PlanInitiativeResult> & { error?: string };
     if (body.status) {
@@ -662,6 +691,7 @@ export async function planInitiative(initiativeId: string): Promise<PlanInitiati
         initiativeId,
         cycleId: body.cycleId,
         flowId: body.flowId,
+        currentFlowId: body.currentFlowId,
         detail: body.detail,
       };
     }
@@ -680,9 +710,15 @@ export type StartFlowRunResult = {
    *  `startFlowRun` passes `body.status` straight through — the union said it
    *  was impossible, so any exhaustive switch fell to its default branch and a
    *  `never` check could not catch the omission. */
-  status?: 'enqueued' | 'not-found' | 'already-running' | 'already-done' | 'not-planned' | 'error';
+  status?: 'enqueued' | 'not-found' | 'already-running' | 'already-done' | 'not-planned'
+    /** W8-A3 (`flows-37`): the initiative is queued under another flow and the
+     *  operator has not confirmed moving it. Nothing was written. */
+    | 'repoint-requires-confirm'
+    | 'error';
   cycleId?: string;
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   error?: string;
 };
 
@@ -693,12 +729,25 @@ export type StartFlowRunResult = {
  * every outcome onto a real HTTP status and every field is meaningful on every
  * outcome — the generic envelope would drop `status`/`detail`).
  */
-export async function startFlowRun(flowId: string, initiativeId: string): Promise<StartFlowRunResult> {
+export async function startFlowRun(
+  flowId: string,
+  initiativeId: string,
+  /** W8-A3 (`flows-37`): the operator's answer — the FLOW they were shown and
+   *  confirmed moving it off (a compare-and-swap; see `enqueue-flow-run.ts`).
+   *  Omitted is what an un-answered start sends, and a confirmation that has
+   *  gone stale under a refetch fails closed at the enqueue rather than moving
+   *  the initiative off a flow the operator was never shown. */
+  opts: { confirmRepointFrom?: string } = {},
+): Promise<StartFlowRunResult> {
   try {
     const res = await bridgeFetch(`/api/flows/${encodeURIComponent(flowId)}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
-      body: JSON.stringify({ initiativeId }),
+      body: JSON.stringify(
+        opts.confirmRepointFrom !== undefined
+          ? { initiativeId, confirmRepointFrom: opts.confirmRepointFrom }
+          : { initiativeId },
+      ),
     });
     const body = (await res.json()) as Partial<StartFlowRunResult> & { error?: string; detail?: string };
     if (body.status) {
@@ -707,6 +756,7 @@ export async function startFlowRun(flowId: string, initiativeId: string): Promis
         status: body.status,
         cycleId: body.cycleId,
         flowId: body.flowId,
+        currentFlowId: body.currentFlowId,
         error: body.status === 'enqueued' ? undefined : (body.detail ?? body.error ?? body.status),
       };
     }

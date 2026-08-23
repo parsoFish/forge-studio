@@ -1319,3 +1319,60 @@ triggers: []
     cleanup(root);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-A3 (`flows-23`) — ADDITION.
+//
+// `architect_session_id` is on the manifest and has been since the architect
+// started writing initiatives, but the run model never carried it, so the run
+// page had no way back to the conversation that produced the plan. Pinned on
+// BOTH construction paths (a planned manifest and an aggregated cycle), and
+// pinned ABSENT when the manifest names none — a fabricated session id would
+// send the operator to a 404.
+// ---------------------------------------------------------------------------
+
+test('listRuns: a planned manifest carries its architect_session_id through as architectSessionId', () => {
+  const root = makeTmp();
+  try {
+    writeManifest(root, 'pending', 'INIT-2026-08-14-with-session', {
+      architect_session_id: '2026-08-14T15-26-59-072e0775',
+    });
+    writeManifest(root, 'pending', 'INIT-2026-08-14-no-session');
+
+    const runs = listRuns(root, Date.now());
+    const withSession = runs.find((r) => r.initiativeId === 'INIT-2026-08-14-with-session');
+    const without = runs.find((r) => r.initiativeId === 'INIT-2026-08-14-no-session');
+
+    assert.equal(withSession?.status, 'planned');
+    assert.equal(withSession?.architectSessionId, '2026-08-14T15-26-59-072e0775');
+    // Absent stays absent — never an empty string, never a fabricated id.
+    assert.equal(without?.architectSessionId, undefined);
+    assert.equal('architectSessionId' in (without as object), false);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('listRuns: an aggregated (claimed) run carries architectSessionId too — not only the planned path', () => {
+  const root = makeTmp();
+  try {
+    const cycleId = '2026-08-14T16-00-00_INIT-2026-08-14-claimed';
+    writeManifest(root, 'in-flight', 'INIT-2026-08-14-claimed', {
+      cycle_id: cycleId,
+      architect_session_id: '2026-08-14T15-26-59-072e0775',
+    });
+    writeCycleLog(root, cycleId, [
+      {
+        event_id: 'EV_1', cycle_id: cycleId, initiative_id: 'INIT-2026-08-14-claimed',
+        phase: 'orchestrator', skill: 'cycle', event_type: 'start',
+        started_at: '2026-08-14T16:00:00.000Z', message: 'cycle.start',
+        metadata: { origin: 'architect' },
+      },
+    ]);
+
+    const run = listRuns(root, Date.now()).find((r) => r.initiativeId === 'INIT-2026-08-14-claimed');
+    assert.equal(run?.architectSessionId, '2026-08-14T15-26-59-072e0775');
+  } finally {
+    cleanup(root);
+  }
+});

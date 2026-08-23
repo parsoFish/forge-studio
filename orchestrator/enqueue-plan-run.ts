@@ -42,7 +42,17 @@ import { isCanonicalInitiativeId } from './initiative-id.ts';
  */
 export const PLAN_FLOW_ID = 'forge-architect';
 
-export type EnqueuePlanStatus = 'enqueued' | 'not-found' | 'already-running' | 'error';
+export type EnqueuePlanStatus =
+  | 'enqueued'
+  | 'not-found'
+  | 'already-running'
+  /**
+   * W8-A3 (`flows-37`, review round 1 S2-2): the manifest is queued under a
+   * flow other than `forge-architect` and the caller did not confirm moving it
+   * off that flow. Refused before anything is written.
+   */
+  | 'repoint-requires-confirm'
+  | 'error';
 
 export type EnqueuePlanResult = {
   status: EnqueuePlanStatus;
@@ -51,6 +61,8 @@ export type EnqueuePlanResult = {
   cycleId?: string;
   /** Present on `enqueued` — always `forge-architect`. */
   flowId?: string;
+  /** Present on `repoint-requires-confirm` — the flow it is queued under today. */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -79,7 +91,7 @@ export type EnqueuePlanResult = {
  */
 export function enqueuePlanRun(
   initiativeId: string,
-  opts: { queueRoot?: string } = {},
+  opts: { queueRoot?: string; confirmRepointFrom?: string; confirmRepoint?: boolean } = {},
 ): EnqueuePlanResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
@@ -122,6 +134,53 @@ export function enqueuePlanRun(
     manifest = parseManifest(readFileSync(sourcePath, 'utf8'));
   } catch (err) {
     return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
+  }
+
+  // W8-A3 (`flows-37`, review round 1 S2-2) — THE THIRD DOOR. This module is a
+  // structural clone of `enqueue-flow-run.ts` that never calls it, so the guard
+  // that module grew had to be carried here in its own terms or the whole class
+  // stayed open one route over: `POST /api/initiatives/:id/plan` is reached from
+  // the roadmap's Plan button, which — like "Start development" — posts an id
+  // the surface never pairs with a flow. Planning an initiative queued under an
+  // authored flow takes it off that flow exactly as the Start-Run picker did.
+  //
+  // `forge-architect` is the no-op case (already the target) and falls through
+  // untouched; anything else needs the operator's answer.
+  //
+  // PARITY IS DELIBERATELY PARTIAL, and this is the full statement of it (round 2
+  // corrected a claim of total parity; round 3 found the correction itself named
+  // only one of the two divergences). `enqueueFlowRun` differs here in TWO ways,
+  // both on purpose:
+  //   1. it refuses an operator enqueue sourced from `_queue/done`
+  //      (`already-done`). This module does not — re-planning a shipped
+  //      initiative re-decomposes it, which parallels re-develop and is pinned by
+  //      this module's own test.
+  //   2. its `ready-for-review` short-circuit fires when the parked manifest
+  //      matches the TARGET flow; this module's fires only for `forge-develop`,
+  //      so a `forge-architect` manifest parked in review stays re-plannable here
+  //      (also pinned by this module's own test).
+  //   3. it carries two options this module has no use for: `allowRepointFrom`
+  //      (standing authority for a named source flow — only the develop hand-off
+  //      needs it) and `allowFinishedSource` (only the trigger drain does).
+  // The repoint rule is what crosses between them; none of those three does.
+  //
+  // The confirmation is a COMPARE-AND-SWAP against the flow the operator was
+  // shown (review round 3, S2-3) — see `enqueue-flow-run.ts` for why a boolean
+  // override was the wrong primitive.
+  const currentFlowId = manifest.flow_id;
+  if (currentFlowId && currentFlowId !== PLAN_FLOW_ID && !opts.confirmRepoint
+      && opts.confirmRepointFrom !== currentFlowId) {
+    const stale = opts.confirmRepointFrom !== undefined;
+    return {
+      status: 'repoint-requires-confirm',
+      initiativeId,
+      currentFlowId,
+      detail: stale
+        ? `${initiativeId} moved to "${currentFlowId}" while you were being asked about ` +
+          `"${opts.confirmRepointFrom}" — confirm again against the flow it is on now.`
+        : `${initiativeId} is currently queued under "${currentFlowId}" — planning it moves it off that flow. ` +
+          'Confirm the repoint to proceed.',
+    };
   }
 
   // Repoint at forge-architect + reset to a fresh, claimable build. resume_from

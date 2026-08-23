@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { subscribe, type EventLogEntry, type ConnectionState, resumeRun } from '@/lib/bridge-client';
+import { subscribe, type EventLogEntry, type ConnectionState } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow, deleteFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
@@ -23,7 +23,9 @@ import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } fr
 import { builderSnapshot, savedNodesCarryPositions } from '@/lib/flow-builder-dirty';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff, type KickoffCandidate } from '@/components/studio/FlowKickoff';
-import { deriveKickoffCandidates, canStartFlow } from '@/lib/kickoff-candidates';
+import { RunControls } from '@/components/studio/RunControls';
+import { deriveKickoffCandidates } from '@/lib/kickoff-candidates';
+import { canStartFlow } from '@/lib/kickoff-surface';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -451,16 +453,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   // (planned) initiatives; a finished or failed one is never offered (the
   // picker used to list merged initiatives, and Start Run silently yanked
   // them out of _queue/done — see lib/kickoff-candidates.ts).
-  const kickoffCandidates: KickoffCandidate[] = deriveKickoffCandidates(allQueueRuns);
-
-  const handleResumeRun = useCallback(async () => {
-    if (!activeRun) return;
-    const signal = { cancelled: false };
-    const r = await resumeRun(activeRun.id);
-    if (r.ok) {
-      void loadData(signal, activeRun.id);
-    }
-  }, [activeRun, loadData]);
+  // W8-A3 (flows-37): the viewed flow id is what tells a candidate queued
+  // under ANOTHER flow apart from one of this flow's own.
+  const kickoffCandidates: KickoffCandidate[] = deriveKickoffCandidates(allQueueRuns, id);
 
   // ---- run selection ----
 
@@ -827,38 +822,28 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 <SchedulerCard variant="strip" queuedCount={view.runs.filter((r) => r.status === 'planned').length} />
               </div>
 
-              {/* Resume CTA — shown when the active run has failed */}
-              {view.activeRun?.status === 'failed' && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 20px',
-                    background: 'rgba(255,80,80,0.06)',
-            borderBottom: '1px solid rgba(255,80,80,0.2)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: 'var(--faint)' }}>Run failed.</span>
-                  <button
-                    data-action="resume-run"
-                    data-run-id={view.activeRun.id}
-                    onClick={() => void handleResumeRun()}
-                    style={{
-                      fontSize: 12,
-                      padding: '3px 12px',
-                      background: 'var(--ember)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-            cursor: 'pointer',
-                    }}
-                  >
-                    Resume
-                  </button>
-                </div>
-              )}
+              {/* W8-A3 (flows-28/49/23): the run's recovery controls, replacing the
+                  hard-coded "Run failed. [Resume]" bar. That bar offered one of the
+                  three actions the bridge implements, disclosed nothing about what
+                  Resume does (it re-enters at the demo node against the preserved
+                  branch), and swallowed its own failures — `handleResumeRun` had no
+                  else branch, so a refused POST produced no observable change at
+                  all. `schedulerStrip={false}`: the monitor mounts its own strip
+                  directly above. */}
+              <div style={{ padding: '0 20px 8px', flexShrink: 0 }}>
+                {/* `key` on the INITIATIVE id (review round 1 S2-5, corrected by
+                    round 2 finding 10): RunControls holds per-run state (an armed
+                    Abandon, a busy flag, the last error and the last outcome) and
+                    returning null from a render does NOT unmount it, so without a
+                    key a confirmation armed for run A stayed on screen after
+                    selecting run B — and its post would have destroyed B, which
+                    the operator never armed. It must NOT be `run.id`: that flips
+                    from the initiative id to the cycle id on every claim and back
+                    on every requeue, so a successful resume remounted the
+                    component and threw away the very outcome line flows-49 exists
+                    to show. The initiative id is the stable handle. */}
+                <RunControls key={view.activeRun?.initiativeId ?? 'none'} run={view.activeRun} onActed={handleEnqueued} schedulerStrip={false} />
+              </div>
 
               {/* Summary strip */}
               <MonitorSummary run={view.activeRun} flow={view.flow ?? EMPTY_FLOW} />

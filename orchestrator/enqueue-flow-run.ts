@@ -44,6 +44,12 @@ export type EnqueueFlowRunStatus =
   | 'already-running'
   | 'already-done'
   | 'not-planned'
+  /**
+   * W8-A3 (`flows-37` / `forge-chm`, S1): the manifest is queued under a
+   * DIFFERENT flow and the caller did not confirm the repoint. Refused before
+   * anything is written — the queued manifest is left byte-identical.
+   */
+  | 'repoint-requires-confirm'
   | 'error';
 
 export type EnqueueFlowRunResult = {
@@ -53,6 +59,14 @@ export type EnqueueFlowRunResult = {
   cycleId?: string;
   /** Present on `enqueued` — the target flow. */
   flowId?: string;
+  /**
+   * The flow the initiative is queued under TODAY. Present on
+   * `repoint-requires-confirm`, so the caller can name it instead of asking the
+   * operator to confirm something the UI never disclosed (the whole of
+   * `flows-37`) — and on `not-planned`, whose prescribed remediation (plan it)
+   * is itself a cross-flow repoint when the initiative belongs elsewhere.
+   */
+  currentFlowId?: string;
   detail?: string;
 };
 
@@ -68,6 +82,9 @@ export type EnqueueFlowRunResult = {
  *   sibling (`already-running`). A DIFFERENT flow's manifest there is a
  *   hand-off state (e.g. forge-architect finalised with no review node) and IS
  *   runnable — fall through.
+ * - a source manifest whose `flow_id` differs from the target, without
+ *   `confirmRepoint` → `repoint-requires-confirm` (W8-A3 / `flows-37`).
+ *   Nothing is written; the queued manifest is untouched.
  * - forge-develop only: no decomposition evidence → `not-planned`
  *   (known-gaps §9 / ADR-040 rider — see enqueue-develop-run.ts).
  * - absent / malformed ids → `not-found`.
@@ -79,7 +96,42 @@ export type EnqueueFlowRunResult = {
 export function enqueueFlowRun(
   initiativeId: string,
   flowId: string,
-  opts: { queueRoot?: string; allowFinishedSource?: boolean } = {},
+  opts: {
+    queueRoot?: string;
+    allowFinishedSource?: boolean;
+    /**
+     * COMPARE-AND-SWAP. The flow the operator was SHOWN and confirmed moving
+     * this initiative OFF. The enqueue proceeds only if the manifest is still
+     * on exactly that flow; if it has moved since the question was asked, the
+     * confirmation is stale and is refused.
+     *
+     * Adversarial review round 3, S2-3 — and it is the cure for the CLASS, not
+     * for a call site. `confirmRepoint: boolean` was an unconditional override
+     * carrying no evidence of what was confirmed, so (a) every client's
+     * snapshot could go stale under a poll, a chained trigger or a second tab
+     * and still authorise a move off a flow the operator was never shown, and
+     * (b) a caller that never asked anything could send `true`. A named source
+     * flow cannot do either: a control that forgets to ask has nothing to send,
+     * and a control whose display went stale fails closed.
+     */
+    confirmRepointFrom?: string;
+    /**
+     * Unconditional override, for the ONE caller that repoints by design and
+     * has no operator to ask: the trigger drain's flow-complete chaining, where
+     * every hop moves the initiative to the next flow. No operator-facing route
+     * forwards this — they forward `confirmRepointFrom`.
+     */
+    confirmRepoint?: boolean;
+    /**
+     * Source flows this caller has standing authority to repoint FROM, because
+     * the transition is the designed lifecycle and its surface states it.
+     * Narrow on purpose: a blanket `confirmRepoint: true` default on a delegate
+     * re-opens `flows-37` through that delegate's own route (adversarial review
+     * round 1, S1-1 — `POST /api/develop/start` batches N initiative ids on one
+     * click and the roadmap carries no flow id to disclose).
+     */
+    allowRepointFrom?: readonly string[];
+  } = {},
 ): EnqueueFlowRunResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
     return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
@@ -152,9 +204,69 @@ export function enqueueFlowRun(
     return {
       status: 'not-planned',
       initiativeId,
-      detail: 'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first',
+      // Review round 2 finding 6: the reorder below put this check first, which
+      // is right — but it must not swallow WHICH flow owns the initiative. The
+      // remediation it prescribes (plan it) is itself a cross-flow repoint when
+      // the initiative belongs to another flow, so the caller needs both facts
+      // in one answer.
+      ...(manifest.flow_id ? { currentFlowId: manifest.flow_id } : {}),
+      detail:
+        'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first' +
+        (manifest.flow_id && manifest.flow_id !== flowId ? ` (it is currently queued under "${manifest.flow_id}")` : ''),
     };
   }
+
+  // W8-A3 (`flows-37` / `forge-chm`, S1 — data corruption). Repointing an
+  // initiative that is queued under ANOTHER flow takes it away from that flow.
+  // Every planned initiative on disk carries the flow that produced it
+  // (`flow_id: forge-architect`), so the generic Start-Run picker's one click
+  // silently stole real queued work. The rule lives HERE and not on a route:
+  // the operator-facing `POST /api/flows/:id/run` and `POST /api/develop/start`
+  // are two doors onto this one primitive, and W7-FIX-A3 (round-2 finding 6)
+  // already learned what a route-local pre-check leaves open. The THIRD door,
+  // `POST /api/initiatives/:id/plan`, is a structural clone that never reaches
+  // this module — `enqueue-plan-run.ts` carries the same rule in its own terms
+  // (review round 1, S2-2).
+  //
+  // A blanket refusal is NOT available: it would refuse every candidate the
+  // picker can legitimately offer. The contract is an EXPLICIT confirmation
+  // that DEFAULTS CLOSED. Two callers hold standing authority instead:
+  //   · the trigger drain's flow-complete chaining, which repoints on every hop
+  //     by design (`confirmRepoint: true`);
+  //   · the architect→develop hand-off, and ONLY from `forge-architect`
+  //     (`allowRepointFrom`). A blanket default on that delegate is what review
+  //     round 1 found re-opening flows-37: `POST /api/develop/start` takes a
+  //     BATCH of ids from a roadmap that carries no flow id to disclose, so an
+  //     initiative queued under an authored flow was taken by one click on a
+  //     button that never named it.
+  //
+  // Ordered AFTER the develop `not-planned` precondition (review round 1, S3-7):
+  // asking the operator to confirm a move that the very next check refuses is a
+  // question with no right answer. Cheap precondition first, authorisation second.
+  const currentFlowId = manifest.flow_id;
+  if (currentFlowId && currentFlowId !== flowId) {
+    const preAuthorised = (opts.allowRepointFrom ?? []).includes(currentFlowId);
+    const confirmedFromThisFlow = opts.confirmRepointFrom === currentFlowId;
+    const staleConfirmation =
+      opts.confirmRepointFrom !== undefined && opts.confirmRepointFrom !== currentFlowId;
+
+    if (!opts.confirmRepoint && !preAuthorised && !confirmedFromThisFlow) {
+      return {
+        status: 'repoint-requires-confirm',
+        initiativeId,
+        currentFlowId,
+        detail: staleConfirmation
+          // The compare-and-swap earning its keep: the operator answered a
+          // question about a flow this initiative is no longer on, so the answer
+          // does not authorise the move that would actually happen.
+          ? `${initiativeId} moved to "${currentFlowId}" while you were being asked about ` +
+            `"${opts.confirmRepointFrom}" — confirm again against the flow it is on now.`
+          : `${initiativeId} is currently queued under "${currentFlowId}" — running it on "${flowId}" ` +
+            `moves it off that flow. Confirm the repoint to proceed.`,
+      };
+    }
+  }
+
 
   // Repoint at the target flow + reset to a fresh, claimable build. resume_from
   // is cleared so the scheduler runs the flow's full spine, not a drain re-entry.

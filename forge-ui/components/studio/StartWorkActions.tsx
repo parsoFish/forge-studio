@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { planInitiative, startDevelopment, startFlowRun, type ProjectRoadmap } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import { deriveStartWorkState } from '@/lib/start-work-view';
+import { RepointGate } from '@/components/studio/RepointGate';
 
 /**
  * StartWorkActions (W7-B6, operator note 11 / orch-02, projects-18/-20) —
@@ -23,6 +24,17 @@ import { deriveStartWorkState } from '@/lib/start-work-view';
  * (crosscut-25). data-* contract: `data-section="start-work"`,
  * `data-action="start-work-{plan|develop|run-flow|architect}"`,
  * `data-start-work-outcome` on the result line.
+ *
+ * W8-A3 (`flows-37`, review round 1 S2-3): Plan, Start development and Run a
+ * flow all repoint a manifest's `flow_id`, and this surface pairs an initiative
+ * with a target without ever showing which flow it is queued under — the roadmap
+ * payload carries no flow id at all. The enqueue therefore refuses an
+ * unconfirmed cross-flow move (409 `repoint-requires-confirm`), and this group
+ * answers it the same way the flow monitor's picker does: an in-DOM
+ * confirmation, `[data-component="repoint-confirm"]` +
+ * `[data-action="confirm-repoint"|"cancel-repoint"]`, naming the flow of origin
+ * the server reported. Without it these controls would 409 forever with no way
+ * to proceed.
  */
 export function StartWorkActions({
   projectId,
@@ -47,6 +59,11 @@ export function StartWorkActions({
     [roadmap, flows, dispatchedDevelop],
   );
   const [busy, setBusy] = useState<'plan' | 'develop' | 'run-flow' | null>(null);
+  // W8-A3 (flows-37): the repoint the server refused, awaiting the operator's
+  // answer. Non-null ⇒ the confirmation is on screen and nothing has been moved.
+  const [pendingRepoint, setPendingRepoint] = useState<
+    { kind: 'plan' | 'run-flow'; initiativeId: string; currentFlowId: string; targetFlowId: string } | null
+  >(null);
   const [outcome, setOutcome] = useState<{ kind: 'ok' | 'error'; text: string; href?: string } | null>(null);
   const [flowId, setFlowId] = useState('');
   const [initiativeId, setInitiativeId] = useState('');
@@ -54,16 +71,32 @@ export function StartWorkActions({
   const chosenFlow = flowId || state.runnableFlows[0]?.id || '';
   const chosenInitiative = initiativeId || state.runCandidates[0]?.initiativeId || '';
 
-  async function onPlan(): Promise<void> {
-    const target = state.unplannedReady[0];
-    if (!target || busy) return;
+  async function onPlan(confirm?: { initiativeId: string; fromFlowId: string }): Promise<void> {
+    // W8-A3 (review round 2 finding 3): a CONFIRMED dispatch posts the id the
+    // confirmation NAMED, never a freshly re-derived one. `unplannedReady[0]`
+    // moves the moment the daemon claims something or the roadmap refetches, so
+    // the first cut could confirm a panel reading INIT-A and repoint INIT-B —
+    // flows-37's exact harm, re-created inside the confirmation built to
+    // prevent it.
+    const initiative = confirm?.initiativeId ?? state.unplannedReady[0]?.initiativeId;
+    if (!initiative || busy) return;
     setBusy('plan');
     setOutcome(null);
     try {
-      const r = await planInitiative(target.initiativeId);
+      const r = await planInitiative(initiative, confirm ? { confirmRepointFrom: confirm.fromFlowId } : {});
+      if (r.status === 'repoint-requires-confirm') {
+        setPendingRepoint({
+          kind: 'plan',
+          initiativeId: initiative,
+          currentFlowId: r.currentFlowId ?? 'another flow',
+          targetFlowId: 'forge-architect',
+        });
+        return;
+      }
+      setPendingRepoint(null);
       setOutcome(
         r.status === 'enqueued'
-          ? { kind: 'ok', text: `planning ${target.initiativeId} enqueued` }
+          ? { kind: 'ok', text: `planning ${initiative} enqueued` }
           : { kind: 'error', text: r.detail ?? r.status },
       );
       await onChanged();
@@ -84,10 +117,25 @@ export function StartWorkActions({
       // `pending`) roadmap can't re-arm the button with the same ids. Failed
       // ids stay eligible — a retry is legitimate for them.
       if (okIds.length > 0) setDispatchedDevelop((prev) => [...prev, ...okIds]);
+      // W8-A3 (`flows-37`, review round 1 S1-1): this button posts a BATCH and the
+      // roadmap carries no flow id, so it cannot disclose a flow of origin — which
+      // is exactly why the develop hand-off is auto-authorised ONLY from
+      // `forge-architect`. An initiative queued under an authored flow is refused
+      // here on purpose, and it is deliberately NOT offered a batch "confirm
+      // everything": rubber-stamping N destructive moves the surface cannot show
+      // is the shape this whole lane exists to remove. It is named, with the way
+      // to move it deliberately — the flow monitor's picker, which discloses the
+      // flow of origin per candidate.
+      const refused = (r.results ?? []).filter((x) => x.status === 'repoint-requires-confirm');
       setOutcome(
         okIds.length > 0
           ? { kind: 'ok', text: `${okIds.length}/${ids.length} initiative${ids.length === 1 ? '' : 's'} enqueued for development` }
-          : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
+          : refused.length > 0
+            ? {
+                kind: 'error',
+                text: `${refused.map((x) => x.initiativeId).join(', ')} ${refused.length === 1 ? 'is' : 'are'} queued under another flow — open ${refused.length === 1 ? 'it' : 'them'} on the Roadmap tab and use that card's own Start development, which names the flow being moved from and asks first.`,
+              }
+            : { kind: 'error', text: r.error ?? r.results?.[0]?.detail ?? 'nothing started' },
       );
       await onChanged();
     } finally {
@@ -95,15 +143,30 @@ export function StartWorkActions({
     }
   }
 
-  async function onRunFlow(): Promise<void> {
-    if (!chosenFlow || !chosenInitiative || busy) return;
+  async function onRunFlow(confirm?: { flowId: string; initiativeId: string; fromFlowId: string }): Promise<void> {
+    // Review round 2 finding 3, as above: the confirmed dispatch uses the PAIR
+    // the panel named. `chosenFlow`/`chosenInitiative` fall back to
+    // `runnableFlows[0]`/`runCandidates[0]`, which move under a refetch.
+    const flow = confirm?.flowId ?? chosenFlow;
+    const initiative = confirm?.initiativeId ?? chosenInitiative;
+    if (!flow || !initiative || busy) return;
     setBusy('run-flow');
     setOutcome(null);
     try {
-      const r = await startFlowRun(chosenFlow, chosenInitiative);
+      const r = await startFlowRun(flow, initiative, confirm ? { confirmRepointFrom: confirm.fromFlowId } : {});
+      if (r.status === 'repoint-requires-confirm') {
+        setPendingRepoint({
+          kind: 'run-flow',
+          initiativeId: initiative,
+          currentFlowId: r.currentFlowId ?? 'another flow',
+          targetFlowId: flow,
+        });
+        return;
+      }
+      setPendingRepoint(null);
       setOutcome(
         r.ok
-          ? { kind: 'ok', text: `${chosenInitiative} enqueued onto ${chosenFlow}`, href: `/flows/${encodeURIComponent(chosenFlow)}/run/${encodeURIComponent(chosenInitiative)}` }
+          ? { kind: 'ok', text: `${initiative} enqueued onto ${flow}`, href: `/flows/${encodeURIComponent(flow)}/run/${encodeURIComponent(initiative)}` }
           : { kind: 'error', text: r.error ?? r.status ?? 'failed to start the flow run' },
       );
       await onChanged();
@@ -133,17 +196,32 @@ export function StartWorkActions({
       </span>
 
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <button
-          className="btn btn-sm"
-          data-action="start-work-plan"
-          disabled={busy !== null || state.planDisabledReason !== null}
-          onClick={() => void onPlan()}
-          {...(state.planDisabledReason ? { 'data-disabled-reason': state.planDisabledReason, title: state.planDisabledReason } : {})}
-          style={groupBtn}
+        {/* W8-A3 round 4, S1-1: the control and its confirmation are one gate.
+            Previously the button stayed live beside the bar (it is disabled only
+            by `busy`, which the `finally` clears before the bar renders), so a
+            second click re-posted unconfirmed — and re-derived
+            `unplannedReady[0]`, so it could raise a bar for a DIFFERENT
+            initiative and silently replace the one on screen. */}
+        <RepointGate
+          initiativeId={pendingRepoint?.initiativeId ?? ''}
+          pending={pendingRepoint?.kind === 'plan' ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: pendingRepoint.targetFlowId } : null}
+          verb="Plan"
+          busy={busy !== null}
+          onConfirm={(fromFlowId) => void onPlan({ initiativeId: pendingRepoint!.initiativeId, fromFlowId })}
+          onCancel={() => setPendingRepoint(null)}
         >
-          {busy === 'plan' ? 'Planning…' : `Plan${state.unplannedReady.length > 0 ? ` (${state.unplannedReady.length})` : ''}`}
-        </button>
-        {state.planDisabledReason && <span style={hint}>{state.planDisabledReason}</span>}
+          <button
+            className="btn btn-sm"
+            data-action="start-work-plan"
+            disabled={busy !== null || state.planDisabledReason !== null}
+            onClick={() => void onPlan()}
+            {...(state.planDisabledReason ? { 'data-disabled-reason': state.planDisabledReason, title: state.planDisabledReason } : {})}
+            style={groupBtn}
+          >
+            {busy === 'plan' ? 'Planning…' : `Plan${state.unplannedReady.length > 0 ? ` (${state.unplannedReady.length})` : ''}`}
+          </button>
+        </RepointGate>
+        {state.planDisabledReason && pendingRepoint?.kind !== 'plan' && <span style={hint}>{state.planDisabledReason}</span>}
       </span>
 
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -166,7 +244,7 @@ export function StartWorkActions({
             <select
               data-field="start-work-flow"
               value={chosenFlow}
-              onChange={(e) => setFlowId(e.target.value)}
+              onChange={(e) => { setFlowId(e.target.value); setPendingRepoint(null); }}
               aria-label="Flow to run"
               style={selectStyle}
             >
@@ -177,7 +255,7 @@ export function StartWorkActions({
             <select
               data-field="start-work-initiative"
               value={chosenInitiative}
-              onChange={(e) => setInitiativeId(e.target.value)}
+              onChange={(e) => { setInitiativeId(e.target.value); setPendingRepoint(null); }}
               aria-label="Initiative to enqueue"
               style={selectStyle}
             >
@@ -185,15 +263,24 @@ export function StartWorkActions({
                 <option key={i.initiativeId} value={i.initiativeId}>{i.initiativeId}</option>
               ))}
             </select>
-            <button
-              className="btn btn-sm"
-              data-action="start-work-run-flow"
-              disabled={busy !== null}
-              onClick={() => void onRunFlow()}
-              style={groupBtn}
+            <RepointGate
+              initiativeId={pendingRepoint?.initiativeId ?? ''}
+              pending={pendingRepoint?.kind === 'run-flow' ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: pendingRepoint.targetFlowId } : null}
+              verb="Run"
+              busy={busy !== null}
+              onConfirm={(fromFlowId) => void onRunFlow({ flowId: pendingRepoint!.targetFlowId, initiativeId: pendingRepoint!.initiativeId, fromFlowId })}
+              onCancel={() => setPendingRepoint(null)}
             >
-              {busy === 'run-flow' ? 'Enqueuing…' : 'Run a flow'}
-            </button>
+              <button
+                className="btn btn-sm"
+                data-action="start-work-run-flow"
+                disabled={busy !== null}
+                onClick={() => void onRunFlow()}
+                style={groupBtn}
+              >
+                {busy === 'run-flow' ? 'Enqueuing…' : 'Run a flow'}
+              </button>
+            </RepointGate>
           </>
         ) : (
           <>

@@ -8,11 +8,27 @@
  * indistinguishable from a live one and one click yanked its manifest out
  * of `_queue/done` and re-ran it. Only genuinely startable (queued) runs
  * are candidates; finished/failed/active/gated never are.
+ *
+ * TEST-WORLD AMENDMENT — W8-A3:
+ *
+ *  - `flows-37` (S1): `deriveKickoffCandidates` now takes the flow being
+ *    VIEWED, and every candidate carries the flow it is queued under plus
+ *    whether selecting it is a repoint. The old signature could not express
+ *    the difference, which is why the picker could not disclose it.
+ *  - `flows-25` (S2): the three `canStartFlow` cases that lived at the bottom
+ *    of this file MOVED to `lib/flow-kickoff-render.test.ts`, and one of them
+ *    was pinning the defect — it asserted `initiative-select -> true` while
+ *    that surface renders no launcher at all. It is now asserted against the
+ *    rendered markup instead of against a hand-written enumeration.
  */
 import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-import { deriveKickoffCandidates, canStartFlow } from './kickoff-candidates.ts';
-import type { Flow, Run } from './studio-client.ts';
+import { deriveKickoffCandidates, NO_FLOW_SENTINEL } from './kickoff-candidates.ts';
+import type { Run } from './studio-client.ts';
+
+const VIEWED = 'forge-develop';
 
 function run(over: Partial<Run> & Pick<Run, 'id' | 'initiativeId' | 'status'>): Run {
   return {
@@ -36,8 +52,8 @@ test('only PLANNED (queued) runs are candidates — complete/failed/active/gated
     run({ id: '2026-08-03T00-00-00_INIT-2026-08-03-live', initiativeId: 'INIT-2026-08-03-live', status: 'active' }),
     run({ id: '2026-08-04T00-00-00_INIT-2026-08-04-gated', initiativeId: 'INIT-2026-08-04-gated', status: 'gated' }),
   ];
-  expect(deriveKickoffCandidates(runs)).toEqual([
-    { initiativeId: 'INIT-2026-08-18-add-version-flag', project: 'demo-project' },
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([
+    { initiativeId: 'INIT-2026-08-18-add-version-flag', project: 'demo-project', currentFlowId: 'forge-develop', isRepoint: false },
   ]);
 });
 
@@ -47,36 +63,74 @@ test('dedupes by initiative id and never fabricates a project (null when the run
     run({ id: 'INIT-2026-08-18-a', initiativeId: 'INIT-2026-08-18-a', status: 'planned', flowId: 'onboard-project' }),
     run({ id: 'INIT-2026-08-18-b', initiativeId: 'INIT-2026-08-18-b', status: 'planned', project: 'mdtoc' }),
   ];
-  expect(deriveKickoffCandidates(runs)).toEqual([
-    { initiativeId: 'INIT-2026-08-18-a', project: null },
-    { initiativeId: 'INIT-2026-08-18-b', project: 'mdtoc' },
+  expect(deriveKickoffCandidates(runs, VIEWED)).toEqual([
+    { initiativeId: 'INIT-2026-08-18-a', project: null, currentFlowId: 'forge-develop', isRepoint: false },
+    { initiativeId: 'INIT-2026-08-18-b', project: 'mdtoc', currentFlowId: 'forge-develop', isRepoint: false },
   ]);
 });
 
 test('a run without an initiative id (degraded manifest) is skipped, and no runs → no candidates', () => {
-  expect(deriveKickoffCandidates([run({ id: 'x', initiativeId: '', status: 'planned' })])).toEqual([]);
-  expect(deriveKickoffCandidates([])).toEqual([]);
+  expect(deriveKickoffCandidates([run({ id: 'x', initiativeId: '', status: 'planned' })], VIEWED)).toEqual([]);
+  expect(deriveKickoffCandidates([], VIEWED)).toEqual([]);
 });
 
-// ---- W7-C1 (flows-25): canStartFlow — the honest data-can-start derivation ----
+// ---- W8-A3 (flows-37): the repoint fact, derived per candidate --------------
 //
-// `data-can-start` on the flow monitor used to be `view.flow ? 'true' :
-// 'false'` — "the flow exists", not "a run can be started". A trigger-only
-// flow renders NO launch surface, so automation reading the attribute was
-// told a start was possible when it was not.
+// Every planned initiative on disk carries `flow_id: forge-architect`, so on
+// ANY authored flow's monitor every candidate is a repoint. The picker could
+// not say so, because the candidate had nowhere to carry it.
 
-test('canStartFlow: null flow -> false (nothing to start)', () => {
-  expect(canStartFlow(null)).toBe(false);
+test('flows-37: a candidate queued under another flow is marked isRepoint, and names that flow', () => {
+  const runs: Run[] = [
+    run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'forge-architect' }),
+    run({ id: 'INIT-2026-08-18-beta', initiativeId: 'INIT-2026-08-18-beta', status: 'planned', flowId: 'my-authored-flow' }),
+  ];
+  expect(deriveKickoffCandidates(runs, 'my-authored-flow')).toEqual([
+    { initiativeId: 'INIT-2026-08-18-alpha', project: null, currentFlowId: 'forge-architect', isRepoint: true },
+    { initiativeId: 'INIT-2026-08-18-beta', project: null, currentFlowId: 'my-authored-flow', isRepoint: false },
+  ]);
 });
 
-test('canStartFlow: a trigger-only kickoff renders no launch surface -> false', () => {
-  const flow: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [], kickoff: { kind: 'trigger-only' } };
-  expect(canStartFlow(flow)).toBe(false);
+test('flows-37: the repoint fact is DERIVED per viewed flow — the same run answers differently on two monitors', () => {
+  const runs: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'forge-architect' })];
+  expect(deriveKickoffCandidates(runs, 'forge-architect')[0].isRepoint).toBe(false);
+  expect(deriveKickoffCandidates(runs, 'retro-flow')[0].isRepoint).toBe(true);
 });
 
-test('canStartFlow: declared launchable kinds AND the generic no-kickoff fallback -> true', () => {
-  const base: Flow = { id: 'f', name: 'f', goal: '', nodes: [], edges: [], triggers: [] };
-  expect(canStartFlow({ ...base, kickoff: { kind: 'idea' } })).toBe(true);
-  expect(canStartFlow({ ...base, kickoff: { kind: 'initiative-select' } })).toBe(true);
-  expect(canStartFlow(base)).toBe(true); // no kickoff: block -> generic Start-Run fallback
+test('flows-37: a run reporting no flow of its own has nothing to be taken from → not a repoint', () => {
+  // The REAL shape (review round 1, S3-8): `Run.flowId` is already defaulted to
+  // `orchestrator/run-model.ts`'s FALLBACK_FLOW_ID for a manifest that carries no
+  // `flow_id`, so `'unknown'` — not `''` — is what a flowless manifest produces
+  // over the wire. The first cut of this test pinned `flowId: ''`, an input the
+  // product cannot emit, so the branch that mattered was never exercised: the UI
+  // said "queued under unknown" and offered a confirmation while the server, which
+  // sees the undefined `manifest.flow_id`, called it no repoint at all.
+  //
+  // KILLS: a derivation that reads `r.flowId` raw and disagrees with the server.
+  const flowless: Run[] = [run({ id: 'INIT-2026-08-18-alpha', initiativeId: 'INIT-2026-08-18-alpha', status: 'planned', flowId: 'unknown' })];
+  expect(deriveKickoffCandidates(flowless, 'retro-flow')).toEqual([
+    { initiativeId: 'INIT-2026-08-18-alpha', project: null, currentFlowId: null, isRepoint: false },
+  ]);
+
+  // And the degenerate empty string stays safe too.
+  const empty: Run[] = [run({ id: 'INIT-2026-08-18-beta', initiativeId: 'INIT-2026-08-18-beta', status: 'planned', flowId: '' })];
+  expect(deriveKickoffCandidates(empty, 'retro-flow')[0]).toEqual(
+    { initiativeId: 'INIT-2026-08-18-beta', project: null, currentFlowId: null, isRepoint: false },
+  );
+});
+
+// ---- W8-A3 (review round 2, finding 9): the client copy of a server constant --
+
+test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', () => {
+  // KILLS: silent drift. `lib/kickoff-candidates.ts` re-declares
+  // `orchestrator/run-model.ts`'s module-private `FALLBACK_FLOW_ID` client-side
+  // (this repo's re-declare convention for orchestrator constants), and the only
+  // thing linking them was a comment. Renaming the server constant's VALUE would
+  // silently re-open the UI/server disagreement about a flowless manifest that
+  // round 1's S3-8 closed — the UI would offer a confirmation to move an
+  // initiative off a flow the server does not think it is on.
+  const src = readFileSync(resolve(__dirname, '..', '..', 'orchestrator', 'run-model.ts'), 'utf8');
+  const match = /const FALLBACK_FLOW_ID = '([^']+)'/.exec(src);
+  expect(match, 'FALLBACK_FLOW_ID must still be declared in orchestrator/run-model.ts').not.toBeNull();
+  expect(NO_FLOW_SENTINEL).toBe(match![1]);
 });

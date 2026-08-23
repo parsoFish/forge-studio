@@ -2101,7 +2101,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-start-run-cta',
         title: `Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`,
-        narration: `On the from-scratch ${SCRATCH_FLOW} flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones.`,
+        narration: `On the from-scratch ${SCRATCH_FLOW} flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones. Picking an initiative that is queued under ANOTHER flow does not silently take it: the option says which flow it belongs to, and Start Run stops on a confirmation instead of moving it. Cancel, and the queued manifest on disk is untouched. The flow that genuinely has no launcher — Forge Develop, which is started from a project roadmap — reports that honestly rather than advertising a Start it does not offer.`,
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── S1.1: Engine control — start-run CTA (a genuinely run-less flow) ───────
@@ -2110,30 +2110,115 @@ export const journey = defineJourney({
               // (forge-develop-scratch) — a parity copy that was never run, and which the
               // lineage logic correctly excludes (its nodes are a subset of forge-develop's).
               console.log(`\n[S1.1] Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`);
-              await page.goto(watch.uiUrl + `/flows/${SCRATCH_FLOW}`, { waitUntil: 'domcontentloaded' });
+
+              // W8-A3 (flows-37): a REAL queued initiative belonging to another flow, so
+              // the picker has something it could take. Written before the page loads and
+              // removed in this beat's own finally — nothing is ever posted against it.
+              const REPOINT_INIT = `INIT-${DATE}-e2e-repoint-guard`;
+              const repointManifest = join(QDIR('pending'), `${REPOINT_INIT}.md`);
+              const repointBody = [
+                '---', `initiative_id: ${REPOINT_INIT}`, `project: ${PROJECT}`,
+                `project_repo_path: ${projectRoot}`, `created_at: '${new Date().toISOString()}'`,
+                'iteration_budget: 10', 'cost_budget_usd: 4', 'phase: pending', 'origin: architect',
+                'flow_id: forge-architect', '---', '',
+                `# ${REPOINT_INIT}`, '',
+                'A planned initiative queued under the architect flow — the picker must not take it silently.',
+              ].join('\n');
+              mkdirSync(QDIR('pending'), { recursive: true });
+              writeFileSync(repointManifest, repointBody);
+
               try {
+                await page.goto(watch.uiUrl + `/flows/${SCRATCH_FLOW}`, { waitUntil: 'domcontentloaded' });
+                try {
+                  await page.waitForFunction(
+                    () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+                    null, { timeout: 20000 },
+                  );
+                  check(true, `engine: flow-monitor ready for ${SCRATCH_FLOW}`);
+                } catch {
+                  const pr = await page.evaluate(() =>
+                    document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
+                  check(false, `engine: flow-monitor ready for ${SCRATCH_FLOW} (got "${pr}")`);
+                }
+                await caption(page, 'The engine runs any flow — Start Run launches a planned flow directly from the UI.');
+                await sleep(ACT);
+                const canStartKi = await page.evaluate(() =>
+                  document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
+                check(canStartKi === 'true', `engine: data-can-start="true" on flow-monitor (got "${canStartKi}")`);
+                const startBtnEnabled = await page.evaluate(() => {
+                  const btn = document.querySelector('[data-action="start-run"]');
+                  return btn !== null && !btn.hasAttribute('disabled');
+                });
+                check(startBtnEnabled, 'engine: [data-action="start-run"] present and enabled (no real run started)');
+                await frame(page, 's1-1-start-run', 'S1 — engine: Start Run CTA enabled on a flow with no runs');
+
+                // ── W8-A3 (flows-37): the picker discloses, and Start Run confirms ──────
+                let optionSeen = false;
+                try {
+                  await page.waitForFunction(
+                    (id) => document.querySelector(`[data-field="kickoff-initiative"] option[value="${id}"]`) !== null,
+                    REPOINT_INIT, { timeout: 20000 },
+                  );
+                  optionSeen = true;
+                } catch { /* reported by the check below with what WAS offered */ }
+                const offered = await page.evaluate(() =>
+                  [...document.querySelectorAll('[data-field="kickoff-initiative"] option')]
+                    .map((o) => ({ value: o.getAttribute('value'), repoint: o.getAttribute('data-repoint'), label: o.textContent })));
+                check(optionSeen,
+                  `flows-37: the queued initiative is offered by the picker (options: ${JSON.stringify(offered)})`);
+                const row = offered.find((o) => o.value === REPOINT_INIT) ?? null;
+                check(row?.repoint === 'true',
+                  `flows-37: its option is marked data-repoint="true" (got "${row?.repoint ?? '(absent)'}")`);
+                check((row?.label ?? '').includes('forge-architect'),
+                  `flows-37: its option NAMES the flow it is queued under (label: "${row?.label ?? '(absent)'}")`);
+
+                await caption(page, 'That initiative is queued under another flow — the option says so.');
+                await sleep(ACT);
+                await page.locator('[data-field="kickoff-initiative"]').selectOption(REPOINT_INIT);
+                await sleep(THINK);
+                await page.locator('[data-action="start-run"]').click();
+
+                let confirmSeen = false;
+                try {
+                  await page.waitForSelector('[data-component="repoint-confirm"]', { timeout: 8000 });
+                  confirmSeen = true;
+                } catch { /* reported below */ }
+                check(confirmSeen, 'flows-37: Start Run stops on [data-component="repoint-confirm"] instead of moving it');
+                const currentFlow = await page.evaluate(() =>
+                  document.querySelector('[data-component="repoint-confirm"]')?.getAttribute('data-current-flow') ?? '(absent)');
+                check(currentFlow === 'forge-architect',
+                  `flows-37: the confirmation names the flow of origin (got "${currentFlow}")`);
+                await caption(page, 'Nothing has moved yet. The manifest on disk is still the architect flow\u2019s.');
+                await frame(page, 's1-1b-repoint-confirm', 'S1 — flows-37: starting a flow against someone else\u2019s queued initiative asks first', { key: true });
+
+                // The ARTIFACT, not the screen: the queued manifest is byte-identical,
+                // so the click genuinely posted nothing.
+                const onDisk = readFileSync(repointManifest, 'utf8');
+                check(onDisk === repointBody,
+                  'flows-37: the queued manifest is byte-unchanged on disk — the click enqueued nothing');
+
+                await page.locator('[data-action="cancel-repoint"]').click();
+                await sleep(ACT);
+                const afterCancel = await page.evaluate(() =>
+                  document.querySelector('[data-component="repoint-confirm"]') === null);
+                check(afterCancel, 'flows-37: Cancel dismisses the confirmation and leaves the initiative where it was');
+
+                // ── W8-A3 (flows-25): the flow with no launcher says so ─────────────────
+                await page.goto(watch.uiUrl + '/flows/forge-develop', { waitUntil: 'domcontentloaded' });
                 await page.waitForFunction(
                   () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 20000 },
-                );
-                check(true, `engine: flow-monitor ready for ${SCRATCH_FLOW}`);
-              } catch {
-                const pr = await page.evaluate(() =>
-                  document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(absent)');
-                check(false, `engine: flow-monitor ready for ${SCRATCH_FLOW} (got "${pr}")`);
+                ).catch(() => {});
+                const developCanStart = await page.evaluate(() =>
+                  document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
+                check(developCanStart === 'false',
+                  `flows-25: forge-develop is started from a project roadmap, so data-can-start="false" (got "${developCanStart}")`);
+                await caption(page, 'Forge Develop is launched from a project roadmap \u2014 it says so rather than advertising a Start it has not got.');
+                await sleep(ACT);
+                await frame(page, 's1-1c-can-start-false', 'S1 — flows-25: a flow with no launcher reports it honestly');
+              } finally {
+                try { rmSync(repointManifest, { force: true }); } catch { /* */ }
               }
-              await caption(page, 'The engine runs any flow — Start Run launches a planned flow directly from the UI.');
-              await sleep(ACT);
-              const canStartKi = await page.evaluate(() =>
-                document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-can-start') ?? '(absent)');
-              check(canStartKi === 'true', `engine: data-can-start="true" on flow-monitor (got "${canStartKi}")`);
-              const startBtnEnabled = await page.evaluate(() => {
-                const btn = document.querySelector('[data-action="start-run"]');
-                return btn !== null && !btn.hasAttribute('disabled');
-              });
-              check(startBtnEnabled, 'engine: [data-action="start-run"] present and enabled (no real run started)');
-              await frame(page, 's1-1-start-run', 'S1 — engine: Start Run CTA enabled on a flow with no runs');
-
         },
       },
       {

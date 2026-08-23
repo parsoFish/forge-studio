@@ -360,7 +360,11 @@ function defaultStartFlowRun(queueRoot?: string, forgeRoot?: string): (req: Flow
       // develop run chaining onto reflect sources its manifest from `done/`).
       // Every operator-initiated enqueue leaves this off and gets the
       // `already-done` refusal instead.
-      const r = enqueueFlowRun(req.sourceInitiativeId, req.target.ref, { queueRoot, allowFinishedSource: true });
+      // W8-A3 (`flows-37`): `confirmRepoint` — chaining is the OTHER caller
+      // for which a repoint is the whole point (every flow-complete hop moves
+      // the initiative onto the next flow). The operator-facing routes leave
+      // this off and get `repoint-requires-confirm` instead.
+      const r = enqueueFlowRun(req.sourceInitiativeId, req.target.ref, { queueRoot, allowFinishedSource: true, confirmRepoint: true });
       if (r.status !== 'enqueued') {
         throw new Error(`enqueue ${req.target.ref} on ${req.sourceInitiativeId}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`);
       }

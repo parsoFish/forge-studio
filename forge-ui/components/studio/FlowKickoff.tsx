@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 
 import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
+import { RepointGate } from '@/components/studio/RepointGate';
 import { startFlowRun } from '@/lib/bridge-client';
 import type { Flow } from '@/lib/studio-client';
 import type { KickoffCandidate } from '@/lib/kickoff-candidates';
+import { kickoffSurfaceId } from '@/lib/kickoff-surface';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
 export type { KickoffCandidate } from '@/lib/kickoff-candidates';
@@ -34,6 +36,11 @@ export type { KickoffCandidate } from '@/lib/kickoff-candidates';
  * W7-A3 (flows-03): the monitor renders this in EVERY state behind a header
  * toggle (open by default when the flow has no runs), so a flow never loses
  * its launch control after its first run.
+ *
+ * W8-A3 (flows-25): the dispatch below is driven by `kickoffSurfaceId`, and
+ * `lib/kickoff-surface.ts`'s table — the same rows `data-can-start` is read
+ * from — is what says which of these surfaces launches anything. There is no
+ * second enumeration to fall out of step with what renders here.
  */
 export function FlowKickoff({
   flow,
@@ -51,12 +58,12 @@ export function FlowKickoff({
    *  id (= the planned run's id in the rail; the page refetches + selects it). */
   onEnqueued?: (initiativeId: string) => void;
 }): JSX.Element {
-  const kind = flow.kickoff?.kind;
-
-  if (kind === 'idea') return <IdeaKickoff project={flow.project} />;
-  if (kind === 'initiative-select') return <InitiativeSelectKickoff />;
-  if (kind === 'trigger-only') return <TriggerOnlyKickoff />;
-  return <GenericKickoff flowId={flow.id} candidates={candidates} onEnqueued={onEnqueued} />;
+  switch (kickoffSurfaceId(flow)) {
+    case 'idea': return <IdeaKickoff project={flow.project} />;
+    case 'initiative-select': return <InitiativeSelectKickoff />;
+    case 'trigger-only': return <TriggerOnlyKickoff />;
+    case 'generic': return <GenericKickoff flowId={flow.id} candidates={candidates} onEnqueued={onEnqueued} />;
+  }
 }
 
 const barStyle: React.CSSProperties = {
@@ -143,11 +150,42 @@ function GenericKickoff({
 }): JSX.Element {
   const [initiativeId, setInitiativeId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // W8-A3 (flows-37): the repoint the operator has been asked about but has
+  // not yet answered. Non-null ⇒ the confirmation step is on screen and
+  // NOTHING has been posted.
+  const [pendingRepoint, setPendingRepoint] = useState<{ initiativeId: string; currentFlowId: string } | null>(null);
   const [result, setResult] = useState<
     | { kind: 'enqueued'; initiativeId: string; flowId?: string }
     | { kind: 'error'; message: string }
     | null
   >(null);
+
+  async function submit(id: string, confirmRepointFrom?: string): Promise<void> {
+    if (submitting) return;
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const r = await startFlowRun(flowId, id, confirmRepointFrom !== undefined ? { confirmRepointFrom } : {});
+      if (r.ok) {
+        setPendingRepoint(null);
+        setResult({ kind: 'enqueued', initiativeId: id, flowId: r.flowId ?? flowId });
+        onEnqueued?.(id);
+        return;
+      }
+      // Defence in depth: the bridge refuses an unconfirmed repoint on its own
+      // (`enqueueFlowRun` owns the rule), so a candidate whose flow of origin
+      // the client could not derive still lands on the confirmation step
+      // rather than on a bare error string.
+      if (r.status === 'repoint-requires-confirm') {
+        setPendingRepoint({ initiativeId: id, currentFlowId: r.currentFlowId ?? 'another flow' });
+        return;
+      }
+      setPendingRepoint(null);
+      setResult({ kind: 'error', message: r.error ?? r.status ?? 'enqueue failed' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function start(): Promise<void> {
     if (submitting) return;
@@ -155,19 +193,15 @@ function GenericKickoff({
       setResult({ kind: 'error', message: 'Pick an initiative to run this flow against.' });
       return;
     }
-    setSubmitting(true);
-    setResult(null);
-    try {
-      const r = await startFlowRun(flowId, initiativeId);
-      if (r.ok) {
-        setResult({ kind: 'enqueued', initiativeId, flowId: r.flowId ?? flowId });
-        onEnqueued?.(initiativeId);
-      } else {
-        setResult({ kind: 'error', message: r.error ?? r.status ?? 'enqueue failed' });
-      }
-    } finally {
-      setSubmitting(false);
+    const picked = candidates.find((c) => c.initiativeId === initiativeId) ?? null;
+    // A repoint takes the initiative away from the flow it is queued under.
+    // Ask before posting — never after.
+    if (picked?.isRepoint && picked.currentFlowId) {
+      setResult(null);
+      setPendingRepoint({ initiativeId, currentFlowId: picked.currentFlowId });
+      return;
     }
+    await submit(initiativeId);
   }
 
   return (
@@ -176,19 +210,35 @@ function GenericKickoff({
       <select
         data-field="kickoff-initiative"
         value={initiativeId}
-        onChange={(e) => setInitiativeId(e.target.value)}
-        style={{ fontSize: 12, padding: '3px 8px', borderRadius: 4, border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--text)', maxWidth: 360 }}
+        onChange={(e) => { setInitiativeId(e.target.value); setPendingRepoint(null); }}
+        style={{ fontSize: 12, padding: '3px 8px', borderRadius: 4, border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--text)', maxWidth: 420 }}
       >
         <option value="">— pick an initiative —</option>
         {candidates.map((c) => (
-          <option key={c.initiativeId} value={c.initiativeId}>
+          <option key={c.initiativeId} value={c.initiativeId} data-repoint={c.isRepoint ? 'true' : 'false'}>
             {c.initiativeId}{c.project ? ` · ${c.project}` : ''}
+            {c.isRepoint && c.currentFlowId ? ` — queued under ${c.currentFlowId}` : ''}
           </option>
         ))}
       </select>
-      <button data-action="start-run" {...disabledAttrs(submitting ? 'Starting the run…' : null)} onClick={() => void start()} style={launchButtonStyle}>
-        {submitting ? 'Starting…' : 'Start Run'}
-      </button>
+      {/* W8-A3 round 4, S2-2: the control and its confirmation are one gate.
+          Re-clicking Start Run while a bar was open re-posted UNCONFIRMED
+          whenever the refusal had come from the server rather than from the
+          client's own `isRepoint` derivation — the path this component's own
+          comment says exists. */}
+      <RepointGate
+        initiativeId={pendingRepoint?.initiativeId ?? ''}
+        pending={pendingRepoint ? { currentFlowId: pendingRepoint.currentFlowId, targetFlowId: flowId } : null}
+        verb="Run"
+        busy={submitting}
+        onConfirm={(fromFlowId) => void submit(pendingRepoint!.initiativeId, fromFlowId)}
+        onCancel={() => setPendingRepoint(null)}
+        barStyle={{ width: '100%', marginTop: 6 }}
+      >
+        <button data-action="start-run" {...disabledAttrs(submitting ? 'Starting the run…' : null)} onClick={() => void start()} style={launchButtonStyle}>
+          {submitting ? 'Starting…' : 'Start Run'}
+        </button>
+      </RepointGate>
       {candidates.length === 0 && (
         <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>No queued initiatives yet — plan one with the architect first.</span>
       )}
