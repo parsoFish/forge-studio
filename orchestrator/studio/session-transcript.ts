@@ -531,6 +531,16 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // record shows it with its decision. If no record carries it — a
   // feedback.md written by any path that did not also append a verdict — the
   // turn still renders, because dropping it would lose the operator's words.
+  //
+  // The `.trim().length > 0` arm is the same blank-source rule the opener
+  // above applies, for the same reason: an empty file is not a turn, and
+  // rendering one produced a blank operator bubble.
+  //
+  // ORDERING NOTE: reading verdicts.json before PUSHING the feedback turn does
+  // not move either turn. The pushes still happen in the same order (feedback,
+  // then the verdict block), so `index` numbering is unchanged wherever the
+  // feedback turn survives — and where it is suppressed the indices are one
+  // shorter, which is exactly right, because there is one fewer turn.
   if (feedbackBody !== null && feedbackBody.trim().length > 0) {
     const carriedByAVerdict = verdictRecords.some(
       (r) => r.feedback !== undefined && r.feedback.trim() === feedbackBody.trim(),

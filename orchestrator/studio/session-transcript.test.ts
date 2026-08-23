@@ -2367,3 +2367,34 @@ describe('deriveSessionTranscript — W8-B3 revise de-duplication (sessions-kind
     assert.equal(result.turns[0].source, 'feedback.md');
   });
 });
+
+describe('deriveSessionTranscript — W8-B3 turn INDEX contract holds across the reorder', () => {
+  // `data-turn-index` is part of the DOM contract (docs/forge-ui-dom-and-
+  // harness.md) and two live journeys assert on index 0 specifically
+  // (flows-run's idea.md pin, stand-up-create's questions.json pin). Reading
+  // verdicts.json before PUSHING the feedback turn must not renumber anything.
+  it('W8-B3: indices stay 0..n-1 in push order — opener, answers, questions, feedback, verdicts', () => {
+    const dir = makeTmpDir('b3-index-contract');
+    writeFileSync(join(dir, 'idea.md'), 'the idea');
+    writeJson(dir, 'answers.json', [{ round: 1, answers: [{ question: 'q1?', answer: 'a1' }] }]);
+    writeJson(dir, 'questions.json', [{ question: 'pending?' }]);
+    writeFileSync(join(dir, 'feedback.md'), 'a note no verdict carries');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'reject', notes: 'not this one' }]);
+
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-answers' });
+    assert.ok(result.ok);
+    assert.deepEqual(result.turns.map((t) => t.index), [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(result.turns.map((t) => t.source), [
+      'idea.md',
+      'answers.json#round-1',
+      'answers.json#round-1',
+      'questions.json',
+      'feedback.md',
+      'verdicts.json#1',
+    ]);
+    // A reject WITH notes and an unrelated feedback.md must keep BOTH — the
+    // de-duplication may only fire on an exact text match.
+    assert.ok(result.turns.some((t) => t.text === 'a note no verdict carries'));
+    assert.ok(result.turns.some((t) => t.text.includes('not this one')));
+  });
+});
