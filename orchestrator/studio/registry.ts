@@ -322,9 +322,14 @@ export function listPlainSkills(forgeRoot: string): { id: string; name: string; 
 
 /**
  * The curated "out of the box" starter agents (ADR-033) under
- * `studio/starters/agents/`. These are templates the New-Agent picker offers —
- * not live agents (lint does not scan them). Returns [] if the dir is absent so
- * a checkout without starters degrades gracefully rather than throwing.
+ * `studio/starters/agents/`. These are templates the New-Agent picker offers,
+ * copied into `skills/<name>/` on install rather than run in place — but
+ * `forge studio lint` DOES scan this tree directly too (`lintSkillToolFence`
+ * of `cli/studio-lint-tool-fence.ts`'s `lintStarterAgentToolFence`, added
+ * forge-6gv.18): a template that violates the tool-fence rule fails the gate
+ * at source, before any operator ever installs it. Returns [] if the dir is
+ * absent so a checkout without starters degrades gracefully rather than
+ * throwing.
  */
 export function listStarterAgents(forgeRoot: string): AgentDefinition[] {
   const dir = join(resolve(forgeRoot), 'studio', 'starters', 'agents');

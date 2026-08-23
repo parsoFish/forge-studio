@@ -14,7 +14,7 @@ runtime:
 brainAccess: none
 interactivity: Autonomous — reads the request and the code, writes a plan, then hands off.
 allowed-tools: [Read, Grep, Glob, Write]
-disallowed-tools: [Edit, Bash]
+disallowed-tools: [Edit, Bash, Task, Agent]
 budgets: {}
 ---
 

@@ -74,7 +74,7 @@ import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types
 import { listFlowBandIds } from './flow-band-vocab.ts';
 import { kbReadPolicyViolation } from './kb-read-policy.ts';
 import { unroutableKbReason } from './kb-sites.ts';
-import { lintSkillToolFence } from './studio-lint-tool-fence.ts';
+import { lintSkillToolFence, lintStarterAgentToolFence } from './studio-lint-tool-fence.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -690,9 +690,14 @@ export function runStudioLint(root: string): StudioLintResult {
   //     the only field that actually removes the subagent-spawn tool from a
   //     skill's reach. Local to this file (not `orchestrator/studio/`) per
   //     ADR 042 boundary 1/4 — its only production caller is this module.
+  //     Covers BOTH the installed roster (`skills/`) and the OOTB starter
+  //     template tree (`studio/starters/agents/**`, ADR-033) — the latter is
+  //     the SOURCE those installs are copied from, and forge-6gv.18 shipped
+  //     because only the roster half was ever scanned.
   // ------------------------------------------------------------------
 
   findings.push(...lintSkillToolFence(root));
+  findings.push(...lintStarterAgentToolFence(root));
 
   // ------------------------------------------------------------------
   // 7. Template library (R3-06) — union registry over artifact-templates/,
