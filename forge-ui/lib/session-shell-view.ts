@@ -170,11 +170,26 @@ function turnsForStage(turns: readonly SessionTurn[], stage: string): SessionTur
  *    - the session is still `working` → an honest "not YET";
  *    - otherwise (an operator gate with no turns yet — the instructions/demo
  *      `briefing` shape) → a NEUTRAL line that promises nothing. */
-function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], allTurns: readonly SessionTurn[], lifecycle: SessionLifecycle): string | null {
+function emptyStageMessageFor(
+  stage: string,
+  turns: readonly SessionTurn[],
+  allTurns: readonly SessionTurn[],
+  lifecycle: SessionLifecycle,
+  transcriptSources: readonly string[],
+): string | null {
   if (turns.length > 0) return null;
   if (allTurns.length > 0) return `No turns recorded for stage "${stage}" — this session's turns are on another stage`;
-  if (lifecycle.state === 'working') return `No turns recorded yet for stage "${stage}"`;
-  return `No transcript for stage "${stage}" — nothing was recorded for this stage`;
+  // W8-B3 adversarial-review finding 2 — the source report is the whole point
+  // of `deriveSessionTranscript`'s binding rule ("an empty transcript reads
+  // 'scanned N sources, none found' — never 'unknown, rendered empty'"), and
+  // the UI had never surfaced it. Naming the files that DO exist separates
+  // "nothing has happened yet" from "a file is there and derived no turn" —
+  // which is exactly the blank-`prompt.md` shape this lane also fixed.
+  const sourceNote = transcriptSources.length > 0
+    ? ` — ${transcriptSources.join(', ')} on disk, none of it derived a turn here`
+    : ' — nothing has been written to this session yet';
+  if (lifecycle.state === 'working') return `No turns recorded yet for stage "${stage}"${sourceNote}`;
+  return `No transcript for stage "${stage}"${sourceNote}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,10 +220,21 @@ function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], allT
 export type SessionPaneSet = {
   /** Whether the LEFT column renders the chat transcript at all. */
   readonly transcript: boolean;
-  /** Why the transcript pane is absent — `null` whenever it renders. A DOM
-   *  value (`data-transcript-omitted`), so a journey asserts the decision
-   *  rather than scraping the copy. */
-  readonly transcriptOmittedReason: 'no-turns-recorded' | null;
+  /**
+   * Why the transcript pane is absent — `null` whenever it renders. A DOM
+   * value (`data-transcript-omitted`), so a journey asserts the decision
+   * rather than scraping the copy.
+   *
+   * The two values are genuinely different situations, not a wording nicety:
+   *   - `nothing-recorded` — the session dir holds none of the transcript
+   *     sources at all. Nothing has happened here yet.
+   *   - `sources-derived-no-turns` — a source file IS on disk and produced no
+   *     turn. Today that means a blank `prompt.md` (three brief routes write
+   *     `body.brief ?? ''`), which used to render as an empty operator bubble.
+   *     Worth telling apart, because the second says the writer ran and the
+   *     first says it did not.
+   */
+  readonly transcriptOmittedReason: 'nothing-recorded' | 'sources-derived-no-turns' | null;
   /** The ordered pane ids actually rendered, for `data-session-panes`. */
   readonly ids: readonly string[];
 };
@@ -219,6 +245,10 @@ export function deriveSessionPanes(input: {
   readonly allTurns: readonly SessionTurn[];
   readonly affordances: readonly SessionAffordance[];
   readonly transcriptError: string | null;
+  /** Which candidate sources actually exist on disk (bridge-derived). Read
+   *  ONLY to say WHY the pane is absent — never to decide whether it renders,
+   *  which stays a question about real turns. */
+  readonly transcriptSources: readonly string[];
 }): SessionPaneSet {
   // A derivation that REFUSED must still show its refusal — dropping the pane
   // would hide the one place the operator can read why the transcript is
@@ -227,7 +257,9 @@ export function deriveSessionPanes(input: {
   const transcript = input.transcriptError !== null || input.allTurns.length > 0 || awaitingOperatorText;
   return {
     transcript,
-    transcriptOmittedReason: transcript ? null : 'no-turns-recorded',
+    transcriptOmittedReason: transcript
+      ? null
+      : input.transcriptSources.length > 0 ? 'sources-derived-no-turns' : 'nothing-recorded',
     ids: transcript ? ['transcript', 'artifact'] : ['artifact'],
   };
 }
@@ -266,6 +298,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     allTurns: payload.turns,
     affordances: payload.affordances,
     transcriptError: payload.transcriptError,
+    transcriptSources: payload.transcriptSources,
   });
   return {
     status: 'ready',
@@ -280,7 +313,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     stageSelectorVisible,
     allTurns: [...payload.turns],
     turnsForStage: turns,
-    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.turns, payload.lifecycle),
+    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.turns, payload.lifecycle, payload.transcriptSources),
     artifactKind,
     artifactLabel: payload.artifact.label,
     artifact: payload.artifact,
@@ -336,7 +369,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
       ...state,
       selectedStage: stage,
       turnsForStage: turns,
-      emptyStageMessage: emptyStageMessageFor(stage, turns, state.allTurns, state.lifecycle),
+      emptyStageMessage: emptyStageMessageFor(stage, turns, state.allTurns, state.lifecycle, state.transcriptSources),
       dataAttrs: readyDataAttrs({
         kind: state.kind,
         stage,

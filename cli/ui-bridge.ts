@@ -6116,6 +6116,32 @@ async function handleDemoBuilder(
       const findings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
 
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+
+      // W8-B3 (ON-5) — the operator's request, recorded as the session's
+      // opening turn. Written through the SAME guarded leaf sibling as
+      // status.json below, so a symlinked `prompt.md` planted inside a real
+      // session dir is refused rather than followed (`guardedWriteFile`
+      // creates the parent dir itself, so it does not need status.json to
+      // have run first).
+      //
+      // ORDER IS LOAD-BEARING, and this is the second write on a path that
+      // used to have exactly one: `status.json` is what makes a session dir a
+      // SESSION. `readGuardedSessionIndexSummary` returns null without it and
+      // `collectStudioSessionIndexRows` skips the row; the shell route 404s.
+      // So the existence marker goes LAST, and any failure here leaves a
+      // directory that no surface can see — rather than a live-looking
+      // session at phase `drafting` with an empty record and no agent ever
+      // spawned, which is unrecoverable except by hand. This needs no
+      // rollback and adds no unguarded fs sink.
+      if (guardedWriteFile(
+        projectsRoot,
+        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
+        renderKbCleanupPrompt(kbId, kb.binding, findings.length),
+      ) === null) {
+        sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
+        return true;
+      }
+
       const written = guardedWriteSessionStatus(
         projectsRoot,
         [sessionProject, '_kb-cleanup', sessionId],
@@ -6131,21 +6157,6 @@ async function handleDemoBuilder(
       );
       if (written === null) {
         sendJson(res, 500, { error: `kb-cleanup start: hand-off session status.json for kb "${kbId}" failed containment` }, origin);
-        return true;
-      }
-
-      // W8-B3 (ON-5) — record the operator's request as the session's opening
-      // turn. Written through the SAME guarded leaf sibling as status.json
-      // above (the dir is already created by that write), so a symlinked
-      // `prompt.md` planted inside a real session dir is refused rather than
-      // followed. A containment refusal is a hard 500, never a silent skip: a
-      // session whose record starts empty is exactly the defect this closes.
-      if (guardedWriteFile(
-        projectsRoot,
-        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
-        renderKbCleanupPrompt(kbId, kb.binding, findings.length),
-      ) === null) {
-        sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
         return true;
       }
 
@@ -6223,6 +6234,23 @@ async function handleDemoBuilder(
 
       const sessionId = newArchitectSessionId();
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+
+      // W8-B3 (ON-5) — the operator's brief was validated, stored on
+      // status.json and then never read by anything. It is real operator
+      // input and belongs in the session's record. Written BEFORE status.json
+      // for the ordering reason documented on the kb-cleanup start route
+      // above: status.json is the existence marker, so it goes last and a
+      // failure here can never leave a live-looking session with an empty
+      // record and no agent.
+      if (guardedWriteFile(
+        projectsRoot,
+        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId, 'prompt.md'],
+        renderCommunityRefreshPrompt(brief),
+      ) === null) {
+        sendJson(res, 500, { error: 'community-refresh start: session prompt.md failed containment' }, origin);
+        return true;
+      }
+
       const written = guardedWriteSessionStatus(
         projectsRoot,
         [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId],
@@ -6248,19 +6276,6 @@ async function handleDemoBuilder(
       );
       if (written === null) {
         sendJson(res, 500, { error: 'community-refresh start: session status.json failed containment' }, origin);
-        return true;
-      }
-
-      // W8-B3 (ON-5) — the operator's brief was validated, stored on
-      // status.json and then never read by anything. It is real operator input
-      // and belongs in the session's record; write it as the opening turn,
-      // through the same guarded leaf sibling as status.json above.
-      if (guardedWriteFile(
-        projectsRoot,
-        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId, 'prompt.md'],
-        renderCommunityRefreshPrompt(brief),
-      ) === null) {
-        sendJson(res, 500, { error: 'community-refresh start: session prompt.md failed containment' }, origin);
         return true;
       }
 

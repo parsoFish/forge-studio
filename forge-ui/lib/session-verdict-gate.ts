@@ -78,7 +78,14 @@ export function deriveApproveGate(input: {
     input.busy ? 'Submitting…'
     : shapeBlocksApprove ? 'The draft’s shape is still resolving'
     : idBadSlug ? `“${idValue}” is not a valid id`
-    : unmet.length > 0 ? 'Fill in every field this verdict requires first'
+    // W8-B3 adversarial-review finding 3 — NAME the unmet field. `provided`
+    // only ever populates `id`, because `id` is the only field this panel has
+    // an input for; a `requires` list naming anything else can never be
+    // satisfied here. Disabling is the honest answer (better than submitting an
+    // empty string the server would refuse), but a generic "fill in every
+    // field" leaves the operator with no way to work out WHICH field, or that
+    // there is no control for it at all. The button's reason now says.
+    : unmet.length > 0 ? `Fill in ${unmet.map((f) => `"${f}"`).join(', ')} first`
     : null;
 
   const hint: string | null =

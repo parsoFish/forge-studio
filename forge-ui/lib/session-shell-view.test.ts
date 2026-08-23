@@ -311,10 +311,10 @@ test('W8-B3 (ON-5): a session with no turns and no live question-form renders NO
       lifecycle: { state, needsYou: false, error: null, idleMs: null, cancellable: state !== 'terminal' },
     } as SessionShellPayload);
     expect(state_.panes.transcript, state).toBe(false);
-    expect(state_.panes.transcriptOmittedReason, state).toBe('no-turns-recorded');
+    expect(state_.panes.transcriptOmittedReason, state).toBe('nothing-recorded');
     expect(state_.panes.ids, state).toEqual(['artifact']);
     expect(state_.dataAttrs['data-session-panes'], state).toBe('artifact');
-    expect(state_.dataAttrs['data-transcript-omitted'], state).toBe('no-turns-recorded');
+    expect(state_.dataAttrs['data-transcript-omitted'], state).toBe('nothing-recorded');
   }
 });
 
@@ -702,4 +702,48 @@ test('AT-106: backToProjectLink — null when project is null, the real /project
 
 test('AT-107: backToProjectLink — a project id needing URL-encoding is encoded in the href', () => {
   expect(backToProjectLink('my project/weird')).toEqual({ label: 'project', href: '/projects/my%20project%2Fweird' });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B3 adversarial-review finding 2 — `transcriptSources` must be READ, not
+// merely carried. It was threaded through four layers (derivation -> bridge ->
+// client parse -> ready state) with a doc comment claiming it explained an
+// absent pane, and then consumed by nothing: the exact declared-data-fails-open
+// shape this lane exists to remove, reintroduced in miniature. These pin the
+// two places it now genuinely decides what the operator reads.
+// ---------------------------------------------------------------------------
+
+function paneStateWith(over: Partial<SessionShellPayload>) {
+  return sessionShellState({ ...SINGLE_STAGE_PAYLOAD, turns: [], affordances: [], ...over } as SessionShellPayload);
+}
+
+test('W8-B3: an omitted pane with NO source on disk reads "nothing-recorded" — the writer never ran', () => {
+  const state = paneStateWith({ transcriptSources: [] });
+  expect(state.panes.transcriptOmittedReason).toBe('nothing-recorded');
+  expect(state.dataAttrs['data-transcript-omitted']).toBe('nothing-recorded');
+});
+
+test('W8-B3: an omitted pane WITH a source on disk reads "sources-derived-no-turns" — the writer ran and produced nothing (the blank prompt.md shape)', () => {
+  const state = paneStateWith({ transcriptSources: ['prompt.md'] });
+  expect(state.panes.transcript).toBe(false);
+  expect(state.panes.transcriptOmittedReason).toBe('sources-derived-no-turns');
+  expect(state.dataAttrs['data-transcript-omitted']).toBe('sources-derived-no-turns');
+});
+
+test('W8-B3: a RENDERED but empty pane names the sources that exist — deriveSessionTranscript\'s "scanned N, found M" contract finally reaches the operator', () => {
+  // Rendered because a question-form is live; empty because no turn exists yet.
+  const askingWithSources = paneStateWith({
+    transcriptSources: ['prompt.md', 'verdicts.json'],
+    affordances: [{ id: 'q', kind: 'question-form', phase: 'briefing', label: 'Brief', description: null, meta: {} }],
+  } as unknown as Partial<SessionShellPayload>);
+  expect(askingWithSources.panes.transcript).toBe(true);
+  expect(askingWithSources.emptyStageMessage).toContain('prompt.md, verdicts.json');
+  expect(askingWithSources.emptyStageMessage).toContain('none of it derived a turn here');
+
+  const askingWithout = paneStateWith({
+    transcriptSources: [],
+    affordances: [{ id: 'q', kind: 'question-form', phase: 'briefing', label: 'Brief', description: null, meta: {} }],
+  } as unknown as Partial<SessionShellPayload>);
+  expect(askingWithout.emptyStageMessage).toContain('nothing has been written to this session yet');
+  expect(askingWithout.emptyStageMessage).not.toContain('on disk');
 });

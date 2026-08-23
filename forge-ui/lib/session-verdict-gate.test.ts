@@ -46,7 +46,7 @@ test('R01: surrounding whitespace is trimmed once, by the gate, and the SAME tri
 
 test('R01: an EMPTY required field disables Approve with the unmet-field reason, not the slug reason', () => {
   const gate = deriveApproveGate({ requires: ['id'], idValue: '', packageShape: 'skill', busy: false });
-  expect(gate.disabledReason).toBe('Fill in every field this verdict requires first');
+  expect(gate.disabledReason).toBe('Fill in "id" first');
   expect(gate.hint).toMatch(/Enter a skill id/);
 });
 
@@ -86,7 +86,10 @@ test('06: a kind with no file-package artifact at all and no requires is clickab
 
 test('a requires field this panel has no UI to collect never silently satisfies — it honestly disables Approve', () => {
   const gate = deriveApproveGate({ requires: ['id', 'unsupported-field'], idValue: OK_ID, packageShape: 'skill', busy: false });
-  expect(gate.disabledReason).toBe('Fill in every field this verdict requires first');
+  // The button's own reason NAMES the field the panel has no input for, so a
+  // requires list this panel cannot satisfy is legible rather than a dead
+  // control with a generic excuse.
+  expect(gate.disabledReason).toBe('Fill in "unsupported-field" first');
   expect(gate.hint).toMatch(/"unsupported-field"/);
   // …and it is not smuggled into the submit body as an empty string either.
   expect(gate.providedFields).toEqual({ id: OK_ID });

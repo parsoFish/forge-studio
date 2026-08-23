@@ -2520,9 +2520,16 @@ inventory rather than one shared page-level contract:
   the operator's choice.
   **⚑ W8-B3 (operator note ON-5) — the pane set is PER SESSION, derived:**
   `[data-session-panes]` names the panes actually rendered, in order
-  (`"transcript,artifact"` or `"artifact"`), and
-  `[data-transcript-omitted="no-turns-recorded"]` appears only when the chat
-  pane is absent. The shell used to render a transcript pane for every kind
+  (`"transcript,artifact"` or `"artifact"`), and `[data-transcript-omitted]`
+  appears only when the chat pane is absent, distinguishing two genuinely
+  different situations: `"nothing-recorded"` (no transcript source exists on
+  disk — the writer never ran) versus `"sources-derived-no-turns"` (a source IS
+  there and produced no turn — today, a blank `prompt.md`, which three brief
+  routes create by writing `body.brief ?? ''`). A pane that renders but is
+  empty now also NAMES the sources on disk, which is
+  `deriveSessionTranscript`'s own binding rule ("an empty transcript reads
+  'scanned N sources, none found' — never 'unknown, rendered empty'") finally
+  reaching the operator. The shell used to render a transcript pane for every kind
   unconditionally, so a `kb-cleanup` or `community-refresh` session — which
   genuinely has no turns until a verdict lands — spent half the screen on an
   empty box explaining its own emptiness while the plan or staged package the
