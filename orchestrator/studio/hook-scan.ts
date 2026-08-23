@@ -3,19 +3,25 @@
  *
  * Every hook entering the library passes a STATIC scan across four
  * categories before it is runnable: network egress (curl/wget/fetch/nc/raw
- * sockets), env reads (secret-shaped names — matched by SUFFIX, `*_TOKEN`,
- * `*_KEY`, ..., AND by PREFIX, `AZDO_*`/`GH_*` — see the comment on
- * SECRET_SHAPED_ENV_SUFFIX_RE / SECRET_SHAPED_ENV_PREFIX_RE below for the
- * over-flag-not-under-flag decision), file reads outside a curated
- * dangerous-path list
- * (`~/.ssh`, `secrets.env`, `id_rsa`, `.aws/credentials`), and obfuscation
+ * sockets, plus — since W8-B6 — bash's own `/dev/tcp/` and `/dev/udp/`
+ * redirections, `dig`, `ssh`, `python -c` and `openssl s_client`), env reads
+ * (secret-shaped names — matched by SUFFIX, `*_TOKEN`, `*_KEY`, ..., AND by
+ * PREFIX, `AZDO_*`/`GH_*` — see the comment on SECRET_SHAPED_ENV_SUFFIX_RE /
+ * SECRET_SHAPED_ENV_PREFIX_RE below for the over-flag-not-under-flag
+ * decision), file reads inside a curated dangerous-path list (`~/.ssh`,
+ * `secrets.env`, `id_rsa`, `.aws/credentials`, and — since W8-B6 —
+ * `.netrc`, `.docker/config.json`, `.kube/config`, `.npmrc`, `.config/gh/`,
+ * `.git-credentials`, `.azure/`, `.config/gcloud/`), and obfuscation
  * (base64 decode pipelines, `eval`).
  *
  * Unlike R3-01's skill scan (facts only, no verdict — prose is unscannable),
  * this scan DOES produce a verdict: `blocked | findings | clean`, derived
- * from per-finding severity (`computeVerdict`). Deny-by-default: a hook is
- * never runnable until an operator explicitly approves it (`approveHook`) —
- * even a `clean` verdict does not auto-activate.
+ * from per-finding severity (`computeVerdict`): ANY `critical` finding is
+ * `blocked` on its own (W8-B6 — the older env-read + network-egress PAIRING
+ * rule is retired; see computeVerdict's own comment for the review that
+ * defeated it). Deny-by-default: a hook is never runnable until an operator
+ * explicitly approves it (`approveHook`) — even a `clean` verdict does not
+ * auto-activate.
  *
  * Declared access NEVER removes a finding — the manifest declaring "this is
  * fine" is written by the same untrusted party as the script, so a scanner
@@ -53,9 +59,11 @@
  * stripping — see that module's own honesty block). `network-egress` and
  * `file-read` are declared (`permissions.network`/`permissions.read`) and
  * scanned for HERE, but nothing at spawn time stops the real `bash` process
- * from making a network call the four literal egress patterns don't match
- * (`/dev/tcp/`, `python3 -c`, `ssh`, `dig`, ...) or reading any file the OS
- * user can read. `file-write` isn't modelled at all — no manifest field, no
+ * from making a network call the egress patterns don't match or reading any
+ * file the OS user can read. W8-B6 widened both lists (the four shapes this
+ * paragraph used to name as examples — `/dev/tcp/`, `python3 -c`, `ssh`,
+ * `dig` — are all detected now), but widening an enumeration never closes
+ * it: the property is unchanged, only the specific known holes are. `file-write` isn't modelled at all — no manifest field, no
  * fifth scan category — so a hook can write, overwrite, or delete anything
  * the OS user can, entirely undeclared. Closing this for real means an
  * OS-level process isolator (restricted user/namespace/container/seccomp);
@@ -137,19 +145,76 @@ export interface HookRunState {
 // Pattern constants — no magic literals scattered through the scan logic.
 // ---------------------------------------------------------------------------
 
+/**
+ * W8-B6 FIX-1 layer 3 (2026-08-24, hostile review): the last five entries are
+ * new. The list used to be curl/wget/fetch(/nc/raw-socket — an enumeration of
+ * what its author had thought of — and this module's own header already NAMED
+ * the shapes it missed. The reviewer simply used one: a hook shipping a stolen
+ * token over bash's `/dev/tcp/` redirection needs no external binary at all,
+ * so it matched nothing and scored `clean`.
+ *
+ * Still an enumeration, and still defeatable — see the DOCUMENTED GAP in
+ * hook-scan.test.ts, which stands unchanged and honest. What changed is that
+ * the shapes a reviewer actually walked through are no longer free.
+ *
+ * `\bssh\b` deliberately also matches the `ssh` inside a `~/.ssh` path, so a
+ * script reading an SSH key reports BOTH a file-read and a network-egress
+ * finding. That is an over-flag, kept on purpose: it costs an operator one
+ * line in an override reason, it never changes the verdict (either finding is
+ * critical, so either one blocks), and the alternative — a cleverer pattern —
+ * trades a real detection for a cosmetic one. Same over-flag-not-under-flag
+ * reasoning already written down for the `AZDO_`/`GH_` env PREFIX rule below.
+ */
 const NETWORK_EGRESS_PATTERNS: readonly { re: RegExp; label: string }[] = [
   { re: /\bcurl\b/, label: 'curl' },
   { re: /\bwget\b/, label: 'wget' },
   { re: /\bfetch\s*\(/, label: 'fetch(' },
   { re: /\bnc\b/, label: 'nc' },
   { re: /\b(?:socket\.socket|net\.connect)\s*\(/, label: 'raw socket' },
+  { re: /\/dev\/tcp\//, label: '/dev/tcp/' },
+  { re: /\/dev\/udp\//, label: '/dev/udp/' },
+  { re: /\bdig\b/, label: 'dig' },
+  { re: /\bssh\b/, label: 'ssh' },
+  { re: /\bpython3?\s+-c/, label: 'python -c' },
+  { re: /\bopenssl\s+s_client\b/, label: 'openssl s_client' },
 ];
 
+/**
+ * W8-B6 FIX-1 layer 3 (2026-08-24, hostile review): the last six entries are
+ * new. The curated list was `~/.ssh`, `secrets.env`, `id_rsa`,
+ * `.aws/credentials` — four literals, so a hook reading the gh CLI's OWN OAuth
+ * token out of `~/.config/gh/hosts.yml` produced zero findings. The reviewer
+ * printed a planted credential from a real spawn to prove it.
+ *
+ * Every added entry is a path a mainstream tool stores a live credential in:
+ * `.netrc` (curl/git/ftp), `.docker/config.json` (registry auth),
+ * `.kube/config` (cluster tokens/certs), `.npmrc` (registry auth token),
+ * `.config/gh/` (the gh CLI's OAuth token — the reviewer's own route),
+ * `.git-credentials` (git's plaintext store), plus the two cloud CLI
+ * credential DIRECTORIES that had no coverage at all, `.azure/` and
+ * `.config/gcloud/`. AWS's is already covered file-wise by the pre-existing
+ * `.aws/credentials`, which is left exactly as it is rather than broadened to
+ * `.aws/` — that would report the same read under two labels for no gain.
+ *
+ * Directory-level rather than file-level for `.config/gh/`, `.azure/` and
+ * `.config/gcloud/` on purpose: the credential FILE inside each is an
+ * implementation detail of the tool that owns it (gh alone has moved its
+ * token between files), and matching the directory cannot be defeated by the
+ * tool renaming its store.
+ */
 const DANGEROUS_FILE_PATTERNS: readonly { re: RegExp; label: string }[] = [
   { re: /\.ssh\b/, label: '~/.ssh' },
   { re: /secrets\.env\b/, label: 'secrets.env' },
   { re: /id_rsa\b/, label: 'id_rsa' },
   { re: /\.aws\/credentials\b/, label: '.aws/credentials' },
+  { re: /\.netrc\b/, label: '.netrc' },
+  { re: /\.docker\/config\.json\b/, label: '.docker/config.json' },
+  { re: /\.kube\/config\b/, label: '.kube/config' },
+  { re: /\.npmrc\b/, label: '.npmrc' },
+  { re: /\.config\/gh\//, label: '.config/gh/' },
+  { re: /\.git-credentials\b/, label: '.git-credentials' },
+  { re: /\.azure\//, label: '.azure/' },
+  { re: /\.config\/gcloud\//, label: '.config/gcloud/' },
 ];
 
 const OBFUSCATION_PATTERNS: readonly { re: RegExp; label: string }[] = [

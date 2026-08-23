@@ -28,10 +28,12 @@
  * *** and cross-checked by hook-scan.ts's pre-approval STATIC TEXT SCAN, but
  * *** nothing at spawn time actually restricts what the real `bash` process
  * *** can touch. A hook can read any file the OS user can read, and reach the
- * *** network via anything the scan's four literal patterns
- * *** (curl/wget/fetch(/nc/raw-socket) don't happen to match — bash's
- * *** `/dev/tcp/` redirection, `python3 -c`, `ssh`, `dig` for DNS exfil, and
- * *** so on. Real enforcement of either would mean an OS-level process
+ * *** network via anything the scan's egress patterns don't happen to match.
+ * *** W8-B6 widened that list — the shapes this block used to name as the
+ * *** live examples (bash's `/dev/tcp/` redirection, `python3 -c`, `ssh`,
+ * *** `dig`) are all detected now — but a widened enumeration is still an
+ * *** enumeration, so the LIMIT is unchanged: only the known holes are.
+ * *** Real enforcement of either would mean an OS-level process
  * *** isolator (a restricted user/namespace/container/seccomp policy) — this
  * *** repo's standing rule (CLAUDE.md: "Never re-invent a job queue, worker
  * *** pool, resource controller, or process isolator") is not to hand-roll
