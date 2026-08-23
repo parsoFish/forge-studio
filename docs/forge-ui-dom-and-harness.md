@@ -1199,7 +1199,16 @@ inventory rather than one shared page-level contract:
   linking to `/community/hook/<id>` (where install and the pre-install scan
   live — this page still owns NO install affordance itself). The facts come
   from the community index route (executed per item); a failed community
-  fetch renders nothing extra and never blanks the local list.
+  fetch renders nothing extra and never blanks the local list. **W8-B4
+  (library-38 fix — a regression the library-11 union above introduced):**
+  the search box (`[data-field="hook-search"]`) filters the community union
+  by the SAME query as the local list, never unfiltered — before this fix,
+  a query matching only a community hook rendered "No hooks match your
+  search." directly above the matching card. `data-hook-count` on the root
+  now counts **both** lists (`filtered.length + communityHooks.length`),
+  mirroring `/skills`' `data-skill-count` (`grouped.total`, below) rather
+  than the local list alone; the empty state is gated on both lists being
+  empty, not the local list alone.
   `[data-action="new-hook"]` links to
   `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
   (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,
@@ -4202,13 +4211,21 @@ inventory rather than one shared page-level contract:
   `[data-component="library-item-actions"][data-kind="skill"]`
   (`components/studio/LibraryItemActions.tsx`, render-pinned in
   `lib/library-authoring-render.test.ts`): `[data-action="edit-skill"]`
-  (aria-pressed mirrors the open editor) toggles
-  `[data-component="skill-edit-form"]` (`[data-field="skill-edit-name"|
+  opens `[data-component="skill-edit-form"]` (`[data-field="skill-edit-name"|
   "skill-edit-description"|"skill-edit-body"]`,
   `[data-action="save-skill-edit"|"cancel-skill-edit"]` → `PUT
   /api/studio/skills/:id` — display name/description/body only, never the id;
   editing an installed skill honestly drops it to needs-review via the
-  existing hash-drift pipeline); `[data-action="delete-skill"]` is two-step
+  existing hash-drift pipeline). **W8-B4 — exactly ONE control dismisses an
+  open editor.** `[data-action="edit-<kind>"]` renders only while the editor
+  is CLOSED (`aria-pressed` is therefore always `"false"`, and the control is
+  un-mounted rather than relabelled while editing); the open editor's own
+  adjacent `[data-action="cancel-skill-edit"|"cancel-hook-edit"|
+  "cancel-template-edit"]` is the sole dismiss. Before W8-B4 the action bar
+  relabelled to "Close editor" while editing, so skills, hooks AND templates
+  each rendered two controls wired to the same `toggleEdit`. The invariant
+  lives in the shared `LibraryItemActions`, not in the three pages, so a
+  fourth consumer inherits it. `[data-action="delete-skill"]` is two-step
   (`[data-action="confirm-delete-skill"|"cancel-delete-skill"]` → `DELETE
   /api/studio/skills/:id`) and, for a skill still composed by agents, renders
   DISABLED with `[data-component="delete-blocked"]` naming them — the same

@@ -121,6 +121,8 @@ import { startBridge } from './ui-bridge.ts';
 // happy paths — see the T3 report for the exact captured failure per test).
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from '../orchestrator/studio/hook-library.ts';
+import { listTemplateLibrary } from '../orchestrator/studio/template-library.ts';
+import { SCAFFOLD_READONLY } from './bridge-studio-templates.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -142,6 +144,11 @@ before(async () => {
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'hooks'), { recursive: true });
+  // W8-B4/WI-3 — kind:'template' finalize writes into these two single-file
+  // categories (project-scaffold is a whole directory tree, never a
+  // finalize target — see the WI3 tests below).
+  mkdirSync(join(forgeRoot, 'studio', 'artifact-templates'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'studio', 'demo-elements'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', PROJECT), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'studio', 'catalog.yaml'),
@@ -268,6 +275,39 @@ test('WI2-1: finalize at phase:"analyzing" -> 409, body naming the required phas
 });
 
 // ===========================================================================
+// WI3-0 (W8-B4/WI-3) — kind ENUMERATION pin. handleStudioAuthoringRoutes's
+// own gate (`kind !== 'skill' && kind !== 'hook' && kind !== 'template'`)
+// must refuse anything outside that closed set — pinned here so a future
+// replacement of the gate with something permissive (e.g. accepting any
+// non-empty string) is caught by THIS suite. 'connection' names the ONE
+// object kind forge deliberately keeps NON-authorable
+// (cli/connections-no-authoring.test.ts) — this is the enforcement for the
+// authoring finalize route specifically; 'flow' is a second, unrelated
+// non-package object kind, proving the gate is a closed enum, not a
+// one-off "not connection" special case.
+// ===========================================================================
+
+for (const badKind of ['connection', 'flow']) {
+  test(`WI3-0: finalize with kind:'${badKind}' (outside the closed skill|hook|template set) -> 400 at the route boundary; the session never even reaches the committing turn`, async () => {
+    const { sessionId, sessionDir } = seedAuthoringSession({
+      phase: 'awaiting-review',
+      staging: { 'SKILL.md': matter.stringify('\n# x\n', { name: 'x', description: 'd' }) },
+    });
+
+    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: badKind, id: `should-not-install-${badKind}` });
+    const text = await res.text();
+    assert.equal(res.status, 400, `expected 400 for kind:'${badKind}', got ${res.status}: ${text}`);
+    const body = JSON.parse(text) as { error?: string };
+    assert.ok(body.error && /skill/.test(body.error) && /hook/.test(body.error) && /template/.test(body.error), `400 body must name the allowed set (skill/hook/template), got: ${JSON.stringify(body)}`);
+
+    assert.equal(readStatusPhase(sessionDir), 'awaiting-review', `kind:'${badKind}' must be refused before the committing turn ever runs — status.json must be untouched`);
+    assert.equal(existsSync(join(forgeRoot, 'skills', `should-not-install-${badKind}`)), false, `kind:'${badKind}' must install nothing under skills/`);
+    assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', `should-not-install-${badKind}`)), false, `kind:'${badKind}' must install nothing under studio/hooks/`);
+    assert.equal(existsSync(join(forgeRoot, 'studio', 'artifact-templates', `should-not-install-${badKind}.md`)), false, `kind:'${badKind}' must install nothing under studio/artifact-templates/`);
+  });
+}
+
+// ===========================================================================
 // D5 happy path (skill) — installs the LANDED package (from staging/ via
 // copyStagingToLibrary), as a DRAFT, palette-invisible; upstream is
 // SERVER-MINTED, never read from the (now-nonexistent) body field.
@@ -291,8 +331,15 @@ test('WI2-2: finalize (skill) body is EXACTLY {project,sessionId,kind,id} -> 200
   assert.equal(body.kind, 'skill');
   assert.equal(body.id, 'authored-skill');
 
+  // library-37 fix (W8-B4/WI-3, superseding this assertion's ORIGINAL form):
+  // _interactive-library/<id>/ is an internal staging->landing BRIDGE, not a
+  // durable record — a `finally` in runFinalize removes it after EVERY
+  // attempt, success included, so the id is never permanently unusable via a
+  // leftover ghost. The real, durable signal that copyStagingToLibrary ran is
+  // the INSTALLED package below (skills/authored-skill/SKILL.md), not the
+  // now-cleaned-up intermediate copy.
   const landedPath = join(forgeRoot, '_interactive-library', 'authored-skill', 'SKILL.md');
-  assert.ok(existsSync(landedPath), `copyStagingToLibrary must have landed the package at ${landedPath}`);
+  assert.equal(existsSync(landedPath), false, `library-37: the landed intermediate copy at ${landedPath} must be cleaned up after a successful finalize, not left behind`);
   assert.equal(readStatusPhase(sessionDir), 'committed', 'status.json on disk must reflect the committing->committed advance');
 
   const installedMdPath = join(forgeRoot, 'skills', 'authored-skill', 'SKILL.md');
@@ -459,6 +506,125 @@ for (const { label, staging } of MALFORMED_HOOK_DRAFTS) {
     assert.equal(res.status, 400, `expected 400 for "${label}", got ${res.status}: ${text}`);
 
     assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', id)), false, `"${label}" must result in NOTHING written under hooks/<id>`);
+  });
+}
+
+// ===========================================================================
+// WI3 (W8-B4/WI-3) — kind:'template'. Mirrors the hook arm's posture: template
+// METADATA (here, the draft-only `category` routing field) is read from the
+// LANDED, DRAFTED `template.md`, parsed server-side, never from body fields.
+// A template is ONE markdown file with gray-matter frontmatter (D1,
+// orchestrator/studio/template-library.ts; forge-ui/app/templates/new/page.tsx's
+// own seedContent precedent) staged at the ONE canonical name `template.md`.
+// ===========================================================================
+
+function templateDraft(fields: Record<string, unknown>, body = '\nDescribe the artifact this template defines.\n'): string {
+  return matter.stringify(body, fields);
+}
+
+test("WI3-1: finalize (template, category:'planning') body is EXACTLY {project,sessionId,kind,id} -> 200; studio/artifact-templates/<id>.md exists with the DRAFTED body and NO stray 'category' field; listTemplateLibrary lists it", async () => {
+  const draft = templateDraft({ category: 'planning', id: 'authored-template', name: 'Authored Template', kind: 'file' });
+  const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'template.md': draft } });
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'template', id: 'authored-template' });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'template');
+  assert.equal(body.id, 'authored-template');
+
+  const installedPath = join(forgeRoot, 'studio', 'artifact-templates', 'authored-template.md');
+  assert.ok(existsSync(installedPath), `studio/artifact-templates/authored-template.md must exist on disk`);
+  const installed = matter(readFileSync(installedPath, 'utf8'));
+  assert.equal((installed.data as Record<string, unknown>)['id'], 'authored-template');
+  assert.equal((installed.data as Record<string, unknown>)['kind'], 'file', 'the real ArtifactTemplate kind field must survive verbatim');
+  assert.equal((installed.data as Record<string, unknown>)['category'], undefined, "a real installed template.md must NOT carry the draft-only 'category' routing field");
+
+  // Assert the ARTIFACT via listTemplateLibrary itself, not just the write.
+  const entries = listTemplateLibrary(forgeRoot);
+  const entry = entries.find((e) => e.id === 'authored-template');
+  assert.ok(entry, 'the finalized template must be listTemplateLibrary-visible immediately');
+  assert.equal(entry!.category, 'planning');
+  assert.equal(entry!.error, undefined, 'a well-formed finalized template must list with no parse error');
+
+  assert.equal(readStatusPhase(sessionDir), 'committed', 'status.json on disk must reflect the committing->committed advance');
+});
+
+test("WI3-2: finalize (template, category:'demo-output') installs into studio/demo-elements/<id>.md and listTemplateLibrary lists it under that category", async () => {
+  const draft = templateDraft({ category: 'demo-output', id: 'authored-demo-el', name: 'Authored Demo Element', phase: 'present', description: 'captures the thing' });
+  const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'template.md': draft } });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'template', id: 'authored-demo-el' });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+
+  assert.ok(existsSync(join(forgeRoot, 'studio', 'demo-elements', 'authored-demo-el.md')), 'studio/demo-elements/authored-demo-el.md must exist on disk');
+  const entry = listTemplateLibrary(forgeRoot).find((e) => e.id === 'authored-demo-el');
+  assert.ok(entry, 'the finalized demo-output template must be listTemplateLibrary-visible immediately');
+  assert.equal(entry!.category, 'demo-output');
+});
+
+test("WI3-3: a drafted template.md declaring category:'project-scaffold' -> 400 (SCAFFOLD_READONLY, the SAME constant/rule POST /api/studio/templates uses); nothing installed; a REAL pre-existing scaffold tree at that id is byte-unchanged; the session recovers to awaiting-review", async () => {
+  // A REAL scaffold tree at the SAME id — proves the refusal happens before
+  // any write ever reaches studio/starters/, not merely that some OTHER
+  // write path no-ops.
+  const scaffoldReadme = join(forgeRoot, 'studio', 'starters', 'projects', 'authored-scaffold', 'README.md');
+  mkdirSync(join(scaffoldReadme, '..'), { recursive: true });
+  writeFileSync(scaffoldReadme, 'pre-existing scaffold — must not change\n', 'utf8');
+  const scaffoldBefore = readFileSync(scaffoldReadme, 'utf8');
+
+  const draft = templateDraft({ category: 'project-scaffold', id: 'authored-scaffold', name: 'Authored Scaffold' });
+  const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'template.md': draft } });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'template', id: 'authored-scaffold' });
+  const text = await res.text();
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.equal(body.error, SCAFFOLD_READONLY, "the 400 body must be the SAME SCAFFOLD_READONLY constant POST /api/studio/templates returns — never a second, drifting copy of the rule");
+
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'artifact-templates', 'authored-scaffold.md')), false, 'nothing must be written to studio/artifact-templates/');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'demo-elements', 'authored-scaffold.md')), false, 'nothing must be written to studio/demo-elements/');
+  assert.equal(readFileSync(scaffoldReadme, 'utf8'), scaffoldBefore, 'the pre-existing scaffold tree must be BYTE-UNCHANGED — project-scaffold is refused before any write is attempted');
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'a refused project-scaffold finalize must leave the session recoverable');
+});
+
+const MALFORMED_TEMPLATE_DRAFTS: { label: string; staging: Record<string, string> }[] = [
+  {
+    // A non-empty staging/ (mirrors MALFORMED_HOOK_DRAFTS's own "missing
+    // hook.yaml entirely" case) so copyStagingToLibrary's generic step 5
+    // still lands something and reaches step 6 — an EMPTY staging/ would
+    // instead fail earlier, at the SAME generic "staging dir missing"
+    // refusal P5-2 already pins, never reaching this arm's own check at all.
+    label: 'missing template.md entirely',
+    staging: { 'README.md': 'not a template — the draft never wrote template.md\n' },
+  },
+  {
+    label: 'unparseable YAML frontmatter',
+    staging: { 'template.md': '---\ncategory: [unterminated\n  - broken\n---\nBody.\n' },
+  },
+  {
+    label: 'a category outside the real TemplateCategory union',
+    staging: { 'template.md': templateDraft({ category: 'bogus-category', id: 'x', name: 'x', kind: 'file' }) },
+  },
+  {
+    label: 'well-formed category but content missing the required "kind" field (refused by the REAL category loader)',
+    staging: { 'template.md': templateDraft({ category: 'planning', id: 'x', name: 'x' }) },
+  },
+];
+
+for (const { label, staging } of MALFORMED_TEMPLATE_DRAFTS) {
+  test(`WI3-4: a drafted template.md that is ${label} -> 400, nothing written under studio/artifact-templates or studio/demo-elements (fail loud, never a fabricated default)`, async () => {
+    const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging });
+    const id = `malformed-tpl-${label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`.slice(0, 60).replace(/-+$/, '');
+
+    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'template', id });
+    const text = await res.text();
+    assert.equal(res.status, 400, `expected 400 for "${label}", got ${res.status}: ${text}`);
+
+    assert.equal(existsSync(join(forgeRoot, 'studio', 'artifact-templates', `${id}.md`)), false, `"${label}" must result in NOTHING written under studio/artifact-templates/`);
+    assert.equal(existsSync(join(forgeRoot, 'studio', 'demo-elements', `${id}.md`)), false, `"${label}" must result in NOTHING written under studio/demo-elements/`);
   });
 }
 
@@ -906,45 +1072,36 @@ test('P7-3-empty: an empty (or whitespace-only) finalize id is refused at the ro
 });
 
 // ===========================================================================
-// P8 (T3 pin round 6, adversarial-review correction D) — a THIRD collision
-// surface, structurally identical to P6's skill/hook id collisions but at a
-// layer neither P6 test touches: `copyStagingToLibrary` (step 5, the GENERIC
-// landing copy every finalize runs before the kind-specific install step)
-// writes into `<forgeRoot>/_interactive-library/<id>/` with O_EXCL, and that
-// directory is NEVER cleaned up on any outcome — success OR failure. So once
-// ANY finalize attempt reaches step 5 under a given `id`, a same-id retry's
-// OWN step 5 collides with the leftover landed files from the first attempt
-// and throws a raw `InteractiveFinalizerError` ("... could not be created at
-// write time ... EEXIST: file already exists ..."), which `runFinalize`'s
-// outer catch (cli/bridge-studio-authoring.ts) reports as an undifferentiated
-// 500 whose message is an EEXIST implementation detail — even when the FIRST
-// attempt failed at a LATER step (step 6, kind-specific validation) and
-// correctly reverted its own session to "awaiting-review".
+// P8 (T3 pin round 6, adversarial-review correction D) — SUPERSEDED
+// 2026-08-23 by the library-37 fix (W8-B4/WI-3). P8's ORIGINAL "corrected
+// contract" (a same-id retry against a landed-but-abandoned
+// `_interactive-library/<id>/` 409s naming the id) is ITSELF the bug
+// library-37 reports: `_interactive-library/<id>/` (step 5's copy target)
+// was never cleaned up on any outcome, so it became a hidden, gitignored,
+// no-Studio-surface id LEDGER — once ANY attempt reached step 5 under a
+// given id, that id was permanently unusable, even after the session that
+// used it correctly reverted, and even where nothing in either REAL library
+// ever held that id. Root cause (the operator-facing framing): the landed
+// staging package was being used as the collision check, and that check ran
+// BEFORE any real-library lookup.
 //
-// Live-reproduced exactly as the reviewer found it: a hook draft carrying a
-// FORBIDDEN_HOOK_BINDING_KEYS key (the SAME shape WI2-3b pins) lands cleanly
-// at step 5 — the generic copy has no hook-shape awareness (file header
-// design call #2) — then is correctly refused at step 6 with a 400, and the
-// session correctly reverts. But `_interactive-library/<id>/` is left
-// behind. A SECOND finalize attempt under the SAME id (a different session,
-// a VALID draft this time) 500s today with the raw EEXIST detail instead of
-// a clean, actionable 409.
-//
-// The corrected contract this pins: once a landed `_interactive-library/<id>/`
-// exists from ANY prior attempt, a same-id finalize must return 409 naming
-// the id and telling the operator to choose a different one — never a 500,
-// never an EEXIST/copyStagingToLibrary implementation detail — and (composed
-// with P5) the session must still recover to "awaiting-review". The fixture
-// below builds the collision the way the reviewer did — letting the FIRST
-// attempt genuinely land and then genuinely fail one step later — rather
-// than hand-planting `_interactive-library/<id>/` directly, so this test
-// exercises the real sequence, not a synthetic stand-in for it.
+// THE RE-CORRECTED CONTRACT (library-37): `_interactive-library/<id>/` is
+// removed in a `finally` after every finalize attempt — success OR failure
+// (`cli/bridge-studio-authoring.ts`'s file header, "LANDED-PACKAGE CLEANUP").
+// This does NOT delete the collision check — it stops the check firing on a
+// GHOST: each kind-specific install step (`finalizeSkillFromLanded` /
+// `finalizeHookFromLanded` / `finalizeTemplateFromLanded`) still 409s on a
+// REAL collision (an existing `skills/<id>/`, `studio/hooks/<id>/`, or
+// template-library entry — P6-1/P6-2 above, and WI3-5-c below, pin this
+// unchanged). P8-1 below is REWRITTEN (not merely tweaked) to assert the
+// OPPOSITE of what it asserted before: a same-id retry after a
+// landed-then-failed-later attempt now SUCCEEDS, because the ghost is gone
+// and nothing real ever held the id.
 // ===========================================================================
 
-test('P8-1 (third collision surface — landed _interactive-library/<id>/ is never cleaned up): a same-id retry after an attempt that landed-then-failed-later returns 409 naming the id (never a 500/EEXIST internal detail); the session recovers to awaiting-review; the previously-landed package is byte-unchanged', async () => {
+test('P8-1 (RE-CORRECTED, library-37): a same-id retry after an attempt that landed-then-failed-later now SUCCEEDS — the ghost _interactive-library/<id>/ no longer blocks it; attempt 1\'s never-installed hook stays absent', async () => {
   const collidingId = 'collision-surface-hook';
   const landedYamlPath = join(forgeRoot, '_interactive-library', collidingId, 'hook.yaml');
-  const landedScriptPath = join(forgeRoot, '_interactive-library', collidingId, 'scripts', 'run.sh');
 
   // ---- Attempt 1: a hook draft that lands cleanly at step 5 (the generic
   // copy has no hook-shape awareness) then is refused at step 6 (a forbidden
@@ -958,10 +1115,9 @@ test('P8-1 (third collision surface — landed _interactive-library/<id>/ is nev
     script: 'scripts/run.sh',
     agent: 'some-agent-slug', // FORBIDDEN
   });
-  const ATTEMPT_1_SCRIPT = '#!/usr/bin/env bash\necho "attempt 1 -- must land then be left behind"\n';
   const attempt1 = seedAuthoringSession({
     phase: 'awaiting-review',
-    staging: { 'hook.yaml': forbiddenDraftYaml, 'scripts/run.sh': ATTEMPT_1_SCRIPT },
+    staging: { 'hook.yaml': forbiddenDraftYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho "attempt 1 -- lands then is refused"\n' },
   });
 
   const res1 = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: attempt1.sessionId, kind: 'hook', id: collidingId });
@@ -970,48 +1126,72 @@ test('P8-1 (third collision surface — landed _interactive-library/<id>/ is nev
   assert.equal(readStatusPhase(attempt1.sessionDir), 'awaiting-review', 'arrange: attempt 1 must correctly revert its own session');
   assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', collidingId)), false, 'arrange: the refused attempt must install nothing under studio/hooks/');
 
-  // Fixture precondition: attempt 1's step 5 REALLY landed the package —
-  // this is the whole point (a genuine sequence, not a hand-planted dir).
-  assert.ok(existsSync(landedYamlPath), `arrange (fixture precondition): attempt 1's generic copy must have landed ${landedYamlPath} before the later hook-shape refusal`);
-  assert.ok(existsSync(landedScriptPath), `arrange (fixture precondition): attempt 1's generic copy must have landed ${landedScriptPath} too`);
-  const landedYamlBefore = readFileSync(landedYamlPath, 'utf8');
-  const landedScriptBefore = readFileSync(landedScriptPath, 'utf8');
+  // library-37: the landed copy must NOT survive attempt 1's finally cleanup.
+  assert.equal(existsSync(landedYamlPath), false, `library-37: _interactive-library/${collidingId}/ must be gone after attempt 1's finally cleanup, win or lose`);
 
-  // ---- Attempt 2: a DIFFERENT session, a VALID draft, the SAME id. Today
-  // this 500s with a raw EEXIST detail from copyStagingToLibrary; the
-  // corrected contract is a clean 409. ----
+  // ---- Attempt 2: a DIFFERENT session, a VALID draft, the SAME id. Under
+  // the OLD (buggy) contract this 409'd against the ghost forever; the
+  // RE-CORRECTED contract is that it now succeeds — nothing real ever held
+  // this id. ----
   const validDraftYaml = hookYamlDraft({
     name: 'Collision Surface Hook (attempt 2)',
-    description: 'a valid draft -- the retry that collides with attempt 1\'s leftover landed package',
+    description: 'a valid draft -- must now succeed since the id was never really taken',
     on: 'PreToolUse',
     script: 'scripts/run.sh',
   });
   const attempt2 = seedAuthoringSession({
     phase: 'awaiting-review',
-    staging: { 'hook.yaml': validDraftYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho "attempt 2 -- must never land"\n' },
+    staging: { 'hook.yaml': validDraftYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho "attempt 2"\n' },
   });
 
   const res2 = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: attempt2.sessionId, kind: 'hook', id: collidingId });
   const text2 = await res2.text();
+  assert.equal(res2.status, 200, `library-37: a same-id retry against a CLEANED-UP ghost must now SUCCEED (the id was never really taken), got ${res2.status}: ${text2}`);
 
-  assert.equal(res2.status, 409, `a same-id retry against a landed-but-abandoned _interactive-library/${collidingId}/ must return 409, not a raw 500 (got ${res2.status}: ${text2})`);
-  const body2 = JSON.parse(text2) as { error?: string };
-  assert.ok(body2.error && body2.error.includes(collidingId), `409 body must name the colliding id "${collidingId}", got: ${JSON.stringify(body2)}`);
-  assert.ok(body2.error && /different id/i.test(body2.error), `409 body must tell the operator to choose a different id, got: ${JSON.stringify(body2)}`);
-  assert.ok(body2.error && !/EEXIST/.test(body2.error), `409 body must NEVER leak the raw EEXIST implementation detail, got: ${JSON.stringify(body2)}`);
-  assert.ok(body2.error && !/copyStagingToLibrary/.test(body2.error), `409 body must NEVER leak the internal finalizer name "copyStagingToLibrary", got: ${JSON.stringify(body2)}`);
+  assert.ok(existsSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml')), 'attempt 2 must actually install under studio/hooks/ this time');
+  const installedDoc = yaml.load(readFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml'), 'utf8')) as Record<string, unknown>;
+  assert.equal(installedDoc['description'], 'a valid draft -- must now succeed since the id was never really taken', 'the installed hook must be attempt 2\'s draft');
+  assert.equal(readStatusPhase(attempt2.sessionDir), 'committed', 'attempt 2 must reach committed on this genuine success');
+  assert.equal(existsSync(landedYamlPath), false, "library-37 pin (a): the landed copy must ALSO be gone after attempt 2's OWN successful finalize — it is a bridge dir, never a durable record");
+});
 
-  assert.equal(
-    readStatusPhase(attempt2.sessionDir),
-    'awaiting-review',
-    'composed with P5: the third collision surface must ALSO leave the session recoverable at awaiting-review, never bricked at "committing"',
-  );
+test('WI3-5-b (library-37, failure frees the id): a hook draft with a FORBIDDEN_HOOK_BINDING_KEYS key lands then fails -> _interactive-library/<id>/ is gone immediately after (not just after a later retry)', async () => {
+  const id = 'library-37-failure-frees-id';
+  assert.ok(FORBIDDEN_HOOK_BINDING_KEYS.includes('agent'), 'arrange: "agent" must be a real forbidden binding key');
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: {
+      'hook.yaml': hookYamlDraft({ name: 'X', description: 'd', on: 'PreToolUse', script: 'scripts/run.sh', agent: 'forbidden' }),
+      'scripts/run.sh': '#!/usr/bin/env bash\necho x\n',
+    },
+  });
 
-  // ARTIFACT: attempt 1's landed package must be byte-unchanged — attempt
-  // 2's failed retry must not have partially overwritten or corrupted it.
-  assert.equal(readFileSync(landedYamlPath, 'utf8'), landedYamlBefore, 'the previously-landed hook.yaml must be BYTE-UNCHANGED after the refused retry');
-  assert.equal(readFileSync(landedScriptPath, 'utf8'), landedScriptBefore, 'the previously-landed scripts/run.sh must be BYTE-UNCHANGED after the refused retry');
-  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', collidingId)), false, 'attempt 2 must install nothing under studio/hooks/ either');
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id });
+  assert.equal(res.status, 400, `arrange: must be refused at step 6, got ${res.status}`);
+  assert.equal(existsSync(join(forgeRoot, '_interactive-library', id)), false, 'library-37 pin (b): a FAILED finalize must also leave _interactive-library/<id>/ gone, immediately');
+});
+
+test('WI3-5-c (library-37 does not weaken the real collision check): a same-id finalize against an id genuinely held by an existing REAL library entry still 409s, naming that entry — composed with cleanup, _interactive-library/<id>/ is gone afterward too', async () => {
+  const collidingId = 'real-library-holder-hook';
+  const PRE_EXISTING_YAML = hookYamlDraft({ name: 'Real Holder', description: 'genuinely installed, not a ghost', on: 'PreToolUse', script: 'scripts/run.sh' });
+  mkdirSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'scripts'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml'), PRE_EXISTING_YAML, 'utf8');
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'scripts', 'run.sh'), '#!/usr/bin/env bash\necho real\n', 'utf8');
+
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': hookYamlDraft({ name: 'Draft', description: 'discarded', on: 'PreToolUse', script: 'scripts/run.sh' }), 'scripts/run.sh': '#!/usr/bin/env bash\necho draft\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: collidingId });
+  const text = await res.text();
+  assert.equal(res.status, 409, `a REAL library collision must still 409, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && body.error.includes(collidingId), `409 body must name the colliding id "${collidingId}", got: ${JSON.stringify(body)}`);
+
+  assert.equal(readFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml'), 'utf8'), PRE_EXISTING_YAML, 'the REAL pre-existing hook.yaml must be BYTE-UNCHANGED');
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'a real-collision failure must also leave the session recoverable');
+  assert.equal(existsSync(join(forgeRoot, '_interactive-library', collidingId)), false, 'composed with library-37 cleanup: the landed copy this failed attempt made must ALSO be gone afterward');
 });
 
 // ===========================================================================

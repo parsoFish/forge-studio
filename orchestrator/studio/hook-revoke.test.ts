@@ -26,6 +26,7 @@ import {
   hookRunState,
   readHookApprovalLedger,
   revokeHookApproval,
+  revokeHookApprovalIfPresent,
 } from './hook-scan.ts';
 
 let root: string;
@@ -76,6 +77,34 @@ test('revoke removes the approval and records the revocation', () => {
 
 test('revoking with no approval on record throws (explicit contract)', () => {
   assert.throws(() => revokeHookApproval({ forgeRoot: root, id: 'h1' }), /no approval/i);
+});
+
+// ---------------------------------------------------------------------------
+// revokeHookApprovalIfPresent (W8-B4, library-34) — the tolerant companion
+// the DELETE route uses: silent when there is nothing to revoke, otherwise
+// behaves exactly like revokeHookApproval.
+// ---------------------------------------------------------------------------
+
+test('revokeHookApprovalIfPresent is a silent no-op when there is no approval on record — never throws', () => {
+  assert.doesNotThrow(() => revokeHookApprovalIfPresent({ forgeRoot: root, id: 'h1' }));
+  // And it must not fabricate a ledger file that never existed.
+  assert.equal(readHookApprovalLedger(root).get('h1'), undefined);
+});
+
+test('revokeHookApprovalIfPresent revokes and records exactly like revokeHookApproval when there IS an approval', () => {
+  approveHook({ forgeRoot: root, id: 'h1' });
+  assert.equal(hookRunState(root, 'h1').runnable, true);
+
+  revokeHookApprovalIfPresent({ forgeRoot: root, id: 'h1' });
+
+  const state = hookRunState(root, 'h1');
+  assert.equal(state.runnable, false);
+  assert.equal(state.needsReview, true);
+  assert.equal(readHookApprovalLedger(root).get('h1'), undefined);
+
+  const doc = yaml.load(readFileSync(join(root, 'studio', 'hook-approvals.yaml'), 'utf8')) as Record<string, unknown>;
+  const revoked = doc['revoked'] as Array<Record<string, unknown>>;
+  assert.ok(Array.isArray(revoked) && revoked.some((r) => r['id'] === 'h1'), 'the revocation is RECORDED, same as revokeHookApproval');
 });
 
 test('readHookApprovalLedger tolerates a ledger carrying a revoked list', () => {

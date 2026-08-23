@@ -160,6 +160,32 @@ test('the Hooks shelf renders a real count and a card per entry', () => {
   expect((html.match(/data-card-type="hook"/g) ?? []).length).toBe(2);
 });
 
+// W8-B4 (library-09, S2 PARTIAL — call site 2). hookBadges()
+// (lib/hook-library-view.ts) had no 'approved' arm — an approved hook
+// rendered badge-less here too, not just on the full /hooks page
+// (lib/hooks-page-render.test.ts pins call site 1,
+// app/hooks/page.tsx's HookCard). `ShelfHookCard` (this file, unexported)
+// renders whatever hookBadges() returns generically, with no per-type
+// filter — so the fix lives ENTIRELY in the shared function; this pins that
+// it actually reaches this second render site.
+test('library-09 pin 4 (call site 2: LibraryHub.tsx ShelfHookCard): an approved hook renders a visible "approved" badge', () => {
+  const entries = [makeHook('approved-hook', { trust: 'approved', scanVerdict: 'clean' })];
+  const html = render({ ...EMPTY_READY_PROPS, hooks: { status: 'ready', entries, error: null } });
+  expect(html).toContain('>approved<');
+});
+
+// library-09 pin 5, same call site: the negative arms are untouched here —
+// the fix is not "always show approved".
+test('library-09 pin 5 (call site 2): needs-review and blocked badges still render on the Hooks shelf', () => {
+  const entries = [
+    makeHook('needs-review-hook', { trust: 'needs-review', scanVerdict: 'clean' }),
+    makeHook('blocked-hook', { trust: 'needs-review', scanVerdict: 'blocked' }),
+  ];
+  const html = render({ ...EMPTY_READY_PROPS, hooks: { status: 'ready', entries, error: null } });
+  expect(html).toContain('>needs-review<');
+  expect(html).toContain('>blocked<');
+});
+
 test('the Connections shelf renders a real count and a card per entry', () => {
   const entries = [makeConnection('gh'), makeConnection('playwright', { kind: 'mcp' })];
   const html = render({ ...EMPTY_READY_PROPS, connections: { status: 'ready', entries, error: null } });

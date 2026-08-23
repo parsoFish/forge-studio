@@ -1,25 +1,36 @@
 /**
- * Forge Studio templates-library bridge routes (R3-06, WI-3).
+ * Forge Studio templates-library bridge routes (R3-06, WI-3; write path
+ * added W7-B4/library-17).
  *
  * Owns EVERY `/api/studio/templates*` route:
  *
- *   GET /api/studio/templates      → { templates: TemplateLibraryEntry[] }
- *   GET /api/studio/templates/:id  → TemplateDetail (404 unknown id, 400 malformed id)
+ *   GET    /api/studio/templates      → { templates: TemplateLibraryEntry[] }
+ *   GET    /api/studio/templates/:id  → TemplateDetail (404 unknown id, 400 malformed id)
+ *   POST   /api/studio/templates      → create / duplicate a single-file template
+ *   PUT    /api/studio/templates/:id  → overwrite a single-file template's content
+ *   DELETE /api/studio/templates/:id  → remove a single-file template (409 while `usedBy` is non-empty)
  *
  * Mirrors bridge-studio-skills.ts's contract exactly: a single
  * `handleStudioTemplatesRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
  * a linear if-chain, an exact-string compare for the collection route and a
- * `match()` regex for the id route, returning `false` on fallthrough. These
- * are READ-ONLY routes — the template library (orchestrator/studio/template-library.ts)
- * has no write path, so no POST/PUT/DELETE belongs here.
+ * `match()` regex for the id route, returning `false` on fallthrough. Same
+ * convention as the skills/hooks files.
+ *
+ * These routes are READ-WRITE — EXCEPT `project-scaffold` templates, which
+ * stay read-only: a scaffold (`studio/starters/projects/<id>/`) is a whole
+ * directory tree curated in the repo, not a single file, so it has no
+ * one-file authoring shape (`SCAFFOLD_READONLY` below, returned by every
+ * write route on that category). `planning` (`studio/artifact-templates/*.md`)
+ * and `demo-output` (`studio/demo-elements/*.md`) are the two single-file
+ * categories POST/PUT/DELETE actually write — see `WRITABLE_CATEGORY_DIRS`.
  *
  * Every id is slug-validated (SLUG_RE, orchestrator/studio/validate.ts) BEFORE
- * it ever reaches `templateDetail`. `templateDetail` itself resolves an id by
- * plain string equality against `listTemplateLibrary`'s ids — an unvalidated
- * `../../etc/passwd`-shaped id would merely fail to match (a 404, silently
- * treating a traversal attempt as "not found"), not fail LOUD as the malformed
- * input it actually is. The guard here rejects it with 400 before that lookup
- * ever runs.
+ * it ever reaches `templateDetail` or a write. `templateDetail` itself resolves
+ * an id by plain string equality against `listTemplateLibrary`'s ids — an
+ * unvalidated `../../etc/passwd`-shaped id would merely fail to match (a 404,
+ * silently treating a traversal attempt as "not found"), not fail LOUD as the
+ * malformed input it actually is. The guard here rejects it with 400 before
+ * that lookup — or any write — ever runs.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -30,7 +41,7 @@ import matter from 'gray-matter';
 import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { listTemplateLibrary, templateDetail } from '../orchestrator/studio/template-library.ts';
+import { listTemplateLibrary, templateDetail, type TemplateCategory } from '../orchestrator/studio/template-library.ts';
 import { loadArtifactTemplate, loadDemoElement } from '../orchestrator/studio/registry.ts';
 import { MAX_SKILL_ID_LENGTH, isReservedId } from '../orchestrator/skill-path.ts';
 
@@ -53,7 +64,7 @@ function decodeIdSegment(raw: string): string {
  *  `/`, `\`, `.`, `..`, uppercase, whitespace, or over-length id can pass),
  *  or `null` when it is valid. Never throws — the caller reports the message
  *  as a 400. */
-function invalidTemplateIdReason(id: string): string | null {
+export function invalidTemplateIdReason(id: string): string | null {
   if (id.length > MAX_TEMPLATE_ID_LENGTH) {
     return `invalid template id "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_TEMPLATE_ID_LENGTH}-character length limit`;
   }
@@ -82,14 +93,39 @@ function toClientEntry<T extends { error?: string }>(entry: T): T {
 // no one-file authoring shape, so it stays read-only WITH that reason.
 // ---------------------------------------------------------------------------
 
-/** The one category → directory mapping the write routes use. */
-const WRITABLE_CATEGORY_DIRS: Readonly<Record<'planning' | 'demo-output', string[]>> = {
+/** The two template categories actually writable as a single file from
+ *  Studio — `project-scaffold` (the third real `TemplateCategory` member) is
+ *  deliberately excluded from this type: it is a whole directory tree, never
+ *  a single-file write target (`SCAFFOLD_READONLY` below). Exported so
+ *  `cli/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm shares
+ *  this exact narrowing rather than re-declaring it. */
+export type WritableTemplateCategory = Extract<TemplateCategory, 'planning' | 'demo-output'>;
+
+/** The one category → directory mapping the write routes use. Exported for
+ *  the SAME reuse reason as `WritableTemplateCategory`. */
+export const WRITABLE_CATEGORY_DIRS: Readonly<Record<WritableTemplateCategory, string[]>> = {
   planning: ['studio', 'artifact-templates'],
   'demo-output': ['studio', 'demo-elements'],
 };
 
-const SCAFFOLD_READONLY =
+export const SCAFFOLD_READONLY =
   'project-scaffold templates are whole directory trees curated in the repo (studio/starters/projects) — not authorable as a single file from Studio';
+
+/**
+ * Validate a candidate `category` value against the REAL `TemplateCategory`
+ * union (template-library.ts) and narrow it to the two WRITABLE members.
+ * Every write path that accepts a category — the POST create route below AND
+ * `cli/bridge-studio-authoring.ts`'s `kind:'template'` finalize arm — shares
+ * this ONE check, so "which categories are writable" and "why
+ * project-scaffold isn't" live in exactly one place, never a second
+ * re-implementation that could drift from this one's wording.
+ */
+export function writableCategoryOrReason(category: unknown): { category: WritableTemplateCategory } | { error: string } {
+  if (category === 'planning' || category === 'demo-output') return { category };
+  return {
+    error: category === 'project-scaffold' ? SCAFFOLD_READONLY : 'category must be "planning" or "demo-output"',
+  };
+}
 
 /**
  * Validate candidate template CONTENT by the REAL category loader — the one
@@ -97,11 +133,12 @@ const SCAFFOLD_READONLY =
  * re-implemented field list that could drift. The bytes are staged into a
  * private server-named file, loaded, id-checked, and the staging dir removed
  * in `finally`; invalid bytes never reach the real library directory.
- * Returns null when valid, else the loader's own message.
+ * Returns null when valid, else the loader's own message. Exported for the
+ * SAME reuse reason as `WRITABLE_CATEGORY_DIRS`.
  */
-function invalidTemplateContentReason(
+export function invalidTemplateContentReason(
   forgeRoot: string,
-  category: 'planning' | 'demo-output',
+  category: WritableTemplateCategory,
   id: string,
   content: string,
 ): string | null {
@@ -141,15 +178,12 @@ export async function handleStudioTemplatesRoutes(
       try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
       const b = (body ?? {}) as Record<string, unknown>;
 
-      const category = b['category'];
-      if (category !== 'planning' && category !== 'demo-output') {
-        sendJson(res, 400, {
-          error: category === 'project-scaffold'
-            ? SCAFFOLD_READONLY
-            : 'category must be "planning" or "demo-output"',
-        }, origin);
+      const categoryCheck = writableCategoryOrReason(b['category']);
+      if ('error' in categoryCheck) {
+        sendJson(res, 400, { error: categoryCheck.error }, origin);
         return true;
       }
+      const category = categoryCheck.category;
 
       const id = typeof b['id'] === 'string' ? b['id'].trim() : '';
       const invalidId = invalidTemplateIdReason(id);

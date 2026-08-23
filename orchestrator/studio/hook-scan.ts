@@ -572,6 +572,31 @@ export function revokeHookApproval(input: { forgeRoot: string; id: string }): vo
   writeHookLedgerDoc(forgeRoot, ledger, revoked);
 }
 
+/**
+ * W8-B4 (library-34) — tolerant companion to {@link revokeHookApproval} for a
+ * caller that must succeed whether or not the hook was ever approved. Kept
+ * SEPARATE from revokeHookApproval rather than changing that function's
+ * contract: `POST /api/studio/hooks/:id/revoke-approval` is an explicit
+ * operator ACT ("revoke this approval") where "nothing to revoke" is a real
+ * state error the route deliberately maps to 409 (it already pre-checks
+ * presence itself before calling through) — that contract is a deployed API
+ * shape other callers may depend on, and loosening it here would blur an
+ * explicit revoke request with a no-op into the same silent 200.
+ *
+ * DESTROYING a hook package is a different act: "this id no longer carries a
+ * live approval" is true whether or not one ever existed, so the delete path
+ * needs a call that is silent on the (common) no-op case. This is the ONE
+ * function every hook-destroying call site should call before removing the
+ * package directory — see cli/bridge-studio-hooks.ts's DELETE route, its
+ * only production caller today.
+ */
+export function revokeHookApprovalIfPresent(input: { forgeRoot: string; id: string }): void {
+  const { forgeRoot, id } = input;
+  if (readHookApprovalLedger(forgeRoot).has(id)) {
+    revokeHookApproval(input);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Trust state — hookRunState re-scans CURRENT bytes every call (never trusts
 // a cached verdict), and cross-checks ALL THREE of the ledger's pinned

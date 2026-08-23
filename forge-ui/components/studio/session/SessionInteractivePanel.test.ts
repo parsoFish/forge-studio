@@ -561,6 +561,42 @@ test('C2-UI-8: finalized kind "hook" links to /hooks/<id>; "community-registry" 
 });
 
 // ===========================================================================
+// W8-B4 FIX-1 — the reviewer's repro: `kind:'template'` was added to the
+// authoring finalize path (W8-B4/WI-3), but the two-shape blind spot in
+// this panel's OWN `draftShapeOf`/`FinalizedLink` never learned the third
+// marker file (`template.md`). C2-UI-7/8 above already pin the identical
+// contract for skill/hook — these are the template controls.
+// ===========================================================================
+
+test('W8-B4 FIX-1: finalized kind "template" links to /templates/<id> — the same PERMANENT-link contract as skill/hook (C2-UI-7/8)', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'committed',
+    affordances: [],
+    terminal: true,
+    finalized: { kind: 'template', id: 'pr-diff-template', exists: true },
+  } as never);
+  expect(html).toContain('data-action="open-finalized"');
+  expect(html).toContain('/templates/pr-diff-template');
+});
+
+test('W8-B4 FIX-1: a staged template.md (no SKILL.md/hook.yaml) resolves the draft shape — Approve is NOT stuck on "the draft\'s shape is still resolving", and the id hint names the template shape (mirrors C2-UI-6\'s skill case)', () => {
+  const files = [{ path: 'template.md', body: '---\ncategory: planning\n---\nBody.' }];
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    artifact: { kind: 'file-package', label: 'Package', files },
+    affordances: [{ id: 'awaiting-review-verdict', kind: 'verdict', phase: 'awaiting-review', meta: { verdicts: ['approve'], requires: ['id'] } }],
+  });
+  // The reviewer's repro's CLIENT-side mirror: pre-fix, `draftShapeOf` never
+  // recognises template.md, so `packageShape` stays 'unknown' and the button
+  // is disabled FOREVER with this exact copy — never becomes true.
+  expect(html).not.toContain('shape is still resolving');
+  expect(html).toContain('data-requires-hint');
+  expect(html).toMatch(/[Ee]nter .*template id.* to enable Approve/);
+});
+
+// ===========================================================================
 // W7-C2 T1 review — the fix round's own DOM pins.
 // ===========================================================================
 
@@ -702,7 +738,10 @@ test('W8-B3 (sessions-kinds-06): a verdict whose row DOES require an id still re
     artifact: filePackage([{ path: 'notes.md', body: 'wip' }]),
   });
   expect(html).toContain('data-field="session-package-id"');
-  expect(html).toContain('SKILL.md or hook.yaml');
+  // W8-B4 FIX-1 — was the stale two-shape "SKILL.md or hook.yaml"; the hint
+  // now names every marker file AUTHORING_PACKAGE_SHAPES declares, template
+  // included, so it can never again silently fall behind a real third shape.
+  expect(html).toContain('SKILL.md, hook.yaml or template.md');
   const tag = actionTag(html, 'verdict-approve');
   expect(tag).toContain('disabled=""');
   expect(tag).toContain('data-disabled-reason');

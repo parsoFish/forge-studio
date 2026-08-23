@@ -10,6 +10,12 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
 import { deriveApproveGate } from '@/lib/session-verdict-gate';
+import {
+  AUTHORING_PACKAGE_SHAPES,
+  authoringPackageKindOf,
+  isAuthoringPackageKind,
+  type AuthoringPackageKind,
+} from '@/lib/authoring-package-shape';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -151,16 +157,40 @@ function isRenderableAffordance(affordance: SessionAffordance): boolean {
   return RENDERABLE_AFFORDANCE_KINDS.has(affordance.kind);
 }
 
-/** Detects a drafted authoring package's shape purely by file PRESENCE
- *  (skills/creation-agent/SKILL.md's own two package shapes) — mirrors the
- *  retired `SessionAuthoringPanel`'s identical helper. `unknown` covers
- *  "still drafting" (neither marker file has landed yet). */
-type DraftShape = 'skill' | 'hook' | 'unknown';
+/** Detects a drafted authoring package's shape purely by file PRESENCE —
+ *  delegates to `authoringPackageKindOf` (forge-ui/lib/authoring-package-
+ *  shape.ts), the ONE enumeration of "which marker file names which shape"
+ *  on this side of the cli/forge-ui boundary (W8-B4 FIX-1; that module's
+ *  header explains why this is a hand-mirrored copy of the SERVER's own
+ *  array, not an import, and how the two are kept honest). `'unknown'`
+ *  covers "still drafting" (no marker file has landed yet) — mirrors the
+ *  retired `SessionAuthoringPanel`'s identical helper's own contract. */
+type DraftShape = AuthoringPackageKind | 'unknown';
 
 function draftShapeOf(files: readonly FilePackageFile[]): DraftShape {
-  if (files.some((f) => f.path === 'SKILL.md')) return 'skill';
-  if (files.some((f) => f.path === 'hook.yaml')) return 'hook';
-  return 'unknown';
+  return authoringPackageKindOf(files.map((f) => f.path));
+}
+
+/** The package-id field's label — was a hardcoded `shape === 'hook' ? …
+ *  : 'Skill id …'` two-way branch (the SAME blind spot as `draftShapeOf`)
+ *  that mislabeled a template draft's id field "Skill id" (W8-B4 FIX-1).
+ *  Derived from `AUTHORING_PACKAGE_SHAPES`'s own kind names so a future
+ *  fourth shape gets an honest label for free rather than falling into the
+ *  'skill' default. */
+function packageIdFieldLabel(shape: DraftShape | null): string {
+  const known = AUTHORING_PACKAGE_SHAPES.find((s) => s.kind === shape);
+  const noun = known ? `${known.kind[0]!.toUpperCase()}${known.kind.slice(1)}` : 'Skill';
+  return shape === 'template' ? `${noun} id (file name, without .md)` : `${noun} id (directory name)`;
+}
+
+/** The "still resolving" advisory naming every marker file this route looks
+ *  for — was a hardcoded "a SKILL.md or hook.yaml" sentence (W8-B4 FIX-1)
+ *  that silently fell behind the moment `template.md` became a real third
+ *  shape. Built FROM `AUTHORING_PACKAGE_SHAPES`, mirroring the server's own
+ *  409 message (cli/bridge-studio-affordances.ts). */
+function shapeWaitingHint(): string {
+  const names = AUTHORING_PACKAGE_SHAPES.map((s) => s.filename);
+  return `Waiting for the draft to include a ${names.slice(0, -1).join(', ')} or ${names[names.length - 1]} before this can be saved.`;
 }
 
 function generationOptions(artifact: SessionArtifactPayload | null): number[] {
@@ -228,12 +258,15 @@ export function SessionInteractivePanel({
    *  DOM-pin test never passes one. */
   onChanged?: () => void;
   /** W6-B8 — called when a verdict-approve's response echoes back a real
-   *  `{kind:'skill'|'hook', id}` (the `file-package` artifact's finalize
-   *  shape, `runFinalize`'s own response) — the PAGE navigates to the landed
-   *  package's own detail page; this panel never calls `useRouter()` itself
-   *  (see this file's header). Optional — a panel under a DOM-pin test never
-   *  passes one, and no other affordance shape ever triggers it. */
-  onPackageFinalized?: (packageKind: 'skill' | 'hook', id: string) => void;
+   *  `{kind, id}` naming one of `AUTHORING_PACKAGE_SHAPES`'s kinds (the
+   *  `file-package` artifact's finalize shape, `runFinalize`'s own
+   *  response) — the PAGE navigates to the landed package's own detail
+   *  page; this panel never calls `useRouter()` itself (see this file's
+   *  header). Optional — a panel under a DOM-pin test never passes one, and
+   *  no other affordance shape ever triggers it. Widened to
+   *  `AuthoringPackageKind` (W8-B4 FIX-1) — was `'skill' | 'hook'` only,
+   *  which silently dropped a `kind:'template'` response on the floor. */
+  onPackageFinalized?: (packageKind: AuthoringPackageKind, id: string) => void;
   /** W7-C2 (sessions-kinds-36) — the shell payload's persisted pointer at
    *  the object this session produced (written at finalize success, read
    *  back on every GET). Rendered as a PERMANENT link in the terminal
@@ -290,11 +323,13 @@ export function SessionInteractivePanel({
     // `{ok:true, kind, id}`) bubbles up to the page for navigation. Driven by
     // the RESPONSE shape, not by `kind`/`affordance` — any future affordance
     // whose write handler happens to echo the same two fields gets the same
-    // treatment, for free.
+    // treatment, for free. `isAuthoringPackageKind` (W8-B4 FIX-1) checks
+    // membership in `AUTHORING_PACKAGE_SHAPES` — was a hardcoded `=== 'skill'
+    // || === 'hook'` pair that silently dropped a `kind:'template'` response.
     const data = result.data;
     const packageKind = data['kind'];
     const packageIdEcho = data['id'];
-    if ((packageKind === 'skill' || packageKind === 'hook') && typeof packageIdEcho === 'string') {
+    if (isAuthoringPackageKind(packageKind) && typeof packageIdEcho === 'string') {
       onPackageFinalized?.(packageKind, packageIdEcho);
     }
     onChanged?.();
@@ -473,7 +508,7 @@ export function SessionInteractivePanel({
               )}
               {idRequired && (
                 <div style={{ marginBottom: 10 }}>
-                  <div style={labelStyle}>{packageShape === 'hook' ? 'Hook id (directory name)' : 'Skill id (directory name)'}</div>
+                  <div style={labelStyle}>{packageIdFieldLabel(packageShape)}</div>
                   <input
                     value={packageId}
                     onChange={(e) => setPackageId(e.target.value)}
@@ -483,7 +518,7 @@ export function SessionInteractivePanel({
                   />
                   {gate.shapeBlocksApprove && (
                     <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>
-                      Waiting for the draft to include a SKILL.md or hook.yaml before this can be saved.
+                      {shapeWaitingHint()}
                     </div>
                   )}
                 </div>
@@ -660,6 +695,10 @@ function FinalizedLink({ finalized }: { finalized: { kind: string; id: string; e
   const href =
     finalized.kind === 'skill' ? `/skills/${encodeURIComponent(finalized.id)}`
     : finalized.kind === 'hook' ? `/hooks/${encodeURIComponent(finalized.id)}`
+    // W8-B4 FIX-1 — the third AUTHORING_PACKAGE_SHAPES kind; was missing
+    // here, so a finalized template rendered the honest label below with NO
+    // link at all (the same no-link branch a deleted skill/hook takes).
+    : finalized.kind === 'template' ? `/templates/${encodeURIComponent(finalized.id)}`
     : finalized.kind === 'community-registry' ? '/community'
     // W7-C2 T1 review (P0-4) — the three kinds whose producers previously
     // wrote no pointer at all (instructions' AGENTS.md, demo's lock,

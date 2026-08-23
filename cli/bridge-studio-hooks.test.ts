@@ -115,6 +115,14 @@ async function postJson(url: string, body: unknown): Promise<Response> {
   });
 }
 
+async function sendMethod(method: string, url: string): Promise<Response> {
+  return fetch(url, { method, headers: { 'x-forge-csrf': '1' } });
+}
+
+async function getJson(url: string): Promise<Record<string, unknown>> {
+  return (await fetch(url)).json() as Promise<Record<string, unknown>>;
+}
+
 type Permissions = { env: string[]; read: string[]; network: boolean };
 const DENY_ALL: Permissions = { env: [], read: [], network: false };
 
@@ -564,6 +572,74 @@ test('POST /api/studio/hooks/<traversal>/approve: hostile ids rejected with 400,
     const res = await postJson(`${bridgeUrl}/api/studio/hooks/${probe}/approve`, {});
     assert.equal(res.status, 400, `approve probe "${probe}" must be rejected with 400`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/studio/hooks/:id (W8-B4, library-34) — delete must revoke the
+// ledger row too, or a byte-identical recreation silently inherits it.
+// ---------------------------------------------------------------------------
+
+const LIBRARY_34_BODY = {
+  name: 'Library 34 Hook',
+  description: 'Hook used to prove delete revokes approval (library-34).',
+  on: 'PreToolUse',
+  scriptBody: BENIGN_SCRIPT,
+  permissions: DENY_ALL,
+};
+
+test('library-34: create -> approve -> delete -> recreate byte-identical is needs-review AND not runnable (the ledger row must not survive the delete)', async () => {
+  const id = 'library-34-recreate-hook';
+
+  const create1 = await postJson(`${bridgeUrl}/api/studio/hooks`, { ...LIBRARY_34_BODY, id });
+  assert.equal(create1.status, 200, 'first create must succeed');
+
+  const approve = await postJson(`${bridgeUrl}/api/studio/hooks/${id}/approve`, {});
+  assert.equal(approve.status, 200, 'approve must succeed on a clean script');
+
+  const approvedDetail = await getJson(`${bridgeUrl}/api/studio/hooks/${id}`);
+  assert.equal(approvedDetail['trust'], 'approved', 'sanity: approved before delete');
+  assert.equal(approvedDetail['runnable'], true, 'sanity: runnable before delete');
+
+  const del = await sendMethod('DELETE', `${bridgeUrl}/api/studio/hooks/${id}`);
+  assert.equal(del.status, 200, 'delete of an approved hook must succeed');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', id)), false, 'the package directory must be gone');
+
+  // Assert the LEDGER ARTIFACT itself, not merely a status code — the whole
+  // point of the fix is that this row is actually gone.
+  const ledgerAfterDelete = yaml.load(
+    readFileSync(join(forgeRoot, 'studio', 'hook-approvals.yaml'), 'utf8'),
+  ) as { approved?: Array<{ id: string }> };
+  assert.ok(
+    !(ledgerAfterDelete.approved ?? []).some((e) => e.id === id),
+    'studio/hook-approvals.yaml must carry NO "approved" row for a deleted hook id',
+  );
+
+  const create2 = await postJson(`${bridgeUrl}/api/studio/hooks`, { ...LIBRARY_34_BODY, id });
+  assert.equal(create2.status, 200, 'recreate with byte-identical fields must succeed (the old dir is gone)');
+
+  const recreatedDetail = await getJson(`${bridgeUrl}/api/studio/hooks/${id}`);
+  assert.equal(recreatedDetail['trust'], 'needs-review', 'a byte-identical recreation must NOT inherit the deleted hook\'s approval');
+  assert.equal(recreatedDetail['runnable'], false, 'and must not be runnable');
+});
+
+test('library-34 control: a genuinely fresh, never-approved hook is ALSO needs-review (proves the fix is not just "always needs-review")', async () => {
+  const id = 'library-34-fresh-control-hook';
+  const create = await postJson(`${bridgeUrl}/api/studio/hooks`, { ...LIBRARY_34_BODY, id, name: 'Fresh Control Hook' });
+  assert.equal(create.status, 200);
+
+  const detail = await getJson(`${bridgeUrl}/api/studio/hooks/${id}`);
+  assert.equal(detail['trust'], 'needs-review');
+  assert.equal(detail['runnable'], false);
+});
+
+test('library-34: DELETE of a NEVER-approved hook succeeds (no throw, no 500)', async () => {
+  const id = 'library-34-never-approved-hook';
+  const create = await postJson(`${bridgeUrl}/api/studio/hooks`, { ...LIBRARY_34_BODY, id, name: 'Never Approved Hook' });
+  assert.equal(create.status, 200);
+
+  const del = await sendMethod('DELETE', `${bridgeUrl}/api/studio/hooks/${id}`);
+  assert.equal(del.status, 200, 'deleting a never-approved hook must succeed, never 500');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', id)), false);
 });
 
 // ---------------------------------------------------------------------------

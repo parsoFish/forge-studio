@@ -88,6 +88,7 @@ import {
   approveHook,
   overrideHookBlock,
   revokeHookApproval,
+  revokeHookApprovalIfPresent,
   type HookApprovalLedgerEntry,
   type HookRunState,
 } from '../orchestrator/studio/hook-scan.ts';
@@ -591,6 +592,14 @@ export async function handleStudioHooksRoutes(
         }, origin);
         return true;
       }
+      // W8-B4 (library-34): revoke BEFORE removing the directory — a crash
+      // between the two steps then fails CLOSED (an orphaned package that
+      // still needs re-review) rather than fails OPEN (a gone package whose
+      // stale ledger row would bless a future byte-identical recreation).
+      // Tolerant of "nothing to revoke" (revokeHookApprovalIfPresent, not
+      // revokeHookApproval) — deleting a never-approved hook is the common
+      // case, not an error, and must not 500.
+      revokeHookApprovalIfPresent({ forgeRoot: ctx.forgeRoot, id });
       rmSync(dirname(located.yamlPath), { recursive: true, force: true });
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {

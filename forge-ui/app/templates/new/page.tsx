@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
+import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createTemplate } from '@/lib/template-client';
+import { fetchStudioProjects } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { CATEGORY_LABEL, writableCategoryNames, type WritableCategory } from '@/lib/template-authoring-view';
 
 // ---------------------------------------------------------------------------
 // Template builder — /templates/new (W7-B4, library-17/library-01). A
@@ -13,14 +16,25 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 // the builder is: category + id + the raw content, seeded with a valid
 // scaffold per category. Validation is server-side by the REAL category
 // loader — the same enforcement `forge studio lint` runs.
+//
+// W8-B4 WI-4 adds a SECOND door onto the same page: the shared
+// `AuthoringLauncher` (the same "describe it, the creation agent drafts it,
+// you iterate and save" loop `/skills/new` and `/hooks/new` already offer),
+// mirroring those two pages' structure exactly — the hand-authoring form
+// above stays exactly as it was, this is additive.
+//
+// `project-scaffold` is a whole curated directory tree, not a single
+// markdown file, and stays deliberately non-authorable (R3-04's ruling,
+// still true here) — it was never added to `WritableCategory`/
+// `CATEGORY_LABEL`, so the guidance text next to the launcher (derived from
+// `CATEGORY_LABEL` via `writableCategoryNames`, not a second hard-coded
+// list) can never name it as offered. See AuthoringLauncher.test.ts for the
+// derivation pin.
 // ---------------------------------------------------------------------------
 
-type WritableCategory = 'planning' | 'demo-output';
-
-const CATEGORY_LABEL: Record<WritableCategory, string> = {
-  planning: 'Planning (studio/artifact-templates)',
-  'demo-output': 'Demo output (studio/demo-elements)',
-};
+// `WritableCategory` / `CATEGORY_LABEL` / `writableCategoryNames` live in
+// `@/lib/template-authoring-view` — a Next.js page.tsx may only export the
+// framework's whitelisted names.
 
 function seedContent(category: WritableCategory, id: string): string {
   const safeId = id || 'my-template';
@@ -62,6 +76,15 @@ export default function TemplateBuilderPage() {
   const [contentTouched, setContentTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioProjects()
+      .then((projects) => { if (!cancelled) setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort()); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const slugOk = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(id);
   const canSubmit = slugOk && (contentTouched ? content.trim().length > 0 : true);
@@ -158,6 +181,18 @@ export default function TemplateBuilderPage() {
             {saving ? 'Creating…' : 'Create template →'}
           </button>
           {!slugOk && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>A valid id is required.</span>}
+        </div>
+        <div style={{ marginTop: 12, paddingTop: 24, borderTop: '1px solid var(--line)' }}>
+          <p data-component="template-authoring-hint" style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.5, margin: '0 0 12px' }}>
+            The creation agent can draft a {writableCategoryNames(CATEGORY_LABEL).join(' or ')} definition for
+            you — project scaffolds are curated directory trees that stay repo-authored and are not offered here.
+          </p>
+          <AuthoringLauncher
+            knownProjects={knownProjects}
+            onStarted={(sessionId, project) =>
+              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
+            }
+          />
         </div>
       </div>
     </StudioPage>

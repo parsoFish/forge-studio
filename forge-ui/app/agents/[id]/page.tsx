@@ -47,7 +47,6 @@ import {
   requestInstructionsDraft,
   type Agent,
   type AgentCapabilityDescriptor,
-  type AgentRuntime,
   type Catalog,
   type Flow,
   type Project,
@@ -70,6 +69,8 @@ import {
   parseAgentToState,
   buildAgentPutBody,
   duplicateAgentState,
+  EMPTY_STATE,
+  BLANK_STATE,
   type AgentBuilderState,
 } from '@/lib/agent-authoring-view';
 import { sessionEntryHrefForAgent } from '@/lib/session-kind-meta';
@@ -90,44 +91,11 @@ type Kind = 'skill' | 'tool' | 'mcp' | 'guard' | 'hook';
 // unit-pinned) — this alias keeps the page's own vocabulary unchanged.
 type AgentState = AgentBuilderState;
 
-const DEFAULT_RUNTIME: AgentRuntime = {
-  sdk: 'sdk-claude',
-  strategy: 'fixed',
-  model: null,
-  range: [],
-};
-
-const EMPTY_STATE: AgentState = {
-  slug: '',
-  name: '',
-  purpose: '',
-  skills: [],
-  tools: [],
-  mcps: [],
-  guards: [],
-  hooks: [],
-  process: '',
-  interactivity: '',
-  runtime: { ...DEFAULT_RUNTIME },
-  brainAccess: 'none',
-  materials: [],
-  allowedTools: [],
-  disallowedTools: [],
-  phase: '',
-  costCeilingEnforceable: false,
-};
-
-// A "Blank" agent still ships sensible defaults so it is creatable with near-zero
-// input (UX spec §2 — defaults over choices): a default model + the event-log
-// guard means a blank agent passes validation without opening Advanced.
-const BLANK_STATE: AgentState = {
-  ...EMPTY_STATE,
-  guards: ['event-log'],
-  runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', range: [] },
-  brainAccess: 'none',
-  // A2: a sensible, editable starting point for interactivity — not a blank box.
-  interactivity: 'Autonomous — runs to completion without human input.',
-};
+// forge-6gv.19 (W8-B4): EMPTY_STATE and BLANK_STATE moved to
+// lib/agent-authoring-view.ts so a test can import the REAL constants a
+// from-blank compose actually uses (a `'use client'` Next `page.tsx` may
+// only export Next's own whitelisted names — see BLANK_STATE's own comment
+// there for the security-fence rationale this move exists to support).
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -482,7 +450,21 @@ export default function AgentBuilderPage() {
     if (found) {
       setState(parseAgent(found));
     } else {
-      setState({ ...EMPTY_STATE });
+      // forge-6gv.19 (W8-B4) residual fix: for a brand-new agent `found` is
+      // ALWAYS undefined (no agent has slug ''), so this branch runs on
+      // every Discard of a new agent — but the Save/Discard bar stays
+      // rendered afterward (`starterChosen` is untouched here), so Save
+      // remains reachable with whatever this branch just loaded. The old
+      // `{ ...EMPTY_STATE }` here reintroduced the SAME unfenced-from-blank
+      // gap BLANK_STATE's own fix closes (EMPTY_STATE's disallowedTools is
+      // `[]`, and the moment it round-trips through a save, skill-md-
+      // fidelity.ts's unconditional-both-keys write puts it back in the
+      // fence lint's scope with nothing in disallowed-tools). BLANK_STATE
+      // — the same fenced, already-correct starting point "Start blank"
+      // itself gives you — is the right thing to discard BACK to for a new
+      // agent; EMPTY_STATE stays reserved for "nothing chosen yet" states
+      // where Save is not (yet) reachable.
+      setState({ ...BLANK_STATE });
     }
     setDirty(false);
     // C3/D9: discarding replaces the instructions text with the last-loaded

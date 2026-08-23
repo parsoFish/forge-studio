@@ -48,6 +48,32 @@ function realHookUsage(hookId) {
   return slugs.sort((a, b) => a.localeCompare(b));
 }
 
+/** W8-B4 (library-38 count half — kept in its own function, surgically
+ *  separable from the rest of this file's helpers): real, disk-derived
+ *  count of vendored community hooks NOT already present as a local hook.
+ *  Mirrors hook-library-view.ts's `communityHooksToUnion` (a hook id
+ *  present locally is excluded from the union) and the real source
+ *  `fetchCommunityIndex('hook')` reads from — vendored packages under
+ *  `studio/community/hooks/*`, never a network fetch (see
+ *  cli/bridge-studio-writes.ts's own comment: "hooks are vendored packages
+ *  under studio/community/hooks/"). Used to cross-check `data-hook-count`
+ *  now that it counts BOTH the local list and this not-yet-installed
+ *  community union (W8-B4 fix for library-38) instead of the local list
+ *  alone. */
+function countVendoredCommunityHooksNotLocal() {
+  const communityHooksRoot = join(FORGE_ROOT, 'studio', 'community', 'hooks');
+  if (!existsSync(communityHooksRoot)) return 0;
+  const localHooksRoot = join(FORGE_ROOT, 'studio', 'hooks');
+  const localIds = new Set(
+    existsSync(localHooksRoot)
+      ? readdirSync(localHooksRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+      : [],
+  );
+  return readdirSync(communityHooksRoot, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !localIds.has(e.name))
+    .length;
+}
+
 /** Real file count under a hook's package directory — mirrors the
  *  hook.yaml + its script the detail route always returns (D-2/D-5). */
 function countHookPackageFiles(id) {
@@ -162,7 +188,17 @@ export const journey = defineJourney({
 
               const domHookCount = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-page="hook-library"]')?.getAttribute('data-hook-count') ?? '-1', 10));
-              check(domHookCount >= 2, `HK-0: the library lists at least both OOTB seeds (data-hook-count=${domHookCount})`);
+              // W8-B4 (library-38 count half): data-hook-count now counts
+              // BOTH the local list and the not-yet-installed community
+              // union (mirrors /skills' data-skill-count — see
+              // hook-library-view.ts's own header). No query is active here,
+              // so the floor is the 2 OOTB local seeds PLUS every real,
+              // disk-derived vendored community hook not already local
+              // (never a hardcoded magic number — see
+              // countVendoredCommunityHooksNotLocal above).
+              const expectedCommunityFloor = countVendoredCommunityHooksNotLocal();
+              check(domHookCount >= 2 + expectedCommunityFloor,
+                `HK-0: the library lists at least both OOTB seeds plus every not-yet-installed vendored community hook (data-hook-count=${domHookCount}, want >= ${2 + expectedCommunityFloor})`);
 
               for (const [id, event] of [['pre-pr-security-review', 'PreToolUse'], ['post-merge-brain-ingest', 'SessionEnd']]) {
                 const card = page.locator(`[data-card-type="hook"][data-hook-id="${id}"]`);
@@ -177,14 +213,26 @@ export const journey = defineJourney({
 
               await frame(page, 'hk-0-library', 'Part 2 (hooks) — the /hooks library: both OOTB seeds, derived carried-by', { key: true });
 
-              // Search narrows the SAME derived count (data-hook-count IS the filtered length).
+              // Search narrows the SAME derived count (data-hook-count IS
+              // filtered.length + communityHooks.length — W8-B4 library-38:
+              // the community union is now filtered by the SAME query as
+              // the local list, and counted alongside it). This still
+              // expects exactly 1: "brain" matches ONLY the local
+              // post-merge-brain-ingest seed (its name literally contains
+              // "brain") — pre-pr-security-review's text doesn't, and the
+              // one vendored community hook on disk at pin time
+              // (studio/community/hooks/block-protected-branch-push —
+              // name/description/id/upstream all about "branch", never
+              // "brain") doesn't match either. If a future vendored
+              // community hook's text ever matches "brain", this expected
+              // count changes and this assertion needs revisiting.
               await page.locator('[data-field="hook-search"]').fill('brain').catch(() => {});
               await page.waitForFunction(
                 () => parseInt(document.querySelector('[data-page="hook-library"]')?.getAttribute('data-hook-count') ?? '-1', 10) === 1,
                 null, { timeout: 5000 }).catch(() => {});
               const filteredCount = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-page="hook-library"]')?.getAttribute('data-hook-count') ?? '-1', 10));
-              check(filteredCount === 1, `HK-0: searching "brain" narrows to the one matching hook (data-hook-count=${filteredCount})`);
+              check(filteredCount === 1, `HK-0: searching "brain" narrows to the one matching hook, local + community combined (data-hook-count=${filteredCount})`);
               await page.locator('[data-field="hook-search"]').fill('').catch(() => {});
 
         },

@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { StudioPage } from '@/components/StudioPage';
+import { HookLibraryResults } from '@/components/studio/HookLibraryResults';
 import { fetchHookLibrary, type HookLibraryEntry } from '@/lib/hook-client';
-import { filterHooks, needsReviewCountOf, hookBadges, communityHooksToUnion } from '@/lib/hook-library-view';
+import { filterHooks, needsReviewCountOf, communityHooksToUnion } from '@/lib/hook-library-view';
 import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
-import { installStateLabel } from '@/lib/community-view';
+import { filterCommunityItems } from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
 // Hooks library — /hooks (R3-03-F4). The local file-package list, plus —
@@ -19,12 +20,6 @@ import { installStateLabel } from '@/lib/community-view';
 // why it is a wholly separate effect/failure mode). "New hook" is the ONE
 // place hook authoring lives (mirrors skills' D8 data-action="new-skill").
 // ---------------------------------------------------------------------------
-
-const BADGE_STYLE: Record<string, React.CSSProperties> = {
-  'needs-review': { color: '#fbbf24', borderColor: 'rgba(251,191,36,.4)', background: 'rgba(251,191,36,.08)' },
-  blocked: { color: '#f87171', borderColor: 'rgba(248,113,113,.4)', background: 'rgba(248,113,113,.08)' },
-  overridden: { color: 'var(--dim)', borderColor: 'var(--line-2)', background: 'rgba(255,255,255,.04)' },
-};
 
 export default function HookLibraryPage() {
   const [entries, setEntries] = useState<HookLibraryEntry[]>([]);
@@ -62,14 +57,33 @@ export default function HookLibraryPage() {
 
   const filtered = filterHooks(entries, query);
   const needsReviewCount = needsReviewCountOf(entries);
-  const communityHooks = communityHooksToUnion(communityItems, new Set(entries.map((e) => e.id)));
+  // W8-B4 (library-38, S2 regression): the community union MUST be filtered
+  // by the SAME query as the local list — the pre-fix code derived
+  // `communityHooks` with no query applied at all, so a query matching only
+  // a community hook rendered "No hooks match your search." directly ABOVE
+  // the matching card (the empty state was gated on the local `filtered`
+  // count alone). `filterCommunityItems` is the SAME query-match function
+  // the real /community browser already uses (community-view.ts) — reused,
+  // not re-derived.
+  const communityHooksAll = communityHooksToUnion(communityItems, new Set(entries.map((e) => e.id)));
+  const communityHooks = filterCommunityItems(communityHooksAll, query);
 
   return (
     <StudioPage
       dataPage="hook-library"
       ready={status !== 'loading'}
       data={{
-        'data-hook-count': filtered.length,
+        // W8-B4 (library-38 count half — kept SURGICALLY SEPARATE from the
+        // search/empty-state fix below; see hook-library-view.ts's own
+        // header and this WI's report for why): data-hook-count now counts
+        // BOTH lists, mirroring /skills' data-skill-count (grouped.total —
+        // every entry in its fetched+filtered list, never just a subset).
+        // This is a load-bearing data-* contract
+        // (docs/forge-ui-dom-and-harness.md) driven by
+        // scripts/journeys/hooks.mjs — if this one line is ever reverted on
+        // its own, revert it to `filtered.length` and nothing else in this
+        // file needs to change.
+        'data-hook-count': filtered.length + communityHooks.length,
         'data-needs-review-count': needsReviewCount,
       }}
       title="Hooks"
@@ -106,120 +120,7 @@ export default function HookLibraryPage() {
           }}
         />
 
-        {status === 'loading' && (
-          <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading hooks…</div>
-        )}
-
-        {status === 'error' && (
-          <div
-            data-component="fetch-error"
-            style={{ color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
-          >
-            Could not reach the forge bridge — hooks are unavailable ({error}). This is NOT the
-            same as an empty library; retry once the bridge is back up.
-          </div>
-        )}
-
-        {status === 'ready' && filtered.length === 0 && (
-          <div style={{ color: 'var(--faint)', fontSize: 13, fontStyle: 'italic', padding: '24px 0' }}>
-            {query ? 'No hooks match your search.' : 'No hooks yet — author one to get started.'}
-          </div>
-        )}
-
-        {status === 'ready' && filtered.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            {filtered.map((entry) => (
-              <HookCard key={entry.id} entry={entry} />
-            ))}
-          </div>
-        )}
-
-        {/* W7-B3 (library-11): community hooks not yet installed — the same
-            union /skills renders. Cards route to the community detail page,
-            where install (and its pre-install scan) lives. */}
-        {status === 'ready' && communityHooks.length > 0 && (
-          <section data-section="community-hooks" data-count={communityHooks.length} style={{ marginTop: 32 }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>
-              Community — not installed
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-              {communityHooks.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/community/hook/${encodeURIComponent(item.id)}`}
-                  className="lib-card"
-                  data-card-type="community-hook"
-                  data-hook-id={item.id}
-                  data-install-state={item.installState}
-                  style={{ display: 'block' }}
-                >
-                  <div className="card-top">
-                    <span className="card-name">{item.name}</span>
-                    <span className="badge" style={{ color: 'var(--c-kb, #4ade80)', borderColor: 'rgba(74,222,128,.4)', background: 'rgba(74,222,128,.08)' }}>community</span>
-                  </div>
-                  <p className="card-body">{item.desc}</p>
-                  <div className="card-meta">
-                    <span className="card-stat">{installStateLabel(item.installState)}</span>
-                    <span className="card-stat">install via community →</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        <HookLibraryResults status={status} error={error} query={query} filtered={filtered} communityHooks={communityHooks} />
     </StudioPage>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// HookCard
-// ---------------------------------------------------------------------------
-
-function HookCard({ entry }: { entry: HookLibraryEntry }) {
-  if (!entry.ok) {
-    return (
-      <Link
-        href={`/hooks/${encodeURIComponent(entry.id)}`}
-        className="lib-card"
-        data-card-type="hook"
-        data-hook-id={entry.id}
-        style={{ display: 'block' }}
-      >
-        <div className="card-top">
-          <span className="card-name">{entry.id}</span>
-          <span className="badge" style={BADGE_STYLE.blocked}>malformed</span>
-        </div>
-        <p style={{ fontSize: 11.5, color: '#f87171', margin: 0 }}>{entry.error}</p>
-      </Link>
-    );
-  }
-
-  const badges = hookBadges(entry);
-  const carriedByCount = entry.carriedBy.length;
-
-  return (
-    <Link
-      href={`/hooks/${encodeURIComponent(entry.id)}`}
-      className="lib-card"
-      data-card-type="hook"
-      data-hook-id={entry.id}
-      data-hook-event={entry.on}
-      data-hook-verdict={entry.scanVerdict}
-      data-hook-trust={entry.trust}
-      data-hook-carried-by-count={carriedByCount}
-      style={{ display: 'block' }}
-    >
-      <div className="card-top">
-        <span className="card-name">{entry.name}</span>
-        {badges.map((b) => (
-          <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
-        ))}
-      </div>
-      <p className="card-body">{entry.description || 'No description.'}</p>
-      <div className="card-meta">
-        <span className="card-stat">{entry.on}</span>
-        <span className="card-stat">{carriedByCount} agent{carriedByCount === 1 ? '' : 's'}</span>
-      </div>
-    </Link>
   );
 }

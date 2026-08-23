@@ -1,6 +1,7 @@
 /**
  * Forge Studio authoring-session finalize route (R4-21 phase 2, WI-2 — the
- * OOTB authoring agent / skill-hook package producer, save path).
+ * OOTB authoring agent / skill-hook-template package producer, save path;
+ * `kind:'template'` added W8-B4/WI-3).
  *
  * Owns the ONE `/api/studio/authoring*` route:
  *
@@ -8,18 +9,18 @@
  *                                            the creation-agent session's
  *                                            `committing` turn and install
  *                                            the LANDED package into the real
- *                                            skill or hook library
+ *                                            skill, hook, or template library
  *
  * ---------------------------------------------------------------------------
  * CONTRACT (D5, `_wave5/unit-specs/R4-21-phase2.md`; mirrored from
- * `cli/bridge-studio-authoring.test.ts`'s own header — that file is this
- * module's spec):
+ * `cli/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
+ * this module's spec):
  *
  *  Wire contract: `POST /api/studio/authoring/finalize { project, sessionId,
- *  kind: 'skill'|'hook', id }` — NOTHING ELSE is read from the body. The
- *  installed artifact's bytes come from the server-landed package, never the
- *  request body (closes the client-supplied-content sink the phase-1 shape
- *  had).
+ *  kind: 'skill'|'hook'|'template', id }` — NOTHING ELSE is read from the
+ *  body. The installed artifact's bytes come from the server-landed package,
+ *  never the request body (closes the client-supplied-content sink the
+ *  phase-1 shape had).
  *
  *  Sequence:
  *   1. Resolve the projects root the SAME way every other bridge route does
@@ -59,6 +60,21 @@
  *          default. Otherwise write the existing 2-file shape (`hook.yaml` +
  *          the fixed relative `scripts/run.sh`) through the SAME guarded
  *          choke points `POST /api/studio/hooks` already uses.
+ *        - `kind:'template'` (W8-B4/WI-3) → the SAME posture as `kind:'hook'`:
+ *          the landed `template.md`'s frontmatter is read server-side, never
+ *          from body fields. Its `category` field is a DRAFT-ONLY routing
+ *          hint — real installed templates never carry one (category is
+ *          STRUCTURAL, derived from which directory a definition lives in,
+ *          `orchestrator/studio/template-library.ts`'s own D1) — validated by
+ *          `writableCategoryOrReason` (`cli/bridge-studio-templates.ts`, the
+ *          SAME function `POST /api/studio/templates` uses) and stripped
+ *          before the persisted bytes are written. `project-scaffold` is
+ *          refused with the SAME `SCAFFOLD_READONLY` constant that route
+ *          returns — never a second, drifting copy of that rule. The
+ *          remaining content is then validated by the SAME real-category-
+ *          loader check (`invalidTemplateContentReason`) that route also
+ *          uses, and written through the SAME `WRITABLE_CATEGORY_DIRS` +
+ *          guarded-path choke point.
  *   7. `{ ok: true, kind, id }`.
  *
  *  Design call: a hook-specific validation failure at step 6 does NOT roll
@@ -88,13 +104,29 @@
  *  correctly 409s again (never a silent bounce back to `awaiting-review`).
  *  See `revertToAwaitingReview` below for the single call site this fans out
  *  from.
+ *
+ *  LANDED-PACKAGE CLEANUP (library-37 fix, W8-B4/WI-3): `<forgeRoot>/
+ *  _interactive-library/<id>/` (step 5's copy target) is an internal
+ *  staging→landing BRIDGE, never a durable record — it is `_interactive-
+ *  library`-gitignored, has no Studio surface, and the real record of a
+ *  successful finalize is the installed skill/hook/template itself. Every
+ *  attempt (success OR failure) removes it in a `finally` after steps 5-6
+ *  run, so a package `id` is never permanently unusable via a leftover ghost
+ *  directory nobody can see or clear. This does NOT weaken the id-collision
+ *  check: a `kind`-specific real-library collision (an existing
+ *  `skills/<id>/`, `studio/hooks/<id>/`, or template-library entry) still
+ *  409s, naming that REAL holder — see `finalizeSkillFromLanded` /
+ *  `finalizeHookFromLanded` / `finalizeTemplateFromLanded` below. Only the
+ *  GHOST-dir 409 (a collision against nothing but a leftover copy from a
+ *  prior, unrelated attempt under the same id) is gone.
  * ---------------------------------------------------------------------------
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import yaml from 'js-yaml';
+import matter from 'gray-matter';
 
 import {
   sendJson,
@@ -118,6 +150,14 @@ import { reqString, optString, oneOf } from '../orchestrator/studio/yaml-fields.
 import { resolveProjectsDir, loadConfig, defaultConfigPath } from '../orchestrator/config.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { isReservedId } from '../orchestrator/skill-path.ts';
+import { listTemplateLibrary } from '../orchestrator/studio/template-library.ts';
+import {
+  writableCategoryOrReason,
+  WRITABLE_CATEGORY_DIRS,
+  invalidTemplateIdReason,
+  invalidTemplateContentReason,
+} from './bridge-studio-templates.ts';
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
 // DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
@@ -318,6 +358,110 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
 }
 
 // ---------------------------------------------------------------------------
+// kind:"template" (W8-B4/WI-3) — the SAME posture as kind:"hook": template
+// METADATA comes from the LANDED, DRAFTED template.md, parsed server-side,
+// never from parallel request-body fields.
+//
+// A template is ONE markdown file with gray-matter frontmatter
+// (forge-ui/app/templates/new/page.tsx's own seedContent — the manual
+// builder's precedent; orchestrator/studio/template-library.ts D1) — never a
+// multi-file package, unlike skill/hook. The creation-agent session drafts it
+// at the ONE canonical staging filename `staging/template.md`
+// (TEMPLATE_STAGING_FILENAME below), mirroring `SKILL.md`/`hook.yaml`'s own
+// one-canonical-name-per-shape convention, and lands unchanged at
+// `_interactive-library/<id>/template.md`.
+//
+// `category` ('planning' | 'demo-output') is NOT a field of a REAL, installed
+// template.md — template-library.ts's D1 states category is STRUCTURAL,
+// derived from which directory a definition lives in, never sniffed from
+// content. But the interactive session has no separate structured "category"
+// channel the way the manual /templates/new builder's own UI select does
+// (forge-ui/app/templates/new/page.tsx) — so the drafted file carries
+// `category` as a DRAFT-ONLY routing hint in its frontmatter, read HERE to
+// pick the target directory, validated by the SAME `writableCategoryOrReason`
+// the POST /api/studio/templates route uses (never a second, drifting copy
+// of "which categories are writable" / "why project-scaffold isn't" — reuses
+// that exact function AND its `SCAFFOLD_READONLY` constant), then STRIPPED
+// before the persisted bytes are written — so an installed, authored
+// template's frontmatter is byte-identical in shape to one authored by hand
+// through /templates/new.
+// ---------------------------------------------------------------------------
+
+const TEMPLATE_STAGING_FILENAME = 'template.md';
+
+function finalizeTemplateFromLanded(forgeRoot: string, id: string): InstallOutcome {
+  // Layer 1 — SHAPE, the SAME checks POST /api/studio/templates runs before
+  // any write: slug shape/length, then the reserved-id collision with the
+  // /templates/new builder's own fixed path.
+  const invalidId = invalidTemplateIdReason(id);
+  if (invalidId) return { ok: false, status: 400, error: invalidId };
+  if (isReservedId(id)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `template id "${id}" is reserved (the /templates/new builder lives at that path) — choose another id`,
+    };
+  }
+
+  const raw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, TEMPLATE_STAGING_FILENAME]);
+  if (raw === null) {
+    return { ok: false, status: 400, error: `drafted ${TEMPLATE_STAGING_FILENAME} is missing from the landed package "${id}"` };
+  }
+
+  let parsed: ReturnType<typeof matter>;
+  try {
+    parsed = matter(raw, {});
+  } catch (err) {
+    return { ok: false, status: 400, error: `drafted ${TEMPLATE_STAGING_FILENAME} is not valid frontmatter: ${sanitizeError(err)}` };
+  }
+  const data: unknown = parsed.data;
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `drafted ${TEMPLATE_STAGING_FILENAME} frontmatter must be a YAML mapping (object), not a scalar/array/null`,
+    };
+  }
+  const { category: draftedCategory, ...persistedData } = data as Record<string, unknown>;
+
+  // Layer 2 — the SAME category rule POST /api/studio/templates enforces
+  // (never a second copy): refuses an unknown category generically and
+  // 'project-scaffold' specifically via SCAFFOLD_READONLY.
+  const categoryCheck = writableCategoryOrReason(draftedCategory);
+  if ('error' in categoryCheck) {
+    return { ok: false, status: 400, error: categoryCheck.error };
+  }
+  const category = categoryCheck.category;
+
+  // Library-wide uniqueness — the SAME check POST /api/studio/templates
+  // runs, against the REAL library (never the ghost _interactive-library
+  // copy — see the file header's LANDED-PACKAGE CLEANUP note / library-37).
+  if (listTemplateLibrary(forgeRoot).some((e) => e.id === id)) {
+    return { ok: false, status: 409, error: `template "${id}" already exists` };
+  }
+
+  // Reconstruct WITHOUT the draft-only "category" routing field — a real,
+  // installed template.md never carries one (category is structural, D1).
+  const content = matter.stringify(parsed.content, persistedData);
+
+  // Layer 3 — CONTENT: the SAME real-category-loader check
+  // (invalidTemplateContentReason) POST /api/studio/templates uses — never a
+  // re-implemented field list.
+  const invalidContent = invalidTemplateContentReason(forgeRoot, category, id, content);
+  if (invalidContent) return { ok: false, status: 400, error: invalidContent };
+
+  // Layer 4 — CONTAINMENT: the SAME guarded choke point
+  // POST /api/studio/templates uses — never a fresh lexical join.
+  const dirSegments = WRITABLE_CATEGORY_DIRS[category];
+  const targetGuard = resolveGuardedPath(resolve(forgeRoot, ...dirSegments), [`${id}.md`]);
+  if (!targetGuard.ok) return { ok: false, status: 400, error: 'path traversal detected' };
+  if (targetGuard.exists) return { ok: false, status: 409, error: `template "${id}" already exists` };
+
+  writeFileSync(targetGuard.realPath, content, 'utf8');
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // Finding 1 fix — revert status.json's phase back to "awaiting-review"
 // through the SAME guarded choke point (guardedWriteSessionStatus) step 4 of
 // runFinalize used to advance it, on ANY failure after that advance. Built
@@ -365,7 +509,7 @@ export async function runFinalize(
   ctx: StudioContext,
   res: ServerResponse,
   origin: string,
-  input: { project: string; sessionId: string; kind: 'skill' | 'hook'; id: string },
+  input: { project: string; sessionId: string; kind: 'skill' | 'hook' | 'template'; id: string },
 ): Promise<void> {
   const { project, sessionId, kind, id } = input;
 
@@ -430,44 +574,24 @@ export async function runFinalize(
     const projectRoot = dirname(dirname(sessionGuard.realPath));
 
     try {
-      // Step 4.5 — third collision surface (P8, adversarial-review correction
-      // D): `copyStagingToLibrary` (run by step 5 below) writes into
-      // `_interactive-library/<id>/` with O_EXCL, and that directory is NEVER
-      // cleaned up on any outcome — a SUCCESSFUL finalize deliberately leaves
-      // it in place (P5-3's own control: it is the committed record of what
-      // landed) and a FAILED one leaves it too (nothing downstream of step 5
-      // owns cleaning it up). So a landed `_interactive-library/<id>/` left
-      // behind by ANY prior attempt under this id — successful, or one that
-      // failed at a LATER step and correctly reverted its own session —
-      // collides with THIS attempt's own step 5. Left undetected, that
-      // collision surfaces as a raw `EEXIST` thrown out of
-      // `copyStagingToLibrary`, caught by this function's own outer catch,
-      // and reported as an undifferentiated 500 carrying an internal
-      // implementation detail — never actionable, unlike the two structurally
-      // identical id collisions (skill/hook) this route already turns into a
-      // clean 409 below.
-      //
-      // Detected HERE, before step 5 runs, through the SAME guarded choke
-      // point step 6 already uses to read the landed package
-      // (`resolveGuardedPath(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id])`)
-      // — never a bare `existsSync` on a request-derived join (attack-the-fix
-      // #2). `.exists` is false both when `_interactive-library/` itself does
-      // not exist yet (the ordinary first-ever-finalize case — ENOENT) and
-      // when this specific id has never landed before, so a fresh id is
-      // never refused by this check (attack-the-fix #3, proven by P5/P6/P7
-      // all still passing on a clean forge root); it is true only on a
-      // genuine prior landing for THIS id (EEXIST). An id-shaped traversal
-      // (`.ok === false`) is deliberately NOT handled here — it falls through
-      // unchanged to step 5, which already refuses it the same way it does
-      // today (P7).
-      const preflightLibraryGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
-      if (preflightLibraryGuard.ok && preflightLibraryGuard.exists) {
-        revert();
-        sendJson(res, 409, {
-          error: `package "${id}" already exists — choose a different id`,
-        }, origin);
-        return;
-      }
+      // library-37 fix (W8-B4/WI-3): the former "Step 4.5" preflight here
+      // used the LANDED `_interactive-library/<id>/` directory's mere
+      // existence as a collision signal — but that directory is never
+      // cleaned up on ANY outcome (until the `finally` below), so it was
+      // really an id LEDGER built out of a hidden, gitignored, no-Studio-
+      // surface staging leftover: once any attempt — even one that later
+      // failed and correctly reverted its own session — reached step 5 under
+      // a given id, that id was permanently unusable, and the 409 it
+      // produced named nothing the operator could see or clear. Removed
+      // outright, not replaced with an equivalent check: each `kind`-specific
+      // install step below (`finalizeSkillFromLanded` / `finalizeHookFromLanded`
+      // / `finalizeTemplateFromLanded`) already 409s on a REAL collision — an
+      // existing `skills/<id>/`, `studio/hooks/<id>/`, or template-library
+      // entry — naming that real holder, which is the correct enforcement
+      // point (see the file header's LANDED-PACKAGE CLEANUP note). The
+      // `finally` below now removes the landed copy after every attempt, so
+      // `copyStagingToLibrary`'s own O_EXCL write at step 5 never collides
+      // with a leftover from an unrelated prior attempt either.
 
       // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
       // Dynamically imported so a static import never pulls the Claude Agent
@@ -505,7 +629,9 @@ export async function runFinalize(
       const outcome: InstallOutcome =
         kind === 'skill'
           ? await finalizeSkillFromLanded(ctx.forgeRoot, landedGuard.realPath, id, sessionId)
-          : finalizeHookFromLanded(ctx.forgeRoot, id);
+          : kind === 'hook'
+            ? finalizeHookFromLanded(ctx.forgeRoot, id)
+            : finalizeTemplateFromLanded(ctx.forgeRoot, id);
 
       if (!outcome.ok) {
         // Finding 1 x Finding 2 composition: an id collision (or any other
@@ -533,6 +659,22 @@ export async function runFinalize(
     } catch (err) {
       revert();
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    } finally {
+      // library-37 fix — see the file header's LANDED-PACKAGE CLEANUP note:
+      // `_interactive-library/<id>/` is removed after EVERY attempt (success
+      // OR failure) so the id is never permanently unusable via a leftover
+      // ghost. Best-effort and NEVER allowed to mask the outcome already
+      // sent above — a cleanup failure (e.g. a transient fs error) leaves the
+      // landed copy behind, which is exactly today's pre-fix behaviour, not a
+      // NEW failure mode.
+      try {
+        const cleanupGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
+        if (cleanupGuard.ok && cleanupGuard.exists) {
+          rmSync(cleanupGuard.realPath, { recursive: true, force: true });
+        }
+      } catch {
+        /* best-effort — see comment above */
+      }
     }
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -585,8 +727,8 @@ export async function handleStudioAuthoringRoutes(
     sendJson(res, 400, { error: 'sessionId is required' }, origin);
     return true;
   }
-  if (kind !== 'skill' && kind !== 'hook') {
-    sendJson(res, 400, { error: 'kind is required and must be "skill" or "hook"' }, origin);
+  if (kind !== 'skill' && kind !== 'hook' && kind !== 'template') {
+    sendJson(res, 400, { error: 'kind is required and must be "skill", "hook", or "template"' }, origin);
     return true;
   }
   if (!id) {

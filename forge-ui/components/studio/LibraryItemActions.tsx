@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // LibraryItemActions — the shared Edit / Delete action bar every library
@@ -10,7 +11,14 @@ import type { ReactNode } from 'react';
 //
 // Contract (pinned in lib/library-authoring-render.test.ts):
 //   [data-component="library-item-actions"][data-kind]
-//   [data-action="edit-<kind>"]      aria-pressed mirrors `editing`
+//   [data-action="edit-<kind>"]      rendered ONLY while `!editing`
+//     (aria-pressed is always "false" there — the control is never shown
+//     pressed, because entering `editing` un-mounts it). While `editing` is
+//     true this bar renders NO dismiss control at all: the editor mounted
+//     alongside it (TemplateEditor / the hook/skill edit form) owns
+//     dismissal via its own adjacent Cancel, so exactly one control ever
+//     dismisses the editor (W8-B4: the old "Close editor" relabel made two
+//     controls do the same thing).
 //   [data-action="delete-<kind>"]    two-step: arming reveals
 //   [data-action="confirm-delete-<kind>"] + [data-action="cancel-delete-<kind>"]
 //   [data-component="delete-blocked"] — a server-guarded delete renders the
@@ -54,29 +62,36 @@ export function LibraryItemActions({
       data-item-id={id}
       style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
     >
-      {onToggleEdit && (
+      {onToggleEdit && !editing && (
         <button
           type="button"
           className="btn btn-sm"
           data-action={`edit-${kind}`}
-          aria-pressed={editing ? 'true' : 'false'}
+          aria-pressed="false"
           onClick={onToggleEdit}
         >
-          {editing ? 'Close editor' : 'Edit'}
+          Edit
         </button>
       )}
 
       {extra}
 
       {!confirming && (
+        // `btn-primary`: Delete is this bar's other primary, consequential
+        // action (alongside Edit) — adding the class keeps it inside
+        // `scripts/check-disabled-reason.mjs`'s scan (W8-B4, library-46: a
+        // hand-written `disabled`/`title` pair here was an undetected ratchet
+        // blind spot; `RepointConfirmBar.tsx` set this exact precedent for a
+        // `btn-sm` control that needed the same coverage). The inline
+        // background/border override below keeps it reading as a danger
+        // action, not `.btn-primary`'s affirmative ember gradient.
         <button
           type="button"
-          className="btn btn-sm"
+          className="btn btn-sm btn-primary"
           data-action={`delete-${kind}`}
-          disabled={blocked || deleting}
-          title={blocked ? deleteBlockReason ?? undefined : undefined}
+          {...disabledAttrs(blocked ? deleteBlockReason : deleting ? 'Deleting…' : null)}
           onClick={() => setConfirming(true)}
-          style={{ color: blocked ? undefined : '#f87171' }}
+          style={{ background: 'transparent', borderColor: 'var(--line-2)', color: blocked ? undefined : '#f87171' }}
         >
           Delete
         </button>
