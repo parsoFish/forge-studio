@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -127,6 +127,16 @@ function writeAgentMd(root: string, slug: string, content: string): void {
   writeFileSync(join(dir, 'SKILL.md'), content);
 }
 
+/** Same shape as `writeAgentMd`, but under `studio/starters/agents/<slug>/`
+ *  — the OOTB starter template tree (forge-6gv.18: the source the roster
+ *  copies are installed FROM, and the tree this file's second sweep,
+ *  `lintStarterAgentToolFence`, was added to cover). */
+function writeStarterAgentMd(root: string, slug: string, content: string): void {
+  const dir = join(root, 'studio', 'starters', 'agents', slug);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), content);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -210,5 +220,110 @@ test('forge studio lint: a roster SKILL.md declaring NEITHER allowed-tools nor d
     );
   } finally {
     if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The starter template tree (studio/starters/agents/**, forge-6gv.18) —
+// SAME rule, same real entry point, a DIFFERENT root. This is the sweep that
+// was missing entirely when the three OOTB starters (Dev/Plan/Review) shipped
+// without Task/Agent fenced: `forge studio lint` stayed green on main because
+// nothing scanned studio/starters/agents/ at all, only skills/.
+// ---------------------------------------------------------------------------
+
+test('forge studio lint: a starter-template SKILL.md under studio/starters/agents/ missing Task/Agent fails skill-tool-fence/task-agent-not-disallowed', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot();
+    const slug = 'starter-missing-fence';
+    writeStarterAgentMd(root, slug, agentSkillMd(slug, { disallowedTools: ['Bash', 'WebFetch'] }));
+
+    const result = runStudioLint(root);
+
+    const hits = result.findings.filter(
+      (f) => f.level === 'error' && f.object === `starter-agent:${slug}` && f.check === CHECK,
+    );
+    assert.strictEqual(
+      hits.length,
+      1,
+      `expected exactly 1 starter-agent:${slug} ${CHECK} error from the REAL forge studio lint entry point — got: ${JSON.stringify(result.findings)}`,
+    );
+    assert.match(hits[0]!.message, /Task/);
+    assert.match(hits[0]!.message, /Agent/);
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('forge studio lint: a starter-template SKILL.md whose disallowed-tools already lists Task and Agent passes clean', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot();
+    const slug = 'starter-fully-fenced';
+    writeStarterAgentMd(root, slug, agentSkillMd(slug, { disallowedTools: ['Bash', 'Task', 'Agent'] }));
+
+    const result = runStudioLint(root);
+
+    const hits = result.findings.filter((f) => f.object === `starter-agent:${slug}` && f.check === CHECK);
+    assert.strictEqual(
+      hits.length,
+      0,
+      `expected 0 ${CHECK} findings for a fully-fenced starter template — got: ${JSON.stringify(result.findings)}`,
+    );
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('forge studio lint: a synthetic root with no studio/starters/agents/ directory at all degrades to zero starter-agent findings (no crash)', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot(); // never creates studio/starters/ — proves the missing-dir case
+    const result = runStudioLint(root);
+
+    const hits = result.findings.filter((f) => f.object.startsWith('starter-agent:'));
+    assert.strictEqual(
+      hits.length,
+      0,
+      `expected 0 starter-agent findings when studio/starters/agents/ is absent — got: ${JSON.stringify(result.findings)}`,
+    );
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Pin: the REAL OOTB starters (forge-6gv.18). Reproduces the exact regression
+// — copy a starter's SKILL.md into skills/ and lint — and separately locks
+// every known starter slug against the fence directly, so a future starter
+// added to studio/starters/agents/ without Task/Agent trips THIS test, not
+// just the general "runStudioLint on the real repo produces 0 errors" smoke
+// test in cli/studio-lint.test.ts (which would also catch it, but wouldn't
+// name the starter or the mechanism).
+// ---------------------------------------------------------------------------
+
+test('every real OOTB starter agent (studio/starters/agents/**) satisfies the tool fence', () => {
+  const KNOWN_STARTER_SLUGS = ['dev', 'plan', 'review'] as const;
+  const result = runStudioLint(process.cwd());
+
+  const starterHits = result.findings.filter((f) => f.object.startsWith('starter-agent:') && f.check === CHECK);
+  assert.strictEqual(
+    starterHits.length,
+    0,
+    `expected 0 ${CHECK} findings across studio/starters/agents/ — got: ${JSON.stringify(starterHits)}`,
+  );
+
+  // Guard the guard: if studio/starters/agents/ were ever emptied or renamed,
+  // the assertion above would pass vacuously (zero dirs scanned ⇒ zero
+  // findings). Naming the known slugs here means that failure mode is caught
+  // too — a bare "0 findings" is not proof the sweep actually ran over
+  // anything.
+  const scannedDirs = new Set(
+    readdirSync(join(process.cwd(), 'studio', 'starters', 'agents'), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name),
+  );
+  for (const slug of KNOWN_STARTER_SLUGS) {
+    assert.ok(scannedDirs.has(slug), `expected studio/starters/agents/${slug}/ to exist on disk`);
   }
 });
