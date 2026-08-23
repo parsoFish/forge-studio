@@ -21,9 +21,9 @@ import {
   deriveWatchLiveRun,
   gateAttentionStatusDot,
   HOME_LEDGER_LIMIT,
+  HOME_STATUS_FRAME,
   type HomeAttentionItem,
   type HomeHex,
-  type HomeStatus,
 } from '@/lib/home-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import type { SessionIndexRow } from '@/lib/studio-client';
@@ -48,16 +48,14 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 // blocks the rest of the page).
 // ---------------------------------------------------------------------------
 
-// Maps HomeStatus (home-view.ts's own 3-state vocab: active/gated/idle) onto
-// the shared .hex-frame / .status-dot CSS's 5-state vocab (pending/active/
-// complete/retrying/failed) for STYLING ONLY. The DOM-contract attributes
-// (data-hex-status, data-attention-status) always carry the real HomeStatus
-// value untouched — this map never leaks into derivation, only presentation.
-const HOME_STATUS_FRAME: Record<HomeStatus, string> = {
-  active: 'active',
-  gated: 'retrying',
-  idle: 'pending',
-};
+// HOME_STATUS_FRAME (HomeStatus -> the shared 5-state .hex-frame/.status-dot
+// CSS vocab, styling ONLY) now lives in lib/home-view.ts, alongside
+// GATE_ATTENTION_STATUS_FRAME — NOT here: a Next.js App Router `page.tsx`
+// may only export its own reserved fields (default, metadata,
+// generateStaticParams, ...); an arbitrary named export like a frame-map
+// const fails `next build`'s page-export validation (found running this
+// lane's own build gate). See home-view.ts's own doc comment on
+// HOME_STATUS_FRAME for the full mapping rationale.
 
 // (forge-2am's KB_ATTENTION_STATUS_FRAME retired by W7-B1: the KB attention
 // rows now render a `badge-kb` chip + a severity accent border instead of a

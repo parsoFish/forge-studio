@@ -217,6 +217,33 @@ export function sessionPhaseRunStatus(phase: string): 'active' | 'complete' | 'f
   return 'active';
 }
 
+/**
+ * WI-1b (ON-7) — a session's own phase, classified into the THREE-way
+ * terminal outcome vocabulary `data-lifecycle-terminal-outcome`
+ * (`SessionLifecycleBar.tsx`) and `home-view.ts`'s failed-hex derivation
+ * both need — declared here (the pure, transport-free module, same reason
+ * `sessionPhaseRunStatus` lives here) so neither client can drift from the
+ * other about what counts as a failure.
+ *
+ * `SESSION_DONE_PHASES` → 'succeeded'. `'cancelled'` is carved OUT of
+ * `SESSION_STOPPED_PHASES` into its own 'cancelled' outcome — it is the
+ * operator's own deliberate stop (it already has distinct, non-alarming UI
+ * treatment: `describeCancelOutcome`/`CancelOutcomeNotice` in
+ * `session-lifecycle-client.ts`), never a system failure. Every OTHER
+ * `SESSION_STOPPED_PHASES` member (`rejected`, `abandoned`, `failed`) is a
+ * real "did not succeed" outcome → 'failed'. Anything not in either set
+ * (a future runner's own unclassified terminal token — none exist today;
+ * `history-ledger.test.ts`'s yaml-parity scan asserts every REAL registry
+ * terminal phase already lands in `SESSION_DONE_PHASES ∪
+ * SESSION_STOPPED_PHASES`) also falls to 'failed': fail CLOSED, never claim
+ * a 'succeeded' this function has no positive evidence for.
+ */
+export function sessionTerminalOutcome(phase: string): 'succeeded' | 'failed' | 'cancelled' {
+  if (SESSION_DONE_PHASES.has(phase)) return 'succeeded';
+  if (phase === 'cancelled') return 'cancelled';
+  return 'failed';
+}
+
 export type LedgerRow = {
   id: string;
   /** Raw ISO `run.startedAt`, or '' if absent (D7) — formatting is a

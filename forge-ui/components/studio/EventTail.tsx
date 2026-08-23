@@ -43,6 +43,25 @@ const EMPTY_COPY: Record<TailState, string> = {
   queued: 'Queued — no events until the scheduler claims it.',
 };
 
+// WI-1b (ON-7): the header's `.status-dot` used to compute its OWN token
+// from a second, independent read of `activeRunId`/`events.length` — never
+// from `tailState`, despite `tailState` already carrying the real run
+// outcome. So a FAILED run's dot rendered identically to a live one
+// ("pending" with no events yet, "active" once events had arrived) — the
+// colour cue the operator actually scans never turned red on failure. This
+// map derives the dot token FROM `tailState` (the one source of truth for
+// this component), onto the shared 5-value status-dot vocabulary
+// (pending|active|complete|retrying|failed, lib/status-colors.ts).
+// `Record<TailState, string>` is exhaustive over the type's 5 members —
+// a 6th TailState fails to COMPILE here until it is mapped.
+const TAIL_DOT_STATUS: Record<TailState, string> = {
+  none: 'pending',
+  live: 'active',
+  finished: 'complete',
+  failed: 'failed',
+  queued: 'pending',
+};
+
 export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
   const tailState = deriveTailState(activeRunId, runStatus);
   const logRef = useRef<HTMLDivElement>(null);
@@ -54,11 +73,7 @@ export function EventTail({ events, activeRunId, runStatus }: EventTailProps) {
     el.scrollTop = el.scrollHeight;
   }, [events]);
 
-  const dotStatus: string = activeRunId
-    ? events.length > 0
-      ? 'active'
-      : 'pending'
-    : 'pending';
+  const dotStatus: string = TAIL_DOT_STATUS[tailState];
 
   return (
     <div

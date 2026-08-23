@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { SessionLifecycle, CancelOutcome } from '@/lib/session-lifecycle-client';
 import { formatIdle, describeLifecycle } from '@/lib/session-lifecycle-client';
+import { sessionTerminalOutcome } from '@/lib/history-ledger';
 import { CancelSessionButton } from './CancelSessionButton';
 import { CancelOutcomeNotice } from './CancelOutcomeNotice';
 
@@ -31,6 +32,18 @@ import { CancelOutcomeNotice } from './CancelOutcomeNotice';
 // DOM: div[data-section="session-lifecycle"][data-lifecycle-state]
 // [data-needs-you][data-cancellable]; button[data-action="cancel"];
 // div[data-cancel-outcome].
+//
+// WI-1b (ON-7): `data-lifecycle-state` stays EXACTLY the 5-token contract
+// above (never widened — journeys this lane cannot run assert on it) even
+// though `terminal` used to bucket a genuinely-failed session (phase
+// rejected/abandoned/cancelled/failed) identically to a succeeded one. Fixed
+// ADDITIVELY: `data-lifecycle-terminal-outcome="succeeded"|"failed"|
+// "cancelled"` (derived from `phase` via `sessionTerminalOutcome`, the SAME
+// classification `home-view.ts`'s failed-hex derivation uses), present ONLY
+// when `state === 'terminal'`. A terminal-`failed` outcome ALSO renders the
+// real reason in `pre[data-lifecycle-error]` (the SAME element `crashed`
+// already uses) whenever `lifecycle.error` actually carries one — never a
+// log-file path in its place.
 // ---------------------------------------------------------------------------
 
 export function SessionLifecycleBar({
@@ -52,6 +65,15 @@ export function SessionLifecycleBar({
   lastCancel?: CancelOutcome | null;
 }): JSX.Element {
   const { state, needsYou, error, idleMs, cancellable } = lifecycle;
+  // WI-1b (ON-7): the terminal outcome, ONLY meaningful (and only computed)
+  // when state === 'terminal' — null otherwise, so the additive attribute
+  // below never renders on a non-terminal row.
+  const terminalOutcome = state === 'terminal' ? sessionTerminalOutcome(phase) : null;
+  // A real reason is worth showing for a terminal FAILURE too — but only
+  // when the lifecycle actually carries one (`error` is null for every
+  // terminal row today; this stays honest-absent rather than fabricating
+  // one, and never falls back to a log-file path).
+  const showTerminalError = terminalOutcome === 'failed' && error !== null;
   const tone =
     state === 'crashed' ? 'var(--red, #f87171)'
     : state === 'stalled' || state === 'awaiting-operator' ? 'var(--ember)'
@@ -69,6 +91,7 @@ export function SessionLifecycleBar({
     <div
       data-section="session-lifecycle"
       data-lifecycle-state={state}
+      {...(terminalOutcome !== null ? { 'data-lifecycle-terminal-outcome': terminalOutcome } : {})}
       data-needs-you={needsYou}
       data-cancellable={cancellable}
       role={state === 'crashed' || state === 'stalled' ? 'alert' : undefined}
@@ -80,7 +103,7 @@ export function SessionLifecycleBar({
     >
       <div style={{ flex: '1 1 320px', minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: tone }}>{headline}</div>
-        {state === 'crashed' && (
+        {(state === 'crashed' || showTerminalError) && (
           <pre
             data-lifecycle-error
             style={{
