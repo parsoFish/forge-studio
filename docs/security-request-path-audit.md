@@ -1589,16 +1589,25 @@ turn**. It is not request text, but it is untrusted text that reaches
 because they do), so `brain/` is too narrow a containment root and `forgeRoot`
 is the right one.
 
-`check-request-path-sinks.mjs` delta: **none. 487 rows, unchanged.** The first
-cut of this lane added three sinks (`existsSync` in the new module, plus
-`mkdirSync`/`writeFileSync` in `cli/bridge-studio-kb-drain.ts` for the repair
-write); all three were routed through `cli/studio-path-guard.ts` instead, which
-is why the baseline did not move.
+`check-request-path-sinks.mjs` delta: **487 → 490**, three rows, all in the new
+module and all the SAME revert that already lived in
+`cli/bridge-studio-kb-drain.ts`. The lane's first cut added three *different*
+sinks (an `existsSync` probe, plus `mkdirSync`/`writeFileSync` for the repair
+write); those were routed through `cli/studio-path-guard.ts` instead and cost
+nothing. The three below arrived later, when adversarial round 1 moved the gate
+off the drain's call site and onto the turn itself: `revertChange` came with it,
+so the same three sinks now appear under the new file's name. The drain keeps
+`revertProseChanges` for its own prose lane, which is why the old rows did not
+fall by three.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/kb-drain-edit-soundness.ts` (`revertChange`) | `mkdirSync`, `writeFileSync`, `rmSync` | none — `relPath` is a directory entry name from `snapshotKbFiles`'s own `readdirSync` walk of the trusted `brainDir`, and that walk skips symlinks entirely (`entry.isFile()` is false for one), so no `..` and no link can enter | accidentally-safe `[read]` | Identical trust chain to `revertProseChanges` (`cli/bridge-studio-kb-drain.ts`), which this is a relocation of and which has carried the same classification since W7-B2. Deliberately NOT routed through `guardedWriteFile`: the revert is the RECOVERY path, and a guard that can refuse it would leave the agent's rejected content on disk — the one outcome the gate exists to prevent. |
 
 | file:line | op | request field | class | evidence |
 |---|---|---|---|---|
 | `cli/kb-drain-edit-soundness.ts` (`linkResolves`) | existence probe via `resolveGuardedPath` | an agent-written markdown/wikilink TARGET, resolved against the edited file's own directory | guarded `[exec]` | `resolve()` normalises the `..` a legitimate cross-directory theme link is full of, so the guard receives a clean segment list; a target that climbed out of `forgeRoot` yields a leading `..` segment `isSafeSegment` rejects, and `resolveGuardedPath` realpath-walks the existing prefix so a symlinked ancestor cannot smuggle the probe outside either. **The rejecting input exists and is executed**: `cli/kb-drain-edit-soundness.test.ts`'s `[exec] a link target that climbs OUT of forgeRoot…` plants a real file outside the repo, points a link at it, and asserts the edit is refused AND the outside file is byte-unchanged. Its paired test asserts a legitimate repo-internal `..` link still resolves, so the guard is not "cannot fail". A rejection is reported as "does not resolve", which makes the gate MORE restrictive — the safe direction. |
-| `cli/bridge-studio-kb-drain.ts` (`writeRepairedChange`) | `guardedWriteFile` | `relPath` from `snapshotKbFiles`'s own walk of the trusted `brainDir`; the CONTENT is agent-influenced | guarded `[read]` | Not request text — `relPath` is a directory entry name from our own `readdirSync` walk, and `snapshotKbFiles` skips symlinks entirely (`entry.isFile()` is false for one). Routed through `guardedWriteFile(brainDir, relPath.split('/'), …)` anyway, because this is the drain WRITING agent-influenced content and the guard costs nothing. **Fails closed**: `writeRepairedChange` returns `false` on a guard refusal and the caller reverts to the pre-turn bytes instead of recording a repair that never landed (`applySoundnessGate`, same file). |
+| `cli/kb-drain-edit-soundness.ts` (`guardAgentKbEdits`) | `guardedWriteFile` | `relPath` from `snapshotKbFiles`'s own walk of the trusted `brainDir`; the CONTENT is agent-influenced | guarded `[read]` | Not request text — `relPath` is a directory entry name from our own `readdirSync` walk, and `snapshotKbFiles` skips symlinks entirely (`entry.isFile()` is false for one). Routed through `guardedWriteFile(brainDir, relPath.split('/'), …)` anyway, because this is a fix turn WRITING agent-influenced content and the guard costs nothing. On a guard refusal the `&amp;&amp;` chain in `guardAgentKbEdits` short-circuits into `revertChange`, which restores `c.before`; the revert is a raw `writeFileSync` on the same snapshot-derived path, so the guard cannot block the restore. That asymmetry — guarded repair, unguarded revert — is what makes the recovery reachable, and it is recorded here rather than asserted as a failure-behaviour claim, which this document admits only with `[exec]` evidence. **No test injects a `guardedWriteFile` refusal**; this row is `[read]` and must not be read as more. |
 
 ### W7-B3 — community registry CRUD + index meta (fixed-path sinks; one guarded read)
 

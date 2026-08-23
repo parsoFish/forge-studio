@@ -464,3 +464,106 @@ test('W8-B2: a project-theme finding the turn genuinely DOES fix still reports c
     cleanup(forgeRoot);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-B2 adversarial round 1 — the edit-soundness gate lives on the TURN, so
+// no caller can invoke it ungated.
+//
+// WHICH WRONG IMPLEMENTATION THIS KILLS: wiring the audit into the drain's
+// round loop alone. runBrainFixTurn has three production callers — the drain,
+// `runBrainConsolidateNow` (the Consolidate button and approveKbCleanup's
+// non-draft arm, cli/bridge-studio-kbs.ts), and `forge brain fix`
+// (orchestrator/cli.ts, which the per-finding `op=fix-agent` route spawns as a
+// subprocess). Two of the three are what an operator clicks by hand, and both
+// could land the exact 2026-08-22 edits with the drain fully guarded.
+// ---------------------------------------------------------------------------
+
+function buildGuardedKbFixture(): { forgeRoot: string; themePath: string; before: string } {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'brain-fix-turn-gate-'));
+  const brain = join(forgeRoot, 'brain');
+  mkdirSync(join(brain, 'cycles', 'themes'), { recursive: true });
+  writeFileSync(join(brain, 'INDEX.md'), '# Brain\n');
+  const kbDir = join(brain, 'projects', 'gitpulse');
+  mkdirSync(join(kbDir, 'themes'), { recursive: true });
+  writeFileSync(join(kbDir, 'kb.yaml'), 'id: gitpulse\nname: gitpulse\nbinding: { kind: project, ref: gitpulse }\ndesc: fixture.\n');
+  writeFileSync(join(kbDir, 'antipatterns.md'), '# antipatterns\n\n- [a](./themes/a.md)\n- [b](./themes/b.md)\n');
+  const stub = (t: string): string => [
+    '---', `title: ${t}`, 'description: d.', 'category: antipattern',
+    'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+    '---', '', `# ${t}`, '',
+  ].join('\n');
+  writeFileSync(join(kbDir, 'themes', 'b.md'), stub('b'));
+  const before = [
+    '---', 'title: a', 'description: d.', 'category: antipattern',
+    'related_themes: [b]',
+    'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+    '---', '', '# a', '', 'body.', '',
+  ].join('\n');
+  const themePath = join(kbDir, 'themes', 'a.md');
+  writeFileSync(themePath, before);
+  return { forgeRoot, themePath, before };
+}
+
+test('W8-B2: runBrainFixTurn ITSELF refuses an edge deletion whose target resolves — the file is byte-unchanged, whoever called it', async () => {
+  const { forgeRoot, themePath, before } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    const deleting: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(themePath, before.replace('related_themes: [b]\n', 'related_themes: []\n'));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-turn-gate-edge', kbId: 'gitpulse', file: themePath,
+      check: 'checkLengthSoftCap', kind: 'length.soft-cap',
+      message: 'theme over soft cap', forgeRoot, queryFn: deleting,
+    });
+    assert.equal(readFileSync(themePath, 'utf8'), before, 'the valid edge must survive at the TURN boundary');
+    assert.equal(result.editAudit?.unsound.length, 1);
+    assert.equal(result.editAudit?.unsound[0].kind, 'edge-deleted');
+    assert.equal(result.editAudit?.refused.length, 1);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-B2: a SOUND structural edit still lands through the turn gate — it refuses unsound edits, not structural ones', async () => {
+  const { forgeRoot, themePath, before } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  const fixed = before.replace('updated_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-02-01T00:00:00Z');
+  try {
+    const editing: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(themePath, fixed);
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-turn-gate-sound', kbId: 'gitpulse', file: themePath,
+      check: 'checkFrontmatter', kind: 'frontmatter.missing-date',
+      message: 'stale', forgeRoot, queryFn: editing,
+    });
+    assert.equal(readFileSync(themePath, 'utf8'), fixed);
+    assert.deepEqual(result.editAudit?.unsound, []);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-B2: an unknown kbId leaves editAudit ABSENT rather than reporting a clean audit that never ran', async () => {
+  const { forgeRoot, themePath } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-turn-gate-nokb', kbId: 'no-such-kb', file: themePath,
+      check: 'checkFrontmatter', kind: 'frontmatter.missing-field',
+      message: 'x', forgeRoot, queryFn: makeFakeQueryThatDoesNothing(),
+    });
+    assert.equal(result.editAudit, undefined);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});

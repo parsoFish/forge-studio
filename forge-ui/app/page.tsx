@@ -341,7 +341,7 @@ export default function HomePage() {
                 <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
                 <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
               </span>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ember)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+              <span data-component="brain-draft-cta" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ember)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                 Review the diff →
               </span>
             </Link>

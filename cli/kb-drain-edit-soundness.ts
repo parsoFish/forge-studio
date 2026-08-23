@@ -40,10 +40,12 @@
 
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
-import { splitFrontmatter, type KbEditChange } from './kb-drain-structural.ts';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+
+import { splitFrontmatter, diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
 import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { parseThemeRaw } from './theme-frontmatter.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedWriteFile } from './studio-path-guard.ts';
 
 /**
  * What makes a structurally-shaped edit unsound.
@@ -99,14 +101,57 @@ export function isUnsound(found: readonly KbEditUnsoundness[]): boolean {
 // Internals
 // ---------------------------------------------------------------------------
 
-/** `related_themes` as a list of bare slugs, normalized the same way
- *  `danglingEdgeFindings` normalizes them (trim, drop a trailing `.md`). */
+function normalizeSlug(entry: string): string {
+  return entry.trim().replace(/^['"]|['"]$/g, '').trim().replace(/\.md$/, '').trim();
+}
+
+/**
+ * `related_themes` as a list of bare slugs, normalized the same way
+ * `danglingEdgeFindings` normalizes them (trim, drop a trailing `.md`).
+ *
+ * The `Array.isArray` tolerance clause is NOT enough on its own (adversarial
+ * round 1). `parseThemeRaw`'s lenient fallback fires whenever gray-matter
+ * rejects the YAML — an unquoted `:` in a description, which
+ * `cli/theme-frontmatter.ts`'s own header calls "a real, common theme shape",
+ * and which one live theme has today — and that fallback is line-based, so a
+ * BLOCK-style list decodes to `''`, not an array. The audit then saw zero
+ * edges and an edge deletion on such a theme landed ungated: this lane's own
+ * defect, re-shipped one layer over.
+ *
+ * So a non-array result falls back to scanning the frontmatter TEXT for both
+ * list shapes. It fails toward SEEING edges, never toward missing them.
+ */
 function relatedSlugs(raw: string): string[] {
   const related = parseThemeRaw(raw).data.related_themes;
-  if (!Array.isArray(related)) return [];
-  return related
-    .map((entry) => String(entry).trim().replace(/\.md$/, '').trim())
-    .filter((slug) => slug !== '');
+  if (Array.isArray(related)) return related.map((e) => normalizeSlug(String(e))).filter((s) => s !== '');
+  return scanRelatedThemesBlock(splitFrontmatter(raw).fm);
+}
+
+/** Both YAML list shapes, read off the raw frontmatter text:
+ *    related_themes: [a, b]        (inline flow list)
+ *    related_themes:
+ *      - a
+ *      - b                          (block list)
+ *  Used only when the structured parse could not produce an array. */
+export function scanRelatedThemesBlock(fm: string): string[] {
+  const lines = fm.split('\n');
+  const at = lines.findIndex((l) => /^related_themes\s*:/.test(l));
+  if (at === -1) return [];
+  const inline = lines[at].replace(/^related_themes\s*:/, '').trim();
+  if (inline.startsWith('[')) {
+    const close = inline.indexOf(']');
+    const body = (close === -1 ? inline.slice(1) : inline.slice(1, close)).trim();
+    return body === '' ? [] : body.split(',').map(normalizeSlug).filter((s) => s !== '');
+  }
+  if (inline !== '') return [normalizeSlug(inline)].filter((s) => s !== '');
+  const out: string[] = [];
+  for (const line of lines.slice(at + 1)) {
+    const m = line.match(/^\s+-\s*(.+)$/);
+    if (!m) break; // the block ends at the first non-item line
+    const slug = normalizeSlug(m[1]);
+    if (slug !== '') out.push(slug);
+  }
+  return out;
 }
 
 /** Entries present more often in `before` than in `after`, one per excess
@@ -165,6 +210,22 @@ function linkResolves(ctx: KbEditSoundnessCtx, absFile: string, target: string):
  */
 export function auditKbEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEditUnsoundness[] {
   if (change.klass !== 'structural') return [];
+  return auditProposedEdit(change, ctx);
+}
+
+/**
+ * The same audit, WITHOUT the structural-class filter.
+ *
+ * For an edit that is being PARKED rather than disposed of — a prose rewrite
+ * heading for a kb-cleanup draft. Approving that draft writes `after` back
+ * byte-for-byte, so a prose rewrite that ALSO deletes a resolvable edge is a
+ * one-click button for exactly the destruction `auditKbEdit` refuses when the
+ * same edit happens to be structural (adversarial round 1). The draft plan
+ * carries these reasons so the operator approves with them in front of them;
+ * the edit is still theirs to accept, because prose IS what they are being
+ * asked to judge.
+ */
+export function auditProposedEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEditUnsoundness[] {
   const { before, after, relPath } = change;
   if (before === null || after === null) return [];
 
@@ -189,51 +250,88 @@ export function auditKbEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEd
   const beforeLinks = extractLinks(beforeBody);
   const afterLinks = extractLinks(afterBody);
 
-  // ---- 2. link targets INTRODUCED that resolve to nothing -----------------
-  for (const target of multisetRemoved(afterLinks.relLinks, beforeLinks.relLinks)) {
-    if (linkResolves(ctx, absFile, target)) continue;
+  // ---- 2/3. link and wikilink changes, paired BY SLUG ---------------------
+  //
+  // Pairing by slug is load-bearing (adversarial round 1). Two earlier shapes
+  // were both wrong:
+  //   - a `netDeleted` budget: an index page could drop EVERY real theme link
+  //     and add the same number of self-links, and the deletion check never
+  //     ran at all;
+  //   - checking only INTRODUCED targets: a link silently repointed from one
+  //     real theme to a DIFFERENT real theme landed clean, while the identical
+  //     destruction in `related_themes` was refused — the same edit judged two
+  //     ways depending on which half of the file it lived in.
+  //
+  // A slug whose occurrence count DROPS lost an edge, whatever else changed. A
+  // slug whose count holds was repointed, and the only question is whether the
+  // new target resolves — which is what makes a genuine dead->real repair pass
+  // while the 2026-08-22 dead->dead swap does not.
+  found.push(...auditTargets(ctx, absFile, beforeLinks.relLinks, afterLinks.relLinks, relPath, 'link'));
+  found.push(...auditTargets(ctx, absFile, beforeLinks.wikilinks, afterLinks.wikilinks, relPath, 'wikilink'));
+
+  return found;
+}
+
+function countBySlug(targets: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const t of targets) {
+    const slug = targetSlug(t);
+    counts.set(slug, (counts.get(slug) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** One pass over one link CLASS (markdown targets, or wikilink slugs). */
+function auditTargets(
+  ctx: KbEditSoundnessCtx,
+  absFile: string,
+  before: readonly string[],
+  after: readonly string[],
+  relPath: string,
+  klass: 'link' | 'wikilink',
+): KbEditUnsoundness[] {
+  const found: KbEditUnsoundness[] = [];
+  const beforeBySlug = countBySlug(before);
+  const afterBySlug = countBySlug(after);
+  const resolves = (t: string): boolean =>
+    klass === 'wikilink' ? repairsFor(ctx, t).length > 0 : linkResolves(ctx, absFile, t);
+
+  // (a) targets INTRODUCED that resolve to nothing.
+  for (const target of multisetRemoved(after, before)) {
+    if (resolves(target)) continue;
     const repairTargets = repairsFor(ctx, targetSlug(target));
     found.push({
       kind: 'link-repoint-unresolved',
       relPath,
       target,
-      repairTargets,
-      message: repairTargets.length > 0
-        ? `refused: repoints a link at "${target}", which does not exist — the real target is ${repairTargets.map((p) => basename(p)).join(', ')}`
-        : `refused: repoints a link at "${target}", which does not exist — a dead link may not be exchanged for another dead link`,
-    });
-  }
-  for (const slug of multisetRemoved(afterLinks.wikilinks, beforeLinks.wikilinks)) {
-    if (repairsFor(ctx, slug).length > 0) continue;
-    found.push({
-      kind: 'link-repoint-unresolved',
-      relPath,
-      target: slug,
-      repairTargets: [],
-      message: `refused: repoints a wikilink at "[[${slug}]]", which resolves to no theme anywhere under brain/**/themes/`,
+      repairTargets: klass === 'wikilink' ? [] : repairTargets,
+      message: klass === 'wikilink'
+        ? `refused: repoints a wikilink at "[[${target}]]", which resolves to no theme anywhere under brain/**/themes/`
+        : repairTargets.length > 0
+          ? `refused: repoints a link at "${target}", which does not exist — the real target is ${repairTargets.map((p) => basename(p)).join(', ')}`
+          : `refused: repoints a link at "${target}", which does not exist — a dead link may not be exchanged for another dead link`,
     });
   }
 
-  // ---- 3. links genuinely REMOVED whose target really exists --------------
-  // Only as many deletions as the link count actually dropped by: a repoint is
-  // a remove+add pair and must never be reported as a deletion.
-  const netDeleted = Math.max(0, beforeLinks.relLinks.length - afterLinks.relLinks.length);
-  if (netDeleted > 0) {
-    let budget = netDeleted;
-    for (const target of multisetRemoved(beforeLinks.relLinks, afterLinks.relLinks)) {
-      if (budget === 0) break;
-      const onDisk = linkResolves(ctx, absFile, target);
-      const repairTargets = onDisk ? [resolve(dirname(absFile), target)] : repairsFor(ctx, targetSlug(target));
+  // (b) SLUGS whose occurrence count dropped — an edge was destroyed, not
+  //     repointed. A slug whose count held is a repoint and is judged by (a).
+  for (const [slug, beforeCount] of beforeBySlug) {
+    const lost = beforeCount - (afterBySlug.get(slug) ?? 0);
+    if (lost <= 0) continue;
+    const originals = before.filter((t) => targetSlug(t) === slug);
+    for (let i = 0; i < lost; i++) {
+      const target = originals[i] ?? slug;
+      const onDisk = klass === 'link' && linkResolves(ctx, absFile, target);
+      const repairTargets = onDisk ? [resolve(dirname(absFile), target)] : repairsFor(ctx, slug);
       if (repairTargets.length === 0) continue; // a genuinely dead link may go
-      budget -= 1;
       found.push({
         kind: 'link-deleted',
         relPath,
         target,
         repairTargets,
         message: onDisk
-          ? `refused: deletes the link "${target}", whose target exists — repair a link, never drop it`
-          : `refused: deletes the link "${target}"; the theme it names exists at ${repairTargets.map((p) => basename(p)).join(', ')} — repair is preferred over deletion`,
+          ? `refused: deletes the ${klass} "${target}", whose target exists — repair a link, never drop it`
+          : `refused: deletes the ${klass} "${target}"; the theme it names exists at ${repairTargets.map((p) => basename(p)).join(', ')} — repair is preferred over deletion`,
       });
     }
   }
@@ -267,7 +365,7 @@ export function repairKbEdit(
   found: readonly KbEditUnsoundness[],
   ctx: KbEditSoundnessCtx,
 ): string | null {
-  if (change.after === null) return null;
+  if (change.after === null || change.before === null) return null;
   const repointable = found.filter(
     (u) => u.kind === 'link-repoint-unresolved' && u.repairTargets.length === 1,
   );
@@ -279,8 +377,113 @@ export function repairKbEdit(
   const absFile = join(ctx.brainDir, change.relPath);
   let repaired = change.after;
   for (const u of repointable) {
+    // COLLATERAL GUARD (adversarial round 1): a target that also appears in
+    // `before` has occurrences the turn never touched, and rewriting those
+    // would put changes in the diff the audit never justified. Refuse rather
+    // than repair-and-overreach.
+    if (linkOccurrences(change.before, u.target) > 0) return null;
     const rel = relative(dirname(absFile), u.repairTargets[0]).split(/[\\/]/).join('/');
-    repaired = repaired.split(`](${u.target})`).join(`](${rel})`);
+    // Anchor/query/title-preserving: `extractLinks` strips `#frag` before the
+    // target ever reaches the audit, so a literal `](target)` replacement
+    // silently missed every anchored link — which is how the first cut both
+    // failed to repair `../beta.md#sec` AND produced a half-repaired file when
+    // one of two identical targets carried an anchor.
+    repaired = repaired.replace(
+      new RegExp(`\\]\\(${escapeRegExp(u.target)}((?:[#?][^)\\s]*)?(?:\\s+"[^"]*")?)\\)`, 'g'),
+      (_m, tail: string) => `](${rel}${tail})`,
+    );
   }
   return repaired === change.after ? null : repaired;
+}
+
+function escapeRegExp(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** How many markdown links in `text` point at exactly `target` (anchor,
+ *  query and title tails allowed). */
+function linkOccurrences(text: string, target: string): number {
+  const re = new RegExp(`\\]\\(${escapeRegExp(target)}(?:[#?][^)\\s]*)?(?:\\s+"[^"]*")?\\)`, 'g');
+  return (text.match(re) ?? []).length;
+}
+
+
+// ---------------------------------------------------------------------------
+// The gate itself — ONE implementation, for EVERY path that lets an agent
+// write into a brain dir.
+// ---------------------------------------------------------------------------
+
+export type KbEditGateResult = {
+  /** Every file the turn changed, as diffed against the pre-turn snapshot. */
+  changes: KbEditChange[];
+  /** Structural changes reverted to their pre-turn bytes. */
+  refused: KbEditChange[];
+  /** Structural changes replaced by a verified repair (carrying it in `after`). */
+  repaired: KbEditChange[];
+  /** Every reason, across every change. */
+  unsound: KbEditUnsoundness[];
+};
+
+/** Restore one change to its pre-turn content — a created file removed, an
+ *  edited/deleted file written back byte-for-byte. `relPath` comes from our
+ *  OWN walk of the trusted `brainDir`, never request or agent text. */
+function revertChange(brainDir: string, c: KbEditChange): void {
+  const abs = join(brainDir, c.relPath);
+  if (c.before === null) {
+    rmSync(abs, { force: true });
+    return;
+  }
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, c.before, 'utf8');
+}
+
+/**
+ * Audit everything an agent turn wrote into `brainDir` and dispose of it.
+ *
+ * **This is the whole class's chokepoint, and that placement is the fix.** The
+ * first cut wired the audit into the drain's round loop alone — one of the
+ * THREE production paths that reach `runBrainFixTurn`. The other two are the
+ * ones an operator clicks by hand (`runBrainConsolidateNow`, and the
+ * per-finding `op=fix-agent` route the needs-you walkthrough dispatches), and
+ * both could still land the exact 2026-08-22 edits. Adding the audit to a call
+ * site closes a door; making the turn itself unable to run ungated closes the
+ * class.
+ *
+ * Structural changes only — the PROSE gate is the drain's own policy, and
+ * consolidate legitimately rewrites prose for a living.
+ *
+ *   - sound              → left on disk;
+ *   - unsound, repairable → the repair is written and RE-AUDITED; a repair that
+ *                           is itself unsound is discarded and the change
+ *                           reverted, because the fix may not re-ship the defect;
+ *   - unsound, otherwise  → reverted to its pre-turn bytes.
+ */
+export function guardAgentKbEdits(
+  forgeRoot: string,
+  brainDir: string,
+  snapshot: ReadonlyMap<string, string>,
+): KbEditGateResult {
+  const changes = diffKbSnapshot(brainDir, snapshot as Map<string, string>);
+  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+  const refused: KbEditChange[] = [];
+  const repaired: KbEditChange[] = [];
+  const unsound: KbEditUnsoundness[] = [];
+
+  for (const c of changes) {
+    if (c.klass !== 'structural') continue;
+    const found = auditKbEdit(c, ctx);
+    if (found.length === 0) continue;
+    unsound.push(...found);
+
+    const fix = repairKbEdit(c, found, ctx);
+    if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0
+        && guardedWriteFile(brainDir, c.relPath.split('/'), fix) !== null) {
+      repaired.push({ ...c, after: fix });
+      continue;
+    }
+    revertChange(brainDir, c);
+    refused.push(c);
+  }
+
+  return { changes, refused, repaired, unsound };
 }

@@ -674,7 +674,12 @@ export const journey = defineJourney({
             status: row?.getAttribute('data-attention-status') ?? '',
             session: row?.getAttribute('data-attention-session') ?? '',
             href: row?.getAttribute('href') ?? '',
-            cta: row?.querySelector('span:last-child')?.textContent ?? '',
+            // A named hook, not `span:last-child`: querySelector is pre-order,
+            // so that selector matched the NESTED `sub` span inside the middle
+            // flex span, never the trailing CTA (adversarial round 1). The
+            // sibling KB-lint check reads `a[data-action=...]` for the same
+            // reason.
+            cta: row?.querySelector('[data-component="brain-draft-cta"]')?.textContent ?? '',
             action: row?.getAttribute('data-action') ?? '',
           };
         });

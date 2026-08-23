@@ -100,13 +100,10 @@ import {
 } from './brain-lint.ts';
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
-import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { snapshotKbFiles, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import {
-  auditKbEdit,
-  repairKbEdit,
-  buildKbEditSoundnessCtx,
-  type KbEditSoundnessCtx,
-  type KbEditUnsoundness,
+  guardAgentKbEdits, auditProposedEdit, buildKbEditSoundnessCtx,
+  type KbEditGateResult, type KbEditUnsoundness,
 } from './kb-drain-edit-soundness.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
 import { guardedWriteFile } from './studio-path-guard.ts';
@@ -736,64 +733,6 @@ function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]):
   }
 }
 
-/** Write one repaired file back into the KB, THROUGH the containment guard.
- *  `relPath` comes from our own walk of the trusted `brainDir`, so it is not
- *  request text — but this is the drain WRITING agent-influenced content, and
- *  a guarded write costs nothing here. Returns false when the guard refuses,
- *  so the caller can fall back to reverting rather than landing an unwritten
- *  "repair" it believes succeeded. */
-function writeRepairedChange(brainDir: string, relPath: string, content: string): boolean {
-  return guardedWriteFile(brainDir, relPath.split('/'), content) !== null;
-}
-
-/**
- * W8-B2 (forge-d8l / knowledge-36) — the SOUNDNESS half of the gate.
- *
- * `classifyKbEdit` answers "is this edit shaped like a structural change?".
- * That is necessary and, as two live 2026-08-22 edits proved, not sufficient:
- * a `related_themes` deletion and a dead-for-dead link swap are both perfectly
- * structural and both destroy the brain. This pass asks the second question —
- * does the edit destroy resolvable structure, or claim a repair that does not
- * resolve — and disposes of every structural change accordingly:
- *
- *   - sound              → left on disk (the honest fix path is untouched);
- *   - unsound, repairable → the REPAIR is written instead, then RE-AUDITED. A
- *                           repair that is itself unsound is discarded and the
- *                           change reverted: the fix may not re-ship the defect;
- *   - unsound, otherwise  → reverted to its pre-turn bytes.
- *
- * A refused edit is deliberately NOT parked as an approvable draft. A draft is
- * applied verbatim on approval, so drafting a destructive edit would hand the
- * operator a one-click button for the exact deletion this gate exists to stop.
- * It is surfaced on the finding row instead (`proposedChange`), diff and all.
- */
-function applySoundnessGate(
-  brainDir: string,
-  structuralChanges: readonly KbEditChange[],
-  ctx: KbEditSoundnessCtx,
-): { refused: KbEditChange[]; repaired: KbEditChange[]; unsound: KbEditUnsoundness[] } {
-  const refused: KbEditChange[] = [];
-  const repaired: KbEditChange[] = [];
-  const unsound: KbEditUnsoundness[] = [];
-
-  for (const c of structuralChanges) {
-    const found = auditKbEdit(c, ctx);
-    if (found.length === 0) continue;
-    unsound.push(...found);
-
-    const fix = repairKbEdit(c, found, ctx);
-    if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0
-        && writeRepairedChange(brainDir, c.relPath, fix)) {
-      repaired.push({ ...c, after: fix });
-      continue;
-    }
-    revertProseChanges(brainDir, [c]);
-    refused.push(c);
-  }
-
-  return { refused, repaired, unsound };
-}
-
 function newDraftSessionId(): string {
   const iso = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
   return `${iso}-${randomBytes(4).toString('hex')}`;
@@ -872,6 +811,14 @@ function mintKbCleanupDraftSession(
     });
     if (!draftsOk) return null;
 
+    // Adversarial round 1: a prose rewrite that ALSO destroys a resolvable
+    // edge or writes a dead link is not refused — prose is precisely what the
+    // operator is being asked to judge — but approving this draft writes
+    // `after` back byte-for-byte, so those consequences must be ON THE PAGE
+    // rather than buried in the diff.
+    const soundnessCtx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+    const warnings = proseChanges.flatMap((c) => auditProposedEdit(c, soundnessCtx).map((u) => u.message));
+
     const plan = [
       '# Drain-gated prose edit',
       '',
@@ -885,6 +832,17 @@ function mintKbCleanupDraftSession(
       '',
       ...draftApply.map((d) => `- [${finding.kind}] ${d.file} — drain-gated prose edit awaiting approval (approve replaces the file with ${d.draft})`),
       '',
+      ...(warnings.length > 0
+        ? [
+            '## ⚠ This edit also changes the graph',
+            '',
+            'Approving applies the draft verbatim, including these — each one is a',
+            'change the drain would have REFUSED outright had the edit been structural:',
+            '',
+            ...warnings.map((w) => `- ${w}`),
+            '',
+          ]
+        : []),
       'Approving this session applies the draft content below verbatim.',
       '',
       '```diff',
@@ -1098,9 +1056,12 @@ export async function runKbDrain(
         // actually saw (auto-fixes and earlier turns in this round have already
         // landed by now).
         const snapshot = snapshotKbFiles(brainDir);
-        const soundnessCtx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
         let draftSession: { id: string; project: string } | undefined;
         let turnError: string | undefined;
+        // The gate `runBrainFixTurn` ran from the INSIDE. Merged into this
+        // call site's own result below, so the row reports "repaired" for what
+        // the runner repaired instead of silently calling it "applied".
+        let turnAudit: KbEditGateResult | null = null;
         try {
           const result = await runFixTurn({
             runId: subRunId,
@@ -1113,6 +1074,7 @@ export async function runKbDrain(
             forgeRoot,
           });
           costUsd += result.costUsd;
+          turnAudit = result.editAudit ?? null;
         } catch (err) {
           // One turn failing must not abort the rest of the round's queue —
           // mirrors runBrainConsolidateNow's per-group catch. The failure is
@@ -1128,9 +1090,19 @@ export async function runKbDrain(
         // cleared unconditionally for exactly the checks both 2026-08-22 defects
         // involved. The row's outcome is derived from this round's real post-fix
         // lint instead — see `finalizeRoundRows`.
-        const changes = diffKbSnapshot(brainDir, snapshot);
+        // The SAME chokepoint `runBrainFixTurn` itself runs. Double-gating is
+        // deliberate and idempotent: the real turn is already guarded from the
+        // inside, but `runFixTurn` is an INJECTABLE seam (termination-matrix
+        // tests drive it with stubs that write files for real), and a gate that
+        // an injected implementation can walk around is not a gate.
+        const gate: KbEditGateResult = guardAgentKbEdits(forgeRoot, brainDir, snapshot);
+        if (turnAudit) {
+          gate.unsound.push(...turnAudit.unsound);
+          gate.refused.push(...turnAudit.refused);
+          gate.repaired.push(...turnAudit.repaired);
+        }
+        const changes = gate.changes;
         const proseChanges = changes.filter((c) => c.klass === 'prose');
-        const gate = applySoundnessGate(brainDir, changes.filter((c) => c.klass === 'structural'), soundnessCtx);
         if (gate.unsound.length > 0) {
           for (const u of gate.unsound) {
             emitProgress(`kb-drain.refused (${basename(f.file)} · ${u.kind} · ${u.message})`, {

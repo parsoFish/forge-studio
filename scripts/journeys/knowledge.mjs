@@ -304,6 +304,9 @@ const SCRATCH_KB_DRAIN_NAME = 'journey-scratch-kb-drain (project)';
 const SCRATCH_KB_DRAIN_DESC = 'Ephemeral per-project-shaped brain created by the e2e journey itself, seeded with one agent-tier lint finding to demo the drain-to-green button reaching an honest, CI-safe terminal.';
 const SCRATCH_KB_DRAIN_DIR = join(FORGE_ROOT, 'brain', 'projects', SCRATCH_KB_DRAIN_ID);
 const SCRATCH_KB_DRAIN_THEME_SLUG = 'scratch-drain-lesson';
+/** A REAL forge theme (brain/cycles/themes/eval-driven-development.md) in a
+ *  DIFFERENT sub-wiki — the cross-KB edge forge-9kr is about. */
+const SCRATCH_KB_DRAIN_EXTERNAL_SLUG = 'eval-driven-development';
 const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, listed in its own category index, but carrying a deliberately dangling related_themes edge so checkDanglingEdges flags it (agent-tier, no auto fixer) and the drain button has something genuine — and genuinely agent-only — to work on.';
 // A slug that exists NOWHERE under brain/**/themes — the dangling target.
 const SCRATCH_KB_DRAIN_DANGLING_SLUG = 'journey-scratch-nonexistent-theme';
@@ -357,7 +360,13 @@ function seedScratchKbDrain() {
     'keywords: [e2e-journey, scratch-kb, kb-drain, drain-to-green]',
     `created_at: ${now}`,
     `updated_at: ${now}`,
-    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}]`,
+    // Two edges, deliberately: the dangling one is the seeded agent-tier
+    // finding, and `eval-driven-development` is a REAL theme in the cycles
+    // sub-wiki — a legitimate cross-KB reference `checkDanglingEdges`
+    // correctly does NOT flag, and which the per-KB graph cannot draw. It is
+    // what makes the external-edge readout assert a real 1 instead of a 0
+    // that could never fail (adversarial round 1).
+    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}, ${SCRATCH_KB_DRAIN_EXTERNAL_SLUG}]`,
     '---',
     '',
     '# Theme: scratch drain lesson',
@@ -1276,8 +1285,8 @@ export const journey = defineJourney({
                 // real themes in another KB, instead of silently discarding them.
                 const externalEdges = await page.evaluate(() =>
                   document.querySelector('#kb-svg')?.getAttribute('data-external-edge-count') ?? '');
-                check(externalEdges !== '' && Number.isFinite(Number(externalEdges)),
-                  `S3.2/forge-9kr: the graph reports its cross-KB edge count rather than dropping those edges in silence (data-external-edge-count="${externalEdges}")`);
+                check(Number(externalEdges) >= 1,
+                  `S3.2/forge-9kr: the graph REPORTS the seeded cross-sub-wiki edge to ${SCRATCH_KB_DRAIN_EXTERNAL_SLUG} instead of dropping it in silence (data-external-edge-count="${externalEdges}", want >=1)`);
               }
 
               // Clip: drain-to-green on the seeded fixture — real/idempotent (re-seeded

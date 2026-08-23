@@ -38,9 +38,11 @@ import {
   repairKbEdit,
   isUnsound,
   buildKbEditSoundnessCtx,
+  scanRelatedThemesBlock,
   type KbEditSoundnessCtx,
 } from './kb-drain-edit-soundness.ts';
 import { collectThemeSlugTargets } from './brain-lint.ts';
+import { parseThemeRaw } from './theme-frontmatter.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -320,13 +322,43 @@ test('INDEX PAGE: deleting a listing link whose target resolves NOWHERE is SOUND
   assert.deepEqual(auditKbEdit(change(INDEX_REL, before, after), ctx), []);
 });
 
-test('a repoint between two targets that BOTH resolve is not reported as a deletion — the link count never dropped', () => {
+test('silently repointing a WORKING link at a DIFFERENT real theme is REFUSED — the same destruction is refused in frontmatter, so it must be refused in the body', () => {
+  // This expectation CHANGED in adversarial round 1, and the old one was
+  // wrong. It asserted that a repoint between two real targets is fine
+  // "because the link count never dropped" — but the count is per FILE, and
+  // the edge that was destroyed is per SLUG. `related_themes: [beta, gamma]`
+  // -> `[gamma, gamma]` was already refused by the frontmatter path; the
+  // identical destruction in the body was accepted. One edit, two verdicts,
+  // decided by which half of the file it lived in.
   const { forgeRoot, brainDir } = plantRealEdit2();
   writeTheme(forgeRoot, 'cycles/themes/another-real-theme.md', themeStub('Another real theme'));
   const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
   const before = edit2Body(EDIT_2_REAL);
   const after = edit2Body('../../../cycles/themes/another-real-theme.md');
-  assert.deepEqual(auditKbEdit(change(EDIT_2_REL, before, after), ctx), []);
+  const found = auditKbEdit(change(EDIT_2_REL, before, after), ctx);
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.equal(found[0].kind, 'link-deleted');
+  assert.equal(found[0].target, EDIT_2_REAL);
+});
+
+test('INDEX PAGE: dropping every real theme link while adding the same number of self-links is REFUSED — a net-count budget could not see this', () => {
+  // Adversarial round 1: the first cut capped deletions at the drop in TOTAL
+  // link count, so deleting three real listings and adding three self-links
+  // reported nothing at all. Slug pairing sees three lost slugs.
+  const { ctx } = plantRealEdit2();
+  const after = [
+    '# Themes',
+    '',
+    '- [Eval-driven development](./README.md)',
+    '- [Grading frontier infrastructure](./README.md)',
+    '',
+  ].join('\n');
+  const found = auditKbEdit(change(INDEX_REL, INDEX_BEFORE, after), ctx);
+  const deleted = found.filter((u) => u.kind === 'link-deleted').map((u) => u.target).sort();
+  assert.deepEqual(deleted, [
+    '../../../cycles/themes/eval-driven-development.md',
+    './2026-05-23-grading-frontier-infrastructure.md',
+  ], `both lost listings must be reported — got ${JSON.stringify(found)}`);
 });
 
 test('a repoint at a target that DOES resolve is SOUND and needs no repair (the honest fix path stays open)', () => {
@@ -337,14 +369,17 @@ test('a repoint at a target that DOES resolve is SOUND and needs no repair (the 
   assert.equal(repairKbEdit(c, [], ctx), null);
 });
 
-test('an unresolved repoint with NO resolvable target anywhere is refused with an empty repair set (never a fabricated repair)', () => {
+test('an unresolved repoint at a DIFFERENT slug is refused twice over — a dead target written, and a repairable edge destroyed', () => {
   const { ctx } = plantRealEdit2();
   const after = edit2Body('../../../nowhere/themes/no-such-theme.md');
-  const found = auditKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, after), ctx);
-  assert.equal(found.length, 1);
-  assert.equal(found[0].kind, 'link-repoint-unresolved');
-  assert.deepEqual(found[0].repairTargets, []);
-  assert.equal(repairKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, after), found, ctx), null);
+  const c = change(EDIT_2_REL, REAL_EDIT_2_BEFORE, after);
+  const found = auditKbEdit(c, ctx);
+  const kinds = found.map((u) => u.kind).sort();
+  assert.deepEqual(kinds, ['link-deleted', 'link-repoint-unresolved'], JSON.stringify(found));
+  const unresolved = found.find((u) => u.kind === 'link-repoint-unresolved');
+  assert.deepEqual(unresolved?.repairTargets, [], 'nothing named no-such-theme exists — never a fabricated repair');
+  // Not every unsoundness is repointable, so no partial repair is synthesized.
+  assert.equal(repairKbEdit(c, found, ctx), null);
 });
 
 test('an unresolved repoint with TWO candidate targets is refused and NOT auto-repaired — the drain never guesses between them', () => {
@@ -397,14 +432,24 @@ test('the audit\'s slug universe is the SAME derivation checkDanglingEdges lints
   assert.deepEqual([...ctx.themeTargets.keys()].sort(), [...lintUniverse.keys()].sort());
 });
 
-test('a wikilink repointed at a slug that resolves to no theme is refused', () => {
+test('a wikilink repointed at a slug that resolves to no theme is refused — and the real wikilink it replaced counts as destroyed', () => {
   const { ctx } = plantRealEdit2();
   const before = edit2Body(EDIT_2_REAL).replace('- Hand-draw each design', '- See [[eval-driven-development]]');
   const after = before.replace('[[eval-driven-development]]', '[[no-such-theme-anywhere]]');
   const found = auditKbEdit(change(EDIT_2_REL, before, after), ctx);
-  assert.equal(found.length, 1);
-  assert.equal(found[0].kind, 'link-repoint-unresolved');
-  assert.equal(found[0].target, 'no-such-theme-anywhere');
+  assert.deepEqual(found.map((u) => u.kind).sort(), ['link-deleted', 'link-repoint-unresolved'], JSON.stringify(found));
+  assert.equal(found.find((u) => u.kind === 'link-repoint-unresolved')?.target, 'no-such-theme-anywhere');
+});
+
+test('a wikilink silently repointed from one REAL theme to another REAL theme is refused (symmetry with the markdown-link case)', () => {
+  const { forgeRoot, brainDir } = plantRealEdit2();
+  writeTheme(forgeRoot, 'cycles/themes/another-real-theme.md', themeStub('Another real theme'));
+  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+  const before = edit2Body(EDIT_2_REAL).replace('- Hand-draw each design', '- See [[eval-driven-development]]');
+  const after = before.replace('[[eval-driven-development]]', '[[another-real-theme]]');
+  const found = auditKbEdit(change(EDIT_2_REL, before, after), ctx);
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.equal(found[0].kind, 'link-deleted');
 });
 
 test('http(s) and anchor-only link targets are never audited (they resolve off-disk by construction)', () => {
@@ -442,9 +487,11 @@ test('[exec] a link target that climbs OUT of forgeRoot is treated as unresolvab
   const after = edit2Body(escape);
   const found = auditKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, after), ctx);
   // The escaping target must be REFUSED, not accepted because the file exists.
-  assert.equal(found.length, 1, `expected the escape to be refused, got ${JSON.stringify(found)}`);
-  assert.equal(found[0].kind, 'link-repoint-unresolved');
-  assert.equal(found[0].target, escape);
+  // (The paired `link-deleted` is the eval-driven-development edge this repoint
+  // also destroyed — correct, and not what this test is about.)
+  const escaped = found.filter((u) => u.kind === 'link-repoint-unresolved');
+  assert.equal(escaped.length, 1, `expected the escape to be refused, got ${JSON.stringify(found)}`);
+  assert.equal(escaped[0].target, escape);
   // The guard must have been what rejected it: the file really is there.
   assert.equal(existsSync(secretPath), true);
   // And nothing outside was touched.
@@ -452,14 +499,98 @@ test('[exec] a link target that climbs OUT of forgeRoot is treated as unresolvab
   void forgeRoot;
 });
 
-test('[exec] escape-and-return still resolves — containment must not reject a legitimate repo-internal link that uses ..', () => {
+test('[exec] a legitimate repo-internal link that traverses upward still resolves — containment must not be a guard that rejects everything', () => {
   const { forgeRoot, brainDir } = plantRealEdit2();
   // A real repo-internal target OUTSIDE brain/ — themes cite docs/ and _logs/
-  // paths for real (checkStaleness exists precisely because they do).
-  mkdirSync(join(forgeRoot, 'docs', 'decisions'), { recursive: true });
-  writeFileSync(join(forgeRoot, 'docs', 'decisions', '035-x.md'), '# adr\n');
+  // paths for real (checkStaleness exists precisely because they do). Same
+  // SLUG as the dead link it replaces, so this is a pure repoint and the
+  // edge-destruction arm is deliberately not in play.
+  mkdirSync(join(forgeRoot, 'docs'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'docs', `${EDD_SLUG_FIXTURE}.md`), '# moved\n');
   const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
-  const target = relative(dirname(join(brainDir, EDIT_2_REL)), join(forgeRoot, 'docs', 'decisions', '035-x.md')).split(/[\\/]/).join('/');
+  const target = relative(dirname(join(brainDir, EDIT_2_REL)), join(forgeRoot, 'docs', `${EDD_SLUG_FIXTURE}.md`)).split(/[\\/]/).join('/');
   assert.match(target, /\.\./, 'the fixture must genuinely traverse upward, or it proves nothing');
   assert.deepEqual(auditKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, edit2Body(target)), ctx), []);
+});
+
+const EDD_SLUG_FIXTURE = 'eval-driven-development';
+
+// ---------------------------------------------------------------------------
+// The lenient-frontmatter path (adversarial round 1, finding 6).
+// ---------------------------------------------------------------------------
+
+test('an edge deletion on a theme whose YAML gray-matter REJECTS is still refused — the lenient fallback must not blind the audit', () => {
+  const forgeRoot = newRoot();
+  // An unquoted `:` in a description is a real, common theme shape and makes
+  // gray-matter throw; parseThemeRaw's line-based fallback then decodes a
+  // BLOCK list to '' rather than an array. The first cut saw zero edges here
+  // and let the deletion land — this lane's own defect one layer over.
+  const head = [
+    '---',
+    'title: Broken YAML theme',
+    'description: A theme: with an unquoted colon, which gray-matter rejects.',
+    'category: antipattern',
+    'related_themes:',
+    '  - 2026-06-21-gitignored-scratch-files-double-commit',
+    '  - 2026-06-22-gitignored-scratch-file-third-cycle',
+    'created_at: 2026-06-21T00:00:00.000Z',
+    'updated_at: 2026-06-21T00:00:00.000Z',
+    '---',
+    '',
+    '# Broken YAML theme',
+    '',
+  ].join('\n');
+  const after = head.replace('  - 2026-06-21-gitignored-scratch-files-double-commit\n', '');
+  writeTheme(forgeRoot, `projects/gitpulse/${EDIT_1_REL}`, head);
+  writeTheme(forgeRoot, 'projects/gitpulse/themes/2026-06-21-gitignored-scratch-files-double-commit.md', themeStub('Double commit'));
+  writeTheme(forgeRoot, 'projects/gitpulse/themes/2026-06-22-gitignored-scratch-file-third-cycle.md', themeStub('Third cycle'));
+  const brainDir = join(forgeRoot, 'brain', 'projects', 'gitpulse');
+  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+  // Prove the premise rather than assuming it: the structured parse really
+  // does fail to yield an array here.
+  assert.equal(Array.isArray(parseThemeRaw(head).data.related_themes), false);
+  const found = auditKbEdit(change(EDIT_1_REL, head, after), ctx);
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.equal(found[0].kind, 'edge-deleted');
+  assert.equal(found[0].target, '2026-06-21-gitignored-scratch-files-double-commit');
+});
+
+test('scanRelatedThemesBlock reads both YAML list shapes and stops at the end of the block', () => {
+  assert.deepEqual(scanRelatedThemesBlock('---\nrelated_themes: [a, b.md, "c"]\n---\n'), ['a', 'b', 'c']);
+  assert.deepEqual(scanRelatedThemesBlock('---\nrelated_themes:\n  - a\n  - b\ncreated_at: x\n  - not-a-member\n---\n'), ['a', 'b']);
+  assert.deepEqual(scanRelatedThemesBlock('---\nrelated_themes: []\n---\n'), []);
+  assert.deepEqual(scanRelatedThemesBlock('---\ntitle: no edges\n---\n'), []);
+});
+
+// ---------------------------------------------------------------------------
+// Repair precision (adversarial round 1, findings 10 + 14).
+// ---------------------------------------------------------------------------
+
+test('a repair preserves an #anchor tail — extractLinks strips it, so a literal replacement silently missed every anchored link', () => {
+  const { ctx } = plantRealEdit2();
+  const before = edit2Body(EDIT_2_BAD_OLD);
+  const after = edit2Body(`${EDIT_2_BAD_NEW}#why-this-layer-works`);
+  const c = change(EDIT_2_REL, before, after);
+  const repaired = repairKbEdit(c, auditKbEdit(c, ctx), ctx);
+  assert.ok(repaired !== null, 'an anchored link must still be repairable');
+  assert.ok(repaired.includes(`](${EDIT_2_REAL}#why-this-layer-works)`), `the anchor must survive — got:\n${repaired}`);
+  assert.deepEqual(auditKbEdit(change(EDIT_2_REL, before, repaired), ctx), []);
+});
+
+test('no repair is synthesized when the dead target ALSO appears in `before` — rewriting untouched lines would put unjustified changes in the diff', () => {
+  const { ctx } = plantRealEdit2();
+  // TWO links, both naming the same slug: one ALREADY at the dead `../../themes/`
+  // path (untouched by this turn), one at the older dead `../../../forge/` path.
+  // The turn repoints the second onto the first's dead path. A literal
+  // whole-file replacement would silently rewrite the untouched link too.
+  const before = edit2Body(EDIT_2_BAD_OLD).replace(
+    'principle.',
+    `principle. See also [the same theme](${EDIT_2_BAD_NEW}).`,
+  );
+  const after = before.replace(`[eval-driven development](${EDIT_2_BAD_OLD})`, `[eval-driven development](${EDIT_2_BAD_NEW})`);
+  const c = change(EDIT_2_REL, before, after);
+  assert.equal(c.klass, 'structural', 'link-target-only, so the prose gate is not what refuses this');
+  const found = auditKbEdit(c, ctx);
+  assert.ok(found.some((u) => u.kind === 'link-repoint-unresolved'), JSON.stringify(found));
+  assert.equal(repairKbEdit(c, found, ctx), null, 'the target is already in `before`; repairing would rewrite lines the turn never touched');
 });

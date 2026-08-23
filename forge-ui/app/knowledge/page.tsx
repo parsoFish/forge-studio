@@ -407,6 +407,41 @@ function KnowledgePageInner() {
     // detailKey: Retry / bridge recovery re-run the detail read (W7-FIX-A1)
   }, [currentId, idConfirmed, getOrStartKbFetch, detailKey]);
 
+  // ── Apply a ?node=/?theme= selection on an IN-APP navigation ─────────────
+  // W8-B2, adversarial round 1. `pendingNodeRef` is consumed ONLY inside the
+  // detail-load effect above, whose deps are [currentId, idConfirmed,
+  // getOrStartKbFetch, detailKey]. Clicking the drain's "open in Explore" link
+  // changes only `?node=`: the resolve effect returns early (an `?id=` is
+  // present), the roster effect calls setCurrentId with the SAME string and
+  // setIdConfirmed(true) when it is already true, so no dep changes, the detail
+  // effect never re-runs, and the pending node is never consumed. The deep link
+  // worked on a fresh LOAD and silently did nothing on a click — which is the
+  // half an operator actually uses.
+  //
+  // Derived from the URL params rather than the ref, so it cannot race the
+  // detail effect: once that effect has selected the node this early-returns.
+  useEffect(() => {
+    const wanted = nodeParam || themeParam;
+    if (!wanted || !kbDetail || !currentId) return;
+    if (selectedNode === wanted) return;
+    const node = kbDetail.graph?.nodes.find((n) => n.id === wanted);
+    // Fail closed: a `?node=` this KB's graph does not contain is the
+    // not-found path's business, not a silent partial selection.
+    if (!node) return;
+    // RULING 1 — the ?theme= alias only ever selects theme-layer nodes.
+    if (!nodeParam && themeParam && node.layer !== 'theme') return;
+    setSelectedNode(wanted);
+    setArticle(null);
+    setArticleLoading(true);
+    const signal = { cancelled: false };
+    fetchKbNode(currentId, wanted).then((art) => {
+      if (signal.cancelled) return;
+      setArticle(art);
+      setArticleLoading(false);
+    }).catch(() => { if (!signal.cancelled) setArticleLoading(false); });
+    return () => { signal.cancelled = true; };
+  }, [nodeParam, themeParam, kbDetail, selectedNode, currentId]);
+
   // ── Node selection: fetch article ─────────────────────────────────────────
   // W8-B2 (forge-6gv.6.3): the selection is WRITTEN BACK to `?node=`, closing
   // the deep link's other end. `?node=` has always been readable — the drain's

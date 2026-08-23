@@ -24,8 +24,17 @@
  *     REPAIRED rather than deleting or accepting the dead-for-dead swap.
  *
  * The diffs these fixtures encode were preserved during the wave-8 open. Their
- * CONTENT is copied in here rather than read from that campaign directory:
+ * content is copied in here rather than read from that campaign directory:
  * campaign dirs are gitignored, so a test citing one is a dangling reference.
+ *
+ * PRECISELY what is verbatim, so nobody over-reads this: the EDITS are — the
+ * `related_themes` line before and after, and all three
+ * `eval-driven-development` link paths (the one that was already dead, the
+ * second dead one the drain wrote, and the real target). The surrounding theme
+ * prose is synthesized, because these fixtures must lint CLEAN apart from the
+ * injected finding or a stray real finding would be mistaken for the fixture's.
+ * The byte-for-byte frontmatter of the gitpulse theme is replayed in
+ * cli/kb-drain-edit-soundness.test.ts, at the audit level.
  */
 
 import { test } from 'node:test';
@@ -319,6 +328,47 @@ test('CONTROL: an honest repoint at a target that really resolves still LANDS �
       },
     });
     assert.equal(readFileSync(target, 'utf8'), gradingTheme(TG_REAL), 'a sound structural repair must land untouched');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('adversarial round 1: a PROSE rewrite that also deletes a valid edge is drafted WITH that consequence on the page, not buried in the diff', async () => {
+  const withEdge = themeFile(
+    'Gitignored scratch files, recurrence',
+    'antipattern',
+    [`related_themes: [${DOUBLE_COMMIT_SLUG}]`],
+    ['The same scratch-file commit happened again, at length, over several lines.'],
+  );
+  const { root, brainDir } = makeKbRoot(GITPULSE_KB, [
+    { slug: RECURRENCE_SLUG, category: 'antipattern', content: withEdge },
+    { slug: DOUBLE_COMMIT_SLUG, category: 'antipattern', content: themeFile('Double commit', 'antipattern') },
+  ]);
+  const target = join(brainDir, 'themes', `${RECURRENCE_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkLengthSoftCap', 'length.soft-cap', 'theme exceeds the soft line cap');
+    // Prose AND an edge deletion in one edit — so `classifyKbEdit` returns
+    // 'prose' for the whole file and the structural gate never audits it.
+    const condensed = withEdge
+      .replace('related_themes: [2026-06-21-gitignored-scratch-files-double-commit]', 'related_themes: []')
+      .replace('The same scratch-file commit happened again, at length, over several lines.', 'Condensed.');
+    const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-r7`, {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: async (input) => {
+        writeFileSync(target, condensed);
+        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+      },
+    });
+    // The prose edit is reverted and parked, exactly as before.
+    assert.equal(readFileSync(target, 'utf8'), withEdge);
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    const sid = row?.draftSession?.id;
+    assert.ok(sid, `expected a draft session — got ${JSON.stringify(status.perFinding)}`);
+    // …and the plan the operator approves SAYS what approving would destroy.
+    const plan = readFileSync(join(root, 'projects', GITPULSE_KB, '_kb-cleanup', sid, 'plan', 'cleanup-plan.md'), 'utf8');
+    assert.match(plan, /This edit also changes the graph/);
+    assert.match(plan, new RegExp(`deletes the related_themes edge "${DOUBLE_COMMIT_SLUG}"`));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

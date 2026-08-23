@@ -3804,9 +3804,14 @@ inventory rather than one shared page-level contract:
       `/knowledge?id=<kb>&node=<slug>`. The href is DERIVED by
       `deriveFindingNodeHref` (`lib/kb-drain-view.ts`) from the finding's own
       path — a theme node's graph id IS its slug — so no wire field stores it.
-      It **fails closed**: an index/category page, a file outside a `themes/`
-      dir, or a missing kb id renders plain text and no link, never a link that
-      lands on the shared NotFound. The reverse wiring exists too: selecting a
+      It **fails closed**: a file whose parent directory is not `themes/`
+      (which is where every KB-root index page — `patterns.md`, `INDEX.md`, … —
+      lives), `themes/README.md`, a non-`.md` file, or a missing kb id renders
+      plain text and no link, never a link that lands on the shared NotFound.
+      Stated as the DIRECTORY rule rather than a name list on purpose: a name
+      list here would be a second, narrower copy of
+      `cli/kb-drain-structural.ts`'s `INDEX_PAGE_NAMES`, and two derivations
+      disagreeing is the defect this lane exists to close. The reverse wiring exists too: selecting a
       node in the graph writes `?node=` back to the URL
       (`app/knowledge/page.tsx`'s `syncSelectionToUrl`, `router.replace`), so
       the deep link round-trips and is shareable.
