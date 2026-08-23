@@ -7,8 +7,8 @@ import type { SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import type { EventLogEntry } from '@/lib/bridge-client';
-import { modelChipLabel } from '@/lib/model-chip';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -665,32 +665,6 @@ export function SessionInteractivePanel({
   );
 }
 
-function ProvenanceStrip({ phase, modelTier }: { phase: string; modelTier: string | null }): JSX.Element {
-  return (
-    <div
-      data-section="session-provenance"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--faint)',
-        fontFamily: 'ui-monospace, Menlo, monospace', padding: '2px 0 10px',
-      }}
-    >
-      <span>derived from phase {phase}</span>
-      <span
-        data-component="session-model-chip"
-        data-model-tier={modelTier ?? ''}
-        style={{
-          border: '1px solid var(--line-2)', borderRadius: 999, padding: '1px 8px',
-          color: 'var(--dim)', whiteSpace: 'nowrap',
-        }}
-      >
-        {/* W7-A2/W7-C3 (sessions-kinds-31) — a null tier is honestly "not
-            recorded", never the literal word "default" (not a tier the picker
-            offers). One rule, unit-pinned: lib/model-chip.ts. */}
-        model: {modelChipLabel(modelTier)}
-      </span>
-    </div>
-  );
-}
 
 /** W7-C2 (library-22) — a hand-mirrored copy of `SLUG_RE`
  *  (orchestrator/skill-path.ts), per this file set's no-cross-boundary-

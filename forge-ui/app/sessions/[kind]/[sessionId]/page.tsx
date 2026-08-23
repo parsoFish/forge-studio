@@ -274,6 +274,49 @@ export default function SessionShellPage({
   // that KB's own page, the community anchor to /community.
   const backTo = viewState.status === 'ready' ? backToProjectLink(project) : null;
 
+  // W8-B3 (ON-5) — the kind's live panel, built ONCE: the transcript pane and
+  // the transcript-less pane below render the SAME element, so dropping the
+  // chat box can never silently drop the operator's controls with it.
+  const kindPanel: JSX.Element | null =
+    viewState.status !== 'ready' ? null
+    : summary && summary.kind === 'architect' ? (
+        <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
+      )
+    : summary && summary.kind === 'project-brain' ? (
+        // W8-B3 (sessions-kinds-R02) — project-brain was the ONLY kind with no
+        // activity drawer and no provenance strip, while `GET /api/events/
+        // _project-brain-<sid>` served its events all along. It now gets the
+        // same two the other seven kinds have, from the events/tier the shell
+        // already has in hand.
+        <SessionProjectBrainPanel
+          session={summary.data}
+          themes={themes}
+          onRefresh={refreshSummary}
+          events={events}
+          phase={viewState.phase}
+          modelTier={viewState.modelTier}
+          terminal={viewState.terminal}
+        />
+      )
+    : GENERIC_PANEL_KINDS.has(kind) ? (
+        <SessionInteractivePanel
+          kind={kind}
+          sessionId={sessionId}
+          project={project}
+          phase={viewState.phase}
+          affordances={viewState.affordances}
+          artifact={viewState.artifact}
+          modelTier={viewState.modelTier}
+          events={events}
+          terminal={viewState.terminal}
+          lifecycle={viewState.lifecycle}
+          finalized={viewState.finalized}
+          onChanged={refreshShell}
+          onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+        />
+      )
+    : null;
+
   // W7-A4 (sessions-kinds-18 / crosscut-27): the two "nothing here" facts are
   // two honest answers through the ONE shared NotFound — and the page's DOM
   // state can no longer read "loading" while the body says "not found".
@@ -370,30 +413,27 @@ export default function SessionShellPage({
               onSelect={setStageOverride}
             />
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
-            <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage} error={viewState.transcriptError}>
-              {summary && summary.kind === 'architect' ? (
-                <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
-              ) : summary && summary.kind === 'project-brain' ? (
-                <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
-              ) : GENERIC_PANEL_KINDS.has(kind) ? (
-                <SessionInteractivePanel
-                  kind={kind}
-                  sessionId={sessionId}
-                  project={project}
-                  phase={viewState.phase}
-                  affordances={viewState.affordances}
-                  artifact={viewState.artifact}
-                  modelTier={viewState.modelTier}
-                  events={events}
-                  terminal={viewState.terminal}
-                  lifecycle={viewState.lifecycle}
-                  finalized={viewState.finalized}
-                  onChanged={refreshShell}
-                  onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
-                />
-              ) : null}
-            </SessionTranscript>
+          {/* W8-B3 (ON-5) — the LEFT column is the kind's live panel; the
+              chat transcript WRAPS it only when this session actually has
+              turns to read (or is asking the operator for text right now).
+              `viewState.panes` is derived in lib/session-shell-view.ts from
+              the session's own turns + affordances, never from a per-kind
+              list here and never from a stored `transcript` flag (the wire's
+              old proxy, which was wrong for `authoring`). A kb-cleanup or
+              community-refresh session that has recorded nothing no longer
+              gets half the screen occupied by an empty box apologising for
+              itself — the plan/package pane it exists to show gets the room
+              instead. */}
+          <div style={{ display: 'grid', gridTemplateColumns: viewState.panes.transcript ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,340px) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+            {viewState.panes.transcript ? (
+              <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage} error={viewState.transcriptError}>
+                {kindPanel}
+              </SessionTranscript>
+            ) : (
+              <div data-section="session-panel" data-transcript-omitted={viewState.panes.transcriptOmittedReason ?? undefined}>
+                {kindPanel}
+              </div>
+            )}
             <div>
               {finalizeError && (
                 <div data-section="finalize-error" style={{ marginBottom: 10, fontSize: 12.5, color: 'var(--red, #f87171)' }}>

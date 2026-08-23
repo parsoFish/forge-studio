@@ -137,8 +137,8 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — 'awaiting-verdict' is not a terminal phase for architect.
   terminal: false,
-  // W7-FIX-A2 (W7A2-04) — architect is a legacy-runner, transcript-bearing kind.
-  transcript: true,
+  // W8-B3 (ON-5) — the candidate sources actually on disk for this session.
+  transcriptSources: ['idea.md', 'answers.json'],
   // W7-A2 — awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator' as const, needsYou: true, error: null, idleMs: null, cancellable: true },
 };
@@ -176,8 +176,8 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   modelTier: null,
   // W6-B8 — a synthetic 'in-progress' phase, not terminal.
   terminal: false,
-  // W7-FIX-A2 (W7A2-04) — a synthetic transcript-bearing kind.
-  transcript: true,
+  // W8-B3 (ON-5) — a synthetic session with real sources on disk.
+  transcriptSources: ['prompt.md'],
   // W7-A2 — a synthetic working phase.
   lifecycle: { state: 'working' as const, needsYou: false, error: null, idleMs: null, cancellable: true },
 };
@@ -279,14 +279,14 @@ function emptyMessageFor(over: Partial<SessionShellPayload>): string | null {
 }
 
 test('W7A2-04: transcript-bearing kind + working + zero turns → "No turns recorded yet" (an honest not-YET)', () => {
-  const msg = emptyMessageFor({ kind: 'instructions', transcript: true, lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true } });
+  const msg = emptyMessageFor({ kind: 'instructions', lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true } });
   expect(msg).toMatch(/No turns recorded yet/);
   expect(msg).not.toMatch(/artifact pane/);
 });
 
 test('W7A2-04: transcript-bearing kind at an operator gate / crashed / stalled / terminal with zero turns → a NEUTRAL "no transcript" line that neither promises a turn nor claims the artifact pane (the instructions/demo `briefing` shape)', () => {
   for (const state of ['awaiting-operator', 'crashed', 'stalled', 'terminal'] as const) {
-    const msg = emptyMessageFor({ kind: 'instructions', transcript: true, phase: 'briefing', lifecycle: { state, needsYou: state !== 'terminal', error: state === 'crashed' ? 'boom' : null, idleMs: null, cancellable: state !== 'terminal' } });
+    const msg = emptyMessageFor({ kind: 'instructions', phase: 'briefing', lifecycle: { state, needsYou: state !== 'terminal', error: state === 'crashed' ? 'boom' : null, idleMs: null, cancellable: state !== 'terminal' } });
     expect(msg, state).toMatch(/No transcript/);
     expect(msg, state).toContain('roadmap');
     expect(msg, state).not.toMatch(/artifact pane/);
@@ -294,11 +294,81 @@ test('W7A2-04: transcript-bearing kind at an operator gate / crashed / stalled /
   }
 });
 
-test('W7A2-04: a transcript-LESS kind (kb-cleanup / authoring / community-refresh — turnSpec spine) says it records its work in the artifact pane in EVERY lifecycle state, including working (never a "not yet" promise of a turn that is not coming)', () => {
+// W8-B3 (ON-5) SUPERSEDES W7A2-04's third case. That test pinned the exact
+// behaviour operator note ON-5 complains about: a kind with no turns still got
+// a transcript pane, and the pane's whole job was to apologise for being empty
+// ("this session records its work in the artifact pane"). The honest answer is
+// not better copy inside the empty pane — it is no pane. The apology string is
+// therefore GONE, and what is pinned instead is the pane decision.
+test('W8-B3 (ON-5): a session with no turns and no live question-form renders NO transcript pane (the empty apologising pane is gone, not re-worded)', () => {
   for (const state of ['working', 'awaiting-operator', 'crashed', 'stalled', 'terminal'] as const) {
-    const msg = emptyMessageFor({ kind: 'kb-cleanup', transcript: false, lifecycle: { state, needsYou: false, error: null, idleMs: null, cancellable: state !== 'terminal' } });
-    expect(msg, state).toMatch(/artifact pane/);
-    expect(msg, state).not.toMatch(/No turns recorded yet/);
+    const state_ = sessionShellState({
+      ...SINGLE_STAGE_PAYLOAD,
+      kind: 'kb-cleanup',
+      turns: [],
+      transcriptSources: [],
+      affordances: [],
+      lifecycle: { state, needsYou: false, error: null, idleMs: null, cancellable: state !== 'terminal' },
+    } as SessionShellPayload);
+    expect(state_.panes.transcript, state).toBe(false);
+    expect(state_.panes.transcriptOmittedReason, state).toBe('no-turns-recorded');
+    expect(state_.panes.ids, state).toEqual(['artifact']);
+    expect(state_.dataAttrs['data-session-panes'], state).toBe('artifact');
+    expect(state_.dataAttrs['data-transcript-omitted'], state).toBe('no-turns-recorded');
+  }
+});
+
+test('W8-B3 (ON-5): one real turn is enough to earn the transcript pane — the decision is DERIVED from turns, never from the kind id or a stored per-kind flag', () => {
+  // `authoring` is the exact kind the retired `transcript: descriptor.turnSpec
+  // === undefined` proxy got WRONG: it declares a turnSpec, so the proxy said
+  // "records no turns", while its start route (writeAuthoringSession) writes
+  // prompt.md before the generic spine ever runs. Measured against the real
+  // writer: turns=1, source=prompt.md.
+  const state = sessionShellState({
+    ...SINGLE_STAGE_PAYLOAD,
+    kind: 'authoring',
+    turns: [{ index: 0, role: 'operator', stage: 'roadmap', text: 'Build me a changelog linter', source: 'prompt.md' }],
+    transcriptSources: ['prompt.md'],
+    affordances: [],
+  } as SessionShellPayload);
+  expect(state.panes.transcript).toBe(true);
+  expect(state.panes.transcriptOmittedReason).toBeNull();
+  expect(state.dataAttrs['data-session-panes']).toBe('transcript,artifact');
+  expect(state.dataAttrs['data-transcript-omitted']).toBeUndefined();
+});
+
+test('W8-B3 (ON-5): a live question-form earns the transcript pane BEFORE the first turn exists — the answer lands there', () => {
+  const state = sessionShellState({
+    ...SINGLE_STAGE_PAYLOAD,
+    kind: 'instructions',
+    phase: 'briefing',
+    turns: [],
+    transcriptSources: [],
+    affordances: [{ id: 'briefing-question-form', kind: 'question-form', phase: 'briefing', label: 'Brief', description: null, meta: {} }],
+  } as unknown as SessionShellPayload);
+  expect(state.panes.transcript).toBe(true);
+});
+
+test('W8-B3 (ON-5): a REFUSED transcript derivation keeps its pane even with zero turns — dropping it would hide the only place the refusal is readable', () => {
+  const state = sessionShellState({
+    ...SINGLE_STAGE_PAYLOAD,
+    kind: 'kb-cleanup',
+    turns: [],
+    transcriptSources: ['verdicts.json'],
+    affordances: [],
+    transcriptError: 'verdicts.json is not valid JSON — Unexpected token }',
+  } as SessionShellPayload);
+  expect(state.panes.transcript).toBe(true);
+  expect(state.panes.transcriptOmittedReason).toBeNull();
+});
+
+test('W8-B3 (ON-5): a quiet stage on a session whose OTHER stages have turns says so, and does not claim nothing was ever recorded', () => {
+  const selected = selectStage(sessionShellState(MULTI_STAGE_PAYLOAD), 'secrets');
+  expect(selected.ok).toBe(true);
+  if (selected.ok) {
+    expect(selected.state.emptyStageMessage).toMatch(/turns are on another stage/);
+    // The pane SET is session-level and does not move with the stage.
+    expect(selected.state.panes.transcript).toBe(true);
   }
 });
 

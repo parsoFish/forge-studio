@@ -3,8 +3,10 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { projectBrainBrief, projectBrainApprove, projectBrainAbandon, type ProjectBrainSession } from '@/lib/bridge-client';
+import { projectBrainBrief, projectBrainApprove, projectBrainAbandon, type ProjectBrainSession, type EventLogEntry } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { ActivityLog } from '@/components/studio/ActivityLog';
+import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
 
 // ---------------------------------------------------------------------------
 // SessionProjectBrainPanel — the project-brain kind's live interactive
@@ -14,6 +16,17 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 // architect/instructions kinds, project-brain never showed a StageHex/
 // activity-log — that fidelity is preserved here rather than forced onto it
 // for visual uniformity.
+//
+// W8-B3 (sessions-kinds-R02) — project-brain was the ONLY one of the eight
+// session kinds with NO activity drawer and NO provenance strip. The events
+// were being SERVED the whole time (`GET /api/events/_project-brain-<sid>`
+// returned 35 rows against a live session) and the page already subscribes to
+// them; nothing rendered them. So the kind that runs longest with no
+// intermediate output — "Reading the project and authoring themes… this can
+// take a minute." was the entire page — was also the only one with no window
+// into whether anything was happening. Both now render from the SAME shared
+// components every other kind uses (`ActivityLog`, `ProvenanceStrip`), never a
+// second local copy.
 //
 // W7-C2 (sessions-kinds-21/22):
 //   - the panel's own back-to-project link and its per-theme <details>
@@ -36,10 +49,29 @@ export function SessionProjectBrainPanel({
   session,
   themes,
   onRefresh,
+  events = [],
+  phase,
+  modelTier = null,
+  terminal = false,
 }: {
   session: ProjectBrainSession;
   themes: Array<{ name: string; content: string }>;
   onRefresh: () => void;
+  /** W8-B3 (sessions-kinds-R02) — this session's live event stream, the SAME
+   *  `useCycleEvents(cycleId)` feed the page already computes for every other
+   *  kind. Defaulted so a DOM-pin test that predates the drawer still renders;
+   *  the real page always passes it. */
+  events?: EventLogEntry[];
+  /** The shell payload's phase — shown only in the provenance strip. Optional
+   *  for the same reason; falls back to the session's own `phase`, which is
+   *  the same value from the older per-kind summary read. */
+  phase?: string;
+  /** The session's kickoff-selected tier, or null when none was recorded. */
+  modelTier?: string | null;
+  /** The shell payload's server-derived `terminal` — the ONE gate for the
+   *  activity drawer, identical to `SessionInteractivePanel`'s: a settled
+   *  session has nothing left to watch work. */
+  terminal?: boolean;
 }): JSX.Element {
   const router = useRouter();
   const [brief, setBrief] = useState('');
@@ -69,7 +101,12 @@ export function SessionProjectBrainPanel({
   }, [session.project, session.session_id, onRefresh]);
 
   return (
-    <div>
+    <div data-component="session-project-brain-panel">
+      {/* W8-B3 (sessions-kinds-R02) — the provenance strip every other kind
+          already had. `phase` prefers the shell payload's value (the same one
+          driving `data-session-phase` on the page) and falls back to the
+          per-kind summary's, so the strip can never disagree with the page. */}
+      <ProvenanceStrip phase={phase ?? session.phase} modelTier={modelTier} />
       {session.phase === 'briefing' && (
         <div data-section="brain-briefing" style={{ marginTop: 12 }}>
           <p style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>
@@ -151,6 +188,10 @@ export function SessionProjectBrainPanel({
           Session abandoned.
         </div>
       )}
+      {/* W8-B3 (sessions-kinds-R02) — the activity drawer, gated exactly the
+          way SessionInteractivePanel gates its own: only while the session is
+          not terminal, because a settled session has nothing left to watch. */}
+      {!terminal && <ActivityLog label="project-brain activity" events={events} phaseLabel={phase ?? session.phase} phaseActive />}
     </div>
   );
 }

@@ -238,7 +238,26 @@ export type SessionTurn = {
 };
 
 export type DeriveTranscriptResult =
-  | { readonly ok: true; readonly turns: readonly SessionTurn[]; readonly sourcesScanned: readonly string[] }
+  | {
+      readonly ok: true;
+      readonly turns: readonly SessionTurn[];
+      readonly sourcesScanned: readonly string[];
+      /** W8-B3 (ON-5) — the subset of `sourcesScanned` that ACTUALLY EXISTS in
+       *  this session dir, in scan order. `sourcesScanned` alone can only ever
+       *  say "we looked"; this says what was found, so a caller can decide
+       *  whether a transcript pane belongs on the page WITHOUT keeping its own
+       *  per-kind guess about which kinds record turns.
+       *
+       *  This replaces the wire's old `transcript: descriptor.turnSpec ===
+       *  undefined` boolean (cli/bridge-studio-sessions.ts), which was a
+       *  STORED PROXY and factually wrong: `authoring` declares a `turnSpec`
+       *  yet its start route (`writeAuthoringSession`, cli/ui-bridge.ts)
+       *  writes `prompt.md` before the generic spine ever runs, so the proxy
+       *  claimed "records no turns" for a kind that records one from second
+       *  zero. Derived from the same reads that build `turns` — there is no
+       *  field anywhere for a writer to leave a stale copy in. */
+      readonly sourcesFound: readonly string[];
+    }
   | { readonly ok: false; readonly error: { readonly message: string } };
 
 type ParsedAnswer = { readonly question: string; readonly answer: string };
@@ -383,7 +402,17 @@ function parseQuestionsJson(raw: string): ParseOutcome<ParsedQuestion[]> {
 export function deriveSessionTranscript(input: { descriptor: SessionKindDescriptor; sessionDir: string; phase: string }): DeriveTranscriptResult {
   const { descriptor, sessionDir, phase } = input;
   const turns: SessionTurn[] = [];
+  const sourcesFound: string[] = [];
   let index = 0;
+
+  /** The ONE read every candidate goes through, so `sourcesFound` cannot
+   *  drift from what was actually read (a second, hand-kept existence check
+   *  would be exactly the stale-copy shape this field exists to remove). */
+  const readCandidate = (filename: string): string | null => {
+    const body = safeReadFileInSession(sessionDir, filename);
+    if (body !== null) sourcesFound.push(filename);
+    return body;
+  };
 
   const resolveStage = (raw: string | undefined): ParseOutcome<SessionStage> => {
     const stage = raw ?? descriptor.defaultStage;
@@ -400,8 +429,19 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // most one of the two; both are scanned unconditionally (file-presence,
   // never descriptor.id-driven).
   for (const filename of [IDEA_FILENAME, PROMPT_FILENAME] as const) {
-    const body = safeReadFileInSession(sessionDir, filename);
+    const body = readCandidate(filename);
     if (body === null) continue;
+    // W8-B3 (ON-5) — a BLANK opener is not a turn. Three real brief routes
+    // (`/api/project-brain/brief`, `/api/instructions/brief`,
+    // `/api/demo-builder/brief`, cli/ui-bridge.ts) write `body.brief ?? ''`,
+    // so an operator who skips the optional brief gets a zero-byte
+    // `prompt.md` — which rendered as an EMPTY operator bubble in the
+    // transcript. The file is still reported in `sourcesFound` (it really is
+    // there); it just does not manufacture a turn out of nothing, which is
+    // this module's binding "NOTHING may be invented" rule applied to the
+    // empty string. Measured on real code, not hypothesised: probing
+    // project-brain with a blank brief produced `turns=1 text=""`.
+    if (body.trim().length === 0) continue;
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
     turns.push({ index: index++, role: 'operator', stage: staged.value, text: body, source: filename });
@@ -409,7 +449,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
 
   // answers.json — each round: an AGENT turn (the question) then an
   // OPERATOR turn (the answer), sharing `answers.json#round-N`.
-  const answersRaw = safeReadFileInSession(sessionDir, ANSWERS_FILENAME);
+  const answersRaw = readCandidate(ANSWERS_FILENAME);
   let rounds: readonly ParsedRound[] = [];
   if (answersRaw !== null) {
     const parsed = parseAnswerRoundsJson(answersRaw);
@@ -430,7 +470,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // (AT-amendment-2, T2-ratified). Any other phase ⇒ questions.json (if
   // present) is stale leftover from a prior round and contributes no turn,
   // regardless of its text — see the module header for the full contract.
-  const questionsRaw = safeReadFileInSession(sessionDir, QUESTIONS_FILENAME);
+  const questionsRaw = readCandidate(QUESTIONS_FILENAME);
   if (questionsRaw !== null) {
     const parsedQ = parseQuestionsJson(questionsRaw);
     if (!parsedQ.ok) return { ok: false, error: { message: parsedQ.message } };
@@ -454,7 +494,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // folded into a prompt), so it can only ever hold the newest round's
   // words. The DURABLE per-round record is verdicts.json's own `feedback`
   // field, rendered below.
-  const feedbackBody = safeReadFileInSession(sessionDir, FEEDBACK_FILENAME);
+  const feedbackBody = readCandidate(FEEDBACK_FILENAME);
   if (feedbackBody !== null) {
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
@@ -477,7 +517,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   //
   // `#<n>` in `source` is the record's POSITION IN THE FILE (1-based), not
   // its display position — it names the durable record a reader can go find.
-  const verdictsRaw = safeReadFileInSession(sessionDir, VERDICTS_FILENAME);
+  const verdictsRaw = readCandidate(VERDICTS_FILENAME);
   if (verdictsRaw !== null) {
     const parsedV = parseVerdictsJson(verdictsRaw);
     if (!parsedV.ok) return { ok: false, error: { message: parsedV.message } };
@@ -497,7 +537,7 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     }
   }
 
-  return { ok: true, turns, sourcesScanned: CANDIDATE_SOURCE_FILES };
+  return { ok: true, turns, sourcesScanned: CANDIDATE_SOURCE_FILES, sourcesFound };
 }
 
 // ---------------------------------------------------------------------------

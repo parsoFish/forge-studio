@@ -2248,3 +2248,65 @@ describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
     assert.match(result.error!.message, /feedback/);
   });
 });
+
+// ===========================================================================
+// W8-B3 (operator note ON-5) — `sourcesFound`, and the blank-opener rule.
+//
+// The wire used to carry `transcript: descriptor.turnSpec === undefined`
+// (cli/bridge-studio-sessions.ts) as a per-kind proxy for "does this kind
+// record turns". It was a stored copy of a fact this module already knows, and
+// it was WRONG for `authoring` — that kind declares a `turnSpec`, yet its start
+// route (`writeAuthoringSession`, cli/ui-bridge.ts) writes `prompt.md` before
+// the generic spine ever runs, so the proxy claimed "no turns" for a kind that
+// has one from second zero. `sourcesFound` replaces it with the derived fact.
+// ===========================================================================
+
+describe('deriveSessionTranscript — W8-B3 sourcesFound + blank-opener rule (ON-5)', () => {
+  it('W8-B3: sourcesFound reports exactly the candidate sources that EXIST, in scan order — never the whole scanned list', () => {
+    const dir = makeTmpDir('b3-sources-found');
+    writeFileSync(join(dir, 'idea.md'), 'ship the thing');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T00:00:00.000Z', verdict: 'approve' }]);
+
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
+    assert.deepEqual([...result.sourcesFound], ['idea.md', 'verdicts.json']);
+    // The scanned list is unchanged and still names everything looked for, so
+    // "scanned 6, found 2" stays a readable, honest report.
+    assert.ok(result.sourcesScanned.length > result.sourcesFound.length);
+    for (const found of result.sourcesFound) assert.ok(result.sourcesScanned.includes(found));
+  });
+
+    it('W8-B3: sourcesFound is [] for a session dir holding none of the candidates — the kb-cleanup / community-refresh shape before any verdict', () => {
+    const dir = makeTmpDir('b3-sources-none');
+    writeFileSync(join(dir, 'status.json'), '{"phase":"drafting"}');
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'drafting' });
+    assert.ok(result.ok);
+    assert.deepEqual([...result.sourcesFound], []);
+    assert.equal(result.turns.length, 0);
+  });
+
+    it('W8-B3: a BLANK prompt.md produces NO turn (never an empty operator bubble), while still being reported as a source that exists', () => {
+    // Live shape, not invented: `/api/project-brain/brief`, `/api/instructions/
+    // brief` and `/api/demo-builder/brief` all write `body.brief ?? ''`, so an
+    // operator who skips the optional brief lands a zero-byte prompt.md.
+    for (const body of ['', '   \n\t  \n']) {
+      const dir = makeTmpDir('b3-blank-prompt');
+      writeFileSync(join(dir, 'prompt.md'), body);
+      const result = deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir: dir, phase: 'analyzing' });
+      assert.ok(result.ok);
+      assert.equal(result.turns.length, 0, `blank prompt.md (${JSON.stringify(body)}) must not manufacture a turn`);
+      assert.deepEqual([...result.sourcesFound], ['prompt.md'], 'the file really is there — presence is not the same as content');
+    }
+  });
+
+    it('W8-B3: a prompt.md with real content still produces exactly one operator turn (the blank rule must not swallow real briefs)', () => {
+    const dir = makeTmpDir('b3-real-prompt');
+    writeFileSync(join(dir, 'prompt.md'), 'emphasise the build/test conventions');
+    const result = deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 1);
+    assert.equal(result.turns[0].role, 'operator');
+    assert.equal(result.turns[0].source, 'prompt.md');
+    assert.equal(result.turns[0].text, 'emphasise the build/test conventions');
+  });
+});

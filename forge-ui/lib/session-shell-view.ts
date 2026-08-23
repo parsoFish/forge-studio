@@ -115,11 +115,16 @@ export type SessionShellReadyState = {
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
   terminal: boolean;
-  /** W7-FIX-A2 (W7A2-04) — the payload's own `transcript` flag (server-
-   *  derived from the descriptor, see session-client.ts): whether this KIND
-   *  records turns as a transcript at all. Session-level, carried through
-   *  UNCHANGED across a `selectStage` switch; keys `emptyStageMessage`. */
-  transcript: boolean;
+  /** W8-B3 (ON-5) — the payload's `transcriptSources`: which candidate
+   *  transcript sources actually exist on disk for this session. Session-
+   *  level, carried through UNCHANGED across a `selectStage` switch. Used
+   *  ONLY to explain a quiet/absent transcript pane — never to decide
+   *  whether the pane renders (that is `panes`, derived from real turns). */
+  transcriptSources: string[];
+  /** W8-B3 (ON-5) — WHICH PANES this session should render, derived from the
+   *  session's real shape (its turns and its live affordances), not from a
+   *  per-kind list and not from a stored flag. See `deriveSessionPanes`. */
+  panes: SessionPaneSet;
   /** W7-A2 — the payload's own derived lifecycle (server-derived, see
    *  session-lifecycle-client.ts), carried through UNCHANGED across a
    *  `selectStage` switch — a session-level fact, like `terminal`. */
@@ -153,23 +158,78 @@ function turnsForStage(turns: readonly SessionTurn[], stage: string): SessionTur
   return turns.filter((t) => t.stage === stage);
 }
 
-/** W7-A2 (knowledge-25) + W7-FIX-A2 (W7A2-04) — keyed on the KIND's own
- *  `transcript` flag (bridge-derived from the descriptor) first, then on
- *  lifecycle:
- *    - a transcript-LESS kind (kb-cleanup / authoring / community-refresh —
- *      the turnSpec spine) records its work in the artifact pane in EVERY
- *      state, so it says so — never a "not yet" promise of a turn that is
- *      not coming;
- *    - a transcript-bearing kind still `working` → an honest "not YET";
- *    - a transcript-bearing kind at an operator gate / crashed / stalled /
- *      terminal with no turns for this stage (the instructions/demo
- *      `briefing` shape) → a NEUTRAL line that neither promises a turn nor
- *      claims the artifact pane holds anything. */
-function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], lifecycle: SessionLifecycle, transcript: boolean): string | null {
+/** W8-B3 (ON-5) — re-keyed off the session's REAL turns. This message is now
+ *  only ever reached when the transcript pane actually renders (see
+ *  `deriveSessionPanes`), so it no longer has to cover "this kind never
+ *  records turns" — that case has no pane at all now, instead of an empty
+ *  pane carrying an apology.
+ *
+ *  The three live cases:
+ *    - other stages DO have turns, this one is quiet → say exactly that
+ *      (onboarding declares five stages and only ever fills `contract`);
+ *    - the session is still `working` → an honest "not YET";
+ *    - otherwise (an operator gate with no turns yet — the instructions/demo
+ *      `briefing` shape) → a NEUTRAL line that promises nothing. */
+function emptyStageMessageFor(stage: string, turns: readonly SessionTurn[], allTurns: readonly SessionTurn[], lifecycle: SessionLifecycle): string | null {
   if (turns.length > 0) return null;
-  if (!transcript) return `No transcript for stage "${stage}" — this session records its work in the artifact pane`;
+  if (allTurns.length > 0) return `No turns recorded for stage "${stage}" — this session's turns are on another stage`;
   if (lifecycle.state === 'working') return `No turns recorded yet for stage "${stage}"`;
   return `No transcript for stage "${stage}" — nothing was recorded for this stage`;
+}
+
+// ---------------------------------------------------------------------------
+// deriveSessionPanes (W8-B3, operator note ON-5)
+//
+// "All the review pages being unified for agent artifacts is good, but there
+// are still issues with them in terms of actually making sense for the kind of
+// thing they are. There is no transcript for many of these sessions."
+//
+// The session shell used to render a chat pane for EVERY kind unconditionally,
+// so a kb-cleanup or community-refresh session — which genuinely has no turns
+// until an operator verdict lands — got half the screen occupied by an empty
+// box explaining its own emptiness, while the thing the operator came to read
+// (the plan, the staged package) was squeezed into the other half.
+//
+// The decision is DERIVED from the session's own observable shape, and there
+// is deliberately no `panes:` field in studio/session-kinds.yaml for it to
+// drift from:
+//   - turns exist  → a transcript is the honest way to read this session;
+//   - a `question-form` affordance is live → the operator is being asked to
+//     type right now, and the answer lands in the transcript, so the pane
+//     belongs even before the first turn exists;
+//   - otherwise    → no transcript pane; the panel and the artifact stand on
+//     their own, and `reason` says why in the DOM rather than in prose the
+//     operator has to read.
+// ---------------------------------------------------------------------------
+
+export type SessionPaneSet = {
+  /** Whether the LEFT column renders the chat transcript at all. */
+  readonly transcript: boolean;
+  /** Why the transcript pane is absent — `null` whenever it renders. A DOM
+   *  value (`data-transcript-omitted`), so a journey asserts the decision
+   *  rather than scraping the copy. */
+  readonly transcriptOmittedReason: 'no-turns-recorded' | null;
+  /** The ordered pane ids actually rendered, for `data-session-panes`. */
+  readonly ids: readonly string[];
+};
+
+const QUESTION_FORM_AFFORDANCE_KIND = 'question-form';
+
+export function deriveSessionPanes(input: {
+  readonly allTurns: readonly SessionTurn[];
+  readonly affordances: readonly SessionAffordance[];
+  readonly transcriptError: string | null;
+}): SessionPaneSet {
+  // A derivation that REFUSED must still show its refusal — dropping the pane
+  // would hide the one place the operator can read why the transcript is
+  // missing, turning a loud failure into a silent one.
+  const awaitingOperatorText = input.affordances.some((a) => a.kind === QUESTION_FORM_AFFORDANCE_KIND);
+  const transcript = input.transcriptError !== null || input.allTurns.length > 0 || awaitingOperatorText;
+  return {
+    transcript,
+    transcriptOmittedReason: transcript ? null : 'no-turns-recorded',
+    ids: transcript ? ['transcript', 'artifact'] : ['artifact'],
+  };
 }
 
 function readyDataAttrs(input: {
@@ -179,6 +239,7 @@ function readyDataAttrs(input: {
   selectorVisible: boolean;
   turnCount: number;
   artifactKind: string;
+  panes: SessionPaneSet;
 }): SessionShellDataAttrs {
   return {
     'data-session-status': 'ready',
@@ -188,6 +249,12 @@ function readyDataAttrs(input: {
     'data-session-selector-visible': input.selectorVisible,
     'data-session-turn-count': input.turnCount,
     'data-session-artifact-kind': input.artifactKind,
+    // W8-B3 (ON-5) — the derived pane set, in the DOM so a journey asserts
+    // WHICH panes a kind renders instead of scraping the copy inside them.
+    'data-session-panes': input.panes.ids.join(','),
+    ...(input.panes.transcriptOmittedReason !== null
+      ? { 'data-transcript-omitted': input.panes.transcriptOmittedReason }
+      : {}),
   };
 }
 
@@ -195,6 +262,11 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
   const turns = turnsForStage(payload.turns, stage);
   const artifactKind = payload.artifact.kind;
   const stageSelectorVisible = payload.stages.length > 1;
+  const panes = deriveSessionPanes({
+    allTurns: payload.turns,
+    affordances: payload.affordances,
+    transcriptError: payload.transcriptError,
+  });
   return {
     status: 'ready',
     kind: payload.kind,
@@ -208,14 +280,15 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     stageSelectorVisible,
     allTurns: [...payload.turns],
     turnsForStage: turns,
-    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.lifecycle, payload.transcript),
+    emptyStageMessage: emptyStageMessageFor(stage, turns, payload.turns, payload.lifecycle),
     artifactKind,
     artifactLabel: payload.artifact.label,
     artifact: payload.artifact,
     affordances: payload.affordances,
     modelTier: payload.modelTier,
     terminal: payload.terminal,
-    transcript: payload.transcript,
+    transcriptSources: [...payload.transcriptSources],
+    panes,
     lifecycle: payload.lifecycle,
     finalized: payload.finalized,
     transcriptError: payload.transcriptError,
@@ -226,6 +299,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
       selectorVisible: stageSelectorVisible,
       turnCount: turns.length,
       artifactKind,
+      panes,
     }),
   };
 }
@@ -262,7 +336,7 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
       ...state,
       selectedStage: stage,
       turnsForStage: turns,
-      emptyStageMessage: emptyStageMessageFor(stage, turns, state.lifecycle, state.transcript),
+      emptyStageMessage: emptyStageMessageFor(stage, turns, state.allTurns, state.lifecycle),
       dataAttrs: readyDataAttrs({
         kind: state.kind,
         stage,
@@ -270,6 +344,9 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
         selectorVisible: state.stageSelectorVisible,
         turnCount: turns.length,
         artifactKind: state.artifactKind,
+        // A stage switch never changes the pane SET — it is a session-level
+        // fact (the session's whole transcript), like `terminal`.
+        panes: state.panes,
       }),
     },
   };
