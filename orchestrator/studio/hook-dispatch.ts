@@ -54,10 +54,25 @@
  *   - `Tool`                → tool name equals `Tool`
  *   - `Tool(prefix)`        → tool name equals `Tool` AND the call's
  *                             `tool_input.command` starts with `prefix`
+ *   - anything else         → MALFORMED: never fires, and is reported once
+ *                             when the options bag is built (W8-B6 FIX-2)
  *
  * A matcher declared on an event that carries no tool (SessionEnd, …) cannot
  * be honoured, so it does not fire — and `lintHookDefinitions` flags it, so
  * the operator is told rather than left with a silent no-op.
+ *
+ * The MALFORMED state is its own outcome and not a synonym for "absent"
+ * (W8-B6 FIX-2, 2026-08-24 hostile review). A typo like `Bash(gh pr create`
+ * used to fall through to "the whole string is a tool name", which no real
+ * tool is ever called — so the hook was authored, scanned, approved, rendered
+ * as `carriedBy` an agent, and never fired, with NO log on any fire. It cannot
+ * collapse into `absent` either: absent means "fire always", so folding a typo
+ * into it would hand a broken guard a veto over every tool call. All five
+ * write paths now refuse the shape at `hook-library.ts`'s `hookTriggerError`
+ * (which reuses this module's own parse, rather than a second copy of the
+ * regex), and this module reports a package that predates that check exactly
+ * once — not per fire, which for a `PostToolUse` binding would flood a real
+ * cycle's event log with one identical error per tool call.
  *
  * ## Exit-code contract (Claude Code's, adopted rather than invented)
  *
@@ -121,7 +136,7 @@ import { resolve } from 'node:path';
 import type { EventLogger } from '../logging.ts';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './registry.ts';
-import { loadHookDefinition, type HookLifecycleEvent } from './hook-library.ts';
+import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from './hook-library.ts';
 import { runHookScript } from './hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
@@ -171,29 +186,29 @@ const HOOK_BLOCKING_EXIT_CODE = 2;
 // Matcher — forge syntax, parsed and applied here.
 // ---------------------------------------------------------------------------
 
-export type ParsedHookMatcher = { tool: string; commandPrefix?: string };
+// The PARSE lives in hook-library.ts, next to the definition it validates, so
+// the five write paths' shape check (`hookTriggerError`) and this enforcement
+// share one implementation rather than two copies of one regex. See that
+// module for why the dependency points that way. Enforcement stays here.
 
-const MATCHER_WITH_ARGS = /^([^()\s]+)\((.*)\)$/;
-
-/** Parse a declared `matcher`. Absent/blank ⇒ `undefined` ⇒ matches every
- *  occurrence of the event. Exported for the lint that mirrors this dispatch. */
-export function parseHookMatcher(raw: string | undefined): ParsedHookMatcher | undefined {
-  const trimmed = raw?.trim();
-  if (!trimmed) return undefined;
-  const withArgs = MATCHER_WITH_ARGS.exec(trimmed);
-  if (withArgs) return { tool: withArgs[1]!, commandPrefix: withArgs[2]!.trim() };
-  return { tool: trimmed };
-}
-
-/** Does this hook input satisfy the declared matcher? A matcher on an event
- *  that carries no tool cannot be honoured, so it does not match. */
-export function hookMatcherMatches(parsed: ParsedHookMatcher | undefined, input: HookDispatchInput): boolean {
-  if (!parsed) return true;
-  if (typeof input.tool_name !== 'string' || input.tool_name !== parsed.tool) return false;
-  if (parsed.commandPrefix === undefined) return true;
+/** Does this hook input satisfy the declared matcher?
+ *
+ *  - `absent`    ⇒ every occurrence of the event.
+ *  - `malformed` ⇒ NEVER. A matcher that cannot equal a real tool name must
+ *    not silently become "fire always" (W8-B6 FIX-2): that would hand a
+ *    broken guard a veto over every tool call. It fails closed, and
+ *    `sdkHooksForAgent` says so once when the bag is built.
+ *  - a matcher on an event that carries no tool cannot be honoured, so it
+ *    does not match either. */
+export function hookMatcherMatches(parse: HookMatcherParse, input: HookDispatchInput): boolean {
+  if (parse.kind === 'absent') return true;
+  if (parse.kind === 'malformed') return false;
+  const { tool, commandPrefix } = parse.matcher;
+  if (typeof input.tool_name !== 'string' || input.tool_name !== tool) return false;
+  if (commandPrefix === undefined) return true;
   const command = (input.tool_input as { command?: unknown } | undefined)?.command;
   if (typeof command !== 'string') return false;
-  return command.startsWith(parsed.commandPrefix);
+  return command.startsWith(commandPrefix);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,8 +357,11 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
   const byEvent = new Map<HookLifecycleEvent, SdkHookMatcher[]>();
   for (const hookId of hookIds) {
     let event: HookLifecycleEvent;
+    let matcher: string | undefined;
     try {
-      event = loadHookDefinition(hookId, forgeRoot).on;
+      const def = loadHookDefinition(hookId, forgeRoot);
+      event = def.on;
+      matcher = def.matcher;
     } catch (e) {
       emitHookError(
         logger,
@@ -354,6 +372,24 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
       );
       continue;
     }
+
+    // W8-B6 FIX-2 — said ONCE, here, not per fire. The write paths refuse this
+    // shape (hook-library.ts's `hookTriggerError`, shared by all five of
+    // them), so reaching dispatch means a package that predates the check or
+    // was hand-edited on disk. Reporting it inside the callback instead would
+    // emit one identical error per tool call for a PostToolUse binding —
+    // flooding a real cycle's event log to say the same thing.
+    const parse = parseHookMatcher(matcher);
+    if (parse.kind === 'malformed') {
+      emitHookError(
+        logger,
+        input.initiativeId,
+        hookId,
+        `Agent "${input.skill}" binds hook "${hookId}", whose matcher ${JSON.stringify(matcher)} ${parse.reason} — it is registered but will never fire`,
+        { skill: input.skill, event, matcher },
+      );
+    }
+
     const list = byEvent.get(event) ?? [];
     list.push({ hooks: [makeCallback(hookId, event, forgeRoot, logger, input.initiativeId)] });
     byEvent.set(event, list);

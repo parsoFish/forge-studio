@@ -409,6 +409,46 @@ describe('sdkHooksForAgent: the declared matcher is enforced in forge syntax', (
     assert.equal(existsSync(hit), true, 'the declared command prefix must actually fire it');
   });
 
+  // -------------------------------------------------------------------
+  // W8-B6 FIX-2 (2026-08-24 hostile review): a malformed matcher was a
+  // PERMANENTLY INERT hook with zero diagnostics anywhere. The old fallback
+  // treated the whole raw string as a tool name, `hookMatcherMatches` could
+  // then never be true, and the no-match branch returned silently — no log on
+  // the first fire, none on the thousandth. A guard-shaped hook was authored,
+  // approved, displayed as carried, and did nothing.
+  //
+  // The write paths now refuse the shape (hook-trigger-coherence.test.ts), so
+  // this is the defence in depth for a package that predates the check or was
+  // hand-edited on disk. It is reported ONCE, when the options bag is built —
+  // not per fire, which for a PostToolUse binding would flood a real cycle's
+  // event log with one identical error per tool call.
+  // -------------------------------------------------------------------
+  it('a MALFORMED matcher is reported ONCE at bag-build time and the hook never fires (kills: the silent no-op, and kills a per-fire log that would flood the event log)', async () => {
+    const root = makeRoot('hook-dispatch-malformed-');
+    const dir = makeRoot('hook-dispatch-malformed-marks-');
+    const hit = join(dir, 'hit.txt');
+    // Written straight to disk, bypassing the write-path gate — exactly the
+    // package shape this defence in depth exists for.
+    writeHook(root, 'malformed-hook', { on: 'PreToolUse', matcher: 'Bash(gh pr create', script: touchScript(hit) });
+    approveHook({ forgeRoot: root, id: 'malformed-hook' });
+    const skill = writeAgent(root, 'malformed-agent', ['malformed-hook']);
+    const { logger, entries } = makeLogger('c-malformed');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+
+    const buildTime = entries().filter((e) => (e.metadata as { kind?: string } | undefined)?.kind === 'hook-dispatch');
+    assert.equal(buildTime.length, 1, `the malformed matcher must be reported exactly once when the bag is built, got ${JSON.stringify(buildTime)}`);
+    assert.match(buildTime[0]!.message ?? '', /Bash\(gh pr create/, 'the report must quote the matcher the operator typed');
+
+    for (const command of ['gh pr create --draft', 'ls', 'gh issue list']) {
+      await fire(hooks, 'PreToolUse', { tool_name: 'Bash', tool_input: { command } });
+    }
+    assert.equal(existsSync(hit), false, 'a matcher that can never equal a real tool name must never fire the hook');
+
+    const after = entries().filter((e) => (e.metadata as { kind?: string } | undefined)?.kind === 'hook-dispatch');
+    assert.equal(after.length, 1, `three fires must add NO further matcher reports — said once, not per fire (got ${after.length})`);
+  });
+
   it('a bare tool-name matcher matches on tool name only, and an absent matcher fires for every tool', async () => {
     const root = makeRoot('hook-dispatch-bare-');
     const dir = makeRoot('hook-dispatch-bare-marks-');

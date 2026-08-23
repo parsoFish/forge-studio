@@ -697,6 +697,31 @@ test('POST /api/studio/hooks: 400s a matcher declared on a tool-less event (kill
   );
 });
 
+// W8-B6 FIX-2 — the SAME shared predicate now also refuses a matcher that
+// cannot parse. Pinned at a REAL route, not only as a unit, because this
+// repo's recurring failure is a rule that is implemented, unit-tested and
+// never invoked by production. The other four write paths (PUT here,
+// authoring finalize, community install, lint) call the identical predicate
+// and each already pins it for the tool-less case.
+test('W8-B6 FIX-2: POST /api/studio/hooks 400s a MALFORMED matcher (kills: authoring a guard hook that is displayed as carried and can never fire)', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-malformed-matcher-create',
+    description: 'One missing closing paren makes this hook permanently inert.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /Bash\(gh pr create/, 'the error must quote the matcher the operator typed');
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'w8b6-malformed-matcher-create')),
+    false,
+    'the refusal must land BEFORE any package is written — assert the artifact, not just the status code',
+  );
+});
+
 test('PUT /api/studio/hooks/:id: 400s when an EDIT moves a matcher-bearing hook onto a tool-less event (kills: gating create and leaving update open)', async () => {
   const created = await postJson(`${bridgeUrl}/api/studio/hooks`, {
     name: 'w8b6-good-trigger-then-edited',
