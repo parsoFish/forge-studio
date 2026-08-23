@@ -14,7 +14,7 @@ runtime:
 brainAccess: none
 interactivity: Autonomous — implements the plan and iterates until the checks pass.
 allowed-tools: [Read, Grep, Glob, Edit, Write, Bash]
-disallowed-tools: [WebFetch, WebSearch]
+disallowed-tools: [WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 

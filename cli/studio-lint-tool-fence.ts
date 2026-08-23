@@ -31,6 +31,17 @@
  * `instructions-runner`, all via `runStructuredTurn`) and fixed them. A new
  * spawn site that drops the field would make every declaration decorative
  * again without this lint noticing.
+ *
+ * COVERS THE SOURCE, NOT ONLY THE INSTALLED COPY (forge-6gv.18). The roster
+ * sweep below (`skills/`) only ever sees an agent AFTER it has been installed
+ * — a `SKILL.md` copied into `skills/<name>/` by the New-Agent picker or by
+ * `forge studio create`. `studio/starters/agents/**` (Dev/Plan/Review, ADR-033)
+ * is the curated template set those installs are COPIED FROM, and it sat
+ * outside this scan entirely: C2a fenced all 19 roster skills but never
+ * touched the three starters, so `forge studio lint` stayed green on main
+ * while any operator who installed a starter agent failed it immediately.
+ * `lintStarterAgentToolFence` below applies the identical predicate to the
+ * template tree so a starter can never ship the same gap again.
  */
 
 import { readFileSync } from 'node:fs';
@@ -40,10 +51,45 @@ import { basename, join } from 'node:path';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
-import { listSkillDirs } from '../orchestrator/skill-path.ts';
+import { listSkillDirs, listSkillMdDirs } from '../orchestrator/skill-path.ts';
 import type { Finding } from '../orchestrator/studio/validate.ts';
 
 const TOOL_FENCE_REQUIRED_NAMES = ['Task', 'Agent'] as const;
+
+/**
+ * Shared predicate: does this `SKILL.md`'s frontmatter satisfy the tool
+ * fence? Returns the finding to report, or `null` when the file is out of
+ * scope (no tool frontmatter at all) or already fully fenced. `objectId`
+ * lets the two callers below (`skills/` roster vs `studio/starters/agents/`
+ * template tree) tag findings with a distinguishable `object` while sharing
+ * one rule, one message shape, and one set of required names.
+ */
+function toolFenceFinding(skillMdPath: string, id: string, objectId: string): Finding | null {
+  let data: Record<string, unknown>;
+  try {
+    data = (matter(readFileSync(skillMdPath, 'utf8'), {}).data ?? {}) as Record<string, unknown>;
+  } catch {
+    return null; // malformed frontmatter — already surfaced elsewhere as a load error
+  }
+
+  const declaresToolFrontmatter = 'allowed-tools' in data || 'disallowed-tools' in data;
+  if (!declaresToolFrontmatter) return null; // the "declares neither" set is out of scope
+
+  const disallowedRaw = data['disallowed-tools'];
+  const disallowed = Array.isArray(disallowedRaw) ? disallowedRaw.map((v) => String(v)) : [];
+  const missing = TOOL_FENCE_REQUIRED_NAMES.filter((name) => !disallowed.includes(name));
+
+  if (missing.length === 0) return null;
+
+  return {
+    level: 'error',
+    object: objectId,
+    check: 'skill-tool-fence/task-agent-not-disallowed',
+    message: `Skill "${id}" declares tool frontmatter but its disallowed-tools list omits ${missing
+      .map((n) => `"${n}"`)
+      .join(' and ')} — allowed-tools is advisory only (no production spawn site sets options.tools), so disallowed-tools is the only real fence against this skill reaching the subagent-spawn tool. Add ${TOOL_FENCE_REQUIRED_NAMES.join(', ')} to "disallowed-tools:" in ${id}/SKILL.md, or, if this skill genuinely needs to spawn a subagent, leave it out and add a frontmatter comment explaining why (see skills/brain-maintenance/SKILL.md for the model).`,
+  };
+}
 
 /**
  * `skill-tool-fence/task-agent-not-disallowed` — a roster SKILL.md that
@@ -63,30 +109,32 @@ export function lintSkillToolFence(forgeRoot: string): Finding[] {
 
   for (const dir of listSkillDirs(forgeRoot)) {
     const id = basename(dir);
-    let data: Record<string, unknown>;
-    try {
-      data = (matter(readFileSync(join(dir, 'SKILL.md'), 'utf8'), {}).data ?? {}) as Record<string, unknown>;
-    } catch {
-      continue; // malformed frontmatter — already surfaced elsewhere as a load error
-    }
+    const finding = toolFenceFinding(join(dir, 'SKILL.md'), id, `skill:${id}`);
+    if (finding) findings.push(finding);
+  }
 
-    const declaresToolFrontmatter = 'allowed-tools' in data || 'disallowed-tools' in data;
-    if (!declaresToolFrontmatter) continue; // the "declares neither" set is out of scope
+  return findings;
+}
 
-    const disallowedRaw = data['disallowed-tools'];
-    const disallowed = Array.isArray(disallowedRaw) ? disallowedRaw.map((v) => String(v)) : [];
-    const missing = TOOL_FENCE_REQUIRED_NAMES.filter((name) => !disallowed.includes(name));
+/**
+ * `skill-tool-fence/task-agent-not-disallowed` applied to the OOTB starter
+ * template tree, `studio/starters/agents/**` (ADR-033: Dev/Plan/Review). The
+ * SAME rule as `lintSkillToolFence` above, over a different root — see the
+ * module header's "COVERS THE SOURCE" note for why this pass exists as a
+ * separate sweep rather than folding the two directories into one walk:
+ * findings here are tagged `starter-agent:<id>` (not `skill:<id>`) so a
+ * template violation is never confused with an installed-roster one, and a
+ * checkout without `studio/starters/agents/` (e.g. a fixture root that never
+ * seeds starters) degrades to zero findings rather than an error.
+ */
+export function lintStarterAgentToolFence(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  const startersDir = join(forgeRoot, 'studio', 'starters', 'agents');
 
-    if (missing.length > 0) {
-      findings.push({
-        level: 'error',
-        object: `skill:${id}`,
-        check: 'skill-tool-fence/task-agent-not-disallowed',
-        message: `Skill "${id}" declares tool frontmatter but its disallowed-tools list omits ${missing
-          .map((n) => `"${n}"`)
-          .join(' and ')} — allowed-tools is advisory only (no production spawn site sets options.tools), so disallowed-tools is the only real fence against this skill reaching the subagent-spawn tool. Add ${TOOL_FENCE_REQUIRED_NAMES.join(', ')} to "disallowed-tools:" in ${id}/SKILL.md, or, if this skill genuinely needs to spawn a subagent, leave it out and add a frontmatter comment explaining why (see skills/brain-maintenance/SKILL.md for the model).`,
-      });
-    }
+  for (const dir of listSkillMdDirs(startersDir)) {
+    const id = basename(dir);
+    const finding = toolFenceFinding(join(dir, 'SKILL.md'), id, `starter-agent:${id}`);
+    if (finding) findings.push(finding);
   }
 
   return findings;

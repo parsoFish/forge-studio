@@ -14,7 +14,7 @@ runtime:
 brainAccess: none
 interactivity: Autonomous review, then a human verdict gate decides approve or send-back.
 allowed-tools: [Read, Grep, Bash]
-disallowed-tools: [Edit, Write, WebFetch, WebSearch]
+disallowed-tools: [Edit, Write, WebFetch, WebSearch, Task, Agent]
 budgets: {}
 ---
 
