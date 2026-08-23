@@ -277,15 +277,35 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
 // full-object deepEqual literals are amended so implementing WI-3 does not
 // spuriously fail two pre-existing, unrelated assertions the moment the new
 // key appears on the wire.
+// W8-B3 amendment (sessions-kinds-R06): agentCapabilityDescriptor gains
+// `fixedTier` — the ONE tier a strategy:fixed skill can run on, the exact
+// mirror of `allowedTiers` (present only for fixed, absent for range). Both
+// fixtures here are strategy:fixed on a real catalog model, so the key is
+// present in both. Amended, like the R6-04 amendment above, so a new key on
+// the wire does not spuriously fail two pre-existing unrelated assertions —
+// and the VALUE is asserted here rather than dropped, so these stay
+// full-object literal pins rather than becoming partial ones.
 test('agentCapabilityDescriptor: surface unattended → interactive:false', () => {
   const def = baseAgentDefFixture({ surface: 'unattended' });
   // W7-B5: absent loopStrategy = legacy invocation path = ceiling enforceable (see derive-cost-ceiling-enforceable.test.ts).
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true, fixedTier: 'sonnet' });
 });
 
 test('agentCapabilityDescriptor: surface interactive → interactive:true', () => {
   const def = baseAgentDefFixture({ surface: 'interactive' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: true, fixedTier: 'sonnet' });
+});
+
+test('W8-B3 (sessions-kinds-R06): fixedTier is present ONLY for strategy:fixed — exactly one of {allowedTiers, fixedTier} ever appears', () => {
+  const fixed = agentCapabilityDescriptor(baseAgentDefFixture({ surface: 'unattended' }));
+  assert.equal(fixed.fixedTier, 'sonnet');
+  assert.ok(!('allowedTiers' in fixed), 'a fixed-strategy descriptor must not advertise a tier envelope');
+
+  // A model outside the catalog resolves to no tier at all rather than a
+  // guess — this route is served live and must degrade, not invent.
+  const unknownModel = baseAgentDefFixture({ surface: 'unattended' });
+  const bogus = agentCapabilityDescriptor({ ...unknownModel, runtime: { ...unknownModel.runtime, model: 'not-a-real-model' } });
+  assert.ok(!('fixedTier' in bogus), 'an unrecognised model must leave the key absent, never fabricate a tier');
 });
 
 test('agentCapabilityDescriptor: R2-03-F2 — fanoutCapable reflects a declared fanout: block', () => {
