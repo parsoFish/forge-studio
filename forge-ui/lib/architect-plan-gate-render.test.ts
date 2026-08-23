@@ -8,6 +8,11 @@
  * awaiting-verdict; the send-back stranding (no link back to the questions);
  * a second Approve.
  *
+ * W8-A2 (artifact-plan-43): also kills a fix that forces `mode=view` to
+ * disarm the gate PERMANENTLY (rather than just for the current visit) — the
+ * negative control below (armed + mode='gate') must still render the live
+ * PlanGate, or the fix has quietly made every plan read-only.
+ *
  * RUN: npx vitest run lib/architect-plan-gate-render.test.ts   (from forge-ui/)
  */
 import { test, expect } from 'vitest';
@@ -40,6 +45,11 @@ function render(props: Partial<React.ComponentProps<typeof ArchitectPlanGate>>):
     session: null,
     sessionId: SID,
     sessionResolved: true,
+    // The page's resolved mode (lib/artifact-mode.ts) — every real caller
+    // passes a real value, never `undefined`. 'gate' matches the pre-W8-A2
+    // implicit default (armed alone decided) for every test below that
+    // doesn't override it.
+    mode: 'gate',
     linkage: [],
     linkageReady: true,
     scheduler: { running: false },
@@ -75,6 +85,42 @@ test('awaiting-verdict → the PlanGate (one Approve, send-back, reject) and the
   expect(html).toContain('data-section="plan-gate"');
   expect(html.match(/data-action="approve-plan"/g)?.length).toBe(1);
   expect(html).toContain('data-action="revise-plan"');
+});
+
+// W8-A2 (artifact-plan-43): an explicit `?mode=view` on an ARMED session must
+// render read-only — never the interactive Approve/Send-back/Reject set —
+// but must ALSO not hide that a decision is waiting.
+test('awaiting-verdict + mode=view → read-only plan + "Decide on this plan" affordance, NOT the interactive PlanGate', () => {
+  const html = render({ session: session('awaiting-verdict'), mode: 'view' });
+  expect(html).toContain('data-architect-phase="awaiting-verdict"');
+  // The session IS armed (a fact about the session) — data-gate-armed stays
+  // true even though the interactive gate itself does not render.
+  expect(html).toContain('data-gate-armed="true"');
+  expect(html).toContain('data-plan-mode="view"');
+  expect(html).not.toContain('data-section="plan-gate"');
+  expect(html).not.toContain('data-action="approve-plan"');
+  expect(html).not.toContain('data-action="revise-plan"');
+  // The plan itself is still readable (never a blank body for an armed-but-
+  // viewing visit).
+  expect(html).toContain('data-plan-readonly="true"');
+  // The named affordance back into the gate — the URL for THIS session with
+  // mode=gate, never the session page (the decision happens on /artifact).
+  expect(html).toMatch(new RegExp(`<a[^>]*data-action="decide-on-plan"[^>]*href="/artifact\\?run=_architect-${SID}&amp;type=plan&amp;mode=gate"`));
+  expect(html).toContain('Plan ready — review &amp; approve.');
+});
+
+// Negative control (W8-A2): absent mode / explicit mode=gate on an armed
+// session STILL arms the interactive gate — the fix must not have disarmed
+// every plan permanently.
+test('awaiting-verdict + mode=gate (or absent) → the interactive PlanGate still renders — the negative control for the mode=view fix', () => {
+  const gateHtml = render({ session: session('awaiting-verdict'), mode: 'gate' });
+  expect(gateHtml).toContain('data-section="plan-gate"');
+  expect(gateHtml).not.toContain('data-action="decide-on-plan"');
+  const unarmedHtml = render({ session: session('drafting'), mode: 'view' });
+  // An UNARMED session forced to view looks exactly like plain view mode —
+  // no "decide on this plan" affordance (there is nothing to decide yet).
+  expect(unarmedHtml).not.toContain('data-action="decide-on-plan"');
+  expect(unarmedHtml).not.toContain('data-section="plan-gate"');
 });
 
 test('awaiting-answers → status + a link to the questions on the session page + the plan stays readable (artifact-plan-33)', () => {

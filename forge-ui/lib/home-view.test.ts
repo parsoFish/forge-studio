@@ -52,6 +52,12 @@ import {
   HOME_SESSIONS_STRIP_LIMIT,
   type HomeHex,
   type HomeAttentionItem,
+  // WI-1b (ON-7) additions — same missing-named-export convention as the
+  // notes above: HOME_STATUSES/deriveFlowHomeStatus resolve to `undefined`
+  // until home-view.ts ships them, so only the new tests that CALL them go
+  // red, on an honest "is not a function"/"is not iterable" reason.
+  HOME_STATUSES,
+  deriveFlowHomeStatus,
 } from './home-view.ts';
 import type { Flow, Agent, Project, Kb, Run, FlowNode, KbLintSummary, SessionIndexRow } from './studio-client.ts';
 import type { ProjectAttentionItem } from './bridge-client.ts';
@@ -726,10 +732,14 @@ test('W7-B1 deriveAgentStatus: a working session lights its kind\'s OWN agent th
   expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], sessions)).toBe('idle');
 });
 
-test('W7-B1 deriveAgentStatus: a needs-you session marks its agent gated; terminal contributes nothing', () => {
+test('W7-B1 deriveAgentStatus: a needs-you session marks its agent gated; a terminal SUCCEEDED session contributes nothing', () => {
   const awaiting = [makeSessionRow({ kind: 'demo', sessionId: 's1', state: 'awaiting-operator', needsYou: true })];
   expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], awaiting)).toBe('gated');
-  const terminal = [makeSessionRow({ kind: 'demo', sessionId: 's2', state: 'terminal', terminal: true })];
+  // WI-1b: `phase` is now load-bearing for a terminal session (sessionTerminalOutcome)
+  // — explicit 'committed' (a real SESSION_DONE_PHASES member), not the
+  // fixture's mid-flow 'drafting' default, which would fail-closed-classify
+  // as 'failed' and no longer prove "terminal contributes nothing" here.
+  const terminal = [makeSessionRow({ kind: 'demo', sessionId: 's2', state: 'terminal', terminal: true, phase: 'committed' })];
   expect(deriveAgentStatus(makeAgent('demo-builder'), [], [], terminal)).toBe('idle');
 });
 
@@ -888,4 +898,112 @@ test('buildHomeSessionsStrip: an empty sessions list -> empty cards, zero counts
   expect(strip.cards).toEqual([]);
   expect(strip.needsYouCount).toBe(0);
   expect(strip.totalCount).toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// WI-1b (ON-7) — GAP 1: the Home constellation could not show a terminal
+// FAILURE at all. HomeStatus widens from 3 states (active|gated|idle) to 4
+// (active|failed|gated|idle); every derive*Status function must surface a
+// real failure instead of falling through to 'idle'.
+//
+// `deriveFlowStatus` itself is deliberately LEFT UNCHANGED (still 3-state):
+// FlowCard (components/studio/LibraryCard.tsx) renders its return value
+// verbatim as the `data-flow-status` DOM contract, and
+// `library-card-render.test.ts`'s "review round GAP 3" tests pin
+// `data-flow-status="idle"` even for a flow whose only matching run failed
+// (the real signal lives there on a SEPARATE `data-flow-failed-count`
+// attribute instead). Widening `deriveFlowStatus` itself would silently
+// flip that pinned DOM contract. `deriveFlowHomeStatus` is Home's OWN,
+// separate 4-state derivation, built on the SAME `runsForFlow` matcher.
+// ---------------------------------------------------------------------------
+
+test('WI-1b HOME_STATUSES: exactly the four members, in the declared precedence order (active > failed > gated > idle) — a future 5th member must be added HERE (HOME_STATUS_RANK in home-view.ts is a Record over the full union, so an unranked member fails to COMPILE, not just this assertion)', () => {
+  expect([...HOME_STATUSES]).toEqual(['active', 'failed', 'gated', 'idle']);
+});
+
+test('WI-1b deriveFlowStatus stays 3-state and UNTOUCHED (the locked data-flow-status DOM contract) even for a flow whose only matching run failed', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'failed' })];
+  expect(deriveFlowStatus('f1', runs)).toBe('idle');
+});
+
+test('WI-1b deriveFlowHomeStatus: a flow whose ONLY matching run failed -> "failed" (Home\'s own 4-state derivation — kills a fix that widens deriveFlowStatus itself and so flips the locked data-flow-status contract)', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'failed' })];
+  expect(deriveFlowHomeStatus('f1', runs)).toBe('failed');
+});
+
+test('WI-1b deriveFlowHomeStatus: built ON runsForFlow (a lineage-only failed run still counts) — never a second, independent predicate', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'f1'], status: 'failed' })];
+  expect(deriveFlowHomeStatus('f1', runs)).toBe('failed');
+});
+
+test('WI-1b deriveFlowHomeStatus: no matching run at all -> "idle" (never fabricated)', () => {
+  expect(deriveFlowHomeStatus('f1', [])).toBe('idle');
+});
+
+test('WI-1b deriveAgentStatus: an owned node whose phase reads "failed" on a non-active run -> "failed" (kills an impl that only ever checks phase === "active" and drops a real per-node failure)', () => {
+  const node: FlowNode = { id: 'dev', agent: 'developer' };
+  const flows = [makeFlow('f1', [node])];
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'failed', phases: { dev: 'failed' } })];
+  expect(deriveAgentStatus(makeAgent('developer'), flows, runs)).toBe('failed');
+});
+
+test('WI-1b deriveProjectStatus: a terminal session anchored on the project whose OWN phase genuinely failed -> "failed" (a terminal SUCCEEDED session — see the pre-existing "contributes nothing" test above — still contributes nothing: this is failure-specific, not "any terminal session")', () => {
+  const failed = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'terminal', terminal: true, phase: 'failed' })];
+  expect(deriveProjectStatus('gitpulse', [], failed)).toBe('failed');
+});
+
+test('WI-1b deriveProjectStatus: a terminal session whose phase is "cancelled" (an operator-initiated stop) contributes NOTHING — never conflated with "failed"', () => {
+  const cancelled = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'gitpulse', state: 'terminal', terminal: true, phase: 'cancelled' })];
+  expect(deriveProjectStatus('gitpulse', [], cancelled)).toBe('idle');
+});
+
+test('WI-1b deriveKbStatus: a terminal kb-cleanup session anchored .kb-<id> whose phase genuinely failed -> "failed"', () => {
+  const failed = [makeSessionRow({ kind: 'kb-cleanup', sessionId: 's1', project: '.kb-cycles', state: 'terminal', terminal: true, phase: 'failed' })];
+  expect(deriveKbStatus('cycles', failed)).toBe('failed');
+});
+
+test('WI-1b buildConstellation: a fully-failed flow/agent/project/KB each surface hex.status === "failed" — never read identically to a never-run object (the exact ON-7 defect)', () => {
+  const node: FlowNode = { id: 'dev', agent: 'developer' };
+  const flows = [makeFlow('f1', [node])];
+  const agents = [makeAgent('developer')];
+  const projects = [makeProject('gitpulse')];
+  const kbs = [makeKb('cycles')];
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'failed', phases: { dev: 'failed' } })];
+  const sessions = [
+    makeSessionRow({ kind: 'instructions', sessionId: 's-proj', project: 'gitpulse', state: 'terminal', terminal: true, phase: 'failed' }),
+    makeSessionRow({ kind: 'kb-cleanup', sessionId: 's-kb', project: '.kb-cycles', state: 'terminal', terminal: true, phase: 'failed' }),
+  ];
+  // buildConstellation itself stays 3-state-vocab-agnostic for the flow hex
+  // in THIS test's own assertion below — it must call deriveFlowHomeStatus,
+  // not deriveFlowStatus, or the flow hex would wrongly read 'idle'.
+  const hexes = buildConstellation({ flows, agents, projects, kbs, runs, attention: [], sessions });
+  const byId = new Map(hexes.map((h) => [`${h.kind}-${h.id}`, h.status]));
+  expect(byId.get('flow-f1')).toBe('failed');
+  expect(byId.get('agent-developer')).toBe('failed');
+  expect(byId.get('project-gitpulse')).toBe('failed');
+  expect(byId.get('kb-cycles')).toBe('failed');
+});
+
+// ---- precedence: the operator-note-required decision ----------------------
+
+test('WI-1b PRECEDENCE decision: active WINS over a recent failure on the same flow — an actively-executing thing is still the single most CURRENT fact (extends the pre-existing active-beats-gated rule; possibly this very run is already recovering from that failure)', () => {
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'f1', status: 'failed' }),
+    makeRun({ id: 'r2', flowId: 'f1', status: 'active' }),
+  ];
+  expect(deriveFlowHomeStatus('f1', runs)).toBe('active');
+});
+
+test('WI-1b PRECEDENCE decision: failed OUTRANKS gated when nothing is active — a broken run is a stronger claim on operator attention than a routine "please approve" wait (gated means the operator is merely asked to make a normal call; failed means something IS broken)', () => {
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'f1', status: 'failed' }),
+    makeRun({ id: 'r2', flowId: 'f1', status: 'gated' }),
+  ];
+  expect(deriveFlowHomeStatus('f1', runs)).toBe('failed');
+});
+
+test('WI-1b PRECEDENCE decision, cross-source: a gated attention row PLUS a genuinely-failed terminal session on the same project -> "failed" (the same failed-outranks-gated rule holds across the two different data sources deriveProjectStatus folds together, not just within one run list)', () => {
+  const attention = [makeAttention({ projectId: 'p1', gated: 1 })];
+  const failed = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'p1', state: 'terminal', terminal: true, phase: 'failed' })];
+  expect(deriveProjectStatus('p1', attention, failed)).toBe('failed');
 });

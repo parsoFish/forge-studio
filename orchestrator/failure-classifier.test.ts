@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCycleFailure, matchesRateLimitSignature } from './failure-classifier.ts';
+import { CostCeilingError } from './flow-budgets.ts';
 import type { EventLogEntry } from './logging.ts';
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {
@@ -676,4 +677,59 @@ test('classifyCycleFailure: pmInvalidWorkItems (per_item_error_count > 0) → te
   assert.equal(c.recoverable, false);
   assert.equal(c.environment, false);
   assert.ok(typeof c.reason === 'string' && c.reason.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 2a): a CostCeilingError (flow-budgets.ts) has no
+// matching signature and falls to the generic "failure could not be
+// classified" default, indistinguishable from a real crash. Add a signature
+// that names the outcome honestly. Reproduced live 2026-08-22,
+// 2026-08-18T12-42-15_INIT-2026-08-14-betterado-gap-registry (all 6 WIs
+// complete, cost ceiling fired at the phase boundary, manifest → failed/).
+// ---------------------------------------------------------------------------
+
+test('classifyCycleFailure: CostCeilingError message classifies to a cost-ceiling signature, terminal + non-recoverable', () => {
+  // Kills a naive implementation that leaves this on the default branch
+  // (kind:'terminal', reason:'failure could not be classified — examine
+  // events.jsonl manually') — that reason names nothing; this one must.
+  const realError = new CostCeilingError(80.8324, 52);
+  const events = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: realError.message,
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal', 'a retry would just re-spend against an already-crossed ceiling');
+  assert.equal(c.recoverable, false, 'recoverable drives auto-retry — must not auto-retry a cost-ceiling stop');
+  // Reason must name the spend, the ceiling, and that the stop was resumable
+  // at a clean phase boundary — not the generic "could not be classified".
+  assert.doesNotMatch(c.reason, /could not be classified/i);
+  assert.match(c.reason, /80\.83/, 'reason should name the spend');
+  assert.match(c.reason, /52\.00|\$52\b/, 'reason should name the ceiling');
+  assert.match(c.reason, /resumable/i, 'reason should say the phase boundary was clean/resumable');
+});
+
+test('classifyCycleFailure: negative control — an ordinary pmHiddenCoupling terminal failure does not read as a cost-ceiling stop', () => {
+  // Kills an implementation that over-broadly matches (e.g. any terminal
+  // failure, or any error event) instead of the specific cost-ceiling
+  // signature.
+  const events = [
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.end',
+      metadata: {
+        hidden_coupling_violations: [{ a: 'WI-1', b: 'WI-2', sharedFiles: ['x.ts'] }],
+        per_item_error_count: 0,
+      },
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.doesNotMatch(c.reason, /cost.ceiling/i);
+  assert.match(c.reason, /hidden coupling/i);
 });

@@ -754,23 +754,59 @@ export function findFailure(
       const reason = typeof m.reason === 'string' ? m.reason : undefined;
       // Find the node of the last error event before this classifier
       const failedNode = findLastErrorNode(events, i, nodeMapping, agentSlugToNodeId);
+      // W8-A2 (ON-7): NO `?? 'unifier'` fallback. The unifier node was retired
+      // from the live flow by R4-01-F4 (ADR-039/040) — `forge-develop/flow.yaml`
+      // mentions it only in a comment saying it is gone — so defaulting here
+      // pointed the operator at a node that exists in no flow. The monitor
+      // silently drew no outline (no hex carries that id) and the field
+      // misinformed anyone who read it. An unattributable failure now says
+      // nothing rather than naming a phase that cannot have failed; every
+      // consumer is already null-safe (monitor-layout `run?.failedAt ?? null`,
+      // RunControls/RunRail conditional, flow-ledger gates on `status`).
       return {
-        failedAt: failedNode ?? 'unifier',
+        ...(failedNode !== null ? { failedAt: failedNode } : {}),
         failNote: reason,
       };
     }
   }
 
-  // Fallback: last error event's node
+  // Fallback: no `failure_classification` event was ever written — the
+  // process died before `emitFailureClassification` ran, or its own
+  // best-effort try/catch swallowed a throw (orchestrator/cycle.ts:436-478).
+  // ON-7 defect 1: the raw error text is still on disk, one event away, as
+  // the last `error` event's `message` (emitted at cycle.ts:257) — derive
+  // failNote from THAT instead of leaving a failed run with no reason at
+  // all.
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
       const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
-      return { failedAt: nodeId ?? 'unifier' };
+      // Same rule as the classified branch above — honest absence, never the
+      // retired `unifier`.
+      return { ...(nodeId !== null ? { failedAt: nodeId } : {}), failNote: truncateFailNote(e.message) };
     }
   }
 
   return {};
+}
+
+/**
+ * Bound for a raw error message before it becomes `Run.failNote`. failNote
+ * renders inline in two compact, unscrolled UI spots — RunControls.tsx's
+ * one-line status span ("Run failed — {failNote}.") and RunRail.tsx's
+ * borderless failure div — neither clips or scrolls long text, so an
+ * unbounded stack trace or JSON dump would blow out that layout. 300 chars
+ * comfortably covers a normal Error.message (almost always a single clause)
+ * while capping the worst case. The LEADING text is kept (not the tail)
+ * because the head of an error message is its most informative part (e.g.
+ * "ENOENT: no such file or directory, open '/very/long/path...'" — what
+ * broke is at the front; the rest is detail).
+ */
+const FAIL_NOTE_MAX_LEN = 300;
+
+function truncateFailNote(message: string | undefined): string | undefined {
+  if (typeof message !== 'string' || message.length === 0) return undefined;
+  return message.length > FAIL_NOTE_MAX_LEN ? `${message.slice(0, FAIL_NOTE_MAX_LEN)}…` : message;
 }
 
 export function findLastErrorNode(
@@ -844,6 +880,77 @@ export function findReflectionLoss(
     };
   }
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Stop-on-budget outcome (ON-7 defect 2b, W8-A2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A cost-ceiling stop is a DIFFERENT terminal outcome from an ordinary
+ * crash: the flow hit its budget at a clean, resumable phase boundary
+ * (flow-budgets.ts CostTracker.checkCeiling) with real work already done —
+ * not zero. The manifest still lands in `_queue/failed/` (no new queue
+ * state; that's an ask-first architectural change, deliberately parked for
+ * this fix), but the operator needs to be able to tell "stopped on budget,
+ * N/M work items already complete" apart from "crashed having built
+ * nothing".
+ *
+ * Derived — nothing is stored, so there is no `stoppedOnBudget` boolean for
+ * a future writer to forget to set (`derive-status-dont-store-it`, this
+ * repo's measured cure for the declared-data-fails-open defect class). The
+ * signal is the flow's own structured `flow.cost-ceiling-stop` log event
+ * (flow-budgets.ts CostTracker.checkCeiling), emitted with
+ * `{spentUsd, ceilingUsd}` at the EXACT instant the tracker decides to
+ * throw `CostCeilingError` — its one call site (flow-runner.ts,
+ * `costTracker.checkCeiling({ throw: true, ... })`) always requests the
+ * throw, so this event firing is synonymous with the flow having crashed
+ * via CostCeilingError. Reading the structured numbers off the log event
+ * (rather than regex-parsing the human-readable error text) means this
+ * never rots if the error message's wording changes.
+ *
+ * The work-item tally comes from the run's OWN already-derived `workItems`
+ * (see `deriveWorkItems` above) — never a second counter, so it can never
+ * drift from what the WI hexes themselves already show.
+ */
+export function deriveStopOnBudget(
+  events: readonly EventLogEntry[],
+  workItems: readonly { status: RunPhaseStatus }[],
+): {
+  spentUsd: number;
+  ceilingUsd: number;
+  resumable: true;
+  completedWorkItems: number;
+  totalWorkItems: number;
+  /** The flow node the run stopped BEFORE — the clean, resumable boundary.
+   *  Carried by `flow.cost-ceiling-stop`'s own metadata (`stoppedBeforeNode`),
+   *  which the real 2026-08-18 cycle records as `"demo"`. Omitted, never
+   *  invented, when the event does not carry it. */
+  stoppedBeforeNode?: string;
+} | null {
+  let stop: { spentUsd: number; ceilingUsd: number; stoppedBeforeNode?: string } | undefined;
+  for (const e of events) {
+    if (e.message !== 'flow.cost-ceiling-stop' || !e.metadata) continue;
+    const { spentUsd, ceilingUsd, stoppedBeforeNode } = e.metadata;
+    if (typeof spentUsd === 'number' && typeof ceilingUsd === 'number') {
+      stop = {
+        spentUsd,
+        ceilingUsd,
+        ...(typeof stoppedBeforeNode === 'string' ? { stoppedBeforeNode } : {}),
+      };
+    }
+  }
+  if (!stop) return null;
+
+  const completedWorkItems = workItems.filter((wi) => wi.status === 'complete').length;
+  return {
+    spentUsd: stop.spentUsd,
+    ceilingUsd: stop.ceilingUsd,
+    resumable: true,
+    completedWorkItems,
+    totalWorkItems: workItems.length,
+    ...(stop.stoppedBeforeNode !== undefined ? { stoppedBeforeNode: stop.stoppedBeforeNode } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------

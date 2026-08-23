@@ -147,3 +147,37 @@ export function runControlsShouldRender(
 ): boolean {
   return controlCount > 0 || awaitsScheduler || done !== null || error !== null;
 }
+
+/**
+ * W8-A2 (ON-7 defect 2) — a cost-ceiling stop is a DIFFERENT terminal
+ * outcome from an ordinary crash: the flow hit its budget at a clean,
+ * resumable phase boundary with real work already done, not a bare
+ * "failed". `RunControls`/`RunRail` must PREFER this over `run.failNote`
+ * whenever `run.stopOnBudget` is present — a `failNote` written by the
+ * classifier that predates `stopOnBudget` reads a budget stop as an
+ * unclassified crash forever (the real 2026-08-18 cycle's STORED failNote
+ * still says "failure could not be classified — examine events.jsonl
+ * manually", since it was written once and never re-derived). ONE copy
+ * function so the flow monitor and the run detail page can never say this
+ * two different ways.
+ */
+export function describeStopOnBudget(stop: NonNullable<Run['stopOnBudget']>): string {
+  const boundary = stop.stoppedBeforeNode ? `, resumable before ${stop.stoppedBeforeNode}` : ', resumable';
+  return `Stopped on budget — $${stop.spentUsd.toFixed(2)} of $${stop.ceilingUsd.toFixed(2)} spent, ${stop.completedWorkItems} of ${stop.totalWorkItems} work items complete${boundary}.`;
+}
+
+/**
+ * W8-A2 (ON-7 defect 2) — the ONE decision `RunControls` and `RunRail` both
+ * route through for "which failure note, if any" — so the "stopOnBudget
+ * wins over failNote" rule lives in exactly one place instead of two
+ * independently-written ternaries that could drift. Only a 'failed' run
+ * renders either; every other status renders neither (unchanged from
+ * today, where both components already gate on `run.status === 'failed'`
+ * before looking at `failNote`).
+ */
+export function runFailureNoteKind(run: Pick<Run, 'status' | 'stopOnBudget' | 'failNote'>): 'budget' | 'fail-note' | null {
+  if (run.status !== 'failed') return null;
+  if (run.stopOnBudget) return 'budget';
+  if (run.failNote) return 'fail-note';
+  return null;
+}

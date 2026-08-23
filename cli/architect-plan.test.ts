@@ -554,6 +554,186 @@ test('extractGwtBlocks: a body with no GWT of any shape returns []', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 17b. WI-7a (regate row artifact-plan-29, still open) — the REAL architect
+// writes acceptance criteria as PLAIN prose under `### AC-N` headings inside a
+// `## Acceptance criteria` section, not bold. The W7-B7 bold-required
+// hardening (above) made that real shape parse to []. Context — the
+// acceptance-criteria section, not bolding — is now the intent signal that
+// admits a plain Given/When/Then clause run.
+// ---------------------------------------------------------------------------
+
+test('extractGwtBlocks: plain prose under `## Acceptance criteria` / `### AC-N` headings parses (the REAL architect shape)', () => {
+  const body = [
+    '## Acceptance criteria',
+    '',
+    '### AC-1 — make docs exits 0; registry docs use new array syntax',
+    '',
+    'Given `make docs` (tfplugindocs or equivalent),',
+    'When run after the framework resources are registered,',
+    'Then `docs/resources/betterado_release_definition.md` are regenerated. `make docs` exits 0.',
+    '',
+    '### AC-3 — make test + lint green',
+    '',
+    'Given all doc/example changes,',
+    'When `make test` (no `TF_ACC`) + `golangci-lint run ./...` + `make terrafmt-check`,',
+    'Then all exit 0.',
+  ].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].given, '`make docs` (tfplugindocs or equivalent)');
+  assert.equal(blocks[0].when, 'run after the framework resources are registered');
+  assert.equal(blocks[0].then, '`docs/resources/betterado_release_definition.md` are regenerated. `make docs` exits 0.');
+  assert.equal(blocks[1].given, 'all doc/example changes');
+  assert.equal(blocks[1].when, '`make test` (no `TF_ACC`) + `golangci-lint run ./...` + `make terrafmt-check`');
+  assert.equal(blocks[1].then, 'all exit 0.');
+});
+
+test('extractGwtBlocks: a `### AC-N` block with Given + Then only (no When) parses one block with an empty `when`', () => {
+  const body = [
+    '## Acceptance criteria',
+    '',
+    '### AC-2 — examples/ updated to new HCL syntax',
+    '',
+    'Given files under `examples/resources/betterado_release_definition/` and `examples/resources/betterado_task_group/`,',
+    'Then every `.tf` file uses the new array syntax and `make terrafmt-check` exits 0 against them.',
+  ].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 1);
+  assert.equal(
+    blocks[0].given,
+    'files under `examples/resources/betterado_release_definition/` and `examples/resources/betterado_task_group/`',
+  );
+  assert.equal(blocks[0].when, '', 'When is genuinely absent from the source AC — must not be fabricated');
+  assert.equal(
+    blocks[0].then,
+    'every `.tf` file uses the new array syntax and `make terrafmt-check` exits 0 against them.',
+  );
+});
+
+test('renderPlanHtml: a Given+Then-only AC (no When) renders an em-dash for the missing clause, not a fabricated or blank cell', () => {
+  const body = [
+    '## Acceptance criteria',
+    '',
+    '### AC-2 — examples/ updated to new HCL syntax',
+    '',
+    'Given files under `examples/resources/betterado_release_definition/`,',
+    'Then every `.tf` file uses the new array syntax.',
+  ].join('\n');
+  const html = renderPlanHtml(fxSession({ initiatives: [fxInitiative({ body })] }));
+  assert.match(html, /files under `examples\/resources\/betterado_release_definition\/`/);
+  assert.match(html, /every `\.tf` file uses the new array syntax\./);
+  // The When cell renders the missing-clause em-dash, never an empty <td></td>
+  // and never fabricated text.
+  assert.match(html, /<td>—<\/td>/, 'missing When clause renders as an honest em-dash');
+});
+
+test('extractGwtBlocks: the SAME plain Given/When/Then lines OUTSIDE any acceptance-criteria context still do NOT parse (the context gate is real)', () => {
+  const body = [
+    '## Context',
+    '',
+    'Given `make docs` (tfplugindocs or equivalent),',
+    'When run after the framework resources are registered,',
+    'Then `docs/resources/betterado_release_definition.md` are regenerated. `make docs` exits 0.',
+  ].join('\n');
+  assert.deepEqual(
+    extractGwtBlocks(body),
+    [],
+    'plain GWT prose outside an acceptance-criteria section must not fabricate a block, even when the text is identical to a real AC',
+  );
+});
+
+test('extractGwtBlocks: the acceptance-criteria context CLOSES at the next same-or-higher heading that is not an AC-N heading', () => {
+  const body = [
+    '## Acceptance criteria',
+    '',
+    '### AC-1 — a real criterion',
+    '',
+    'Given a real criterion,',
+    'When it runs,',
+    'Then it passes.',
+    '',
+    '## Not in scope',
+    '',
+    'Given this is just prose in the out-of-scope section,',
+    'When someone reads it,',
+    'Then it must not be parsed as an AC.',
+  ].join('\n');
+  const blocks = extractGwtBlocks(body);
+  assert.equal(blocks.length, 1, 'only the AC-1 block inside the still-open context parses');
+  assert.equal(blocks[0].given, 'a real criterion');
+  assert.equal(blocks[0].when, 'it runs');
+  assert.equal(blocks[0].then, 'it passes.');
+});
+
+// Corpus fixture — copied verbatim from a REAL merged architect manifest
+// (`_queue/done/INIT-2026-06-19-framework-docs-examples.md`, terraform-provider-betterado,
+// betterado roadmap execution 2026-06-19). `_queue/` and `projects/` are
+// gitignored operational state, so the body is copied into the fixture
+// rather than read from disk at test time. 4 ACs: AC-1 and AC-3 have the
+// full triple, AC-2 and AC-4 are Given+Then only (no When) — the exact shape
+// this defect made invisible on the PLAN the operator was asked to approve.
+const REAL_MANIFEST_AC_SECTION = [
+  '## Context',
+  '',
+  'The v1.0.0 breaking change requires updated registry documentation and HCL examples. Current `docs/resources/betterado_release_definition.md`, `docs/resources/betterado_task_group.md`, and all files under `examples/` use the old block syntax. Consumers landing on the registry page after 1.0.0 must see the new array syntax. The project `roadmap.md` should record the remaining holistic SDKv2→framework migration as the documented follow-on.',
+  '',
+  '## Acceptance criteria',
+  '',
+  '### AC-1 — make docs exits 0; registry docs use new array syntax',
+  '',
+  'Given `make docs` (tfplugindocs or equivalent),',
+  'When run after the framework resources are registered,',
+  'Then `docs/resources/betterado_release_definition.md` and `docs/resources/betterado_task_group.md` are regenerated and contain example HCL using `stages = [{…}]` and `task = [{…}]` array syntax (not block syntax). `make docs` exits 0.',
+  '',
+  '### AC-2 — examples/ updated to new HCL syntax',
+  '',
+  'Given files under `examples/resources/betterado_release_definition/` and `examples/resources/betterado_task_group/`,',
+  'Then every `.tf` file uses the new array syntax and `make terrafmt-check` exits 0 against them.',
+  '',
+  '### AC-3 — make test + lint green',
+  '',
+  'Given all doc/example changes,',
+  'When `make test` (no `TF_ACC`) + `golangci-lint run ./...` + `make terrafmt-check`,',
+  'Then all exit 0.',
+  '',
+  '### AC-4 — roadmap documents follow-on holistic migration',
+  '',
+  'Given `roadmap.md` (or `docs/roadmap.md`) in the project repo,',
+  'Then it contains a section titled **Future: holistic terraform-plugin-framework migration** listing the remaining SDKv2 resources (`betterado_release_folder`, `betterado_release_definition_permissions`, and upstream-inherited resources) as phase-2 candidates, with a note that the mux scaffold from initiative 1 is the extension point.',
+  '',
+  '## Not in scope',
+  '',
+  '- Re-validating live acceptance tests (covered in initiatives 2, 3, 4).',
+  '- Publishing the release tag (handled by the existing release process outside forge).',
+  '- Migrating any additional resources beyond `release_definition` and `task_group`.',
+].join('\n');
+
+test('extractGwtBlocks: corpus fixture (real merged manifest) parses all 4 ACs — 2 full triples, 2 Given+Then-only', () => {
+  const blocks = extractGwtBlocks(REAL_MANIFEST_AC_SECTION);
+  assert.equal(blocks.length, 4, 'all 4 acceptance criteria parse, not just the full-triple ones');
+  assert.equal(blocks[0].given, '`make docs` (tfplugindocs or equivalent)');
+  assert.equal(blocks[0].when, 'run after the framework resources are registered');
+  assert.ok(blocks[0].then.startsWith('`docs/resources/betterado_release_definition.md`'));
+  // AC-2: Given + Then only, no When — must not be dropped, must not fabricate a When.
+  assert.equal(
+    blocks[1].given,
+    'files under `examples/resources/betterado_release_definition/` and `examples/resources/betterado_task_group/`',
+  );
+  assert.equal(blocks[1].when, '');
+  assert.ok(blocks[1].then.startsWith('every `.tf` file uses the new array syntax'));
+  assert.equal(blocks[2].given, 'all doc/example changes');
+  assert.equal(blocks[2].when, '`make test` (no `TF_ACC`) + `golangci-lint run ./...` + `make terrafmt-check`');
+  assert.equal(blocks[2].then, 'all exit 0.');
+  // AC-4: Given + Then only, no When.
+  assert.equal(blocks[3].given, '`roadmap.md` (or `docs/roadmap.md`) in the project repo');
+  assert.equal(blocks[3].when, '');
+  assert.ok(blocks[3].then.startsWith('it contains a section titled'));
+  // The "Not in scope" prose (also Given/When/Then-shaped-ish text is absent here,
+  // but this pins that the context closed and no 5th block leaked in).
+  assert.equal(blocks.length, 4);
+});
+
+// ---------------------------------------------------------------------------
 // 18. W7-B7 (artifact-plan-30) — the PLAN's operator notice must point at the
 // surface that exists (/artifact?run=_architect-<sid>&type=plan), not the
 // retired /architect/<sid> screen (M7-4 / ADR-031).

@@ -274,7 +274,11 @@ inventory rather than one shared page-level contract:
 - **Shared — page load error (`[data-component="page-load-error"]`,
   `components/PageLoadError.tsx`, W7-FIX-A1 A1-01/A1-02).** The ONE settled
   ERROR state every DETAIL route renders when its own read fails —
-  `/agents/<id>`, `/projects/<id>`, `/flows/<id>`, `/projects/<id>/showcase`.
+  `/agents/<id>`, `/projects/<id>`, `/flows/<id>`, `/projects/<id>/showcase`,
+  `/artifact` (W8-A2, crosscut-08 — `page="artifact"`, `rootAttrs={{
+  'data-run', 'data-artifact-type' }}`; an architect session read failure
+  (`/api/architect/sessions` throwing) settles here too, backHref the owning
+  session, never an indefinite silent "Loading the architect session…").
   A detail page whose roster read failed knows NEITHER that the object exists
   NOR that it does not, so it renders neither the object (a blank builder)
   nor `NotFound` ("No project <id>"): the route's OWN `data-page` root with
@@ -420,16 +424,33 @@ inventory rather than one shared page-level contract:
     `a.home-hex[data-hex-kind][data-hex-id][data-hex-status]` per flow/agent/
     project/KB (`data-hex-kind` is `flow|agent|project|kb`), href routing to
     the owning surface (`/flows/<id>`, `/agents/<id>`, `/projects/<id>`,
-    `/knowledge?id=<id>`). Status (`active|gated|idle`) is ALWAYS derived —
-    never a `.status` field the wire types don't carry (`home-view.ts`'s own
-    declared-data-fails-open discipline). **W7-B1 (home-sessions-14): the
-    in-flight sessions index feeds hex status alongside the flow-run model**
-    — a `working` session lights its agent (via `session-kind-meta.ts`'s
-    yaml-parity-pinned kind→agent map), its anchor project, or (via the
-    `.kb-<id>` seeding anchor) its KB as `active`; a needs-you session
-    (awaiting-operator/crashed/stalled) marks them `gated`; `active` beats
-    `gated` (deriveFlowStatus's own precedence). The header's "N live" count
-    derives from the hexes, so 13 in-flight sessions can never again read
+    `/knowledge?id=<id>`). Status (`active|failed|gated|idle` — WI-1b/ON-7
+    widened the pre-existing 3-state vocab with `failed`, `home-view.ts`'s
+    `HOME_STATUSES`) is ALWAYS derived — never a `.status` field the wire
+    types don't carry (`home-view.ts`'s own declared-data-fails-open
+    discipline). **W7-B1 (home-sessions-14): the in-flight sessions index
+    feeds hex status alongside the flow-run model** — a `working` session
+    lights its agent (via `session-kind-meta.ts`'s yaml-parity-pinned
+    kind→agent map), its anchor project, or (via the `.kb-<id>` seeding
+    anchor) its KB as `active`; a needs-you session
+    (awaiting-operator/crashed/stalled) marks them `gated`. **WI-1b (ON-7):
+    a terminal session whose OWN phase genuinely failed** (`rejected|
+    abandoned|failed`, never `cancelled` — an operator-chosen stop is not a
+    system failure; `sessionTerminalOutcome`, `lib/history-ledger.ts`) marks
+    the anchored object `failed`; an owned flow node whose phase reads
+    `failed` on any run likewise marks that agent's hex `failed`; a flow
+    whose only matching run failed marks that flow hex `failed`
+    (`deriveFlowHomeStatus` — deliberately a SEPARATE derivation from the
+    Library card's `deriveFlowStatus`, which stays 3-state on purpose: see
+    `components/studio/LibraryCard.tsx`'s own `data-flow-status` contract
+    below). Precedence, DECREASING: `active` beats everything (the single
+    most current fact, even a failure — possibly this very run is already
+    recovering from it); `failed` beats `gated` (a broken run is a stronger
+    claim on operator attention than a routine review-gate wait); `idle` is
+    the fail-closed floor. The `.hex-frame`'s own `data-status` (styling
+    only, `HOME_STATUS_FRAME` in `home-view.ts`) maps `failed` onto the
+    shared red terminal-failure token. The header's "N live" count derives
+    from the hexes, so 13 in-flight sessions can never again read
     "0 live / all idle". A KB with no `.kb-<id>`-anchored session stays
     `idle` (a project-BOUND KB's sessions anchor under the real project and
     light that hex instead — never double-attributed). Empty state (a
@@ -783,6 +804,19 @@ inventory rather than one shared page-level contract:
   (`components/studio/RunControls.tsx`, derived by `lib/run-controls.ts` from
   the run's status alone, so nothing stores which controls a run offers):
   `[data-section="run-controls"][data-run-status][data-run-id][data-control-count]`.
+  **W8-A2 (ON-7, bead `forge-6gv.3.4`):** a run that stopped on its **cost
+  ceiling** is not a crash and must not read like one. Where `run.stopOnBudget`
+  is present it is preferred over `run.failNote`, and the status line carries
+  `[data-component="run-status-line"][data-stop-on-budget="true"]` (mirrored on
+  `RunRail`'s budget-stop note). `stopOnBudget` is DERIVED per read from the
+  run's own `flow.cost-ceiling-stop` event plus its already-derived work items
+  (`deriveStopOnBudget`, `orchestrator/run-model-derive.ts`) — there is no
+  stored `stoppedOnBudget` field for a writer to forget. The preference matters
+  because `failNote` is a STORED classification: on the real 2026-08-18 cycle it
+  still reads "failure could not be classified" and always will, while the
+  derived value correctly reports 6 of 6 work items complete, $80.83 against a
+  $52.00 ceiling, resumable before the `demo` node.
+
   A **failed** run offers all three actions the bridge implements —
   `button[data-action="resume-run"|"requeue-run"|"abandon-run"]`, each carrying
   BOTH `data-run-id` (the run handle the UI shows — a cycle id once claimed) and
@@ -816,7 +850,11 @@ inventory rather than one shared page-level contract:
   finished|failed|queued|none"]` (a finished run is never "Waiting for
   events…"; W7-FIX-A3 A3-09: the attribute lives on the tail CONTAINER
   `[data-component="event-tail"]`, so `none` — no run selected — is
-  reachable); the run rail persists group collapse per flow
+  reachable); the header's `span.status-dot[data-status]` inside the tail is
+  DERIVED from this same `data-tail-state` (WI-1b/ON-7 — it used to be a
+  second, independent read of `activeRunId`/`events.length` that could never
+  turn red on a failed run): `none|queued` → `pending`, `live` → `active`,
+  `finished` → `complete`, `failed` → `failed`; the run rail persists group collapse per flow
   (`sessionStorage forge-run-groups:<flowId>`, `lib/run-rail-collapse.ts`;
   COMPLETE starts collapsed above 10 rows — W7-FIX-A3: a collapsed group still
   renders the SELECTED run's card, `[data-run-group] [data-run-id]
@@ -981,7 +1019,20 @@ inventory rather than one shared page-level contract:
   sessions-kinds-14, crosscut-05):** `?mode=gate` is a REQUEST, not a fact —
   `lib/artifact-mode.ts`'s `resolveArtifactMode` honours it only when the run
   is actually gated for that artifact (`data-mode` reads `view` and no gate
-  bar renders on a completed/planned run). The generic gate bar surfaces its
+  bar renders on a completed/planned run). An explicit `?mode=view` on an
+  ARMED architect plan wins too (artifact-plan-43, W8-A2) — the architect
+  branch used to check `architectArmed` before the `mode=view` short-circuit,
+  so a plan that armed WHILE the tab sat open (the live session poll) silently
+  promoted a read-only visit to the full Approve/Send-back/Reject gate;
+  `ArchitectPlanGate` now takes `mode` (mirrored onto its root as
+  `[data-plan-mode="gate"|"view"]`) and, when forced to `view` on an armed
+  session, renders the read-only plan plus a `[data-section="architect-plan-
+  status"][data-plan-view-forced="true"]` status line with a
+  `[data-action="decide-on-plan"]` "Decide on this plan →" link (back into
+  the same URL with `mode=gate`) instead of mounting `PlanGate` —
+  `mode=gate`/absent still arms it as before; `[data-gate-armed]` always
+  reflects the SESSION fact regardless of `mode`.
+  The generic gate bar surfaces its
   error for BOTH verdicts (`[data-gate-error]`, hoisted out of the send-back
   drawer). An **architect session's plan** (`run=_architect-<sid>`) is
   resolved through `/api/architect/sessions` — never `/api/runs` or
@@ -1006,12 +1057,22 @@ inventory rather than one shared page-level contract:
   build"]`, and a `strip` SchedulerCard when the daemon is stopped. The
   breadcrumb for an architect plan reads project (`a[data-crumb="project"]`)
   / planning session (`a[data-crumb="session"]`) / PLAN with
-  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor`.
+  `a[data-action="back-to-session"]`; a cycle keeps `back-to-monitor` — EXCEPT
+  when there is no live flow to link (an orphan run, or a retired flow id):
+  `a[data-action="back-to-flows"]` linking `/flows` (the index), both on the
+  breadcrumb's flow crumb (never a dead unlinked "flow" span, artifact-plan-44)
+  and the trailing "← back to …" action link, labelled to match.
+  `?type=` for an architect id accepts only `plan` or absent — any other value
+  renders the shared NotFound naming that a planning session has only a PLAN
+  (artifact-plan-42; it used to silently coerce to the plan for ANY value).
   **W7-B7 request honesty:** every optional artifact GET is decided by
   `lib/artifact-request-plan.ts` from the run's own `artifactsReady` — an
   artifact the run declares absent renders the honest empty state with NO
-  guaranteed-404 probe (only an unknown/orphan run probes its type's primary
-  directly). The structured plan.json / PLAN.md branches were DELETED
+  guaranteed-404 probe (an orphan run — on disk, no queue record — probes its
+  type's primary directly; an UNKNOWN id — nothing on disk either, `onDisk`
+  threaded from `fetchRunLookup` — probes NOTHING, since that existence
+  question is already answered before this page's NotFound paints,
+  artifact-plan-41). The structured plan.json / PLAN.md branches were DELETED
   (artifact-plan-19: nothing ever produced either file; PLAN.html is the one
   cycle plan artifact, always view-only — the interactive plan gate is the
   architect session's). The filename chip links the RAW artifact file when
@@ -1022,7 +1083,13 @@ inventory rather than one shared page-level contract:
   verdict GATE is armed by the queue state alone (gated ⇒ armed, round-2
   send-backs included; active/complete/failed ⇒ view — artifact-plan-11/-14),
   and a missing verdict.json in view mode renders the SAME shared empty state
-  as every other type (artifact-plan-12 — never a blank page).
+  as every other type (artifact-plan-12 — never a blank page). The shared
+  `EmptyState` carries `[data-empty-reason="pending"|"terminal-failed"|
+  "terminal-status"|"orphan"]` (W8-A2, `deriveArtifactEmptyReason`,
+  `lib/artifact-mode.ts`) — only `"pending"` (the run is still planned/active/
+  gated) says a future phase will emit the artifact; a `failed`/`complete` run
+  or an orphan (no queue record) never makes that promise (artifact-plan-38 /
+  artifact-plan-35).
   `type=reflection` is the exception (W7-B7 review r1): ReflectionGate is the
   type's own surface and renders its honest states itself — a live gate's
   Stage-2 questions are never buried under the generic EmptyState, and a
@@ -1037,7 +1104,11 @@ inventory rather than one shared page-level contract:
   resolves `empty` — demo.json alone never yields a blank pr body (W7-B7
   review r1). `type=demo` view
   mode renders the DEMO.md narrative (`[data-section="demo-narrative"]
-  iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison.
+  iframe[data-demo-markdown]`, artifact-plan-32) above DemoComparison — this
+  ONE probe is deliberately best-effort rather than status-before-body
+  (artifact-plan-40, W8-A2): the narrative has no `artifactsReady` bit of its
+  own (only `demo.json` does), so a miss degrades silently to nothing
+  (`fetchDemoMarkdown` already treats a 404/thrown read as "no narrative").
   `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes) —
@@ -2456,7 +2527,25 @@ inventory rather than one shared page-level contract:
   stalled"; `awaiting-operator` → "Waiting on you"; `working` → a quiet
   one-liner; `terminal` → honest per-phase copy ("Done — committed" for
   committed/locked/applied/complete, "<Phase> — nothing further to do
-  here" for rejected/abandoned/cancelled/failed). While `cancellable` a
+  here" for rejected/abandoned/cancelled/failed). **WI-1b (ON-7): a terminal
+  row ADDITIONALLY carries `data-lifecycle-terminal-outcome="succeeded"|
+  "failed"|"cancelled"`** (present ONLY when `data-lifecycle-state="terminal"`
+  — never on working/awaiting-operator/crashed/stalled), derived from the
+  session's own phase via `sessionTerminalOutcome`
+  (`lib/history-ledger.ts`): `committed|locked|applying|applied|complete` →
+  `succeeded`; `cancelled` → `cancelled` (an operator-chosen stop, distinct
+  from a system failure — its own `describeCancelOutcome`/
+  `CancelOutcomeNotice` treatment already says so); `rejected|abandoned|
+  failed` (and any future unclassified terminal phase, fail-closed) →
+  `failed`. `data-lifecycle-state` itself STAYS exactly the 5-token
+  contract above, unwidened — a terminal-failed session and a
+  terminal-succeeded one both still read `terminal` there; only the new,
+  additive attribute differentiates them, so this stays queryable without
+  touching the DOM contract the journeys assert on. A terminal-`failed` row
+  ALSO renders the real reason in `pre[data-lifecycle-error]` (the SAME
+  element `crashed` uses) whenever `lifecycle.error` actually carries one
+  (honest-absent otherwise — never a fabricated reason, never a log-file
+  path in its place). While `cancellable` a
   `button[data-action="cancel"]` (the shared two-step `CancelSessionButton`;
   `[data-action="cancel-abort"]` "keep" link while armed; server error
   verbatim in `[data-cancel-error]`) POSTs the generic cancel route; on

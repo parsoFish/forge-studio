@@ -2,11 +2,13 @@ import { describe, it, expect } from 'vitest';
 
 import {
   architectHexMeta,
+  architectHexMetaForLifecycle,
   isArchitectWorking,
   isSessionStale,
   ARCHITECT_HEX_META,
   STALE_THRESHOLD_MS,
 } from './architect-hex';
+import { STATUS_COLOR } from './status-colors';
 import type { ArchitectPhase } from './bridge-client';
 
 const ALL_PHASES: ArchitectPhase[] = [
@@ -32,14 +34,54 @@ describe('architectHexMeta', () => {
     }
   });
 
-  it('falls back to an idle meta for an unknown phase', () => {
+  it('falls back to an ATTENTION tone (never idle) for an unknown phase — W8-A2 ON-7 defect 3: idle claims "calm, nothing to worry about", which an unrecognised phase is not', () => {
+    // KILLS: the pre-fix fallback `{ glow: STATUS_COLOR.idle, ... }`.
     const meta = architectHexMeta('???' as ArchitectPhase);
+    expect(meta.glow).toBe(STATUS_COLOR.attention);
     expect(meta.frac).toBe(0);
     expect(meta.label).toBe('???');
   });
 
   it('greens the hex once committed', () => {
     expect(architectHexMeta('committed').frac).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 3, WI-1a item 3) — architectHexMetaForLifecycle(phase,
+// lifecycleState): a session whose DERIVED lifecycle is 'crashed' renders the
+// failed tone and a truthful label regardless of its STORED (frozen-mid-work)
+// phase. No settable `failed` field anywhere — `lifecycleState` is a plain
+// argument, re-derived by the caller on every read, never stored by this
+// function or read back from anywhere it wrote to.
+// ---------------------------------------------------------------------------
+describe('architectHexMetaForLifecycle (ON-7 defect 3)', () => {
+  it('a crashed session renders the failed tone regardless of a stored phase of "drafting" — kills a phase-keyed-only map', () => {
+    // KILLS: any implementation that ignores `lifecycleState` and only ever
+    // consults `phase` (i.e. is byte-identical to `architectHexMeta`) — the
+    // exact pre-fix shape, where a crashed runner frozen at 'drafting' reads
+    // "drafting the plan…" forever.
+    const meta = architectHexMetaForLifecycle('drafting', 'crashed');
+    expect(meta.glow).toBe(STATUS_COLOR.failed);
+    expect(meta.label).not.toBe(architectHexMeta('drafting').label);
+    expect(meta.label.toLowerCase()).toContain('crash');
+  });
+
+  it('uses STATUS_COLOR.failed verbatim — never an invented colour', () => {
+    expect(architectHexMetaForLifecycle('interviewing', 'crashed').glow).toBe(STATUS_COLOR.failed);
+    expect(architectHexMetaForLifecycle('exploring', 'crashed').glow).toBe(STATUS_COLOR.failed);
+  });
+
+  it('every OTHER lifecycle state (or none at all) is UNCHANGED from the phase-only tone — never fabricates a crash', () => {
+    // KILLS: an implementation that always overrides regardless of state
+    // (would slander a working/awaiting-operator/terminal session as failed).
+    for (const state of ['working', 'awaiting-operator', 'stalled', 'terminal', undefined] as const) {
+      expect(architectHexMetaForLifecycle('drafting', state)).toEqual(architectHexMeta('drafting'));
+    }
+  });
+
+  it('is pure: the same (phase, lifecycleState) always yields an equal result', () => {
+    expect(architectHexMetaForLifecycle('finalizing', 'crashed')).toEqual(architectHexMetaForLifecycle('finalizing', 'crashed'));
   });
 });
 

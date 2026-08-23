@@ -47,7 +47,7 @@ import { useState } from 'react';
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { SchedulerCard } from '@/components/SchedulerCard';
 import { resumeRun, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
-import { armedControl, deriveRunControls, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, type RunControl, type RunControlId } from '@/lib/run-controls';
+import { armedControl, deriveRunControls, describeStopOnBudget, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, runFailureNoteKind, type RunControl, type RunControlId } from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -117,6 +117,8 @@ export function RunControls({
   if (run === null || !runControlsShouldRender(controls.length, awaitsScheduler, done, error)) return null;
 
   const initiativeId = run.initiativeId;
+  // W8-A2 (ON-7 defect 2) — see the run-status-line render below.
+  const failureNoteKind = runFailureNoteKind(run);
 
   /**
    * The armed destructive control, DERIVED — so a run that leaves `failed` while
@@ -186,9 +188,19 @@ export function RunControls({
         background: run.status === 'failed' ? 'rgba(255,80,80,0.06)' : 'transparent',
       }}
     >
+      {/* W8-A2 (ON-7 defect 2): `runFailureNoteKind` decides "budget" vs
+          "fail-note" ONCE (lib/run-controls.ts) so this and RunRail's
+          identical rendering can never independently drift on the
+          "stopOnBudget wins over failNote" rule. */}
       {run.status === 'failed' && (
-        <span data-component="run-status-line" style={{ fontSize: 12, color: 'var(--faint)' }}>
-          Run failed{run.failNote ? ` — ${run.failNote}` : ''}.
+        <span
+          data-component="run-status-line"
+          data-stop-on-budget={failureNoteKind === 'budget' ? 'true' : undefined}
+          style={{ fontSize: 12, color: 'var(--faint)' }}
+        >
+          {failureNoteKind === 'budget'
+            ? describeStopOnBudget(run.stopOnBudget!)
+            : `Run failed${failureNoteKind === 'fail-note' ? ` — ${run.failNote}` : ''}.`}
         </span>
       )}
       {controls.map((c) => (

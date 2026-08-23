@@ -358,6 +358,23 @@ export function emitDryBridgeSkip(
 // ---------------------------------------------------------------------------
 
 /**
+ * bead forge-8nw — the ONE `dryBridgeAgentTurnMarker` caller (POST
+ * `/api/agents/:slug/run`, `cli/ui-bridge.ts`) whose 3rd argument is not a
+ * session id at all but the STANDALONE dispatch's own `runId` (minted
+ * `` `_agent-${slug}-${stamp}` ``, then handed to this function verbatim as
+ * `sessionId`). `runId` doubles as the run's OWN `_logs/` directory NAME —
+ * the exact string `deriveStandaloneRunState`/`GET /api/agents/runs/:runId`
+ * (`cli/ui-bridge.ts`) reads back. Every OTHER call site (architect/
+ * instructions/demo-builder/project-brain/onboarding/authoring/kb-cleanup/
+ * community-refresh — see this file's `BRIDGE_ROUTE_CLASSIFICATION` table)
+ * passes a session id whose own terminal state lives in `status.json`
+ * (`writeSessionTerminalPhase`, `cli/agent-run.ts`), not in an
+ * events.jsonl any standalone-run deriver ever reads — so only THIS route
+ * gets the extra write below.
+ */
+const STANDALONE_DISPATCH_ROUTE = '/api/agents/:slug/run';
+
+/**
  * For the spawn-route families (classification 'stub-actions', guard
  * 'spawn-helper'): when dry-bridge is active, emit one `dry-bridge.skip`
  * agent-turn event and return the `dryBridge` fragment to spread into the
@@ -365,6 +382,27 @@ export function emitDryBridgeSkip(
  * FORGE_ARCHITECT_NO_SPAWN-only, whose legacy silent-skip semantics stay
  * byte-identical — returns `{}` and emits nothing. Call exactly once per
  * response, only on branches that would have spawned.
+ *
+ * bead forge-8nw / forge-720 — beyond the shared-bucket skip event above,
+ * a standalone dispatch (`STANDALONE_DISPATCH_ROUTE`) ALSO gets a terminal
+ * marker written into ITS OWN `<logsRoot>/<runId>/events.jsonl` — the file
+ * `deriveStandaloneRunState` (`cli/ui-bridge.ts`) actually reads to derive
+ * `GET /api/agents/runs/:runId`'s state. Without this, a dispatch under
+ * dry-bridge wrote only into the shared `DRY_BRIDGE_LOG_BUCKET`, so its own
+ * run directory never recorded a terminal fact and the run derived
+ * `state: 'running'` FOREVER — the measured root cause of the zombie
+ * `_agent-onboarding-agent-*` / `_agent-w7-throwaway-agent-*` directories
+ * bead forge-720 found on disk. The message reuses the EXACT literal
+ * `'run-agent.spawn-suppressed'` a REAL (non-dry-bridge) suppressed spawn
+ * already writes into this same run's log (`orchestrator/run-agent.ts`,
+ * its own `FORGE_DRY_BRIDGE_ENV`/`FORGE_ARCHITECT_NO_SPAWN_ENV` early
+ * return) — no new marker vocabulary, exactly what
+ * `deriveStandaloneStateFromEvents` (`cli/ui-bridge.ts`) already checks via
+ * `parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed')` to
+ * derive `state: 'suppressed'`. `createLogger` appends (never truncates),
+ * so this lands safely after the route's own t0 `agent-run.dispatched`
+ * marker (`cli/ui-bridge.ts`, written the instant `runId` is minted, before
+ * this function is ever called).
  */
 export function dryBridgeAgentTurnMarker(
   logsRoot: string,
@@ -379,5 +417,21 @@ export function dryBridgeAgentTurnMarker(
       ...(sessionId ? { sessionId } : {}),
     });
   } catch { /* best-effort — never break the route response on a logging failure */ }
+
+  if (sessionId && route === STANDALONE_DISPATCH_ROUTE) {
+    try {
+      createLogger(sessionId, logsRoot).emit({
+        initiative_id: sessionId,
+        phase: 'orchestrator',
+        skill: 'dry-bridge',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'run-agent.spawn-suppressed',
+        metadata: { reason: DRY_BRIDGE_ENV, route },
+      });
+    } catch { /* best-effort — never break the route response on a logging failure */ }
+  }
+
   return { dryBridge: { skipped: ['agent-turn'] } };
 }

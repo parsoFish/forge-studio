@@ -19,12 +19,32 @@
 
 import type { Run, Flow, Agent, Project, Kb, KbLintSummary, SessionIndexRow } from './studio-client';
 import type { ProjectAttentionItem } from './bridge-client';
-import type { LedgerRow } from './history-ledger';
+import { type LedgerRow, sessionTerminalOutcome } from './history-ledger';
 import { mergeRecentAgentRuns } from './agents-index';
 import { sessionKindAgent } from './session-kind-meta';
 import { KB_SEEDING_ANCHOR_PREFIX } from './session-shell-view';
 
-export type HomeStatus = 'active' | 'gated' | 'idle';
+/**
+ * WI-1b (ON-7): declared as a closed const ARRAY (not a bare union) —
+ * mirrors `session-lifecycle-client.ts`'s `SESSION_LIFECYCLE_STATES`
+ * precedent — so a consumer's own exhaustiveness (e.g. `app/page.tsx`'s
+ * `HOME_STATUS_FRAME: Record<HomeStatus, string>`) can be asserted against
+ * THIS array at test time, not a hand-copied literal list that silently
+ * drifts when a member is added.
+ *
+ * Order is the precedence `strongerStatus` (below) ranks by, DECREASING:
+ * `active` beats everything (an actively-executing thing is the single most
+ * CURRENT fact about an object — the pre-existing active-beats-gated rule,
+ * now extended: it beats a failure too, since something is happening right
+ * now, possibly already recovering from that very failure). `failed` beats
+ * `gated`: `gated` means "the operator is asked to make a routine call",
+ * nothing is broken; `failed` means something genuinely IS broken and is a
+ * stronger claim on operator attention than a routine wait. `idle` is the
+ * fail-closed floor — never a fabricated default. Pinned in
+ * home-view.test.ts (WI-1b precedence tests).
+ */
+export const HOME_STATUSES = ['active', 'failed', 'gated', 'idle'] as const;
+export type HomeStatus = (typeof HOME_STATUSES)[number];
 export type HomeHexKind = 'flow' | 'agent' | 'project' | 'kb';
 
 export type HomeHex = {
@@ -115,6 +135,32 @@ export function deriveFlowStatus(flowId: string, runs: Run[]): HomeStatus {
   return 'idle';
 }
 
+/**
+ * WI-1b (ON-7) — Home's OWN flow-hex status. NOT `deriveFlowStatus` above:
+ * a prior review round locked THAT function to 3 states (active|gated|idle)
+ * on purpose — `FlowCard` (`components/studio/LibraryCard.tsx`) renders its
+ * return value verbatim as the `data-flow-status` DOM contract, and
+ * `lib/library-card-render.test.ts`'s "review round GAP 3" tests pin
+ * `data-flow-status="idle"` even for a flow whose only matching run failed
+ * (the real signal lives there on a SEPARATE `data-flow-failed-count`
+ * attribute instead — see that file's own header). Widening
+ * `deriveFlowStatus` in place would silently flip that pinned contract.
+ *
+ * Home's hex constellation carries no such lock and IS the actual ON-7 gap
+ * this closes (a fully-failed flow read identically to a never-run one) —
+ * so this is a second, thin derivation built on the SAME `runsForFlow`
+ * matcher `deriveFlowStatus` itself is built on, adding exactly the one
+ * precedence rung (`strongerStatus`'s active > failed > gated > idle) that
+ * `deriveFlowStatus` deliberately omits for its own DOM contract.
+ */
+export function deriveFlowHomeStatus(flowId: string, runs: Run[]): HomeStatus {
+  const matching = runsForFlow(flowId, runs);
+  if (matching.some((r) => r.status === 'active')) return 'active';
+  if (matching.some((r) => r.status === 'failed')) return 'failed';
+  if (matching.some((r) => r.status === 'gated')) return 'gated';
+  return 'idle';
+}
+
 // ---------------------------------------------------------------------------
 // W7-B1 (home-sessions-14) — interactive sessions are a live-status source.
 //
@@ -131,22 +177,37 @@ export function deriveFlowStatus(flowId: string, runs: Run[]): HomeStatus {
 /** What one session contributes to a hex it anchors on: a `working` runner
  *  is live activity ('active'); a session waiting on the OPERATOR —
  *  awaiting-operator, crashed, stalled (`needsYou`, the bridge's truthful
- *  verdict) — is attention ('gated'); anything else (terminal, unknown)
- *  contributes NOTHING — fail closed, never a fabricated light. */
+ *  verdict) — is attention ('gated'); WI-1b (ON-7): a TERMINAL session whose
+ *  own phase genuinely failed (`sessionTerminalOutcome`, the SAME
+ *  classification `session-lifecycle-client.ts`'s
+ *  `data-lifecycle-terminal-outcome` DOM attribute uses — one source, never
+ *  a second copy that could disagree) is 'failed'. A terminal session that
+ *  merely succeeded or was cancelled by the operator contributes NOTHING —
+ *  fail closed, never a fabricated light (a clean finish or a deliberate
+ *  stop is not an alarm). */
 function sessionContribution(s: SessionIndexRow): HomeStatus | null {
-  if (s.terminal || s.state === 'terminal') return null;
+  if (s.terminal || s.state === 'terminal') {
+    return sessionTerminalOutcome(s.phase) === 'failed' ? 'failed' : null;
+  }
   if (s.state === 'working') return 'active';
   if (s.needsYou) return 'gated';
   return null;
 }
 
-/** 'active' beats 'gated' beats 'idle' — the SAME precedence
- *  `deriveFlowStatus` established (an actively-executing thing is the more
- *  urgent fact than a parked one). */
+/** Precedence rank for `HomeStatus` — see `HOME_STATUSES`'s own doc comment
+ *  for the active > failed > gated > idle reasoning. A `Record` keyed on
+ *  the FULL union, so a future 5th member fails to COMPILE here until it is
+ *  ranked, rather than silently sorting last (or first). */
+const HOME_STATUS_RANK: Record<HomeStatus, number> = {
+  idle: 0,
+  gated: 1,
+  failed: 2,
+  active: 3,
+};
+
+/** The stronger of two statuses, by `HOME_STATUS_RANK`. */
 function strongerStatus(a: HomeStatus, b: HomeStatus): HomeStatus {
-  if (a === 'active' || b === 'active') return 'active';
-  if (a === 'gated' || b === 'gated') return 'gated';
-  return 'idle';
+  return HOME_STATUS_RANK[a] >= HOME_STATUS_RANK[b] ? a : b;
 }
 
 /** Fold every matching session's contribution into one status. */
@@ -167,9 +228,14 @@ function sessionsStatus(sessions: readonly SessionIndexRow[], matches: (s: Sessi
  * keyed by that node's own `id` against `run.phases`) — OR (W7-B1,
  * home-sessions-14) an in-flight session whose kind this agent drives
  * (`sessionKindAgent`, the yaml-parity-pinned mapping) is `working`;
- * a needs-you session marks it 'gated'. An agent that maps to no flow node
- * AND no session kind fails CLOSED to 'idle' — it must never default to
- * 'active' just because it exists.
+ * a needs-you session marks it 'gated'. WI-1b (ON-7): 'failed' iff an owned
+ * node's own phase reads 'failed' on ANY run (a per-node fact, independent
+ * of that run's overall `status` — a node can fail while the run as a whole
+ * is still finishing up elsewhere) — OR a terminal session driven by this
+ * agent's kind genuinely failed (folded in via `sessionsStatus`, same as
+ * every other contribution). An agent that maps to no flow node AND no
+ * session kind fails CLOSED to 'idle' — it must never default to 'active'
+ * (or 'failed') just because it exists.
  */
 export function deriveAgentStatus(agent: Agent, flows: Flow[], runs: Run[], sessions: SessionIndexRow[] = []): HomeStatus {
   const fromSessions = sessionsStatus(sessions, (s) => sessionKindAgent(s.kind) === agent.id);
@@ -181,23 +247,29 @@ export function deriveAgentStatus(agent: Agent, flows: Flow[], runs: Run[], sess
       if (node.agent === agent.id) ownedNodeIds.add(node.id);
     }
   }
+
+  let fromNodes: HomeStatus = 'idle';
   for (const run of runs) {
-    if (run.status !== 'active') continue;
     for (const nodeId of ownedNodeIds) {
-      if (run.phases[nodeId] === 'active') return 'active';
+      const phase = run.phases[nodeId];
+      if (run.status === 'active' && phase === 'active') return 'active';
+      if (phase === 'failed') fromNodes = strongerStatus(fromNodes, 'failed');
     }
   }
-  return fromSessions;
+
+  return strongerStatus(fromNodes, fromSessions);
 }
 
 /**
  * A project's live status, read from its row in the attention aggregate
  * (never a fabricated `project.status` — `Project` carries none) — merged
  * (W7-B1, home-sessions-14) with the in-flight sessions anchored on this
- * project: a `working` session is 'active', a needs-you one 'gated',
- * 'active' winning (deriveFlowStatus's own precedence). A project absent
- * from the attention list with no sessions fails closed to 'idle', not to a
- * guessed state.
+ * project: a `working` session is 'active', a needs-you one 'gated'. WI-1b
+ * (ON-7): a TERMINAL session whose own phase genuinely failed contributes
+ * 'failed' (`sessionContribution`). All folded through `strongerStatus`'s
+ * active > failed > gated > idle precedence. A project absent from the
+ * attention list with no sessions fails closed to 'idle', not to a guessed
+ * state.
  */
 export function deriveProjectStatus(projectId: string, attention: ProjectAttentionItem[], sessions: SessionIndexRow[] = []): HomeStatus {
   const row = attention.find((a) => a.projectId === projectId);
@@ -213,7 +285,9 @@ export function deriveProjectStatus(projectId: string, attention: ProjectAttenti
  * live-status source for the KB hex. A project-BOUND KB's sessions anchor
  * under the real project instead and light that project's hex — attributing
  * them to the KB too would need the binding join; fail closed rather than
- * guess. No matching session = 'idle', never fabricated.
+ * guess. WI-1b (ON-7): a terminal seeding session that genuinely failed
+ * contributes 'failed' (`sessionContribution`), never lumped in with a
+ * clean finish. No matching session = 'idle', never fabricated.
  */
 export function deriveKbStatus(kbId: string, sessions: SessionIndexRow[] = []): HomeStatus {
   return sessionsStatus(sessions, (s) => s.project === `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`);
@@ -247,7 +321,9 @@ export function buildConstellation(input: {
       kind: 'flow',
       glyph: '⬡',
       label: flow.name,
-      status: deriveFlowStatus(flow.id, runs),
+      // WI-1b (ON-7): deriveFlowHomeStatus, NOT deriveFlowStatus — see that
+      // function's own doc comment for why the two must stay separate.
+      status: deriveFlowHomeStatus(flow.id, runs),
       href: `/flows/${flow.id}`,
     });
   }
@@ -374,6 +450,38 @@ export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
 
   return items;
 }
+
+// ---------------------------------------------------------------------------
+// WI-1b (ON-7) — HOME_STATUS_FRAME
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps `HomeStatus` (this module's own 4-state vocab: active/failed/gated/
+ * idle) onto the shared `.hex-frame`/`.status-dot` CSS's 5-state vocab
+ * (pending/active/complete/retrying/failed, `lib/status-colors.ts`) for
+ * STYLING ONLY — `app/page.tsx`'s `data-hex-status` DOM-contract attribute
+ * always carries the real `HomeStatus` value untouched; this map is
+ * consulted ONLY for the hex's visual `.hex-frame`/`.status-dot`
+ * `data-status`. `failed` -> 'failed', the shared red terminal-failure
+ * token — never an invented colour.
+ *
+ * Lives HERE, not in `app/page.tsx` (where it originally sat): a Next.js
+ * App Router `page.tsx` may only export its own reserved fields (`default`,
+ * `metadata`, `generateStaticParams`, ...) — an arbitrary named export like
+ * a frame-map const fails `next build`'s page-export validation (found
+ * running this lane's own build gate). Mirrors `GATE_ATTENTION_STATUS_
+ * FRAME`'s own established "styling-only frame map lives in home-view.ts"
+ * pattern below. `Record<HomeStatus, string>` means a future `HomeStatus`
+ * member fails to COMPILE here until mapped — pinned exhaustively, over
+ * `HOME_STATUSES` (not a hand-copied literal list), by
+ * `lib/home-status-frame-render.test.ts`.
+ */
+export const HOME_STATUS_FRAME: Record<HomeStatus, string> = {
+  active: 'active',
+  failed: 'failed',
+  gated: 'retrying',
+  idle: 'pending',
+};
 
 // ---------------------------------------------------------------------------
 // W6-IA-4 sweep finding C1#3 — GATE_ATTENTION_STATUS_FRAME

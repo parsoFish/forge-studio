@@ -9,6 +9,7 @@ import { architectFileUrl, type ArchitectSessionSummary, type SchedulerStatus } 
 import { isCriticBlocked, shouldResetApproval, planGateKey } from '@/lib/plan-gate-state';
 import {
   architectGateArmed,
+  architectPlanArtifactHref,
   architectPlanStatusCopy,
   architectSessionHref,
   deriveArchitectPlanPhase,
@@ -46,6 +47,7 @@ export function ArchitectPlanGate({
   session,
   sessionId,
   sessionResolved,
+  mode,
   onGateState,
   linkage,
   linkageReady,
@@ -60,6 +62,15 @@ export function ArchitectPlanGate({
   sessionId: string;
   /** True once the sessions fetch settled — not-found is never asserted before. */
   sessionResolved: boolean;
+  /**
+   * W8-A2 (artifact-plan-43): the page's RESOLVED mode
+   * (`lib/artifact-mode.ts`'s `resolveArtifactMode`) — an explicit
+   * `?mode=view` must win even while the session is armed (`architectGateArmed`
+   * alone used to be the ONLY input this component looked at, so the caller's
+   * resolved mode was silently ignored in both directions). `'gate'`/absent
+   * still arms the interactive PlanGate exactly as before.
+   */
+  mode: 'gate' | 'view';
   /** Bubble the verdict up so the page's data-gate-state stays in sync. */
   onGateState?: (state: 'approved' | 'idle') => void;
   linkage: InitiativeLinkage[];
@@ -85,9 +96,13 @@ export function ArchitectPlanGate({
 
   const kind = deriveArchitectPlanPhase(session);
   const armed = architectGateArmed(session);
+  // W8-A2 (artifact-plan-43): armed AND the page's own resolved mode still
+  // says gate — an explicit `mode=view` forces the read-only branch below
+  // even while the session awaits a verdict.
+  const showGate = armed && mode !== 'view';
 
   return (
-    <div data-section="architect-plan" data-architect-phase={kind} data-gate-armed={armed ? 'true' : 'false'}>
+    <div data-section="architect-plan" data-architect-phase={kind} data-gate-armed={armed ? 'true' : 'false'} data-plan-mode={mode}>
       {!session && !sessionResolved && (
         <div style={{ fontSize: 13, color: 'var(--faint)', padding: '20px 0' }}>Loading the architect session…</div>
       )}
@@ -103,7 +118,7 @@ export function ArchitectPlanGate({
         </div>
       )}
 
-      {session && armed && (
+      {session && showGate && (
         <PlanGate
           key={planGateKey(session.round, session.completenessCritic)}
           fullPage
@@ -119,9 +134,15 @@ export function ArchitectPlanGate({
         />
       )}
 
-      {session && !armed && (
+      {session && !showGate && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {(approved || kind === 'finalizing' || kind === 'committed') ? (
+          {armed ? (
+            // artifact-plan-43: forced to view (`mode=view`) while the
+            // session IS armed — read-only, but never hide that a decision
+            // is waiting: a named affordance back into the gate, not a
+            // guess-the-URL exercise.
+            <ArmedButViewingStatus session={session} />
+          ) : (approved || kind === 'finalizing' || kind === 'committed') ? (
             <ArchitectCommittedView
               session={session}
               linkage={linkage}
@@ -168,6 +189,40 @@ function StatusLine({ session, kind }: { session: ArchitectSessionSummary; kind:
       ) : (
         <Link href={href} data-action="open-session" style={{ fontSize: 12.5, color: 'var(--accent)' }}>Open the session →</Link>
       )}
+    </div>
+  );
+}
+
+/**
+ * W8-A2 (artifact-plan-43): the status line for an ARMED session forced into
+ * `mode=view` — reuses the armed copy ("Plan ready — review & approve.") so
+ * the operator isn't left guessing that a decision is even waiting, and links
+ * back into the SAME artifact URL with `mode=gate` to actually decide. Never
+ * `architectSessionHref` here — the decision happens on THIS page, not the
+ * session page.
+ */
+function ArmedButViewingStatus({ session }: { session: ArchitectSessionSummary }): JSX.Element {
+  return (
+    <div
+      data-section="architect-plan-status"
+      data-plan-view-forced="true"
+      style={{
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        padding: '14px 18px',
+        background: 'var(--panel)',
+        fontSize: 13,
+        color: 'var(--dim)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ flex: 1 }}>{architectPlanStatusCopy(session)}</span>
+      <Link href={architectPlanArtifactHref(session.sessionId, 'gate')} data-action="decide-on-plan" style={btnLinkStyle}>
+        Decide on this plan →
+      </Link>
     </div>
   );
 }

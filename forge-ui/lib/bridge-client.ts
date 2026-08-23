@@ -23,6 +23,11 @@ import {
   unwrapBridgeReadOr404,
   type BridgeReadResult,
 } from './bridge-result.ts';
+// W8-A2 (ON-7 defect 1) — type-only import (erased at compile time): safe
+// against the reverse VALUE import (`session-lifecycle-client.ts` imports
+// `bridgeFetch` from this module) because a `type`-only edge never
+// participates in module evaluation order.
+import type { SessionLifecycle } from './session-lifecycle-client.ts';
 
 export type Cycle = {
   cycleId: string;
@@ -912,8 +917,22 @@ export type ArchitectSessionSummary = {
   questions: ArchitectQuestion[] | null;
   planUrl: string | null;
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
-   *  Use this to detect a stalled runner. */
+   *  Use this to detect a stalled runner. Derived from `lifecycle.idleMs`
+   *  (W8-A2, ON-7 defect 1) rather than an independent calculation — kept
+   *  for wire compatibility with `isSessionStale` (architect-hex.ts). */
   staleMs?: number;
+  /**
+   * W8-A2 (ON-7 defect 1) — the derived session lifecycle (state/needsYou/
+   * error/idleMs/cancellable — `cli/bridge-studio-lifecycle.ts`), the SAME
+   * derivation the aggregate `/api/studio/sessions` index already carried;
+   * `GET /api/architect/sessions` never called it before. `error` is the
+   * runner's own crash message (only for `state: 'crashed'`) —
+   * `SessionArchitectPanel`'s stuck warning renders THIS, not a log path.
+   * Additive-optional (declared-data-fails-open guard): absent only if the
+   * registry itself could not resolve the 'architect' descriptor, which
+   * never happens for the real studio/session-kinds.yaml.
+   */
+  lifecycle?: SessionLifecycle;
   /** Null until the critic has run for this session. */
   completenessCritic: CompletenessCriticStatus | null;
   /**
@@ -1012,8 +1031,12 @@ export type InstructionsSessionSummary = {
   /** Bridge-relative URL to the pending AGENTS.draft.md, or null until drafted. */
   draftUrl: string | null;
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
-   *  Use this to detect a stalled runner. */
+   *  Use this to detect a stalled runner. Derived from `lifecycle.idleMs`
+   *  (W8-A2, ON-7 defect 1). */
   staleMs?: number;
+  /** W8-A2 (ON-7 defect 1) — see `ArchitectSessionSummary.lifecycle`'s doc
+   *  comment; the same wiring for `GET /api/instructions/sessions`. */
+  lifecycle?: SessionLifecycle;
 };
 
 export async function listInstructionsSessions(): Promise<InstructionsSessionSummary[]> {
@@ -1094,8 +1117,12 @@ export type DemoSessionSummary = {
    *  (.forge/demo/fragments/<id>.html) — each viewable independently. */
   fragments: string[];
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
-   *  Use this to detect a stalled runner. */
+   *  Use this to detect a stalled runner. Derived from `lifecycle.idleMs`
+   *  (W8-A2, ON-7 defect 1). */
   staleMs?: number;
+  /** W8-A2 (ON-7 defect 1) — see `ArchitectSessionSummary.lifecycle`'s doc
+   *  comment; the same wiring for `GET /api/demo-builder/sessions`. */
+  lifecycle?: SessionLifecycle;
 };
 
 /** Bridge-relative URL serving one element's rendered fragment for a demo session. */
@@ -1179,6 +1206,11 @@ export type ProjectBrainSession = {
   project: string;
   phase: 'briefing' | 'analyzing' | 'awaiting-review' | 'committing' | 'committed' | 'abandoned';
   prompt: string;
+  /** W8-A2 (ON-7 defect 1) — see `ArchitectSessionSummary.lifecycle`'s doc
+   *  comment. `GET /api/project-brain/sessions` served `statuses` VERBATIM
+   *  before this fix — no lifecycle AND no staleness of any kind, the
+   *  worst of the four bespoke list routes. */
+  lifecycle?: SessionLifecycle;
 };
 
 /** Start a project-brain builder session (phase=briefing). */

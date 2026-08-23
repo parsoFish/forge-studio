@@ -1692,7 +1692,7 @@ export const journey = defineJourney({
       {
         id: 'agents-kickoff-dispatch',
         title: 'Kickoff — Run actually carries the chosen project, ceiling, and material',
-        narration: 'The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx\'s own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client\'s own claim. No terminal state is reachable under this harness\'s no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route\'s `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.',
+        narration: 'The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx\'s own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client\'s own claim. The state this beat asserts is `suppressed`, and W8-A2 (bead forge-8nw) is why it changed: `spawnAgentDispatch` returns before the child `agent dispatch` process is ever spawned, so nothing ever ran — but the dry-bridge marker used to be filed under a shared bucket instead of the run\'s OWN events.jsonl, which is the only file the status route derives from. The run therefore derived `running` forever, days later, and real zombie run dirs accumulated on this machine from exactly this path (bead forge-720). The marker now lands in the run\'s own log, so the status route\'s pre-existing `suppressed` branch finally fires. A run that will never run is not `running` — the honest state is that its spawn was suppressed, and that is what the operator now sees.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — Run dispatches with the chosen values (wire-level proof)');
@@ -1769,17 +1769,24 @@ export const journey = defineJourney({
                   statusState = typeof body.state === 'string' ? body.state : '';
                 } catch { /* leave statusOk false */ }
               }
-              check(statusOk && statusState === 'running',
-                `agents-kickoff: the dispatched run is a real, resolvable identity on the shared status surface — GET /api/agents/runs/:runId resolves ok with state:"running", the honest non-terminal state this no-spawn seam produces (got ok=${statusOk}, state="${statusState}")`);
+              // W8-A2 (forge-8nw/forge-720): 'suppressed', NOT 'running'. The dry
+              // bridge genuinely suppresses the spawn, and the marker recording
+              // that now lands in the run's OWN events.jsonl — the only file
+              // `deriveStandaloneRunState` reads. Asserting 'running' here
+              // pinned the zombie-run defect as the contract: a run that will
+              // never run reported itself live indefinitely, which is how the
+              // leaked _agent-* dirs on this machine were created.
+              check(statusOk && statusState === 'suppressed',
+                `agents-kickoff: the dispatched run is a real, resolvable identity on the shared status surface — GET /api/agents/runs/:runId resolves ok with state:"suppressed", the honest TERMINAL state this no-spawn seam produces (got ok=${statusOk}, state="${statusState}")`);
               const domStatus = await page.evaluate(() => document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-status') ?? '');
-              check(domStatus === 'running',
+              check(domStatus === 'suppressed',
                 `agents-kickoff: the kickoff panel's own poll reflects the same state (data-run-status="${domStatus}")`);
         },
       },
       {
         id: 'agents-kickoff-run-view',
         title: 'Kickoff — the standalone run view renders the log, cost, and material as a reference',
-        narration: 'Navigating to the /agents/[id]/run/[runId] route — the log renders the TWO real events this no-spawn seam produces for this run (W7-B5: the route\'s t0 agent-run.dispatched marker — which also records the ceiling at dispatch time, agents-31 — plus its materials-staged bookkeeping; the child dispatch process that would emit start/end/spawn-suppressed never runs at all), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance now reads the REAL $3.5 recorded at dispatch — a failed or still-running run no longer claims "not recorded" about a ceiling that was submitted and enforced.',
+        narration: 'Navigating to the /agents/[id]/run/[runId] route — the log renders the THREE real events this no-spawn seam produces for this run (W7-B5: the route\'s t0 agent-run.dispatched marker — which also records the ceiling at dispatch time, agents-31 — its materials-staged bookkeeping, and, since W8-A2/forge-8nw, the run-agent.spawn-suppressed marker written into the run\'s OWN events.jsonl rather than a shared bucket, which is what lets the run reach a terminal state at all instead of deriving \'running\' forever), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance now reads the REAL $3.5 recorded at dispatch — a failed or still-running run no longer claims "not recorded" about a ceiling that was submitted and enforced.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — the standalone run view');
@@ -1796,18 +1803,22 @@ export const journey = defineJourney({
               check(found === 'true', `agents-kickoff-run-view: the run view finds a real dispatch record for this runId (got "${found}")`);
 
               // NOT a "≥N lines" count — measured: this no-spawn seam produces
-              // EXACTLY TWO events for this run (W7-B5: the route's t0
+              // EXACTLY THREE events for this run (W7-B5: the route's t0
               // `agent-run.dispatched` marker — agents-20's tail anchor +
               // agents-31's dispatch-time ceiling record — then its
-              // synchronous materials-staged bookkeeping; the child `agent
-              // dispatch` process that would add start/end/spawn-suppressed
-              // never spawns at all). Asserting the SPECIFIC real events (by
-              // kind + message) is stronger than a count and can't silently
-              // drift if the seam's event shape changes.
+              // synchronous materials-staged bookkeeping; then, since
+              // W8-A2/forge-8nw, the `run-agent.spawn-suppressed` marker,
+              // which the dry bridge now files in the run's OWN events.jsonl
+              // instead of a shared bucket. That third event is the whole
+              // point: without it `deriveStandaloneRunState` had no terminal
+              // marker to read and derived `running` indefinitely.
+              // Asserting the SPECIFIC real events (by kind + message) is
+              // stronger than a count and can't silently drift if the seam's
+              // event shape changes.
               const logLines = page.locator('[data-log-line="true"]');
               const logLineCount = await logLines.count();
-              check(logLineCount === 2,
-                `agents-kickoff-run-view: exactly two real event lines render under this no-spawn seam (got ${logLineCount})`);
+              check(logLineCount === 3,
+                `agents-kickoff-run-view: exactly three real event lines render under this no-spawn seam (got ${logLineCount})`);
               const firstLineText = await logLines.first().innerText().catch(() => '');
               check(firstLineText.includes('agent-run.dispatched'),
                 `agents-kickoff-run-view: the first line IS the t0 dispatched marker (text="${firstLineText}")`);

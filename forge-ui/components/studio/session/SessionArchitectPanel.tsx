@@ -8,7 +8,7 @@ import { StageHex } from '@/components/StageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ArchitectCommittedView } from '@/components/studio/session/ArchitectCommittedView';
-import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
+import { architectHexMeta, architectHexMetaForLifecycle, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
 import { architectPlanArtifactHref } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
@@ -49,7 +49,13 @@ export function SessionArchitectPanel({
   events: EventLogEntry[];
   nowMs: number;
 }): JSX.Element {
-  const meta = architectHexMeta(session.phase);
+  // W8-A2 (ON-7 defect 3) — a CRASHED runner's `phase` is frozen mid-work
+  // (it dies before it could write one more status.json field), so the hex
+  // reads "drafting the plan…" forever unless the derived lifecycle
+  // overrides it. `session.lifecycle?.state` is `undefined` for a wire
+  // payload that predates the lifecycle field (declared-data-fails-open
+  // guard) — that reads as the ordinary phase-only tone.
+  const meta = architectHexMetaForLifecycle(session.phase, session.lifecycle?.state);
   const active = isArchitectWorking(session.phase);
   const stale = isSessionStale(session);
   const committed = session.phase === 'committed';
@@ -217,6 +223,19 @@ function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.El
     }
   }
 
+  // W8-A2 (ON-7 defect 2) — `lifecycle.error` is the runner's OWN crash
+  // message (the last non-stack line of stderr.log —
+  // `cli/bridge-studio-lifecycle.ts::extractErrorMessage`), reached now
+  // that `GET /api/architect/sessions` finally wires the lifecycle in (ON-7
+  // defect 1). Naming a LOG FILE PATH was never an error message — the
+  // operator had to go open a terminal and cat it themselves. Falls back to
+  // the silence-based copy when the session is stale but NOT (yet) resolved
+  // `crashed` (silent past the ceiling with no stderr at all is genuinely
+  // "may have stalled", a different, honest claim from "crashed" — never
+  // fabricate a crash message that doesn't exist).
+  const crashError = session.lifecycle?.state === 'crashed' ? session.lifecycle.error : null;
+  const phaseLabel = architectHexMeta(session.phase).label;
+
   return (
     <div
       data-architect-stale="true"
@@ -233,11 +252,17 @@ function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.El
       }}
     >
       <div>
-        ⚠ No architect activity for {staleMinutes}m — it may have stalled. Check{' '}
-        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          _logs/_architect-{session.sessionId}/stderr.log
-        </code>{' '}
-        or re-run below.
+        {crashError !== null ? (
+          <>⚠ The architect crashed while {phaseLabel} — {crashError}</>
+        ) : (
+          <>
+            ⚠ No architect activity for {staleMinutes}m — it may have stalled. Check{' '}
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+              _logs/_architect-{session.sessionId}/stderr.log
+            </code>{' '}
+            or re-run below.
+          </>
+        )}
       </div>
       <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
         <button

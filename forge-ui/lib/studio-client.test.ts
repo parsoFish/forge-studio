@@ -873,6 +873,19 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     // `Required<Run>` demands it here — the pin is only a FIELD-PARITY pin
     // if it enumerates every field (GateBar depends on this one).
     project: 'gitpulse',
+    // W8-A2 (ON-7, bead forge-6gv.3.4): the derived budget-stop outcome.
+    // `Required<Run>` demands it the moment the field is declared, which is
+    // exactly what this parity probe is for — it caught the omission at
+    // `test:ui:typecheck` (a CI gate the main tsc pass does not cover).
+    // Values differ from every default so a dropped field cannot coincide.
+    stopOnBudget: {
+      spentUsd: 80.83237065,
+      ceilingUsd: 52,
+      resumable: true,
+      completedWorkItems: 6,
+      totalWorkItems: 6,
+      stoppedBeforeNode: 'demo',
+    },
   };
 
   const parsed = parseRun(raw);

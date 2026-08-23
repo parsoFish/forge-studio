@@ -66,12 +66,29 @@ export interface AgentRunnerEntry {
   /** Print the phase-specific console summary (moved out of each legacy
    *  `cmd<X>Run` body verbatim). */
   printResult: (result: unknown) => void;
+  /** bead forge-poc — the ONE on-disk containment segment this runner's own
+   *  session dir lives under (`<projectRoot>/<kindDir>/<sessionId>/status.json`),
+   *  mirroring `TurnSpec.kindDir` for the new-road turnSpec kinds
+   *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
+   *  `*_KIND_DIR` constant — `orchestrator/architect-runner.ts` ('_architect'),
+   *  `orchestrator/instructions-runner.ts` ('_instructions'),
+   *  `orchestrator/project-brain-builder-runner.ts` ('_project-brain') — with
+   *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
+   *  `orchestrator/demo-builder-runner.ts`'s `DEMO_KIND_DIR` and
+   *  `studio/session-kinds.yaml`'s own "id is demo — NOT demo-builder" comment
+   *  on the "demo" descriptor — the AGENT_RUNNERS *key* `demo-builder` and the
+   *  on-disk dir are intentionally different strings). Used ONLY by
+   *  `cmdAgentRun`'s new failed-turn catch (below) to locate the session's
+   *  `status.json` for `writeSessionTerminalPhase` — never by the runner
+   *  itself, which resolves its own kind dir independently. */
+  kindDir: string;
 }
 
 export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
   architect: {
     verb: 'architect run',
     requiresProject: false,
+    kindDir: '_architect',
     loadRunTurn: async () => runArchitectTurn as unknown as AgentTurnFn,
     printResult: (raw) => {
       const result = raw as Awaited<ReturnType<typeof runArchitectTurn>>;
@@ -92,6 +109,7 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
     // R3-05-F3 — the runner reads the studio/instruction-seeds/ library under
     // forgeRoot to compose AGENTS.md from vetted blocks.
     needsForgeRoot: true,
+    kindDir: '_instructions',
     loadRunTurn: async () => runInstructionsTurn as unknown as AgentTurnFn,
     printResult: (raw) => {
       const result = raw as Awaited<ReturnType<typeof runInstructionsTurn>>;
@@ -107,6 +125,9 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
     verb: 'demo-builder run',
     requiresProject: true,
     needsForgeRoot: true,
+    // NOTE the trap: the on-disk kind dir is '_demo', not '_demo-builder' —
+    // see the AgentRunnerEntry.kindDir doc above.
+    kindDir: '_demo',
     loadRunTurn: async () => runDemoBuilderTurn as unknown as AgentTurnFn,
     printResult: (raw) => {
       const result = raw as Awaited<ReturnType<typeof runDemoBuilderTurn>>;
@@ -120,6 +141,7 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
     requiresProject: true,
     needsForgeRoot: true,
     combinedArgCheck: true,
+    kindDir: '_project-brain',
     loadRunTurn: async () => {
       const { runProjectBrainTurn: run } = await import('../orchestrator/project-brain-builder-runner.ts');
       return run as unknown as AgentTurnFn;
@@ -225,6 +247,16 @@ function writeSessionTerminalPhase(
    *  nothing else about the guard changes). When absent, behaviour is
    *  byte-identical to before this parameter existed. */
   trustedProjectsRoot?: string,
+  /** bead forge-poc (ON-7) — the real caught error's `.message` (or its
+   *  `String(err)` fallback). Carried into the written status as `error`
+   *  ALONGSIDE `phase` — the operator's whole complaint about a silently-
+   *  wedged session is that its terminal state carries no trace of what
+   *  actually happened; the word "failed" alone repeats that mistake in a
+   *  new place. Absent ⇒ no `error` key is written (byte-identical to
+   *  before this parameter existed) — every pre-existing call site that
+   *  omits it keeps writing the bare `{ ...existing, phase }` shape it
+   *  always has. */
+  errorMessage?: string,
 ): void {
   try {
     if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
@@ -282,7 +314,11 @@ function writeSessionTerminalPhase(
     // is the reserved terminal `cancelled` and this late `complete`/`failed`
     // is refused — the session is never resurrected. Best-effort, never masks
     // the dispatch outcome/exit code.
-    guardedWriteSessionStatus(realProjectsRoot, dirSegments, { ...existing, phase });
+    guardedWriteSessionStatus(realProjectsRoot, dirSegments, {
+      ...existing,
+      phase,
+      ...(errorMessage !== undefined ? { error: errorMessage } : {}),
+    });
   } catch {
     /* best-effort — never masks the dispatch outcome/exit code */
   }
@@ -577,7 +613,11 @@ export async function cmdAgentDispatch(
       });
     } catch { /* best-effort */ }
     // D7 — the run ended in failure: write the terminal phase before exiting.
-    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', trustedProjectsRoot);
+    // bead forge-poc (ON-7): the error text rides along too, for the same
+    // reason the sibling agent-dispatch.failed log event above already
+    // carries it — a terminal status.json that only says "failed" forces the
+    // operator back to stderr.log for the one thing they actually need.
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', trustedProjectsRoot, msg);
     process.exit(1);
   }
 }
@@ -688,7 +728,41 @@ async function runTurnSpecAgent(
     return;
   }
 
-  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot });
+  // bead forge-poc — `descriptor.turnSpec` is guaranteed present here: the
+  // ONLY caller (`cmdAgentRun`'s ADR-043 §3 fork below) invokes this function
+  // exclusively when `descriptor?.turnSpec` is truthy. Asserted rather than
+  // silently trusted, per this codebase's declared-data-fails-open rule —
+  // if this invariant is ever violated it fails loud, naming the id, instead
+  // of a confusing crash three lines later inside `join(undefined, ...)`.
+  const turnSpec = descriptor.turnSpec;
+  if (!turnSpec) {
+    throw new Error(`runTurnSpecAgent: session kind "${agentId}" has no turnSpec (internal invariant violated — the caller must only reach here for a turnSpec-bearing descriptor)`);
+  }
+  // bead forge-poc (defect 1, "a runner throw wedges a session at its
+  // pre-turn phase forever") — `runInteractiveTurn` (like each of the 4
+  // legacy runners below) can throw synchronously (a declared-data-fails-open
+  // guard, a cost-ceiling refusal, a containment refusal, …) with NOTHING
+  // above this call catching it; the session's status.json then sits at
+  // whatever phase it was in when the turn started, forever — the operator
+  // UI polls status and shows silence, the only trace is stderr.log (R4-23
+  // widened exactly this trigger set; ADR-043 2026-08-14 amendment §4).
+  // The session dir mirrors `runInteractiveTurn`'s OWN SEC-04 containment
+  // preamble (`[turnSpec.kindDir, sessionId]` under `projectRoot`) — same
+  // two segments, same root, so the terminal write lands exactly where the
+  // turn itself would have written its next status.
+  const sessionDir = join(projectRoot, turnSpec.kindDir, sessionId);
+  let result: Awaited<ReturnType<typeof runInteractiveTurn>>;
+  try {
+    result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // writeSessionTerminalPhase is best-effort (its own try/catch swallows
+    // any failure) and honours the sticky-cancel rule via
+    // guardedWriteSessionStatus — a session the operator cancelled while
+    // this turn ran stays 'cancelled', never resurrected to 'failed'.
+    writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', undefined, msg);
+    throw err; // RETHROW — the exit code must still reflect the failure.
+  }
   console.log(`${agentId} turn complete — phase=${result.phase}`);
   if (result.wrote.length) {
     console.log(`  wrote ${result.wrote.length} file(s):`);
@@ -796,11 +870,27 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
   }
 
   const runTurn = await entry.loadRunTurn();
-  const result = await runTurn({
-    sessionId,
-    projectRoot,
-    ...(entry.needsForgeRoot ? { forgeRoot } : {}),
-  });
+  // bead forge-poc (defect 1) — same rationale as runTurnSpecAgent's own
+  // catch above: a legacy runner throw (architect's cost-ceiling refusal,
+  // any runner's "no status.json"/containment refusal, …) previously had
+  // NOTHING between it and the top-level `orchestrator/cli.ts` catch-all,
+  // which only logs to stderr — invisible to the detached, unref'd spawn
+  // `cli/ui-bridge.ts`'s `spawnAgentTurn` uses. `entry.kindDir` is each
+  // runner's own on-disk session-dir segment (see AgentRunnerEntry.kindDir's
+  // doc for the demo-builder/`_demo` trap).
+  const sessionDir = join(projectRoot, entry.kindDir, sessionId);
+  let result: unknown;
+  try {
+    result = await runTurn({
+      sessionId,
+      projectRoot,
+      ...(entry.needsForgeRoot ? { forgeRoot } : {}),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed', undefined, msg);
+    throw err; // RETHROW — the exit code must still reflect the failure.
+  }
   entry.printResult(result);
 }
 

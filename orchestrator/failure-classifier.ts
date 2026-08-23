@@ -181,12 +181,23 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
   let crashDeterministic = false;
+  // W8-A2 (ON-7 defect 2a): the flow's own budget guard (CostTracker.
+  // checkCeiling, flow-budgets.ts) firing. Captured verbatim so the reason
+  // string below can quote the flow's own accounting instead of re-deriving
+  // it (the message already names the spend, the ceiling, and that the stop
+  // was at a clean, resumable phase boundary).
+  let costCeilingHit = false, costCeilingMessage = '';
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
     const msg = e.message ?? '';
     const pmErr = e.phase === 'project-manager' && e.event_type === 'error';
 
+    // Checked ahead of the generic error-blob scan below: CostCeilingError's
+    // message (flow-budgets.ts) always starts with this literal prefix, and
+    // matching it here means the branch never depends on the blob-based
+    // rate-limit/agent_threw checks happening to miss it.
+    if (e.event_type === 'error' && msg.startsWith('cost-ceiling:')) { costCeilingHit = true; costCeilingMessage = msg; ev(e); }
     if (msg === 'ralph.end' && md.status === 'failed' && (md.iterations === 0 || md.iterations === undefined) && md.stop_reason === 'quality-gates-pass') { trivialPass = true; ev(e); }
     if (e.event_type === 'error' && (msg.includes('brain-skipped') || msg.includes('brain-first mandate'))) { brainSkipped = true; ev(e); }
     if (e.phase === 'project-manager' && (md.result_subtype === 'error_max_turns' || md.result_subtype === 'error_max_budget_usd')) {
@@ -305,6 +316,20 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence, true);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
+  // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget
+  // guard firing at a clean phase boundary (flow-budgets.ts CostTracker.
+  // checkCeiling) — never a defect in the work, and the class's own doc
+  // comment even calls it "resumable — the operator decides whether to
+  // continue or abandon." That "resumable" is about a HUMAN being able to
+  // raise the ceiling and re-queue past this exact point; it is NOT license
+  // to auto-retry. `recoverable` (kind==='transient') is what
+  // `decideAutoRetry` reads to grant an unattended retry, and an unattended
+  // retry here would immediately re-spend against a ceiling it already
+  // crossed — zero new work, guaranteed repeat, at cost. So this stays
+  // `kind: 'terminal'` (recoverable: false) even though it is, in the
+  // "an operator could resume this" sense, the least "terminal" terminal
+  // failure in this file. Do not "fix" this to transient.
+  if (costCeilingHit) return T('terminal', `cost ceiling reached — ${costCeilingMessage} An auto-retry would immediately re-spend against the same already-crossed ceiling with zero new work; continuing is an OPERATOR decision (raise the ceiling and resume from this phase boundary, or abandon), never an unattended scheduler retry.`, evidence);
   if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
