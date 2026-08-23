@@ -10,7 +10,14 @@ import type { ReactNode } from 'react';
 //
 // Contract (pinned in lib/library-authoring-render.test.ts):
 //   [data-component="library-item-actions"][data-kind]
-//   [data-action="edit-<kind>"]      aria-pressed mirrors `editing`
+//   [data-action="edit-<kind>"]      rendered ONLY while `!editing`
+//     (aria-pressed is always "false" there — the control is never shown
+//     pressed, because entering `editing` un-mounts it). While `editing` is
+//     true this bar renders NO dismiss control at all: the editor mounted
+//     alongside it (TemplateEditor / the hook/skill edit form) owns
+//     dismissal via its own adjacent Cancel, so exactly one control ever
+//     dismisses the editor (W8-B4: the old "Close editor" relabel made two
+//     controls do the same thing).
 //   [data-action="delete-<kind>"]    two-step: arming reveals
 //   [data-action="confirm-delete-<kind>"] + [data-action="cancel-delete-<kind>"]
 //   [data-component="delete-blocked"] — a server-guarded delete renders the
@@ -54,15 +61,15 @@ export function LibraryItemActions({
       data-item-id={id}
       style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
     >
-      {onToggleEdit && (
+      {onToggleEdit && !editing && (
         <button
           type="button"
           className="btn btn-sm"
           data-action={`edit-${kind}`}
-          aria-pressed={editing ? 'true' : 'false'}
+          aria-pressed="false"
           onClick={onToggleEdit}
         >
-          {editing ? 'Close editor' : 'Edit'}
+          Edit
         </button>
       )}
 

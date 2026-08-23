@@ -24,6 +24,9 @@
 import { test, expect } from 'vitest';
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
@@ -31,6 +34,9 @@ import { TemplateEditor } from '@/components/studio/TemplateEditor';
 import { sessionEntryHrefForAgent, SESSION_KIND_META } from './session-kind-meta';
 import { buildAgentPutBody, parseAgentToState, duplicateAgentState } from './agent-authoring-view';
 import type { Agent } from './studio-client';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const readAppFile = (relPath: string) => readFileSync(join(__dirname, relPath), 'utf8');
 
 // ---------------------------------------------------------------------------
 // LibraryItemActions — the shared Edit / Delete bar
@@ -70,17 +76,122 @@ test('LibraryItemActions — a blocked delete is disabled WITH the reason shown'
   expect(html).toMatch(/data-action="delete-hook"[^>]*disabled/);
 });
 
-test('LibraryItemActions — editing state flips the edit control label/pressed state', () => {
-  const html = renderToStaticMarkup(
-    React.createElement(LibraryItemActions, {
-      kind: 'template',
-      id: 't',
-      editing: true,
-      onToggleEdit: () => {},
-      onDelete: () => {},
+// W8-B4: STRONGER replacement for the old 'editing state flips the edit
+// control label/pressed state' pin. The old contract (an `edit-<kind>`
+// control that relabels to "Close editor" and stays pressed while editing)
+// made every library detail page show TWO controls that dismiss the same
+// editor: this action-bar control AND the editor's own adjacent Cancel
+// (TemplateEditor/HookEditForm/SkillEditForm all already have one). The new
+// contract: LibraryItemActions renders NO dismiss control at all while
+// editing — the editor below is the ONE surviving dismiss.
+//
+// This is the enumeration pin: real, looped (not three copy-pasted
+// single-kind assertions a fourth page could dodge) — for every kind a real
+// library detail page uses (skill/hook/template), it asserts (a) the shared
+// action bar contributes zero dismiss controls while editing, from the
+// SAME LibraryItemActions instance every page mounts, and (b) that page's
+// own source still wires its own editor's Cancel to the SAME toggleEdit
+// handler, so exactly one dismiss survives end to end. Because the
+// production fix lives in LibraryItemActions and is not kind-specific, a
+// future fourth consumer inherits "zero from the bar" for free — it cannot
+// resurrect the two-control bug through this shared component regardless of
+// what its own editor looks like.
+test('LibraryItemActions — exactly one dismiss control survives while editing, for every real page (skill, hook, template)', () => {
+  const kinds = ['skill', 'hook', 'template'] as const;
+  const pageSourceByKind: Record<(typeof kinds)[number], { path: string; cancelPattern: RegExp }> = {
+    skill: {
+      path: '../app/skills/[id]/page.tsx',
+      cancelPattern: /data-action="cancel-skill-edit"[^>]*onClick=\{toggleEdit\}/,
+    },
+    hook: {
+      path: '../app/hooks/[id]/page.tsx',
+      cancelPattern: /data-action="cancel-hook-edit"[^>]*onClick=\{toggleEdit\}/,
+    },
+    template: {
+      path: '../app/templates/[id]/page.tsx',
+      // The template editor is the one extracted, reusable component
+      // (TemplateEditor) — its onCancel is wired to the SAME toggleEdit.
+      cancelPattern: /<TemplateEditor[\s\S]*?onCancel=\{toggleEdit\}/,
+    },
+  };
+
+  for (const kind of kinds) {
+    // (a) the shared action bar: zero dismiss controls while editing.
+    const actionsHtml = renderToStaticMarkup(
+      React.createElement(LibraryItemActions, {
+        kind,
+        id: 'x',
+        editing: true,
+        onToggleEdit: () => {},
+        onDelete: () => {},
+      }),
+    );
+    expect(actionsHtml).not.toMatch(new RegExp(`data-action="edit-${kind}"`));
+    expect(actionsHtml).not.toContain('Close editor');
+
+    // (b) the real page still wires its own editor's Cancel — dismissal
+    // still works, it just isn't duplicated.
+    const { path, cancelPattern } = pageSourceByKind[kind];
+    const pageSrc = readAppFile(path);
+    expect(pageSrc).toMatch(cancelPattern);
+  }
+
+  // Cross-check (b) for templates against the REAL TemplateEditor markup —
+  // not just page-source text — since it IS an extracted, importable
+  // component: the ONE dismiss control it renders is cancel-template-edit.
+  const templateEditorHtml = renderToStaticMarkup(
+    React.createElement(TemplateEditor, {
+      content: 'x',
+      onChange: () => {},
+      onSave: () => {},
+      onCancel: () => {},
+      saving: false,
+      error: null,
     }),
   );
-  expect(html).toMatch(/data-action="edit-template"[^>]*aria-pressed="true"/);
+  expect(templateEditorHtml).toContain('data-action="cancel-template-edit"');
+});
+
+// Component-level: NO kind value renders a dismiss control while editing —
+// including 'agent', which never passes onToggleEdit at all (the agent
+// builder page IS the editor; LibraryItemActions renders no Edit control for
+// it either way). Parameterized over ALL FOUR kind values so the underlying
+// production guard is proven kind-agnostic, not merely kind-by-kind lucky.
+test('LibraryItemActions — the action bar renders no dismiss control while editing, for every kind', () => {
+  const kinds = ['skill', 'hook', 'template', 'agent'] as const;
+  for (const kind of kinds) {
+    const html = renderToStaticMarkup(
+      React.createElement(LibraryItemActions, {
+        kind,
+        id: 'x',
+        editing: true,
+        onToggleEdit: () => {},
+        onDelete: () => {},
+      }),
+    );
+    expect(html).not.toMatch(new RegExp(`data-action="edit-${kind}"`));
+    expect(html).not.toContain('Close editor');
+  }
+});
+
+// The flip side of the above: the fix must not be "delete the Edit button
+// outright" — it must still be OFFERED whenever the item is NOT being
+// edited, for every kind a real page uses.
+test('LibraryItemActions — the Edit control is still offered when NOT editing, for every real kind', () => {
+  const kinds = ['skill', 'hook', 'template'] as const;
+  for (const kind of kinds) {
+    const html = renderToStaticMarkup(
+      React.createElement(LibraryItemActions, {
+        kind,
+        id: 'x',
+        editing: false,
+        onToggleEdit: () => {},
+        onDelete: () => {},
+      }),
+    );
+    expect(html).toMatch(new RegExp(`data-action="edit-${kind}"[^>]*aria-pressed="false"`));
+    expect(html).toContain('>Edit<');
+  }
 });
 
 // ---------------------------------------------------------------------------
