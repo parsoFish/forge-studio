@@ -155,6 +155,43 @@ export type KbDrainState =
   | 'cancelled'
   | 'failed';
 
+/**
+ * W8-B2 (ON-3) — what the fix turn actually PROPOSED for one file, and what
+ * became of it.
+ *
+ * Operator note ON-3: "it's very hard to see what changes are being proposed
+ * when it raises those up to the operator, and there's no way to drill into
+ * what it thinks the issues are and what it's trying to do to fix them."
+ * Before this, the entire per-finding UI was a glyph, a filename basename, a
+ * rule id and one sentence — the diff existed (the structural gate computes it
+ * to render the draft plan) and simply never reached the row.
+ */
+export type KbDrainProposedChange = {
+  /** Path relative to forgeRoot — greppable, and the same label the gated
+   *  draft plan uses for the same file. */
+  file: string;
+  /** Unified diff of the proposal, truncated at `KB_DRAIN_DIFF_MAX_LINES`. */
+  diff: string;
+  /** True when `diff` was cut short — never a silently shortened diff. */
+  diffTruncated: boolean;
+  /**
+   * What became of the proposal:
+   *   - `applied`  — sound and structural; it is on disk.
+   *   - `repaired` — unsound; the drain wrote a verified repair instead.
+   *   - `refused`  — unsound with no unique repair; reverted, nothing landed.
+   *   - `drafted`  — prose; reverted and parked for operator approval.
+   */
+  disposition: 'applied' | 'repaired' | 'refused' | 'drafted';
+  /** The soundness audit's own reasons, verbatim. Empty for `applied`. */
+  reasons: string[];
+};
+
+/** Line cap for one rendered proposal diff. A theme is lint-capped at 800
+ *  lines, but a turn can touch several files and the whole status object is
+ *  polled; truncation is DECLARED on the row (`diffTruncated`) so a cut diff
+ *  can never read as a small one. */
+export const KB_DRAIN_DIFF_MAX_LINES = 200;
+
 export type KbDrainPerFinding = {
   key: string;
   check: string;
@@ -182,6 +219,13 @@ export type KbDrainPerFinding = {
    *  produced a green run carrying a not-cleared row for a finding its own lint
    *  said was gone. */
   turnError?: string;
+  /** W8-B2 (ON-3): every file the turn proposed to change for this finding,
+   *  with its diff and its disposition. */
+  proposedChanges?: KbDrainProposedChange[];
+  /** W8-B2 (ON-3): the targeted instruction the fix turn was given for this
+   *  finding (`Finding.fixHint`) — the closest thing to the agent's brief, and
+   *  the thing that explains WHY it did what the diff shows. */
+  fixHint?: string;
 };
 
 export type KbDrainStatus = {
@@ -597,6 +641,58 @@ export function finalizeRoundRows(
     ...row,
     outcome: row.draftSession ? 'needs-you' : afterKeys.has(row.key) ? 'not-cleared' : 'cleared',
   }));
+}
+
+/** One proposal diff, capped and honestly flagged when cut. */
+function renderProposalDiff(label: string, before: string, after: string): { diff: string; diffTruncated: boolean } {
+  const full = buildUnifiedDiff(label, before, after).split('\n');
+  if (full.length <= KB_DRAIN_DIFF_MAX_LINES) return { diff: full.join('\n'), diffTruncated: false };
+  return {
+    diff: [...full.slice(0, KB_DRAIN_DIFF_MAX_LINES), `… ${full.length - KB_DRAIN_DIFF_MAX_LINES} more diff line(s) not shown`].join('\n'),
+    diffTruncated: true,
+  };
+}
+
+/**
+ * W8-B2 (ON-3) — turn every file the turn touched into an operator-inspectable
+ * proposal row: the diff, what became of it, and why.
+ *
+ * Derived entirely from the change set the gate already computed. Nothing here
+ * re-reads the filesystem or re-decides a disposition — a second derivation of
+ * "what happened to this edit" is exactly the drift this lane exists to close.
+ */
+function buildProposedChanges(
+  forgeRoot: string,
+  brainDir: string,
+  changes: readonly KbEditChange[],
+  gate: { refused: readonly KbEditChange[]; repaired: readonly KbEditChange[]; unsound: readonly KbEditUnsoundness[] },
+  proseChanges: readonly KbEditChange[],
+  proseDisposition: 'drafted' | 'refused',
+): KbDrainProposedChange[] {
+  const refusedPaths = new Set(gate.refused.map((c) => c.relPath));
+  const repairedByPath = new Map(gate.repaired.map((c) => [c.relPath, c]));
+  const prosePaths = new Set(proseChanges.map((c) => c.relPath));
+  const reasonsByPath = new Map<string, string[]>();
+  for (const u of gate.unsound) {
+    const list = reasonsByPath.get(u.relPath) ?? [];
+    list.push(u.message);
+    reasonsByPath.set(u.relPath, list);
+  }
+
+  return changes.map((c) => {
+    const file = relative(forgeRoot, join(brainDir, c.relPath));
+    const repaired = repairedByPath.get(c.relPath);
+    const disposition: KbDrainProposedChange['disposition'] =
+      repaired ? 'repaired'
+      : refusedPaths.has(c.relPath) ? 'refused'
+      : prosePaths.has(c.relPath) ? proseDisposition
+      : 'applied';
+    // A repaired file's diff shows what LANDED, not the rejected proposal —
+    // the reasons carry what was rejected and why.
+    const after = repaired ? (repaired.after ?? '') : (c.after ?? '');
+    const { diff, diffTruncated } = renderProposalDiff(file, c.before ?? '', after);
+    return { file, diff, diffTruncated, disposition, reasons: reasonsByPath.get(c.relPath) ?? [] };
+  });
 }
 
 /** Rows still awaiting this round's post-fix lint — what a mid-round poll sees. */
@@ -1047,12 +1143,14 @@ export async function runKbDrain(
             });
           }
         }
+        let proseDisposition: 'drafted' | 'refused' = 'refused';
         if (proseChanges.length > 0) {
           // The prose edit NEVER lands directly: restore, then park the
           // proposal as an operator-approved kb-cleanup draft.
           revertProseChanges(brainDir, proseChanges);
           const minted = mintKbCleanupDraftSession(forgeRoot, kbId, brainDir, f, proseChanges, runId, round);
           if (minted) {
+            proseDisposition = 'drafted';
             draftSession = minted;
             draftedKeys.set(findingKey(f), minted);
             emitProgress(`kb-drain.gated (${basename(f.file)} · prose edit parked as draft ${minted.id})`, {
@@ -1069,6 +1167,10 @@ export async function runKbDrain(
           tier: 'agent', round,
           ...(draftSession ? { draftSession } : {}),
           ...(turnError ? { turnError } : {}),
+          ...(f.fixHint ? { fixHint: f.fixHint } : {}),
+          ...(changes.length > 0
+            ? { proposedChanges: buildProposedChanges(forgeRoot, brainDir, changes, gate, proseChanges, proseDisposition) }
+            : {}),
         });
         emitProgress(`kb-drain.turn-end (${basename(f.file)} · $${costUsd.toFixed(2)})`, {
           round, file: f.file, check: f.check, costUsd,

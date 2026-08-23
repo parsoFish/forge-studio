@@ -408,9 +408,29 @@ function KnowledgePageInner() {
   }, [currentId, idConfirmed, getOrStartKbFetch, detailKey]);
 
   // ── Node selection: fetch article ─────────────────────────────────────────
+  // W8-B2 (forge-6gv.6.3): the selection is WRITTEN BACK to `?node=`, closing
+  // the deep link's other end. `?node=` has always been readable — the drain's
+  // per-finding "open in Explore" link relies on it — but a selection made by
+  // clicking the graph never reached the URL, so the address bar disagreed
+  // with the page and a share/reload/back landed somewhere else. `replace`,
+  // not `push`: exploring a graph must not bury the Back button under one
+  // history entry per node.
+  const syncSelectionToUrl = useCallback((nodeId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.get('node') === nodeId) return;
+    params.set('node', nodeId);
+    // ?theme= is a thin alias onto ?node= (RULING 1); leaving a stale one
+    // beside the node we just wrote would be two sources of truth for one
+    // selection.
+    params.delete('theme');
+    if (currentId) params.set('id', currentId);
+    router.replace(`/knowledge?${params.toString()}`, { scroll: false });
+  }, [searchParams, router, currentId]);
+
   const handleSelectNode = useCallback((nodeId: string) => {
     if (!currentId) return;
     setSelectedNode(nodeId);
+    syncSelectionToUrl(nodeId);
     setArticle(null);
     setArticleLoading(true);
 
@@ -424,7 +444,7 @@ function KnowledgePageInner() {
     });
 
     return () => { signal.cancelled = true; };
-  }, [currentId]);
+  }, [currentId, syncSelectionToUrl]);
 
   // ── Jump-to-node (from article chips or wiki-links) ───────────────────────
   const handleJump = useCallback((nodeId: string) => {

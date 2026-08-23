@@ -215,6 +215,72 @@ test('REGRESSION 2 (trafficGame, 2026-08-22): the drain REPAIRS a dead link rath
   }
 });
 
+test('ON-3: a refused finding SHOWS ITS FIX — the row carries the proposed diff, its disposition and the audit\'s reason', async () => {
+  const { root, brainDir } = makeKbRoot(GITPULSE_KB, [
+    { slug: RECURRENCE_SLUG, category: 'antipattern', content: RECURRENCE_BEFORE },
+    { slug: DOUBLE_COMMIT_SLUG, category: 'antipattern', content: themeFile('Double commit', 'antipattern') },
+    { slug: THIRD_CYCLE_SLUG, category: 'antipattern', content: themeFile('Third cycle', 'antipattern') },
+  ]);
+  const target = join(brainDir, 'themes', `${RECURRENCE_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkLengthSoftCap', 'length.soft-cap', 'theme exceeds the soft line cap');
+    finding.fixHint = 'Condense the theme below the soft cap without losing amendment history.';
+    const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-r5`, {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: async (input) => {
+        writeFileSync(target, RECURRENCE_AFTER_DELETION);
+        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+      },
+    });
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    assert.ok(row, JSON.stringify(status.perFinding));
+    // The rule and the brief the agent was given.
+    assert.equal(row.check, 'checkLengthSoftCap');
+    assert.equal(row.fixHint, 'Condense the theme below the soft cap without losing amendment history.');
+    // The proposal itself.
+    const proposals = row.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, `expected one proposal — got ${JSON.stringify(proposals)}`);
+    const [p] = proposals;
+    assert.equal(p.disposition, 'refused');
+    assert.match(p.file, new RegExp(`${RECURRENCE_SLUG}\\.md$`));
+    assert.match(p.diff, new RegExp(`^-related_themes: \\[${DOUBLE_COMMIT_SLUG}`, 'm'), `the diff must show the deleted edge — got:\n${p.diff}`);
+    assert.equal(p.diffTruncated, false);
+    assert.equal(p.reasons.length, 1);
+    assert.match(p.reasons[0], /deletes the related_themes edge/);
+    assert.match(p.reasons[0], new RegExp(DOUBLE_COMMIT_SLUG));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ON-3: a REPAIRED finding shows the diff of what LANDED, with the rejected proposal named in its reasons', async () => {
+  const { root, brainDir } = makeTrafficGameRoot();
+  const target = join(brainDir, 'themes', `${GRADING_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkSourceLinks', 'links.broken', `broken link: ${TG_DEAD_OLD}`);
+    let turns = 0;
+    const status = await runKbDrain(root, TG_KB, `${TG_KB}-drain-r6`, {
+      lint: () => ({ findings: turns === 0 ? [finding] : [] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: turns === 0 ? [finding] : [] }),
+      runFixTurn: async (input) => {
+        turns += 1;
+        writeFileSync(target, gradingTheme(TG_DEAD_NEW));
+        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+      },
+    });
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    const proposals = row?.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, JSON.stringify(proposals));
+    assert.equal(proposals[0].disposition, 'repaired');
+    assert.ok(proposals[0].diff.includes(TG_REAL), `the shown diff must be what landed — got:\n${proposals[0].diff}`);
+    assert.ok(!proposals[0].diff.includes(`+[eval-driven development](${TG_DEAD_NEW})`), 'the rejected proposal must not be shown as if it landed');
+    assert.match(proposals[0].reasons[0] ?? '', /does not exist/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('REGRESSION 2b: with NO resolvable target anywhere, the drain refuses instead of inventing one — the pre-turn bytes stand', async () => {
   const made = makeKbRoot(TG_KB, [
     { slug: GRADING_SLUG, category: 'pattern', content: gradingTheme(TG_DEAD_OLD) },
