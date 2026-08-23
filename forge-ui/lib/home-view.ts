@@ -84,6 +84,16 @@ export type HomeAttentionItem =
       href: string;
       kbId: string;
       lint: KbLintSummary;
+    }
+  | {
+      id: string;
+      kind: 'kb-draft';
+      text: string;
+      sub: string;
+      status: 'gated';
+      href: string;
+      sessionId: string;
+      project: string;
     };
 
 /**
@@ -448,6 +458,50 @@ export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
     });
   }
 
+  return items;
+}
+
+/**
+ * W8-B2 (ON-4) — brain edits waiting on the operator.
+ *
+ * Operator note ON-4: "the review draft button for edits to the brains is so
+ * unnoticeable it's insane." It was an 11px text link inside a round-grouped
+ * finding row on the Health tab of one KB — and a pending drain draft appeared
+ * in NO Home attention row at all, so a KB holding an unreviewed, unapplied
+ * edit to a real brain theme looked identical on Home to one that had never
+ * been drained.
+ *
+ * DERIVED, with nothing added to the wire. A drain-gated edit is parked as a
+ * `kb-cleanup` session in `awaiting-approval`, and the bridge already computes
+ * the truthful `needsYou` verdict for every session row
+ * (`cli/bridge-studio-lifecycle.ts`). So the condition is exactly "a kb-cleanup
+ * session that needs you" — read off the SAME already-fetched sessions array
+ * Home's constellation and sessions strip use. No new fetch, no new poll, and
+ * no `pendingDraft` boolean for some writer to forget to set.
+ *
+ * The row links to the SESSION, not to the KB: approving the draft is the
+ * action, and the KB's Health tab cannot perform it.
+ *
+ * Deliberately narrow: `kb-cleanup` is the kind that carries an unapplied edit
+ * to brain content. Widening this to every needs-you session would duplicate
+ * the sessions strip directly below it.
+ */
+export function buildKbDraftAttention(sessions: readonly SessionIndexRow[]): HomeAttentionItem[] {
+  const items: HomeAttentionItem[] = [];
+  for (const s of sessions) {
+    if (s.kind !== 'kb-cleanup') continue;
+    if (!s.needsYou) continue; // fires on the bridge's real verdict, never on mere existence
+    items.push({
+      id: `kb-draft-${s.project}-${s.sessionId}`,
+      kind: 'kb-draft',
+      text: `${s.project} · a brain edit is waiting for your review`,
+      sub: `kb-cleanup · ${s.phase}`,
+      status: 'gated',
+      href: s.href,
+      sessionId: s.sessionId,
+      project: s.project,
+    });
+  }
   return items;
 }
 

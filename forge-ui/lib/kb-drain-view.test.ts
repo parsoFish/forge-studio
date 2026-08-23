@@ -15,6 +15,12 @@ import {
   formatDrainElapsed,
   deriveDrainDisplayState,
   KB_DRAIN_MAX_ROUNDS_DISPLAY,
+  findingDisposition,
+  findingRefusalReasons,
+  findingHasDetail,
+  deriveFindingNodeHref,
+  KB_DRAIN_OUTCOME_GLYPH,
+  pendingDraftSessions,
 } from './kb-drain-view';
 import type { KbDrainPerFinding } from './studio-client';
 
@@ -191,4 +197,87 @@ test('W7-B2 formatDrainElapsed: real elapsed label; null without startedAt or fo
   expect(formatDrainElapsed('2026-08-20T10:02:00Z', now)).toBe('5s');
   expect(formatDrainElapsed(undefined, now)).toBeNull();
   expect(formatDrainElapsed('2026-08-20T10:03:00Z', now)).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-3) — a finding shows its fix, and links back to Explore
+// ---------------------------------------------------------------------------
+
+test('findingDisposition: no proposals -> none', () => {
+  expect(findingDisposition({})).toBe('none');
+  expect(findingDisposition({ proposedChanges: [] })).toBe('none');
+});
+
+test('findingDisposition: one agreed disposition is reported verbatim', () => {
+  expect(findingDisposition({ proposedChanges: [
+    { file: 'brain/x/themes/a.md', diff: '', disposition: 'refused' },
+  ] })).toBe('refused');
+});
+
+test('findingDisposition: MIXED when one file landed and another was refused — never one clean claim for both', () => {
+  expect(findingDisposition({ proposedChanges: [
+    { file: 'brain/x/themes/a.md', diff: '', disposition: 'applied' },
+    { file: 'brain/x/themes/b.md', diff: '', disposition: 'refused' },
+  ] })).toBe('mixed');
+});
+
+test('findingRefusalReasons: flattens every proposal reason in order', () => {
+  expect(findingRefusalReasons({ proposedChanges: [
+    { file: 'a', diff: '', disposition: 'refused', reasons: ['one', 'two'] },
+    { file: 'b', diff: '', disposition: 'repaired', reasons: ['three'] },
+  ] })).toEqual(['one', 'two', 'three']);
+});
+
+test('findingHasDetail: a disclosure is offered only when something is inside it', () => {
+  expect(findingHasDetail({})).toBe(false);
+  expect(findingHasDetail({ fixHint: 'repoint the entry' })).toBe(true);
+  expect(findingHasDetail({ turnError: 'crashed' })).toBe(true);
+  expect(findingHasDetail({ proposedChanges: [{ file: 'a', diff: 'd', disposition: 'applied' }] })).toBe(true);
+});
+
+test('deriveFindingNodeHref: deep-links a theme finding at its own node in Explore', () => {
+  expect(deriveFindingNodeHref(
+    { file: '/home/p/forge/brain/projects/gitpulse/themes/2026-06-21-recurrence.md' },
+    'gitpulse',
+  )).toBe('/knowledge?id=gitpulse&node=2026-06-21-recurrence');
+});
+
+test('deriveFindingNodeHref: handles windows-style separators', () => {
+  expect(deriveFindingNodeHref(
+    { file: 'C:\\forge\\brain\\cycles\\themes\\eval-driven-development.md' },
+    'cycles',
+  )).toBe('/knowledge?id=cycles&node=eval-driven-development');
+});
+
+test('deriveFindingNodeHref: fails CLOSED for anything that is not a theme node — no link beats a link to NotFound', () => {
+  expect(deriveFindingNodeHref({ file: '/f/brain/cycles/patterns.md' }, 'cycles')).toBeNull();
+  expect(deriveFindingNodeHref({ file: '/f/brain/cycles/themes/README.md' }, 'cycles')).toBeNull();
+  expect(deriveFindingNodeHref({ file: '/f/brain/cycles/_raw/notes.md' }, 'cycles')).toBeNull();
+  expect(deriveFindingNodeHref({ file: '/f/brain/cycles/themes/kb.yaml' }, 'cycles')).toBeNull();
+  expect(deriveFindingNodeHref({ file: '/f/brain/cycles/themes/a.md' }, '')).toBeNull();
+});
+
+test('deriveFindingNodeHref: percent-encodes both the kb id and the slug', () => {
+  expect(deriveFindingNodeHref({ file: '/f/brain/x/themes/a b.md' }, 'k b'))
+    .toBe('/knowledge?id=k%20b&node=a%20b');
+});
+
+test('KB_DRAIN_OUTCOME_GLYPH covers every outcome the wire can carry, including pending', () => {
+  for (const o of ['cleared', 'not-cleared', 'needs-you', 'pending'] as const) {
+    expect(KB_DRAIN_OUTCOME_GLYPH[o]).toBeTruthy();
+  }
+});
+
+test('pendingDraftSessions: dedupes by session id and preserves row order', () => {
+  const f = (key: string, draft?: { id: string; project: string }): KbDrainPerFinding => ({
+    key, check: 'c', kind: 'k', file: 'themes/x.md', message: 'm', tier: 'agent',
+    outcome: 'needs-you', ...(draft ? { draftSession: draft } : {}),
+  });
+  expect(pendingDraftSessions([
+    f('a', { id: 's1', project: 'p' }),
+    f('b', { id: 's1', project: 'p' }),
+    f('c'),
+    f('d', { id: 's2', project: 'q' }),
+  ])).toEqual([{ id: 's1', project: 'p' }, { id: 's2', project: 'q' }]);
+  expect(pendingDraftSessions([f('a')])).toEqual([]);
 });

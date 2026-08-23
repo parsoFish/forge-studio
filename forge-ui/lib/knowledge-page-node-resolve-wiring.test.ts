@@ -64,3 +64,36 @@ test('the roster-keyed selection effect never calls resolveKbNode — the node-o
   expect(deps).toContain('allKbs');
   expect(body).not.toContain('resolveKbNode(');
 });
+
+// ---------------------------------------------------------------------------
+// W8-B2 (forge-6gv.6.3) — a graph selection is WRITTEN BACK to ?node=.
+//
+// `?node=` has always been READABLE (the drain's per-finding "open in Explore"
+// link depends on it), but clicking a node in the graph never reached the URL,
+// so the address bar disagreed with the page and a share/reload/back landed
+// somewhere else. Source-level, like every other assertion in this file: the
+// page is a client component with hooks and no jsdom is installed.
+// ---------------------------------------------------------------------------
+
+test('handleSelectNode writes the selection back to ?node= via syncSelectionToUrl', () => {
+  expect(source).toMatch(/const syncSelectionToUrl = useCallback\(/);
+  const body = source.slice(source.indexOf('const handleSelectNode = useCallback('));
+  expect(body.slice(0, 400)).toContain('syncSelectionToUrl(nodeId)');
+});
+
+test('the selection sync uses router.replace, never push — exploring a graph must not bury the Back button', () => {
+  const fn = source.slice(source.indexOf('const syncSelectionToUrl = useCallback('));
+  const bodyOnly = fn.slice(0, fn.indexOf('const handleSelectNode'));
+  expect(bodyOnly).toContain('router.replace(');
+  expect(bodyOnly).not.toContain('router.push(');
+});
+
+test('the sync short-circuits when ?node= already names this node — no redundant history writes', () => {
+  const fn = source.slice(source.indexOf('const syncSelectionToUrl = useCallback('));
+  expect(fn.slice(0, fn.indexOf('const handleSelectNode'))).toMatch(/params\.get\('node'\) === nodeId\) return;/);
+});
+
+test('the sync clears ?theme=, so its alias can never disagree with the ?node= just written', () => {
+  const fn = source.slice(source.indexOf('const syncSelectionToUrl = useCallback('));
+  expect(fn.slice(0, fn.indexOf('const handleSelectNode'))).toContain("params.delete('theme')");
+});

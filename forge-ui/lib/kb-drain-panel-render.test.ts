@@ -34,6 +34,7 @@ function baseProps(overrides: Partial<KbDrainPanelViewProps> = {}): KbDrainPanel
     costUsd: 0,
     counts: { auto: 0, agent: 0, user: 0 },
     perFinding: [],
+    kbId: 'fixture-kb',
     nowMs: 1_755_000_000_000,
     attaching: false,
     dispatchError: null,
@@ -365,4 +366,132 @@ test('W7-FIX-A1 review: a failed status read (readError) renders [data-component
   expect(html).toContain('data-component="drain-read-error"');
   expect(html).toMatch(/status read failed: bridge unreachable \(Failed to fetch\) — still watching/);
   expect(render({ displayState: 'running', readError: null })).not.toContain('drain-read-error');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-3) — a finding SHOWS ITS FIX, and links back to Explore.
+//
+// Every assertion below kills a specific wrong implementation: rendering a
+// disposition that isn't derived from the proposals, offering a disclosure
+// with nothing in it, showing a truncated diff as if it were whole, and
+// emitting a node link for a file that is not a graph node.
+// ---------------------------------------------------------------------------
+
+const REFUSED_FINDING: KbDrainPerFinding = {
+  key: 'edge::recurrence', check: 'checkLengthSoftCap', kind: 'length.soft-cap',
+  file: '/f/brain/projects/gitpulse/themes/2026-06-21-recurrence.md',
+  message: 'theme exceeds the soft line cap', tier: 'agent', outcome: 'not-cleared', round: 1,
+  fixHint: 'Condense without losing amendment history.',
+  proposedChanges: [{
+    file: 'brain/projects/gitpulse/themes/2026-06-21-recurrence.md',
+    diff: '--- a/x\n+++ b/x\n-related_themes: [a, b]\n+related_themes: [b]',
+    diffTruncated: false,
+    disposition: 'refused',
+    reasons: ['refused: deletes the related_themes edge "a", whose theme exists at a.md'],
+  }],
+};
+
+function renderRefused(extra: Partial<KbDrainPerFinding> = {}): string {
+  return render({ displayState: 'no-progress', kbId: 'gitpulse', perFinding: [{ ...REFUSED_FINDING, ...extra }] });
+}
+
+test('a refused finding renders its proposal DIFF, its refusal reason and the agent brief — ON-3', () => {
+  const html = renderRefused();
+  expect(html).toContain('data-component="drain-proposal-diff"');
+  expect(html).toContain('related_themes: [a, b]');
+  expect(html).toContain('data-component="drain-finding-reasons"');
+  expect(html).toContain('whose theme exists at a.md');
+  expect(html).toContain('data-component="drain-finding-brief"');
+  expect(html).toContain('Condense without losing amendment history.');
+});
+
+test('the row advertises a DERIVED disposition and the proposal/reason counts', () => {
+  const tag = tagContaining(renderRefused(), 'data-drain-finding-disposition');
+  expect(tag).toContain('data-drain-finding-disposition="refused"');
+  expect(tag).toContain('data-drain-finding-proposals="1"');
+  expect(tag).toContain('data-drain-finding-reasons="1"');
+});
+
+test('one landed file plus one refused file reports MIXED — never a single clean claim covering both', () => {
+  const html = render({ displayState: 'no-progress', kbId: 'gitpulse', perFinding: [{
+    ...REFUSED_FINDING,
+    proposedChanges: [
+      { file: 'a.md', diff: 'd', disposition: 'applied' },
+      { file: 'b.md', diff: 'd', disposition: 'refused', reasons: ['nope'] },
+    ],
+  }] });
+  expect(tagContaining(html, 'data-drain-finding-disposition')).toContain('data-drain-finding-disposition="mixed"');
+  expect(html).toContain('data-drain-finding-proposals="2"');
+});
+
+test('a theme finding deep-links to its own node in Explore (?node=), and an index page does NOT', () => {
+  expect(renderRefused()).toContain('data-action="open-finding-node"');
+  expect(renderRefused()).toContain('/knowledge?id=gitpulse&amp;node=2026-06-21-recurrence');
+  // A category index page is a real finding target but not a graph node — the
+  // link must be absent, never a link that lands on the shared NotFound.
+  const idx = renderRefused({ file: '/f/brain/projects/gitpulse/patterns.md' });
+  expect(idx).not.toContain('data-action="open-finding-node"');
+  expect(idx).toContain('patterns.md');
+});
+
+test('with no kbId in context there is no node link — the derivation fails closed', () => {
+  const html = render({ displayState: 'no-progress', kbId: '', perFinding: [REFUSED_FINDING] });
+  expect(html).not.toContain('data-action="open-finding-node"');
+});
+
+test('a finding with nothing to show renders NO disclosure — an empty drawer is its own small lie', () => {
+  const html = render({ displayState: 'no-progress', kbId: 'gitpulse', perFinding: [finding({ outcome: 'cleared' })] });
+  expect(html).not.toContain('data-component="drain-finding-detail"');
+});
+
+test('a truncated diff SAYS so — a cut diff can never read as a whole one', () => {
+  const html = renderRefused({ proposedChanges: [{
+    file: 'a.md', diff: '--- a/a\n+++ b/a\n-x', diffTruncated: true, disposition: 'refused', reasons: ['r'],
+  }] });
+  expect(html).toContain('data-component="drain-proposal-truncated"');
+});
+
+test('a crashed fix turn is shown as its own fact, beside the derived outcome rather than inside it', () => {
+  const html = renderRefused({ turnError: 'synthetic turn crash', outcome: 'cleared' });
+  expect(html).toContain('data-component="drain-finding-turn-error"');
+  expect(html).toContain('synthetic turn crash');
+  expect(tagContaining(html, 'data-drain-finding-outcome')).toContain('data-drain-finding-outcome="cleared"');
+});
+
+test('the pending outcome renders a glyph rather than a blank cell', () => {
+  const html = render({ displayState: 'running', kbId: 'gitpulse', perFinding: [finding({ outcome: 'pending' })] });
+  expect(tagContaining(html, 'data-drain-finding-outcome')).toContain('data-drain-finding-outcome="pending"');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-4) — the pending-draft affordance stops being invisible.
+// ---------------------------------------------------------------------------
+
+test('a parked draft raises a sticky panel-width bar, not just an 11px in-row link (ON-4)', () => {
+  const html = render({
+    displayState: 'needs-you', kbId: 'gitpulse',
+    perFinding: [finding({ outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } })],
+  });
+  expect(html).toContain('data-component="drain-pending-drafts-bar"');
+  expect(html).toContain('data-pending-draft-count="1"');
+  expect(html).toContain('data-action="review-drain-draft"');
+  expect(html).toContain('nothing has been applied');
+  // The per-row link stays — it names WHICH finding — so the bar is additive.
+  expect(html).toContain('data-action="open-drain-draft"');
+});
+
+test('two findings gated into ONE session raise ONE bar entry — a doubled count would overstate the review load', () => {
+  const html = render({
+    displayState: 'needs-you', kbId: 'gitpulse',
+    perFinding: [
+      finding({ key: 'a', outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } }),
+      finding({ key: 'b', outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } }),
+    ],
+  });
+  expect(html).toContain('data-pending-draft-count="1"');
+});
+
+test('no parked draft, no bar — the affordance fires on a real condition only', () => {
+  const html = render({ displayState: 'green', kbId: 'gitpulse', perFinding: [finding({ outcome: 'cleared' })] });
+  expect(html).not.toContain('data-component="drain-pending-drafts-bar"');
 });
