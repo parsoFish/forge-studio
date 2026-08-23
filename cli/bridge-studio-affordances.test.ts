@@ -41,6 +41,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
+import matter from 'gray-matter';
 
 import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
@@ -60,6 +61,11 @@ before(async () => {
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'hooks'), { recursive: true });
+  // W8-B4 FIX-1 — TBL-authoring-7/8's template control needs these two
+  // single-file template categories to exist as real finalize targets
+  // (mirrors cli/bridge-studio-authoring-finalize.test.ts's own before()).
+  mkdirSync(join(forgeRoot, 'studio', 'artifact-templates'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'studio', 'demo-elements'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'studio', 'catalog.yaml'),
@@ -686,6 +692,90 @@ test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-6: neither SKILL.md nor ho
   const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve', id: 'w6b9-unknown-shape' });
   const text = await res.text();
   assert.equal(res.status, 409, text);
+  assert.equal(readPhase(sessionDir), 'awaiting-review');
+});
+
+// ===========================================================================
+// W8-B4 FIX-1 — the adversarial-review repro (S1, blocks merge): drafting a
+// template works, but approving it through the REAL operator surface (this
+// generic verdict route, POST /api/studio/sessions/authoring/<id>/
+// awaiting-review-verdict — the ONLY route the UI's Approve button calls)
+// 409'd forever, because `deriveAuthoringPackageKind` only ever recognised
+// two of the three drafted-package shapes. The dedicated
+// `POST /api/studio/authoring/finalize` route (bridge-studio-authoring.ts)
+// already understood `kind:'template'` — WI3's own suite there is green —
+// which is exactly why the gap was invisible: nothing exercised the SAME
+// claim through the route the operator actually uses.
+// ===========================================================================
+
+test('TBL-authoring-7 (W8-B4 FIX-1, reviewer repro): verdict approve with a staged template.md (no SKILL.md/hook.yaml) at awaiting-review -> 200 via the SAME generic verdict route the Approve button calls, never 409; installs into studio/artifact-templates/<id>.md', async () => {
+  const project = 'tblauthoring7';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  const draft = matter.stringify('\nDescribe the artifact this template defines.\n', {
+    category: 'planning',
+    id: 'tblauthoring7-template',
+    name: 'TBL Authoring 7 Template',
+    kind: 'file',
+  });
+  writeFileSync(join(sessionDir, 'staging', 'template.md'), draft, 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
+    project, verdict: 'approve', id: 'tblauthoring7-template',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200 (not the reviewer's reproduced 409), got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'template');
+  assert.equal(readPhase(sessionDir), 'committed');
+  assert.ok(
+    existsSync(join(forgeRoot, 'studio', 'artifact-templates', 'tblauthoring7-template.md')),
+    'the finalized template must be installed for real, via runFinalize',
+  );
+});
+
+test('TBL-authoring-8 (control): verdict approve with a staged hook.yaml + scripts/run.sh (no SKILL.md/template.md) at awaiting-review -> 200 via the same generic verdict route; installs studio/hooks/<id>', async () => {
+  const project = 'tblauthoring8';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging', 'scripts'), { recursive: true });
+  writeFileSync(
+    join(sessionDir, 'staging', 'hook.yaml'),
+    'name: TBL Authoring 8 Hook\ndescription: control fixture\non: PreToolUse\n',
+    'utf8',
+  );
+  writeFileSync(join(sessionDir, 'staging', 'scripts', 'run.sh'), '#!/usr/bin/env bash\necho x\n', 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
+    project, verdict: 'approve', id: 'tblauthoring8-hook',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
+  assert.equal(body.kind, 'hook');
+  assert.equal(readPhase(sessionDir), 'committed');
+  assert.ok(existsSync(join(forgeRoot, 'studio', 'hooks', 'tblauthoring8-hook', 'hook.yaml')), 'the finalized hook must be installed for real, via runFinalize');
+});
+
+test('TBL-authoring-9 (enumeration message): none of the three marker files staged -> 409 whose message NAMES every shape it looked for (SKILL.md, hook.yaml, template.md), not the stale two-item phrasing', async () => {
+  const project = 'tblauthoring9';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'README.md'), 'not a package marker file', 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve', id: 'w8b4-unknown-shape' });
+  const text = await res.text();
+  assert.equal(res.status, 409, text);
+  const body = JSON.parse(text) as { error: string };
+  for (const filename of ['SKILL.md', 'hook.yaml', 'template.md']) {
+    assert.ok(body.error.includes(filename), `409 message must name "${filename}" among what it looked for, got: ${body.error}`);
+  }
   assert.equal(readPhase(sessionDir), 'awaiting-review');
 });
 

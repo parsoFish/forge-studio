@@ -94,3 +94,28 @@ test('a requires field this panel has no UI to collect never silently satisfies 
   // …and it is not smuggled into the submit body as an empty string either.
   expect(gate.providedFields).toEqual({ id: OK_ID });
 });
+
+// ---------------------------------------------------------------------------
+// W8-B4 FIX-1 — `DraftShape` (this module) must accept 'template', the
+// third drafted-package shape (cli/bridge-studio-affordances.ts's
+// AUTHORING_PACKAGE_SHAPES). Pre-fix, `DraftShape` was `'skill' | 'hook' |
+// 'unknown' | null` — passing 'template' here is a TYPE ERROR (proven via
+// `npx tsc --noEmit`, not this runtime assertion: esbuild/vitest strips
+// types and does not enforce them, so the BOOLEAN logic below — keyed only
+// on `=== 'unknown'`, never an allowlist of known-good shapes — already
+// behaved correctly at runtime even before the type was widened; the type
+// was the one place still lying about what this function actually accepts).
+// ---------------------------------------------------------------------------
+
+test('W8-B4 FIX-1: a template draft does not block Approve on the shape advisory', () => {
+  const gate = deriveApproveGate({ requires: ['id'], idValue: OK_ID, packageShape: 'template', busy: false });
+  expect(gate.shapeBlocksApprove).toBe(false);
+  expect(gate.disabledReason).toBeNull();
+  expect(gate.hint).toBeNull();
+});
+
+test('W8-B4 FIX-1: a genuinely unknown shape still blocks Approve even after "template" is a recognised shape', () => {
+  const gate = deriveApproveGate({ requires: ['id'], idValue: OK_ID, packageShape: 'unknown', busy: false });
+  expect(gate.shapeBlocksApprove).toBe(true);
+  expect(gate.disabledReason).toMatch(/shape is still resolving/);
+});

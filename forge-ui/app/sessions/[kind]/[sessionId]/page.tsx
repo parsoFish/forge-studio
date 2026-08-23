@@ -312,7 +312,19 @@ export default function SessionShellPage({
           lifecycle={viewState.lifecycle}
           finalized={viewState.finalized}
           onChanged={refreshShell}
-          onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+          // W8-B4 FIX-1 — was a hardcoded skill/hook two-way branch (the
+          // SAME blind-spot class as SessionInteractivePanel.tsx's own
+          // draftShapeOf/FinalizedLink): a finalized TEMPLATE fell into the
+          // `else` and got routed to /skills/<id>, a page that does not
+          // exist for it. Widened to the three real AUTHORING_PACKAGE_SHAPES
+          // kinds — mirrors FinalizedLink's own href map one route over.
+          onPackageFinalized={(pkgKind, id) =>
+            router.push(
+              pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}`
+              : pkgKind === 'template' ? `/templates/${encodeURIComponent(id)}`
+              : `/skills/${encodeURIComponent(id)}`,
+            )
+          }
         />
       )
     : null;

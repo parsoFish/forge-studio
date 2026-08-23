@@ -862,24 +862,50 @@ async function handleKbCleanupVerdict(
 // kb-cleanup, not the other way around.
 // ---------------------------------------------------------------------------
 
-/** Derives the drafted package's shape purely by file PRESENCE (skills/
- *  creation-agent/SKILL.md's own two package shapes) — mirrors
- *  `SessionInteractivePanel.tsx`'s client-side `draftShapeOf` EXACTLY, but
- *  reads the REAL staging files server-side via `guardedReadFile` (the SAME
- *  guarded primitive `handleInstructionsAnswer` above already uses), never
- *  a client-supplied `body.kind` (W6-B9, reviewer finding on W6-B8: "keep
- *  kind derived from artifact" — `kind` is not an operator decision, D4;
- *  only the library `id` is, and that is what `meta.requires` now enforces
- *  generically). `null` when neither marker file exists yet under
- *  `staging/` — still drafting, never guessed. `'staging'` mirrors
+/** The ONE enumeration of "which single file at an authoring session's
+ *  `staging/` root identifies the drafted package's shape" — SERVER-side
+ *  source of truth (W8-B4 FIX-1). `'staging'` itself mirrors
  *  `orchestrator/studio/session-transcript.ts`'s own (unexported)
  *  `PACKAGE_DIRNAME` literal — not imported, to avoid widening that file's
  *  export surface for a single constant this route can just as honestly
  *  hand-copy (the same convention this file's own header already documents
- *  for `SLUG_RE`-class values). */
-function deriveAuthoringPackageKind(projectsRoot: string, dirSegs: readonly string[]): 'skill' | 'hook' | null {
-  if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', 'SKILL.md']) !== null) return 'skill';
-  if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', 'hook.yaml']) !== null) return 'hook';
+ *  for `SLUG_RE`-class values).
+ *
+ *  W8-B4/WI-3 landed `kind:'template'` on the DEDICATED finalize route
+ *  (`cli/bridge-studio-authoring.ts`'s `runFinalize` + its own
+ *  `TEMPLATE_STAGING_FILENAME`) but this array's OWN two-shape version —
+ *  the one `deriveAuthoringPackageKind` below actually used — never learned
+ *  about `template.md`. Drafting a template therefore worked end to end,
+ *  but the operator's real Approve button (which calls THIS route, never
+ *  the dedicated one) 409'd forever. Exported so:
+ *   (a) `deriveAuthoringPackageKind` below derives from it (one iteration,
+ *       not a hand-rolled if-chain that a fourth shape is easy to forget
+ *       inside), and
+ *   (b) `cli/authoring-package-shape-parity.test.ts` can cross-check it,
+ *       byte-for-byte, against forge-ui's own hand-mirrored copy
+ *       (`forge-ui/lib/authoring-package-shape.ts` — forge-ui never
+ *       imports cli/ at runtime, so that file is a second, independent
+ *       definition, not an import of this one; the parity test is what
+ *       keeps a hand-copy honest instead of silent). */
+export const AUTHORING_PACKAGE_SHAPES: ReadonlyArray<{ readonly filename: string; readonly kind: 'skill' | 'hook' | 'template' }> = [
+  { filename: 'SKILL.md', kind: 'skill' },
+  { filename: 'hook.yaml', kind: 'hook' },
+  { filename: 'template.md', kind: 'template' },
+];
+
+/** Derives the drafted package's shape purely by file PRESENCE, from
+ *  `AUTHORING_PACKAGE_SHAPES` above — reads the REAL staging files
+ *  server-side via `guardedReadFile` (the SAME guarded primitive
+ *  `handleInstructionsAnswer` above already uses), never a client-supplied
+ *  `body.kind` (W6-B9, reviewer finding on W6-B8: "keep kind derived from
+ *  artifact" — `kind` is not an operator decision, D4; only the library
+ *  `id` is, and that is what `meta.requires` now enforces generically).
+ *  `null` when no marker file exists yet under `staging/` — still
+ *  drafting, never guessed. */
+function deriveAuthoringPackageKind(projectsRoot: string, dirSegs: readonly string[]): 'skill' | 'hook' | 'template' | null {
+  for (const shape of AUTHORING_PACKAGE_SHAPES) {
+    if (guardedReadFile(projectsRoot, [...dirSegs, 'staging', shape.filename]) !== null) return shape.kind;
+  }
   return null;
 }
 
@@ -918,7 +944,14 @@ async function handleAuthoringVerdict(
   // never trusted from the request body.
   const kind = deriveAuthoringPackageKind(projectsRoot, dirSegs);
   if (kind === null) {
-    sendJson(res, 409, { error: 'cannot finalize: the drafted package has neither a SKILL.md nor a hook.yaml at its staging root yet' }, origin);
+    // The enumeration pin: built FROM AUTHORING_PACKAGE_SHAPES, never a
+    // hand-typed literal list — a shape added to that array is a shape this
+    // message names for free, so the operator-facing error can never drift
+    // behind the actual check above the way the old two-item "neither a
+    // SKILL.md nor a hook.yaml" copy silently did the day `template.md`
+    // became a real third shape.
+    const expected = AUTHORING_PACKAGE_SHAPES.map((s) => s.filename).join(', ');
+    sendJson(res, 409, { error: `cannot finalize: the drafted package has none of ${expected} at its staging root yet` }, origin);
     return;
   }
   // body.id is already guaranteed a non-empty (post-trim) string by the

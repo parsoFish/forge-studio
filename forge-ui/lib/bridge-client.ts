@@ -1284,33 +1284,22 @@ export async function startAuthoring(input: {
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
 
-/**
- * Save an authoring session's CURRENT drafted package into the real skill or
- * hook library — `POST /api/studio/authoring/finalize`
- * (`cli/bridge-studio-authoring.ts`). R4-21 phase 2, WI-2 (D5): the wire
- * contract is EXACTLY `{project, sessionId, kind, id}` — the route drives the
- * session's own `committing` turn server-side and installs the LANDED
- * package; no package bytes, hook metadata, or `upstream` ride on this
- * request (the operator reviews the drafted package in the session's own
- * file-package artifact pane, not a form here). Lands as a DRAFT
- * (`paletteVisible:false` for a skill; unbound for a hook) — approval /
- * binding stay the operator's own SEPARATE, later act (D6 — never
- * auto-approved here).
- */
-export async function finalizeAuthoring(input: {
-  project: string;
-  sessionId: string;
-  kind: 'skill' | 'hook';
-  id: string;
-}): Promise<{ ok: boolean; kind?: 'skill' | 'hook'; id?: string; error?: string }> {
-  const r = await bridgePost('/api/studio/authoring/finalize', input);
-  if (!r.ok) return { ok: false, error: r.error };
-  return {
-    ok: true,
-    kind: r.data?.kind === 'skill' || r.data?.kind === 'hook' ? r.data.kind : undefined,
-    id: typeof r.data?.id === 'string' ? r.data.id : undefined,
-  };
-}
+// W8-B4 FIX-1 — `finalizeAuthoring()` (a typed wrapper over the DEDICATED
+// `POST /api/studio/authoring/finalize` route, cli/bridge-studio-authoring.ts)
+// was removed here: `git grep -n finalizeAuthoring forge-ui/ cli/ orchestrator/
+// scripts/` found ZERO callers anywhere in the codebase — the real Approve
+// path has gone through the GENERIC verdict route (`postSessionAffordance`
+// -> `handleAuthoringVerdict` -> `runFinalize`, cli/bridge-studio-affordances.ts)
+// since W6-B9, and nothing in forge-ui ever called this function to reach the
+// dedicated route directly. It had also drifted stale (`kind: 'skill' |
+// 'hook'` only — would have silently dropped a `kind:'template'` response,
+// W8-B4/WI-3) BECAUSE it had no caller exercising it; keeping a zero-caller
+// wrapper around is exactly how that kind of drift recurs invisibly. The
+// dedicated server route + its own acceptance suite
+// (cli/bridge-studio-authoring-finalize.test.ts) are UNCHANGED and remain a
+// legitimate, independently-tested API surface — only this orphaned client
+// wrapper is gone, per the task brief's "do not leave a third half-wired
+// path": a function with no caller is not a caller that should exist.
 
 // ---- Community refresh (W6-CR-3 — the community-registry refresh agent) ----
 
