@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
 import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind, type CommunityIndexMeta } from '@/lib/community-client';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
@@ -16,13 +17,19 @@ import {
   freshnessBadge,
   lastRefreshLabel,
   lastTerminalRefreshOf,
+  isHubDeclaredOnly,
+  communityEmptyState,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
-  DEFAULT_COMMUNITY_SORT_KEY,
-  DEFAULT_COMMUNITY_SORT_DIRECTION,
   type CommunitySortKey,
-  type CommunitySortDirection,
 } from '@/lib/community-view';
+import {
+  parseCommunityViewState,
+  communityHrefFor,
+  writeBaseState,
+  type CommunityViewState,
+  type PendingCommunityWrite,
+} from '@/lib/community-url-state';
 
 // ---------------------------------------------------------------------------
 // Community browser — /community (R3-07-F1; sort + freshness W6-CR-2). The
@@ -37,6 +44,32 @@ import {
 // W6-CR-2, operator-locked: ordering is SIMPLE SORTS ONLY (name / stars /
 // updated / source) — no search/facets/tags sort. Default is name/asc,
 // deterministic (documented in docs/forge-ui-dom-and-harness.md).
+//
+// ---------------------------------------------------------------------------
+// W8-B5 (community-35 / exit row E15) — THE BROWSE STATE LIVES IN THE URL.
+// ---------------------------------------------------------------------------
+// kind / hub / query / sort key / sort direction used to be five `useState`s,
+// and this file never touched the router: open a card, press Back, and every
+// one of them was gone — and the view could be neither linked nor shared.
+// They now READ from the query string (`lib/community-url-state.ts`, which
+// validates every value at that boundary and degrades an unknown one to the
+// documented default rather than letting a filter vocabulary the page does
+// not have reach `data-kind-filter`) and are WRITTEN back through the router:
+//
+//   - kind / hub / sort  → router.push, so Back genuinely restores them.
+//   - the search box     → a LOCAL draft (typing stays instant) mirrored to
+//                          the URL on a short debounce with router.REPLACE,
+//                          so a burst of keystrokes never becomes a burst of
+//                          history entries to press Back through.
+//
+// The default view serialises to the bare `/community`: this page never
+// rewrites its own URL on mount.
+//
+// W8-B5 (community-36 / exit row E14): the empty block consumes the DERIVED
+// empty state (`communityEmptyState`), which reads the selected hub's own
+// itemCount through the SAME `isHubDeclaredOnly` predicate the chips use — so
+// there is no second copy of the declared-only flag to go stale, and the chip
+// and the empty block can never disagree about the same hub.
 // ---------------------------------------------------------------------------
 
 const KIND_FILTERS: Array<CommunityKind | 'all'> = ['all', ...COMMUNITY_KINDS];
@@ -49,18 +82,29 @@ const KIND_LABEL: Record<CommunityKind | 'all', string> = {
   tool: 'Tools',
 };
 
-export default function CommunityBrowserPage() {
+/** How long the search box waits before mirroring itself into the URL. Long
+ *  enough that a normal typing burst produces ONE navigation; short enough
+ *  that the address bar is right by the time anyone reads or copies it. */
+const QUERY_URL_DEBOUNCE_MS = 350;
+
+function CommunityBrowserInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  // The URL is the state. Every rendered attribute below reads from HERE, so
+  // the DOM contract and the address bar can never disagree.
+  const viewState = parseCommunityViewState(search);
+  const { kind, hub: hubFilter, sortKey, sortDir } = viewState;
+
   const [hubs, setHubs] = useState<CommunityHubWithCount[]>([]);
   const [items, setItems] = useState<CommunityItem[]>([]);
   const [meta, setMeta] = useState<CommunityIndexMeta | null>(null);
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [kind, setKind] = useState<CommunityKind | 'all'>('all');
-  // W7-B3 (community-17): hub chips filter the LOCAL index; null = all hubs.
-  const [hubFilter, setHubFilter] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<CommunitySortKey>(DEFAULT_COMMUNITY_SORT_KEY);
-  const [sortDir, setSortDir] = useState<CommunitySortDirection>(DEFAULT_COMMUNITY_SORT_DIRECTION);
+  // The search box's live value. The URL holds the durable copy; this is the
+  // one being typed into, so the list filters on every keystroke while the
+  // address bar catches up on the debounce below.
+  const [queryDraft, setQueryDraft] = useState(viewState.query);
   const [nowMs] = useState(() => Date.now());
   // W7-B3 (community-16): the refresh sessions this surface used to lose —
   // in-flight (non-terminal) + the most recent terminal one, from the SAME
@@ -99,10 +143,62 @@ export default function CommunityBrowserPage() {
     };
   }, []);
 
+  /** A router write already issued but not yet reflected in the URL. A router
+   *  write is ASYNCHRONOUS, so a second interaction landing before the first
+   *  is applied must build on the FIRST one's state — otherwise picking a kind
+   *  and immediately clicking a hub chip drops the kind. `writeBaseState`
+   *  (pure, unit-tested) owns that rule; the moment the URL moves — to our own
+   *  target or to a Back press's — the pending write is stale and the URL
+   *  wins. */
+  const pendingWrite = useRef<PendingCommunityWrite | null>(null);
+  if (pendingWrite.current !== null && pendingWrite.current.from !== search) pendingWrite.current = null;
+
+  // The state a write (a click, or the search debounce firing) builds on, read
+  // at fire time via a ref rather than captured — otherwise a filter clicked
+  // mid-typing-burst would be clobbered when the timer lands.
+  const baseRef = useRef<CommunityViewState>(viewState);
+  baseRef.current = writeBaseState(viewState, search, pendingWrite.current);
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
+  /** The last query value THIS page wrote to the URL. It tells our own
+   *  debounced write (which must not disturb the draft) apart from an
+   *  EXTERNAL change — a Back/Forward press, or a pasted link — which must
+   *  put the draft back in step with the address bar. */
+  const lastWrittenQuery = useRef(viewState.query);
+
+  const writeState = useCallback((next: CommunityViewState, mode: 'push' | 'replace') => {
+    pendingWrite.current = { from: searchRef.current, state: next };
+    lastWrittenQuery.current = next.query;
+    const href = communityHrefFor(next);
+    if (mode === 'push') router.push(href, { scroll: false });
+    else router.replace(href, { scroll: false });
+  }, [router]);
+
+  // Back / Forward / a pasted link changed the query in the URL — resync the
+  // box. Our own debounced write is skipped here, so typing is never
+  // truncated by the navigation it just caused.
+  useEffect(() => {
+    if (viewState.query === lastWrittenQuery.current) return;
+    lastWrittenQuery.current = viewState.query;
+    setQueryDraft(viewState.query);
+  }, [viewState.query]);
+
+  // Trailing-edge debounce: one REPLACE per typing burst, never one per
+  // keystroke — the address bar ends up right without burying Back.
+  useEffect(() => {
+    if (queryDraft === baseRef.current.query) return;
+    const timer = setTimeout(() => {
+      writeState({ ...baseRef.current, query: queryDraft }, 'replace');
+    }, QUERY_URL_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [queryDraft, viewState.query, writeState]);
+
   const byKind = filterByKind(items, kind);
   const byHub = filterByHub(byKind, hubFilter);
-  const searched = filterCommunityItems(byHub, query);
+  const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
+  const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
   const inFlightRefresh = refreshSessions.filter((row) => !row.terminal);
   const lastTerminalRefresh = lastTerminalRefreshOf(refreshSessions);
 
@@ -191,7 +287,9 @@ export default function CommunityBrowserPage() {
         {status === 'ready' && (
           <div data-component="hub-strip" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
             {hubs.map((hub) => {
-              const declaredOnly = hub.itemCount === 0;
+              // The SAME predicate the empty state below reads — ONE fact
+              // about this hub, never a chip-local copy of it (community-36).
+              const declaredOnly = isHubDeclaredOnly(hub);
               const active = hubFilter === hub.id;
               return (
                 <span key={hub.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -203,7 +301,7 @@ export default function CommunityBrowserPage() {
                     data-hub-item-count={hub.itemCount}
                     data-hub-declared-only={declaredOnly ? 'true' : 'false'}
                     className="badge"
-                    onClick={() => setHubFilter((prev) => (prev === hub.id ? null : hub.id))}
+                    onClick={() => writeState({ ...baseRef.current, hub: active ? null : hub.id }, 'push')}
                     style={{
             cursor: 'pointer', border: active ? '1px solid var(--ember, #FF9E4A)' : undefined,
                       opacity: declaredOnly ? 0.65 : 1,
@@ -235,12 +333,17 @@ export default function CommunityBrowserPage() {
         )}
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24, alignItems: 'center' }}>
+          {/* W8-B5 (community-32): a placeholder is not an accessible name — it
+              vanishes the moment anything is typed, and assistive tech is not
+              required to announce it. The sibling sort <select> already carried
+              an aria-label; this now matches that pattern. */}
           <input
             type="text"
             data-field="community-search"
-            placeholder="Search by name, id, description, hub or provenance…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search the community index by name, id, description, category, hub or provenance"
+            placeholder="Search by name, id, description, category, hub or provenance…"
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
             style={{
  width: '100%', maxWidth: 340, background: 'var(--bg-2)',
               border: '1px solid var(--line)', borderRadius: 'var(--radius-sm, 6px)', color: 'var(--text)',
@@ -254,7 +357,7 @@ export default function CommunityBrowserPage() {
               data-action="filter-kind"
               data-kind={k}
               className="btn btn-sm"
-              onClick={() => setKind(k)}
+              onClick={() => writeState({ ...baseRef.current, kind: k }, 'push')}
               style={k === kind ? { borderColor: 'var(--ember, #FF9E4A)', color: 'var(--text)' } : undefined}
             >
               {KIND_LABEL[k]}
@@ -264,7 +367,7 @@ export default function CommunityBrowserPage() {
           <select
             data-community-sort
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as CommunitySortKey)}
+            onChange={(e) => writeState({ ...baseRef.current, sortKey: e.target.value as CommunitySortKey }, 'push')}
             className="btn btn-sm"
             style={{ cursor: 'pointer' }}
             aria-label="Sort the community index by"
@@ -280,7 +383,7 @@ export default function CommunityBrowserPage() {
             data-action="toggle-sort-direction"
             data-sort-direction={sortDir}
             className="btn btn-sm"
-            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            onClick={() => writeState({ ...baseRef.current, sortDir: baseRef.current.sortDir === 'asc' ? 'desc' : 'asc' }, 'push')}
             title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
           >
             {sortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
@@ -302,8 +405,12 @@ export default function CommunityBrowserPage() {
         )}
 
         {status === 'ready' && filtered.length === 0 && (
-          <div style={{ color: 'var(--faint)', fontSize: 13, fontStyle: 'italic', padding: '24px 0' }}>
-            {query || kind !== 'all' || hubFilter !== null ? 'Nothing matches this filter.' : 'The community index is empty.'}
+          <div
+            data-component="community-empty"
+            data-empty-state={emptyState.state}
+            style={{ color: 'var(--faint)', fontSize: 13, fontStyle: 'italic', padding: '24px 0' }}
+          >
+            {emptyState.message}
           </div>
         )}
 
@@ -315,6 +422,23 @@ export default function CommunityBrowserPage() {
           </div>
         )}
     </StudioPage>
+  );
+}
+
+/** `useSearchParams` in a client component needs a Suspense boundary — Next
+ *  otherwise refuses to statically render the route at build time. Mirrors
+ *  /knowledge's own wrapper. */
+export default function CommunityBrowserPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 13 }}>
+          Loading the community index…
+        </div>
+      }
+    >
+      <CommunityBrowserInner />
+    </Suspense>
   );
 }
 
@@ -332,6 +456,10 @@ function CommunityCard({ item, nowMs }: { item: CommunityItem; nowMs: number }) 
       data-item-id={item.id}
       data-item-kind={item.kind}
       data-item-hub={item.hub?.id}
+      // W8-B5 (community-05): ABSENT for an item with no registry row — the
+      // same discipline data-item-hub / data-fetched-at already hold, never a
+      // fabricated attribute value.
+      data-item-category={item.category ?? undefined}
       data-install-state={item.installState}
       data-has-signals={item.signals !== null ? 'true' : 'false'}
       data-fetched-at={item.fetchedAt ?? undefined}

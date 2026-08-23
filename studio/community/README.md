@@ -4,8 +4,21 @@ Three things live here, and the difference matters:
 
 - **`registry.yaml`** — the declared-list source of truth for community items
   (W6-CR-1; previously `studio/catalog.yaml`'s `community-skills:` section).
-  Hand-curated (`fetchedBy: seed`), never a verified live signal from the
-  upstream host — see `orchestrator/studio/registry.ts`'s `loadCommunityRegistry`.
+  **Schema v2 (W8-B5)** splits it in two: `items:` carries per-item curation,
+  and `sources:` carries repo-level facts (`stars`, `upstreamUpdatedAt`,
+  `fetchedAt`, `fetchedBy`) keyed by a normalized source key such as
+  `github:obra/superpowers`. Several items share one repo, so a repo fact has
+  exactly one home and the item has no field to hold a divergent copy. Today
+  every source row is `fetchedBy: seed` — hand-curated, never a verified live
+  signal from the upstream host; `forge community refresh` replaces that with
+  `api:github` / `api:npm` / `api:mcp-registry` only for a source it genuinely
+  got a 200 for. See `orchestrator/studio/registry.ts`'s
+  `loadCommunityRegistry`.
+
+  The **leading comment block** of `registry.yaml` is preserved verbatim across
+  every programmatic write; a comment INSIDE `items:` is not (js-yaml cannot
+  round-trip it), so `forge studio lint` refuses one. Put rationale in the
+  header.
 - **`hubs.yaml`** — a registry of real public source hubs. It exists only so an
   item's hub can be **derived** by matching the item's own upstream URL, instead
   of trusting a declared hub name (D4). Nothing crawls it.

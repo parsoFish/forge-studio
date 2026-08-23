@@ -131,7 +131,8 @@ import { randomBytes } from 'node:crypto';
 
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { loadCommunityRegistry, serializeCommunityRegistry } from './studio/registry.ts';
-import type { CommunityRegistryItem } from './studio/types.ts';
+import { communitySourceKey } from './studio/community-source-url.ts';
+import type { CommunityRegistryItem, CommunityRegistrySource } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an
@@ -579,7 +580,11 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
       `commitRegistryDraft: live registry.yaml failed containment (${registryGuard.reason}).`,
     );
   }
-  const liveItems = registryGuard.exists ? loadCommunityRegistry(registryGuard.realPath).items : [];
+  // ONE load of the live document — its items, its `sources` map and its
+  // curation header are all needed below, and re-loading per concern would
+  // read the same file three times and risk them disagreeing.
+  const liveDoc = registryGuard.exists ? loadCommunityRegistry(registryGuard.realPath) : null;
+  const liveItems = liveDoc?.items ?? [];
   const liveById = new Map(liveItems.map((item) => [item.id, item] as const));
 
   // ---- Phase 2: compute the stamped output from evidence status. Pure —
@@ -590,11 +595,11 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
 
   const stampedItems: CommunityRegistryItem[] = draft.items.map((item) => {
     if (evidence[item.id]?.status === 'verified') {
-      // A genuinely verified row — this function, never the draft, is the
-      // sole source of fetchedAt/fetchedBy; every OTHER field is trusted as
-      // drafted (the agent verified it this pass, unconditionally stamped
-      // even when the verified numbers are unchanged from live).
-      return { ...item, fetchedAt: now, fetchedBy };
+      // A genuinely verified row — every field is trusted as drafted (the
+      // agent verified it this pass). Under schema v2 the item carries no
+      // fetchedAt/fetchedBy of its own to stamp: those are repo facts and are
+      // stamped on the shared SOURCE row below, under the same evidence gate.
+      return item;
     }
     // verifyFailed, or no evidence entry at all: NEVER trust the draft's
     // own content for this row — the committed row is the LIVE entry,
@@ -609,9 +614,41 @@ export function commitRegistryDraft(ctx: FinalizerContext): string[] {
     return liveItem;
   });
 
+  // W8-B5 (schema v2) — the SAME evidence discipline, translated onto the
+  // repo-scoped `sources` map. A source row is committed from the draft only
+  // when EVERY committed item resolving to it was marked "verified"; one
+  // unverified consumer and the LIVE source row is kept byte-identical. That
+  // is deliberately conservative: a source row is shared, so accepting it on
+  // partial evidence would publish an unverified number onto rows that WERE
+  // verified — the exact mis-scoping schema v2 exists to prevent.
+  const verifiedKeys = new Set<string>();
+  const blockedKeys = new Set<string>();
+  for (const item of draft.items) {
+    const key = communitySourceKey(item.sourceUrl);
+    if (key === null) continue;
+    if (evidence[item.id]?.status === 'verified') verifiedKeys.add(key);
+    else blockedKeys.add(key);
+  }
+  const liveSources = liveDoc?.sources ?? {};
+  const stampedSources: Record<string, CommunityRegistrySource> = { ...liveSources };
+  for (const [key, src] of Object.entries(draft.sources)) {
+    if (!verifiedKeys.has(key) || blockedKeys.has(key)) continue;
+    stampedSources[key] = { ...src, fetchedAt: now, fetchedBy };
+  }
+
   // W7-B3: the ONE registry serializer, shared with the Studio CRUD routes
   // (orchestrator/studio/registry.ts) — never a second dump shape to drift.
-  const serialized = serializeCommunityRegistry({ schemaVersion: draft.schemaVersion, lastRefresh: now, items: stampedItems });
+  // W8-B5 (exit row E4): `leadingComments` comes from the LIVE file, not the
+  // draft — the curation header is the repo's, and an agent draft must never
+  // be able to rewrite it.
+  const liveLeadingComments = liveDoc?.leadingComments ?? '';
+  const serialized = serializeCommunityRegistry({
+    schemaVersion: draft.schemaVersion,
+    lastRefresh: now,
+    sources: stampedSources,
+    items: stampedItems,
+    leadingComments: liveLeadingComments,
+  });
 
   // ---- Phase 3: write. Guarded destination, temp+rename (atomic). -------
   const destPath = registryGuard.realPath;

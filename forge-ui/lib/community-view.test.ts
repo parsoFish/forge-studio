@@ -65,6 +65,10 @@ function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
     kind: 'tool',
     name: 'X',
     desc: 'An x thing.',
+    // W8-B5 (community-05 / exit row E11): `category` joined CommunityItem so
+    // the browse search can match it. Nullable — this fixture is a tool, which
+    // has no registry row and therefore genuinely has no category.
+    category: null,
     upstream: 'https://example.com/x',
     hub: null,
     signals: null,
@@ -202,6 +206,9 @@ const COLLIDING_COMMUNITY_ITEM: CommunityItem = {
   kind: 'skill',
   name: 'Collide Id (community)',
   desc: 'A catalog community-skills entry.',
+  // W8-B5 (community-05 / exit row E11): a registry-sourced skill carries its
+  // own real category over the wire.
+  category: 'review',
   upstream: 'https://example.com/collide-id',
   hub: { id: 'example-hub', name: 'Example Hub', url: 'https://example.com', kinds: 'skills' },
   signals: { stars: '9.9k', attributedTo: 'Catalog Curator', starsNumeric: 9900 },

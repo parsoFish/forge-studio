@@ -1,28 +1,71 @@
-# Community registry (W6-CR-1) — the declared-list SOURCE OF TRUTH for
-# community items forge showcases in its OOTB library, superseding
-# studio/catalog.yaml's now-removed `community-skills:` section.
+# Community registry (W6-CR-1; schema v2 since W8-B5) — the declared-list
+# SOURCE OF TRUTH for community items forge showcases in its OOTB library,
+# superseding studio/catalog.yaml's now-removed `community-skills:` section.
 #
-# Every fact in `items[]` below is hand-curated (fetchedBy: seed) — the same
-# discipline studio/catalog.yaml's community-skills section followed before
-# this migration: `which forge agents actually compose a skill` stays DERIVED
-# from real agent composition.skills (never declared here, see
-# orchestrator/studio/skill-library.ts's deriveSkillUsage); nothing here is a
-# verified LIVE signal from the upstream host — `signals.stars` is parsed only
-# where the curated display string is unambiguously a pure k/M-notation number
-# (e.g. "228k" → 228000); a display string that names a different unit (e.g.
-# "156k installs") is NOT a star count and is left `stars: null` — never
-# fabricated — while `starsDisplay` still preserves the original curated text
-# verbatim for rendering.
+# SCHEMA v2 — repo facts are keyed by REPO, not copied onto every item.
+# `stars`, `upstreamUpdatedAt`, `fetchedAt` and `fetchedBy` describe an
+# upstream REPOSITORY, and v1 gave each item its own copy of them: nine items
+# here share only five distinct `sourceUrl`s, so one repo's star count was
+# written onto N rows and the copies drifted. They now live ONCE in the
+# top-level `sources:` map, keyed by a normalized source key derived from
+# `sourceUrl` (orchestrator/studio/community-source-url.ts), and are resolved
+# at read time. An item carries only what is genuinely per-item curation:
+# identity, category, source URL, provenance, recommended tier and
+# `signals.attributedTo`. Writing `stars:` on an item is now a LOAD ERROR —
+# the row has nowhere to hold a mis-scoped copy.
 #
-# `meta.lastRefresh` stays null until a real automated refresh pass exists —
-# this migration seeds data only, it does not add a refresh mechanism.
+# WHAT v2 RETIRED, on purpose, so nobody reads it as an accidental loss: the
+# `pre-impl-interview` row carried `starsDisplay: "156k installs"` plus two
+# inline comments explaining that "156k installs" is NOT a star count. Under
+# v2 that annotation is structural instead of prose — that row's source is a
+# blog post, which resolves to no repo, so it simply has no star signal at
+# all and reads honestly unrefreshed. The figure and its two comment lines
+# retire with the field they annotated.
+#
+# `fetchedBy: seed` means hand-curated and never fetched. A row only becomes
+# `api:github` / `api:npm` / `api:mcp-registry` when `forge community refresh`
+# actually received a 200 for it; a failed, rate-limited or 404'd fetch leaves
+# the source row byte-identical rather than stamping it fresh.
+#
+# `meta.lastRefresh` stays null until a refresh pass has actually run.
+#
+# NOTE FOR EDITORS: comments inside the `items:` block cannot survive a
+# programmatic write (js-yaml has no comment round-trip), so `forge studio
+# lint` refuses them. This header block IS preserved verbatim by
+# `serializeCommunityRegistry` — put rationale here.
 #
 # Read by orchestrator/studio/registry.ts's `loadCommunityRegistry` /
 # `communitySkillsFromRegistry` — see that module for the schema's structural
-# enforcement (required fields, kind vocab, signals shape).
+# enforcement (required fields, kind vocab, signals shape, retired fields).
 meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+
+sources:
+  "github:anthropics/skills":
+    stars: 151000
+    starsDisplay: "151k"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+  "github:obra/superpowers":
+    stars: 228000
+    starsDisplay: "228k"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+  "github:travisvn/awesome-claude-skills":
+    stars: null
+    starsDisplay: null
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+  "github:vercel-labs/agent-browser":
+    stars: 14000
+    starsDisplay: "14k"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
 
 items:
   - id: handoff
@@ -34,12 +77,7 @@ items:
     provenance: "obra/superpowers + Matt Pocock"
     tier: haiku
     signals:
-      stars: 228000
-      starsDisplay: "228k"
       attributedTo: "obra/superpowers + Matt Pocock"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: pre-impl-interview
     kind: skill
@@ -50,14 +88,7 @@ items:
     provenance: "Matt Pocock (Grill Me)"
     tier: haiku
     signals:
-      # "156k installs" names a DIFFERENT unit (installs, not stars) — not a
-      # pure k-notation star count, so left unparsed rather than fabricated.
-      stars: null
-      starsDisplay: "156k installs"
       attributedTo: "Matt Pocock (Grill Me)"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: superpowers-tdd
     kind: skill
@@ -68,12 +99,7 @@ items:
     provenance: "obra/superpowers"
     tier: sonnet
     signals:
-      stars: 228000
-      starsDisplay: "228k"
       attributedTo: "obra/superpowers"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: systematic-debugging
     kind: skill
@@ -84,12 +110,7 @@ items:
     provenance: "obra/superpowers"
     tier: sonnet
     signals:
-      stars: 228000
-      starsDisplay: "228k"
       attributedTo: "obra/superpowers"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: webapp-testing
     kind: skill
@@ -100,12 +121,7 @@ items:
     provenance: "anthropics/skills"
     tier: sonnet
     signals:
-      stars: 151000
-      starsDisplay: "151k"
       attributedTo: "anthropics/skills"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: security-review
     kind: skill
@@ -116,12 +132,7 @@ items:
     provenance: "Trail of Bits"
     tier: sonnet
     signals:
-      stars: null
-      starsDisplay: null
       attributedTo: "Trail of Bits"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: skill-creator
     kind: skill
@@ -132,12 +143,7 @@ items:
     provenance: "anthropics/skills"
     tier: sonnet
     signals:
-      stars: 151000
-      starsDisplay: "151k"
       attributedTo: "anthropics/skills"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: agent-browser
     kind: skill
@@ -148,12 +154,7 @@ items:
     provenance: vercel-labs
     tier: sonnet
     signals:
-      stars: 14000
-      starsDisplay: "14k"
       attributedTo: vercel-labs
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
 
   - id: output-compress
     kind: skill
@@ -164,9 +165,4 @@ items:
     provenance: "Julius Brussee (Caveman)"
     tier: haiku
     signals:
-      stars: null
-      starsDisplay: null
       attributedTo: "Julius Brussee (Caveman)"
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed

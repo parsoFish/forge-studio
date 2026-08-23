@@ -28,6 +28,7 @@ import {
   loadCommunityRegistry,
   communitySkillsFromRegistry,
   communityRegistryPath,
+  resolveCommunitySource,
   discoverProjects,
 } from './registry.ts';
 import type { KbBinding, KbDescriptor } from './types.ts';
@@ -1494,9 +1495,24 @@ describe('loadCatalog', () => {
 // former `community-skills:` section.
 // ---------------------------------------------------------------------------
 
+// W8-B5 schema v2 — repo facts live ONCE under `sources`, keyed by source URL;
+// the item carries curation only.
 const REGISTRY_FIXTURE = `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources:
+  "github:obra/superpowers":
+    stars: 228000
+    starsDisplay: "228k"
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
+  "github:travisvn/awesome-claude-skills":
+    stars: null
+    starsDisplay: null
+    upstreamUpdatedAt: null
+    fetchedAt: null
+    fetchedBy: seed
 items:
   - id: handoff
     kind: skill
@@ -1506,10 +1522,7 @@ items:
     sourceUrl: "https://github.com/obra/superpowers"
     provenance: "obra/superpowers + Matt Pocock"
     tier: haiku
-    signals: { stars: 228000, starsDisplay: "228k", attributedTo: "obra/superpowers + Matt Pocock" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "obra/superpowers + Matt Pocock" }
   - id: security-review
     kind: skill
     name: Security Review
@@ -1517,10 +1530,7 @@ items:
     category: review
     sourceUrl: "https://github.com/travisvn/awesome-claude-skills"
     provenance: "Trail of Bits"
-    signals: { stars: null, starsDisplay: null, attributedTo: "Trail of Bits" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Trail of Bits" }
 `;
 
 describe('communityRegistryPath', () => {
@@ -1533,7 +1543,7 @@ describe('loadCommunityRegistry', () => {
   it('parses meta + items, preserving every field', () => {
     const p = writeFixture('registry.yaml', REGISTRY_FIXTURE);
     const registry = loadCommunityRegistry(p);
-    assert.equal(registry.schemaVersion, 1);
+    assert.equal(registry.schemaVersion, 2);
     assert.equal(registry.lastRefresh, null);
     assert.equal(registry.items.length, 2);
     const handoff = registry.items.find((i) => i.id === 'handoff');
@@ -1544,10 +1554,12 @@ describe('loadCommunityRegistry', () => {
     assert.equal(handoff!.sourceUrl, 'https://github.com/obra/superpowers');
     assert.equal(handoff!.provenance, 'obra/superpowers + Matt Pocock');
     assert.equal(handoff!.tier, 'haiku');
-    assert.deepEqual(handoff!.signals, { stars: 228000, starsDisplay: '228k', attributedTo: 'obra/superpowers + Matt Pocock' });
-    assert.equal(handoff!.fetchedBy, 'seed');
+    assert.deepEqual(handoff!.signals, { attributedTo: 'obra/superpowers + Matt Pocock' });
+    // W8-B5 (E5): the repo facts are on the SHARED source row, not the item.
+    assert.equal(registry.sources['github:obra/superpowers'].stars, 228000);
+    assert.equal(registry.sources['github:obra/superpowers'].fetchedBy, 'seed');
     const noStars = registry.items.find((i) => i.id === 'security-review');
-    assert.deepEqual(noStars!.signals, { stars: null, starsDisplay: null, attributedTo: 'Trail of Bits' });
+    assert.deepEqual(noStars!.signals, { attributedTo: 'Trail of Bits' });
     assert.equal(noStars!.tier, undefined, 'a registry item with no curated tier must not fabricate one');
   });
 
@@ -1562,16 +1574,17 @@ describe('loadCommunityRegistry', () => {
     });
   });
 
-  it('throws on a missing required field (fetchedBy)', () => {
-    const bad = REGISTRY_FIXTURE.replace('    fetchedBy: seed\n  - id: security-review', '  - id: security-review');
+  it('throws on a missing required field (a source row without fetchedBy)', () => {
+    // W8-B5 schema v2: `fetchedBy` is a REPO fact and lives on the source row.
+    const bad = REGISTRY_FIXTURE.replace('    fetchedBy: seed\n  "github:travisvn/awesome-claude-skills":', '  "github:travisvn/awesome-claude-skills":');
     const p = writeFixture('registry-missing-field.yaml', bad);
     assert.throws(() => loadCommunityRegistry(p), /fetchedBy/);
   });
 
-  it('throws on a malformed signals block (stars not a number or null)', () => {
+  it('throws on a malformed source row (stars not a number or null)', () => {
     const bad = REGISTRY_FIXTURE.replace('stars: 228000', 'stars: "not-a-number"');
     const p = writeFixture('registry-bad-signals.yaml', bad);
-    assert.throws(() => loadCommunityRegistry(p), /signals\.stars/);
+    assert.throws(() => loadCommunityRegistry(p), /sources .*\.stars/);
   });
 
   it('throws on a non-existent file (never a silent empty registry)', () => {
@@ -1591,13 +1604,13 @@ describe('communitySkillsFromRegistry', () => {
       assert.ok(handoff);
       assert.equal(handoff!.source, 'https://github.com/obra/superpowers', 'sourceUrl projects onto the legacy `source` field');
       assert.equal(handoff!.stars, '228k', 'stars is the curated DISPLAY string, never the parsed numeric signals.stars');
-      assert.equal(handoff!.starsNumeric, 228000, 'W6-CR-2: starsNumeric carries the parsed numeric figure alongside the display string');
+      assert.equal(handoff!.starsNumeric, 228000, 'W8-B5: starsNumeric is DERIVED from the shared source row, never a per-item copy');
       assert.equal(handoff!.upstreamUpdatedAt, null, 'W6-CR-2: upstreamUpdatedAt threads through (null in this fixture, never fabricated)');
       assert.equal(handoff!.fetchedAt, null, 'W6-CR-2: fetchedAt threads through (null — still just the seed)');
       assert.equal(handoff!.fetchedBy, 'seed', 'W6-CR-2: fetchedBy threads through');
       const noStars = skills.find((s) => s.id === 'security-review');
       assert.equal(noStars!.stars, undefined, 'no starsDisplay ⇒ CommunitySkill.stars is undefined, never a fabricated value');
-      assert.equal(noStars!.starsNumeric, null, 'no numeric signals.stars ⇒ CommunitySkill.starsNumeric is null, never a fabricated value');
+      assert.equal(noStars!.starsNumeric, null, 'a source row with no star count ⇒ CommunitySkill.starsNumeric is null, never a fabricated value');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -1749,18 +1762,38 @@ community-skills:
       assert.equal(actual!.source, old['source'], `"${id}".source dropped/changed vs pre-migration`);
       assert.equal(actual!.category, old['category'], `"${id}".category dropped/changed vs pre-migration`);
       assert.equal(actual!.tier, old['tier'], `"${id}".tier dropped/changed vs pre-migration`);
-      assert.equal(actual!.stars, old['stars'], `"${id}".stars dropped/changed vs pre-migration`);
+      if (id === 'pre-impl-interview') {
+        // W8-B5 schema v2, RECORDED AS A DELIBERATE LOSS, not an accident.
+        // This row's pre-migration `stars` was "156k installs" — a figure in a
+        // DIFFERENT unit, annotated as such by two inline comments in the v1
+        // file. v2 keys star counts by REPO, and this row's source is a blog
+        // post, which resolves to no repo at all. So the row now honestly
+        // carries no star signal instead of a non-star number in the star
+        // field, and the two comments retire with the field they annotated.
+        assert.equal(old['stars'], '156k installs', 'frozen-fixture sanity: this is the non-star figure');
+        assert.equal(actual!.stars, undefined, 'a blog-post source resolves to no repo ⇒ no star signal, never fabricated');
+      } else {
+        assert.equal(actual!.stars, old['stars'], `"${id}".stars dropped/changed vs pre-migration`);
+      }
       assert.equal(actual!.desc, old['desc'], `"${id}".desc dropped/changed vs pre-migration`);
     }
   });
 
-  it('a stars value that is pure k-notation ("228k") parses to a real number; "156k installs" (a different unit) stays null, never fabricated', () => {
+  it('W8-B5 (E5): the star count is on the SHARED source row, and a row whose source is not a repo has none at all', () => {
     const registry = loadCommunityRegistry(communityRegistryPath(REPO_ROOT_FOR_MIGRATION));
     const handoff = registry.items.find((i) => i.id === 'handoff');
-    assert.deepEqual(handoff!.signals, { stars: 228000, starsDisplay: '228k', attributedTo: 'obra/superpowers + Matt Pocock' });
+    assert.deepEqual(handoff!.signals, { attributedTo: 'obra/superpowers + Matt Pocock' }, 'the item carries curation only');
+    assert.equal(resolveCommunitySource(registry, handoff!)!.stars, 228000);
+
+    // The three obra/superpowers rows resolve to the SAME object — by
+    // construction they cannot report different counts (the v1 defect).
+    const sharing = registry.items.filter((i) => i.sourceUrl === 'https://github.com/obra/superpowers');
+    assert.equal(sharing.length, 3, 'sanity: three real rows share this repo');
+    const resolved = sharing.map((i) => resolveCommunitySource(registry, i));
+    assert.equal(new Set(resolved).size, 1, 'three items, one source object');
+
     const installs = registry.items.find((i) => i.id === 'pre-impl-interview');
-    assert.equal(installs!.signals.stars, null, '"156k installs" names a different unit — never fabricated as a star count');
-    assert.equal(installs!.signals.starsDisplay, '156k installs', 'the original curated display string is preserved verbatim');
+    assert.equal(resolveCommunitySource(registry, installs!), null, 'a blog post is not a repo — no source row, no star signal');
   });
 
   it('the full cross-kind community index still totals 20 items post-migration (9 registry skills + 1 vendored-only skill + 1 hook + 3 tools + 6 mcps)', () => {

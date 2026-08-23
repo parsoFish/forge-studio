@@ -122,8 +122,9 @@ function seedValidCommunityRegistry(root: string): void {
   writeFileSync(
     join(dir, 'registry.yaml'),
     `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources: {}
 items: []
 `,
   );

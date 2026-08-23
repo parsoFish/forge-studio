@@ -118,6 +118,18 @@ type CommunityItemWire = {
   kind: CommunityKind;
   name: string;
   desc: string;
+  /** W8-B5 (community-05 / exit row E11) — the registry row's OWN `category`,
+   *  so `/community`'s search can match the word the registry actually files
+   *  rows under ("planning", "memory", "review"). It reached the client
+   *  nowhere before this, which is why adding the search term alone would
+   *  have been a no-op.
+   *
+   *  `null` is LOAD-BEARING and never an invented string: a vendored package
+   *  or a catalog connection has no registry row at all, so it genuinely has
+   *  no category. Same discipline as `hub`/`signals` — an honest absence,
+   *  never a fabricated value, and deliberately not `''` (an empty string
+   *  would make every empty-ish query "match" it). */
+  category: string | null;
   upstream: string;
   hub: CommunityItem['hub'];
   signals: CommunityItem['signals'];
@@ -200,6 +212,23 @@ function originFor(item: CommunityItem): string {
   return `listConnections (studio/catalog.yaml ${item.kind}s:)`;
 }
 
+/**
+ * W8-B5 (exit row E11) — the item's category, read from the ONE place it is
+ * declared: the registry row this item was sourced from (`CommunitySkill`,
+ * itself projected from `CommunityRegistryItem`). Never derived, never
+ * guessed, never defaulted to a plausible-looking string.
+ *
+ * A vendored-only skill package, a vendored hook and a catalog connection all
+ * have NO registry row (D1's other two sources), so they honestly carry
+ * `null` — the same treatment `fetchedAt`/`upstreamUpdatedAt` already get for
+ * exactly the same reason (D14).
+ */
+function categoryFor(item: CommunityItem, ctx: WireCtx): string | null {
+  if (item.kind !== 'skill') return null;
+  const cs = ctx.communitySkills.find((c) => c.id === item.id);
+  return cs ? cs.category : null;
+}
+
 /** The item's own real source link — never hub.url substituted in (see this
  *  file's header: a hub can be a coarser prefix of an item's own upstream). */
 function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
@@ -245,6 +274,7 @@ function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
     kind: item.kind,
     name: item.name,
     desc: item.description ?? NO_DESCRIPTION,
+    category: categoryFor(item, ctx),
     upstream: upstreamFor(item, ctx),
     hub: item.hub,
     signals: item.signals,
@@ -271,6 +301,11 @@ function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
       kind: item.kind,
       name: item.name,
       desc: item.description ?? NO_DESCRIPTION,
+      // The degraded row still carries the honest absence rather than
+      // omitting the key: an ABSENT key is a malformed response to the
+      // client's parser, which would turn one item's derivation failure into
+      // a whole-list parse throw — the opposite of this arm's purpose.
+      category: null,
       upstream: VENDORED_UPSTREAM_SOURCE,
       hub: item.hub,
       signals: item.signals,

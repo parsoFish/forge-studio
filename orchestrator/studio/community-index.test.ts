@@ -63,6 +63,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { skillPath } from '../skill-path.ts';
+import { communitySourceKey } from './community-source-url.ts';
 import { listConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-library.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
@@ -151,21 +152,46 @@ type RawCommunitySkill = {
 /** W6-CR-1: community skills live in studio/community/registry.yaml, not
  *  catalog.yaml — this builds one registry item's YAML doc, migrated field
  *  names (source → sourceUrl, stars → signals.starsDisplay). */
+/** W8-B5 schema v2: an item's `sourceUrl` defaults to a real github.com URL
+ *  so a fixture that declares `stars` has somewhere for that repo fact to
+ *  live — repo facts are keyed by source, not carried on the item. A fixture
+ *  that passes an explicit `source` still gets it verbatim (hub-derivation
+ *  tests depend on the exact URL). */
+function fixtureSourceUrl(s: RawCommunitySkill): string {
+  return s.source ?? `https://github.com/test-owner/${s.id}`;
+}
+
 function communityRegistryItemDoc(s: RawCommunitySkill): Record<string, unknown> {
   return {
     id: s.id,
     kind: 'skill',
     name: s.name ?? s.id,
     provenance: s.provenance ?? 'Test Author',
-    sourceUrl: s.source ?? `https://example.com/${s.id}`,
+    sourceUrl: fixtureSourceUrl(s),
     category: s.category ?? 'testing',
     desc: s.desc ?? `${s.id} description`,
     ...(s.tier !== undefined ? { tier: s.tier } : {}),
-    signals: { stars: null, starsDisplay: s.stars ?? null, attributedTo: s.provenance ?? 'Test Author' },
-    upstreamUpdatedAt: null,
-    fetchedAt: null,
-    fetchedBy: 'seed',
+    signals: { attributedTo: s.provenance ?? 'Test Author' },
   };
+}
+
+/** The v2 `sources:` map, derived from the same raw fixture records — one row
+ *  per distinct resolvable source URL, carrying the repo-level `stars`
+ *  display the pre-v2 fixture put on each item. */
+function communityRegistrySourcesDoc(skills: RawCommunitySkill[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const s of skills) {
+    const key = communitySourceKey(fixtureSourceUrl(s));
+    if (key === null || s.stars === undefined) continue;
+    out[key] = {
+      stars: null,
+      starsDisplay: s.stars,
+      upstreamUpdatedAt: null,
+      fetchedAt: null,
+      fetchedBy: 'seed',
+    };
+  }
+  return out;
 }
 
 /** Writes studio/community/registry.yaml from the same `communitySkills`
@@ -179,7 +205,8 @@ function writeRegistry(root: string, communitySkills: RawCommunitySkill[]): void
   const dir = join(root, 'studio', 'community');
   mkdirSync(dir, { recursive: true });
   const doc = {
-    meta: { schemaVersion: 1, lastRefresh: null },
+    meta: { schemaVersion: 2, lastRefresh: null },
+    sources: communityRegistrySourcesDoc(communitySkills),
     items: communitySkills.map(communityRegistryItemDoc),
   };
   writeFileSync(join(dir, 'registry.yaml'), yaml.dump(doc), 'utf8');

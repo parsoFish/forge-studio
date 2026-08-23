@@ -77,8 +77,9 @@ guards: []
   writeFileSync(
     join(root, 'studio', 'community', 'registry.yaml'),
     `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources: {}
 items:
   - id: colliding-community-skill
     kind: skill
@@ -87,10 +88,7 @@ items:
     sourceUrl: "https://example.com/colliding"
     category: testing
     desc: "A community skill whose id a vendored package also claims."
-    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Test Author" }
 `,
     'utf8',
   );
