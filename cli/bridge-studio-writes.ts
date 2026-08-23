@@ -937,8 +937,13 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   // A body that carries one with a REAL value is refused, naming where the
   // fact belongs: silently ignoring it is the declared-data-fails-open shape
   // (the operator would see their number accepted and never rendered).
-  // An explicit `null` carries no information and is accepted-and-dropped —
-  // /community's add form still posts `stars: null, starsDisplay: null`.
+  // An explicit `null` carries no information, so it is accepted-and-dropped
+  // rather than refused. That is ordinary input tolerance, NOT a back-compat
+  // path: forge's own client does not send these keys at all any more
+  // (forge-ui/app/community/new/page.tsx's `toInput`, changed alongside this),
+  // so nothing in this repo depends on the tolerance. It survives only so a
+  // scripted or third-party caller that spells "I have no star count" as an
+  // explicit null is not punished for it.
   const retiredRepoFields: Array<[string, unknown]> = [
     ['upstreamUpdatedAt', e['upstreamUpdatedAt']],
     ['fetchedAt', e['fetchedAt']],

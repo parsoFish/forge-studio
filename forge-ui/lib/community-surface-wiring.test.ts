@@ -305,3 +305,34 @@ test('E16: the install arms are untouched — install / install-confirm / browse
     expect(src, `the "${arm}" install arm was removed`).toContain(`'${arm}'`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// E5 (cross-worker follow-up, added by the lane orchestrator, not by WI-6).
+//
+// Worker A retired stars / starsDisplay / upstreamUpdatedAt / fetchedAt /
+// fetchedBy as PER-ITEM fields (schema v2 — they are repo facts and live in
+// the registry's `sources` map). The add form was still posting
+// `signals: { stars: null, starsDisplay: null, attributedTo }`, which the
+// bridge's parser had to grow an explicit null-tolerance to accept. That
+// tolerance is fine as ordinary input hygiene, but it must not exist BECAUSE
+// forge's own client keeps sending keys the schema no longer has — that is how
+// a retired field quietly stays alive.
+//
+// Nothing pinned the client half, so a future edit could re-add the literals
+// and every other test would stay green. This is that pin.
+// ---------------------------------------------------------------------------
+
+test('E5 (client half): the add form posts NO retired repo-fact key — not even as an explicit null', () => {
+  const src = stripComments(read(FORM_PAGE));
+  // The one signals literal the form is allowed to build.
+  expect(src).toMatch(/signals:\s*\{\s*attributedTo\s*\}/);
+  // A repo fact must not appear as a key in the request body at all. Comments
+  // are stripped first on purpose: both this file and the form DISCUSS these
+  // names in prose, and a scanner that counted a sentence would fail forever.
+  for (const retired of ['stars', 'starsDisplay', 'upstreamUpdatedAt', 'fetchedAt', 'fetchedBy']) {
+    expect(
+      src,
+      `the add form names the retired repo fact "${retired}" as a \`key:\` — either in the request body it builds, or in the copy it shows the operator. Under schema v2 an item has no such field: it belongs in the registry's top-level "sources" map, keyed by sourceUrl, written only from a real upstream response. (The rendered-copy half is not incidental — this assertion is how the form's own description was caught still telling operators their row would be stamped "fetchedBy: operator".)`,
+    ).not.toMatch(new RegExp(`\\b${retired}\\s*:`));
+  }
+});

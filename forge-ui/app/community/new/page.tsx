@@ -29,14 +29,19 @@ import {
 // Registry item form — /community/new (W7-B3, community-23). Add a curated
 // row to studio/community/registry.yaml, or edit one (?edit=<id>). The
 // bridge validates through the SAME structural loader forge studio lint
-// trusts and FORCES the hand-curated stamps (fetchedAt: null / fetchedBy:
-// operator) — this form never fabricates a verification fact, which is why
-// there is no "stars" number input: a hand-entered star count is exactly the
-// invented signal the registry's own seed discipline forbids. Since the
-// W7-B3 review (F4/F5) stars/starsDisplay/upstreamUpdatedAt are fully
-// SERVER-OWNED (create → null; edit → carried from the existing row), and
-// only the attribution note is operator text. Kind is fixed to "skill" —
-// the index sources every other kind outside the registry (F1).
+// trusts — this form never fabricates a verification fact, which is why there
+// is no "stars" number input: a hand-entered star count is exactly the
+// invented signal the registry's own seed discipline forbids.
+//
+// W8-B5 (schema v2) SUPERSEDES the W7-B3 review's F4/F5 answer here. F4/F5
+// made stars / starsDisplay / upstreamUpdatedAt SERVER-OWNED *per-item*
+// fields (create → null; edit → carried forward from the existing row). v2
+// deletes the per-item field instead of protecting it: those are REPO facts,
+// they live in the registry's top-level `sources` map keyed by sourceUrl, and
+// only `forge community refresh` writes them. So an item carries curation
+// only, and the sole operator-authored signal left on this form is the
+// attribution note. Kind is fixed to "skill" — the index sources every other
+// kind outside the registry (F1).
 //
 // Commit policy (decision, recorded in docs/community-registry-writes.md):
 // Studio writes the repo-tracked file; the operator commits via their normal
@@ -60,10 +65,16 @@ type FormState = RegistryFormState;
 const EMPTY: FormState = EMPTY_REGISTRY_FORM;
 
 function toInput(form: FormState): RegistryItemInput {
-  // W7-B3 review F4/F5: stars/starsDisplay/upstreamUpdatedAt are SERVER-OWNED
-  // — the bridge ignores any body value (create starts them null; edit
-  // carries the existing row's values forward), so the form sends only the
-  // operator-authored attribution note.
+  // W8-B5 (schema v2, exit row E5): stars/starsDisplay/upstreamUpdatedAt are
+  // REPO facts and are not properties of an item at all — they live in the
+  // registry's top-level `sources` map, keyed by sourceUrl, and are written
+  // only by a `forge community refresh` that actually got a 200. The form
+  // therefore sends only the operator-authored attribution note, and does not
+  // send the retired keys even as `null`: a key the schema no longer has has
+  // no business on the wire, and leaving it there would keep the bridge's
+  // null-tolerance alive on behalf of a client that no longer needs it.
+  // (Supersedes W7-B3 review F4/F5, which made these SERVER-OWNED per-item
+  // fields; v2 deletes the per-item field rather than protecting it.)
   const attributedTo = form.attributedTo.trim();
   return {
     id: form.id.trim(),
@@ -74,7 +85,7 @@ function toInput(form: FormState): RegistryItemInput {
     sourceUrl: form.sourceUrl.trim(),
     provenance: form.provenance.trim(),
     ...(form.tier.trim() ? { tier: form.tier.trim() } : {}),
-    ...(attributedTo ? { signals: { stars: null, starsDisplay: null, attributedTo } } : {}),
+    ...(attributedTo ? { signals: { attributedTo } } : {}),
   };
 }
 
@@ -186,9 +197,12 @@ function RegistryItemFormInner(): JSX.Element {
         </h1>
         <p style={{ fontSize: 12.5, color: 'var(--dim)', margin: '0 0 18px', lineHeight: 1.6 }}>
           Writes <code>studio/community/registry.yaml</code> (a repo-tracked file — commit it via your normal
-          git flow afterwards). Hand-curated rows are stamped <code>fetchedBy: operator</code> and read
-          &ldquo;never verified&rdquo; until a community-refresh pass checks them; there is deliberately no
-          star-count field — a number nobody fetched is a fabricated signal.
+          git flow afterwards). A row you add here carries curation only, and reads
+          &ldquo;never verified&rdquo; until a refresh checks its source. Upstream facts like the star
+          count and the last-updated date belong to the <em>source</em>, not to the row — they are
+          recorded once per repository and only ever written from a real upstream response, which is
+          why there is deliberately no star-count field here: a number nobody fetched is a fabricated
+          signal.
         </p>
 
         {loadError && (
