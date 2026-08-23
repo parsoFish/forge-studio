@@ -52,6 +52,39 @@ export const HOOK_LIFECYCLE_EVENTS = [
 export type HookLifecycleEvent = (typeof HOOK_LIFECYCLE_EVENTS)[number];
 
 /**
+ * The lifecycle events whose SDK hook input carries a `tool_name` — the only
+ * ones a declared `matcher` can be evaluated against. `SessionStart`,
+ * `SessionEnd`, `Notification` and `UserPromptSubmit` inputs have no tool at
+ * all, so a matcher on one of them can never be honoured.
+ *
+ * DERIVED FROM DISPATCH, not a second opinion about it: `hook-dispatch.ts`'s
+ * `hookMatcherMatches` returns false the moment `input.tool_name` is not a
+ * string, which is exactly this set. Kept next to the event registry so the
+ * lint and the dispatch cannot drift apart — this repo's standing lesson is
+ * that defense-in-depth lint must mirror the dispatch it backstops.
+ */
+export const TOOL_SCOPED_HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
+
+/**
+ * The trigger-coherence rule, as a pure predicate so it has ONE implementation
+ * and three callers (`lintHookDefinitions` below, plus the hook create and
+ * update bridge routes). Returns an operator-facing message, or `undefined`
+ * when the trigger is coherent.
+ *
+ * A blank/whitespace matcher counts as none — that is literally what the
+ * authoring form submits for an empty field.
+ */
+export function hookTriggerError(on: HookLifecycleEvent, matcher: string | undefined): string | undefined {
+  if (!matcher || !matcher.trim()) return undefined;
+  if ((TOOL_SCOPED_HOOK_EVENTS as readonly string[]).includes(on)) return undefined;
+  return (
+    `matcher ${JSON.stringify(matcher)} is declared on "${on}", which carries no tool — a matcher can only be ` +
+    `honoured on ${TOOL_SCOPED_HOOK_EVENTS.join(' or ')}. Dispatch would never fire this hook. ` +
+    `Remove the matcher, or move the hook to a tool-scoped event.`
+  );
+}
+
+/**
  * A `hook.yaml` declaring any of these top-level keys is REJECTED — a
  * definition never names a binding (round-4 mockup rule). This makes
  * "definitions land unbound" structural, not conventional: no amount of
@@ -313,7 +346,17 @@ export function lintHookDefinitions(forgeRoot: string): Finding[] {
   const findings: Finding[] = [];
   for (const id of listHookIds(forgeRoot)) {
     try {
-      loadHookDefinition(id, forgeRoot);
+      const def = loadHookDefinition(id, forgeRoot);
+      // W8-B6 — mirror hook dispatch's matcher rule (see hookTriggerError).
+      const triggerError = hookTriggerError(def.on, def.matcher);
+      if (triggerError) {
+        findings.push({
+          level: 'error',
+          object: `hook:${id}`,
+          check: 'hook-library/trigger',
+          message: triggerError,
+        });
+      }
     } catch (e) {
       findings.push({
         level: 'error',

@@ -657,3 +657,87 @@ test('handleStudioHooksRoutes returns false for a non-matching URL (passthrough 
   const handled = await handleStudioHooksRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-hooks URL must return false');
 });
+
+// ---------------------------------------------------------------------------
+// W8-B6 — trigger coherence, gated on BOTH write routes
+//
+// A matcher on a tool-less event can never be honoured by hook dispatch
+// (`orchestrator/studio/hook-dispatch.ts`'s `hookMatcherMatches` needs a
+// `tool_name`), so the hook would be authored, displayed as bound, and never
+// fire. Gating create alone would leave PUT as the open door — the one-of-N
+// shape this repo keeps paying for — so both are pinned here.
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/hooks: 400s a matcher declared on a tool-less event (kills: a matcher field that changes nothing and is reported nowhere)', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-bad-trigger-create',
+    description: 'A matcher on SessionEnd can never be honoured.',
+    on: 'SessionEnd',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /SessionEnd/);
+  assert.match(body.error, /PreToolUse or PostToolUse/);
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'w8b6-bad-trigger-create')),
+    false,
+    'the refusal must land BEFORE any package is written — assert the artifact, not just the status code',
+  );
+});
+
+test('PUT /api/studio/hooks/:id: 400s when an EDIT moves a matcher-bearing hook onto a tool-less event (kills: gating create and leaving update open)', async () => {
+  const created = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-good-trigger-then-edited',
+    description: 'Starts coherent on PreToolUse.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(created.status, 200);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/hooks/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ on: 'SessionEnd' }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(((await res.json()) as { error: string }).error, /SessionEnd/);
+
+    const onDisk = yaml.load(readFileSync(join(forgeRoot, 'studio', 'hooks', id, 'hook.yaml'), 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['on'], 'PreToolUse', 'the rejected edit must not have been written');
+    assert.equal(onDisk['matcher'], 'Bash(gh pr create)');
+  } finally {
+    removeHookFixture(id);
+  }
+});
+
+test('PUT /api/studio/hooks/:id: dropping the matcher while moving to a tool-less event is ACCEPTED — the rule refuses the incoherent pair, not the event', async () => {
+  const created = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-drop-matcher-on-move',
+    description: 'Starts on PreToolUse with a matcher.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(created.status, 200);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/hooks/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ on: 'SessionEnd', matcher: '' }),
+    });
+    assert.equal(res.status, 200);
+    const onDisk = yaml.load(readFileSync(join(forgeRoot, 'studio', 'hooks', id, 'hook.yaml'), 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['on'], 'SessionEnd');
+    assert.equal('matcher' in onDisk, false, 'a cleared matcher leaves no key behind');
+  } finally {
+    removeHookFixture(id);
+  }
+});
