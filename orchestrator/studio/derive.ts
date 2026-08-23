@@ -194,6 +194,31 @@ export type AgentCapabilityDescriptor = {
    * re-derivation this type's own doc comment forbids.
    */
   allowedTiers?: ModelTier[];
+  /**
+   * W8-B3 (sessions-kinds-R06 / sessions-kinds-31) — the ONE tier a
+   * `strategy:fixed` skill can ever run on, resolved from its declared
+   * `runtime.model` by the SAME `TIER_BY_MODEL` lookup `deriveAgentSpec`
+   * uses. Present ONLY for `strategy:fixed`; a `strategy:range` skill leaves
+   * this key entirely absent (never `undefined`), exactly mirroring how
+   * `allowedTiers` above is present only for range — so precisely one of the
+   * two keys is ever present, and the *presence* carries the fact.
+   *
+   * Why it exists: the capability payload exposed the RANGE but never the
+   * resolved tier, so for the three fixed-tier kinds (architect,
+   * project-brain, onboarding) the whole chain read blank — the kickoff chip
+   * printed the literal string "fixed · read-only", the session chip "model:
+   * not recorded", and the sessions index "—". On a cost review there was no
+   * way to tell what the most expensive session kind in forge actually ran
+   * on. A fixed-tier agent still HAS a tier; this names it.
+   *
+   * DERIVED, never stored: it is read off the SKILL.md at request time, so a
+   * skill re-pointed at a different model can never leave a stale copy
+   * behind. It is also why the fallback it enables is scoped to
+   * `strategy:fixed` ONLY — a range agent's session that recorded no tier ran
+   * on whatever the default was at the time, which today's default may no
+   * longer be, so "not recorded" stays the honest answer there.
+   */
+  fixedTier?: ModelTier;
   // Extension point (documented; added where its authoring source lands):
   //   artifactOutputs — R2-05-F2.
 };
@@ -225,6 +250,17 @@ export function agentCapabilityDescriptor(def: AgentDefinition, root: string = F
     }
   }
 
+  // W8-B3 (sessions-kinds-R06) — the resolved tier for a strategy:fixed
+  // skill, by the SAME TIER_BY_MODEL lookup deriveAgentSpec uses. A model
+  // string outside the catalog leaves the key absent rather than guessing —
+  // the same degrade-don't-crash discipline the allowedTiers branch above
+  // applies (and unlike deriveAgentSpec, this descriptor must not throw over
+  // one malformed agent: it is served on a live read route).
+  const fixedTier: ModelTier | undefined =
+    def.runtime.strategy === 'fixed' && typeof def.runtime.model === 'string'
+      ? TIER_BY_MODEL[def.runtime.model]
+      : undefined;
+
   return {
     interactive: executionPathForSurface(def.surface) === 'interactive',
     runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
@@ -247,5 +283,8 @@ export function agentCapabilityDescriptor(def: AgentDefinition, root: string = F
     // same discipline as PhaseAgentSpec.allowedTiers, so a fixed-strategy
     // descriptor's literal deep-equal stays byte-identical.
     ...(allowedTiers ? { allowedTiers } : {}),
+    // W8-B3 — same omit-the-key-entirely discipline, and the exact mirror of
+    // allowedTiers: precisely one of the two is ever present.
+    ...(fixedTier ? { fixedTier } : {}),
   };
 }

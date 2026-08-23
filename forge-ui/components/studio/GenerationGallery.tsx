@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { generationGalleryView, preferredGenerationFor, type GenerationGalleryView } from '@/lib/session-artifact-view';
 import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
 import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 // ---------------------------------------------------------------------------
 // GenerationGallery — the demo-builder's accumulating generation selector
@@ -52,6 +53,7 @@ export function GenerationGallery({
   project,
   sessionId,
   onFinalize,
+  finalizeUnavailableReason = null,
 }: {
   artifact: GenerationGalleryArtifact;
   project?: string;
@@ -61,6 +63,14 @@ export function GenerationGallery({
    *  never by this presentational component. Absent ⇒ the control renders,
    *  disabled — never a silently-swallowed click. */
   onFinalize?: (generationNumber: number) => void;
+  /** W8-B3 (sessions-kinds-07) — WHY finalize is unavailable, supplied by the
+   *  caller that actually knows (this session is already locked; it was
+   *  cancelled; this is a read-only view). The button used to be disabled with
+   *  a hardcoded, view-centric `title="Not available from this view"` and NO
+   *  `data-disabled-reason`, on a session that was simply already locked —
+   *  breaking the wave-7 contract that a disabled primary CTA states its real
+   *  reason. Absent ⇒ the shared helper's generic fallback. */
+  finalizeUnavailableReason?: string | null;
 }): JSX.Element {
   // Stable per-mount identity for a caller that doesn't thread `sessionId`
   // (the deep-link session-shell route) — see the module header above.
@@ -117,6 +127,7 @@ export function GenerationGallery({
               project={project}
               sessionId={sessionId}
               onFinalize={onFinalize}
+              finalizeUnavailableReason={finalizeUnavailableReason}
             />
           )}
         </>
@@ -130,11 +141,13 @@ function GenerationDetail({
   project,
   sessionId,
   onFinalize,
+  finalizeUnavailableReason = null,
 }: {
   generation: GenerationGalleryEntry;
   project?: string;
   sessionId?: string;
   onFinalize?: (generationNumber: number) => void;
+  finalizeUnavailableReason?: string | null;
 }): JSX.Element {
   const hasFeedback = generation.feedback !== null;
 
@@ -182,8 +195,7 @@ function GenerationDetail({
         data-action="finalize-generation"
         data-generation-number={generation.number}
         onClick={() => onFinalize?.(generation.number)}
-        disabled={!onFinalize}
-        title={onFinalize ? undefined : 'Not available from this view'}
+        {...disabledAttrs(onFinalize ? null : (finalizeUnavailableReason ?? 'This generation cannot be finalized from here'))}
         style={{
           alignSelf: 'flex-start',
           fontSize: 13,

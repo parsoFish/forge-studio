@@ -79,7 +79,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -758,10 +758,15 @@ test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the ful
 
   // W6-B3 — architect carries NEITHER turnSpec NOR panel (permanently
   // bespoke, ADR-043 2026-08-15 amendment §4) — deriveSessionAffordances must
-  // yield the honest empty answer, not a fabricated guess. modelTier is the
-  // B5 placeholder, always null today.
+  // yield the honest empty answer, not a fabricated guess.
   assert.deepEqual(body.affordances, [], 'architect has no turnSpec/panel — affordances must be [], never fabricated');
-  assert.equal(body.modelTier, null);
+  // W8-B3 AMENDMENT (sessions-kinds-R06/31) — this asserted `null`, which was
+  // pinning the defect: architect is `strategy:fixed`, so it HAS exactly one
+  // legal tier and the session provably ran on it, yet the whole chain read
+  // "not recorded" / "—". This fixture's agent declares
+  // `model: claude-sonnet-4-6`, so the resolved tier is `sonnet` — read live
+  // off the SKILL.md, never stored on the session.
+  assert.equal(body.modelTier, 'sonnet');
 });
 
 test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the full shell payload', async () => {
@@ -801,7 +806,37 @@ test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the 
     ],
     `expected the panel-derived affordances for phase "drafting", got: ${JSON.stringify(body.affordances)}`,
   );
-  assert.equal(body.modelTier, null);
+  // W8-B3 AMENDMENT — see AT-38 above. This fixture's instructions-creator is
+  // written as `strategy:fixed` on claude-sonnet-4-6 (writeSkillAgent), so the
+  // fallback resolves. The scoping — that a strategy:RANGE agent resolves
+  // nothing — is pinned separately below and in cli/session-model-tier.test.ts
+  // against the REAL registry.
+  assert.equal(body.modelTier, 'sonnet');
+});
+
+test('W8-B3 (sessions-kinds-R06/31): the fixed-tier fallback is SCOPED — a strategy:range agent\'s untiered session still reads "not recorded", never a guessed tier', async () => {
+  // Re-point the instructions-creator fixture at a real range envelope, then
+  // read the SAME untiered session again. Nothing about the session changed —
+  // only the agent's declared strategy — which is exactly the distinction the
+  // fallback rests on: a fixed agent has one possible answer, a range agent's
+  // untiered session ran on whatever the default was at the time.
+  const skillPath = join(forgeRoot, 'skills', 'instructions-creator', 'SKILL.md');
+  const before = readFileSync(skillPath, 'utf8');
+  try {
+    writeFileSync(
+      skillPath,
+      before
+        .replace('strategy: fixed', 'strategy: range')
+        .replace('model: claude-sonnet-4-6', 'range:\n    - claude-sonnet-4-6'),
+      'utf8',
+    );
+    const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${REAL_INSTRUCTIONS_SESSION}?project=demoproj`);
+    const body = JSON.parse(await res.text()) as SessionShellBody;
+    assert.equal(res.status, 200);
+    assert.equal(body.modelTier, null, 'a range agent has no single knowable tier — "not recorded" is the honest answer');
+  } finally {
+    writeFileSync(skillPath, before, 'utf8');
+  }
 });
 
 test('W6-B6: GET /api/studio/sessions/instructions/<id>?project=<p> threads a real status.json modelTier through, never the stale null placeholder', async () => {

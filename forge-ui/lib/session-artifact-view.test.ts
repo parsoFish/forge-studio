@@ -476,7 +476,7 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
     transcriptError: null,
     modelTier: null,
     terminal: false,
-    transcript: true,
+    transcriptSources: ['prompt.md'],
     // W7-A2 — the shell payload's derived lifecycle (required at runtime by
     // emptyStageMessageFor's phase-aware copy).
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },

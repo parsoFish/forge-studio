@@ -17,7 +17,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -194,4 +194,70 @@ test('AT-10: an over-long brief (> 2000 chars) -> 400 naming the cap', async () 
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /2000/);
+});
+
+// ---------------------------------------------------------------------------
+// W8-B3 (operator note ON-5) — the session's OPENING OPERATOR TURN.
+//
+// The brief was already validated and stored on status.json by AT-6 above, and
+// then read back by NOTHING: the operator typed a real instruction and the
+// session opened on an empty transcript. `prompt.md` is the file
+// `deriveSessionTranscript` actually reads, so that is where the record has to
+// land. These kill the shipped behaviour directly — before the fix there was
+// no prompt.md at all.
+// ---------------------------------------------------------------------------
+
+test('W8-B3 (ON-5): a briefed session records the operator words VERBATIM as prompt.md — the transcript source, not just status.json', async () => {
+  const res = await start({ brief: 'find me skills for terraform drift detection' });
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const prompt = readFileSync(join(sessionDirFor(body.sessionId), 'prompt.md'), 'utf8');
+  assert.match(prompt, /find me skills for terraform drift detection/);
+  // The operator's own words, never re-cast as a fabricated agent question.
+  assert.doesNotMatch(prompt, /\?$/m);
+});
+
+test('W8-B3 (ON-5): an UNBRIEFED session still records what was asked for — "a full refresh" is information, not silence', async () => {
+  const res = await start({});
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const prompt = readFileSync(join(sessionDirFor(body.sessionId), 'prompt.md'), 'utf8');
+  assert.match(prompt, /full community registry refresh/i);
+  assert.ok(prompt.trim().length > 0, 'a blank prompt.md would derive no turn at all — the same empty transcript this closes');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B3 adversarial-review finding 1 — WRITE ORDER is load-bearing.
+//
+// Adding prompt.md made this a TWO-write route where it had been a one-write
+// route, which opened a window: if the second write fails (containment
+// refusal, ENOSPC, EACCES — `guardedWriteFile` does not catch I/O errors), the
+// route 500s and returns. Had status.json been written FIRST, that would leave
+// a session dir which every surface treats as a real, live session at a
+// working phase, with an empty record and no agent ever spawned — and which
+// `deriveSessionLifecycleFor` never classifies `stalled` (its own documented
+// `lastActivityMs === null` hole), so it is unrecoverable except by hand.
+//
+// status.json is what MAKES a directory a session: without it
+// `readGuardedSessionIndexSummary` returns null, `collectStudioSessionIndexRows`
+// skips the row, and the shell route 404s. So it goes LAST, and a failure
+// leaves only an invisible directory. This pins that ordering directly — a
+// future edit that moves the status write back to the front fails here.
+// ---------------------------------------------------------------------------
+
+test('W8-B3: status.json is written LAST — prompt.md is already on disk by the time the session becomes visible', async () => {
+  const res = await start({ brief: 'ordering probe' });
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const dir = sessionDirFor(body.sessionId);
+  const promptStat = statSync(join(dir, 'prompt.md'));
+  const statusStat = statSync(join(dir, 'status.json'));
+  assert.ok(
+    promptStat.mtimeMs <= statusStat.mtimeMs,
+    `prompt.md (${promptStat.mtimeMs}) must not be written after status.json (${statusStat.mtimeMs}) — the existence marker goes last`,
+  );
+  // The invariant that actually matters, asserted independently of clock
+  // resolution: whenever the session is VISIBLE (status.json exists), its
+  // record is already there.
+  assert.ok(existsSync(join(dir, 'prompt.md')), 'a visible session always has its opening turn on disk');
 });

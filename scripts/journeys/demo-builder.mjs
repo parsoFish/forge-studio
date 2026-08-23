@@ -59,7 +59,7 @@ export const journey = defineJourney({
     {
       id: 'demo-builder-generate',
       title: 'The demo agent composes the page',
-      narration: 'The agent composes the demo, then hands back an iframe-viewable generation for the operator to review before anything is locked in. While it works, the shared ActivityLog drawer (wired generically into the session shell, W6-B10) shows real progress — never a silent hold with only disabled "not yet wired" buttons as the signal.',
+      narration: 'The agent composes the demo, then hands back an iframe-viewable generation for the operator to review before anything is locked in. While it works, the shared ActivityLog drawer (wired generically into the session shell, W6-B10) shows real progress — never a silent hold with only disabled "not yet wired" buttons as the signal. The chat pane beside it is there because this session EARNED one: the brief typed a beat ago was written to the record and is turn 0 (W8-B3, operator note ON-5 — the pane set is derived from the session\'s own turns and live affordances, so a kind that records nothing gets the pane that fits it instead of an empty box explaining its emptiness).',
       drive: async (ctx) => {
         const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
         console.log('\n[DB-2] demo-builder — generate');
@@ -77,6 +77,25 @@ export const journey = defineJourney({
         // actually happening.
         check(await page.locator('[data-component="activity-drawer"]').count() > 0,
           'DB-2: the ActivityLog drawer renders during the working (generating) phase — SessionInteractivePanel, generic over kind');
+
+        // W8-B3 (operator note ON-5). The pane set is DERIVED per session, not
+        // a per-kind list: this demo session earned its transcript by being
+        // BRIEFED for real one beat ago (DB-1's submit-answers POST runs
+        // handleDemoBrief, which writes prompt.md), so the operator's own words
+        // are turn 0 and the chat pane renders. A session that has recorded
+        // nothing renders `data-session-panes="artifact"` instead, with no
+        // empty box apologising for itself.
+        const demoPanes = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-panes') ?? '');
+        check(demoPanes === 'transcript,artifact',
+          `DB-2 (ON-5): a briefed session renders both panes (data-session-panes="${demoPanes}")`);
+        const demoTurn0 = await page.evaluate(() => {
+          const el = document.querySelector('[data-turn-index="0"]');
+          return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source'), text: el.textContent ?? '' } : null;
+        });
+        check(demoTurn0 !== null && demoTurn0.role === 'operator' && demoTurn0.source === 'prompt.md',
+          `DB-2 (ON-5): the operator's brief IS the first turn, derived from prompt.md (got ${JSON.stringify(demoTurn0 && { role: demoTurn0.role, source: demoTurn0.source })})`);
+        check(demoTurn0 !== null && demoTurn0.text.includes(demoBrief.slice(0, 24)),
+          'DB-2 (ON-5): that turn carries the operator\'s own words, not a fabricated stand-in');
         await frame(page, 'demo-1-generating', 'The demo agent composes the page — the ActivityLog shows real progress');
         writeDemoArtifacts();
         // R4-16: the turn's output is SNAPSHOTTED as generation 1, so it

@@ -320,6 +320,15 @@ const PENDING_PAGES: Record<string, string> = {
     'Renders NotFound AND FetchErrorState; several `.catch(() => {})` sites nearby ' +
     'that look like the SAME swallow-to-nothing shape crosscut-08 is about — the ' +
     'strongest OTHER candidate for a real defect, unverified.',
+  'app/sessions/[kind]/new/page.tsx':
+    'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
+    'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +
+    'read failure, so the derivation now picks it up. Verified at source, not scanned: ' +
+    'its mount load is a single Promise.all with ONE top-level .catch that sets `error` ' +
+    'and renders it at :512 as `data-kickoff-error` — a real, distinguishable failure ' +
+    'state, not a swallow. It is PENDING rather than EXEMPT only because no test pins ' +
+    'that banner to a thrown bridge read yet, and EXEMPT here requires naming a test ' +
+    'file that actually covers the page.',
   'app/skills/[id]/page.tsx':
     'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
     'state — not the shared kit; unverified whether a transport failure reaches it.',

@@ -166,6 +166,7 @@ import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir, isSafeSegment, isSafeSubPath } from './studio-path-guard.ts';
+import { fixedTierForSessionKind } from './session-model-tier.ts';
 
 
 /** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
@@ -1894,6 +1895,21 @@ function findSessionKindDescriptorSafe(forgeRoot: string, kind: string): Session
 function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
+  // W8-B3 (sessions-kinds-R06/31) — resolved ONCE PER KIND for this request,
+  // not once per row. The tier is a property of the KIND's agent, so a
+  // per-row lookup would re-read the same SKILL.md for every session of that
+  // kind — 24+ file reads on today's corpus, on a polled index route, for at
+  // most 8 distinct answers. Request-scoped and thrown away afterwards, so it
+  // is still derived at read time and a re-pointed SKILL.md is picked up on
+  // the very next request; nothing is cached across requests.
+  const tierByKind = new Map<string, string | null>();
+  const fixedTierFor = (descriptor: SessionKindDescriptor): string | null => {
+    const hit = tierByKind.get(descriptor.id);
+    if (hit !== undefined) return hit;
+    const resolved = fixedTierForSessionKind(ctx.forgeRoot, descriptor);
+    tierByKind.set(descriptor.id, resolved);
+    return resolved;
+  };
 
   const pushRow = (
     descriptor: SessionKindDescriptor,
@@ -1908,6 +1924,12 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     // definition, needs nothing further from the operator; `deriveRowLifecycle`
     // derives `terminal` before `lifecycle` so that is true structurally.
     const { terminal, lifecycle } = deriveRowLifecycle(ctx, descriptor, phase, project, sessionId);
+    // W8-B3 (sessions-kinds-R06/31) — the SAME read-time fixed-tier fallback
+    // the session shell applies (cli/session-model-tier.ts), so the index
+    // MODEL column and the session's own chip can never disagree about what a
+    // fixed-tier kind ran on. The index used to show "—" for every architect
+    // and project-brain row for exactly this reason.
+    const resolvedTier = modelTier ?? fixedTierFor(descriptor);
     rows.push({
       kind: descriptor.id,
       sessionId,
@@ -1918,7 +1940,7 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       state: lifecycle.state,
       error: lifecycle.error,
       idleMs: lifecycle.idleMs,
-      modelTier,
+      modelTier: resolvedTier,
       updatedAt,
       href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
     });
@@ -3972,6 +3994,56 @@ function guardedSessionDir(
  *  as `prompt.md`'s body. No fabricated interview: form field labels are
  *  never re-cast as agent questions, mirroring the honest single-turn shape
  *  project-brain's `prompt.md` already has. */
+/**
+ * W8-B3 (operator note ON-5) — the kb-cleanup session's OPENING OPERATOR TURN.
+ *
+ * ON-5: "there is no transcript for many of these sessions". Measured: a
+ * kb-cleanup session's dir held only `status.json` until an operator verdict
+ * landed, so `deriveSessionTranscript` honestly found nothing and the session
+ * opened on an empty pane — even though the operator HAD made a request (they
+ * clicked "Cleanup plan" on a specific KB's health panel). That request was
+ * real input and simply was not written down.
+ *
+ * This records the request, at the moment it was made, in the same shape and
+ * for the same reason `renderOnboardingPrompt` (below) records an onboarding
+ * form: the operator's own inputs, verbatim, never re-cast as a fabricated
+ * agent question (D8).
+ *
+ * The finding count is stamped "at kickoff" ON PURPOSE. It is a HISTORICAL
+ * fact about the request, not a status field: the cleanup-plan artifact still
+ * re-derives findings live from a fresh scan at read time
+ * (`deriveCleanupPlan`), and nothing must ever read this line back as current
+ * — see the `findings` comment on the start route itself.
+ */
+function renderKbCleanupPrompt(kbId: string, binding: { kind: string; ref?: string }, findingCount: number): string {
+  const target = binding.ref === undefined ? binding.kind : `${binding.kind} ${binding.ref}`;
+  return [
+    `Clean up the knowledge base \`${kbId}\` (${target}).`,
+    '',
+    `Requested from that KB's health panel with ${findingCount} agent-tier finding${findingCount === 1 ? '' : 's'} open at kickoff.`,
+    'Draft a cleanup plan for review; nothing is applied without an explicit approval.',
+    '',
+  ].join('\n');
+}
+
+/**
+ * W8-B3 (operator note ON-5) — the community-refresh session's OPENING
+ * OPERATOR TURN, and the sharper half of the finding.
+ *
+ * The start route already ACCEPTS, validates and stores a real operator
+ * `brief` on `status.json` ("find me skills for X" — a targeted pass instead
+ * of a full refresh). Nothing ever read it back, so the operator's own words
+ * were captured and then dropped from the record: the session opened on an
+ * empty transcript while the thing they typed sat in a status file. Absence of
+ * a brief is equally real information ("a full refresh, nothing narrowed"),
+ * and is recorded as such rather than as silence.
+ */
+function renderCommunityRefreshPrompt(brief: string | undefined): string {
+  return brief === undefined
+    ? 'Run a full community registry refresh — verify the existing entries against live sources and extend them.\n'
+    : `${brief}\n`;
+}
+
 function renderOnboardingPrompt(inputs: Record<string, string>): string {
   const keys = Object.keys(inputs);
   if (keys.length === 0) return '# Onboarding inputs\n\n(no inputs provided)\n';
@@ -6044,6 +6116,32 @@ async function handleDemoBuilder(
       const findings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
 
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+
+      // W8-B3 (ON-5) — the operator's request, recorded as the session's
+      // opening turn. Written through the SAME guarded leaf sibling as
+      // status.json below, so a symlinked `prompt.md` planted inside a real
+      // session dir is refused rather than followed (`guardedWriteFile`
+      // creates the parent dir itself, so it does not need status.json to
+      // have run first).
+      //
+      // ORDER IS LOAD-BEARING, and this is the second write on a path that
+      // used to have exactly one: `status.json` is what makes a session dir a
+      // SESSION. `readGuardedSessionIndexSummary` returns null without it and
+      // `collectStudioSessionIndexRows` skips the row; the shell route 404s.
+      // So the existence marker goes LAST, and any failure here leaves a
+      // directory that no surface can see — rather than a live-looking
+      // session at phase `drafting` with an empty record and no agent ever
+      // spawned, which is unrecoverable except by hand. This needs no
+      // rollback and adds no unguarded fs sink.
+      if (guardedWriteFile(
+        projectsRoot,
+        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
+        renderKbCleanupPrompt(kbId, kb.binding, findings.length),
+      ) === null) {
+        sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
+        return true;
+      }
+
       const written = guardedWriteSessionStatus(
         projectsRoot,
         [sessionProject, '_kb-cleanup', sessionId],
@@ -6136,6 +6234,23 @@ async function handleDemoBuilder(
 
       const sessionId = newArchitectSessionId();
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+
+      // W8-B3 (ON-5) — the operator's brief was validated, stored on
+      // status.json and then never read by anything. It is real operator
+      // input and belongs in the session's record. Written BEFORE status.json
+      // for the ordering reason documented on the kb-cleanup start route
+      // above: status.json is the existence marker, so it goes last and a
+      // failure here can never leave a live-looking session with an empty
+      // record and no agent.
+      if (guardedWriteFile(
+        projectsRoot,
+        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId, 'prompt.md'],
+        renderCommunityRefreshPrompt(brief),
+      ) === null) {
+        sendJson(res, 500, { error: 'community-refresh start: session prompt.md failed containment' }, origin);
+        return true;
+      }
+
       const written = guardedWriteSessionStatus(
         projectsRoot,
         [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId],

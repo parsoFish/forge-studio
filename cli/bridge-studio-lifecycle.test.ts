@@ -472,15 +472,26 @@ test('index: every row carries the three new fields (state/error/idleMs) — no 
 
 // ---- shell payload: lifecycle + deep links without ?project= ---------------
 
-test('W7-FIX-A2 shell (W7A2-04): the payload carries `transcript` — DERIVED from the descriptor (a turnSpec kind rides the generic spine, which never writes transcript turns → false; a legacy-runner kind → true), never a UI-side kind list', async () => {
+test('W8-B3 shell (ON-5): the payload carries `transcriptSources` — the candidate sources that ACTUALLY EXIST in each session dir, derived by the same reads that built `turns`, never a per-kind boolean proxy', async () => {
+  // SUPERSEDES W7A2-04's `transcript: descriptor.turnSpec === undefined`
+  // assertion. That proxy was a stored per-kind guess, and it was WRONG for
+  // `authoring`: authoring declares a turnSpec, yet its start route
+  // (`writeAuthoringSession`, cli/ui-bridge.ts) writes prompt.md before the
+  // generic spine ever runs — so the wire claimed "records no turns" for a
+  // kind that has one from second zero. What ships is the derived fact.
+  //
   // community-refresh is a turnSpec kind whose shell resolves without a live
   // KB (kb-cleanup's shell 409s on an unresolvable kb_id by design — R4-19-F2).
-  const cr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`), 200);
-  assert.equal(cr.transcript, false, 'community-refresh (turnSpec) records its work in the artifact pane, never as transcript turns');
-  const instr = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_VERDICT_SID}?project=proja`), 200);
-  assert.equal(instr.transcript, true, 'instructions (legacy runner) writes prompt/questions/answers/feedback → transcript-bearing');
-  const arch = await expectJson<{ transcript: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}?project=proja`), 200);
-  assert.equal(arch.transcript, true);
+  // This fixture's session dir holds only status.json, so nothing was found.
+  const cr = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`), 200);
+  assert.deepEqual(cr.transcriptSources, [], 'no candidate source is on disk for this session — the honest empty list');
+  // The instructions fixture writes a real prompt.md; the architect fixture a
+  // real idea.md. Both are asserted by NAME, so a change that started
+  // reporting the whole scanned list (or a hardcoded per-kind answer) fails.
+  const instr = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${INSTR_VERDICT_SID}?project=proja`), 200);
+  assert.deepEqual(instr.transcriptSources, ['prompt.md']);
+  const arch = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/architect/${ARCHITECT_VERDICT_SID}?project=proja`), 200);
+  assert.deepEqual(arch.transcriptSources, ['idea.md']);
 });
 
 test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the anchor project (a dot-anchor too) and carries lifecycle', async () => {

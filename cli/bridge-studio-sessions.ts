@@ -119,6 +119,7 @@ import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
+import { fixedTierForSessionKind } from './session-model-tier.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -802,7 +803,17 @@ export async function handleStudioSessionsRoutes(
         // note. Read directly off the already-parsed `statusParsed`, the
         // SAME realpath-guarded read every other field on this envelope
         // comes from; never a second, unguarded status read.
-        modelTier: typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null,
+        // W8-B3 (sessions-kinds-R06/31) — when the session recorded no tier,
+        // fall back to the kind's agent's FIXED tier, derived live off its
+        // SKILL.md. Scoped to `strategy:fixed` on purpose: such an agent has
+        // exactly one legal tier, so a session of that kind provably ran on
+        // it; a `strategy:range` agent's untiered session ran on whatever the
+        // default was at the time, which today's default may no longer be, so
+        // "not recorded" stays the honest answer there. Never stored — a
+        // skill re-pointed at a different model cannot leave a stale copy.
+        modelTier: typeof statusParsed.modelTier === 'string'
+          ? statusParsed.modelTier
+          : fixedTierForSessionKind(ctx.forgeRoot, descriptor),
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
         // used internally to gate `ensureSessionTail` (this file's header),
         // now also threaded onto the wire (ALWAYS present, never omitted —
@@ -810,16 +821,24 @@ export async function handleStudioSessionsRoutes(
         // `SessionInteractivePanel` can gate its ActivityLog drawer without a
         // second, hand-kept terminal-phase table client-side.
         terminal: isTerminalPhase(descriptor, phase),
-        // W7-FIX-A2 (W7A2-04) — whether this KIND records turns as a
-        // transcript at all, DERIVED from the descriptor: a `turnSpec` kind
-        // rides the generic spine (orchestrator/interactive-runner.ts), which
-        // never writes the transcript files `deriveSessionTranscript` reads
-        // (idea/prompt/questions/answers/feedback) — its work lives in the
-        // artifact pane; a legacy-runner kind writes them. ALWAYS present,
-        // mirroring `terminal`/`affordances`, so the shell's empty-transcript
-        // copy is keyed on the kind's real shape, never on a UI-side kind
-        // list or on lifecycle state alone.
-        transcript: descriptor.turnSpec === undefined,
+        // W8-B3 (ON-5) — REPLACES W7-FIX-A2's `transcript: descriptor.turnSpec
+        // === undefined`. That boolean was a STORED PROXY for "does this kind
+        // record turns", and it was factually wrong: its own comment claimed a
+        // `turnSpec` kind "never writes the transcript files", but `authoring`
+        // declares a turnSpec AND its start route (`writeAuthoringSession`,
+        // cli/ui-bridge.ts) writes `prompt.md` before the generic spine ever
+        // runs — so the wire said "records no turns" for a kind that records
+        // one from second zero. Measured, not argued: driving the real writer
+        // and the real derivation yields `turns=1, source=prompt.md`.
+        //
+        // What ships instead is the FACT, derived by the same reads that built
+        // `turns`: which of the scanned candidate sources actually exist here.
+        // The consumer (forge-ui/lib/session-shell-view.ts's
+        // `deriveSessionPanes`) decides whether a transcript pane belongs from
+        // `turns` + the live affordances — there is no longer any field for a
+        // writer to leave a stale per-kind copy in. ALWAYS present, mirroring
+        // `terminal`/`affordances`.
+        transcriptSources: transcriptResult.ok ? [...transcriptResult.sourcesFound] : [],
         // W7-A2 — the DERIVED lifecycle view (cli/bridge-studio-lifecycle.ts):
         // state (working | awaiting-operator | crashed | stalled | terminal),
         // a truthful `needsYou`, the runner's crash text read live off

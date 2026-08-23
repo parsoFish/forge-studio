@@ -61,8 +61,21 @@ export function KickoffModelTierPicker({ capability, modelTier, onChange }: Kick
           ))}
         </div>
       ) : (
-        <div data-field="kickoff-model-fixed-chip" style={{ fontSize: 12.5, color: 'var(--dim)' }}>
-          fixed · read-only
+        // W8-B3 (sessions-kinds-R06) — a fixed-tier agent still HAS a tier;
+        // name it. This printed the literal string "fixed · read-only" for
+        // every fixed-strategy agent, so the three fixed-tier session kinds
+        // (architect, project-brain, onboarding) never named their model
+        // anywhere in the product. `fixedTier` now rides the capability
+        // payload, derived off the SKILL.md's own `runtime.model`. A
+        // capability that has not loaded yet — or an agent whose declared
+        // model is outside the catalog — has no tier to name and keeps the
+        // honest read-only chip rather than inventing one.
+        <div
+          data-field="kickoff-model-fixed-chip"
+          data-model-tier={capability?.fixedTier ?? ''}
+          style={{ fontSize: 12.5, color: 'var(--dim)' }}
+        >
+          {capability?.fixedTier ? `${capability.fixedTier} · fixed for this agent` : 'fixed · read-only'}
         </div>
       )}
     </div>

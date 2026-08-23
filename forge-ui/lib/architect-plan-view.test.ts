@@ -92,7 +92,9 @@ test('hrefs: session deep link carries the project; artifact href carries the mo
 
 test('linkage: one row per initiative id, matched on run.initiativeId, run/monitor hrefs from the run\'s OWN flowId + id', () => {
   const runs = [run({ id: 'INIT-2026-08-18-add-version-flag', flowId: 'forge-architect', status: 'planned' })];
-  const [row] = deriveInitiativeLinkage(['INIT-2026-08-18-add-version-flag'], runs);
+  // W8-B3 (sessions-kinds-08): the monitor link is derived against the LIVE
+  // flows roster, so this row must be told the flow really exists.
+  const [row] = deriveInitiativeLinkage(['INIT-2026-08-18-add-version-flag'], runs, ['forge-architect', 'forge-develop']);
   expect(row).toEqual({
     initiativeId: 'INIT-2026-08-18-add-version-flag',
     runId: 'INIT-2026-08-18-add-version-flag',
@@ -223,4 +225,43 @@ test('stopping wins over paused on the committed view (a draining daemon cannot 
   const v = describePostCommit([link('queued')], { running: true, paused: true, stopping: true });
   expect(v.tone).toBe('queued-stopping');
   expect(v.headline).not.toMatch(/resume it/);
+});
+
+
+// ---------------------------------------------------------------------------
+// W8-B3 (sessions-kinds-08) — the monitor link is derived against the LIVE
+// flows roster, never minted from the run's flowId unconditionally.
+//
+// Live evidence: `GET /api/runs` returns 22 of 63 runs carrying the `"unknown"`
+// sentinel the runs payload uses for pre-S8 manifests, and
+// `ArchitectCommittedView` picks the first non-null monitorHref as its
+// "Watch it build →" target. On 8 of 12 committed architect sessions the
+// biggest, greenest control on the panel therefore navigated to
+// `/flows/unknown` — a retired-flow not-found page.
+// ---------------------------------------------------------------------------
+
+test('sessions-kinds-08: a run whose flowId is not in the live roster gets NO monitor link — its own run page still resolves', () => {
+  const runs = [run({ id: 'INIT-legacy', initiativeId: 'INIT-legacy', flowId: 'unknown', status: 'complete' })];
+  const [row] = deriveInitiativeLinkage(['INIT-legacy'], runs, ['forge-develop', 'forge-architect']);
+  expect(row.monitorHref).toBeNull();
+  // Not a blanket suppression: the run page derives from the runs list and
+  // works without a flow definition (W7-FIX-A3), so it must survive.
+  expect(row.runHref).toBe('/flows/unknown/run/INIT-legacy');
+  expect(row.flowId).toBe('unknown');
+});
+
+test('sessions-kinds-08: the class, not the one sentinel — a retired-but-not-"unknown" flow id is equally dead and equally suppressed', () => {
+  const runs = [run({ id: 'INIT-old', initiativeId: 'INIT-old', flowId: 'release-refine', status: 'complete' })];
+  expect(deriveInitiativeLinkage(['INIT-old'], runs, ['forge-develop'])[0].monitorHref).toBeNull();
+});
+
+test('sessions-kinds-08: a run on a REAL flow keeps its monitor link — the guard must not have been widened into "never link"', () => {
+  const runs = [run({ id: 'INIT-live', initiativeId: 'INIT-live', flowId: 'forge-develop', status: 'active' })];
+  expect(deriveInitiativeLinkage(['INIT-live'], runs, ['forge-develop'])[0].monitorHref).toBe('/flows/forge-develop');
+});
+
+test('sessions-kinds-08: an UNRESOLVED roster suppresses the link rather than guessing — one fewer link beats a dead end', () => {
+  const runs = [run({ id: 'INIT-live', initiativeId: 'INIT-live', flowId: 'forge-develop', status: 'active' })];
+  expect(deriveInitiativeLinkage(['INIT-live'], runs, undefined)[0].monitorHref).toBeNull();
+  expect(deriveInitiativeLinkage(['INIT-live'], runs, [])[0].monitorHref).toBeNull();
 });

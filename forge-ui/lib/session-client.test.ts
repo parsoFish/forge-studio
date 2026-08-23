@@ -199,7 +199,7 @@ const WELL_FORMED_PAYLOAD = {
   terminal: false,
   // W7-FIX-A2 (W7A2-04) — REQUIRED on every wire payload: architect is a
   // legacy-runner (transcript-bearing) kind.
-  transcript: true,
+  transcriptSources: ['idea.md'],
   // W7-A2 — REQUIRED on every wire payload (never omitted): the bridge's
   // derived lifecycle; awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true },
@@ -478,7 +478,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [{ id: 'drafting-staged-review', kind: 'staged-review', phase: 'drafting', meta: { writes: ['draft'] } }],
     modelTier: 'sonnet',
     terminal: false,
-    transcript: true,
+    transcriptSources: ['idea.md'],
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
     finalized: null,
     transcriptError: null,
@@ -499,7 +499,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     affordances: [],
     modelTier: null,
     terminal: false,
-    transcript: true,
+    transcriptSources: ['idea.md'],
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
     finalized: null,
     transcriptError: null,
@@ -527,24 +527,27 @@ test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS
 });
 
 // ===========================================================================
-// W7-FIX-A2 (W7A2-04) — parseSessionShellPayload gains "transcript" (boolean,
-// REQUIRED, never omitted or defaulted): whether this KIND records turns as a
-// transcript at all (bridge-derived: a turnSpec kind rides the generic spine,
-// which never writes transcript files → false). Same hard-required treatment
-// as "terminal"/"affordances" — a missing flag must never quietly read as
-// "transcript-bearing" (or as "artifact-pane only").
+// W8-B3 (ON-5) — parseSessionShellPayload carries "transcriptSources" (string
+// array, REQUIRED, never omitted or defaulted), REPLACING W7-FIX-A2's
+// `transcript` boolean. That boolean was a per-kind STORED PROXY and was
+// factually wrong for `authoring` (declares a turnSpec, yet its start route
+// writes prompt.md before the spine runs). Same hard-required treatment as
+// "terminal"/"affordances": an empty array is the honest "nothing written
+// yet" and must stay distinguishable from a bridge that omitted the field.
 // ===========================================================================
 
-test('W7A2-04: parseSessionShellPayload: "transcript" round-trips true/false verbatim', () => {
-  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: true }).transcript).toBe(true);
-  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: false }).transcript).toBe(false);
+test('W8-B3: parseSessionShellPayload: "transcriptSources" round-trips verbatim, empty array included', () => {
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptSources: ['idea.md', 'verdicts.json'] }).transcriptSources)
+    .toEqual(['idea.md', 'verdicts.json']);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptSources: [] }).transcriptSources).toEqual([]);
 });
 
-test('W7A2-04: parseSessionShellPayload: "transcript" missing or non-boolean THROWS naming the field — never defaulted', () => {
-  const { transcript: _drop, ...missing } = WELL_FORMED_PAYLOAD;
-  expect(() => parseSessionShellPayload(missing)).toThrow(/transcript/);
-  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: 'yes' })).toThrow(/transcript/);
-  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcript: null })).toThrow(/transcript/);
+test('W8-B3: parseSessionShellPayload: "transcriptSources" missing, non-array, or holding a non-string THROWS naming the field — never defaulted', () => {
+  const { transcriptSources: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/transcriptSources/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptSources: 'idea.md' })).toThrow(/transcriptSources/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptSources: null })).toThrow(/transcriptSources/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, transcriptSources: ['idea.md', 7] })).toThrow(/transcriptSources/);
 });
 
 // ===========================================================================

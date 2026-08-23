@@ -83,7 +83,7 @@ const BASE_PAYLOAD = {
   ok: true, kind: 'demo', title: 'Demo capability session', sessionId: '2026-08-03T12-00-00', project: 'projb',
   phase: 'generating', stages: ['demo'], defaultStage: 'demo', turns: [],
   artifact: { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: [] },
-  affordances: [], modelTier: null, terminal: false, transcript: true,
+  affordances: [], modelTier: null, terminal: false, transcriptSources: ['idea.md'],
   // W7-C2 — REQUIRED on every wire payload (null = produced nothing).
   finalized: null,
   transcriptError: null,

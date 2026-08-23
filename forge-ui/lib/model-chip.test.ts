@@ -33,8 +33,13 @@ test('W7-C3 review: a BLANK tier is unrecorded too — never a blank chip', () =
   }
 });
 
-test('SessionInteractivePanel renders the chip through modelChipLabel (source pin)', () => {
-  const src = readFileSync(resolve(__dirname, '../components/studio/session/SessionInteractivePanel.tsx'), 'utf8');
+test('the shared ProvenanceStrip renders the chip through modelChipLabel (source pin)', () => {
+  // W8-B3 (sessions-kinds-R02): the strip was extracted out of
+  // SessionInteractivePanel into its own component so SessionProjectBrainPanel
+  // — the one kind that had no provenance strip at all — renders the SAME one
+  // rather than a second copy. This pin follows it, and is now STRONGER: there
+  // is exactly one file that could regress instead of one per panel.
+  const src = readFileSync(resolve(__dirname, '../components/studio/session/ProvenanceStrip.tsx'), 'utf8');
   expect(src).toMatch(/modelChipLabel/);
   expect(src).not.toMatch(/modelTier \?\? 'default'/);
 });

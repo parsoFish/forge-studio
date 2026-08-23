@@ -659,3 +659,51 @@ test('community-14: a community-refresh registry draft (registry.yaml + evidence
   // once approve joins them.
   expect(html).toContain('data-action="verdict-reject"');
 });
+
+// ===========================================================================
+// W8-B3 (sessions-kinds-06, second half) — the "Skill id (directory name)"
+// FIELD, not just the Approve button, is keyed on the phase row's own
+// `requires:` list. Keyed on `artifact.kind === 'file-package'` it rendered on
+// community-refresh, a kind that never asked for an id, complete with a
+// "waiting for a SKILL.md or hook.yaml" hint about a file its registry draft
+// will never contain. The button was un-gated by community-14; the field it
+// gates on was not.
+// ===========================================================================
+
+test('W8-B3 (sessions-kinds-06): a verdict whose row requires NOTHING renders no id field and no SKILL.md/hook.yaml hint, even on a file-package artifact', () => {
+  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'community-refresh');
+  const verdict = deriveSessionAffordances(descriptor!, 'awaiting-review').find((a) => a.kind === 'verdict');
+  expect(verdict!.meta?.requires ?? []).toEqual([]);
+
+  const html = render({
+    kind: 'community-refresh',
+    phase: 'awaiting-review',
+    affordances: [verdict as SessionAffordance],
+    artifact: filePackage([
+      { path: 'registry.yaml', body: 'entries: []' },
+      { path: 'evidence.md', body: '# Evidence' },
+    ]),
+  });
+  expect(html).not.toContain('data-field="session-package-id"');
+  expect(html).not.toContain('SKILL.md or hook.yaml');
+});
+
+test('W8-B3 (sessions-kinds-06): a verdict whose row DOES require an id still renders the field and the shape hint — the fix must not delete the affordance it scopes', () => {
+  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'authoring');
+  const verdict = deriveSessionAffordances(descriptor!, 'awaiting-review').find((a) => a.kind === 'verdict');
+  expect(verdict!.meta?.requires ?? []).toEqual(['id']);
+
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    affordances: [verdict as SessionAffordance],
+    // Still drafting: neither marker file has landed, so the shape advisory
+    // genuinely applies here.
+    artifact: filePackage([{ path: 'notes.md', body: 'wip' }]),
+  });
+  expect(html).toContain('data-field="session-package-id"');
+  expect(html).toContain('SKILL.md or hook.yaml');
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).toContain('disabled=""');
+  expect(tag).toContain('data-disabled-reason');
+});

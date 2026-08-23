@@ -1075,6 +1075,12 @@ const MODEL_TIER_VALUES: readonly ModelTier[] = ['haiku', 'sonnet', 'opus'];
  *  degrades the WHOLE array to `undefined` rather than silently dropping
  *  just that one entry (a partial tier list would let the kickoff picker
  *  offer a narrower-than-real range without any signal something's wrong). */
+/** W8-B3 — the single-tier sibling of `parseAllowedTiers` below: a value
+ *  outside the closed `ModelTier` vocabulary is refused, never coerced. */
+function isModelTier(raw: unknown): raw is ModelTier {
+  return typeof raw === 'string' && (MODEL_TIER_VALUES as readonly string[]).includes(raw);
+}
+
 function parseAllowedTiers(raw: unknown): ModelTier[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   if (!raw.every((t): t is ModelTier => typeof t === 'string' && (MODEL_TIER_VALUES as readonly string[]).includes(t))) return undefined;
@@ -1177,6 +1183,16 @@ export type AgentCapability = {
   materials: string[];
   costCeilingEnforceable: boolean;
   allowedTiers?: ModelTier[];
+  /**
+   * W8-B3 (sessions-kinds-R06) — the ONE tier a `strategy:fixed` agent can
+   * run on, server-derived off its SKILL.md `runtime.model`. The exact
+   * mirror of `allowedTiers`: present only for `fixed`, absent for `range`,
+   * so precisely one of the two keys ever arrives and the PRESENCE carries
+   * the fact. The kickoff picker names it in the read-only chip instead of
+   * printing the literal string "fixed · read-only", which is why the three
+   * fixed-tier session kinds never named their model anywhere.
+   */
+  fixedTier?: ModelTier;
 };
 
 /** Parse `GET /api/studio/agents/:slug/capability`'s `capability` field.
@@ -1199,6 +1215,9 @@ export function parseAgentCapability(raw: unknown): AgentCapability | null {
     // same discipline as the server's own AgentCapabilityDescriptor
     // (orchestrator/studio/derive.ts) and PhaseAgentSpec.allowedTiers.
     ...(allowedTiers ? { allowedTiers } : {}),
+    // W8-B3 — same discipline; a malformed/absent value stays absent rather
+    // than becoming a fabricated tier.
+    ...(isModelTier(c['fixedTier']) ? { fixedTier: c['fixedTier'] } : {}),
   };
 }
 

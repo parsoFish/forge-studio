@@ -2518,6 +2518,49 @@ inventory rather than one shared page-level contract:
   (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
   the transcript pane AND the artifact pane together; a shell refetch keeps
   the operator's choice.
+  **⚑ W8-B3 (operator note ON-5) — the pane set is PER SESSION, derived:**
+  `[data-session-panes]` names the panes actually rendered, in order
+  (`"transcript,artifact"` or `"artifact"`), and `[data-transcript-omitted]`
+  appears only when the chat pane is absent, distinguishing two genuinely
+  different situations: `"nothing-recorded"` (no transcript source exists on
+  disk — the writer never ran) versus `"sources-derived-no-turns"` (a source IS
+  there and produced no turn — today, a blank `prompt.md`, which three brief
+  routes create by writing `body.brief ?? ''`). A pane that renders but is
+  empty now also NAMES the sources on disk, which is
+  `deriveSessionTranscript`'s own binding rule ("an empty transcript reads
+  'scanned N sources, none found' — never 'unknown, rendered empty'") finally
+  reaching the operator. The shell used to render a transcript pane for every kind
+  unconditionally, so a `kb-cleanup` or `community-refresh` session — which
+  genuinely has no turns until a verdict lands — spent half the screen on an
+  empty box explaining its own emptiness while the plan or staged package the
+  operator came to read was squeezed into the other half. The decision is
+  derived in `deriveSessionPanes` (`lib/session-shell-view.ts`) from the
+  session's OWN turns plus its live affordances: turns exist, or a
+  `question-form` affordance is asking the operator for text right now (the
+  answer lands in the transcript), or the transcript derivation REFUSED (its
+  reason is only readable in that pane). There is deliberately **no `panes:`
+  key in `studio/session-kinds.yaml`** for it to drift from. When the pane is
+  absent the kind's live panel renders in
+  `div[data-section="session-panel"]` instead — the SAME element, so dropping
+  the chat box can never drop the operator's controls with it.
+  This **replaced** the wire's `transcript: boolean`
+  (`descriptor.turnSpec === undefined`), a stored per-kind proxy that was
+  factually wrong for `authoring`: that kind declares a `turnSpec` yet its
+  start route (`writeAuthoringSession`) writes `prompt.md` before the generic
+  spine ever runs. The wire now carries `transcriptSources` — which candidate
+  sources actually exist on disk — used ONLY to explain a quiet pane, never
+  to decide whether it renders.
+  **W8-B3 (sessions-kinds-R02): `project-brain` finally renders the shared
+  `ActivityLog` drawer and `[data-section="session-provenance"]` strip** —
+  it was the only one of the eight kinds with neither, while
+  `GET /api/events/_project-brain-<sid>` had been serving its events all
+  along with no consumer. The strip is now one shared component
+  (`components/studio/session/ProvenanceStrip.tsx`), not a copy per panel.
+  **W8-B3 (sessions-kinds-R08): `[data-draft-destination-tense]`** on the
+  markdown-draft destination line — `"future"` while a verdict is still
+  available, `"settled"` once it is not. A rejected AGENTS.md draft used to
+  sit under the present-tense header "Approving writes /…/AGENTS.md (new
+  file)", promising a verdict that can never be given again.
   **W7-B3 (sessions-kinds-06 / community-14): `community-refresh` joined
   `GENERIC_PANEL_KINDS`** — its declared approve/reject verdict (the
   `awaiting-review` row in `studio/session-kinds.yaml`) and activity drawer

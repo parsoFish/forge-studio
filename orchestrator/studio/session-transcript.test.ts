@@ -468,17 +468,16 @@ describe('deriveSessionTranscript — stage machinery is genuinely exercised (fa
 describe('deriveSessionTranscript — empty session honesty', () => {
   it('AT-23: an empty session dir → {ok:true, turns:[]} with sourcesScanned NON-empty, naming the files it looked for', () => {
     const sessionDir = makeTmpDir('transcript-empty-');
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as {
-      ok: true;
-      turns: unknown[];
-      sourcesScanned: string[];
-    };
-    assert.equal(result.ok, true);
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
     assert.deepEqual(result.turns, []);
     assert.ok(Array.isArray(result.sourcesScanned) && result.sourcesScanned.length > 0, 'sourcesScanned must never be silently empty — it names what was scanned even when nothing was found');
     for (const name of ['idea.md', 'answers.json', 'questions.json', 'feedback.md']) {
       assert.ok(result.sourcesScanned.some((s) => s.includes(name)), `sourcesScanned must name "${name}"`);
     }
+    // W8-B3 (ON-5): scanned names what we LOOKED for; found names what was
+    // there. An empty dir must report the second as empty, never conflate them.
+    assert.deepEqual([...result.sourcesFound], []);
   });
 });
 
@@ -2246,5 +2245,156 @@ describe('W7-C2 — verdicts.json renders operator verdict turns', () => {
     const result = deriveSessionTranscript({ descriptor: instructionsDescriptor(), sessionDir, phase: 'drafting' }) as { ok: boolean; error?: { message: string } };
     assert.equal(result.ok, false);
     assert.match(result.error!.message, /feedback/);
+  });
+});
+
+// ===========================================================================
+// W8-B3 (operator note ON-5) — `sourcesFound`, and the blank-opener rule.
+//
+// The wire used to carry `transcript: descriptor.turnSpec === undefined`
+// (cli/bridge-studio-sessions.ts) as a per-kind proxy for "does this kind
+// record turns". It was a stored copy of a fact this module already knows, and
+// it was WRONG for `authoring` — that kind declares a `turnSpec`, yet its start
+// route (`writeAuthoringSession`, cli/ui-bridge.ts) writes `prompt.md` before
+// the generic spine ever runs, so the proxy claimed "no turns" for a kind that
+// has one from second zero. `sourcesFound` replaces it with the derived fact.
+// ===========================================================================
+
+describe('deriveSessionTranscript — W8-B3 sourcesFound + blank-opener rule (ON-5)', () => {
+  it('W8-B3: sourcesFound reports exactly the candidate sources that EXIST, in scan order — never the whole scanned list', () => {
+    const dir = makeTmpDir('b3-sources-found');
+    writeFileSync(join(dir, 'idea.md'), 'ship the thing');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T00:00:00.000Z', verdict: 'approve' }]);
+
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
+    assert.deepEqual([...result.sourcesFound], ['idea.md', 'verdicts.json']);
+    // The scanned list is unchanged and still names everything looked for, so
+    // "scanned 6, found 2" stays a readable, honest report.
+    assert.ok(result.sourcesScanned.length > result.sourcesFound.length);
+    for (const found of result.sourcesFound) assert.ok(result.sourcesScanned.includes(found));
+  });
+
+    it('W8-B3: sourcesFound is [] for a session dir holding none of the candidates — the kb-cleanup / community-refresh shape before any verdict', () => {
+    const dir = makeTmpDir('b3-sources-none');
+    writeFileSync(join(dir, 'status.json'), '{"phase":"drafting"}');
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'drafting' });
+    assert.ok(result.ok);
+    assert.deepEqual([...result.sourcesFound], []);
+    assert.equal(result.turns.length, 0);
+  });
+
+    it('W8-B3: a BLANK prompt.md produces NO turn (never an empty operator bubble), while still being reported as a source that exists', () => {
+    // Live shape, not invented: `/api/project-brain/brief`, `/api/instructions/
+    // brief` and `/api/demo-builder/brief` all write `body.brief ?? ''`, so an
+    // operator who skips the optional brief lands a zero-byte prompt.md.
+    for (const body of ['', '   \n\t  \n']) {
+      const dir = makeTmpDir('b3-blank-prompt');
+      writeFileSync(join(dir, 'prompt.md'), body);
+      const result = deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir: dir, phase: 'analyzing' });
+      assert.ok(result.ok);
+      assert.equal(result.turns.length, 0, `blank prompt.md (${JSON.stringify(body)}) must not manufacture a turn`);
+      assert.deepEqual([...result.sourcesFound], ['prompt.md'], 'the file really is there — presence is not the same as content');
+    }
+  });
+
+    it('W8-B3: a prompt.md with real content still produces exactly one operator turn (the blank rule must not swallow real briefs)', () => {
+    const dir = makeTmpDir('b3-real-prompt');
+    writeFileSync(join(dir, 'prompt.md'), 'emphasise the build/test conventions');
+    const result = deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 1);
+    assert.equal(result.turns[0].role, 'operator');
+    assert.equal(result.turns[0].source, 'prompt.md');
+    assert.equal(result.turns[0].text, 'emphasise the build/test conventions');
+  });
+});
+
+describe('deriveSessionTranscript — W8-B3 revise de-duplication (sessions-kinds-R05)', () => {
+  // Live repro from the wave-7 re-gate, on a real authoring session: Request
+  // changes -> feedback "Add a short \"Examples\" section with one echo
+  // example." -> Send for revision. The transcript then read OPERATOR "Add a
+  // short …" followed by OPERATOR "Verdict: revise Add a short …" — the same
+  // instruction twice, because the ONE write appends the durable verdicts.json
+  // record AND leaves the transient feedback.md the next turn will consume.
+  const FEEDBACK = 'Add a short "Examples" section with one echo example.';
+
+  it('R05: a revise whose feedback is carried by its verdict record renders ONCE — as the verdict, with the words as its body', () => {
+    const dir = makeTmpDir('b3-revise-dedup');
+    writeFileSync(join(dir, 'feedback.md'), FEEDBACK);
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: FEEDBACK }]);
+
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    const operatorTurns = result.turns.filter((t) => t.role === 'operator');
+    assert.equal(operatorTurns.length, 1, `expected ONE turn, got ${operatorTurns.length}: ${JSON.stringify(operatorTurns.map((t) => t.source))}`);
+    assert.equal(operatorTurns[0].source, 'verdicts.json#1');
+    assert.match(operatorTurns[0].text, /Verdict: revise/);
+    // The operator's words are NOT lost — they are the verdict turn's body.
+    assert.ok(operatorTurns[0].text.includes(FEEDBACK));
+  });
+
+  it('R05: TWO revise rounds each render exactly once, with their own words', () => {
+    const dir = makeTmpDir('b3-revise-dedup-2');
+    writeFileSync(join(dir, 'feedback.md'), 'second round words');
+    writeJson(dir, 'verdicts.json', [
+      { at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: 'first round words' },
+      { at: '2026-08-23T11:00:00.000Z', verdict: 'revise', feedback: 'second round words' },
+    ]);
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 2);
+    assert.equal(result.turns.filter((t) => t.text.includes('second round words')).length, 1);
+    assert.equal(result.turns.filter((t) => t.text.includes('first round words')).length, 1);
+  });
+
+  it('R05: feedback.md that NO verdict record carries still renders — de-duplication must never lose the operator\'s words', () => {
+    const dir = makeTmpDir('b3-revise-orphan');
+    writeFileSync(join(dir, 'feedback.md'), 'a note no verdict recorded');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: 'something else entirely' }]);
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 2);
+    assert.ok(result.turns.some((t) => t.source === 'feedback.md' && t.text === 'a note no verdict recorded'));
+  });
+
+  it('R05: feedback.md with NO verdicts.json at all still renders (the architect shape — feedback with no verdict record)', () => {
+    const dir = makeTmpDir('b3-revise-nofile');
+    writeFileSync(join(dir, 'feedback.md'), 'tighten the scope');
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 1);
+    assert.equal(result.turns[0].source, 'feedback.md');
+  });
+});
+
+describe('deriveSessionTranscript — W8-B3 turn INDEX contract holds across the reorder', () => {
+  // `data-turn-index` is part of the DOM contract (docs/forge-ui-dom-and-
+  // harness.md) and two live journeys assert on index 0 specifically
+  // (flows-run's idea.md pin, stand-up-create's questions.json pin). Reading
+  // verdicts.json before PUSHING the feedback turn must not renumber anything.
+  it('W8-B3: indices stay 0..n-1 in push order — opener, answers, questions, feedback, verdicts', () => {
+    const dir = makeTmpDir('b3-index-contract');
+    writeFileSync(join(dir, 'idea.md'), 'the idea');
+    writeJson(dir, 'answers.json', [{ round: 1, answers: [{ question: 'q1?', answer: 'a1' }] }]);
+    writeJson(dir, 'questions.json', [{ question: 'pending?' }]);
+    writeFileSync(join(dir, 'feedback.md'), 'a note no verdict carries');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'reject', notes: 'not this one' }]);
+
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-answers' });
+    assert.ok(result.ok);
+    assert.deepEqual(result.turns.map((t) => t.index), [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(result.turns.map((t) => t.source), [
+      'idea.md',
+      'answers.json#round-1',
+      'answers.json#round-1',
+      'questions.json',
+      'feedback.md',
+      'verdicts.json#1',
+    ]);
+    // A reject WITH notes and an unrelated feedback.md must keep BOTH — the
+    // de-duplication may only fire on an exact text match.
+    assert.ok(result.turns.some((t) => t.text === 'a note no verdict carries'));
+    assert.ok(result.turns.some((t) => t.text.includes('not this one')));
   });
 });

@@ -807,14 +807,17 @@ export type SessionShellPayload = {
    */
   terminal: boolean;
   /**
-   * W7-FIX-A2 (W7A2-04) — whether this KIND records turns as a transcript
-   * at all (bridge-derived: a `turnSpec` kind rides the generic spine, which
-   * never writes transcript turns → `false`; a legacy-runner kind → `true`).
-   * Keys the empty-transcript copy (`session-shell-view.ts`) so a
-   * transcript-bearing kind at an operator gate is never told its work is
-   * "in the artifact pane". REQUIRED and hard-parsed like `terminal`.
+   * W8-B3 (ON-5) — which of `deriveSessionTranscript`'s candidate sources
+   * (idea.md / prompt.md / answers.json / questions.json / feedback.md /
+   * verdicts.json) ACTUALLY EXIST in this session dir, in scan order.
+   * Replaces W7-FIX-A2's `transcript: boolean`, which was a per-kind stored
+   * proxy that was wrong for `authoring` (see the bridge's own comment at
+   * cli/bridge-studio-sessions.ts). Read by `deriveSessionPanes`
+   * (session-shell-view.ts) purely to EXPLAIN an absent/quiet transcript
+   * pane; the pane decision itself is made from `turns` + `affordances`.
+   * REQUIRED and hard-parsed like `terminal` — an omitted key throws.
    */
-  transcript: boolean;
+  transcriptSources: string[];
   /**
    * W7-A2 — the bridge's DERIVED lifecycle (`cli/bridge-studio-lifecycle.ts`):
    * `state` (working | awaiting-operator | crashed | stalled | terminal), a
@@ -916,14 +919,16 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const terminal = terminalRaw;
 
-  // W7-FIX-A2 (W7A2-04) — REQUIRED like "terminal": a missing or non-boolean
-  // "transcript" throws, never defaulted (either default would be a lie for
-  // half the kinds).
-  const transcriptRaw = raw['transcript'];
-  if (typeof transcriptRaw !== 'boolean') {
-    throw new Error(`missing or invalid "transcript": expected a boolean, got ${JSON.stringify(transcriptRaw)}`);
+  // W8-B3 (ON-5) — REQUIRED like "terminal": a missing or non-array
+  // "transcriptSources" throws, and every element must be a string. Never
+  // defaulted to [] — an empty array is the honest "nothing has been written
+  // yet" value and must be distinguishable from a bridge that forgot to send
+  // the field at all.
+  const transcriptSourcesRaw = raw['transcriptSources'];
+  if (!Array.isArray(transcriptSourcesRaw) || transcriptSourcesRaw.some((v) => typeof v !== 'string')) {
+    throw new Error(`missing or invalid "transcriptSources": expected an array of strings, got ${JSON.stringify(transcriptSourcesRaw)}`);
   }
-  const transcript = transcriptRaw;
+  const transcriptSources = transcriptSourcesRaw as string[];
 
   // W7-A2 — REQUIRED like "terminal" above; every malformed shape throws.
   const lifecycle = parseSessionLifecycle(raw['lifecycle']);
@@ -965,7 +970,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     affordances,
     modelTier,
     terminal,
-    transcript,
+    transcriptSources,
     lifecycle,
     finalized,
     transcriptError,

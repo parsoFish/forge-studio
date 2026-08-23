@@ -99,6 +99,7 @@ export function SessionArtifactPane({
   activeStage,
   onFinalizeGeneration,
   draftContext,
+  terminalPhase = null,
 }: {
   artifact: SessionArtifactPayload;
   project?: string;
@@ -108,6 +109,15 @@ export function SessionArtifactPane({
   /** W7-C2 — markdown-draft only; every other kind ignores it (same
    *  optional-passthrough convention as `project`/`sessionId` above). */
   draftContext?: MarkdownDraftContext;
+  /** W8-B3 (sessions-kinds-R08) — the session's phase when it has SETTLED
+   *  (`committed` / `rejected` / `locked` / `abandoned` / …), else `null`.
+   *  The pane used to render its destination line from the draft payload
+   *  alone, with no knowledge that the decision had already been made: a
+   *  REJECTED AGENTS.md draft still sat under the present-tense header
+   *  "Approving writes /…/AGENTS.md (new file)" — promising a verdict that
+   *  can never be given again. The shell payload already carries both facts
+   *  (`terminal`, `phase`); they just were not threaded down here. */
+  terminalPhase?: string | null;
 }): JSX.Element {
   let view: SessionArtifactView | null = null;
   let dispatchError: string | null = null;
@@ -150,7 +160,7 @@ export function SessionArtifactPane({
         ) : view.kind === 'roadmap-draft' ? (
           <RoadmapDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'roadmap-draft' }>} />
         ) : view.kind === 'markdown-draft' ? (
-          <MarkdownDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>} draftContext={draftContext} />
+          <MarkdownDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>} draftContext={draftContext} terminalPhase={terminalPhase} />
         ) : view.kind === 'brain-structure' ? (
           <BrainStructureBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'brain-structure' }>} />
         ) : view.kind === 'generation-gallery' ? (
@@ -158,6 +168,10 @@ export function SessionArtifactPane({
             artifact={artifact as Extract<SessionArtifactPayload, { kind: 'generation-gallery' }>}
             project={project}
             sessionId={sessionId}
+            // W8-B3 (sessions-kinds-07) — the REAL reason, from the caller
+            // that knows it: a settled session names the phase that settled
+            // it, instead of the hardcoded "Not available from this view".
+            finalizeUnavailableReason={terminalPhase === null ? null : `This session is ${terminalPhase} — its demo can no longer be finalized`}
             onFinalize={onFinalizeGeneration}
           />
         ) : view.kind === 'contract-buildout' ? (
@@ -235,9 +249,11 @@ function RoadmapDraftBody({ artifact }: { artifact: Extract<SessionArtifactPaylo
 function MarkdownDraftBody({
   artifact,
   draftContext,
+  terminalPhase = null,
 }: {
   artifact: Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>;
   draftContext?: MarkdownDraftContext;
+  terminalPhase?: string | null;
 }): JSX.Element {
   // W7-C2 (sessions-kinds-30) — the draft-vs-current toggle. Hook order is
   // stable: declared before any early return, and inert (never read) for
@@ -275,12 +291,30 @@ function MarkdownDraftBody({
   if (draftContext === undefined) return body;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* W8-B3 (sessions-kinds-R08) — on a SETTLED session the destination
+          line reads in the past, because the decision has already been made
+          and the promise it used to carry is one the operator can never take
+          up again. `data-draft-destination-tense` puts the distinction in the
+          DOM rather than leaving it to the prose. */}
       <div
         data-draft-target={draftContext.targetPath}
+        data-draft-destination-tense={terminalPhase === null ? 'future' : 'settled'}
         style={{ fontSize: 11.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}
       >
-        Approving writes <code>{draftContext.targetPath}</code>
-        {draftContext.current === null ? ' (new file)' : ' (replaces the current file)'}
+        {terminalPhase === null ? (
+          <>
+            Approving writes <code>{draftContext.targetPath}</code>
+            {draftContext.current === null ? ' (new file)' : ' (replaces the current file)'}
+          </>
+        ) : terminalPhase === 'committed' ? (
+          <>
+            Written to <code>{draftContext.targetPath}</code>
+          </>
+        ) : (
+          <>
+            This draft was {terminalPhase} — nothing was written to <code>{draftContext.targetPath}</code>
+          </>
+        )}
       </div>
       {/* W7-C2 T1 review (A10) — the selected view reads as SELECTED. The
           pair used to render the ACTIVE button `disabled` AND at
