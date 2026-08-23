@@ -1574,6 +1574,32 @@ both the bridge's 409s and the UI's action-group gate consume.
 `scripts/request-path-sinks.baseline.txt` now records `cli/kb-job-state.ts`
 `readFileSync` at 2.
 
+### W8-B2 — the KB drain's edit-soundness audit (agent-written link targets)
+
+Wave-8 lane B2 (bead `forge-d8l` / `knowledge-36`). `cli/kb-drain-edit-soundness.ts`
+is a NEW module reached from `POST /api/studio/kbs/:id/drain`. It asks whether a
+structurally-shaped edit is SOUND — does it delete a resolvable graph edge, or
+introduce a link target that resolves to nothing.
+
+The security-relevant input is a shape this audit had not carried before: a
+**markdown link target extracted from file content an AGENT wrote during the
+turn**. It is not request text, but it is untrusted text that reaches
+`resolve()`, and a brain theme legitimately links anywhere inside the repo
+(`../../../docs/decisions/…`, `_logs/…` — `checkStaleness` exists precisely
+because they do), so `brain/` is too narrow a containment root and `forgeRoot`
+is the right one.
+
+`check-request-path-sinks.mjs` delta: **none. 487 rows, unchanged.** The first
+cut of this lane added three sinks (`existsSync` in the new module, plus
+`mkdirSync`/`writeFileSync` in `cli/bridge-studio-kb-drain.ts` for the repair
+write); all three were routed through `cli/studio-path-guard.ts` instead, which
+is why the baseline did not move.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/kb-drain-edit-soundness.ts` (`linkResolves`) | existence probe via `resolveGuardedPath` | an agent-written markdown/wikilink TARGET, resolved against the edited file's own directory | guarded `[exec]` | `resolve()` normalises the `..` a legitimate cross-directory theme link is full of, so the guard receives a clean segment list; a target that climbed out of `forgeRoot` yields a leading `..` segment `isSafeSegment` rejects, and `resolveGuardedPath` realpath-walks the existing prefix so a symlinked ancestor cannot smuggle the probe outside either. **The rejecting input exists and is executed**: `cli/kb-drain-edit-soundness.test.ts`'s `[exec] a link target that climbs OUT of forgeRoot…` plants a real file outside the repo, points a link at it, and asserts the edit is refused AND the outside file is byte-unchanged. Its paired test asserts a legitimate repo-internal `..` link still resolves, so the guard is not "cannot fail". A rejection is reported as "does not resolve", which makes the gate MORE restrictive — the safe direction. |
+| `cli/bridge-studio-kb-drain.ts` (`writeRepairedChange`) | `guardedWriteFile` | `relPath` from `snapshotKbFiles`'s own walk of the trusted `brainDir`; the CONTENT is agent-influenced | guarded `[read]` | Not request text — `relPath` is a directory entry name from our own `readdirSync` walk, and `snapshotKbFiles` skips symlinks entirely (`entry.isFile()` is false for one). Routed through `guardedWriteFile(brainDir, relPath.split('/'), …)` anyway, because this is the drain WRITING agent-influenced content and the guard costs nothing. **Fails closed**: `writeRepairedChange` returns `false` on a guard refusal and the caller reverts to the pre-turn bytes instead of recording a repair that never landed (`applySoundnessGate`, same file). |
+
 ### W7-B3 — community registry CRUD + index meta (fixed-path sinks; one guarded read)
 
 Wave-7 lane B3 (community; bead forge-bzt.8). `check-request-path-sinks.mjs`

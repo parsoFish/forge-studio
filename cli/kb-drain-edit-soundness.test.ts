@@ -27,9 +27,9 @@
 
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 
 import { classifyKbEdit, type KbEditChange } from './kb-drain-structural.ts';
 import {
@@ -419,4 +419,47 @@ test('http(s) and anchor-only link targets are never audited (they resolve off-d
   assert.equal(found.length, 1);
   assert.equal(found[0].kind, 'link-deleted');
   assert.equal(found[0].target, EDIT_2_REAL);
+});
+
+// ---------------------------------------------------------------------------
+// Containment — a link target is text an AGENT wrote.
+//
+// [exec] escapes, executed, with byte-level assertions on the outside file.
+// A theme legitimately links anywhere inside the repo, so `forgeRoot` is the
+// containment root, not `brain/`.
+// ---------------------------------------------------------------------------
+
+test('[exec] a link target that climbs OUT of forgeRoot is treated as unresolvable — the probe is contained, not trusted', () => {
+  const { forgeRoot, brainDir, ctx } = plantRealEdit2();
+  // A real file OUTSIDE the repo, which genuinely exists.
+  const outside = mkdtempSync(join(tmpdir(), 'w8b2-outside-'));
+  roots.push(outside);
+  const secretPath = join(outside, 'secret.md');
+  writeFileSync(secretPath, 'outside content\n', 'utf8');
+  const before = readFileSync(secretPath, 'utf8');
+
+  const escape = relative(dirname(join(brainDir, EDIT_2_REL)), secretPath).split(/[\\/]/).join('/');
+  const after = edit2Body(escape);
+  const found = auditKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, after), ctx);
+  // The escaping target must be REFUSED, not accepted because the file exists.
+  assert.equal(found.length, 1, `expected the escape to be refused, got ${JSON.stringify(found)}`);
+  assert.equal(found[0].kind, 'link-repoint-unresolved');
+  assert.equal(found[0].target, escape);
+  // The guard must have been what rejected it: the file really is there.
+  assert.equal(existsSync(secretPath), true);
+  // And nothing outside was touched.
+  assert.equal(readFileSync(secretPath, 'utf8'), before);
+  void forgeRoot;
+});
+
+test('[exec] escape-and-return still resolves — containment must not reject a legitimate repo-internal link that uses ..', () => {
+  const { forgeRoot, brainDir } = plantRealEdit2();
+  // A real repo-internal target OUTSIDE brain/ — themes cite docs/ and _logs/
+  // paths for real (checkStaleness exists precisely because they do).
+  mkdirSync(join(forgeRoot, 'docs', 'decisions'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'docs', 'decisions', '035-x.md'), '# adr\n');
+  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+  const target = relative(dirname(join(brainDir, EDIT_2_REL)), join(forgeRoot, 'docs', 'decisions', '035-x.md')).split(/[\\/]/).join('/');
+  assert.match(target, /\.\./, 'the fixture must genuinely traverse upward, or it proves nothing');
+  assert.deepEqual(auditKbEdit(change(EDIT_2_REL, REAL_EDIT_2_BEFORE, edit2Body(target)), ctx), []);
 });

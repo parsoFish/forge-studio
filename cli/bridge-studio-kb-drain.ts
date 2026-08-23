@@ -736,13 +736,14 @@ function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]):
   }
 }
 
-/** Write one repaired file back into the KB. Same trusted-path construction as
- *  `revertProseChanges` above (`brainDir` + a relPath from our OWN walk); the
- *  only difference is the content, which the caller has already re-audited. */
-function writeRepairedChange(brainDir: string, relPath: string, content: string): void {
-  const abs = join(brainDir, relPath);
-  mkdirSync(dirname(abs), { recursive: true });
-  writeFileSync(abs, content, 'utf8');
+/** Write one repaired file back into the KB, THROUGH the containment guard.
+ *  `relPath` comes from our own walk of the trusted `brainDir`, so it is not
+ *  request text — but this is the drain WRITING agent-influenced content, and
+ *  a guarded write costs nothing here. Returns false when the guard refuses,
+ *  so the caller can fall back to reverting rather than landing an unwritten
+ *  "repair" it believes succeeded. */
+function writeRepairedChange(brainDir: string, relPath: string, content: string): boolean {
+  return guardedWriteFile(brainDir, relPath.split('/'), content) !== null;
 }
 
 /**
@@ -781,8 +782,8 @@ function applySoundnessGate(
     unsound.push(...found);
 
     const fix = repairKbEdit(c, found, ctx);
-    if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0) {
-      writeRepairedChange(brainDir, c.relPath, fix);
+    if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0
+        && writeRepairedChange(brainDir, c.relPath, fix)) {
       repaired.push({ ...c, after: fix });
       continue;
     }

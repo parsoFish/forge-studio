@@ -38,12 +38,12 @@
  *     instead.
  */
 
-import { existsSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
 import { splitFrontmatter, type KbEditChange } from './kb-drain-structural.ts';
 import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { parseThemeRaw } from './theme-frontmatter.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 
 /**
  * What makes a structurally-shaped edit unsound.
@@ -73,6 +73,11 @@ export type KbEditUnsoundness = {
 };
 
 export type KbEditSoundnessCtx = {
+  /** Containment root for link resolution. A brain theme legitimately links
+   *  anywhere inside the repo (`../../../docs/decisions/...`, `_logs/...`), so
+   *  `brain/` is too narrow a root — but nothing it names is ever OUTSIDE the
+   *  repo, and a link target is agent-written text. */
+  forgeRoot: string;
   /** Absolute dir every `KbEditChange.relPath` is relative to. */
   brainDir: string;
   /** slug -> every absolute theme file carrying that basename, brain-wide. */
@@ -83,7 +88,7 @@ export type KbEditSoundnessCtx = {
  *  turn: the audit compares an edit against the brain as it stood, and a
  *  per-target re-walk would be O(files) per link. */
 export function buildKbEditSoundnessCtx(forgeRoot: string, brainDir: string): KbEditSoundnessCtx {
-  return { brainDir, themeTargets: collectThemeSlugTargets(join(forgeRoot, 'brain')) };
+  return { forgeRoot, brainDir, themeTargets: collectThemeSlugTargets(join(forgeRoot, 'brain')) };
 }
 
 export function isUnsound(found: readonly KbEditUnsoundness[]): boolean {
@@ -127,10 +132,25 @@ function repairsFor(ctx: KbEditSoundnessCtx, slug: string): readonly string[] {
   return ctx.themeTargets.get(slug) ?? [];
 }
 
-/** Does a relative link target resolve to a real file, from the edited file's
- *  own directory? This is the check the drain never made. */
-function linkResolves(absFile: string, target: string): boolean {
-  return existsSync(resolve(dirname(absFile), target));
+/**
+ * Does a relative link target resolve to a real file, from the edited file's
+ * own directory? This is the check the drain never made — and the target is
+ * text an AGENT wrote, so the probe is contained rather than trusted.
+ *
+ * `resolve()` normalises the `..` segments a legitimate cross-directory theme
+ * link is full of, so what reaches the guard is a clean segment list; a target
+ * that climbed out of `forgeRoot` yields a leading `..` segment that
+ * `isSafeSegment` rejects, and `resolveGuardedPath` additionally realpath-walks
+ * the prefix, so a symlinked ancestor cannot smuggle the probe outside either.
+ * A rejection is reported as "does not resolve", which makes the gate MORE
+ * restrictive (the edit is refused) — the safe direction to fail.
+ */
+function linkResolves(ctx: KbEditSoundnessCtx, absFile: string, target: string): boolean {
+  const abs = resolve(dirname(absFile), target);
+  const rel = relative(ctx.forgeRoot, abs);
+  if (rel === '') return false; // the repo root itself is not a link target
+  const guarded = resolveGuardedPath(ctx.forgeRoot, rel.split(sep));
+  return guarded.ok && guarded.exists;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +191,7 @@ export function auditKbEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEd
 
   // ---- 2. link targets INTRODUCED that resolve to nothing -----------------
   for (const target of multisetRemoved(afterLinks.relLinks, beforeLinks.relLinks)) {
-    if (linkResolves(absFile, target)) continue;
+    if (linkResolves(ctx, absFile, target)) continue;
     const repairTargets = repairsFor(ctx, targetSlug(target));
     found.push({
       kind: 'link-repoint-unresolved',
@@ -202,7 +222,7 @@ export function auditKbEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEd
     let budget = netDeleted;
     for (const target of multisetRemoved(beforeLinks.relLinks, afterLinks.relLinks)) {
       if (budget === 0) break;
-      const onDisk = linkResolves(absFile, target);
+      const onDisk = linkResolves(ctx, absFile, target);
       const repairTargets = onDisk ? [resolve(dirname(absFile), target)] : repairsFor(ctx, targetSlug(target));
       if (repairTargets.length === 0) continue; // a genuinely dead link may go
       budget -= 1;
