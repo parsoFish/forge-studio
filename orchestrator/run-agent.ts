@@ -507,6 +507,16 @@ async function runOneShotSpawn(
   let tokensIn = 0;
   let tokensOut = 0;
   let resultSubtype: string | undefined;
+  // Defect fix: this path used to return `outputRefs: []` unconditionally, so
+  // every one-shot run (reflector/adversarial-review/PM/demo-agent/
+  // contract-check/release-finalizer) reported zero outputs even when it
+  // really wrote files. Derive real refs the same way the sibling adapter
+  // path does (`loops/ralph/claude-agent.ts`'s `filesChanged`): accumulate
+  // file-modifying tool_use paths — via the SAME shared `extractLiveToolDetails`
+  // helper the adapter path's `fileChangeForTool` backs — into an
+  // order-preserving dedup Set.
+  const outputRefs = new Set<string>();
+  let toolSeq = 0;
 
   for await (const msg of stream) {
     ctx.onMessage?.(msg);
@@ -517,7 +527,15 @@ async function runOneShotSpawn(
       total_cost_usd?: number;
       duration_ms?: number;
       usage?: { input_tokens?: number; output_tokens?: number };
+      message?: unknown;
     };
+    if (m.type === 'assistant') {
+      const details = extractLiveToolDetails(m.message, toolSeq);
+      for (const detail of details) {
+        if (detail.filePath) outputRefs.add(detail.filePath);
+      }
+      toolSeq += details.length;
+    }
     if (m.type !== 'result') continue;
     if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
     if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
@@ -531,7 +549,7 @@ async function runOneShotSpawn(
 
   return {
     costUsd,
-    outputRefs: [],
+    outputRefs: [...outputRefs],
     tokensIn,
     tokensOut,
     suppressed: false,
