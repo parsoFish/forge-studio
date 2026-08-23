@@ -233,8 +233,14 @@ test('needsReviewCountOf: zero when nothing needs review (empty library or all r
 // launders the verdict, at the view layer too).
 // ---------------------------------------------------------------------------
 
-test('hookBadges: an approved, clean hook has NO badges', () => {
-  expect(hookBadges(okEntry({ id: 'a', trust: 'approved', scanVerdict: 'clean' }))).toEqual([]);
+// W8-B4 (library-09, S2 PARTIAL): approval was invisible on the index — the
+// card carried data-hook-trust="approved" in the DOM but hookBadges() had no
+// 'approved' arm, so the operator read approval only as the ABSENCE of a red
+// badge. Mirrors InstallStateBadge's positive-state precedent
+// (components/studio/LibraryHub.tsx): a resolved-good state gets its own
+// visible badge, not silence.
+test('hookBadges: an approved, clean hook gets a positive "approved" badge (library-09) — approval is no longer only the absence of a red badge', () => {
+  expect(hookBadges(okEntry({ id: 'a', trust: 'approved', scanVerdict: 'clean' }))).toEqual(['approved']);
 });
 
 test('hookBadges: a never-approved hook gets "needs-review"', () => {

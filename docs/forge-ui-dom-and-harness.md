@@ -1199,7 +1199,16 @@ inventory rather than one shared page-level contract:
   linking to `/community/hook/<id>` (where install and the pre-install scan
   live — this page still owns NO install affordance itself). The facts come
   from the community index route (executed per item); a failed community
-  fetch renders nothing extra and never blanks the local list.
+  fetch renders nothing extra and never blanks the local list. **W8-B4
+  (library-38 fix — a regression the library-11 union above introduced):**
+  the search box (`[data-field="hook-search"]`) filters the community union
+  by the SAME query as the local list, never unfiltered — before this fix,
+  a query matching only a community hook rendered "No hooks match your
+  search." directly above the matching card. `data-hook-count` on the root
+  now counts **both** lists (`filtered.length + communityHooks.length`),
+  mirroring `/skills`' `data-skill-count` (`grouped.total`, below) rather
+  than the local list alone; the empty state is gated on both lists being
+  empty, not the local list alone.
   `[data-action="new-hook"]` links to
   `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
   (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,

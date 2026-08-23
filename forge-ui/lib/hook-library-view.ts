@@ -69,13 +69,25 @@ export function communityHooksToUnion<T extends { id: string; kind: string }>(
 // hookBadges — derived from real fields only. A 'blocked' badge PERSISTS
 // even after override — the verdict is never laundered, at the view layer
 // either.
+//
+// W8-B4 (library-09, S2 PARTIAL): 'approved' has its OWN positive arm,
+// mirroring InstallStateBadge's positive-state precedent
+// (components/studio/LibraryHub.tsx) — every member of HookTrust
+// ('needs-review' | 'approved' | 'overridden', hook-client.ts) now maps to a
+// real, visible badge here. Before this arm, an approved hook rendered
+// badge-less: the operator could only read approval as the ABSENCE of a red
+// badge, indistinguishable from "nothing rendered for some other reason".
+// Both call sites (components/studio/HookLibraryResults.tsx's HookCard,
+// components/studio/LibraryHub.tsx's ShelfHookCard) render whatever this
+// returns generically — fixed once, here, for both.
 // ---------------------------------------------------------------------------
 
-export type HookBadge = 'needs-review' | 'blocked' | 'overridden';
+export type HookBadge = 'needs-review' | 'approved' | 'blocked' | 'overridden';
 
 export function hookBadges(entry: HookLibraryEntryOk): HookBadge[] {
   const badges: HookBadge[] = [];
   if (entry.trust === 'needs-review') badges.push('needs-review');
+  if (entry.trust === 'approved') badges.push('approved');
   if (entry.trust === 'overridden') badges.push('overridden');
   if (entry.scanVerdict === 'blocked') badges.push('blocked');
   return badges;
