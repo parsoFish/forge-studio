@@ -70,7 +70,7 @@ test('BRIDGE_ROUTE_CLASSIFICATION is a non-empty array of well-typed rows', () =
   assert.ok(Array.isArray(BRIDGE_ROUTE_CLASSIFICATION));
   assert.ok(BRIDGE_ROUTE_CLASSIFICATION.length > 20, 'expected broad route coverage');
   const validClass = new Set(['refuse', 'stub-actions', 'exempt-local', 'read-only']);
-  const validAction = new Set(['spawn-agent', 'git-remote', 'daemon']);
+  const validAction = new Set(['spawn-agent', 'git-remote', 'daemon', 'network']);
   for (const row of BRIDGE_ROUTE_CLASSIFICATION) {
     assert.ok(row.method, `row missing method: ${JSON.stringify(row)}`);
     assert.ok(row.route, `row missing route: ${JSON.stringify(row)}`);

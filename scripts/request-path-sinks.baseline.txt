@@ -82,6 +82,11 @@ cli/bridge-studio-writes.ts writeFileSync 9
 cli/bridge-studio.ts existsSync 7
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 5
+cli/community-refresh-run.ts existsSync 1
+cli/community-refresh-run.ts mkdirSync 1
+cli/community-refresh-run.ts renameSync 1
+cli/community-refresh-run.ts unlinkSync 1
+cli/community-refresh-run.ts writeFileSync 1
 cli/contract-stages.ts realpathSync 2
 cli/cycle-recap.ts existsSync 9
 cli/cycle-recap.ts mkdirSync 1
