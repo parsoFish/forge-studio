@@ -19,7 +19,7 @@
  * M2-C adds POST handlers for verdicts (file writes guarded by proper-lockfile).
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse, type OutgoingHttpHeaders } from 'node:http';
 import {
   closeSync,
   existsSync,
@@ -812,11 +812,99 @@ type HttpContext = {
 
 /** Content-type by extension for served artifacts. `.html` → `text/html` so the
  *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
- *  else stays `text/plain`. */
+ *  else stays `text/plain`. Module-private and, by convention enforced in
+ *  `cli/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
+ *  this file), callable ONLY from `servedFileHeaders` below — every route
+ *  that serves a file on the bridge origin must go through the hardened
+ *  helper, never this alone. */
 function contentTypeFor(filename: string): string {
   return filename.toLowerCase().endsWith('.html')
     ? 'text/html; charset=utf-8'
     : 'text/plain; charset=utf-8';
+}
+
+/** Reduce a filename to a header-safe charset before it rides inside
+ *  `content-disposition: inline; filename="..."`. Strips anything outside
+ *  `[A-Za-z0-9._-]` — a bare `"`, CR, LF or any other byte that could break
+ *  out of the quoted string or smuggle a second header is gone — and falls
+ *  back to a fixed placeholder if that empties the name entirely.
+ *  `basename()` runs first so a `filename` that still carries `/`-joined
+ *  path segments contributes only its leaf.
+ *
+ *  This is genuinely load-bearing, not decorative, for SOME of the seven
+ *  call sites and NOT others — checked per route, not assumed: `isSafeSegment`
+ *  (cli/studio-path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
+ *  which gate the `/api/artifact/`, `/api/architect/file/` and
+ *  `/api/instructions/file/` routes) denies control characters (so CR/LF
+ *  header-injection is ALREADY refused before this ever runs on those three
+ *  routes — a 400, not a sanitised 200) but has no opinion on a bare `"`, so
+ *  THIS function is what stops a quote breaking out of the quoted-string on
+ *  those routes and on `/api/demo-builder/fragment/` (whose `element`
+ *  component is checked only by a lexical `startsWith(base)`, same gap).
+ *  `/api/demo-builder/generation/`'s `GENERATION_FILENAME_RE` is a strict
+ *  `[A-Za-z0-9._-]+` allowlist that already excludes `"` and control
+ *  characters — this function is unreachable-but-harmless for that route.
+ *  `/api/demo-builder/demo/` and `/api/demo-builder/history/<project>/<id>`
+ *  always pass the fixed literal `'DEMO.html'`, never request-derived
+ *  input. */
+function sanitizeHeaderFilename(filename: string): string {
+  const leaf = basename(filename);
+  const cleaned = leaf.replace(/[^A-Za-z0-9._-]/g, '_');
+  return cleaned.length > 0 ? cleaned : 'file';
+}
+
+/** WI-3 (regate row `artifact-plan-45`, bead forge-6gv.3.2) — the COMPLETE
+ *  header set for a route serving an AGENT-AUTHORED file on the bridge's own
+ *  origin (artifact / PLAN / DEMO / instructions-draft / fragment /
+ *  generation-snapshot). Before this helper, `contentTypeFor` alone reached
+ *  `res.writeHead` at seven call sites with no `content-security-policy`, no
+ *  `x-content-type-options` and no `content-disposition` — script inside such
+ *  a file would run AS the bridge origin (localhost:4123) and could drive
+ *  every mutating route the CSRF check only guards with a header a
+ *  same-origin fetch can add just as easily (approve-and-merge, scheduler
+ *  start, plan verdicts). No live exploit exists today: a survey of every
+ *  HTML file these routes can actually serve on this host — 109
+ *  `_logs/**\/artifacts/*.html` files plus every `.forge/demo/**.html`,
+ *  `_demo/**\/DEMO.html` and `_architect/**\/PLAN.html` — found zero
+ *  `<script>`, zero inline `onclick=`/`onload=`, zero external `<link>`
+ *  stylesheets (the only `src=` values are `data:image/png;base64,…`
+ *  screenshots). A script-blocking CSP therefore breaks nothing that exists
+ *  today and closes the class before an agent-authored file changes that.
+ *
+ *  Deliberately STRUCTURAL, not per-site: this is the only function in the
+ *  file allowed to call `contentTypeFor` (enforced by the source-level
+ *  ratchet in `cli/ui-bridge-served-file-headers.test.ts`), so a content-type
+ *  can never be obtained here without the hardening headers riding along —
+ *  the eighth route someone adds next year gets this for free by using the
+ *  helper, and the ratchet fails loudly if they reach for `contentTypeFor`
+ *  directly instead.
+ *
+ *  Two INDEPENDENT script defences, on purpose: `sandbox` with no
+ *  `allow-scripts` (the document gets an opaque origin — cannot run script,
+ *  cannot reach the bridge, cannot read its own cookies/storage) AND
+ *  `default-src 'none'` (a CSP script-src belt for a UA that ignores or only
+ *  partially applies the sandbox directive). `style-src 'unsafe-inline'` +
+ *  `img-src data:` + `font-src data:` are exactly what the surveyed files
+ *  use (inlined CSS, base64 screenshots) — nothing wider is opened.
+ *  `content-type` stays `text/html` for `.html` (never `text/plain`):
+ *  `forge-ui/app/artifact/page.tsx`, `forge-ui/components/PlanGate.tsx` and
+ *  `forge-ui/components/studio/artifact/ArchitectPlanGate.tsx` all render
+ *  these files in a `sandbox=""` iframe and expect the browser to actually
+ *  RENDER the markup — `text/plain` would show raw source, a user-visible
+ *  regression. `content-disposition: inline` (never `attachment`) for the
+ *  same reason: `attachment` forces a download instead of an iframe render.
+ *  See `sanitizeHeaderFilename` for which routes it is actually load-bearing
+ *  on versus redundant-with-an-already-strict-guard. */
+function servedFileHeaders(filename: string, origin: string): OutgoingHttpHeaders {
+  return {
+    'content-type': contentTypeFor(filename),
+    'x-content-type-options': 'nosniff',
+    'content-security-policy':
+      "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'",
+    'content-disposition': `inline; filename="${sanitizeHeaderFilename(filename)}"`,
+    'access-control-allow-origin': origin,
+    'vary': 'origin',
+  };
 }
 
 /** True when `v` is a `{given, when, then}` shape (all string fields present). */
@@ -2000,11 +2088,7 @@ async function handleHttp(
       return;
     }
     try {
-      res.writeHead(200, {
-        'content-type': contentTypeFor(filename),
-        'access-control-allow-origin': origin,
-        'vary': 'origin',
-      });
+      res.writeHead(200, servedFileHeaders(filename, origin));
       res.end(body);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -3955,11 +4039,7 @@ async function handleArchitect(
     }
     const requested = guarded.realPath;
     try {
-      res.writeHead(200, {
-        'content-type': contentTypeFor(filename),
-        'access-control-allow-origin': origin,
-        'vary': 'origin',
-      });
+      res.writeHead(200, servedFileHeaders(filename, origin));
       res.end(readFileSync(requested, 'utf8'));
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -4332,11 +4412,7 @@ async function handleInstructions(
     }
     const requested = guarded.realPath;
     try {
-      res.writeHead(200, {
-        'content-type': contentTypeFor(filename),
-        'access-control-allow-origin': origin,
-        'vary': 'origin',
-      });
+      res.writeHead(200, servedFileHeaders(filename, origin));
       res.end(readFileSync(requested, 'utf8'));
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -4972,11 +5048,7 @@ async function handleDemoBuilder(
       return true;
     }
     try {
-      res.writeHead(200, {
-        'content-type': contentTypeFor('DEMO.html'),
-        'access-control-allow-origin': origin,
-        'vary': 'origin',
-      });
+      res.writeHead(200, servedFileHeaders('DEMO.html', origin));
       res.end(demoBody);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -5044,7 +5116,7 @@ async function handleDemoBuilder(
     try {
       const isFullDoc = /^\s*<!doctype|^\s*<html[\s>]/i.test(raw);
       const out = isFullDoc ? raw : wrapDemoFragment(ctx.forgeRoot, element, raw);
-      res.writeHead(200, { 'content-type': contentTypeFor('f.html'), 'access-control-allow-origin': origin, 'vary': 'origin' });
+      res.writeHead(200, servedFileHeaders(`${element}.html`, origin));
       res.end(out);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -5107,7 +5179,7 @@ async function handleDemoBuilder(
       sendJson(res, 404, { error: 'generation snapshot file not found', project, sessionId, generation: n, filename }, origin);
       return true;
     }
-    res.writeHead(200, { 'content-type': contentTypeFor(filename), 'access-control-allow-origin': origin, 'vary': 'origin' });
+    res.writeHead(200, servedFileHeaders(filename, origin));
     res.end(fileBody);
     return true;
   }
@@ -5172,11 +5244,7 @@ async function handleDemoBuilder(
       return true;
     }
     try {
-      res.writeHead(200, {
-        'content-type': contentTypeFor('DEMO.html'),
-        'access-control-allow-origin': origin,
-        'vary': 'origin',
-      });
+      res.writeHead(200, servedFileHeaders('DEMO.html', origin));
       res.end(demoHtml);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
