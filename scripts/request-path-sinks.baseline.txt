@@ -22,7 +22,8 @@ cli/bridge-recovery.ts readFileSync 3
 cli/bridge-recovery.ts renameSync 1
 cli/bridge-recovery.ts rmSync 1
 cli/bridge-studio-authoring.ts mkdirSync 1
-cli/bridge-studio-authoring.ts writeFileSync 2
+cli/bridge-studio-authoring.ts rmSync 1
+cli/bridge-studio-authoring.ts writeFileSync 3
 cli/bridge-studio-community.ts execFileSync 1
 cli/bridge-studio-community.ts existsSync 3
 cli/bridge-studio-community.ts spawnSync 1
