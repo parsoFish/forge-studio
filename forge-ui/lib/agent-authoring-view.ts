@@ -10,12 +10,29 @@
  *   - duplicateAgentState: agents-09 — a prefill for /agents/new?duplicate=,
  *                          slug cleared (save derives a fresh one) and the
  *                          name marked as a copy.
+ *   - EMPTY_STATE/BLANK_STATE: (forge-6gv.19, W8-B4) the builder's two seed
+ *                          states, moved here from app/agents/[id]/page.tsx —
+ *                          a `'use client'` Next `page.tsx` may only export
+ *                          Next's own whitelisted names
+ *                          (forge-ui/lib/page-exports-whitelist.test.ts
+ *                          enforces it), so they were not importable by a
+ *                          test in their old home. See BLANK_STATE's own
+ *                          comment below for the security-fence rationale.
  *
  * No DOM, no React, no network. Immutability: every function returns new
  * objects, never mutates its input.
  */
 
 import type { Agent, AgentCapabilityDescriptor, AgentRuntime } from './studio-client';
+// Explicit `.ts` extension (moduleResolution: "bundler" tolerates it, and
+// Next/vitest already resolve `./authoring-package-shape`-style extension-
+// less siblings fine either way) — this is a VALUE import (unlike the
+// `import type` above, which is erased entirely and needs no runtime
+// resolution), and it must resolve under plain Node ESM too:
+// cli/bridge-studio-write-tool-fence.test.ts imports THIS module directly
+// via `node --experimental-strip-types`, which does not do bundler-style
+// extension-less resolution.
+import { TOOL_FENCE_REQUIRED_NAMES } from './tool-fence-required-names.ts';
 
 export type AgentBuilderState = {
   slug: string;
@@ -141,3 +158,73 @@ export function duplicateAgentState(source: Agent): AgentBuilderState {
   const parsed = parseAgentToState(source);
   return { ...parsed, slug: '', name: `${parsed.name || parsed.slug} (copy)` };
 }
+
+/** The builder's baseline "nothing loaded/selected yet" state — the initial
+ *  `useState` value, the placeholder before a starter is chosen, and (as of
+ *  forge-6gv.19) NEVER the state a Save can actually be issued from: the
+ *  page's Save/Discard bar only renders once `starterChosen` is true, which
+ *  requires transiting through `applyStarter`/`applyBlank`/an existing-agent
+ *  load/a duplicate prefill first — every one of which replaces this object
+ *  wholesale before the builder becomes save-reachable. */
+export const EMPTY_STATE: AgentBuilderState = {
+  slug: '',
+  name: '',
+  purpose: '',
+  skills: [],
+  tools: [],
+  mcps: [],
+  guards: [],
+  hooks: [],
+  process: '',
+  interactivity: '',
+  runtime: { ...DEFAULT_AGENT_RUNTIME },
+  brainAccess: 'none',
+  materials: [],
+  allowedTools: [],
+  disallowedTools: [],
+  phase: '',
+  costCeilingEnforceable: false,
+};
+
+/**
+ * A "Blank" agent still ships sensible defaults so it is creatable with
+ * near-zero input (UX spec §2 — defaults over choices): a default model +
+ * the event-log guard means a blank agent passes validation without opening
+ * Advanced.
+ *
+ * forge-6gv.19 (W8-B4) — SECURITY FENCE. `orchestrator/studio/skill-md-
+ * fidelity.ts`'s `projectAgentFrontmatter` writes BOTH `allowed-tools` and
+ * `disallowed-tools` UNCONDITIONALLY the moment a full re-serialize runs
+ * (which a brand-new agent's first save always is — there is no
+ * `originalRaw` to byte-preserve). That makes both keys PRESENT in the
+ * written SKILL.md regardless of content, which trips `cli/studio-lint-
+ * tool-fence.ts`'s presence-only scope test
+ * (`declaresToolFrontmatter = 'allowed-tools' in data || 'disallowed-tools'
+ * in data` — deliberately content-blind; see that file's header for why).
+ * `disallowed-tools` is the only key whose CONTENT that check reads (it is
+ * the only real fence against the subagent-spawn tool — `allowed-tools` is
+ * advisory-only, no production spawn site sets `options.tools`), so it is
+ * the one that must actually carry the fence.
+ *
+ * The fix seeds `disallowedTools` from `TOOL_FENCE_REQUIRED_NAMES`
+ * (forge-ui/lib/tool-fence-required-names.ts) — the SAME array
+ * `cli/studio-lint-tool-fence.ts` exports and checks against
+ * (`cli/tool-fence-required-names-parity.test.ts` proves the two arrays
+ * cannot drift apart), rather than a bare `['Task', 'Agent']` literal here.
+ * `allowedTools` is deliberately left `[]`: the ruling this fixes ("seed
+ * BOTH keys' worth of correctness — the enumeration point") means reasoning
+ * about both of the producer's two unconditional writes, not that both
+ * arrays must carry names — an empty, honestly-advisory `allowed-tools` is
+ * already correct for a blank agent (it should pre-approve nothing extra),
+ * and `allowed-tools`'s CONTENT plays no part in the lint's missing-names
+ * check either way.
+ */
+export const BLANK_STATE: AgentBuilderState = {
+  ...EMPTY_STATE,
+  guards: ['event-log'],
+  runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', range: [] },
+  brainAccess: 'none',
+  // A2: a sensible, editable starting point for interactivity — not a blank box.
+  interactivity: 'Autonomous — runs to completion without human input.',
+  disallowedTools: [...TOOL_FENCE_REQUIRED_NAMES],
+};

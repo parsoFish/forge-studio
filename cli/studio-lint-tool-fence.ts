@@ -54,7 +54,14 @@ import matter from 'gray-matter';
 import { listSkillDirs, listSkillMdDirs } from '../orchestrator/skill-path.ts';
 import type { Finding } from '../orchestrator/studio/validate.ts';
 
-const TOOL_FENCE_REQUIRED_NAMES = ['Task', 'Agent'] as const;
+// forge-6gv.19 (W8-B4) — exported so `forge-ui/lib/tool-fence-required-
+// names.ts` (the Agent Builder's from-blank compose, `BLANK_STATE`) and
+// `cli/tool-fence-required-names-parity.test.ts` (the cross-boundary
+// cross-check) both consume the REAL value, never a hand-copied literal.
+// forge-ui never imports cli/ at runtime (see forge-ui/lib/session-client.ts
+// / session-lifecycle-client.ts's own headers), so the export exists for
+// the parity test to import directly, not for a production forge-ui import.
+export const TOOL_FENCE_REQUIRED_NAMES = ['Task', 'Agent'] as const;
 
 /**
  * Shared predicate: does this `SKILL.md`'s frontmatter satisfy the tool

@@ -32,7 +32,14 @@ import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
 import { TemplateEditor } from '@/components/studio/TemplateEditor';
 import { sessionEntryHrefForAgent, SESSION_KIND_META } from './session-kind-meta';
-import { buildAgentPutBody, parseAgentToState, duplicateAgentState } from './agent-authoring-view';
+import {
+  buildAgentPutBody,
+  parseAgentToState,
+  duplicateAgentState,
+  EMPTY_STATE,
+  BLANK_STATE,
+} from './agent-authoring-view';
+import { TOOL_FENCE_REQUIRED_NAMES } from './tool-fence-required-names';
 import type { Agent } from './studio-client';
 import { SkillDetailBody } from '@/components/studio/SkillDetailBody';
 import type { SkillDetail, SkillTrust } from './skill-client';
@@ -404,6 +411,43 @@ test('duplicateAgentState + buildAgentPutBody carries disallowedTools through on
   const dup = duplicateAgentState(FENCED_AGENT_FIXTURE);
   const body = buildAgentPutBody(dup, { create: true });
   expect(body['disallowedTools']).toEqual(['WebFetch', 'WebSearch', 'Task', 'Agent']);
+});
+
+// ---------------------------------------------------------------------------
+// forge-6gv.19 (W8-B4) — the from-blank compose must ALSO carry the fence.
+// BLANK_STATE (`applyBlank`, app/agents/[id]/page.tsx) is the state a
+// brand-new agent is actually saved from when the operator picks "Start
+// blank" instead of a starter — before this fix its disallowedTools was
+// `[]`, so `buildAgentPutBody` sent an empty fence for every from-blank
+// compose (the root cause of forge-6gv.19: "every agent composed from
+// blank... is born failing forge studio lint").
+// ---------------------------------------------------------------------------
+
+test('BLANK_STATE seeds disallowedTools from the shared TOOL_FENCE_REQUIRED_NAMES constant (not a bare literal)', () => {
+  expect(BLANK_STATE.disallowedTools).toEqual([...TOOL_FENCE_REQUIRED_NAMES]);
+  expect(BLANK_STATE.disallowedTools).toEqual(['Task', 'Agent']);
+});
+
+test('BLANK_STATE leaves allowedTools empty — advisory, no extra pre-approved tools for a blank agent', () => {
+  expect(BLANK_STATE.allowedTools).toEqual([]);
+});
+
+test('buildAgentPutBody carries the BLANK_STATE fence through on a from-blank compose (create:true) — the applyBlank path', () => {
+  // Mirrors forge-ui/app/agents/[id]/page.tsx's applyBlank(): the operator
+  // types a name over BLANK_STATE and saves as a brand-new agent.
+  const state = { ...BLANK_STATE, name: 'Blank Compose Test' };
+  const body = buildAgentPutBody(state, { create: true });
+  expect(body['create']).toBe(true);
+  expect(body['disallowedTools']).toEqual(['Task', 'Agent']);
+});
+
+test('EMPTY_STATE is not itself fenced — it is not a save-reachable state (see page.tsx: Save only renders once starterChosen is true)', () => {
+  // Documents the OTHER half of the enumeration: EMPTY_STATE keeps a bare
+  // [] because no reachable Save path is meant to issue from it directly —
+  // page.tsx's handleDiscard() no longer falls back to EMPTY_STATE for a
+  // new agent (it now uses BLANK_STATE) specifically because that fallback
+  // WAS save-reachable.
+  expect(EMPTY_STATE.disallowedTools).toEqual([]);
 });
 
 // ---------------------------------------------------------------------------
