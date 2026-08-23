@@ -59,6 +59,13 @@ export type CommunityItem = {
   kind: CommunityKind;
   name: string;
   desc: string;
+  /** W8-B5 (community-05) — the registry row's own category ("planning",
+   *  "memory", "review", …), mirrored from `CommunityItemWire`. It exists so
+   *  the browse search can match the word the registry itself files rows
+   *  under. `null` for an item with no registry row at all (a vendored
+   *  package, a catalog connection): an honest absence, never an invented
+   *  string and deliberately never `''`. */
+  category: string | null;
   upstream: string;
   hub: CommunityHub | null;
   signals: CommunitySignals | null;
@@ -236,6 +243,14 @@ export function parseCommunityItem(raw: unknown): CommunityItem {
     kind: parseCommunityKind(r['kind']),
     name: requireString(r, 'name'),
     desc: requireString(r, 'desc'),
+    // W8-B5 (community-05): nullable, but the KEY must be PRESENT — the same
+    // rule hub/signals/probeState already hold. An absent `category` is a
+    // malformed response (a wire projection that forgot to send it), never
+    // silently the same as an item that genuinely has none.
+    category: parseNullableField(r, 'category', (v) => {
+      if (typeof v !== 'string') throw new Error(`expected "category" to be a string when present, got ${JSON.stringify(v)}`);
+      return v;
+    }),
     upstream: requireString(r, 'upstream'),
     hub: parseNullableField(r, 'hub', parseCommunityHub),
     signals: parseNullableField(r, 'signals', parseCommunitySignals),
@@ -574,9 +589,18 @@ export function deleteRegistryItem(id: string): Promise<RegistryCrudResult> {
   return registryCrud(`/api/studio/community/registry/items/${encodeURIComponent(id)}`, 'DELETE');
 }
 
-/** The RAW registry row (category/tier/signals included — the browse wire
- *  projection does not carry them) for the edit form's prefill. 404 → null. */
-export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item?: RegistryItemInput; error?: string }> {
+/**
+ * The RAW registry row (tier/signals included — the browse wire projection
+ * carries `category` since W8-B5 but not those) for the edit form's prefill.
+ *
+ * W8-B5 (exit row E9): `status` is carried through whenever the bridge
+ * ANSWERED, and is deliberately ABSENT when the transport threw — the same
+ * vocabulary `bridge-result.ts` uses, and the fact `registryEditLoadOutcome`
+ * needs to tell "no such registry row" (404 → the shared NotFound) from "the
+ * bridge was never reached" (→ the error banner). Without it the edit form
+ * could only ever render one surface for both, which is the defect.
+ */
+export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item?: RegistryItemInput; error?: string; status?: number }> {
   let res: Response;
   try {
     res = await bridgeFetch(`/api/studio/community/registry/items/${encodeURIComponent(id)}`);
@@ -584,15 +608,18 @@ export async function fetchRegistryItem(id: string): Promise<{ ok: boolean; item
     return { ok: false, error: `bridge unreachable: ${String(err)}` };
   }
   const data = await res.json().catch(() => undefined);
-  if (!res.ok) return { ok: false, error: errorFrom(data, `HTTP ${res.status}`) };
+  if (!res.ok) return { ok: false, status: res.status, error: errorFrom(data, `HTTP ${res.status}`) };
   // W7-B3 review F6: the parse below throws on an unexpected shape
   // (asRecord/requireString) — wrap it like every sibling in this module so
   // a malformed 200 body becomes ok:false, never an unhandled rejection that
   // strands the edit form at data-page-ready="false".
   try {
-    return parseRegistryItemResponse(data);
+    return { ...parseRegistryItemResponse(data), status: res.status };
   } catch (err) {
-    return { ok: false, error: `malformed bridge response: ${String(err)}` };
+    // A malformed 200 is an ERROR, not a not-found: the status is carried so
+    // the caller can see the bridge answered, and 200 !== 404 keeps it out of
+    // the NotFound arm.
+    return { ok: false, status: res.status, error: `malformed bridge response: ${String(err)}` };
   }
 }
 

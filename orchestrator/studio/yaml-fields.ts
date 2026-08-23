@@ -71,6 +71,21 @@ export function oneOf<T extends string>(value: string, allowed: readonly T[], fi
 }
 
 export function loadYaml(file: string): Record<string, unknown> {
+  return loadYamlWithRaw(file).data;
+}
+
+/**
+ * Same load as `loadYaml`, additionally returning the RAW file text.
+ *
+ * W8-B5 (exit row E4): `js-yaml` cannot round-trip comments, so a loader whose
+ * document will later be re-serialized needs the original bytes to recover the
+ * comment layer from (see orchestrator/studio/yaml-comments.ts). Implemented
+ * as the ONE read that `loadYaml` now delegates to, deliberately: a second
+ * `readFileSync` in a caller would both double the I/O and add a new
+ * (file, sink) row to scripts/request-path-sinks.baseline.txt for a read the
+ * loader was already doing.
+ */
+export function loadYamlWithRaw(file: string): { data: Record<string, unknown>; raw: string } {
   let raw: string;
   try {
     raw = readFileSync(file, 'utf8');
@@ -82,7 +97,7 @@ export function loadYaml(file: string): Record<string, unknown> {
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new RegistryError(`${file}: YAML root must be a mapping`);
     }
-    return parsed as Record<string, unknown>;
+    return { data: parsed as Record<string, unknown>, raw };
   } catch (err) {
     if (err instanceof RegistryError) throw err;
     throw new Error(`${file}: YAML parse error — ${(err as Error).message}`);

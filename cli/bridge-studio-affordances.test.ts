@@ -702,9 +702,24 @@ function communityRegistryPath(): string {
   return join(forgeRoot, 'studio', 'community', 'registry.yaml');
 }
 
-function writeCommunityRegistry(itemsYaml: string): void {
+// W8-B5 schema v2 — repo facts live under `sources`, keyed by source URL.
+const ALPHA_LIVE_SOURCES_YAML = [
+  'sources:',
+  '  "github:example/alpha":',
+  '    stars: 100',
+  '    starsDisplay: "100"',
+  '    upstreamUpdatedAt: null',
+  '    fetchedAt: null',
+  '    fetchedBy: seed',
+].join('\n');
+
+function writeCommunityRegistry(itemsYaml: string, sourcesYaml = ALPHA_LIVE_SOURCES_YAML): void {
   mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
-  writeFileSync(communityRegistryPath(), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${itemsYaml}`, 'utf8');
+  writeFileSync(
+    communityRegistryPath(),
+    `meta:\n  schemaVersion: 2\n  lastRefresh: null\n${sourcesYaml}\nitems:\n${itemsYaml}`,
+    'utf8',
+  );
 }
 
 const ALPHA_LIVE_YAML = [
@@ -715,12 +730,7 @@ const ALPHA_LIVE_YAML = [
   '    sourceUrl: "https://github.com/example/alpha"',
   '    provenance: "example/alpha"',
   '    signals:',
-  '      stars: 100',
-  '      starsDisplay: "100"',
   '      attributedTo: "example/alpha"',
-  '    upstreamUpdatedAt: null',
-  '    fetchedAt: null',
-  '    fetchedBy: seed',
   '',
 ].join('\n');
 
@@ -735,8 +745,15 @@ test('TBL-communityrefresh-1: verdict approve at awaiting-review -> 200, delegat
     join(sessionDir, 'staging', 'registry.yaml'),
     [
       'meta:',
-      '  schemaVersion: 1',
+      '  schemaVersion: 2',
       '  lastRefresh: null',
+      'sources:',
+      '  "github:example/alpha":',
+      '    stars: 250',
+      '    starsDisplay: "250"',
+      '    upstreamUpdatedAt: "2026-08-01T00:00:00.000Z"',
+      '    fetchedAt: null',
+      '    fetchedBy: seed',
       'items:',
       '  - id: alpha',
       '    kind: skill',
@@ -745,12 +762,7 @@ test('TBL-communityrefresh-1: verdict approve at awaiting-review -> 200, delegat
       '    sourceUrl: "https://github.com/example/alpha"',
       '    provenance: "example/alpha"',
       '    signals:',
-      '      stars: 250',
-      '      starsDisplay: "250"',
       '      attributedTo: "example/alpha"',
-      '    upstreamUpdatedAt: "2026-08-01T00:00:00.000Z"',
-      '    fetchedAt: null',
-      '    fetchedBy: seed',
       '',
     ].join('\n'),
     'utf8',
@@ -785,7 +797,7 @@ test('TBL-communityrefresh-2: verdict reject at awaiting-review -> 200, phase ->
     session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
   });
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
-  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${ALPHA_LIVE_YAML}`, 'utf8');
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), `meta:\n  schemaVersion: 2\n  lastRefresh: null\n${ALPHA_LIVE_SOURCES_YAML}\nitems:\n${ALPHA_LIVE_YAML}`, 'utf8');
 
   const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
     project: COMMUNITY_REFRESH_PROJECT, verdict: 'reject',
@@ -807,7 +819,7 @@ test('TBL-communityrefresh-3: verdict approve with a malformed staged draft -> 5
   });
   mkdirSync(join(sessionDir, 'staging'), { recursive: true });
   // Malformed: "items" is a scalar, not an array — loadCommunityRegistry throws.
-  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), 'meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems: not-an-array\n', 'utf8');
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), 'meta:\n  schemaVersion: 2\n  lastRefresh: null\nsources: {}\nitems: not-an-array\n', 'utf8');
 
   const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
     project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',

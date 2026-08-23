@@ -47,10 +47,18 @@ guess a relative path against your own working directory (which is your
 session's own scratch dir, not the forge root):
 
 - `registryPath` — the CURRENT `studio/community/registry.yaml` (the exact
-  schema your draft must reproduce: `meta: {schemaVersion, lastRefresh}` +
-  `items: [{id, kind, name, desc?, category, sourceUrl, provenance, tier?,
-  signals: {stars, starsDisplay, attributedTo}, upstreamUpdatedAt, fetchedAt,
-  fetchedBy}]`).
+  schema your draft must reproduce — **schema v2**: `meta: {schemaVersion,
+  lastRefresh}` + `sources: {"<key>": {stars, starsDisplay, upstreamUpdatedAt,
+  archived?, topics?, version?, fetchedAt, fetchedBy}}` + `items: [{id, kind,
+  name, desc?, category, sourceUrl, provenance, tier?, signals:
+  {attributedTo}}]`).
+
+  **Repo facts are keyed by SOURCE, not copied onto each item.** `<key>` is the
+  normalized source key: a `https://github.com/<owner>/<repo>` URL keys as
+  `github:<owner>/<repo>` (lower-cased). Several items commonly share one
+  `sourceUrl`, and they must all read the same star count — which is why the
+  item carries no `stars`/`fetchedAt`/`fetchedBy` field at all. Writing one on
+  an item makes the file fail to load.
 - `hubsPath` — `studio/community/hubs.yaml`, the registry of real public
   source hubs (declared, not crawled — D10: **you** fetch, forge does not).
 
@@ -93,24 +101,25 @@ kickoff (e.g. "find me skills for terraform drift detection").
    reliable than scraping the HTML page — prefer it when `sourceUrl` is a
    `github.com/<owner>/<repo>` URL). Record, for every item, whether you
    genuinely verified it this pass:
-   - **Verified** (the fetch succeeded and returned real, current data): copy
-     the item forward with its real fields updated — `signals.stars` (the
-     numeric count, or `null` if the source names a different unit — never
-     force a display string into a number it doesn't mean),
-     `signals.starsDisplay`, `upstreamUpdatedAt` (ISO date). This applies
-     EVEN IF the real numbers turn out unchanged from what the registry
-     already says — a re-verification that confirms the existing data is
-     still accurate is itself real, honest work; it is not "nothing
-     happened." Leave `fetchedAt`/`fetchedBy` exactly as they already are in
-     the current registry — the finalizer that commits your draft stamps
-     those two fields itself, from your evidence record (below); anything
-     you write there is discarded.
+   - **Verified** (the fetch succeeded and returned real, current data):
+     update that item's SOURCE row under `sources` — `stars` (the numeric
+     count, or `null` if the source names a different unit — never force a
+     display string into a number it doesn't mean), `starsDisplay`,
+     `upstreamUpdatedAt` (ISO date). The item itself is copied forward
+     unchanged; it holds no fetched facts. This applies EVEN IF the real
+     numbers turn out unchanged from what the registry already says — a
+     re-verification that confirms the existing data is still accurate is
+     itself real, honest work; it is not "nothing happened." Leave
+     `fetchedAt`/`fetchedBy` exactly as they already are — the finalizer that
+     commits your draft stamps those two fields itself, from your evidence
+     record (below); anything you write there is discarded.
    - **Unverifiable** (the fetch failed, the URL 404s, the response is not
-     parseable, or you are simply unsure the data is real): copy the item
-     forward **byte-identical** to its current entry — every field exactly as
-     it is in `registryPath` today, including `signals`/`upstreamUpdatedAt`/
-     `fetchedAt`/`fetchedBy`. Never guess a number or a date to fill the
-     gap — an unchanged row is the honest output when verification fails.
+     parseable, or you are simply unsure the data is real): copy the item AND
+     its source row forward **byte-identical** to their current entries — every
+     field exactly as it is in `registryPath` today. Never guess a number or a
+     date to fill the gap — an unchanged row is the honest output when
+     verification fails. A source row is shared: if ANY item on it is
+     unverified, the finalizer keeps the LIVE row for all of them.
 
 3. **Optionally propose new items.** A hub in `hubsPath` may have real,
    citable items your registry doesn't carry yet. You may WebSearch/WebFetch

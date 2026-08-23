@@ -15,6 +15,7 @@ import { SLUG_RE, EXACT_ID_RE, PROJECT_ID_RE, KB_ID_RE, MAX_EXACT_ID_LENGTH, RES
 import { isSafeProjectName } from '../../cli/manifest-path-guard.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
+import { communitySourceKey } from './community-source-url.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
 import { BAND_CANONICAL_SLUG } from '../agent-bands.ts';
@@ -904,6 +905,42 @@ export function validateCommunityRegistry(registry: CommunityRegistry): Finding[
     findings.push(
       err(obj, 'unique-ids', `Duplicate (kind, id) pair "${kind}, ${id}" in studio/community/registry.yaml`),
     );
+  }
+
+  // W8-B5 (exit row E4, community-28) — CLOSE THE COMMENT-LOSS CLASS.
+  // `serializeCommunityRegistry` re-emits the file's LEADING comment block
+  // verbatim, so the 22 header lines of curation rationale survive every
+  // write. It provably cannot preserve a comment written INSIDE `items:` —
+  // js-yaml has no comment round-trip and the serializer dumps a freshly
+  // built object. Rather than leave that residual to be discovered by the
+  // next operator whose annotation silently vanished, lint REFUSES it: what
+  // the linter will not accept cannot later be lost. Every offending line is
+  // named (a first-hit-only report trains a first-hit-only fix).
+  for (const line of registry.itemsCommentLines) {
+    findings.push(
+      err(
+        obj,
+        'community-registry/lossy-comment',
+        `studio/community/registry.yaml:${line} — a comment inside the "items:" block cannot survive a programmatic write (js-yaml has no comment round-trip, and Studio CRUD / the community refresh both re-serialize the whole file). Move this rationale into the file's leading comment header, which IS preserved verbatim.`,
+      ),
+    );
+  }
+
+  // W8-B5 (exit row E5) — a `sources` row nothing refers to is dead weight
+  // that will drift: nothing reads it, so nothing keeps it honest.
+  const referenced = new Set(
+    registry.items.map((item) => communitySourceKey(item.sourceUrl)).filter((k): k is string => k !== null),
+  );
+  for (const key of Object.keys(registry.sources)) {
+    if (!referenced.has(key)) {
+      findings.push(
+        flag(
+          obj,
+          'community-registry/orphan-source',
+          `studio/community/registry.yaml: sources "${key}" is referenced by no item's sourceUrl — a repo fact nothing reads. Delete it, or add the item that needs it.`,
+        ),
+      );
+    }
   }
 
   const TIERS = new Set(['haiku', 'sonnet', 'opus']);

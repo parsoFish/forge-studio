@@ -40,26 +40,39 @@ function registryPath(): string {
   return join(forgeRoot, 'studio', 'community', 'registry.yaml');
 }
 
-function seedRegistry(items: Array<Record<string, unknown>> = []): void {
-  writeFileSync(registryPath(), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }), 'utf8');
+function seedRegistry(items: Array<Record<string, unknown>> = [], sources: Record<string, unknown> = {}): void {
+  writeFileSync(registryPath(), yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources, items }), 'utf8');
 }
 
-function readRegistryDoc(): { meta: { schemaVersion: number; lastRefresh: string | null }; items: Array<Record<string, unknown>> } {
+function readRegistryDoc(): {
+  meta: { schemaVersion: number; lastRefresh: string | null };
+  sources: Record<string, Record<string, unknown>>;
+  items: Array<Record<string, unknown>>;
+} {
   return yaml.load(readFileSync(registryPath(), 'utf8')) as never;
 }
 
+// W8-B5 schema v2 — an item carries curation only; the repo facts it used to
+// hold live in the top-level `sources` map, keyed by its sourceUrl.
 const SEED_ROW = {
   id: 'seed-item',
   kind: 'skill',
   name: 'Seed Item',
   desc: 'seeded',
   category: 'testing',
-  sourceUrl: 'https://example.com/seed',
+  sourceUrl: 'https://github.com/seeder/seed',
   provenance: 'Seeder',
-  signals: { stars: null, starsDisplay: null, attributedTo: null },
-  upstreamUpdatedAt: null,
-  fetchedAt: '2026-08-01T00:00:00.000Z',
-  fetchedBy: 'community-refresh/older-session',
+  signals: { attributedTo: null },
+};
+
+const SEED_SOURCES = {
+  'github:seeder/seed': {
+    stars: 4200,
+    starsDisplay: '4.2k',
+    upstreamUpdatedAt: '2026-08-01',
+    fetchedAt: '2026-08-01T00:00:00.000Z',
+    fetchedBy: 'api:github',
+  },
 };
 
 const NEW_ITEM_BODY = {
@@ -68,9 +81,11 @@ const NEW_ITEM_BODY = {
   name: 'New Item',
   desc: 'added by the operator',
   category: 'testing',
-  sourceUrl: 'https://example.com/new-item',
+  sourceUrl: 'https://github.com/operator/new-item',
   provenance: 'Operator Pick',
-  signals: { starsDisplay: '1.2k', attributedTo: 'Operator Pick', stars: 1200 },
+  // /community's add form still posts these two as explicit nulls; a null
+  // carries no information and is accepted-and-dropped. A REAL value is 400.
+  signals: { starsDisplay: null, attributedTo: 'Operator Pick', stars: null },
 };
 
 before(async () => {
@@ -80,7 +95,7 @@ before(async () => {
   }
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
-  seedRegistry([SEED_ROW]);
+  seedRegistry([SEED_ROW], SEED_SOURCES);
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
@@ -101,27 +116,43 @@ function del(id: string): Promise<Response> {
   return fetch(`${url}/api/studio/community/registry/items/${encodeURIComponent(id)}`, { method: 'DELETE', headers: CSRF });
 }
 
-test('CRUD-1: POST adds a row — fetchedAt/fetchedBy AND the fetch facts (stars/starsDisplay/upstreamUpdatedAt) are server-owned, regardless of body claims', async () => {
-  seedRegistry([SEED_ROW]);
-  const res = await post({ item: { ...NEW_ITEM_BODY, upstreamUpdatedAt: '2026-07-01', fetchedAt: '2026-01-01T00:00:00Z', fetchedBy: 'liar' } });
+test('CRUD-1: POST adds a row carrying CURATION ONLY — the repo facts have no per-item field to land in, and the shared sources map is untouched', async () => {
+  seedRegistry([SEED_ROW], SEED_SOURCES);
+  const res = await post({ item: NEW_ITEM_BODY });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const doc = readRegistryDoc();
   const row = doc.items.find((i) => i.id === 'new-item');
   assert.ok(row, 'the new row must be in the written registry');
-  assert.equal(row!.fetchedAt, null, 'an operator add is hand-curated — never a fabricated verification stamp');
-  assert.equal(row!.fetchedBy, 'operator');
   assert.equal(row!.name, 'New Item');
-  // W7-B3 review F5 (declared-data-fails-open): the body claimed stars:1200 /
-  // starsDisplay:'1.2k' / upstreamUpdatedAt — all fabricated-signal vectors
-  // (stars drives the "Stars" sort). The server IGNORES them on create.
+  // W8-B5 (E5) — the structural cure: the written row has NO key that could
+  // hold a mis-scoped repo fact. W7-B3 review F5 had to FORCE these null
+  // server-side; now there is nothing to force.
+  for (const gone of ['fetchedAt', 'fetchedBy', 'upstreamUpdatedAt']) {
+    assert.ok(!(gone in row!), `an item must have no "${gone}" key at all`);
+  }
   const signals = row!.signals as Record<string, unknown>;
-  assert.equal(signals.stars, null, 'a hand-entered star count is a fabricated signal — server-owned, starts null');
-  assert.equal(signals.starsDisplay, null, 'starsDisplay summarizes stars — it must not survive without it');
+  assert.deepEqual(Object.keys(signals), ['attributedTo'], 'signals carries curation only');
   assert.equal(signals.attributedTo, 'Operator Pick', 'the attribution note IS operator text — kept');
-  assert.equal(row!.upstreamUpdatedAt, null, 'nothing was fetched — no upstream fact to record');
-  // The untouched seed row survives byte-equivalent (same parsed value).
-  assert.ok(doc.items.some((i) => i.id === 'seed-item' && i.fetchedAt === '2026-08-01T00:00:00.000Z'));
+  // The operator's curation edit must never disturb another row's repo facts.
+  assert.deepEqual(doc.sources, SEED_SOURCES, 'a CRUD add must carry the sources map forward untouched');
+});
+
+test('CRUD-1b: a POST body claiming a REAL repo fact is REFUSED (400) naming sources — never silently ignored', async () => {
+  seedRegistry([SEED_ROW], SEED_SOURCES);
+  for (const spoof of [
+    { signals: { attributedTo: 'x', stars: 1200 } },
+    { signals: { attributedTo: 'x', starsDisplay: '1.2k' } },
+    { upstreamUpdatedAt: '2026-07-01' },
+    { fetchedAt: '2026-01-01T00:00:00Z' },
+    { fetchedBy: 'liar' },
+  ]) {
+    const res = await post({ item: { ...NEW_ITEM_BODY, id: 'spoofed', ...spoof } });
+    const body = (await res.json()) as { error?: string };
+    assert.equal(res.status, 400, `expected 400 for ${JSON.stringify(spoof)}, got ${res.status}`);
+    assert.match(body.error ?? '', /sources/, 'the refusal must say where the fact belongs');
+  }
+  assert.ok(!readRegistryDoc().items.some((i) => i.id === 'spoofed'), 'a refused POST writes nothing');
 });
 
 test('CRUD-2: POST with an already-present id → 409, registry unchanged', async () => {
@@ -149,16 +180,17 @@ test('CRUD-4: POST with an out-of-vocabulary kind → 400', async () => {
   assert.equal(res.status, 400);
 });
 
-test('CRUD-5: PUT edits an existing row in place (fetched stamps reset to hand-curated)', async () => {
-  seedRegistry([SEED_ROW]);
+test('CRUD-5: PUT edits an existing row in place; the written row carries no fetch stamp to go stale', async () => {
+  seedRegistry([SEED_ROW], SEED_SOURCES);
   const res = await put('seed-item', { item: { ...SEED_ROW, name: 'Seed Item (renamed)', signals: { stars: null, starsDisplay: null, attributedTo: null } } });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const doc = readRegistryDoc();
   assert.equal(doc.items.length, 1);
   assert.equal(doc.items[0].name, 'Seed Item (renamed)');
-  assert.equal(doc.items[0].fetchedAt, null, 'a hand edit is no longer the agent-verified row — the stamp resets honestly');
-  assert.equal(doc.items[0].fetchedBy, 'operator');
+  for (const gone of ['fetchedAt', 'fetchedBy', 'upstreamUpdatedAt']) {
+    assert.ok(!(gone in doc.items[0]), `an item must have no "${gone}" key at all`);
+  }
 });
 
 test('CRUD-6: PUT on an unknown id → 404; body id disagreeing with the URL id → 400', async () => {
@@ -213,34 +245,22 @@ test('CRUD-10: POST with kind "hook" (a real registry kind the index never surfa
 // review F5: nor may the body fabricate them. stars/starsDisplay/
 // upstreamUpdatedAt come from the EXISTING row on PUT; only fetchedAt/
 // fetchedBy reset (the content is now hand-curated).
-test('CRUD-11: PUT carries the existing row\'s stars/starsDisplay/upstreamUpdatedAt forward — body spoofs ignored, attribution note editable', async () => {
-  const agentRow = {
-    ...SEED_ROW,
-    signals: { stars: 4200, starsDisplay: '4.2k', attributedTo: null },
-    upstreamUpdatedAt: '2026-08-01',
-    fetchedAt: '2026-08-02T00:00:00.000Z',
-    fetchedBy: 'community-refresh/2026-08-02T00-00-00-fx',
-  };
-  seedRegistry([agentRow]);
+test('CRUD-11: an operator EDIT cannot disturb the shared source row — the fetched facts survive because the item never held them', async () => {
+  seedRegistry([SEED_ROW], SEED_SOURCES);
   const res = await put('seed-item', {
-    item: {
-      ...SEED_ROW,
-      desc: 'typo fixed',
-      signals: { stars: 999999, starsDisplay: 'one MILLION', attributedTo: 'curator note' },
-      upstreamUpdatedAt: '1999-01-01',
-    },
+    item: { ...SEED_ROW, desc: 'typo fixed', signals: { attributedTo: 'curator note' } },
   });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
-  const row = readRegistryDoc().items.find((i) => i.id === 'seed-item')!;
+  const doc = readRegistryDoc();
+  const row = doc.items.find((i) => i.id === 'seed-item')!;
   assert.equal(row.desc, 'typo fixed', 'the edit itself lands');
-  const signals = row.signals as Record<string, unknown>;
-  assert.equal(signals.stars, 4200, 'the agent-fetched star count survives the edit — never wiped, never spoofed');
-  assert.equal(signals.starsDisplay, '4.2k', 'the display string stays consistent with the number it summarizes');
-  assert.equal(signals.attributedTo, 'curator note', 'the attribution note IS operator text — editable');
-  assert.equal(row.upstreamUpdatedAt, '2026-08-01', 'the fetched upstream fact survives; the body\'s 1999 claim is ignored');
-  assert.equal(row.fetchedAt, null, 'the honesty reset still applies — the CONTENT is now hand-curated');
-  assert.equal(row.fetchedBy, 'operator');
+  assert.deepEqual(row.signals, { attributedTo: 'curator note' }, 'the attribution note IS operator text — editable');
+  // W7-B3 review F4 had to carry the agent-fetched facts forward by hand on
+  // every edit; v2 removes the opportunity to drop them. The source row is
+  // shared with every other item on that repo, so a per-item edit that could
+  // touch it would be the mis-scoping schema v2 exists to prevent.
+  assert.deepEqual(doc.sources, SEED_SOURCES, 'the shared repo facts are byte-identical after an item edit');
 });
 
 // W7-B3 review F3 (guard-symmetry): admitting DELETE into
@@ -273,4 +293,60 @@ test('CRUD-12b: the routes that DO implement DELETE are admitted by the top gate
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     assert.ok(body?.error, `${target} must answer its handler's JSON error, proving the route ran`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5 (exit row E4, community-28) — the curation header survives a REAL
+// CRUD round trip through the live bridge routes.
+//
+// This is the defect at its actual scene: one "Add item" click used to destroy
+// all 24 comment lines in studio/community/registry.yaml, because the shared
+// serializer is a bare `yaml.dump` of a freshly built object. The fix lives in
+// that ONE serializer, so this route inherits it rather than carrying its own
+// copy — which is why the assertion is made HERE, at a writer, and not only at
+// the serializer's unit test.
+// ---------------------------------------------------------------------------
+
+const CURATION_HEADER = [
+  '# Community registry — hand-curated.',
+  '#',
+  '# Every line of this header is rationale a future operator needs, and none',
+  '# of it exists anywhere else.',
+].join('\n');
+
+function seedRegistryWithHeader(items: Array<Record<string, unknown>>, sources: Record<string, unknown>): void {
+  const body = yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources, items });
+  writeFileSync(registryPath(), `${CURATION_HEADER}\n${body}`, 'utf8');
+}
+
+test('CRUD-E4: POST → PUT → DELETE each preserve the registry\'s leading comment block verbatim', async () => {
+  seedRegistryWithHeader([SEED_ROW], SEED_SOURCES);
+
+  const add = await post({ item: NEW_ITEM_BODY });
+  assert.equal(add.status, 200, await add.text());
+  assert.ok(
+    readFileSync(registryPath(), 'utf8').startsWith(`${CURATION_HEADER}\n`),
+    'the ADD path destroyed the curation header',
+  );
+
+  const edit = await put('seed-item', { item: { ...SEED_ROW, desc: 'edited' } });
+  assert.equal(edit.status, 200, await edit.text());
+  assert.ok(
+    readFileSync(registryPath(), 'utf8').startsWith(`${CURATION_HEADER}\n`),
+    'the EDIT path destroyed the curation header',
+  );
+
+  const remove = await del('new-item');
+  assert.equal(remove.status, 200, await remove.text());
+  const finalText = readFileSync(registryPath(), 'utf8');
+  assert.ok(finalText.startsWith(`${CURATION_HEADER}\n`), 'the DELETE path destroyed the curation header');
+  assert.equal(
+    (finalText.match(/# Community registry — hand-curated\./g) ?? []).length,
+    1,
+    'three writes must not accumulate three copies of the header',
+  );
+  // …and the file still round-trips through the ONE loader.
+  const doc = readRegistryDoc();
+  assert.equal(doc.meta.schemaVersion, 2);
+  assert.ok(doc.items.some((i) => i.id === 'seed-item' && i.desc === 'edited'));
 });

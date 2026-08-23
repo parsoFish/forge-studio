@@ -55,6 +55,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
+import { communitySourceKey } from './community-source-url.ts';
 
 import { skillPath } from '../skill-path.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
@@ -90,15 +91,23 @@ function communitySkillDoc(s: Record<string, unknown>): Record<string, unknown> 
     kind: 'skill',
     name: s['name'] ?? s['id'],
     provenance: s['provenance'] ?? 'Test Author',
-    sourceUrl: s['source'] ?? `https://example.com/${s['id']}`,
+    sourceUrl: s['source'] ?? `https://github.com/test-owner/${s['id']}`,
     category: s['category'] ?? 'testing',
     desc: s['desc'] ?? `${s['id']} description`,
     ...(s['tier'] !== undefined ? { tier: s['tier'] } : {}),
-    signals: { stars: null, starsDisplay: s['stars'] ?? null, attributedTo: s['provenance'] ?? 'Test Author' },
-    upstreamUpdatedAt: null,
-    fetchedAt: null,
-    fetchedBy: 'seed',
+    signals: { attributedTo: s['provenance'] ?? 'Test Author' },
   };
+}
+
+/** W8-B5 schema v2 — repo facts keyed by source, not copied onto each item. */
+function communityRegistrySourcesDoc(skills: Array<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const s of skills) {
+    const key = communitySourceKey(communitySkillDoc(s)['sourceUrl'] as string);
+    if (key === null || s['stars'] === undefined) continue;
+    out[key] = { stars: null, starsDisplay: s['stars'], upstreamUpdatedAt: null, fetchedAt: null, fetchedBy: 'seed' };
+  }
+  return out;
 }
 
 /** W6-CR-1: community skills live in studio/community/registry.yaml, written
@@ -107,7 +116,11 @@ function communitySkillDoc(s: Record<string, unknown>): Record<string, unknown> 
 function writeRegistry(root: string, communitySkills: Array<Record<string, unknown>>): void {
   const dir = join(root, 'studio', 'community');
   mkdirSync(dir, { recursive: true });
-  const doc = { meta: { schemaVersion: 1, lastRefresh: null }, items: communitySkills.map(communitySkillDoc) };
+  const doc = {
+    meta: { schemaVersion: 2, lastRefresh: null },
+    sources: communityRegistrySourcesDoc(communitySkills),
+    items: communitySkills.map(communitySkillDoc),
+  };
   writeFileSync(join(dir, 'registry.yaml'), yaml.dump(doc), 'utf8');
 }
 

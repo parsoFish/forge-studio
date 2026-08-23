@@ -26,6 +26,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
+import { communitySourceKey } from './community-source-url.ts';
 
 import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
 import { isStudioAgent, listPlainSkills, listAgentDefinitions } from './registry.ts';
@@ -100,18 +101,32 @@ function writeSkillFile(root: string, id: string, relPath: string, content: stri
  *  catalog.yaml — converts each raw fixture record's LEGACY field names
  *  (source → sourceUrl, stars → signals.starsDisplay) into a registry item
  *  doc, mirroring community-index.test.ts's own communityRegistryItemDoc. */
+function fixtureSourceUrl(s: Record<string, unknown>): string {
+  return (s['source'] as string | undefined) ?? `https://github.com/test-owner/${s['id']}`;
+}
+
 function communityRegistryItemDoc(s: Record<string, unknown>): Record<string, unknown> {
   const { source, stars, provenance, ...rest } = s;
+  void source;
+  void stars;
   return {
     ...rest,
     kind: 'skill',
     provenance: provenance ?? 'Test Author',
-    sourceUrl: source ?? `https://example.com/${s['id']}`,
-    signals: { stars: null, starsDisplay: stars ?? null, attributedTo: provenance ?? 'Test Author' },
-    upstreamUpdatedAt: null,
-    fetchedAt: null,
-    fetchedBy: 'seed',
+    sourceUrl: fixtureSourceUrl(s),
+    signals: { attributedTo: provenance ?? 'Test Author' },
   };
+}
+
+/** W8-B5 schema v2 — repo facts keyed by source, not copied onto each item. */
+function communityRegistrySourcesDoc(skills: Array<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const s of skills) {
+    const key = communitySourceKey(fixtureSourceUrl(s));
+    if (key === null || s['stars'] === undefined) continue;
+    out[key] = { stars: null, starsDisplay: s['stars'], upstreamUpdatedAt: null, fetchedAt: null, fetchedBy: 'seed' };
+  }
+  return out;
 }
 
 /** Write studio/catalog.yaml (community-skills MOVED off it, W6-CR-1) plus its
@@ -125,7 +140,8 @@ function writeCatalogYaml(root: string, communitySkills: Array<Record<string, un
   const communityDir = join(studioDir, 'community');
   mkdirSync(communityDir, { recursive: true });
   const doc = {
-    meta: { schemaVersion: 1, lastRefresh: null },
+    meta: { schemaVersion: 2, lastRefresh: null },
+    sources: communityRegistrySourcesDoc(communitySkills),
     items: communitySkills.map(communityRegistryItemDoc),
   };
   writeFileSync(join(communityDir, 'registry.yaml'), yaml.dump(doc), 'utf8');
@@ -236,7 +252,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
         id: 'handoff',
         name: 'Handoff',
         provenance: 'obra/superpowers',
-        source: 'https://x',
+        source: 'https://github.com/obra/superpowers',
         category: 'memory',
         stars: '228k',
       },

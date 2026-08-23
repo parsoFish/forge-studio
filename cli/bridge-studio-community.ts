@@ -65,7 +65,7 @@ import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
-import { isDryBridge } from './dry-bridge.ts';
+import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import { assertSkillSlug } from '../orchestrator/skill-path.ts';
 import {
   hubCountsFrom,
@@ -87,6 +87,11 @@ import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState }
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../orchestrator/studio/registry.ts';
 import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
+import {
+  communityRefreshRemedy,
+  runCommunityRefresh,
+  type CommunityRefreshRunReason,
+} from './community-refresh-run.ts';
 import type { CommunitySkill } from '../orchestrator/studio/types.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
@@ -118,6 +123,18 @@ type CommunityItemWire = {
   kind: CommunityKind;
   name: string;
   desc: string;
+  /** W8-B5 (community-05 / exit row E11) — the registry row's OWN `category`,
+   *  so `/community`'s search can match the word the registry actually files
+   *  rows under ("planning", "memory", "review"). It reached the client
+   *  nowhere before this, which is why adding the search term alone would
+   *  have been a no-op.
+   *
+   *  `null` is LOAD-BEARING and never an invented string: a vendored package
+   *  or a catalog connection has no registry row at all, so it genuinely has
+   *  no category. Same discipline as `hub`/`signals` — an honest absence,
+   *  never a fabricated value, and deliberately not `''` (an empty string
+   *  would make every empty-ish query "match" it). */
+  category: string | null;
   upstream: string;
   hub: CommunityItem['hub'];
   signals: CommunityItem['signals'];
@@ -200,6 +217,23 @@ function originFor(item: CommunityItem): string {
   return `listConnections (studio/catalog.yaml ${item.kind}s:)`;
 }
 
+/**
+ * W8-B5 (exit row E11) — the item's category, read from the ONE place it is
+ * declared: the registry row this item was sourced from (`CommunitySkill`,
+ * itself projected from `CommunityRegistryItem`). Never derived, never
+ * guessed, never defaulted to a plausible-looking string.
+ *
+ * A vendored-only skill package, a vendored hook and a catalog connection all
+ * have NO registry row (D1's other two sources), so they honestly carry
+ * `null` — the same treatment `fetchedAt`/`upstreamUpdatedAt` already get for
+ * exactly the same reason (D14).
+ */
+function categoryFor(item: CommunityItem, ctx: WireCtx): string | null {
+  if (item.kind !== 'skill') return null;
+  const cs = ctx.communitySkills.find((c) => c.id === item.id);
+  return cs ? cs.category : null;
+}
+
 /** The item's own real source link — never hub.url substituted in (see this
  *  file's header: a hub can be a coarser prefix of an item's own upstream). */
 function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
@@ -245,6 +279,7 @@ function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
     kind: item.kind,
     name: item.name,
     desc: item.description ?? NO_DESCRIPTION,
+    category: categoryFor(item, ctx),
     upstream: upstreamFor(item, ctx),
     hub: item.hub,
     signals: item.signals,
@@ -271,6 +306,11 @@ function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
       kind: item.kind,
       name: item.name,
       desc: item.description ?? NO_DESCRIPTION,
+      // The degraded row still carries the honest absence rather than
+      // omitting the key: an ABSENT key is a malformed response to the
+      // client's parser, which would turn one item's derivation failure into
+      // a whole-list parse throw — the opposite of this arm's purpose.
+      category: null,
       upstream: VENDORED_UPSTREAM_SOURCE,
       hub: item.hub,
       signals: item.signals,
@@ -518,6 +558,63 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
   }
 }
 
+/**
+ * The HTTP status for each refusal `runCommunityRefresh` can return. Every
+ * choice here is deliberate, and the reasoning is written down because a
+ * status picked by reflex is a status nobody can defend later:
+ *
+ * - `missing-token` / `invalid-token` → **409**, and specifically NOT 500 and
+ *   NOT 401. Not 500: nothing broke — the route worked exactly as designed and
+ *   is reporting an unmet precondition; a 500 is indistinguishable from a crash
+ *   and would carry `sanitizeError` prose where an operator needs an actionable
+ *   remedy. Not 401: the missing credential is not the CALLER's. The caller is
+ *   the operator's own browser against their own bridge; the credential is the
+ *   SERVER process's environment, and a 401 would invite a UI to prompt for a
+ *   login it has no way to supply. 409 is this bridge's established "the server
+ *   is in a state that conflicts with this request, here is the fix" status —
+ *   the same one the contract-stages check uses to name `forge project migrate`,
+ *   and the hook-already-exists and KB-active-job routes use for their own
+ *   preconditions. The body carries `reason` + `remedy`, so a client
+ *   distinguishes absent from rejected without parsing prose.
+ * - `rate-limited` → **429**, the exact semantic, so a client can back off
+ *   without reading text.
+ * - `all-sources-failed` → **502**: forge reached its upstreams and every one
+ *   of them failed it. Deliberately NOT a 200 carrying `wrote:false`, because a
+ *   200 is what a UI renders as "refreshed" — the precise lie this lane exists
+ *   to stop.
+ * - `registry-missing` → **404** (there is no such document to refresh).
+ * - `registry-invalid` / `refresh-refused` → **409** (a local document or a
+ *   guard the operator must resolve).
+ * - `registry-locked` → **503** (W8-B5 security review, FINDING 1): another
+ *   writer — a curation edit, a draft commit, a second refresh — holds the
+ *   registry mutex, so this pass discarded its verified facts rather than race
+ *   them onto a document someone else is mid-way through changing. Transient
+ *   and retryable, the same status the verdict mutex in
+ *   cli/bridge-studio-runs.ts answers for its own contention, and deliberately
+ *   NOT a 500: nothing is broken and nothing was written.
+ * - `write-failed` → **500**: an unexpected I/O condition, and the only reason
+ *   here that genuinely is a server fault. The registry on disk is untouched.
+ */
+function statusForRefreshReason(reason: CommunityRefreshRunReason): number {
+  switch (reason) {
+    case 'rate-limited':
+      return 429;
+    case 'registry-locked':
+      return 503;
+    case 'registry-missing':
+      return 404;
+    case 'all-sources-failed':
+      return 502;
+    case 'write-failed':
+      return 500;
+    case 'missing-token':
+    case 'invalid-token':
+    case 'registry-invalid':
+    case 'refresh-refused':
+      return 409;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
@@ -581,6 +678,80 @@ export async function handleStudioCommunityRoutes(
         return true;
       }
       sendJson(res, 200, { item: row }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/community/refresh — the DETERMINISTIC refresh -----
+  // (W8-B5, exit row E7.) This route holds NO refresh logic of its own: it
+  // calls the same `runCommunityRefresh` that `forge community refresh` calls
+  // (cli/community-refresh-run.ts) and renders the typed result as HTTP. That
+  // sharing IS the deliverable — two hand-rolled load→refresh→write copies
+  // would drift, and a byte-parity test pins the two surfaces together.
+  //
+  // The write destination is the FIXED, server-owned `communityRegistryPath(
+  // forgeRoot)`; nothing request-derived reaches any path in this arm (the
+  // request has no body and no parameters at all), so no containment guard
+  // applies and none is faked.
+  if (method === 'POST' && url === '/api/studio/community/refresh') {
+    // The FIRST bridge route in forge's history that makes an outbound call to
+    // a third-party API, and it makes it with the operator's real GitHub PAT.
+    // Dry-bridge REFUSES it outright rather than stubbing a sub-step: unlike
+    // the spawn families there is no local bookkeeping half worth keeping —
+    // the network call IS the route — and a `ui:journey` run that quietly
+    // spent the operator's GitHub rate limit, or wrote live upstream numbers
+    // into the repo-tracked registry mid-harness, is the 2026-07-16 incident
+    // shape this seam exists to prevent.
+    if (isDryBridge()) {
+      refuseDryBridge(res, origin, {
+        route: '/api/studio/community/refresh',
+        method: 'POST',
+        action: 'network',
+        logsRoot: ctx.logsRoot,
+      });
+      return true;
+    }
+    try {
+      const result = await runCommunityRefresh({ forgeRoot: ctx.forgeRoot });
+      if (!result.ok) {
+        sendJson(
+          res,
+          statusForRefreshReason(result.reason),
+          {
+            error: result.message,
+            reason: result.reason,
+            remedy: communityRefreshRemedy(result.reason),
+            // Stated explicitly on every refusal so a client never has to
+            // infer from a status code whether the file was touched.
+            wrote: false,
+            ...(result.counts !== undefined ? { counts: result.counts } : {}),
+            ...(result.outcomes !== undefined ? { outcomes: result.outcomes } : {}),
+            ...(result.errors !== undefined ? { errors: result.errors } : {}),
+          },
+          origin,
+        );
+        return true;
+      }
+      // Everything a UI needs to render the outcome without a second request:
+      // one row per registry item with its own status + detail, the tallies,
+      // the new `meta.lastRefresh`, and the per-source failures (which MAY be
+      // non-empty on a 200 — a partial pass writes what verified and reports
+      // what did not).
+      sendJson(
+        res,
+        200,
+        {
+          wrote: result.wrote,
+          dryRun: result.dryRun,
+          lastRefresh: result.lastRefresh,
+          counts: result.counts,
+          outcomes: result.outcomes,
+          errors: result.errors,
+        },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

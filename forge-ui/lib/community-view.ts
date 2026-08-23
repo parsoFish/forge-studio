@@ -19,7 +19,7 @@
  * function's own doc comment below for the full contract).
  */
 
-import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunitySignals } from './community-client.ts';
+import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals } from './community-client.ts';
 
 // ---------------------------------------------------------------------------
 // Filtering
@@ -34,11 +34,19 @@ export function filterByKind(items: readonly CommunityItem[], kind: CommunityKin
   return items.filter((item) => item.kind === kind);
 }
 
-/** Case-insensitive match on name + desc + id + hub label + signals
- *  attribution + upstream URL (W7-B3, community-05: the operator's natural
- *  query terms — the id shown in the URL, the hub names in the strip, the
- *  attribution on the card — all used to return zero results). Empty query
- *  returns a NEW array of every item, unfiltered. */
+/** Case-insensitive match on name + desc + id + category + hub label +
+ *  signals attribution + upstream URL (W7-B3, community-05: the operator's
+ *  natural query terms — the id shown in the URL, the hub names in the strip,
+ *  the attribution on the card — all used to return zero results). Empty
+ *  query returns a NEW array of every item, unfiltered.
+ *
+ *  W8-B5 (exit row E11) adds `category` — the word the registry itself files
+ *  rows under ("planning", "memory", "review"), and one of the first an
+ *  operator browsing a library types. It could not be added before: the field
+ *  reached neither the client type nor the server's wire projection, so a
+ *  search-term-only change would have been a no-op. A `null` category (an
+ *  item with no registry row) simply never matches — it is NOT coerced to
+ *  `''`, which would quietly match a query of nothing in particular. */
 export function filterCommunityItems(items: readonly CommunityItem[], query: string): CommunityItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return [...items];
@@ -46,6 +54,7 @@ export function filterCommunityItems(items: readonly CommunityItem[], query: str
     item.name.toLowerCase().includes(q) ||
     item.desc.toLowerCase().includes(q) ||
     item.id.toLowerCase().includes(q) ||
+    (item.category !== null && item.category.toLowerCase().includes(q)) ||
     hubLabel(item.hub).toLowerCase().includes(q) ||
     (item.signals !== null && item.signals.attributedTo.toLowerCase().includes(q)) ||
     item.upstream.toLowerCase().includes(q),
@@ -148,6 +157,91 @@ export function installActionForItem(item: {
   if (!item.vendored) return { action: 'browse-upstream', href: item.upstream };
   if (item.installState === 'not-installed') return { action: 'install' };
   return { action: 'open-owning', href: owningHrefForKind(item.kind, item.id) };
+}
+
+/**
+ * W8-B5 (community-18 / exit row E16) — the SECONDARY link to the connection's
+ * own page, rendered BESIDE whatever `installActionForItem` decided.
+ *
+ * The earlier community-18 fix only reached the INSTALLED case (its own
+ * comment above says so): `installActionForItem` returns `open-owning` when
+ * `installState !== 'not-installed'`, so a not-installed mcp/tool — the most
+ * common state, and the one where an operator most needs the config vars, the
+ * env-var list and the probe explanation — had no route to
+ * `/connections/<id>` at all. The install action is deliberately NOT changed:
+ * a not-installed npm connection still offers its two-step install confirm,
+ * an external one still offers its upstream, a system-provided one still says
+ * why there is nothing to install here. This ADDS the missing link.
+ *
+ * Returns `null` — never a duplicate — when the primary action ALREADY links
+ * that page (`open-owning`, `present-unmanaged`), and for skill/hook, whose
+ * owning pages are the local libraries and only exist once something has been
+ * installed there.
+ */
+export function connectionPageLinkFor(
+  item: { kind: CommunityKind; id: string },
+  action: CommunityInstallAction,
+): string | null {
+  if (item.kind !== 'mcp' && item.kind !== 'tool') return null;
+  if (action.action === 'open-owning' || action.action === 'present-unmanaged') return null;
+  return owningHrefForKind(item.kind, item.id);
+}
+
+// ---------------------------------------------------------------------------
+// The empty state — W8-B5 (community-36 / exit row E14).
+//
+// The hub chip already computed "this hub is DECLARED but indexes nothing"
+// and said so in its own tooltip; the empty block below the grid never read
+// it and collapsed every zero-result view to "Nothing matches this filter."
+// — so selecting skills.sh (a real, registered hub forge indexes nothing
+// from yet) read as a failed search rather than as the honest state of that
+// source. Classic declared-data-fails-open: a value parsed and surfaced, then
+// enforced nowhere downstream.
+//
+// The cure derives the state from the SELECTED HUB'S OWN `itemCount` through
+// `isHubDeclaredOnly` — the SAME predicate the chip uses — so there is no
+// second copy of the flag to go stale, and no way for the chip and the empty
+// block to disagree about the same hub.
+// ---------------------------------------------------------------------------
+
+export const COMMUNITY_EMPTY_STATES = ['empty-index', 'no-match', 'hub-declared-only'] as const;
+export type CommunityEmptyStateKind = (typeof COMMUNITY_EMPTY_STATES)[number];
+
+export type CommunityEmptyState = { state: CommunityEmptyStateKind; message: string };
+
+/** A real, registered hub that forge has indexed nothing from yet. Derived
+ *  from the hub's own DERIVED-per-request count — never a declared flag. */
+export function isHubDeclaredOnly(hub: { itemCount: number }): boolean {
+  return hub.itemCount === 0;
+}
+
+export function communityEmptyState(args: {
+  hubs: readonly CommunityHubWithCount[];
+  hubFilter: string | null;
+  kind: CommunityKind | 'all';
+  query: string;
+}): CommunityEmptyState {
+  // The hub the operator actually selected, looked up in the live strip. A
+  // `hubFilter` naming a hub that is not there (a stale link, a hub removed
+  // from hubs.yaml) falls through to the generic state rather than
+  // fabricating a name for it.
+  const selected = args.hubFilter === null
+    ? undefined
+    : args.hubs.find((h) => h.id === args.hubFilter);
+
+  if (selected && isHubDeclaredOnly(selected)) {
+    // Beats every other reason: no kind filter and no query can match a hub
+    // that indexes nothing, so "nothing matches your filter" would be the
+    // less true of the two statements.
+    return {
+      state: 'hub-declared-only',
+      message: `${selected.name} is a declared source — nothing from it is indexed yet. A targeted refresh can propose items from it.`,
+    };
+  }
+
+  const filtering = args.query.trim().length > 0 || args.kind !== 'all' || args.hubFilter !== null;
+  if (filtering) return { state: 'no-match', message: 'Nothing matches this filter.' };
+  return { state: 'empty-index', message: 'The community index is empty.' };
 }
 
 // ---------------------------------------------------------------------------

@@ -41,11 +41,17 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import { listSkillLibrary } from '../orchestrator/studio/skill-library.ts';
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
-import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry } from '../orchestrator/studio/registry.ts';
-import type { CommunityRegistryItem } from '../orchestrator/studio/types.ts';
+import {
+  communityRegistryPath,
+  loadCommunityRegistry,
+  serializeCommunityRegistry,
+  COMMUNITY_REGISTRY_SCHEMA_VERSION,
+} from '../orchestrator/studio/registry.ts';
+import type { CommunityRegistryItem, CommunityRegistrySource } from '../orchestrator/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from './studio-path-guard.ts';
+import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
@@ -925,20 +931,43 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   if (desc !== undefined && typeof desc !== 'string') return { ok: false, error: 'item.desc must be a string when present' };
   const tier = e['tier'];
   if (tier !== undefined && typeof tier !== 'string') return { ok: false, error: 'item.tier must be a string when present' };
-  const upstreamUpdatedAt = e['upstreamUpdatedAt'] ?? null;
-  if (upstreamUpdatedAt !== null && typeof upstreamUpdatedAt !== 'string') {
-    return { ok: false, error: 'item.upstreamUpdatedAt must be a string or null' };
-  }
+  // W8-B5 (schema v2, exit row E5): stars / starsDisplay / upstreamUpdatedAt /
+  // fetchedAt / fetchedBy are REPO facts and no longer exist on an item at
+  // all — they live in the registry's top-level `sources` map, keyed by
+  // sourceUrl, and are written only by a refresh that actually got a 200.
+  // A body that carries one with a REAL value is refused, naming where the
+  // fact belongs: silently ignoring it is the declared-data-fails-open shape
+  // (the operator would see their number accepted and never rendered).
+  // An explicit `null` carries no information, so it is accepted-and-dropped
+  // rather than refused. That is ordinary input tolerance, NOT a back-compat
+  // path: forge's own client does not send these keys at all any more
+  // (forge-ui/app/community/new/page.tsx's `toInput`, changed alongside this),
+  // so nothing in this repo depends on the tolerance. It survives only so a
+  // scripted or third-party caller that spells "I have no star count" as an
+  // explicit null is not punished for it.
+  const retiredRepoFields: Array<[string, unknown]> = [
+    ['upstreamUpdatedAt', e['upstreamUpdatedAt']],
+    ['fetchedAt', e['fetchedAt']],
+    ['fetchedBy', e['fetchedBy']],
+  ];
 
   const signalsRaw = e['signals'];
   let attributedTo: string | null = null;
   if (signalsRaw !== undefined && signalsRaw !== null) {
     if (typeof signalsRaw !== 'object' || Array.isArray(signalsRaw)) return { ok: false, error: 'item.signals must be an object when present' };
     const s = signalsRaw as Record<string, unknown>;
-    if (s['stars'] !== undefined && s['stars'] !== null && typeof s['stars'] !== 'number') return { ok: false, error: 'item.signals.stars must be a number or null' };
-    if (s['starsDisplay'] !== undefined && s['starsDisplay'] !== null && typeof s['starsDisplay'] !== 'string') return { ok: false, error: 'item.signals.starsDisplay must be a string or null' };
+    retiredRepoFields.push(['signals.stars', s['stars']], ['signals.starsDisplay', s['starsDisplay']]);
     if (s['attributedTo'] !== undefined && s['attributedTo'] !== null && typeof s['attributedTo'] !== 'string') return { ok: false, error: 'item.signals.attributedTo must be a string or null' };
     attributedTo = (s['attributedTo'] as string | null | undefined) ?? null;
+  }
+
+  for (const [field, value] of retiredRepoFields) {
+    if (value !== undefined && value !== null) {
+      return {
+        ok: false,
+        error: `item.${field} is a REPO-level fact and is not a property of an item — it lives in the registry's "sources" map, keyed by this item's sourceUrl, and is written only by "forge community refresh". Remove it from the body.`,
+      };
+    }
   }
 
   return {
@@ -952,21 +981,12 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
       sourceUrl,
       provenance,
       ...(tier !== undefined ? { tier } : {}),
-      // SERVER-OWNED fetch facts — never trusted from the body (W7-B3 review
-      // F5, the declared-data-fails-open class): stars/starsDisplay/
-      // upstreamUpdatedAt are facts a refresh pass fetched about upstream. A
-      // hand-entered value would be a fabricated signal that drives the
-      // "Stars" sort, so a CREATE starts them null; the PUT arm carries the
-      // EXISTING row's values forward (an operator edit must not wipe agent-
-      // fetched facts either — review F4). Body values for these fields are
-      // type-checked above (bad shapes still 400) and then IGNORED.
-      // `attributedTo` stays operator-suppliable: it is a curation note, not
-      // a fetched signal. `upstreamUpdatedAt` was type-checked above; its
-      // parsed value is deliberately discarded here.
-      signals: { stars: null, starsDisplay: null, attributedTo },
-      upstreamUpdatedAt: null,
-      fetchedAt: null,
-      fetchedBy: 'operator',
+      // `attributedTo` is the ONLY signal an item carries in v2: it is a
+      // curation note ("who to credit for THIS skill"), not a fetched
+      // repo-level fact. W7-B3 review F4/F5 protected stars/starsDisplay/
+      // upstreamUpdatedAt by forcing them server-side; v2 protects them
+      // structurally instead — an item has no such field to force.
+      signals: { attributedTo },
     },
   };
 }
@@ -976,33 +996,83 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
  *  from `mutate` means "refused, write NOTHING" — the file stays
  *  byte-identical (a 409/404 must never reformat the registry as a side
  *  effect). Throws on a malformed EXISTING registry (never half-trusts a
- *  corrupt file) and on a produced document the loader itself refuses. */
-function mutateCommunityRegistry(
+ *  corrupt file) and on a produced document the loader itself refuses.
+ *
+ *  W8-B5 security review, FINDING 1: the WHOLE read-modify-write runs under
+ *  the shared registry mutex (cli/community-registry-lock.ts), and the load
+ *  below happens INSIDE it — the same lock, on the same path, that
+ *  `runCommunityRefresh` and `commitRegistryDraft` take. A lock only one of
+ *  three writers honours is not a lock, which is why there is exactly one
+ *  helper and all three call it. Contention throws
+ *  `CommunityRegistryLockError`, which every arm below renders as a 503;
+ *  nothing is written on that path. The critical section is fs-only and
+ *  sub-millisecond — no caller of this function does network I/O while
+ *  holding it. */
+async function mutateCommunityRegistry(
   forgeRoot: string,
   mutate: (items: CommunityRegistryItem[]) => CommunityRegistryItem[] | null,
-): void {
+): Promise<void> {
   const destPath = communityRegistryPath(forgeRoot);
-  const existing = existsSync(destPath)
-    ? loadCommunityRegistry(destPath)
-    : { schemaVersion: 1, lastRefresh: null as string | null, items: [] as CommunityRegistryItem[] };
-  const nextItems = mutate([...existing.items]);
-  if (nextItems === null) return;
-  const serialized = serializeCommunityRegistry({ schemaVersion: existing.schemaVersion, lastRefresh: existing.lastRefresh, items: nextItems });
-
+  // Ahead of the lock, not after the mutate: the mutex is taken on
+  // studio/community/ itself, so on a fresh forge root the directory has to
+  // exist before two concurrent creators have anything to serialise on.
   mkdirSync(dirname(destPath), { recursive: true });
-  const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
-  writeFileSync(tempPath, serialized, 'utf8');
+  const release = await lockCommunityRegistry(forgeRoot);
   try {
-    loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
-    renameSync(tempPath, destPath);
-  } catch (err) {
+    const existing = existsSync(destPath)
+      ? loadCommunityRegistry(destPath)
+      : {
+          schemaVersion: COMMUNITY_REGISTRY_SCHEMA_VERSION as number,
+          lastRefresh: null as string | null,
+          sources: {} as Record<string, CommunityRegistrySource>,
+          items: [] as CommunityRegistryItem[],
+          leadingComments: '',
+        };
+    const nextItems = mutate([...existing.items]);
+    if (nextItems === null) return;
+    // W8-B5 (exit row E4): `leadingComments` threads the file's curation header
+    // through the ONE shared serializer, so a CRUD write no longer destroys it.
+    // `sources` is carried forward untouched — a CRUD edit is curation, never a
+    // refresh, and must not disturb a repo fact (nor prune a source row a
+    // re-added item would want back). That split is also what makes the
+    // refresh's re-load-under-lock merge safe: CRUD owns `items`, a refresh
+    // owns `sources` + `lastRefresh`, and neither writes the other's half.
+    const serialized = serializeCommunityRegistry({
+      schemaVersion: existing.schemaVersion,
+      lastRefresh: existing.lastRefresh,
+      sources: existing.sources,
+      items: nextItems,
+      leadingComments: existing.leadingComments,
+    });
+
+    const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
+    writeFileSync(tempPath, serialized, 'utf8');
     try {
-      unlinkSync(tempPath);
-    } catch {
-      /* best-effort cleanup */
+      loadCommunityRegistry(tempPath); // structural round-trip — the ONE loader is the validator
+      renameSync(tempPath, destPath);
+    } catch (err) {
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        /* best-effort cleanup */
+      }
+      throw err;
     }
-    throw err;
+  } finally {
+    await release();
   }
+}
+
+/** W8-B5 security review, FINDING 1: lock contention is a 503 ("another
+ *  writer holds the registry, retry"), never the 500 every other failure in
+ *  these arms renders. Kept as one helper so the three CRUD arms cannot drift
+ *  into answering the same condition three different ways. */
+function sendRegistryWriteFailure(res: ServerResponse, err: unknown, origin: string): void {
+  if (err instanceof CommunityRegistryLockError) {
+    sendJson(res, 503, { error: err.message, reason: 'registry-locked' }, origin);
+    return;
+  }
+  sendJson(res, 500, { error: sanitizeError(err) }, origin);
 }
 
 export async function handleStudioWriteRoutes(
@@ -1046,7 +1116,7 @@ export async function handleStudioWriteRoutes(
         return true;
       }
       let conflict = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         if (items.some((i) => i.id === parsed.item.id)) {
           conflict = true;
           return null; // refused — the file stays byte-identical
@@ -1059,7 +1129,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id: parsed.item.id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }
@@ -1084,25 +1154,17 @@ export async function handleStudioWriteRoutes(
         return true;
       }
       let found = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         const next = items.map((i) => {
           if (i.id !== id) return i;
           found = true;
-          // W7-B3 review F4: an operator EDIT carries the EXISTING row's
-          // agent-fetched facts forward — stars, starsDisplay and
-          // upstreamUpdatedAt are server-owned (see parseRegistryItemBody).
-          // Only fetchedAt/fetchedBy reset (the documented honesty reset:
-          // the CONTENT is now hand-curated). attributedTo comes from the
-          // body — it is a curation note the operator may edit.
-          return {
-            ...parsed.item,
-            signals: {
-              stars: i.signals.stars,
-              starsDisplay: i.signals.starsDisplay,
-              attributedTo: parsed.item.signals.attributedTo,
-            },
-            upstreamUpdatedAt: i.upstreamUpdatedAt,
-          };
+          // W8-B5 (schema v2): W7-B3 review F4's "carry the existing row's
+          // agent-fetched facts forward" is now unnecessary by construction —
+          // an item HAS no fetched facts to wipe. They live on the shared
+          // `sources` row, which `mutateCommunityRegistry` carries forward
+          // untouched, so an operator edit cannot disturb another item's data
+          // either. `attributedTo` remains operator-editable curation.
+          return { ...parsed.item };
         });
         return found ? next : null; // 404 path writes nothing
       });
@@ -1112,7 +1174,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }
@@ -1122,7 +1184,7 @@ export async function handleStudioWriteRoutes(
       const id = decodeIdOrRespond(registryItemMatch[1], res, origin);
       if (id === null) return true;
       let found = false;
-      mutateCommunityRegistry(ctx.forgeRoot, (items) => {
+      await mutateCommunityRegistry(ctx.forgeRoot, (items) => {
         const next = items.filter((i) => {
           if (i.id === id) {
             found = true;
@@ -1138,7 +1200,7 @@ export async function handleStudioWriteRoutes(
       }
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      sendRegistryWriteFailure(res, err, origin);
     }
     return true;
   }

@@ -60,8 +60,17 @@ export function isDryBridge(env: Record<string, string | undefined> = process.en
 export type DryBridgeStubAction = 'release-finalize' | 'merge-pr' | 'finalize-after-merge' | 'agent-turn';
 
 /** The action kind a `refuse` route's real-acting call falls into — carried
- *  in the typed 409 body so a caller can tell WHY without parsing prose. */
-export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon';
+ *  in the typed 409 body so a caller can tell WHY without parsing prose.
+ *
+ *  `network` was added by W8-B5: forge had never made an outbound call to a
+ *  THIRD-PARTY API from any route before the community registry's
+ *  deterministic refresh (the only pre-existing outbound `fetch` in the tree,
+ *  orchestrator/notify.ts, targets an operator-configured webhook; the other
+ *  two are localhost port probes). The vocabulary predates the capability, so
+ *  it grows rather than being stretched: classifying a real GitHub call with
+ *  the operator's PAT as `daemon` or as `exempt-local` would have been a lie
+ *  in the one table that exists to keep this honest. */
+export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon' | 'network';
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
 
@@ -100,6 +109,15 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawns the detached forge serve daemon (spawnServeDetached)' },
   { method: 'POST', route: '/api/scheduler/stop', classification: 'refuse', action: 'daemon', guard: 'route',
     reason: 'SIGTERMs the live daemon process' },
+  // W8-B5 (exit row E7) — the deterministic community-registry refresh. The
+  // ONLY route in the bridge that calls a third-party API, and it calls it
+  // with the operator's real GH_TOKEN. Refused outright rather than
+  // stub-actioned: there is no local-bookkeeping half to keep (the network
+  // call IS the route), and a harness run that silently spent the operator's
+  // GitHub rate limit — or wrote live upstream numbers into the repo-tracked
+  // registry — is the 2026-07-16 incident shape.
+  { method: 'POST', route: '/api/studio/community/refresh', classification: 'refuse', action: 'network', guard: 'route',
+    reason: 'calls api.github.com / registry.npmjs.org / registry.modelcontextprotocol.io with the operator\'s GH_TOKEN and rewrites studio/community/registry.yaml from the answers' },
   { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', classification: 'refuse', action: 'spawn-agent', guard: 'route',
     reason: 'spawnBrainFix dispatches a real agent-fix turn' },
   { method: 'POST', route: '/api/recovery/:id/abandon', classification: 'refuse', action: 'git-remote', guard: 'route',

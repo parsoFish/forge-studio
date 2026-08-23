@@ -288,6 +288,28 @@ const EXEMPT_PAGES: Record<string, string> = {
   'app/knowledge/page.tsx':
     'lib/knowledge-page-fail-closed-wiring.test.ts — a bespoke (FetchErrorState + ' +
     'kbDetailError/retryKbDetail) shape pinned there; same contract, different names.',
+  // W8-B5 (community-30) made this a candidate: it began rendering NotFound
+  // for an `?edit=<id>` that does not exist (it used to render the whole edit
+  // form under a red banner). Categorised deliberately, with BOTH halves
+  // stated so this row cannot read as a clean bill of health:
+  //   COVERED — the defect class this file exists for. The not-found claim is
+  //   gated on `registryEditLoadOutcome` (lib/community-form.ts): ONLY a real
+  //   HTTP 404 renders NotFound; a transport failure carries no status at all
+  //   and renders the existing [data-component="fetch-error"] banner instead,
+  //   so a down bridge can never fabricate an absence claim. Pinned by name in
+  //   lib/community-surface-wiring.test.ts ("NotFound is gated on the
+  //   not-found OUTCOME…", "the transport-failure banner SURVIVES",
+  //   "fetchRegistryItem carries the HTTP status through") and enumerated over
+  //   every status shape in lib/community-form.test.ts.
+  //   NOT covered — this page does NOT use the shared PageLoadError kit, and
+  //   has no bridge-recovery resubscribe and no Retry control. That is a real
+  //   (smaller) gap, disclosed here rather than papered over; it was out of
+  //   W8-B5/WI-6's brief, which was the false-absence claim.
+  'app/community/new/page.tsx':
+    'lib/community-surface-wiring.test.ts + lib/community-form.test.ts — the 404-vs-' +
+    'transport-failure split (this file\'s defect class) is pinned there over every ' +
+    'status shape. NOT the shared PageLoadError kit: no bridge-recovery resubscribe ' +
+    'and no Retry control — disclosed gap, out of W8-B5/WI-6\'s scope.',
 };
 
 /**
