@@ -205,7 +205,7 @@ test('WI-1a-5: a failed run with neither stopOnBudget nor failNote renders neith
   // forgets the `status === 'failed'` gate — a resumed run whose stale
   // stopOnBudget/failNote fields have not yet been cleared server-side must
   // never render a failure note once it is running/gated/queued again.
-  expect(runFailureNoteKind(run('running', { stopOnBudget: STOP_ON_BUDGET }))).toBe(null);
+  expect(runFailureNoteKind(run('active', { stopOnBudget: STOP_ON_BUDGET }))).toBe(null);
 });
 
 test('WI-1a-5: describeStopOnBudget omits the resumable-boundary clause honestly when stoppedBeforeNode is absent', () => {
