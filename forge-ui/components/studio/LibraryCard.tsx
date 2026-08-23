@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { Agent, Flow, Kb, Project, Run } from '@/lib/studio-client';
 import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 import { deriveFlowStatus, runsForFlow } from '@/lib/home-view';
+import { deriveProjectHealth, type ProjectHealthLevel } from '@/lib/projects-index-health';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,9 +23,25 @@ function plural(n: number, word: string): string {
 // Project card
 // ---------------------------------------------------------------------------
 
+/** W8-C3: the health chip's colour token per level. `healthy` is deliberately
+ *  the QUIET one — a roster of ready projects should not glow; the eye belongs
+ *  on the two that need the operator. */
+const HEALTH_COLOR: Record<ProjectHealthLevel, string> = {
+  healthy: 'var(--faint)',
+  attention: 'var(--amber, var(--ember))',
+  broken: 'var(--ember)',
+  unknown: 'var(--faint)',
+};
+
 export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb[]; index: number }) {
   const skillCount = (project.skills ?? []).length;
   const kbLabel = project.kb ? (kbs.find((k) => k.id === project.kb)?.name ?? project.kb) : null;
+  // W8-C3 (projects-08 / forge-j1e): DERIVED here, from the project itself, on
+  // every render. Deliberately NOT a prop — a `health` prop is a place for a
+  // stale copy to live, and this card renders on two shelves (the Library's
+  // projects section and the /projects index), which is exactly how two
+  // callers end up disagreeing. One derivation, both shelves.
+  const health = deriveProjectHealth(project);
 
   return (
     <Link
@@ -33,6 +50,7 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
       data-card-type="project"
       data-card-id={project.id}
       data-provenance={project.provenance}
+      data-health={health.level}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
@@ -44,7 +62,27 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
       <div className="card-meta">
         <span className="card-stat">{plural(skillCount, 'skill')}</span>
         {kbLabel && <span className="badge badge-kb">{kbLabel}</span>}
+        <span
+          className="card-stat"
+          data-field="project-health"
+          data-health={health.level}
+          style={{ color: HEALTH_COLOR[health.level], fontWeight: health.level === 'broken' ? 700 : 400 }}
+        >
+          {health.label}
+        </span>
       </div>
+      {/* The reason, in the words of whatever judged it — the operator cannot
+          fix "unhealthy", only "the flat gate keys moved to the typed
+          testProcess object". Rendered only when there IS one, so a healthy
+          card gains no empty row. */}
+      {health.reasons.length > 0 && (
+        <div
+          data-field="project-health-reason"
+          style={{ fontSize: 11, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}
+        >
+          {health.reasons.join(' · ')}
+        </div>
+      )}
     </Link>
   );
 }

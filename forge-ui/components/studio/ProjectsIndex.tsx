@@ -4,6 +4,7 @@ import type { Kb, Project } from '@/lib/studio-client';
 import { StudioPage } from '@/components/StudioPage';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { ProjectCard } from './LibraryCard';
+import { summariseProjectHealth } from '@/lib/projects-index-health';
 
 // ---------------------------------------------------------------------------
 // ProjectsIndexBody — the real /projects index (W6-IA-1), replacing the
@@ -42,6 +43,10 @@ export function ProjectsIndexBody({
   // an in-flight fetch must never flash a false "no projects" before real
   // data arrives, and a FAILED fetch must never claim there are no projects.
   const isEmpty = ready && !error && projects.length === 0;
+
+  // W8-C3: derived per render off the roster itself — never held in state,
+  // never fetched separately, so it cannot drift from what the cards show.
+  const health = summariseProjectHealth(projects);
 
   return (
     <StudioPage
@@ -128,6 +133,14 @@ export function ProjectsIndexBody({
           className="card-grid"
           data-section="projects-grid"
           data-count={projects.length}
+          /* W8-C3 (projects-08): the roster health rollup, derived from the
+             SAME `deriveProjectHealth` each card calls — a summary that could
+             disagree with the cards under it is worse than no summary. The
+             four counts always sum to `data-count`. */
+          data-health-healthy={health.healthy}
+          data-health-attention={health.attention}
+          data-health-broken={health.broken}
+          data-health-unknown={health.unknown}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}
         >
           {projects.map((p, i) => (

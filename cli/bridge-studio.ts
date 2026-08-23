@@ -63,7 +63,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickof
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
-import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
+import { AGENT_INSTRUCTION_FILES, validateProjectConfig } from '../orchestrator/project-config.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
@@ -370,7 +370,48 @@ type ProjectWithMeta = {
    *  project concept and discoverProjects is a pure directory scan, so the
    *  server has no field to attest either provenance from. */
   provenance: Provenance;
+  /** W8-C3 (projects-08 / forge-j1e): the project's contract health, DERIVED
+   *  on every read by running `.forge/project.json` through the SAME
+   *  validator the orchestrator runs the project through
+   *  (`validateProjectConfig`). Never persisted — there is no field on disk a
+   *  writer could forget to update, so it cannot go stale. Always present. */
+  configHealth: ProjectConfigHealth;
 };
+
+/**
+ * W8-C3 (projects-08 / forge-j1e) — the derived contract-health verdict for
+ * one project.
+ *
+ * · `ok`           — `.forge/project.json` exists, parses, and `validateProjectConfig` accepts it.
+ * · `unconfigured` — the project directory exists but carries no `.forge/project.json` at all
+ *                    (half-onboarded; `discoverProjects` deliberately still lists it).
+ * · `invalid`      — the file is present but unreadable, is not JSON, or the REAL validator
+ *                    rejects it (e.g. the R1-03 legacy flat gate keys — gitpulse's live state,
+ *                    the shape `GET /api/studio/projects/:id/contract-stages` already 409s on).
+ *
+ * `reason` is the validator's OWN message wherever one exists, never a
+ * re-worded copy: a copy is a second source of truth that drifts.
+ */
+const NO_PROJECT_CONFIG_REASON = 'no .forge/project.json — onboarding is unfinished';
+
+export type ProjectConfigHealth = {
+  state: 'ok' | 'unconfigured' | 'invalid';
+  reason?: string;
+};
+
+/**
+ * Derive one project's contract health from the parsed config. Pure — the
+ * caller owns every filesystem decision (absent file, unreadable file, bad
+ * JSON), so this function has exactly one job: ask the real validator.
+ */
+function deriveConfigHealth(raw: unknown): ProjectConfigHealth {
+  try {
+    validateProjectConfig(raw);
+    return { state: 'ok' };
+  } catch (err) {
+    return { state: 'invalid', reason: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // B1: projects are auto-discovered from disk — scan `<projectsDir>/*` rather
@@ -388,7 +429,17 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   const kbBoundToProject = projectKbBindings(forgeRoot);
 
   return discovered.map((ref) => {
-    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path, provenance: PROJECT_PROVENANCE };
+    // W8-C3: `configHealth` starts PESSIMISTIC. Every path below that learns
+    // better overwrites it; a path that learns nothing leaves the project
+    // honestly marked unconfigured rather than fabricating health. The whole
+    // defect this closes was a fail-OPEN default, so the default fails closed.
+    const result: ProjectWithMeta = {
+      id: ref.id,
+      name: ref.id,
+      path: ref.path,
+      provenance: PROJECT_PROVENANCE,
+      configHealth: { state: 'unconfigured', reason: NO_PROJECT_CONFIG_REASON },
+    };
     // SEC-04 (bd forge-ebj): every read of a per-project leaf rides `guardedFile`
     // against the TRUSTED `projectsDir` root, with the on-disk project directory
     // NAME (`basename(ref.absPath)`, not the API-facing normalized id) as its OWN
@@ -418,11 +469,33 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       guardedFile(projectsDir, [dirName, '.forge', 'demo', 'demo.lock.json'], 'read') !== null;
     const derivedKb = kbBoundToProject.get(ref.id);
     if (derivedKb !== undefined) result.kb = derivedKb;
+    // `discoverProjects` deliberately lists a directory with no
+    // `.forge/project.json` so a half-onboarded project stays VISIBLE. Before
+    // W8-C3 it was visible AND indistinguishable from a fully-onboarded one.
     if (!ref.hasConfig) return result;
     const projectJsonRaw = guardedReadFile(projectsDir, [dirName, '.forge', 'project.json']);
-    if (projectJsonRaw === null) return result; // absent, unreadable, or containment-refused
+    if (projectJsonRaw === null) {
+      // `hasConfig` said the file is on disk, so this is a real read failure or
+      // a containment refusal (a symlinked config escaping projectsDir) — NOT
+      // the same thing as "never onboarded".
+      result.configHealth = { state: 'invalid', reason: '.forge/project.json is present but could not be read' };
+      return result;
+    }
+    let raw: Record<string, unknown>;
     try {
-      const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
+      raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
+    } catch (err) {
+      result.configHealth = {
+        state: 'invalid',
+        reason: `.forge/project.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      };
+      return result;
+    }
+    // The verdict is taken from the REAL validator, and the field extraction
+    // below runs REGARDLESS of it: a project whose contract is broken must
+    // still be nameable and openable, or the operator cannot go fix it.
+    result.configHealth = deriveConfigHealth(raw);
+    try {
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
       // W7-FIX-A4: the STORED `kb` outranks the derived binding in BOTH
@@ -456,8 +529,16 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
             ...(typeof s.element === 'string' && s.element ? { element: s.element as string } : {}),
           }));
       }
-    } catch {
-      // ignore unreadable project.json
+    } catch (err) {
+      // W8-C3: this used to be a SILENT swallow (`catch { /* ignore */ }`) —
+      // the exact fail-open shape this WI closes. Every read above is
+      // typeof-guarded so a throw here means the config is shaped in a way we
+      // genuinely cannot read; say so rather than returning a project that
+      // looks healthy. Still per-project: one bad config never sinks the roster.
+      result.configHealth = {
+        state: 'invalid',
+        reason: `.forge/project.json could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
     return result;
   });
