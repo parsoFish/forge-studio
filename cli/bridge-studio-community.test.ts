@@ -208,12 +208,24 @@ function vendorSkillPackage(id: string): void {
   );
 }
 
-function vendorHookPackage(id: string, script = '#!/usr/bin/env bash\nexit 0\n'): void {
+function vendorHookPackage(
+  id: string,
+  script = '#!/usr/bin/env bash\nexit 0\n',
+  trigger: { on?: string; matcher?: string } = {},
+): void {
   const dir = join(forgeRoot, 'studio', 'community', 'hooks', id);
   mkdirSync(join(dir, 'scripts'), { recursive: true });
   writeFileSync(
     join(dir, 'hook.yaml'),
-    yaml.dump({ id, name: id, description: `${id} description`, on: 'PreToolUse', script: 'scripts/run.sh', permissions: { env: [], read: [], network: false } }),
+    yaml.dump({
+      id,
+      name: id,
+      description: `${id} description`,
+      on: trigger.on ?? 'PreToolUse',
+      ...(trigger.matcher !== undefined ? { matcher: trigger.matcher } : {}),
+      script: 'scripts/run.sh',
+      permissions: { env: [], read: [], network: false },
+    }),
     'utf8',
   );
   writeFileSync(join(dir, 'scripts', 'run.sh'), script, 'utf8');
@@ -483,6 +495,41 @@ test('POST .../community/hook/<vendored>/install: routes to the hook pipeline (r
   const body = (await res.json()) as { ok: boolean; routedTo: string };
   assert.equal(body.ok, true);
   assert.equal(body.routedTo, 'hook-needs-approval');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 — trigger coherence on the FIFTH write path into studio/hooks/.
+// A vendored community package is third-party bytes: the LAST place to assume
+// the matcher/event pair is coherent. A matcher on a tool-less event can never
+// be honoured by hook dispatch, so the hook would install, list, and silently
+// never fire. Same shared predicate the lint, both hook write routes and the
+// creation-agent finalize route use.
+// ---------------------------------------------------------------------------
+
+test('W8-B6: POST .../community/hook/<vendored>/install: 400s a vendored matcher on a tool-less event, and materialises NOTHING under studio/hooks/', async () => {
+  vendorHookPackage('route-hook-bad-trigger', '#!/usr/bin/env bash\nexit 0\n', { on: 'SessionEnd', matcher: 'Bash(gh pr create)' });
+  const res = await postJson(`${bridgeUrl}/api/studio/community/hook/route-hook-bad-trigger/install`, {});
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /SessionEnd/);
+  assert.match(body.error, /PreToolUse or PostToolUse/);
+  // Assert the ARTIFACT, not the status code.
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'route-hook-bad-trigger')),
+    false,
+    'a refused install must leave nothing materialised under studio/hooks/<id>',
+  );
+});
+
+test('W8-B6: the SAME vendored matcher on a tool-scoped event still installs — the gate refuses the incoherent pair, not the matcher', async () => {
+  vendorHookPackage('route-hook-good-trigger', '#!/usr/bin/env bash\nexit 0\n', { on: 'PostToolUse', matcher: 'Bash(gh pr create)' });
+  const res = await postJson(`${bridgeUrl}/api/studio/community/hook/route-hook-good-trigger/install`, {});
+  assert.equal(res.status, 200);
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'route-hook-good-trigger', 'hook.yaml')),
+    true,
+    'a coherent vendored package must still install — pins that the new gate is not over-broad',
+  );
 });
 
 test('POST .../community/mcp/<installable>/install: routes to the connections pipeline (routedTo: "connection-install")', async () => {
