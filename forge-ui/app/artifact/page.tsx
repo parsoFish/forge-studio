@@ -43,6 +43,9 @@ import { useDocumentTitle } from '@/lib/document-title';
 
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { ArtifactTrail, type ArtifactKey } from '@/components/studio/artifact/ArtifactTrail';
 import { GateBar, type GateState } from '@/components/studio/artifact/GateBar';
 import { WorkItemsRenderer, type WorkItemEntry } from '@/components/studio/artifact/WorkItemsRenderer';
@@ -59,7 +62,7 @@ import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGat
 import { fetchRunLookup, fetchStudioFlows, type Run, type Flow } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, bridgeFetch, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
-import { resolveArtifactMode, isRunNotFound } from '@/lib/artifact-mode';
+import { resolveArtifactMode, isRunNotFound, deriveArtifactEmptyReason, type ArtifactEmptyReason } from '@/lib/artifact-mode';
 import { planArtifactRequests, type ArtifactRequestPlan } from '@/lib/artifact-request-plan';
 import { prDocWithRunLink } from '@/lib/artifact-pr-view';
 import { effectiveInitiativeId } from '@/lib/initiative-id';
@@ -143,6 +146,16 @@ function isValidType(t: string): t is ArtifactKey {
  * the disk truth, so an artifact the run declares absent is rendered as the
  * honest empty state WITHOUT a guaranteed-404 probe. Only an UNKNOWN run
  * (orphan `_logs/<id>/`) probes its type's primary file directly.
+ *
+ * W8-A2 (crosscut-08): this function has NO catch-all any more. Every probe
+ * below either resolves a SETTLED outcome (found, or a CONFIRMED 404 →
+ * `{type:'empty'}`) or THROWS — `fetchDemoModel`/`fetchWorkItem` already
+ * distinguish a real 404 from a transport failure (`bridgeReadOr404`), and
+ * the raw-file / JSON probes below (`fetchArtifactFileChecked` /
+ * `fetchJsonArtifactChecked`) draw the same line. A thrown failure propagates
+ * to `load()`'s own catch, which renders the shared `PageLoadError` — never a
+ * fabricated absence claim (the bug: a down bridge rendered "not yet
+ * produced" for a PLAN.html that was sitting on disk).
  */
 async function fetchArtifactDoc(
   runId: string,
@@ -150,105 +163,147 @@ async function fetchArtifactDoc(
   run: Run | null,
   reqPlan: ArtifactRequestPlan,
 ): Promise<ArtifactDoc> {
-  try {
-    if (type === 'demo') {
-      if (!reqPlan.probeDemoJson) return { type: 'empty' };
-      // cycleId ~ runId for the existing bridge routes
-      const model = await fetchDemoModel(runId);
-      if (!model) return { type: 'empty' };
-      return { type: 'demo', doc: model };
-    }
-
-    if (type === 'workitems') {
-      // Per-WI spec fetches, keyed on the snapshot the run itself declares.
-      if (reqPlan.workItemIds.length === 0) return { type: 'empty' };
-      const statusById = new Map((run?.workItems ?? []).map((w) => [w.id, w.status] as const));
-      const items = await Promise.all(
-        reqPlan.workItemIds.map(async (wiId) => {
-          const detail = await fetchWorkItem(runId, wiId);
-          const entry: WorkItemEntry = {
-            id: wiId,
-            title: detail?.body ? extractTitle(detail.body) : wiId,
-            status: statusById.get(wiId) ?? 'pending',
-            ac: detail?.acceptance_criteria?.map(
-              (a) => `Given ${a.given}, when ${a.when}, then ${a.then}`,
-            ),
-          };
-          return entry;
-        }),
-      );
-      if (items.every((i) => i.title === i.id)) return { type: 'empty' };
-      return { type: 'workitems', doc: items };
-    }
-
-    if (type === 'reflection') {
-      // W7-B7 (artifact-plan-13): a run that never reflected returns the
-      // HONEST empty state — never `{type:'reflection', doc:{}}`, which
-      // rendered "None logged ✓ closes clean" for a cycle the reflector
-      // never touched.
-      if (!reqPlan.probeReflectionJson) return { type: 'empty' };
-      const doc = await fetchJsonArtifact<ReflectionDoc>(runId, 'reflection.json');
-      if (doc) return { type: 'reflection', doc };
-      return { type: 'empty' };
-    }
-
-    if (type === 'pr') {
-      // PRIMARY: demo.json (the gate's own evidence, mirrored to artifacts/).
-      const demoModel = reqPlan.probeDemoJson ? await fetchDemoModel(runId) : null;
-
-      // SECONDARY (optional): pr-description.md as hero header text.
-      let prDoc: PrDoc | null = null;
-      if (reqPlan.probePrDescription) {
-        try {
-          const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/pr-description.md`);
-          if (res.ok) prDoc = parsePrDescription(await res.text());
-        } catch { /* best-effort */ }
-      }
-
-      // artifact-plan-17: a recorded PR URL alone (run.prUrl) still renders a
-      // linkable PR card — the render path merges via prDocWithRunLink.
-      // Review r1: demoModel does NOT count toward resolution — the pr render
-      // path shows only the merged hero (prDoc + run.prUrl; demo evidence is
-      // deliberately not duplicated here), so a demo-only cycle whose reviewer
-      // hit pr-open-failed must get the honest EmptyState, not a blank body.
-      if (!prDoc && !run?.prUrl) return { type: 'empty' };
-      return { type: 'pr', doc: { demoModel, prDoc } };
-    }
-
-    if (type === 'plan') {
-      // The rendered PLAN.html — the ONLY plan file a cycle snapshots into
-      // artifacts/ (run-model-derive.ts). Shown in a sandboxed iframe. The
-      // probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's own
-      // `src` needs the absolute base — the ONE non-fetch use of
-      // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
-      if (!reqPlan.probePlanHtml) return { type: 'empty' };
-      try {
-        const htmlPath = `/api/artifact/${encodeURIComponent(runId)}/PLAN.html`;
-        const htmlRes = await bridgeFetch(htmlPath);
-        if (htmlRes.ok) {
-          const base = await resolveBridgeUrl();
-          if (base) return { type: 'plan-html', url: `${base}${htmlPath}` };
-        }
-      } catch { /* best-effort */ }
-      return { type: 'empty' };
-    }
-
-    if (type === 'verdict') {
-      // The on-disk shape is VerdictRecord ({kind, decidedBy, rationale}) —
-      // map it onto the renderer's VerdictDoc (fixes the always-"Approved"
-      // view-mode stamp, R4-08-F3). In gate mode the verdict is being
-      // AUTHORED — reqPlan never probes the prior doc there.
-      if (!reqPlan.probeVerdictJson) return { type: 'empty' };
-      const verdictJson = verdictRecordToDoc(await fetchJsonArtifact<unknown>(runId, 'verdict.json'));
-      if (verdictJson) return { type: 'verdict', doc: verdictJson };
-      return { type: 'empty' };
-    }
-  } catch {
-    // fall through to empty
+  if (type === 'demo') {
+    if (!reqPlan.probeDemoJson) return { type: 'empty' };
+    // cycleId ~ runId for the existing bridge routes. Throws on non-404.
+    const model = await fetchDemoModel(runId);
+    if (!model) return { type: 'empty' };
+    return { type: 'demo', doc: model };
   }
+
+  if (type === 'workitems') {
+    // Per-WI spec fetches, keyed on the snapshot the run itself declares.
+    // `fetchWorkItem` throws on non-404 — a mid-fan bridge blip rejects the
+    // whole Promise.all rather than silently downgrading one WI to "pending".
+    if (reqPlan.workItemIds.length === 0) return { type: 'empty' };
+    const statusById = new Map((run?.workItems ?? []).map((w) => [w.id, w.status] as const));
+    const items = await Promise.all(
+      reqPlan.workItemIds.map(async (wiId) => {
+        const detail = await fetchWorkItem(runId, wiId);
+        const entry: WorkItemEntry = {
+          id: wiId,
+          title: detail?.body ? extractTitle(detail.body) : wiId,
+          status: statusById.get(wiId) ?? 'pending',
+          ac: detail?.acceptance_criteria?.map(
+            (a) => `Given ${a.given}, when ${a.when}, then ${a.then}`,
+          ),
+        };
+        return entry;
+      }),
+    );
+    if (items.every((i) => i.title === i.id)) return { type: 'empty' };
+    return { type: 'workitems', doc: items };
+  }
+
+  if (type === 'reflection') {
+    // W7-B7 (artifact-plan-13): a run that never reflected returns the
+    // HONEST empty state — never `{type:'reflection', doc:{}}`, which
+    // rendered "None logged ✓ closes clean" for a cycle the reflector
+    // never touched. W8-A2: a READ FAILURE is a third outcome, never folded
+    // into that same honest-empty state — fetchJsonArtifactChecked keeps it
+    // distinct (`failed`), and a failed read throws so the page settles into
+    // PageLoadError instead of "never reflected".
+    if (!reqPlan.probeReflectionJson) return { type: 'empty' };
+    const { doc, failed } = await fetchJsonArtifactChecked<ReflectionDoc>(runId, 'reflection.json');
+    if (failed) throw new Error(`reflection.json read failed for run "${runId}"`);
+    return doc ? { type: 'reflection', doc } : { type: 'empty' };
+  }
+
+  if (type === 'pr') {
+    // PRIMARY: demo.json (the gate's own evidence, mirrored to artifacts/).
+    // Throws on non-404.
+    const demoModel = reqPlan.probeDemoJson ? await fetchDemoModel(runId) : null;
+
+    // SECONDARY (optional): pr-description.md as hero header text. A
+    // CONFIRMED 404 is a real "no such file" — stays best-effort (prDoc
+    // null). Any OTHER failure is uncertain: swallow it only when run.prUrl
+    // still gives the page something real to render (the pre-existing
+    // best-effort contract); otherwise we genuinely don't know, so it must
+    // not settle into the honest empty state.
+    let prDoc: PrDoc | null = null;
+    if (reqPlan.probePrDescription) {
+      const { text, failed } = await fetchArtifactFileChecked(runId, 'pr-description.md');
+      if (failed && !run?.prUrl) {
+        throw new Error(`pr-description.md read failed for run "${runId}"`);
+      }
+      if (text !== null) prDoc = parsePrDescription(text);
+    }
+
+    // artifact-plan-17: a recorded PR URL alone (run.prUrl) still renders a
+    // linkable PR card — the render path merges via prDocWithRunLink.
+    // Review r1: demoModel does NOT count toward resolution — the pr render
+    // path shows only the merged hero (prDoc + run.prUrl; demo evidence is
+    // deliberately not duplicated here), so a demo-only cycle whose reviewer
+    // hit pr-open-failed must get the honest EmptyState, not a blank body.
+    if (!prDoc && !run?.prUrl) return { type: 'empty' };
+    return { type: 'pr', doc: { demoModel, prDoc } };
+  }
+
+  if (type === 'plan') {
+    // The rendered PLAN.html — the ONLY plan file a cycle snapshots into
+    // artifacts/ (run-model-derive.ts). Shown in a sandboxed iframe. The
+    // probe rides bridgeFetch (one transport, W7-FIX-A1); the iframe's own
+    // `src` needs the absolute base — the ONE non-fetch use of
+    // resolveBridgeUrl on this page (see lib/bridge-transport-guard.test.ts).
+    if (!reqPlan.probePlanHtml) return { type: 'empty' };
+    const { text, failed } = await fetchArtifactFileChecked(runId, 'PLAN.html');
+    if (failed) throw new Error(`PLAN.html read failed for run "${runId}"`);
+    if (text === null) return { type: 'empty' }; // confirmed 404
+    const base = await resolveBridgeUrl();
+    // A resolved 200 with no resolvable base is NOT "the plan doesn't exist"
+    // — we simply cannot build the iframe's absolute src right now. Throw so
+    // the page settles into PageLoadError (retryable) instead of quietly
+    // claiming the plan was never produced.
+    if (!base) throw new Error(`bridge base URL unavailable while rendering PLAN.html for run "${runId}"`);
+    return { type: 'plan-html', url: `${base}/api/artifact/${encodeURIComponent(runId)}/PLAN.html` };
+  }
+
+  if (type === 'verdict') {
+    // The on-disk shape is VerdictRecord ({kind, decidedBy, rationale}) —
+    // map it onto the renderer's VerdictDoc (fixes the always-"Approved"
+    // view-mode stamp, R4-08-F3). In gate mode the verdict is being
+    // AUTHORED — reqPlan never probes the prior doc there.
+    if (!reqPlan.probeVerdictJson) return { type: 'empty' };
+    const { doc, failed } = await fetchJsonArtifactChecked<unknown>(runId, 'verdict.json');
+    if (failed) throw new Error(`verdict.json read failed for run "${runId}"`);
+    const verdictJson = verdictRecordToDoc(doc);
+    return verdictJson ? { type: 'verdict', doc: verdictJson } : { type: 'empty' };
+  }
+
   return { type: 'empty' };
 }
 
+/**
+ * W8-A2 (crosscut-08): like fetchJsonArtifactChecked, but for a raw
+ * (non-JSON) artifact file — the PLAN.html / pr-description.md probes need
+ * the response TEXT (or existence alone), not a parsed body, and must draw
+ * the exact same line: absence claimed ONLY on an authoritative 404.
+ */
+async function fetchArtifactFileChecked(
+  runId: string,
+  filename: string,
+): Promise<{ text: string | null; failed: boolean }> {
+  try {
+    const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
+    if (res.status === 404) return { text: null, failed: false };
+    if (!res.ok) return { text: null, failed: true };
+    return { text: await res.text(), failed: false };
+  } catch {
+    return { text: null, failed: true };
+  }
+}
+
+/**
+ * W8-A2 (crosscut-08 enumeration): the ONE deliberately-kept unchecked read
+ * left on this page — the view-mode verdict STAMP (ViewStampStrip) fetched
+ * at the bottom of `load()`. A failure here degrades to `verdictDoc === null`,
+ * and `ViewStampStrip` renders NOTHING for a null doc — no absence claim is
+ * ever made from it (contrast `fetchArtifactDoc`'s type==='verdict' branch,
+ * which IS the primary content for that type and uses the checked/throwing
+ * probe above). Left unchecked on purpose: promoting a decorative stamp's
+ * failure to a page-wide PageLoadError would fail the whole page over a
+ * strip that renders nothing on its own absence anyway.
+ */
 async function fetchJsonArtifact<T>(runId: string, filename: string): Promise<T | null> {
   try {
     const res = await bridgeFetch(`/api/artifact/${encodeURIComponent(runId)}/${encodeURIComponent(filename)}`);
@@ -357,10 +412,62 @@ const PHASE_FOR_TYPE: Record<ArtifactKey, string> = {
   reflection: 'Reflector',
 };
 
-function EmptyState({ type, backHref }: { type: ArtifactKey; backHref: string }) {
-  const phase = PHASE_FOR_TYPE[type];
+/**
+ * W8-A2 (artifact-plan-38 / artifact-plan-35): the empty-state COPY, keyed on
+ * `deriveArtifactEmptyReason` (lib/artifact-mode.ts — pure, unit-tested). A
+ * failed/complete run and an orphan run never promise a future phase — only
+ * `'pending'` (the run is still progressing) says "will emit it when this run
+ * reaches that stage".
+ */
+function emptyStateHeading(reason: ArtifactEmptyReason): string {
+  if (reason === 'orphan') return 'No artifact found on disk';
+  if (reason === 'pending') return 'Artifact not yet produced';
+  return 'Artifact was never produced';
+}
+
+function emptyStateBody(type: ArtifactKey, phase: string, reason: ArtifactEmptyReason): JSX.Element {
+  // No block braces on these `if`s (single-statement bodies) — deliberate:
+  // `lib/route-chrome.test.ts`'s A-H4 early-return scan greps for a
+  // 2-space-indented `if (…) {` immediately followed by an indented
+  // `return` to catch a component-level early return ABOVE its
+  // `useDocumentTitle` call; that shape inside this MODULE-LEVEL helper
+  // (defined above the component, same as the EmptyState it feeds) is a
+  // false positive for that scan, not a real hook-order issue.
+  if (reason === 'orphan') return (
+    <>This run left log data on disk, but no <strong>{type}</strong> artifact was found in
+    it — its queue record is gone, so nothing will produce one now.</>
+  );
+  if (reason === 'terminal-failed') return (
+    <>This run <strong>failed</strong> before producing a <strong>{type}</strong> artifact —
+    the <strong>{phase}</strong> phase never reached it, and this run will not retry.</>
+  );
+  if (reason === 'terminal-status') return (
+    <>This run is <strong>complete</strong> and never produced a <strong>{type}</strong> artifact.</>
+  );
   return (
-    <div style={{
+    <>This <strong>{type}</strong> artifact has not been produced yet — the{' '}
+    <strong>{phase}</strong> phase will emit it when this run reaches that stage.</>
+  );
+}
+
+function EmptyState({
+  type,
+  backHref,
+  status,
+  isOrphan,
+}: {
+  type: ArtifactKey;
+  backHref: string;
+  /** The run's own status; `null` for an orphan (no queue record at all). */
+  status: Run['status'] | null;
+  /** No queue record for this run — `deriveArtifactEmptyReason` overrides
+   *  `status` (which is always null here too, but passed for clarity). */
+  isOrphan: boolean;
+}) {
+  const phase = PHASE_FOR_TYPE[type];
+  const reason = deriveArtifactEmptyReason(status, isOrphan);
+  return (
+    <div data-empty-reason={reason} style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -382,10 +489,9 @@ function EmptyState({ type, backHref }: { type: ArtifactKey; backHref: string })
       }}>
         ◇
       </div>
-      <h2 style={{ fontSize: 18, color: 'var(--text)' }}>Artifact not yet produced</h2>
+      <h2 style={{ fontSize: 18, color: 'var(--text)' }}>{emptyStateHeading(reason)}</h2>
       <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 440, lineHeight: 1.6, margin: 0 }}>
-        This <strong>{type}</strong> artifact has not been produced yet — the{' '}
-        <strong>{phase}</strong> phase will emit it when this run reaches that stage.
+        {emptyStateBody(type, phase, reason)}
       </p>
       <Link
         href={backHref}
@@ -424,10 +530,13 @@ function ArtifactPageInner() {
   // coerced to PLAN. `type` stays a valid key for the hooks below; the
   // render short-circuits to NotFound when `typeInvalid`.
   // W7-A3: an architect session (`_architect-<sid>`) has exactly one artifact —
-  // its PLAN — so any other `type` for it resolves to plan rather than
-  // rendering a cycle-artifact header over a session, and never trips
-  // `typeInvalid` (an architect run's `type` is never read from the query).
-  const typeInvalid = !isArchitectRunId(runId) && !isValidType(typeRaw);
+  // its PLAN. artifact-plan-42 (W8-A2): that used to SUPPRESS `typeInvalid`
+  // entirely for an architect id, so `?type=frobnicate` silently rendered the
+  // plan instead of the same honest NotFound a cycle id gets for the same
+  // typo. `typeRaw` already defaults to `'plan'` when the param is absent
+  // (line above), so "absent or plan" is exactly `typeRaw === 'plan'` here —
+  // anything ELSE is not-found, naming that a planning session has only a PLAN.
+  const typeInvalid = isArchitectRunId(runId) ? typeRaw !== 'plan' : !isValidType(typeRaw);
   const type: ArtifactKey = isArchitectRunId(runId) ? 'plan' : isValidType(typeRaw) ? typeRaw : 'plan';
 
   const [run,        setRun]        = useState<Run | null>(null);
@@ -474,6 +583,16 @@ function ArtifactPageInner() {
   // so the "no queue record" note never renders off an outage.
   const [runRecordAbsent, setRunRecordAbsent] = useState(false);
   const [gateState,  setGateState]  = useState<GateState>('idle');
+  // W8-A2 (crosscut-08): a bridge read that THREW — never "not yet produced",
+  // never "no such run"; the shared PageLoadError with Retry. `loadKey` re-runs
+  // the load on Retry / bridge recovery, same contract as the sibling detail
+  // pages (lib/detail-pages-fail-closed-wiring.test.ts).
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
+  const [loadKey, setLoadKey] = useState(0);
+  const reload = useCallback(() => setLoadKey((k) => k + 1), []);
+  // Detail-page rule (W7-FIX-A1 review): recovery refills ONLY a failed load —
+  // a socket blip never re-loads over an open gate form / unsaved edits.
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   const meta = TYPE_META[type];
 
@@ -530,19 +649,24 @@ function ArtifactPageInner() {
       // through the sessions list and stop here.
       if (isArchitect) {
         // W7-A1: the read THROWS on a bridge failure. A failed read is NOT
-        // "no such session" — leave `archSessionResolved` false (the page
-        // keeps its loading line; the app-shell BridgeStatus banner owns the
-        // outage) rather than asserting not-found off a transient error. The
-        // 2s session poll re-resolves once the bridge answers.
+        // "no such session" — `archSessionResolved` stays false (never
+        // asserts not-found off a transient error). W8-A2 (crosscut-08): it
+        // IS however an honest ERROR state now — the shared PageLoadError
+        // with Retry — instead of an indefinite silent "Loading the
+        // architect session…" with no way to know anything is wrong. The 2s
+        // session poll (useArchitectSessionPoll) still re-resolves once the
+        // bridge answers, same as before.
         let sessions: ArchitectSessionSummary[];
         try {
           sessions = await fetchArchitectSessions();
-        } catch {
+        } catch (err) {
+          if (!signal.cancelled) setLoadError(fetchErrorPropsFrom(err));
           return;
         }
         if (signal.cancelled) return;
         setArchSession(sessions.find((s) => s.sessionId === architectSessionId) ?? null);
         setArchSessionResolved(true);
+        setLoadError(null);
         return;
       }
 
@@ -571,7 +695,10 @@ function ArtifactPageInner() {
 
       // W7-B7: the request plan — which optional artifact files exist per the
       // run's OWN declared state (status-before-body; no blind 404 fan).
-      const reqPlan = planArtifactRequests(type, fetchedRun, effectiveMode);
+      // artifact-plan-41: `lookup.onDisk` threaded through so an UNKNOWN id
+      // (nothing on disk either) probes nothing — the existence question is
+      // already answered by the lookup above.
+      const reqPlan = planArtifactRequests(type, fetchedRun, effectiveMode, lookup.onDisk);
 
       const artifactDoc = await fetchArtifactDoc(artifactId, type, fetchedRun, reqPlan);
       if (signal.cancelled) return;
@@ -595,9 +722,14 @@ function ArtifactPageInner() {
       // For reflection: fetch the live Stage-2 questions (user-questions.json)
       // so the operator can answer them in-place. The read-only reflection.json
       // artifact is fetched separately above for the renderer.
+      // W8-A2 (crosscut-08): NOT `.catch(() => null)` any more — `null` here
+      // renders ReflectionGate's "No reflection questions filed for this
+      // cycle yet." (an absence claim). `fetchReflection` already throws on
+      // any non-404 failure (bridgeReadOr404); let it propagate to this
+      // function's own catch instead of fabricating that claim.
       let refl: ReflectionData | null = null;
       if (type === 'reflection') {
-        refl = await fetchReflection(artifactId).catch(() => null);
+        refl = await fetchReflection(artifactId);
         if (!signal.cancelled) setReflectionData(refl);
       }
 
@@ -648,9 +780,19 @@ function ArtifactPageInner() {
       // W7-B7 (artifact-plan-26): resolve the bridge base once so the
       // filename chip can link the RAW artifact file.
       const base = await resolveBridgeUrl();
-      if (!signal.cancelled) setBridgeBase(base ?? null);
-    } catch {
-      // keep defaults — reach page-ready on error
+      if (!signal.cancelled) {
+        setBridgeBase(base ?? null);
+        setLoadError(null);
+      }
+    } catch (err) {
+      // W8-A2 (crosscut-08): a THROWN read (unreachable bridge / 5xx /
+      // malformed body) is an honest ERROR state — the shared PageLoadError
+      // with Retry — never a fabricated "not yet produced" / "no such run".
+      // Every probe this function calls now either resolves a settled
+      // outcome or throws (fetchArtifactDoc, fetchJsonArtifactChecked,
+      // fetchReflection, fetchRunLookup, fetchStudioFlows) — nothing left
+      // here swallows a transport failure into a confident wrong answer.
+      if (!signal.cancelled) setLoadError(fetchErrorPropsFrom(err));
     } finally {
       if (!signal.cancelled) setReady(true);
     }
@@ -669,9 +811,13 @@ function ArtifactPageInner() {
     setReviewFindingsAbsent(false);
     setReviewFindingsError(false);
     setDemoMarkdownDoc('');
+    // W8-A2: a stale error from a PREVIOUS run/type must not paint over a
+    // fresh load-in-progress for a new one (Retry / bridge recovery bump
+    // `loadKey`; a run/type switch runs this same reset via `load`'s deps).
+    setLoadError(null);
     void load(signal);
     return () => { signal.cancelled = true; };
-  }, [load]);
+  }, [load, loadKey]);
 
   // Architect PLAN gate: poll the session so the gate reflects phase
   // transitions live (send-back → drafting unmounts the gate; the revised plan
@@ -689,7 +835,13 @@ function ArtifactPageInner() {
   // W7-A3 (artifact-plan-28): an architect plan's "back" is its owning session,
   // not the home cascade.
   const sessionBackHref = archSession ? architectSessionHref(archSession) : '/sessions';
-  const monitorHref = isArchitect ? sessionBackHref : flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/';
+  // artifact-plan-44 (W8-A2): an ORPHAN run (`run === null`) has no `flowId`
+  // either, so this used to fall all the way back to Home ('/') — the SAME
+  // destination the breadcrumb's dead "flow" span sat next to, offering two
+  // identical links to Home and nothing else outbound. `/flows` (the index)
+  // is always a real, honest destination; `flowIsLive === false` covers both
+  // "no run" and "a retired flow id" the same way.
+  const monitorHref = isArchitect ? sessionBackHref : flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/flows';
 
   // Status pill
   const statusPill = run?.status ?? null;
@@ -721,7 +873,10 @@ function ArtifactPageInner() {
         id={typeRaw}
         backHref={runId ? `/artifact?run=${encodeURIComponent(runId)}` : '/flows'}
         backLabel={runId ? 'Run artifacts' : 'Flows'}
-        detail={`Valid types: ${ARTIFACT_TYPES.join(', ')}.`}
+        // artifact-plan-42: an architect session has exactly one artifact —
+        // never "valid types: plan, workitems, pr, …" for an id that can
+        // only ever have a PLAN.
+        detail={isArchitect ? 'A planning session has only a PLAN.' : `Valid types: ${ARTIFACT_TYPES.join(', ')}.`}
       />
     );
   }
@@ -734,6 +889,26 @@ function ArtifactPageInner() {
         backHref="/flows"
         backLabel="Flows"
         detail="Open a run from a flow monitor or a HISTORY ledger, then its artifacts."
+      />
+    );
+  }
+  // W8-A2 (crosscut-08): a bridge read that THREW settles here — never the
+  // shared NotFound (that is for a CONFIRMED "no such run"/id, which this is
+  // not: nothing was actually resolved either way) and never a furnished page
+  // built on defaults. Checked BEFORE `runNotFound`, which stays false on a
+  // load error (never asserted off a transient failure) but is still worth
+  // ordering explicitly, matching the sibling detail pages.
+  if (ready && loadError) {
+    return (
+      <PageLoadError
+        page="artifact"
+        rootAttrs={{ 'data-run': runId, 'data-artifact-type': type }}
+        what={isArchitect ? `the planning session "${architectSessionId}"` : `the artifacts for run "${runId}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
+        backHref={isArchitect ? sessionBackHref : '/flows'}
+        backLabel={isArchitect ? 'Back to session' : 'Flows'}
       />
     );
   }
@@ -793,7 +968,13 @@ function ArtifactPageInner() {
                   {run?.flowId ?? 'flow'}
                 </Link>
               ) : (
-                <span style={{ color: 'var(--dim)' }}>flow</span>
+                // artifact-plan-44: no live flow to name (an orphan run, or a
+                // retired flow id) — a real link to the flows index, never a
+                // dead unlinked "flow" placeholder next to another link to
+                // the same destination.
+                <Link href="/flows" style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+                  flows
+                </Link>
               )}
               <span style={{ color: 'var(--line-2)' }}>/</span>
               <span>{runId || '—'}</span>
@@ -803,7 +984,7 @@ function ArtifactPageInner() {
           <span style={{ color: 'var(--c-artifact)' }}>{type.toUpperCase()}</span>
           <Link
             href={monitorHref}
-            data-action={isArchitect ? 'back-to-session' : 'back-to-monitor'}
+            data-action={isArchitect ? 'back-to-session' : flowIsLive ? 'back-to-monitor' : 'back-to-flows'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -818,7 +999,10 @@ function ArtifactPageInner() {
               border: '1px solid var(--line)',
             }}
           >
-            {isArchitect ? '← back to session' : '← back to monitor'}
+            {/* artifact-plan-44: the label matches the actual destination —
+                "back to monitor" only when a live flow monitor is where this
+                link goes; an orphan/retired-flow run honestly says "flows". */}
+            {isArchitect ? '← back to session' : flowIsLive ? '← back to monitor' : '← back to flows'}
           </Link>
         </nav>
 
@@ -1057,7 +1241,7 @@ function ArtifactPageInner() {
                     {showGateBar && <> You can still approve or send back below.</>}
                   </div>
                 ) : (
-                  <EmptyState type={type} backHref={monitorHref} />
+                  <EmptyState type={type} backHref={monitorHref} status={run?.status ?? null} isOrphan={runRecordAbsent} />
                 )
               )}
 
@@ -1092,6 +1276,7 @@ function ArtifactPageInner() {
                   session={archSession}
                   sessionId={architectSessionId}
                   sessionResolved={archSessionResolved}
+                  mode={mode}
                   onGateState={(s) => setGateState(s)}
                   linkage={loop.linkage}
                   linkageReady={loop.linkageReady}

@@ -40,7 +40,18 @@ export function resolveArtifactMode(
   run: Run | null,
   opts: { architect: boolean; architectArmed: boolean },
 ): 'gate' | 'view' {
-  if (opts.architect) return opts.architectArmed ? 'gate' : 'view';
+  // artifact-plan-43: an explicit `?mode=view` must win EVEN for an armed
+  // architect plan — this used to be checked only AFTER the architect
+  // short-circuit below, so the arming decision ignored the URL in both
+  // directions (a `mode=view` link followed while the session was armed, or
+  // that became armed via the live session poll while the tab sat open,
+  // silently promoted to the full Approve/Send-back/Reject gate). `mode=gate`
+  // is still never HONOURED for an unarmed session — the gate is armed by the
+  // session phase alone, never forced open by the URL.
+  if (opts.architect) {
+    if (modeParam === 'view') return 'view';
+    return opts.architectArmed ? 'gate' : 'view';
+  }
   if (modeParam === 'view') return 'view';
   const inferred = inferArtifactMode(type, run);
   if (modeParam === 'gate') return inferred === 'gate' ? 'gate' : 'view';
@@ -69,4 +80,35 @@ export function resolveArtifactMode(
 export function isRunNotFound(input: { runFound: boolean; runOnDisk: boolean }): boolean {
   if (input.runFound) return false;
   return !input.runOnDisk;
+}
+
+/**
+ * W8-A2 (artifact-plan-38 / artifact-plan-35) — WHY an artifact's empty state
+ * is empty, decided ONCE and shared by the heading + body copy
+ * (app/artifact/page.tsx's `EmptyState`). Never promise a future phase for a
+ * run that cannot reach one:
+ *
+ *   - `'orphan'`         — no queue record for this run at all (the queue
+ *     manifest is gone); nothing tracks phase progression for this id any
+ *     more, so "will emit it when this run reaches that stage" is false
+ *     regardless of what's actually on disk for THIS type.
+ *   - `'terminal-failed'` — the run failed; it will not retry, so whichever
+ *     phase would have produced this artifact never will now.
+ *   - `'terminal-status'` — the run is otherwise terminal (complete) and
+ *     simply never produced this artifact; nothing more will happen to it.
+ *   - `'pending'`         — the run is still planned/active/gated — the
+ *     existing "will emit it when this run reaches that stage" promise is
+ *     still true.
+ *
+ * `isOrphan` takes priority: an orphan run has no `Run` object at all, so
+ * `status` is always `null` for it — the two are never in conflict, but
+ * `isOrphan` is checked first for clarity at the call site.
+ */
+export type ArtifactEmptyReason = 'orphan' | 'terminal-failed' | 'terminal-status' | 'pending';
+
+export function deriveArtifactEmptyReason(status: Run['status'] | null, isOrphan: boolean): ArtifactEmptyReason {
+  if (isOrphan) return 'orphan';
+  if (status === 'failed') return 'terminal-failed';
+  if (status === 'complete') return 'terminal-status';
+  return 'pending';
 }

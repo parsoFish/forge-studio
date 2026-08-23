@@ -1,6 +1,6 @@
 /**
  * W7-FIX-A1 (A1-01 / A1-02 + the demo-showcase gate regression) — WIRING
- * pins for the four detail routes whose reads went fail-closed in W7-A1
+ * pins for the detail routes whose reads went fail-closed in W7-A1
  * (`studioRead*` THROW `BridgeReadError`) while their `load()` kept the
  * pre-conversion `try { … } finally { setReady(true) }` shape — no `catch`.
  * On any bridge failure the throw escaped as an unhandled rejection, the
@@ -12,8 +12,11 @@
  *   - /projects/<id>/showcase → the honest EMPTY state for a bridge failure
  *     (and, since W7-A4, NotFound for a not-yet-listed project — the beat's
  *     zero-cycle fixture project was never registered, so it never settled).
+ *   - /artifact (W8-A2, crosscut-08) → "Artifact not yet produced" for a
+ *     PLAN.html that was sitting on disk the whole time — a down bridge
+ *     fabricated an ABSENCE claim, not just a not-found.
  *
- * These four pages are `use client` pages with effect-driven fetches — they
+ * These pages are `use client` pages with effect-driven fetches — they
  * cannot be render-tested via `renderToStaticMarkup` (the fetch effect never
  * runs under SSR-style rendering; see `flows-index-render.test.ts`'s header
  * for the standing reason). So, like `knowledge-page-empty-state-wiring.
@@ -28,11 +31,52 @@
  * F5 — crosscut-22); the dead `'empty-roster'` branch that a fail-closed
  * roster read can never reach.
  *
+ * ---------------------------------------------------------------------------
+ * W8-A2 (WI-5, crosscut-08 review) — DERIVED page inventory, not hardcoded.
+ * ---------------------------------------------------------------------------
+ * The four pages above used to be the file's entire universe, hand-picked.
+ * That is exactly why `/artifact` was missed for a whole wave: nothing ever
+ * asked "which OTHER pages have the same shape". Below, every
+ * every nested `page.tsx` under `app/` is enumerated and scored against a predicate for "is
+ * this a candidate for the shared fail-closed contract at all" — every
+ * candidate must then land in exactly ONE of three buckets:
+ *
+ *   - `COMPLIANT_PAGES` — asserted in full via `expectFailClosedPrimitives`
+ *     (one describe block per page, below).
+ *   - `EXEMPT_PAGES` — legitimately fine via a DIFFERENT, equally-strict
+ *     wiring test (named per entry) that this file does not duplicate.
+ *   - `PENDING_PAGES` — flagged by the derivation, NOT fixed by this pass.
+ *     W8-A2/WI-5's brief is explicit: "report them, do not silently expand
+ *     scope to fix them all." Each entry carries a one-line note of what was
+ *     actually observed (several already have SOME inline `FetchErrorState`
+ *     handling — just not the shared `PageLoadError` shape — so "pending" is
+ *     not a claim that they are broken, only that this file does not verify
+ *     them yet).
+ *
+ * The completeness test below asserts the derived candidate list is EXACTLY
+ * the union of the three buckets — a NEW page that starts rendering
+ * `NotFound` off its own bridge read will show up as an extra candidate in
+ * NONE of the three buckets, failing that test until someone consciously
+ * places it in one.
+ *
+ * PREDICATE (documented so it stays honest as pages change): a `page.tsx` is
+ * a candidate when it (a) imports at least one `fetch*`-named symbol from
+ * `@/lib/*` (excluding `fetchErrorPropsFrom`, the error-SHAPING helper, not
+ * a read) — it performs its OWN bridge read — AND (b) renders the shared
+ * `<NotFound>` component — it can answer "this object does not exist". That
+ * conjunction is exactly crosscut-08's defect class: a transport failure has
+ * nowhere else to go but a false "does not exist" claim UNLESS the page
+ * threads it through the shared kit (or an exempted equivalent). A page that
+ * fetches but never renders NotFound (an index/listing page — an empty list
+ * is a real, unambiguous answer, never confusable with "list does not
+ * exist") is correctly never a candidate; neither is a page that renders
+ * NotFound off a purely static check (no fetch at all).
+ *
  * RUN: cd forge-ui && npx vitest run lib/detail-pages-fail-closed-wiring.test.ts
  */
 import { test, expect, describe } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { resolve, join, relative } from 'node:path';
 
 const read = (rel: string): string => readFileSync(resolve(__dirname, '..', rel), 'utf8');
 
@@ -40,6 +84,7 @@ const AGENT = read('app/agents/[id]/page.tsx');
 const PROJECT = read('app/projects/[id]/page.tsx');
 const FLOW = read('app/flows/[id]/page.tsx');
 const SHOWCASE = read('app/projects/[id]/showcase/page.tsx');
+const ARTIFACT = read('app/artifact/page.tsx');
 
 /** The three primitives every fail-closed detail page must wire. */
 function expectFailClosedPrimitives(src: string, page: string): void {
@@ -155,4 +200,154 @@ describe('/projects/[id]/showcase (demo-showcase gate regression)', () => {
     expect(SHOWCASE).toMatch(/if \(ready && !loadError && projectKnown === false\)/);
     expect(SHOWCASE).toMatch(/const known = roster\.some\(\(p\) => p\.id === id\);[\s\S]{0,500}if \(!known\) \{[\s\S]{0,120}return;\s*\}\s*const snapshot = await fetchCycles\(\);/);
   });
+});
+
+describe('/artifact (W8-A2, crosscut-08)', () => {
+  test('wires the fail-closed primitives under data-page="artifact"', () => {
+    expectFailClosedPrimitives(ARTIFACT, 'artifact');
+  });
+  test('fetchArtifactDoc has no catch-all — every probe resolves a settled outcome or throws (never coerces a transport failure to {type:"empty"})', () => {
+    const start = ARTIFACT.indexOf('async function fetchArtifactDoc(');
+    expect(start).toBeGreaterThan(-1);
+    const end = ARTIFACT.indexOf('\nasync function fetchArtifactFileChecked', start);
+    expect(end).toBeGreaterThan(start);
+    const body = ARTIFACT.slice(start, end);
+    expect(body).not.toMatch(/\}\s*catch\s*\{/);
+  });
+  test('the NotFound(run) branch is gated on ready — and the loadError branch is checked BEFORE it, so a transport failure never falls through to "no such run"', () => {
+    const loadErrorIdx = ARTIFACT.indexOf('if (ready && loadError) {');
+    const runNotFoundIdx = ARTIFACT.indexOf('if (ready && runNotFound) {');
+    expect(loadErrorIdx).toBeGreaterThan(-1);
+    expect(runNotFoundIdx).toBeGreaterThan(-1);
+    expect(loadErrorIdx).toBeLessThan(runNotFoundIdx);
+  });
+  test('the architect-session branch is fail-closed too — a thrown fetchArchitectSessions sets loadError, not a silent indefinite spinner', () => {
+    expect(ARTIFACT).toMatch(/sessions = await fetchArchitectSessions\(\);\s*\} catch \(err\) \{\s*if \(!signal\.cancelled\) setLoadError\(fetchErrorPropsFrom\(err\)\);/);
+  });
+  test('the reflection Stage-2 fetch no longer swallows a transport failure into "No reflection questions filed"', () => {
+    expect(ARTIFACT).not.toMatch(/fetchReflection\(artifactId\)\.catch\(\(\) => null\)/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-A2 (WI-5) — derived page inventory + completeness gate. See the file
+// header for the full rationale and the predicate definition.
+// ---------------------------------------------------------------------------
+
+const APP_ROOT = resolve(__dirname, '..', 'app');
+
+function findPageFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...findPageFiles(full));
+    else if (entry === 'page.tsx') out.push(full);
+  }
+  return out;
+}
+
+/** `fetch<Name>` imports found in the file's `import` statements, excluding
+ *  `fetchErrorPropsFrom` (the error-SHAPING helper — not a bridge read). */
+function importsFetchSymbol(src: string): boolean {
+  const importBlock = (src.match(/^import [\s\S]*?;\s*$/gm) ?? []).join('\n');
+  const names = importBlock.match(/\bfetch[A-Za-z0-9_]*\b/g) ?? [];
+  return names.some((n) => n !== 'fetchErrorPropsFrom');
+}
+
+/** Renders the shared `<NotFound … />` component — see `components/NotFound.tsx`'s
+ *  own docstring for the exact set of routes it documents as its callers. */
+function rendersNotFound(src: string): boolean {
+  return /<NotFound[\s/>]/.test(src);
+}
+
+function toAppRelative(absPath: string): string {
+  return `app/${relative(APP_ROOT, absPath).replace(/\\/g, '/')}`;
+}
+
+const CANDIDATES = findPageFiles(APP_ROOT)
+  .filter((p) => {
+    const src = readFileSync(p, 'utf8');
+    return importsFetchSymbol(src) && rendersNotFound(src);
+  })
+  .map(toAppRelative)
+  .sort();
+
+/** Asserted in full above via `expectFailClosedPrimitives`. */
+const COMPLIANT_PAGES = [
+  'app/agents/[id]/page.tsx',
+  'app/artifact/page.tsx',
+  'app/flows/[id]/page.tsx',
+  'app/projects/[id]/page.tsx',
+  'app/projects/[id]/showcase/page.tsx',
+].sort();
+
+/** Legitimately fail-closed via a DIFFERENT, equally-strict wiring test —
+ *  not asserted again here so the two tests cannot drift out of sync and
+ *  both silently pass on a shape neither actually checks. */
+const EXEMPT_PAGES: Record<string, string> = {
+  'app/knowledge/page.tsx':
+    'lib/knowledge-page-fail-closed-wiring.test.ts — a bespoke (FetchErrorState + ' +
+    'kbDetailError/retryKbDetail) shape pinned there; same contract, different names.',
+};
+
+/**
+ * Flagged by the derivation, NOT fixed by W8-A2/WI-5 — reported, not
+ * silently expanded into. Each note records what was actually observed
+ * (2026-08-23), so "pending" here is a TODO, not an accusation: several
+ * already render an inline `FetchErrorState` distinct from `NotFound` (just
+ * not the shared `PageLoadError` shape this file asserts), which may turn
+ * out to be an equally valid pattern on closer look — that look is exactly
+ * what was NOT done here, per the brief's "report, don't fix" instruction.
+ */
+const PENDING_PAGES: Record<string, string> = {
+  'app/agents/[id]/run/[runId]/page.tsx':
+    'Renders NotFound for "no such run" AND an inline FetchErrorState for "unresolved" ' +
+    '— NOT the shared PageLoadError kit. Unverified whether the FetchErrorState branch ' +
+    'is reachable for a THROWN read or only a resolved-but-refused one.',
+  'app/community/[kind]/[id]/page.tsx':
+    'Renders NotFound for an unknown kind/id; no FetchErrorState/PageLoadError/catch ' +
+    'visible near the read — the most likely GENUINE gap of the eight.',
+  'app/connections/[id]/page.tsx':
+    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
+    'state — not the shared kit; unverified whether a transport failure reaches it.',
+  'app/flows/[id]/run/[runId]/page.tsx':
+    'Renders NotFound for an unknown run; no FetchErrorState/PageLoadError visible ' +
+    'near the read in a quick scan — unverified.',
+  'app/hooks/[id]/page.tsx':
+    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
+    'state — not the shared kit; unverified whether a transport failure reaches it.',
+  'app/sessions/[kind]/[sessionId]/page.tsx':
+    'Renders NotFound AND FetchErrorState; several `.catch(() => {})` sites nearby ' +
+    'that look like the SAME swallow-to-nothing shape crosscut-08 is about — the ' +
+    'strongest OTHER candidate for a real defect, unverified.',
+  'app/skills/[id]/page.tsx':
+    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
+    'state — not the shared kit; unverified whether a transport failure reaches it.',
+  'app/templates/[id]/page.tsx':
+    'Renders NotFound; no FetchErrorState/PageLoadError/catch visible near the read ' +
+    'in a quick scan — unverified, possibly a genuine gap.',
+};
+
+test('the derived candidate list is EXACTLY the union of compliant + exempt + pending — a new page must be consciously categorized, never silently uncovered', () => {
+  const accountedFor = [...COMPLIANT_PAGES, ...Object.keys(EXEMPT_PAGES), ...Object.keys(PENDING_PAGES)].sort();
+  expect(CANDIDATES).toEqual(accountedFor);
+});
+
+test('every COMPLIANT page is a real file this suite actually reads (no stale entry passing by accident)', () => {
+  const readPaths = new Set([
+    'app/agents/[id]/page.tsx',
+    'app/projects/[id]/page.tsx',
+    'app/flows/[id]/page.tsx',
+    'app/projects/[id]/showcase/page.tsx',
+    'app/artifact/page.tsx',
+  ]);
+  for (const p of COMPLIANT_PAGES) expect(readPaths.has(p), p).toBe(true);
+});
+
+test('every EXEMPT page names a real, existing test file that covers it', () => {
+  for (const [page, note] of Object.entries(EXEMPT_PAGES)) {
+    const testFile = note.split(' — ')[0]?.split(' ')[0] ?? '';
+    expect(testFile.endsWith('.test.ts'), `${page}: "${testFile}" doesn't look like a test file`).toBe(true);
+    expect(() => readFileSync(resolve(__dirname, '..', testFile), 'utf8'), `${page}: ${testFile} must exist`).not.toThrow();
+  }
 });
