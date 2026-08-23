@@ -1,5 +1,6 @@
 /**
- * Acceptance tests for the six-pillar Studio nav (R6-03-F3 → W6-IA-5 repoint).
+ * Acceptance tests for the seven-pillar Studio nav (R6-03-F3 → W6-IA-5
+ * repoint → W8-B1 Monitor pillar).
  *
  * Immutable-gate, RED-first: pins the nav contract BEFORE the repoint change.
  * Which wrong implementation each assertion kills is named inline.
@@ -27,14 +28,25 @@ import { StudioNav, NAV_ITEMS, isNavItemActive } from './StudioNav';
 
 // ── data contract (kills: wrong pillar count, wrong order, stale hrefs) ──
 
-test('NAV_ITEMS is exactly the six pillars, in the operator-locked order', () => {
-  // Kills a 5-item nav, a reorder, or a leftover deep-link href.
+test('NAV_ITEMS is exactly the seven pillars, in the operator-locked order', () => {
+  // Kills a 6-item nav, a reorder, or a leftover deep-link href.
+  // W8-B1: Monitor sits second — the aggregate "everything running" surface
+  // reads next to Home, before the per-kind browse pillars.
   expect(NAV_ITEMS.map((i) => i.id)).toEqual([
-    'home', 'projects', 'flows', 'agents', 'library', 'knowledge',
+    'home', 'monitor', 'projects', 'flows', 'agents', 'library', 'knowledge',
   ]);
   expect(NAV_ITEMS.map((i) => i.href)).toEqual([
-    '/', '/projects', '/flows', '/agents', '/library', '/knowledge',
+    '/', '/monitor', '/projects', '/flows', '/agents', '/library', '/knowledge',
   ]);
+});
+
+test('Monitor is a real pillar pointing at its own aggregate route', () => {
+  // Kills: Monitor shipped as a link buried on Home, or pointed at a
+  // per-flow monitor deep-link (/flows/<id>) instead of the pillar route.
+  const monitor = NAV_ITEMS.find((i) => i.id === 'monitor');
+  expect(monitor).toBeDefined();
+  expect(monitor?.href).toBe('/monitor');
+  expect(monitor?.label).toBe('Monitor');
 });
 
 test('Home is the first pillar and points at /', () => {
@@ -69,7 +81,7 @@ test('only Home owns the root slot (no two pillars share /)', () => {
 
 // ── render contract (kills: item exists in data but never rendered) ──
 
-test('renders six nav links with their data-nav ids and hrefs', () => {
+test('renders seven nav links with their data-nav ids and hrefs', () => {
   const html = renderToStaticMarkup(React.createElement(StudioNav));
   for (const item of NAV_ITEMS) {
     expect(html).toContain(`data-nav="${item.id}"`);
@@ -82,6 +94,11 @@ test('renders six nav links with their data-nav ids and hrefs', () => {
   // Flows/Agents links carry their own index hrefs, not the retired deep-links.
   expect(html).toMatch(/href="\/flows"[^>]*data-nav="flows"|data-nav="flows"[^>]*href="\/flows"/);
   expect(html).toMatch(/href="\/agents"[^>]*data-nav="agents"|data-nav="agents"[^>]*href="\/agents"/);
+  // W8-B1: the Monitor pillar is rendered, not just declared in the data.
+  expect(html).toMatch(/href="\/monitor"[^>]*data-nav="monitor"|data-nav="monitor"[^>]*href="\/monitor"/);
+  // The nav renders exactly one link per declared pillar — kills a nav that
+  // grew a pillar in NAV_ITEMS but renders a hand-written extra link too.
+  expect((html.match(/data-nav="/g) ?? []).length).toBe(NAV_ITEMS.length);
 });
 
 // ── active-state contract (kills: per-id special cases that don't
@@ -95,6 +112,9 @@ test('renders six nav links with their data-nav ids and hrefs', () => {
 
 const ACTIVE_CASES: Array<{ pathname: string; active: string | null }> = [
   { pathname: '/', active: 'home' },
+
+  { pathname: '/monitor', active: 'monitor' },
+  { pathname: '/monitor/anything', active: 'monitor' },
 
   { pathname: '/projects', active: 'projects' },
   { pathname: '/projects/mdtoc', active: 'projects' },
@@ -158,6 +178,7 @@ test('prefix matching respects path boundaries (no substring false positives)', 
   expect(isNavItemActive('/librarything', 'library')).toBe(false);
   expect(isNavItemActive('/flowsy', 'flows')).toBe(false);
   expect(isNavItemActive('/knowledgeable', 'knowledge')).toBe(false);
+  expect(isNavItemActive('/monitoring', 'monitor')).toBe(false);
 });
 
 test('isNavItemActive returns false for an unknown pillar id', () => {
