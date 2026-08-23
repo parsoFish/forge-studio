@@ -671,6 +671,74 @@ through the live `aggregateRun` rather than invented.
   derivation ([ADR 044](../decisions/044-read-path-memoization.md) is the
   amendment that rules on this).
 
+### R6-10 Pending platform changes — one derivation over every Studio-written tracked root
+
+- **Status:** planned  ·  **Wave:** unsequenced — independent of R3-08/R3-09 and
+  landable first
+- **Depends on:** — hard: none. *R3-08 (soft — shrinks what this surface has to
+  show, once operator authoring stops dirtying the repo)*, *R3-09 (soft — gives
+  its rows somewhere to go)*. Neither blocks it; this is landable first.
+- **Depended on by:** —
+- **Context:** [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C.
+  There is exactly **one** pending-change signal in all of Studio and it is
+  hard-coded to a single file: `communityIndexMeta`
+  (`cli/bridge-studio-community.ts`) runs a literal `git status --porcelain --
+  studio/community/registry.yaml`, publishes `meta.registryDirty`, and
+  `forge-ui/app/community/page.tsx` renders a notice from it. Agents, flows, hooks
+  and knowledge-base edits produce **no signal at all** — an operator can author a
+  week of platform changes and the only page that will admit anything happened is
+  the community page, about a file they may never have touched. This is not
+  theoretical: on 2026-08-22 a knowledge-base drain rewrote six `brain/**` theme
+  files and a community refresh rewrote `registry.yaml` by +288/−75 lines, all
+  uncommitted with nothing in the UI saying so, and two of the six brain edits
+  deleted graph edges whose targets existed on disk. The operator is being asked
+  to rubber-stamp destructive edits with no surface on which to inspect them.
+  Forge already ships the honest version of this derivation for **managed
+  projects** — `hasPendingStudioChanges` (`orchestrator/project-repo-tx.ts`) behind
+  `GET /api/studio/projects/:id/repo-status` — but nothing equivalent exists for
+  forge's own repo.
+- **Features:**
+  - **R6-10-F1 — The declared set of Studio-written tracked roots is data with a
+    drift guard.** A typed, exported table in the shape of
+    `BRIDGE_ROUTE_CLASSIFICATION` (`cli/dry-bridge.ts`), enumerating every tracked
+    path Studio writes into, consumed by a test. A hand-maintained list of five
+    paths that nothing enforces is today's single-path defect with four more places
+    to rot — the `declared-data-fails-open` class. The set of Studio-written tracked
+    roots and the set of paths the dirty check covers must be **the same object**.
+    Acceptance: adding a Studio write route to a new tracked root without adding
+    its row fails the guard; the guard names the offending route and the root.
+  - **R6-10-F2 — One derivation, three states, over the whole declared set.**
+    Generalize `communityIndexMeta`'s single-path check into one derivation over
+    the table, returning per-root pending detail rather than one boolean.
+    `communityIndexMeta` already answers `true`/`false`/`null` for "git did not
+    answer" and the UI renders only on `true`; the generalized derivation keeps the
+    three-state answer — an unavailable git is **never** rendered as "clean".
+    Acceptance: a dirty `skills/` tree produces a pending answer; a git failure
+    produces `null`, not `false`; the existing `/community` behaviour is preserved
+    byte-for-byte as one row of the new answer.
+  - **R6-10-F3 — Surfaced where Studio objects live, not only on `/community`.**
+    The pending state appears on the library surfaces the affected objects belong
+    to, with the usual `data-*` contract so the journeys can drive it (see
+    [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md)). The
+    per-root detail is inspectable — the operator can see *which* files changed
+    before deciding anything. Acceptance: a dirty hook shows pending on `/hooks`
+    and on that hook's detail page; the affected paths are listed, not merely
+    counted; a `journey-sync` obligation is discharged in the same PR.
+  - **R6-10-F4 — Read-only, and honest about it.** This surface reports; it does
+    not commit, stage, revert or promote. Its rows become actionable when R3-09
+    lands. Acceptance: no git write of any kind on this path; the notice text names
+    the operator's own git flow (or, once R3-09 exists, the promote affordance) and
+    never implies Studio will act.
+- **Session sizing:** ~2 operator-run agent sessions — (1) F1+F2 the declared table,
+  its drift guard, and the generalized derivation; (2) F3+F4 the surfaces and
+  journey coverage.
+- **Out of scope:** committing, staging or reverting anything (R3-09 owns the only
+  write path, and it ends at a PR). Changing where Studio writes (R3-08). Moving
+  `brain/` out of the forge repo —
+  [ADR 035](../decisions/035-forge-owned-central-artifacts.md) stands, which is
+  exactly why `brain/` writes need this surface. Managed-project pending state,
+  which already exists via `hasPendingStudioChanges`.
+
 ## Deferred
 
 ### R6-D1 Notification transport beyond the in-Studio blade
@@ -790,3 +858,18 @@ R4-11-F4 attention strip during real multi-project operation.
   remain unbuilt. **R6-09 Performance minted and implemented (P0-P4; P5
   deferred)** — perf was unowned before wave 6; the plan's coverage pass
   flagged it and R6 is its natural home.
+- 2026-08-23 — **R6-10 minted** (planned) from
+  [ADR 045](../decisions/045-operator-workspace-and-promotion.md) §C, the wave-8
+  ON-2 platform-round-trip design spike. Generalizes the one hard-coded
+  single-path dirty check in Studio (`communityIndexMeta` →
+  `meta.registryDirty`, `cli/bridge-studio-community.ts`) into one derivation
+  over a declared, drift-guarded set of Studio-written tracked roots, surfaced
+  where the objects live rather than only on `/community`. Routed to R6 by
+  `docs/roadmaps/README.md` §2's coverage map (*"Operator surface &
+  observability platform"*) — the machinery half lives in R3-08/R3-09. Design
+  only so far: the wave-8 spike shipped an ADR, roadmap entries and beads by
+  explicit operator decision, and no production code. **Register correction
+  filed with it:** `docs/roadmaps/README.md` §2 and its canonical initiative
+  skeleton still counted R6 at "8 planned, 1 deferred" and listed R6-01..R6-08
+  only — R6-09 (Performance, minted wave-6) was never folded in. Both are
+  corrected in the same pass.

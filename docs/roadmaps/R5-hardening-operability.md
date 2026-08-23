@@ -142,7 +142,8 @@ was needed.
   R2-04-F3 (trigger paths guard-covered), R3-03 *(soft — hook execution leans
   on the same rails)*, R1-04-F2 (anything added to the finalize path sits
   behind this guard), R4-05-F4 (standalone-planner dispatch), R4-11-F5 (rerun
-  spawn path)
+  spawn path), R3-09 *(soft — the promote-to-core route registers in
+  `BRIDGE_ROUTE_CLASSIFICATION` as `git-remote`/`refuse`)*
 - **Context:** known-gaps §4.10 open platform tail + memory
   `feedback_bridge_real_agent_surfaces`: three bridge surfaces trigger real
   agents/real git with **no env guard** — (1) in-process `runReleaseFinalize`
@@ -583,3 +584,14 @@ maintenance contract; nothing currently carries a deferral condition.
   `flow-node-log.ts` composes it), ledger vocabulary (`lib/history-ledger.ts`
   engine, `flow-ledger`/`agent-ledger` import it), package-tab renderer
   (`lib/file-package.ts`, five surfaces) — no near-duplicates, F3 delta 0.
+- 2026-08-23 — **Cross-reference added, no scope change.** R5-01's
+  `Depended on by` gains R3-09 *(soft)*: the promote-into-forge-core route
+  minted the same day from
+  [ADR 045](../decisions/045-operator-workspace-and-promotion.md) is a
+  real-acting `git-remote` route and must register in
+  `BRIDGE_ROUTE_CLASSIFICATION` (`cli/dry-bridge.ts`), refused under
+  `FORGE_DRY_BRIDGE=1`, so a harness run can never open a forge PR. Recorded
+  on both sides per §5 rule 2 of `docs/roadmaps/README.md`. R5's own scope is
+  unchanged — this is the seam R5-01 already shipped being used, not new R5
+  work; the capability itself is owned by R3 (R5's mission explicitly holds
+  that "no new product capability lives here").
