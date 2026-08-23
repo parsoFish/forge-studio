@@ -828,23 +828,15 @@ export default function AgentBuilderPage() {
 
         {/* ══ RIGHT: Preview + Readiness + Flows ══ */}
         <aside className="col-right" id="col-right">
-          <YamlPreview
-            slug={state.slug}
-            name={state.name}
-            purpose={state.purpose}
-            skills={state.skills}
-            tools={state.tools}
-            mcps={state.mcps}
-            guards={state.guards}
-            hooks={state.hooks}
-            materials={state.materials}
-            process={state.process}
-            interactivity={state.interactivity}
-            runtime={state.runtime}
-            brainAccess={state.brainAccess}
-            catalog={catalog}
-          />
-          <ReadinessPanel state={readinessState} />
+          {/* W8-B1 (ON-8): Run comes FIRST in this column and stays pinned.
+              It used to render third, below the full YAML preview and the
+              readiness list, so on any real agent the one control the page
+              exists for sat off-screen — the operator's own note. The fix is
+              the codebase's existing pinned-CTA idiom (GateBar's fixed bar,
+              DemoReviewSurface's sticky verdict form, whose comment names
+              this exact problem), applied to the panel itself rather than
+              minting a SECOND run control: two controls for one action is
+              its own defect. */}
           {/* W7-B5 (agents-21/36): defaultCostCeilingUsd — the agent's OWN
               declared ceiling wins the seed slot, the run-level policy
               default is the fallback; standaloneBlockedReason — a
@@ -868,6 +860,24 @@ export default function AgentBuilderPage() {
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
           />
+
+          <YamlPreview
+            slug={state.slug}
+            name={state.name}
+            purpose={state.purpose}
+            skills={state.skills}
+            tools={state.tools}
+            mcps={state.mcps}
+            guards={state.guards}
+            hooks={state.hooks}
+            materials={state.materials}
+            process={state.process}
+            interactivity={state.interactivity}
+            runtime={state.runtime}
+            brainAccess={state.brainAccess}
+            catalog={catalog}
+          />
+          <ReadinessPanel state={readinessState} />
           {/* W7-C1 (agents-27): the dispatch-provenance note keeps an agent
               dispatched OUTSIDE the flow graph (release-finalizer's merge
               chain, project-scoped-review's operator entry, reflector's
