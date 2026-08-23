@@ -195,3 +195,33 @@ test('AT-10: an over-long brief (> 2000 chars) -> 400 naming the cap', async () 
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /2000/);
 });
+
+// ---------------------------------------------------------------------------
+// W8-B3 (operator note ON-5) — the session's OPENING OPERATOR TURN.
+//
+// The brief was already validated and stored on status.json by AT-6 above, and
+// then read back by NOTHING: the operator typed a real instruction and the
+// session opened on an empty transcript. `prompt.md` is the file
+// `deriveSessionTranscript` actually reads, so that is where the record has to
+// land. These kill the shipped behaviour directly — before the fix there was
+// no prompt.md at all.
+// ---------------------------------------------------------------------------
+
+test('W8-B3 (ON-5): a briefed session records the operator words VERBATIM as prompt.md — the transcript source, not just status.json', async () => {
+  const res = await start({ brief: 'find me skills for terraform drift detection' });
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const prompt = readFileSync(join(sessionDirFor(body.sessionId), 'prompt.md'), 'utf8');
+  assert.match(prompt, /find me skills for terraform drift detection/);
+  // The operator's own words, never re-cast as a fabricated agent question.
+  assert.doesNotMatch(prompt, /\?$/m);
+});
+
+test('W8-B3 (ON-5): an UNBRIEFED session still records what was asked for — "a full refresh" is information, not silence', async () => {
+  const res = await start({});
+  const body = (await res.json()) as { sessionId: string };
+  assert.equal(res.status, 200);
+  const prompt = readFileSync(join(sessionDirFor(body.sessionId), 'prompt.md'), 'utf8');
+  assert.match(prompt, /full community registry refresh/i);
+  assert.ok(prompt.trim().length > 0, 'a blank prompt.md would derive no turn at all — the same empty transcript this closes');
+});

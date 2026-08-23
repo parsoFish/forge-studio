@@ -3972,6 +3972,56 @@ function guardedSessionDir(
  *  as `prompt.md`'s body. No fabricated interview: form field labels are
  *  never re-cast as agent questions, mirroring the honest single-turn shape
  *  project-brain's `prompt.md` already has. */
+/**
+ * W8-B3 (operator note ON-5) — the kb-cleanup session's OPENING OPERATOR TURN.
+ *
+ * ON-5: "there is no transcript for many of these sessions". Measured: a
+ * kb-cleanup session's dir held only `status.json` until an operator verdict
+ * landed, so `deriveSessionTranscript` honestly found nothing and the session
+ * opened on an empty pane — even though the operator HAD made a request (they
+ * clicked "Cleanup plan" on a specific KB's health panel). That request was
+ * real input and simply was not written down.
+ *
+ * This records the request, at the moment it was made, in the same shape and
+ * for the same reason `renderOnboardingPrompt` (below) records an onboarding
+ * form: the operator's own inputs, verbatim, never re-cast as a fabricated
+ * agent question (D8).
+ *
+ * The finding count is stamped "at kickoff" ON PURPOSE. It is a HISTORICAL
+ * fact about the request, not a status field: the cleanup-plan artifact still
+ * re-derives findings live from a fresh scan at read time
+ * (`deriveCleanupPlan`), and nothing must ever read this line back as current
+ * — see the `findings` comment on the start route itself.
+ */
+function renderKbCleanupPrompt(kbId: string, binding: { kind: string; ref?: string }, findingCount: number): string {
+  const target = binding.ref === undefined ? binding.kind : `${binding.kind} ${binding.ref}`;
+  return [
+    `Clean up the knowledge base \`${kbId}\` (${target}).`,
+    '',
+    `Requested from that KB's health panel with ${findingCount} agent-tier finding${findingCount === 1 ? '' : 's'} open at kickoff.`,
+    'Draft a cleanup plan for review; nothing is applied without an explicit approval.',
+    '',
+  ].join('\n');
+}
+
+/**
+ * W8-B3 (operator note ON-5) — the community-refresh session's OPENING
+ * OPERATOR TURN, and the sharper half of the finding.
+ *
+ * The start route already ACCEPTS, validates and stores a real operator
+ * `brief` on `status.json` ("find me skills for X" — a targeted pass instead
+ * of a full refresh). Nothing ever read it back, so the operator's own words
+ * were captured and then dropped from the record: the session opened on an
+ * empty transcript while the thing they typed sat in a status file. Absence of
+ * a brief is equally real information ("a full refresh, nothing narrowed"),
+ * and is recorded as such rather than as silence.
+ */
+function renderCommunityRefreshPrompt(brief: string | undefined): string {
+  return brief === undefined
+    ? 'Run a full community registry refresh — verify the existing entries against live sources and extend them.\n'
+    : `${brief}\n`;
+}
+
 function renderOnboardingPrompt(inputs: Record<string, string>): string {
   const keys = Object.keys(inputs);
   if (keys.length === 0) return '# Onboarding inputs\n\n(no inputs provided)\n';
@@ -6062,6 +6112,21 @@ async function handleDemoBuilder(
         return true;
       }
 
+      // W8-B3 (ON-5) — record the operator's request as the session's opening
+      // turn. Written through the SAME guarded leaf sibling as status.json
+      // above (the dir is already created by that write), so a symlinked
+      // `prompt.md` planted inside a real session dir is refused rather than
+      // followed. A containment refusal is a hard 500, never a silent skip: a
+      // session whose record starts empty is exactly the defect this closes.
+      if (guardedWriteFile(
+        projectsRoot,
+        [sessionProject, '_kb-cleanup', sessionId, 'prompt.md'],
+        renderKbCleanupPrompt(kbId, kb.binding, findings.length),
+      ) === null) {
+        sendJson(res, 500, { error: `kb-cleanup start: session prompt.md for kb "${kbId}" failed containment` }, origin);
+        return true;
+      }
+
       spawnAgentTurn(ctx.forgeRoot, 'kb-cleanup', sessionProject, sessionId);
       sendJson(
         res, 200,
@@ -6161,6 +6226,19 @@ async function handleDemoBuilder(
       );
       if (written === null) {
         sendJson(res, 500, { error: 'community-refresh start: session status.json failed containment' }, origin);
+        return true;
+      }
+
+      // W8-B3 (ON-5) — the operator's brief was validated, stored on
+      // status.json and then never read by anything. It is real operator input
+      // and belongs in the session's record; write it as the opening turn,
+      // through the same guarded leaf sibling as status.json above.
+      if (guardedWriteFile(
+        projectsRoot,
+        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId, 'prompt.md'],
+        renderCommunityRefreshPrompt(brief),
+      ) === null) {
+        sendJson(res, 500, { error: 'community-refresh start: session prompt.md failed containment' }, origin);
         return true;
       }
 

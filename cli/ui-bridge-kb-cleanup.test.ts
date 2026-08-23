@@ -375,3 +375,38 @@ test('AT-5: findings reflect a REAL on-disk lint defect for this KB — not a fa
   assert.match(serialized, /frontmatter|description/i, `expected a finding describing the missing-frontmatter-field defect, got: ${serialized}`);
 });
 
+
+// ---------------------------------------------------------------------------
+// W8-B3 (operator note ON-5) — the session's OPENING OPERATOR TURN.
+//
+// Measured before the fix: a kb-cleanup session dir held ONLY status.json until
+// an operator verdict landed, so `deriveSessionTranscript` honestly found
+// nothing and the session opened on an empty pane — even though the operator
+// HAD made a request (they clicked "Cleanup plan" on a named KB's health
+// panel). `prompt.md` is the file the transcript derivation actually reads.
+// ---------------------------------------------------------------------------
+
+test('W8-B3 (ON-5): the start route records the request as prompt.md — the KB, its binding, and the finding count AT KICKOFF', async () => {
+  writeKb('ontime-cleanup-kb', '{ kind: unique }');
+  writeBrokenTheme('ontime-cleanup-kb');
+
+  const res = await start('ontime-cleanup-kb');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { sessionId: string };
+  const sessionDir = join(forgeRoot, 'projects', `${KB_SEEDING_ANCHOR_PREFIX}ontime-cleanup-kb`, '_kb-cleanup', body.sessionId);
+
+  const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
+  assert.match(prompt, /ontime-cleanup-kb/, 'the request must name the KB it was made against');
+  assert.match(prompt, /finding/, 'the request must say how much was open when it was made');
+  // "at kickoff" is load-bearing wording, not decoration: the cleanup-plan
+  // artifact re-derives findings LIVE from a fresh scan at read time, so this
+  // line must never be readable as current status.
+  assert.match(prompt, /at kickoff/);
+
+  // The count is the REAL live-scan count this session was started against,
+  // not a hardcoded number — same status.json the live-scan test asserts.
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
+  assert.ok(status.findings.length > 0);
+  assert.match(prompt, new RegExp(`${status.findings.length} agent-tier finding`));
+});
