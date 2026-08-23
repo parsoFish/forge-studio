@@ -752,7 +752,13 @@ export type KbNode = {
 
 export type KbEdge = { from: string; to: string };
 
-export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
+/** W8-B2 (forge-9kr) — a declared `related_themes` edge whose target is a REAL
+ *  theme in ANOTHER KB. It cannot be drawn here (this graph has no node for
+ *  it), but it exists, and used to be dropped with no signal at all. Optional
+ *  on the wire: a status written before this field existed simply has none. */
+export type KbExternalEdge = { from: string; toSlug: string };
+
+export type KbGraph = { nodes: KbNode[]; edges: KbEdge[]; externalEdges?: KbExternalEdge[] };
 
 /** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
  *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint
@@ -1580,6 +1586,20 @@ export type KbDrainState =
   | 'cancelled'
   | 'failed';
 
+/** W8-B2 (ON-3) — mirrors `cli/bridge-studio-kb-drain.ts`'s type of the same
+ *  name: what the fix turn proposed for one file, and what became of it. */
+export type KbDrainProposedChange = {
+  /** Path relative to forgeRoot. */
+  file: string;
+  /** Unified diff of the proposal. */
+  diff: string;
+  /** True when `diff` was cut at the server's line cap. */
+  diffTruncated?: boolean;
+  disposition: 'applied' | 'repaired' | 'refused' | 'drafted';
+  /** The soundness audit's reasons, verbatim. Empty for `applied`. */
+  reasons?: string[];
+};
+
 export type KbDrainPerFinding = {
   key: string;
   check: string;
@@ -1587,12 +1607,21 @@ export type KbDrainPerFinding = {
   file: string;
   message: string;
   tier: 'auto' | 'agent' | 'user';
-  outcome: 'cleared' | 'not-cleared' | 'needs-you';
+  /** W8-B2 — `pending` is the honest in-flight value: the turn ran and the
+   *  round's post-fix lint (the sole authority on whether a finding cleared)
+   *  has not. Every terminal value is derived there, never self-reported. */
+  outcome: 'cleared' | 'not-cleared' | 'needs-you' | 'pending';
   /** W7-B2 (knowledge-12) — which round recorded this entry. Optional:
    *  pre-W7 status files don't carry it. */
   round?: number;
   /** W7-B2 (orch-01) — set when the fix was gated into a kb-cleanup draft. */
   draftSession?: { id: string; project: string };
+  /** W8-B2 — the fix turn threw. Separate from `outcome` by construction. */
+  turnError?: string;
+  /** W8-B2 (ON-3) — every file the turn proposed to change, with its diff. */
+  proposedChanges?: KbDrainProposedChange[];
+  /** W8-B2 (ON-3) — the targeted instruction the fix turn was given. */
+  fixHint?: string;
 };
 
 export type KbDrainStatus = {

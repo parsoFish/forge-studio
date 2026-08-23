@@ -22,6 +22,7 @@ import { execSync } from 'node:child_process';
 import matter from 'gray-matter';
 
 import { resolveKbBrainDir } from './brain-paths.ts';
+import { collectThemeSlugTargets } from '../cli/brain-lint.ts';
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +41,31 @@ export type KbNode = {
 
 export type KbEdge = { from: string; to: string };
 
-export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
+/**
+ * W8-B2 (forge-9kr) — a declared `related_themes` edge whose target is a REAL
+ * theme in a DIFFERENT sub-wiki.
+ *
+ * `buildKbGraph` scopes `nodeIds` to the one KB it is graphing, so such an edge
+ * cannot be drawn. `checkDanglingEdges` deliberately does NOT flag these — its
+ * slug universe is brain-wide, and a cross-sub-wiki reference is legitimate
+ * CONTENT, not a broken link (flagging them would steer a maintenance agent
+ * into "fixing" correct links, which is how forge-d8l happens). So they were
+ * dropped by the `nodeIds.has` guard and again by the `validEdges` filter, with
+ * no signal anywhere. Twenty-five of them exist in the live brain.
+ *
+ * They are now REPORTED rather than silently discarded. Still not drawn — a
+ * per-KB graph has no node to draw them to — but a consumer can say "N links
+ * leave this KB" instead of the graph quietly claiming they do not exist.
+ */
+export type KbExternalEdge = { from: string; toSlug: string };
+
+export type KbGraph = {
+  nodes: KbNode[];
+  edges: KbEdge[];
+  /** Declared edges pointing at a real theme outside this KB (forge-9kr).
+   *  Always present; empty when the KB has none. */
+  externalEdges: KbExternalEdge[];
+};
 
 export type KbNodeArticle = {
   id: string;
@@ -265,6 +290,14 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
 
   const nodes: KbNode[] = [];
   const edges: KbEdge[] = [];
+  const externalEdges: KbExternalEdge[] = [];
+
+  // forge-9kr: the brain-wide slug universe, so a related_themes target that
+  // is not in THIS KB can be told apart from one that does not exist at all.
+  // Same single walk `checkDanglingEdges` resolves against (cli/brain-lint.ts)
+  // — this file must never grow its own second answer to "does this theme
+  // exist", which is precisely the disagreement forge-d8l was made of.
+  const externalSlugs = new Set(collectThemeSlugTargets(join(forgeRoot, 'brain')).keys());
 
   // Track node ids for dedup + edge resolution
   const nodeIds = new Set<string>();
@@ -411,6 +444,15 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
     for (const relSlug of data.related_themes ?? []) {
       if (nodeIds.has(relSlug)) {
         edges.push({ from: fromId, to: relSlug });
+        continue;
+      }
+      // forge-9kr: not in THIS KB. If the slug resolves to a real theme
+      // anywhere in the brain, the edge is legitimate content this graph
+      // simply cannot draw — record it so the drop is visible. If it resolves
+      // nowhere it is genuinely dangling, and checkDanglingEdges owns saying
+      // so; adding a second voice here would be two derivations of one verdict.
+      if (externalSlugs.has(relSlug)) {
+        externalEdges.push({ from: fromId, toSlug: relSlug });
       }
     }
 
@@ -468,7 +510,7 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   // Drop dangling edges (both nodes must exist)
   const validEdges = edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to));
 
-  return { nodes, edges: validEdges };
+  return { nodes, edges: validEdges, externalEdges };
 }
 
 // ---------------------------------------------------------------------------

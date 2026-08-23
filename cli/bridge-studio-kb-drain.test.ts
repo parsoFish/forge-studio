@@ -319,7 +319,7 @@ test('runKbDrain: under FORGE_DRY_BRIDGE=1 the DEFAULT fix turn never spawns —
   }
 });
 
-test('runKbDrain: a single turn throwing is caught and recorded not-cleared, without aborting the round', async () => {
+test('runKbDrain: a single turn throwing is RECORDED as a turn error, and the outcome still comes from the round\'s own lint (W8-B2)', async () => {
   const { root, brainDir } = makeDrainRoot('turnthrow-kb');
   const f1 = fixtureFinding(brainDir, 'throws', 'agent');
   const opts: KbDrainOpts = {
@@ -334,7 +334,15 @@ test('runKbDrain: a single turn throwing is caught and recorded not-cleared, wit
   // proving the per-turn throw was caught locally, not propagated to the loop.
   assert.equal(status.state, 'green', JSON.stringify(status));
   const agentEntry = status.perFinding.find((f) => f.tier === 'agent');
-  assert.equal(agentEntry?.outcome, 'not-cleared');
+  // W8-B2 — this assertion CHANGED, and the old one was wrong. It used to
+  // require `outcome: 'not-cleared'` here, which made this very fixture assert
+  // a contradiction: a GREEN run (the round's post-fix lint reports the finding
+  // gone) carrying a not-cleared row for that same finding. That is forge-6gu's
+  // shape with the sign flipped. `outcome` is now derived from the post-fix
+  // lint — the only thing that actually knows — and the crash is recorded as
+  // the separate fact it is, so neither signal is lost in the other.
+  assert.equal(agentEntry?.outcome, 'cleared');
+  assert.match(agentEntry?.turnError ?? '', /synthetic turn crash/);
 });
 
 test('runKbDrain: status.json is written per round (survives nav-away) with round/counts/updatedAt progressing', async () => {

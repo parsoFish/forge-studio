@@ -304,6 +304,9 @@ const SCRATCH_KB_DRAIN_NAME = 'journey-scratch-kb-drain (project)';
 const SCRATCH_KB_DRAIN_DESC = 'Ephemeral per-project-shaped brain created by the e2e journey itself, seeded with one agent-tier lint finding to demo the drain-to-green button reaching an honest, CI-safe terminal.';
 const SCRATCH_KB_DRAIN_DIR = join(FORGE_ROOT, 'brain', 'projects', SCRATCH_KB_DRAIN_ID);
 const SCRATCH_KB_DRAIN_THEME_SLUG = 'scratch-drain-lesson';
+/** A REAL forge theme (brain/cycles/themes/eval-driven-development.md) in a
+ *  DIFFERENT sub-wiki — the cross-KB edge forge-9kr is about. */
+const SCRATCH_KB_DRAIN_EXTERNAL_SLUG = 'eval-driven-development';
 const SCRATCH_KB_DRAIN_THEME_DESC = 'A scratch lint fixture: a real theme, listed in its own category index, but carrying a deliberately dangling related_themes edge so checkDanglingEdges flags it (agent-tier, no auto fixer) and the drain button has something genuine — and genuinely agent-only — to work on.';
 // A slug that exists NOWHERE under brain/**/themes — the dangling target.
 const SCRATCH_KB_DRAIN_DANGLING_SLUG = 'journey-scratch-nonexistent-theme';
@@ -357,7 +360,13 @@ function seedScratchKbDrain() {
     'keywords: [e2e-journey, scratch-kb, kb-drain, drain-to-green]',
     `created_at: ${now}`,
     `updated_at: ${now}`,
-    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}]`,
+    // Two edges, deliberately: the dangling one is the seeded agent-tier
+    // finding, and `eval-driven-development` is a REAL theme in the cycles
+    // sub-wiki — a legitimate cross-KB reference `checkDanglingEdges`
+    // correctly does NOT flag, and which the per-KB graph cannot draw. It is
+    // what makes the external-edge readout assert a real 1 instead of a 0
+    // that could never fail (adversarial round 1).
+    `related_themes: [${SCRATCH_KB_DRAIN_DANGLING_SLUG}, ${SCRATCH_KB_DRAIN_EXTERNAL_SLUG}]`,
     '---',
     '',
     '# Theme: scratch drain lesson',
@@ -1065,7 +1074,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-lint-index',
         title: 'KB health — drain to green (W6-B13) + index / OOTB brains',
-        narration: 'The operator opens a KB with a real lint finding and clicks the ONE "Drain to green" button on Health — forge iteratively fixes every auto- and agent-tier finding server-side, round by round, until the KB is clean or honestly stops and says why (`cli/bridge-studio-kb-drain.ts`). This replaces the old kb-lint scan + LintResolutionPanel\'s own "fix all with agent" client loop (W6-B13, retiring sweep finding C4#7\'s header/panel scan duplication and C9#2/C9#3\'s silent-timeout/dead-skip-button defects). Under this harness\'s FORGE_ARCHITECT_NO_SPAWN=1 the drain loop still runs for real (a real local fresh-lint, a real local auto-fix pass, a real status.json on disk) but never actually spawns the agent-tier turn — so the seeded fixture\'s one agent-tier finding can never clear here, and the panel\'s own [data-drain-state] honestly reaches "no-progress," never a fabricated "green." Navigating away (the Explore tab) and back to Health proves the run is server-owned, not component state: the SAME run id and state are still there, exactly the "nav-away never loses the work" invariant the operator brief names. The KB selector also confirms both cycles and forge-dev ship as OOTB brains, and kb-index still runs a real deterministic refresh.',
+        narration: 'The operator opens a KB with a real lint finding and clicks the ONE "Drain to green" button on Health — forge iteratively fixes every auto- and agent-tier finding server-side, round by round, until the KB is clean or honestly stops and says why (`cli/bridge-studio-kb-drain.ts`). This replaces the old kb-lint scan + LintResolutionPanel\'s own "fix all with agent" client loop (W6-B13, retiring sweep finding C4#7\'s header/panel scan duplication and C9#2/C9#3\'s silent-timeout/dead-skip-button defects). Under this harness\'s FORGE_ARCHITECT_NO_SPAWN=1 the drain loop still runs for real (a real local fresh-lint, a real local auto-fix pass, a real status.json on disk) but never actually spawns the agent-tier turn — so the seeded fixture\'s one agent-tier finding can never clear here, and the panel\'s own [data-drain-state] honestly reaches "no-progress," never a fabricated "green." Wave 8 (B2) answers operator note ON-3 on this same panel: every finding row now advertises the DERIVED disposition of what the turn proposed (`data-drain-finding-disposition` — honestly \"none\" here, because this harness suppresses the agent turn), carries a disclosure holding the proposal\'s own diff, the gate\'s refusal reasons and the brief the agent was given, and LINKS BACK to its own theme in Explore. The beat clicks that link and asserts where it lands, and the graph now reports how many declared links point at real themes in another KB instead of discarding them in silence (forge-9kr). Navigating away (the Explore tab) and back to Health proves the run is server-owned, not component state: the SAME run id and state are still there, exactly the "nav-away never loses the work" invariant the operator brief names. The KB selector also confirms both cycles and forge-dev ship as OOTB brains, and kb-index still runs a real deterministic refresh.',
         drive: async (ctx) => {
               const { page, watch, browser, recordClip, check, frame } = ctx;
               // ── S3.2: KB health — drain to green + index / OOTB brains ────────────────
@@ -1147,6 +1156,25 @@ export const journey = defineJourney({
                   `kb-drain: per-finding rows render file/tier/outcome for the seeded finding (got ${findingRows.length} row(s)) — knowledge-01/08`);
                 const roundGroups = await page.locator('[data-drain-round-group]').count().catch(() => 0);
                 check(roundGroups > 0, `kb-drain: finding rows are grouped under per-round headers ([data-drain-round-group], got ${roundGroups}) — knowledge-12`);
+
+                // W8-B2 (ON-3): every row advertises the DERIVED disposition of
+                // what the turn proposed. Under NO_SPAWN no turn runs, so the
+                // honest value here is "none" — asserting that exact token, not
+                // merely "the attribute exists", is what kills a fabricated
+                // "applied" on a run where nothing was ever proposed.
+                const dispositions = await page.evaluate(() => Array.from(
+                  document.querySelectorAll('[data-drain-finding]'),
+                ).map((el) => el.getAttribute('data-drain-finding-disposition') ?? ''));
+                check(dispositions.length > 0 && dispositions.every((d) => d === 'none'),
+                  `kb-drain: every finding row carries a DERIVED data-drain-finding-disposition; with the agent turn suppressed the honest value is "none" (got ${JSON.stringify(dispositions)}) — W8-B2/ON-3`);
+
+                // W8-B2 (ON-3, second half): the finding links back to its own
+                // theme in Explore. The seeded finding is on a real theme file,
+                // so the link must be present AND point at that theme's slug.
+                const nodeHref = await page.evaluate(() =>
+                  document.querySelector('[data-action="open-finding-node"]')?.getAttribute('data-finding-node-href') ?? '');
+                check(nodeHref === `/knowledge?id=${SCRATCH_KB_DRAIN_ID}&node=${SCRATCH_KB_DRAIN_THEME_SLUG}`,
+                  `kb-drain: the finding deep-links to ITS OWN theme node in Explore (got "${nodeHref}") — ON-3`);
 
                 // W7-B2 (knowledge-14): Cancel exists and is HONEST — against this
                 // already-terminal run the endpoint refuses with 409 ("no active
@@ -1233,6 +1261,32 @@ export const journey = defineJourney({
                 }));
                 check(ootb.cycles.length > 0 && ootb.forgeDev.length > 0,
                   `S3.2: cycles + forge-dev brains ship OOTB (${ootb.cycles} / ${ootb.forgeDev})`);
+
+                // ── W8-B2 (ON-3) — the finding's Explore link is CLICKED, not just
+                // asserted present. A link whose href is right and whose landing is
+                // wrong is exactly the shape this lane exists to stop.
+                await page.locator('[data-action="open-finding-node"]').first().click().catch(() => {});
+                await page.waitForFunction(
+                  (slug) => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-selected-node') === slug,
+                  SCRATCH_KB_DRAIN_THEME_SLUG, { timeout: 12000 },
+                ).catch(() => {});
+                const landed = await page.evaluate(() => ({
+                  node: document.querySelector('[data-page="knowledge"]')?.getAttribute('data-selected-node') ?? '',
+                  tabActive: document.querySelector('[data-tab="explore"]')?.getAttribute('data-tab-active') ?? '',
+                  url: location.search,
+                }));
+                check(landed.node === SCRATCH_KB_DRAIN_THEME_SLUG,
+                  `S3.2/ON-3: clicking the finding's link LANDS on that theme in Explore (data-selected-node="${landed.node}")`);
+                check(landed.url.includes(`node=${SCRATCH_KB_DRAIN_THEME_SLUG}`),
+                  `S3.2/ON-3: the deep link is in the URL, so it is shareable and survives a reload (got "${landed.url}")`);
+                await frame(page, 'kb-drain-3-finding-to-explore', 'Knowledge — a drain finding links straight back to its own theme in Explore', { key: true });
+
+                // W8-B2 (forge-9kr): the graph SAYS how many declared links point at
+                // real themes in another KB, instead of silently discarding them.
+                const externalEdges = await page.evaluate(() =>
+                  document.querySelector('#kb-svg')?.getAttribute('data-external-edge-count') ?? '');
+                check(Number(externalEdges) >= 1,
+                  `S3.2/forge-9kr: the graph REPORTS the seeded cross-sub-wiki edge to ${SCRATCH_KB_DRAIN_EXTERNAL_SLUG} instead of dropping it in silence (data-external-edge-count="${externalEdges}", want >=1)`);
               }
 
               // Clip: drain-to-green on the seeded fixture — real/idempotent (re-seeded

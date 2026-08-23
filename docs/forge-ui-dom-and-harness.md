@@ -405,6 +405,16 @@ inventory rather than one shared page-level contract:
     `/knowledge?id=<id>&tab=health`, where the drain lives (the row's React
     `key` is `kb-<id>`-shaped but a `key` is React-internal bookkeeping,
     never rendered to the DOM — find the row via `data-attention-kb`).
+    A THIRD strip sits above both (W8-B2, ON-4):
+    `section[data-section="brain-edits-awaiting-review"]`, present only when
+    `buildKbDraftAttention(sessions)` returns ≥1 row —
+    `a[data-attention-item][data-attention-kind="kb-draft"][data-attention-status="gated"][data-attention-session][data-attention-project][data-action="review-brain-draft"]`,
+    `href` pointing at the kb-cleanup SESSION (the only place the edit can be
+    approved or rejected, which the KB's Health tab cannot do). It fires on the
+    bridge's own `needsYou` verdict for a `kb-cleanup` session read off the
+    SAME already-fetched sessions array the constellation uses — no new fetch,
+    no new poll, and no stored `pendingDraft` flag. It contributes to
+    `data-attention-count` alongside the gate and KB-lint rows.
     `data-attention-status` is `fail|warn|unknown` (never `gated|flagged`,
     the gate-row vocabulary) — `unknown` means the KB's own lint run threw
     (`lint.error` present), an HONEST "the server cannot attest" signal,
@@ -3760,10 +3770,64 @@ inventory rather than one shared page-level contract:
       (W7-B2, knowledge-08/12): one `[data-drain-round-group=<n>]` header
       per round, each row
       `[data-drain-finding][data-drain-finding-tier="auto"|"agent"|"user"]
-      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"]
+      [data-drain-finding-outcome="cleared"|"not-cleared"|"needs-you"|"pending"]
       [data-drain-finding-file=<path>]` naming the file and rule; a row the
       structural-only gate parked as a prose DRAFT carries its
       `[data-action="open-drain-draft"]` session link (orch-01).
+      `'pending'` (W8-B2) is the honest IN-FLIGHT value: the turn has run and
+      this round's post-fix lint — the sole authority on whether a finding
+      cleared — has not. Every terminal value is DERIVED there
+      (`finalizeRoundRows`, `cli/bridge-studio-kb-drain.ts`), never from the
+      agent's own `cleared` self-report.
+    - **What the turn PROPOSED (W8-B2, ON-3).** Each row additionally carries
+      `[data-drain-finding-disposition="applied"|"repaired"|"refused"|"drafted"|"mixed"|"none"]`
+      plus `[data-drain-finding-proposals=<n>][data-drain-finding-reasons=<n>]`,
+      all derived by `lib/kb-drain-view.ts`'s `findingDisposition` /
+      `findingRefusalReasons` (pure, unit-tested) from the server's
+      `proposedChanges`. `'mixed'` is real and deliberate — one turn can land a
+      sound structural edit in one file while another file's edit is refused,
+      and a single clean claim covering both would be fail-open. `'none'` means
+      the turn changed no files at all (what a `FORGE_ARCHITECT_NO_SPAWN` run
+      honestly shows). Where there is anything to inspect
+      (`findingHasDetail`), the row opens a
+      `[data-component="drain-finding-detail"]` disclosure holding
+      `[data-component="drain-finding-brief"]` (the `fixHint` the agent was
+      given), `[data-component="drain-finding-reasons"]` with one
+      `[data-drain-finding-reason]` per soundness refusal, an optional
+      `[data-component="drain-finding-turn-error"]`, and one
+      `[data-drain-proposal][data-drain-proposal-file][data-drain-proposal-disposition]`
+      per touched file wrapping a `[data-component="drain-proposal-diff"]`
+      (`[data-component="drain-proposal-truncated"]` when the server cut it).
+      An empty disclosure is never offered.
+    - **Back to Explore (W8-B2, ON-3).** A finding on a theme node renders
+      `a[data-action="open-finding-node"][data-finding-node-href]` pointing at
+      `/knowledge?id=<kb>&node=<slug>`. The href is DERIVED by
+      `deriveFindingNodeHref` (`lib/kb-drain-view.ts`) from the finding's own
+      path — a theme node's graph id IS its slug — so no wire field stores it.
+      It **fails closed**: a file whose parent directory is not `themes/`
+      (which is where every KB-root index page — `patterns.md`, `INDEX.md`, … —
+      lives), `themes/README.md`, a non-`.md` file, or a missing kb id renders
+      plain text and no link, never a link that lands on the shared NotFound.
+      Stated as the DIRECTORY rule rather than a name list on purpose: a name
+      list here would be a second, narrower copy of
+      `cli/kb-drain-structural.ts`'s `INDEX_PAGE_NAMES`, and two derivations
+      disagreeing is the defect this lane exists to close. The reverse wiring exists too: selecting a
+      node in the graph writes `?node=` back to the URL
+      (`app/knowledge/page.tsx`'s `syncSelectionToUrl`, `router.replace`), so
+      the deep link round-trips and is shareable.
+    - **Pending drafts (W8-B2, ON-4).** When the run parked any kb-cleanup
+      draft, the panel renders a sticky
+      `[data-component="drain-pending-drafts-bar"][data-pending-draft-count=<n>]`
+      with one `a[data-action="review-drain-draft"][data-draft-session]` per
+      DISTINCT session (`pendingDraftSessions` dedupes by session id — one
+      gated turn can touch several files but mints one session). The per-row
+      `open-drain-draft` link stays; it names WHICH finding, so the bar is
+      additive.
+    - **Graph, cross-KB edges (W8-B2, forge-9kr).** `#kb-svg` carries
+      `[data-external-edge-count=<n>]` — declared `related_themes` edges whose
+      target is a REAL theme in another KB. They cannot be drawn (a per-KB
+      graph has no node for them) and used to be dropped by `buildKbGraph`'s
+      `nodeIds` guard with no signal at all.
       Every terminal state gets honest, state-specific copy
       (`lib/kb-drain-view.ts`'s `drainStateCopy` — pure, unit-tested):
       `'green'` shows `[data-component="drain-green"]`; `'no-progress'` /

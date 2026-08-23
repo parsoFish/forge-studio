@@ -8,7 +8,7 @@
  * plain function here instead, where it's directly unit-testable.
  */
 
-import type { KbDrainPerFinding, KbDrainState } from './studio-client';
+import type { KbDrainPerFinding, KbDrainProposedChange, KbDrainState } from './studio-client';
 
 /** Mirrors `cli/bridge-studio-kb-drain.ts`'s `KB_DRAIN_MAX_ROUNDS` — a
  *  display-only constant (not imported: that module touches `node:fs` and
@@ -150,4 +150,97 @@ export function formatDrainElapsed(startedAt: string | undefined, nowMs: number)
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-3) — a finding shows its fix, and links back to Explore
+// ---------------------------------------------------------------------------
+
+/** Outcome glyphs, including `pending`'s. Lives here (not in the `.tsx`) so
+ *  the vocabulary is exhaustively type-checked against the wire union: a new
+ *  outcome that nobody gave a glyph is a compile error, not a blank cell. */
+export const KB_DRAIN_OUTCOME_GLYPH: Record<KbDrainPerFinding['outcome'], string> = {
+  cleared: '\u2713',
+  'not-cleared': '\u26a0',
+  'needs-you': '?',
+  pending: '\u00b7',
+};
+
+/**
+ * The ONE disposition token a finding row advertises — DERIVED from the
+ * proposals the server recorded, never stored alongside them.
+ *
+ * `mixed` is real and must not be smoothed away: one turn can land a sound
+ * structural edit in one file while another file's edit is refused, and a row
+ * claiming a single clean disposition for both would be the fail-open shape
+ * this lane exists to close. `none` means the turn changed no files at all.
+ */
+export function findingDisposition(f: Pick<KbDrainPerFinding, 'proposedChanges'>): KbDrainProposedChange['disposition'] | 'mixed' | 'none' {
+  const changes = f.proposedChanges ?? [];
+  if (changes.length === 0) return 'none';
+  const kinds = new Set(changes.map((c) => c.disposition));
+  if (kinds.size > 1) return 'mixed';
+  return changes[0].disposition;
+}
+
+/** Every reason the drain gave for refusing or repairing this finding's edits,
+ *  flattened in proposal order. */
+export function findingRefusalReasons(f: Pick<KbDrainPerFinding, 'proposedChanges'>): string[] {
+  return (f.proposedChanges ?? []).flatMap((c) => c.reasons ?? []);
+}
+
+/** True when this finding has anything for the operator to inspect — a diff,
+ *  a refusal reason, a brief, or a crash. Drives whether the row renders a
+ *  disclosure at all, so an empty drawer can never be offered. */
+export function findingHasDetail(f: Pick<KbDrainPerFinding, 'proposedChanges' | 'fixHint' | 'turnError'>): boolean {
+  return (f.proposedChanges ?? []).length > 0 || !!f.fixHint || !!f.turnError;
+}
+
+/**
+ * W8-B2 (ON-3, second half) — the Explore deep link for a finding's own theme,
+ * or `null` when the finding is not about a theme node.
+ *
+ * DERIVED from the finding's `file` and the KB id; nothing is stored. A theme
+ * node's id in `buildKbGraph` IS its slug (the basename without `.md`), which
+ * is exactly what `?node=` resolves — so the mapping the drain was missing is a
+ * pure function, not a new field on the wire.
+ *
+ * Fails CLOSED: an index/category page (`README.md`, `patterns.md`, …), a file
+ * outside a `themes/` dir, or an empty slug yields `null` and the row renders
+ * no link, rather than a link that lands on a shared NotFound.
+ */
+export function deriveFindingNodeHref(
+  f: Pick<KbDrainPerFinding, 'file'>,
+  kbId: string,
+): string | null {
+  if (!kbId) return null;
+  const parts = (f.file ?? '').split(/[\\/]/).filter((p) => p !== '');
+  const name = parts[parts.length - 1] ?? '';
+  if (!name.endsWith('.md')) return null;
+  if (parts[parts.length - 2] !== 'themes') return null;
+  const slug = name.slice(0, -'.md'.length);
+  if (slug === '' || slug === 'README') return null;
+  return `/knowledge?id=${encodeURIComponent(kbId)}&node=${encodeURIComponent(slug)}`;
+}
+
+/**
+ * W8-B2 (ON-4) — the distinct kb-cleanup drafts this run parked, in row order.
+ *
+ * Derived from `perFinding` alone; nothing on the wire says "a draft is
+ * pending". Deduplicated by session id: one gated turn can touch several files
+ * but mints ONE session, and a count that double-counted them would overstate
+ * how much the operator has to review.
+ */
+export function pendingDraftSessions(
+  perFinding: readonly KbDrainPerFinding[],
+): Array<{ id: string; project: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ id: string; project: string }> = [];
+  for (const f of perFinding) {
+    const d = f.draftSession;
+    if (!d || seen.has(d.id)) continue;
+    seen.add(d.id);
+    out.push(d);
+  }
+  return out;
 }

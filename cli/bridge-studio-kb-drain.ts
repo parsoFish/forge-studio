@@ -100,7 +100,11 @@ import {
 } from './brain-lint.ts';
 import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
-import { snapshotKbFiles, diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import { snapshotKbFiles, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
+import {
+  guardAgentKbEdits, auditProposedEdit, buildKbEditSoundnessCtx,
+  type KbEditGateResult, type KbEditUnsoundness,
+} from './kb-drain-edit-soundness.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS, parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
 import { guardedWriteFile } from './studio-path-guard.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
@@ -148,6 +152,43 @@ export type KbDrainState =
   | 'cancelled'
   | 'failed';
 
+/**
+ * W8-B2 (ON-3) — what the fix turn actually PROPOSED for one file, and what
+ * became of it.
+ *
+ * Operator note ON-3: "it's very hard to see what changes are being proposed
+ * when it raises those up to the operator, and there's no way to drill into
+ * what it thinks the issues are and what it's trying to do to fix them."
+ * Before this, the entire per-finding UI was a glyph, a filename basename, a
+ * rule id and one sentence — the diff existed (the structural gate computes it
+ * to render the draft plan) and simply never reached the row.
+ */
+export type KbDrainProposedChange = {
+  /** Path relative to forgeRoot — greppable, and the same label the gated
+   *  draft plan uses for the same file. */
+  file: string;
+  /** Unified diff of the proposal, truncated at `KB_DRAIN_DIFF_MAX_LINES`. */
+  diff: string;
+  /** True when `diff` was cut short — never a silently shortened diff. */
+  diffTruncated: boolean;
+  /**
+   * What became of the proposal:
+   *   - `applied`  — sound and structural; it is on disk.
+   *   - `repaired` — unsound; the drain wrote a verified repair instead.
+   *   - `refused`  — unsound with no unique repair; reverted, nothing landed.
+   *   - `drafted`  — prose; reverted and parked for operator approval.
+   */
+  disposition: 'applied' | 'repaired' | 'refused' | 'drafted';
+  /** The soundness audit's own reasons, verbatim. Empty for `applied`. */
+  reasons: string[];
+};
+
+/** Line cap for one rendered proposal diff. A theme is lint-capped at 800
+ *  lines, but a turn can touch several files and the whole status object is
+ *  polled; truncation is DECLARED on the row (`diffTruncated`) so a cut diff
+ *  can never read as a small one. */
+export const KB_DRAIN_DIFF_MAX_LINES = 200;
+
 export type KbDrainPerFinding = {
   key: string;
   check: string;
@@ -155,7 +196,11 @@ export type KbDrainPerFinding = {
   file: string;
   message: string;
   tier: 'auto' | 'agent' | 'user';
-  outcome: 'cleared' | 'not-cleared' | 'needs-you';
+  /** W8-B2 — DERIVED, never stored from a self-report. `pending` is the honest
+   *  in-flight value: the turn has run and this round's post-fix lint has not.
+   *  `finalizeRoundRows` (below) is the ONLY producer of a terminal value, and
+   *  it reads the post-fix lint's own key set. */
+  outcome: 'cleared' | 'not-cleared' | 'needs-you' | 'pending';
   /** W7-B2 (knowledge-12): the round this entry was recorded in — perFinding
    *  accumulates across rounds now, so a finished run keeps every round's
    *  work instead of only the last round's list. */
@@ -164,6 +209,20 @@ export type KbDrainPerFinding = {
    *  proposed prose edit was reverted and parked as a kb-cleanup draft
    *  session the operator approves with a diff. */
   draftSession?: { id: string; project: string };
+  /** W8-B2: the fix turn threw. A SEPARATE fact from `outcome`, deliberately:
+   *  a turn can crash after writing a valid edit, and the round's post-fix lint
+   *  — not the crash — is the authority on whether the finding cleared. Before
+   *  this field existed the crash was silently folded into `not-cleared`, which
+   *  produced a green run carrying a not-cleared row for a finding its own lint
+   *  said was gone. */
+  turnError?: string;
+  /** W8-B2 (ON-3): every file the turn proposed to change for this finding,
+   *  with its diff and its disposition. */
+  proposedChanges?: KbDrainProposedChange[];
+  /** W8-B2 (ON-3): the targeted instruction the fix turn was given for this
+   *  finding (`Finding.fixHint`) — the closest thing to the agent's brief, and
+   *  the thing that explains WHY it did what the diff shows. */
+  fixHint?: string;
 };
 
 export type KbDrainStatus = {
@@ -542,12 +601,100 @@ async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
 // perFinding builders
 // ---------------------------------------------------------------------------
 
-function autoAppliedEntry(item: AutoFixStableResult['applied'][number], round: number): KbDrainPerFinding {
-  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.detail, tier: 'auto', outcome: 'cleared', round };
+/**
+ * A row BEFORE its outcome is known. `Omit<…, 'outcome'>` is load-bearing:
+ * the type gives the round loop nowhere to park a self-reported verdict, so a
+ * row physically cannot exist with an unreconciled outcome. That is the cure
+ * for forge-6gu (rows glyphed cleared for findings the round's own post-fix
+ * lint still reports) — the previous shape stored `result.cleared` and nothing
+ * ever revisited it.
+ */
+type KbDrainRoundRow = Omit<KbDrainPerFinding, 'outcome'>;
+
+function autoAppliedEntry(item: AutoFixStableResult['applied'][number], round: number): KbDrainRoundRow {
+  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.detail, tier: 'auto', round };
 }
 
-function autoSkippedEntry(item: AutoFixStableResult['skipped'][number], round: number): KbDrainPerFinding {
-  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.reason, tier: 'auto', outcome: 'not-cleared', round };
+function autoSkippedEntry(item: AutoFixStableResult['skipped'][number], round: number): KbDrainRoundRow {
+  return { key: `${item.kind}::${item.file}`, check: item.kind, kind: item.kind, file: item.file, message: item.reason, tier: 'auto', round };
+}
+
+/**
+ * The ONE place a round row gets a terminal outcome — derived from this
+ * round's real post-fix lint (`afterKeys`, the same set the no-progress and
+ * oscillation decisions are made from), never from what a fixer or an agent
+ * claimed.
+ *
+ * A drafted row is the single exception, and it is not an exception to the
+ * rule: its finding legitimately still lints (the proposed edit was reverted),
+ * so the key IS in `afterKeys`; `needs-you` is the more precise truth about
+ * why, not a softer one.
+ */
+export function finalizeRoundRows(
+  rows: readonly KbDrainRoundRow[],
+  afterKeys: ReadonlySet<string>,
+): KbDrainPerFinding[] {
+  return rows.map((row) => ({
+    ...row,
+    outcome: row.draftSession ? 'needs-you' : afterKeys.has(row.key) ? 'not-cleared' : 'cleared',
+  }));
+}
+
+/** One proposal diff, capped and honestly flagged when cut. */
+function renderProposalDiff(label: string, before: string, after: string): { diff: string; diffTruncated: boolean } {
+  const full = buildUnifiedDiff(label, before, after).split('\n');
+  if (full.length <= KB_DRAIN_DIFF_MAX_LINES) return { diff: full.join('\n'), diffTruncated: false };
+  return {
+    diff: [...full.slice(0, KB_DRAIN_DIFF_MAX_LINES), `… ${full.length - KB_DRAIN_DIFF_MAX_LINES} more diff line(s) not shown`].join('\n'),
+    diffTruncated: true,
+  };
+}
+
+/**
+ * W8-B2 (ON-3) — turn every file the turn touched into an operator-inspectable
+ * proposal row: the diff, what became of it, and why.
+ *
+ * Derived entirely from the change set the gate already computed. Nothing here
+ * re-reads the filesystem or re-decides a disposition — a second derivation of
+ * "what happened to this edit" is exactly the drift this lane exists to close.
+ */
+function buildProposedChanges(
+  forgeRoot: string,
+  brainDir: string,
+  changes: readonly KbEditChange[],
+  gate: { refused: readonly KbEditChange[]; repaired: readonly KbEditChange[]; unsound: readonly KbEditUnsoundness[] },
+  proseChanges: readonly KbEditChange[],
+  proseDisposition: 'drafted' | 'refused',
+): KbDrainProposedChange[] {
+  const refusedPaths = new Set(gate.refused.map((c) => c.relPath));
+  const repairedByPath = new Map(gate.repaired.map((c) => [c.relPath, c]));
+  const prosePaths = new Set(proseChanges.map((c) => c.relPath));
+  const reasonsByPath = new Map<string, string[]>();
+  for (const u of gate.unsound) {
+    const list = reasonsByPath.get(u.relPath) ?? [];
+    list.push(u.message);
+    reasonsByPath.set(u.relPath, list);
+  }
+
+  return changes.map((c) => {
+    const file = relative(forgeRoot, join(brainDir, c.relPath));
+    const repaired = repairedByPath.get(c.relPath);
+    const disposition: KbDrainProposedChange['disposition'] =
+      repaired ? 'repaired'
+      : refusedPaths.has(c.relPath) ? 'refused'
+      : prosePaths.has(c.relPath) ? proseDisposition
+      : 'applied';
+    // A repaired file's diff shows what LANDED, not the rejected proposal —
+    // the reasons carry what was rejected and why.
+    const after = repaired ? (repaired.after ?? '') : (c.after ?? '');
+    const { diff, diffTruncated } = renderProposalDiff(file, c.before ?? '', after);
+    return { file, diff, diffTruncated, disposition, reasons: reasonsByPath.get(c.relPath) ?? [] };
+  });
+}
+
+/** Rows still awaiting this round's post-fix lint — what a mid-round poll sees. */
+function pendingRows(rows: readonly KbDrainRoundRow[]): KbDrainPerFinding[] {
+  return rows.map((row) => ({ ...row, outcome: 'pending' as const }));
 }
 
 function findingKey(f: Finding): string {
@@ -664,6 +811,14 @@ function mintKbCleanupDraftSession(
     });
     if (!draftsOk) return null;
 
+    // Adversarial round 1: a prose rewrite that ALSO destroys a resolvable
+    // edge or writes a dead link is not refused — prose is precisely what the
+    // operator is being asked to judge — but approving this draft writes
+    // `after` back byte-for-byte, so those consequences must be ON THE PAGE
+    // rather than buried in the diff.
+    const soundnessCtx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+    const warnings = proseChanges.flatMap((c) => auditProposedEdit(c, soundnessCtx).map((u) => u.message));
+
     const plan = [
       '# Drain-gated prose edit',
       '',
@@ -677,6 +832,17 @@ function mintKbCleanupDraftSession(
       '',
       ...draftApply.map((d) => `- [${finding.kind}] ${d.file} — drain-gated prose edit awaiting approval (approve replaces the file with ${d.draft})`),
       '',
+      ...(warnings.length > 0
+        ? [
+            '## ⚠ This edit also changes the graph',
+            '',
+            'Approving applies the draft verbatim, including these — each one is a',
+            'change the drain would have REFUSED outright had the edit been structural:',
+            '',
+            ...warnings.map((w) => `- ${w}`),
+            '',
+          ]
+        : []),
       'Approving this session applies the draft content below verbatim.',
       '',
       '```diff',
@@ -859,14 +1025,14 @@ export async function runKbDrain(
       const beforeKeys = progressKeySet(before);
 
       const autoResult = applyAutoFixes(forgeRoot, { filter: inKb, extraFindings: ownLens });
-      const roundRows: KbDrainPerFinding[] = [
+      const roundRows: KbDrainRoundRow[] = [
         ...autoResult.applied.map((x) => autoAppliedEntry(x, round)),
         ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
       ];
       emitProgress(`kb-drain.auto (applied ${autoResult.applied.length}, skipped ${autoResult.skipped.length})`, {
         round, applied: autoResult.applied.length, skipped: autoResult.skipped.length,
       });
-      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...roundRows], costUsd, updatedAt: now() });
+      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
 
       const agentResidual = autoResult.remaining.filter(
         (f): f is Finding & { check: string; kind: string } =>
@@ -885,9 +1051,17 @@ export async function runKbDrain(
           round, file: f.file, check: f.check, kind: f.kind, turn: turnIndex, turns: agentResidual.length,
         });
         // orch-01 STRUCTURAL GATE — snapshot before the turn, classify after.
+        // W8-B2: the slug universe is captured at the SAME instant as the
+        // snapshot, so the audit judges the edit against the brain the agent
+        // actually saw (auto-fixes and earlier turns in this round have already
+        // landed by now).
         const snapshot = snapshotKbFiles(brainDir);
-        let outcome: KbDrainPerFinding['outcome'] = 'not-cleared';
         let draftSession: { id: string; project: string } | undefined;
+        let turnError: string | undefined;
+        // The gate `runBrainFixTurn` ran from the INSIDE. Merged into this
+        // call site's own result below, so the row reports "repaired" for what
+        // the runner repaired instead of silently calling it "applied".
+        let turnAudit: KbEditGateResult | null = null;
         try {
           const result = await runFixTurn({
             runId: subRunId,
@@ -900,26 +1074,62 @@ export async function runKbDrain(
             forgeRoot,
           });
           costUsd += result.costUsd;
-          outcome = result.cleared ? 'cleared' : 'not-cleared';
-        } catch {
+          turnAudit = result.editAudit ?? null;
+        } catch (err) {
           // One turn failing must not abort the rest of the round's queue —
-          // mirrors runBrainConsolidateNow's per-group catch.
+          // mirrors runBrainConsolidateNow's per-group catch. The failure is
+          // RECORDED rather than swallowed into the outcome (see `turnError`).
+          turnError = sanitizeError(err);
+          emitProgress(`kb-drain.turn-failed (${basename(f.file)} · ${turnError})`, {
+            round, file: f.file, check: f.check, error: turnError,
+          });
         }
-        const proseChanges = diffKbSnapshot(brainDir, snapshot).filter((c) => c.klass === 'prose');
+        // The turn's `cleared` self-report is DELIBERATELY NOT READ here. It is
+        // unreliable by construction: `runBrainFixTurn`'s verification gate
+        // re-lints through a forge-only lens, so for a project theme it reports
+        // cleared unconditionally for exactly the checks both 2026-08-22 defects
+        // involved. The row's outcome is derived from this round's real post-fix
+        // lint instead — see `finalizeRoundRows`.
+        // The SAME chokepoint `runBrainFixTurn` itself runs. Double-gating is
+        // deliberate and idempotent: the real turn is already guarded from the
+        // inside, but `runFixTurn` is an INJECTABLE seam (termination-matrix
+        // tests drive it with stubs that write files for real), and a gate that
+        // an injected implementation can walk around is not a gate.
+        const gate: KbEditGateResult = guardAgentKbEdits(forgeRoot, brainDir, snapshot);
+        if (turnAudit) {
+          gate.unsound.push(...turnAudit.unsound);
+          gate.refused.push(...turnAudit.refused);
+          gate.repaired.push(...turnAudit.repaired);
+        }
+        const changes = gate.changes;
+        const proseChanges = changes.filter((c) => c.klass === 'prose');
+        if (gate.unsound.length > 0) {
+          for (const u of gate.unsound) {
+            emitProgress(`kb-drain.refused (${basename(f.file)} · ${u.kind} · ${u.message})`, {
+              round, file: f.file, check: f.check, unsoundKind: u.kind, target: u.target,
+              repairTargets: u.repairTargets,
+            });
+          }
+          if (gate.repaired.length > 0) {
+            emitProgress(`kb-drain.repaired (${basename(f.file)} · ${gate.repaired.length} file(s) repointed at a target that really exists)`, {
+              round, file: f.file, check: f.check, repaired: gate.repaired.map((c) => c.relPath),
+            });
+          }
+        }
+        let proseDisposition: 'drafted' | 'refused' = 'refused';
         if (proseChanges.length > 0) {
           // The prose edit NEVER lands directly: restore, then park the
           // proposal as an operator-approved kb-cleanup draft.
           revertProseChanges(brainDir, proseChanges);
           const minted = mintKbCleanupDraftSession(forgeRoot, kbId, brainDir, f, proseChanges, runId, round);
           if (minted) {
+            proseDisposition = 'drafted';
             draftSession = minted;
             draftedKeys.set(findingKey(f), minted);
-            outcome = 'needs-you';
             emitProgress(`kb-drain.gated (${basename(f.file)} · prose edit parked as draft ${minted.id})`, {
               round, file: f.file, check: f.check, draftSessionId: minted.id, draftProject: minted.project,
             });
           } else {
-            outcome = 'not-cleared';
             emitProgress(`kb-drain.gated (${basename(f.file)} · prose edit reverted; draft session could NOT be written)`, {
               round, file: f.file, check: f.check,
             });
@@ -927,12 +1137,18 @@ export async function runKbDrain(
         }
         roundRows.push({
           key: findingKey(f), check: f.check, kind: f.kind, file: f.file, message: f.message,
-          tier: 'agent', outcome, round, ...(draftSession ? { draftSession } : {}),
+          tier: 'agent', round,
+          ...(draftSession ? { draftSession } : {}),
+          ...(turnError ? { turnError } : {}),
+          ...(f.fixHint ? { fixHint: f.fixHint } : {}),
+          ...(changes.length > 0
+            ? { proposedChanges: buildProposedChanges(forgeRoot, brainDir, changes, gate, proseChanges, proseDisposition) }
+            : {}),
         });
-        emitProgress(`kb-drain.turn-end (${basename(f.file)} · ${outcome} · $${costUsd.toFixed(2)})`, {
-          round, file: f.file, check: f.check, outcome, costUsd,
+        emitProgress(`kb-drain.turn-end (${basename(f.file)} · $${costUsd.toFixed(2)})`, {
+          round, file: f.file, check: f.check, costUsd,
         });
-        status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...roundRows], costUsd, updatedAt: now() });
+        status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
         if (costUsd >= maxCostUsd) {
           costCeilingHit = true;
           break;
@@ -945,7 +1161,13 @@ export async function runKbDrain(
 
       const after = lintKb();
       const counts = resolutionCounts(after);
-      completed.push(...roundRows);
+      // W8-B2 (forge-6gu): `afterKeys` is hoisted ABOVE the push so every row
+      // this round produced is reconciled against the round's own real lint
+      // before it is ever recorded. It used to be computed ~35 lines further
+      // down, for the no-progress check alone, while the rows were finalized
+      // from the agent's self-report — the whole defect in one ordering.
+      const afterKeys = progressKeySet(after);
+      completed.push(...finalizeRoundRows(roundRows, afterKeys));
       const withUserRows = (): KbDrainPerFinding[] => {
         const rows = [...completed];
         for (const f of after) {
@@ -980,7 +1202,6 @@ export async function runKbDrain(
         break;
       }
 
-      const afterKeys = progressKeySet(after);
       const oscillating = afterKeys.size > 0 && [...afterKeys].every((k) => everSeenAfterKeys.has(k));
       if (setsEqual(beforeKeys, afterKeys) || oscillating) {
         status = persist({ ...base, state: 'no-progress', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });

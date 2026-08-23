@@ -576,3 +576,68 @@ test('parseMd cache-poisoning regression — second parse of a gray-matter-rejec
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-B2 (forge-9kr) — cross-sub-wiki related_themes edges are REPORTED, not
+// silently discarded.
+//
+// WHICH WRONG IMPLEMENTATION THIS KILLS: the pre-existing `no dangling edges`
+// test asserts only that every KEPT edge's endpoints exist in this KB's own
+// node set — trivially true by construction, since the `nodeIds.has` guard and
+// the `validEdges` filter each drop the edge before it can be counted. Nothing
+// compared DECLARED edges against EMITTED ones, so 25 real links could vanish
+// from the live brain's graph with every test green.
+// ---------------------------------------------------------------------------
+
+test('buildKbGraph: a related_themes target that is a REAL theme in another sub-wiki is reported as an external edge, not dropped in silence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-graph-external-'));
+  try {
+    const brain = join(root, 'brain');
+    mkdirSync(join(brain, 'cycles', 'themes'), { recursive: true });
+    mkdirSync(join(brain, 'forge-dev', 'themes'), { recursive: true });
+    writeFileSync(join(brain, 'cycles', 'kb.yaml'), 'id: cycles\nname: Cycles\nbinding: { kind: unique }\ndesc: fixture.\n');
+    writeFileSync(join(brain, 'forge-dev', 'kb.yaml'), 'id: forge-dev\nname: Forge dev\nbinding: { kind: unique }\ndesc: fixture.\n');
+    writeFileSync(join(brain, 'cycles', 'patterns.md'), '# patterns\n\n- [a](./themes/a.md)\n');
+    writeFileSync(join(brain, 'cycles', 'themes', 'a.md'), [
+      '---', 'title: a', 'description: d.', 'category: pattern',
+      'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+      'related_themes: [brain-read-policy, no-such-theme-anywhere]',
+      '---', '', '# a', '',
+    ].join('\n'));
+    // The cross-sub-wiki target is REAL — it just lives in another KB.
+    writeFileSync(join(brain, 'forge-dev', 'themes', 'brain-read-policy.md'), [
+      '---', 'title: brp', 'description: d.', 'category: reference',
+      'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+      '---', '', '# brp', '',
+    ].join('\n'));
+
+    const g = buildKbGraph(root, 'cycles');
+    // Still not DRAWN — a per-KB graph has no node to draw it to.
+    assert.equal(g.edges.some((e) => e.to === 'brain-read-policy'), false);
+    // But no longer invisible.
+    assert.deepEqual(g.externalEdges, [{ from: 'a', toSlug: 'brain-read-policy' }]);
+    // A genuinely dangling entry is NOT reported here: checkDanglingEdges owns
+    // that verdict, and a second voice would be a second derivation.
+    assert.equal(g.externalEdges.some((e) => e.toSlug === 'no-such-theme-anywhere'), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('buildKbGraph: externalEdges is always present and empty for a KB with no cross-sub-wiki links', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-graph-external-none-'));
+  try {
+    const brain = join(root, 'brain');
+    mkdirSync(join(brain, 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(brain, 'cycles', 'kb.yaml'), 'id: cycles\nname: Cycles\nbinding: { kind: unique }\ndesc: fixture.\n');
+    writeFileSync(join(brain, 'cycles', 'patterns.md'), '# patterns\n\n- [a](./themes/a.md)\n');
+    writeFileSync(join(brain, 'cycles', 'themes', 'a.md'), [
+      '---', 'title: a', 'description: d.', 'category: pattern',
+      'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+      'related_themes: []', '---', '', '# a', '',
+    ].join('\n'));
+    assert.deepEqual(buildKbGraph(root, 'cycles').externalEdges, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

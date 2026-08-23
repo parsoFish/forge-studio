@@ -22,7 +22,10 @@ import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts'
 import { withIdleDeadline } from './stream-deadline.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
-import { runBrainLint } from '../cli/brain-lint.ts';
+import { runBrainLint, lintThemeFiles, classify } from '../cli/brain-lint.ts';
+import { snapshotKbFiles } from '../cli/kb-drain-structural.ts';
+import { guardAgentKbEdits, type KbEditGateResult } from '../cli/kb-drain-edit-soundness.ts';
+import { resolveKbBrainDir } from './brain-paths.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,9 @@ export type RunBrainFixResult = {
   runId: string;
   /** True when the re-lint after the agent turn found no same-kind finding. */
   cleared: boolean;
+  /** W8-B2 — what the edit-soundness gate did to this turn's writes. Absent
+   *  only when the KB id resolves to no brain dir (nothing to guard). */
+  editAudit?: KbEditGateResult;
 };
 
 // ---------------------------------------------------------------------------
@@ -163,6 +169,18 @@ export async function runBrainFixTurn(
   const queryImpl: QueryFn =
     input.queryFn ?? (sdkQuery as unknown as QueryFn);
 
+  // W8-B2 — the edit-soundness gate runs HERE, around the turn itself, not at
+  // a call site. `runBrainFixTurn` has three production callers: the drain's
+  // round loop, `runBrainConsolidateNow` (the Consolidate button, and
+  // approveKbCleanup's non-draft arm), and `forge brain fix` (which the
+  // per-finding `op=fix-agent` route the needs-you walkthrough dispatches
+  // spawns as a subprocess). The first cut guarded the drain alone, so the two
+  // paths an operator clicks by HAND could still land the exact 2026-08-22
+  // edits. Guarding a call site closes a door; guarding the turn closes the
+  // class — no caller, present or future, can invoke this ungated.
+  const guardedBrainDir = resolveKbBrainDir(input.forgeRoot, input.kbId);
+  const preTurnSnapshot = guardedBrainDir ? snapshotKbFiles(guardedBrainDir) : null;
+
   let costUsd = 0;
   let toolSeq = 0;
   let lastHeartbeatMs = 0;
@@ -224,10 +242,14 @@ export async function runBrainFixTurn(
       metadata: { error: err instanceof Error ? err.message : String(err) },
     });
     sink.flushIteration(1);
-    return { runId: input.runId, cleared: false };
+    return { runId: input.runId, cleared: false, ...(applyEditGate() ?? {}) };
   }
 
   sink.flushIteration(1);
+  // BEFORE the verification lint, deliberately: a refused edit is reverted, so
+  // the finding is back on disk and the re-lint must see that rather than the
+  // agent's rejected version.
+  const editAudit = applyEditGate();
 
   // ---------------------------------------------------------------------------
   // Verification gate: re-lint the file and check if the same kind cleared.
@@ -235,12 +257,26 @@ export async function runBrainFixTurn(
   const relFile = relative(input.forgeRoot, input.file);
   let cleared = false;
   try {
-    const lintResult = runBrainLint({
-      cwd: input.forgeRoot,
-      scope: 'single-file',
-      file: relFile,
-    });
-    cleared = !lintResult.findings.some(
+    // W8-B2 — the verification lens must cover the file it is verifying.
+    //
+    // `runBrainLint`'s `checkSourceLinks` and `checkDanglingEdges` are both
+    // CHECK_SCOPE 'forge-themes': they iterate `readThemeFiles`, which walks
+    // ONLY brain/cycles/themes and brain/forge-dev/themes (its own comment
+    // still says project themes live in separate repos — ADR 035 centralised
+    // them into brain/projects/<name>/themes/ in 2026-06). So for a project
+    // theme those two checks produced NO finding at all, cleared or not, and
+    // `cleared` came back unconditionally TRUE for exactly the two check kinds
+    // both 2026-08-22 drain defects involved. That is how a link repointed at
+    // a second dead path got reported cleared.
+    //
+    // `lintThemeFiles` is the project-aware lens the KB drain already surfaces
+    // findings through (via `collectKbFindings`). Unioning it in means the
+    // thing that raises a finding and the thing that verifies its fix agree
+    // about which files exist — two derivations disagreeing is the exact shape
+    // of forge-d8l.
+    const scoped = runBrainLint({ cwd: input.forgeRoot, scope: 'single-file', file: relFile }).findings;
+    const perFile = lintThemeFiles(input.forgeRoot, [input.file]).map((f) => (f.resolution ? f : classify(f)));
+    cleared = ![...scoped, ...perFile].some(
       (f) => f.kind === input.kind && (f.file === input.file || f.file === relFile),
     );
   } catch {
@@ -260,5 +296,16 @@ export async function runBrainFixTurn(
     metadata: { runId: input.runId, kind: input.kind, file: input.file, cleared },
   });
 
-  return { runId: input.runId, cleared };
+  return { runId: input.runId, cleared, ...(editAudit ?? {}) };
+
+  function applyEditGate(): { editAudit: KbEditGateResult } | undefined {
+    if (!guardedBrainDir || preTurnSnapshot === null) return undefined;
+    try {
+      return { editAudit: guardAgentKbEdits(input.forgeRoot, guardedBrainDir, preTurnSnapshot) };
+    } catch {
+      // A gate that throws must not take the turn down with it — but it must
+      // also not report a clean audit it never performed.
+      return undefined;
+    }
+  }
 }

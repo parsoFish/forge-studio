@@ -30,7 +30,9 @@ import { pollKbDrain, pollAgentFix, pollDisplayState, type PolledKbDrainStatus }
 import {
   drainStateCopy, findingsByTier, resolveUserTierStep, isKbDrainTerminal,
   findingRounds, formatDrainElapsed, deriveDrainDisplayState,
-  KB_DRAIN_MAX_ROUNDS_DISPLAY, type KbDrainDisplayState,
+  findingDisposition, findingRefusalReasons, findingHasDetail, deriveFindingNodeHref,
+  pendingDraftSessions,
+  KB_DRAIN_MAX_ROUNDS_DISPLAY, KB_DRAIN_OUTCOME_GLYPH, type KbDrainDisplayState,
 } from '@/lib/kb-drain-view';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
@@ -42,7 +44,21 @@ const btn: CSSProperties = {
   border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
 };
 
-const OUTCOME_GLYPH: Record<KbDrainPerFinding['outcome'], string> = { cleared: '✓', 'not-cleared': '⚠', 'needs-you': '?' };
+/** W8-B2: the glyph vocabulary moved to `lib/kb-drain-view.ts` so it is
+ *  exhaustively type-checked against the wire union in a file that is actually
+ *  unit-tested — a new outcome with no glyph is now a compile error here. */
+const OUTCOME_GLYPH = KB_DRAIN_OUTCOME_GLYPH;
+
+/** Refused/repaired rows are the ones the operator most needs to notice; a
+ *  landed one is ordinary. Colour follows that, not the tier. */
+const DISPOSITION_TONE: Record<string, string> = {
+  refused: 'var(--amber)',
+  repaired: 'var(--c-kb)',
+  drafted: 'var(--amber)',
+  mixed: 'var(--amber)',
+  applied: 'var(--faint)',
+  none: 'var(--faint)',
+};
 
 // ---------------------------------------------------------------------------
 // Container — hooks, effects, fetch/poll wiring.
@@ -252,6 +268,7 @@ export function KbDrainPanel({
         costUsd={status?.costUsd ?? 0}
         counts={status?.counts ?? { auto: 0, agent: 0, user: 0 }}
         perFinding={status?.perFinding ?? []}
+        kbId={kbId}
         startedAt={status?.startedAt}
         maxRounds={status?.maxRounds}
         maxCostUsd={status?.maxCostUsd}
@@ -305,6 +322,9 @@ export type KbDrainPanelViewProps = {
   costUsd: number;
   counts: { auto: number; agent: number; user: number };
   perFinding: KbDrainPerFinding[];
+  /** W8-B2 (ON-3): the KB whose findings these are — the Explore deep link is
+   *  DERIVED from it plus the finding's own path, never stored on the row. */
+  kbId: string;
   /** W7-B2 (knowledge-14): elapsed + real budget — optional (pre-W7 runs). */
   startedAt?: string;
   maxRounds?: number;
@@ -330,7 +350,7 @@ export type KbDrainPanelViewProps = {
 };
 
 export function KbDrainPanelView({
-  displayState, round, runId, costUsd, counts, perFinding,
+  displayState, round, runId, costUsd, counts, perFinding, kbId,
   startedAt, maxRounds, maxCostUsd, nowMs,
   attaching, dispatchError, readError = null,
   cancelArmed, cancelBusy, cancelMsg,
@@ -345,6 +365,9 @@ export function KbDrainPanelView({
   const rounds = findingRounds(progressFindings);
   const roundsDisplay = maxRounds ?? KB_DRAIN_MAX_ROUNDS_DISPLAY;
   const elapsed = displayState === 'running' ? formatDrainElapsed(startedAt, nowMs) : null;
+  // W8-B2 (ON-4): drain-gated edits waiting on the operator. Derived from the
+  // rows themselves — no `pendingDraft` flag for a writer to forget.
+  const pendingDrafts = pendingDraftSessions(perFinding);
 
   return (
     <div
@@ -435,7 +458,7 @@ export function KbDrainPanelView({
                   round {r}
                 </div>
               )}
-              {progressFindings.filter((f) => (f.round ?? 0) === r).map((f) => <FindingRow key={`${r}::${f.key}::${f.outcome}`} f={f} />)}
+              {progressFindings.filter((f) => (f.round ?? 0) === r).map((f) => <FindingRow key={`${r}::${f.key}::${f.outcome}`} f={f} kbId={kbId} />)}
             </div>
           ))}
         </div>
@@ -446,7 +469,7 @@ export function KbDrainPanelView({
         <div data-drain-section="needs-you" data-user-index={userIdx} data-user-total={userStep.total} style={{ marginTop: 14 }}>
           {userStep.finding ? (
             <>
-              <FindingRow f={userStep.finding} />
+              <FindingRow f={userStep.finding} kbId={kbId} />
               <textarea
                 data-component="user-resolution-input"
                 value={userNote}
@@ -484,6 +507,43 @@ export function KbDrainPanelView({
         </div>
       )}
 
+      {/* W8-B2 (ON-4) — "the review draft button for edits to the brains is so
+          unnoticeable it's insane." It was an 11px text link nested inside a
+          round-grouped finding row. The per-row link stays (it names WHICH
+          finding), but the fact that unapplied edits to a real brain are
+          sitting here waiting now gets a sticky, panel-width affordance in the
+          GateBar/DemoReviewSurface idiom, plus a Home attention row. */}
+      {pendingDrafts.length > 0 && (
+        <div
+          data-component="drain-pending-drafts-bar"
+          data-pending-draft-count={pendingDrafts.length}
+          style={{
+            position: 'sticky', bottom: 12, zIndex: 5, marginTop: 12,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            padding: '9px 13px', background: 'var(--panel-2)',
+            border: '1px solid var(--ember)', borderRadius: 'var(--radius)',
+          }}
+        >
+          <span className="badge badge-kb">KB</span>
+          <span style={{ flex: 1, minWidth: 180, fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
+            {pendingDrafts.length === 1
+              ? '1 brain edit is waiting for your review — nothing has been applied.'
+              : `${pendingDrafts.length} brain edits are waiting for your review — nothing has been applied.`}
+          </span>
+          {pendingDrafts.map((d, i) => (
+            <Link
+              key={d.id}
+              data-action="review-drain-draft"
+              data-draft-session={d.id}
+              href={`/sessions/kb-cleanup/${encodeURIComponent(d.id)}?project=${encodeURIComponent(d.project)}`}
+              style={{ ...btn, borderColor: 'var(--ember)', color: 'var(--ember)', fontWeight: 600, textDecoration: 'none' }}
+            >
+              {pendingDrafts.length === 1 ? 'Review the diff →' : `Review #${i + 1} →`}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {runId && (
         <ActivityLog
           label="kb drain"
@@ -497,32 +557,113 @@ export function KbDrainPanelView({
   );
 }
 
-/** One finding row: outcome glyph · file basename · rule · message — plus a
- *  link to the drain-gated draft session when one was minted (orch-01). */
-function FindingRow({ f }: { f: KbDrainPerFinding }) {
+/**
+ * One finding row (W8-B2, ON-3).
+ *
+ * Operator note ON-3: "it's very hard to see what changes are being proposed
+ * when it raises those up to the operator, and there's no way to drill into
+ * what it thinks the issues are and what it's trying to do to fix them. The
+ * issues should link back to the explore page."
+ *
+ * So the row now carries, all derived and none of it stored twice:
+ *   - the outcome glyph + the DISPOSITION of what the turn proposed;
+ *   - a deep link to this finding's own theme in Explore (`?node=`), when the
+ *     finding is about a theme node at all;
+ *   - a disclosure holding the proposal DIFF per file, the audit's refusal /
+ *     repair reasons, the brief the agent was given, and any crash.
+ *
+ * The disclosure renders only when `findingHasDetail` says there is something
+ * inside it — an empty drawer is its own small lie.
+ */
+function FindingRow({ f, kbId }: { f: KbDrainPerFinding; kbId: string }) {
   const fileBase = f.file.split('/').pop() ?? f.file;
+  const disposition = findingDisposition(f);
+  const reasons = findingRefusalReasons(f);
+  const nodeHref = deriveFindingNodeHref(f, kbId);
+  const hasDetail = findingHasDetail(f);
+  const proposals = f.proposedChanges ?? [];
   return (
     <div
       data-drain-finding
       data-drain-finding-tier={f.tier}
       data-drain-finding-outcome={f.outcome}
       data-drain-finding-file={fileBase}
-      style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', fontSize: 11.5, color: 'var(--dim)', borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}
+      data-drain-finding-disposition={disposition}
+      data-drain-finding-proposals={proposals.length}
+      data-drain-finding-reasons={reasons.length}
+      style={{ padding: '3px 0', fontSize: 11.5, color: 'var(--dim)', borderTop: '1px solid var(--line)' }}
     >
-      <span style={{ fontFamily: 'var(--font-mono)', color: f.outcome === 'not-cleared' ? 'var(--amber)' : 'var(--faint)', fontSize: 10 }}>
-        {OUTCOME_GLYPH[f.outcome]}
-      </span>
-      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{fileBase}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint)', fontSize: 10.5 }}>{f.check}</span>
-      <span style={{ flex: 1, minWidth: 180 }}>{f.message}</span>
-      {f.draftSession && (
-        <Link
-          data-action="open-drain-draft"
-          href={`/sessions/kb-cleanup/${encodeURIComponent(f.draftSession.id)}?project=${encodeURIComponent(f.draftSession.project)}`}
-          style={{ fontSize: 11, color: 'var(--c-kb)' }}
-        >
-          review draft →
-        </Link>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', color: f.outcome === 'not-cleared' ? 'var(--amber)' : 'var(--faint)', fontSize: 10 }}>
+          {OUTCOME_GLYPH[f.outcome]}
+        </span>
+        {nodeHref ? (
+          <Link
+            data-action="open-finding-node"
+            data-finding-node-href={nodeHref}
+            href={nodeHref}
+            style={{ fontFamily: 'var(--font-mono)', color: 'var(--c-kb)' }}
+          >
+            {fileBase}
+          </Link>
+        ) : (
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{fileBase}</span>
+        )}
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint)', fontSize: 10.5 }}>{f.check}</span>
+        {disposition !== 'none' && (
+          <span
+            data-component="drain-finding-disposition"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: DISPOSITION_TONE[disposition] ?? 'var(--faint)' }}
+          >
+            {disposition}
+          </span>
+        )}
+        <span style={{ flex: 1, minWidth: 180 }}>{f.message}</span>
+        {f.draftSession && (
+          <Link
+            data-action="open-drain-draft"
+            href={`/sessions/kb-cleanup/${encodeURIComponent(f.draftSession.id)}?project=${encodeURIComponent(f.draftSession.project)}`}
+            style={{ fontSize: 11, color: 'var(--c-kb)' }}
+          >
+            review draft →
+          </Link>
+        )}
+      </div>
+      {hasDetail && (
+        <details data-component="drain-finding-detail" style={{ marginTop: 4 }}>
+          <summary data-action="toggle-finding-detail" style={{ cursor: 'pointer', fontSize: 11, color: 'var(--c-kb)' }}>
+            what it proposed{proposals.length > 1 ? ` (${proposals.length} files)` : ''}
+          </summary>
+          {f.fixHint && (
+            <div data-component="drain-finding-brief" style={{ marginTop: 5, fontSize: 11, color: 'var(--dim)' }}>
+              <span style={{ color: 'var(--faint)' }}>brief: </span>{f.fixHint}
+            </div>
+          )}
+          {reasons.length > 0 && (
+            <ul data-component="drain-finding-reasons" style={{ margin: '5px 0 0', paddingLeft: 16, fontSize: 11, color: 'var(--amber)' }}>
+              {reasons.map((r, i) => <li key={i} data-drain-finding-reason>{r}</li>)}
+            </ul>
+          )}
+          {f.turnError && (
+            <div data-component="drain-finding-turn-error" style={{ marginTop: 5, fontSize: 11, color: 'var(--amber)' }}>
+              <span style={{ color: 'var(--faint)' }}>the fix turn crashed: </span>{f.turnError}
+            </div>
+          )}
+          {proposals.map((p) => (
+            <div key={p.file} data-drain-proposal data-drain-proposal-file={p.file} data-drain-proposal-disposition={p.disposition} style={{ marginTop: 6 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)' }}>{p.file}</div>
+              <pre
+                data-component="drain-proposal-diff"
+                style={{ margin: '3px 0 0', padding: 7, background: 'var(--panel-2)', border: '1px solid var(--line-2)', borderRadius: 5, fontSize: 10.5, fontFamily: 'var(--font-mono)', overflowX: 'auto', whiteSpace: 'pre', maxHeight: 260 }}
+              >{p.diff}</pre>
+              {p.diffTruncated && (
+                <div data-component="drain-proposal-truncated" style={{ fontSize: 10.5, color: 'var(--faint)' }}>
+                  diff truncated — open the file to see the rest
+                </div>
+              )}
+            </div>
+          ))}
+        </details>
       )}
     </div>
   );
