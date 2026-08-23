@@ -1,5 +1,6 @@
 import { STATUS_COLOR } from './status-colors';
 import type { ArchitectPhase } from './bridge-client';
+import type { SessionLifecycleState } from './session-lifecycle-client';
 
 /**
  * Architect-phase presentation logic, extracted out of the old MomentHex
@@ -43,9 +44,51 @@ export const STALE_THRESHOLD_MS = 120_000;
 type HexPhase = ArchitectPhase | 'briefing';
 
 /** Resolve the hex meta for a phase, defaulting to the idle tone. The pre-spawn
- *  'briefing' phase has no agent activity, so it reads idle. */
+ *  'briefing' phase has no agent activity, so it reads idle.
+ *
+ *  W8-A2 (ON-7 defect 3) — an UNKNOWN phase's fallback tone was `idle`,
+ *  which reads as "calm, nothing to worry about". That is not an honest
+ *  default: a phase this map does not recognise (a future phase this file
+ *  has not been taught yet, a corrupted status.json) is an ANOMALY, not
+ *  calm — an unknown-but-actually-failed session reading `idle` is the
+ *  exact same defect this fix's `architectHexMetaForLifecycle` closes for
+ *  the KNOWN-phase case, one level up. `attention` ("take a look") is the
+ *  honest default for "this doesn't match anything I know how to render" —
+ *  never a claim that nothing is happening. `frac`/`label` are unchanged
+ *  (0 / the raw phase string) — this is a tone fix only. */
 export function architectHexMeta(phase: HexPhase): HexMeta {
-  return ARCHITECT_HEX_META[phase as ArchitectPhase] ?? { glow: STATUS_COLOR.idle, frac: 0, label: phase };
+  return ARCHITECT_HEX_META[phase as ArchitectPhase] ?? { glow: STATUS_COLOR.attention, frac: 0, label: phase };
+}
+
+/**
+ * W8-A2 (ON-7 defect 3) — derives the architect hex's presentation from
+ * BOTH the stored `phase` AND the DERIVED session lifecycle, so a CRASHED
+ * runner renders the failed tone and a truthful label whatever its frozen
+ * `phase` says. A crashed runner dies mid-work — it never gets to write a
+ * "the phase is now retired" fact to status.json — so `phase` stays stuck
+ * at whatever it was doing (`drafting` reads "drafting the plan…" forever).
+ *
+ * Deliberately NOT a new `ArchitectPhase` member. `phase` is a STORED
+ * status.json field; a runner that just crashed is, by construction, past
+ * the point where it could ever write one more field to that file. A
+ * `failed` phase some writer must remember to set is this campaign's
+ * dominant defect class (declared-data-fails-open, 25+ recurrences in wave
+ * 7) — including inside the very lifecycle primitive built to fix it. This
+ * function has NO settable "failed" field anywhere: `lifecycleState` is
+ * re-derived fresh on every read (`deriveSessionLifecycleFor`,
+ * cli/bridge-studio-lifecycle.ts) by the CALLER and passed in here as a
+ * plain argument — nothing is stored by this module or by this function.
+ * Pure: same phase + lifecycle in, same {@link HexMeta} out, always.
+ *
+ * `lifecycleState` is `undefined` for any caller that has not yet threaded
+ * the wire's `lifecycle` field through (declared-data-fails-open guard,
+ * additive-optional) — that reads as the ordinary phase-only tone, never a
+ * fabricated crash.
+ */
+export function architectHexMetaForLifecycle(phase: HexPhase, lifecycleState: SessionLifecycleState | undefined): HexMeta {
+  const base = architectHexMeta(phase);
+  if (lifecycleState !== 'crashed') return base;
+  return { glow: STATUS_COLOR.failed, frac: base.frac, label: `${base.label} — crashed` };
 }
 
 /** Is the phase a working phase (architect runner busy)? 'briefing' is not. */

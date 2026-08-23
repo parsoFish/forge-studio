@@ -154,3 +154,63 @@ test('flows-49 (review round 3, S2-5): a successful action keeps the section mou
   expect(runControlsShouldRender(3, false, null, null), 'controls to offer → render').toBe(true);
   expect(runControlsShouldRender(0, true, null, null), 'a queued run needs the scheduler → render').toBe(true);
 });
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7 defect 2, WI-1a item 5) — a budget stop must not be presented
+// as a crash. `RunControls`/`RunRail` both route through `runFailureNoteKind`
+// + `describeStopOnBudget` (this module) instead of two independent
+// ternaries — tested here at the pure-logic seam both components call.
+// ---------------------------------------------------------------------------
+import { describeStopOnBudget, runFailureNoteKind } from './run-controls.ts';
+
+const STOP_ON_BUDGET: NonNullable<Run['stopOnBudget']> = {
+  spentUsd: 80.83237065,
+  ceilingUsd: 52,
+  resumable: true,
+  completedWorkItems: 6,
+  totalWorkItems: 6,
+  stoppedBeforeNode: 'demo',
+};
+
+test('WI-1a-5: a run with stopOnBudget renders the budget stop, never the stale failNote', () => {
+  // KILLS: a fix that renders `failNote` whenever it is present regardless
+  // of `stopOnBudget` (the pre-fix shape — `failNote` unconditionally wins).
+  const failed = run('failed', {
+    stopOnBudget: STOP_ON_BUDGET,
+    failNote: 'failure could not be classified — examine events.jsonl manually',
+  });
+  expect(runFailureNoteKind(failed)).toBe('budget');
+  const text = describeStopOnBudget(failed.stopOnBudget!);
+  expect(text).not.toContain('could not be classified');
+  expect(text).toContain('Stopped on budget');
+  expect(text).toContain('$80.83');
+  expect(text).toContain('$52.00');
+  expect(text).toContain('6 of 6 work items complete');
+  expect(text).toContain('resumable before demo');
+});
+
+test('WI-1a-5: a run with a real failure and NO stopOnBudget still renders failNote', () => {
+  // KILLS: a fix that always prefers `stopOnBudget`-shaped copy (e.g. a
+  // literal `'budget'` return) regardless of whether the field is present —
+  // this is the negative control that stops an ordinary crash from being
+  // relabelled "stopped on budget".
+  const failed = run('failed', { failNote: 'TypeError: Cannot read properties of undefined' });
+  expect(failed.stopOnBudget).toBeUndefined();
+  expect(runFailureNoteKind(failed)).toBe('fail-note');
+});
+
+test('WI-1a-5: a failed run with neither stopOnBudget nor failNote renders neither kind; a non-failed run never renders either even with stopOnBudget set', () => {
+  expect(runFailureNoteKind(run('failed'))).toBe(null);
+  // KILLS: a fix that keys ONLY on `stopOnBudget`/`failNote` presence and
+  // forgets the `status === 'failed'` gate — a resumed run whose stale
+  // stopOnBudget/failNote fields have not yet been cleared server-side must
+  // never render a failure note once it is running/gated/queued again.
+  expect(runFailureNoteKind(run('running', { stopOnBudget: STOP_ON_BUDGET }))).toBe(null);
+});
+
+test('WI-1a-5: describeStopOnBudget omits the resumable-boundary clause honestly when stoppedBeforeNode is absent', () => {
+  const { stoppedBeforeNode: _drop, ...rest } = STOP_ON_BUDGET;
+  const text = describeStopOnBudget(rest as NonNullable<Run['stopOnBudget']>);
+  expect(text).toContain(', resumable.');
+  expect(text).not.toContain('resumable before');
+});

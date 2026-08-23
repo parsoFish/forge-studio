@@ -69,13 +69,24 @@ export type AgentFlowNodeRunEntry = { run: Run; nodeId: string; href: string };
 
 /** A standalone (non-flow) worker dispatch. `status` is its OWN closed
  *  vocabulary — never coerced into `RunStatus`/`RunPhaseStatus` (D12).
- *  `costUsd: null` when the cost genuinely does not exist yet. */
+ *  `costUsd: null` when the cost genuinely does not exist yet.
+ *
+ *  W8-A2 (ON-7 defect 4) — 'stalled' added: `StandaloneRunState['state']`
+ *  (cli/ui-bridge.ts) grew this member (a run whose process died/wedged
+ *  with no terminal marker, silent past the stall ceiling) and this union
+ *  is the enforcement point for what a standalone row's status may be
+ *  (`STANDALONE_STATUSES` below, `isValidStandaloneEntry`) — leaving it
+ *  out here would not merely mis-render a stalled row, it would reject the
+ *  ENTIRE ledger response as 'unresolved' the moment one appeared (every
+ *  item must validate or the whole response is rejected — see
+ *  `resolveAgentHistoryFromResponse`'s own doc comment), which is worse
+ *  than the defect this fix closes. */
 export type AgentStandaloneRunEntry = {
   id: string;
   href: string;
   when: string;
   what: string;
-  status: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded';
+  status: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded' | 'stalled';
   costUsd: number | null;
   trigger?: LedgerRowTrigger;
 };
@@ -239,7 +250,7 @@ export type AgentHistoryResolution =
  *  runtime array because a TS union has no runtime membership check of its
  *  own — same precedent as session-kinds.ts's `SESSION_STAGES`
  *  (`Object.freeze([...] as const)`), kept in sync by hand. */
-const STANDALONE_STATUSES = Object.freeze(['running', 'done', 'failed', 'suppressed', 'budget-exceeded'] as const);
+const STANDALONE_STATUSES = Object.freeze(['running', 'done', 'failed', 'suppressed', 'budget-exceeded', 'stalled'] as const);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

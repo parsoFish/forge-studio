@@ -85,7 +85,16 @@ import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
-import { deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun, type SessionLifecycleState } from './bridge-studio-lifecycle.ts';
+import {
+  deriveSessionLifecycleFor, sessionLogDirName, killTrackedRun,
+  type SessionLifecycleState, type SessionLifecycle,
+  // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
+  // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
+  // below): the SAME stall ceiling, ownership-proof liveness check, and
+  // crash-message extraction sessions already use — never a second,
+  // independently-invented staleness rule.
+  DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage,
+} from './bridge-studio-lifecycle.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -975,7 +984,19 @@ type AgentHistoryRow =
   | { id: string; linkKind: 'session'; href: string; status: string; costUsd: number | null; when: string; what: string };
 
 type StandaloneRunState = {
-  state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded' | 'cancelled';
+  /**
+   * W8-A2 (ON-7 defect 4) — 'stalled' added. Every OTHER member is derived
+   * from a TERMINAL MARKER the run's own events.jsonl recorded (an `end`
+   * event, a `agent-dispatch.{failed,cancelled}` log, a suppression
+   * message) — there was no time-based signal at all, so a process
+   * SIGKILLed with no terminal marker read byte-identical to one that
+   * started two seconds ago: 'running' forever. 'stalled' is the ONLY
+   * member derived from silence rather than a marker — see
+   * `applyStandaloneStaleness`'s doc comment for the exact rule (reusing
+   * the session lifecycle's own stall ceiling / liveness proof, never a
+   * second invented one).
+   */
+  state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded' | 'cancelled' | 'stalled';
   costUsd: number | null;
   events: number;
   lines: Record<string, unknown>[];
@@ -1104,19 +1125,129 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
   };
 }
 
+/**
+ * W8-A2 (ON-7 defect 4) — a standalone run's OWN on-disk liveness facts.
+ * `spawnAgentDispatch` (this file) writes `events.jsonl`, `stderr.log` AND
+ * `turn.pid` into the SAME `_logs/<runId>/` directory — unlike a
+ * SESSION-bound dispatch (onboarding etc.), whose tracked `turn.pid` lives
+ * in the session's OWN log dir while its events/stderr live in a DIFFERENT
+ * one (`_logs/<runId>/`; see `readSessionLifecycleFacts`'s doc comment in
+ * bridge-studio-lifecycle.ts). Because a standalone run never splits those
+ * facts across two directories, `lastActivityMs`/`turnAlive` are read the
+ * same guarded way `readSessionLifecycleFacts` reads them, just against one
+ * flat directory instead of a per-kind session template.
+ */
+function readStandaloneLivenessFacts(logsRoot: string, runEntryName: string): {
+  idleMs: number | null;
+  turnAlive: boolean;
+  stderr: { text: string; mtimeMs: number } | null;
+} {
+  const guardedMtime = (segments: readonly string[]): number | null => {
+    const guarded = resolveGuardedPath(logsRoot, segments);
+    if (!guarded.ok || !guarded.exists) return null;
+    try {
+      return statSync(guarded.realPath).mtimeMs; // guard-terminal: `guarded.realPath` IS the guard's own output.
+    } catch {
+      return null;
+    }
+  };
+  const eventsMtimeMs = guardedMtime([runEntryName, 'events.jsonl']);
+  const stderrMtimeMs = guardedMtime([runEntryName, 'stderr.log']);
+  const pidMtimeMs = guardedMtime([runEntryName, 'turn.pid']);
+  const candidates = [eventsMtimeMs, stderrMtimeMs, pidMtimeMs].filter((m): m is number => m !== null);
+  const lastActivityMs = candidates.length > 0 ? Math.max(...candidates) : null;
+
+  const pidRaw = guardedReadFile(logsRoot, [runEntryName, 'turn.pid']);
+  const turnPid = pidRaw !== null && /^\d+\s*$/.test(pidRaw.trim()) ? Number.parseInt(pidRaw.trim(), 10) : null;
+  // Ownership mark = the runId itself, a whole argv element — the SAME
+  // contract `killTrackedRun` already trusts for the cancel route
+  // (`--run-id <runId>`, buildAgentDispatchArgs).
+  const turnAlive = turnPid !== null && isTurnAlive(turnPid, runEntryName);
+
+  const stderrText = stderrMtimeMs !== null ? guardedReadFile(logsRoot, [runEntryName, 'stderr.log']) : null;
+  const stderr = stderrText !== null && stderrText.trim().length > 0 && stderrMtimeMs !== null ? { text: stderrText, mtimeMs: stderrMtimeMs } : null;
+
+  return {
+    idleMs: lastActivityMs !== null ? Math.max(0, Date.now() - lastActivityMs) : null,
+    turnAlive,
+    stderr,
+  };
+}
+
+/**
+ * W8-A2 (ON-7 defect 4) — narrows a 'running' verdict to 'stalled' using the
+ * run's own liveness facts. Every OTHER state is a terminal marker and is
+ * NEVER overridden (a `done`/`failed`/`cancelled` run cannot un-happen
+ * because a later poll finds an old mtime). `idleMs === null` (no log dir
+ * at all — no liveness signal to be silent on) stays 'running': an honest
+ * "unknown", never a guess — the SAME rule `deriveSessionLifecycle` applies
+ * to a session with no log dir.
+ *
+ * Reuses `DEFAULT_STALL_CEILING_MS` (bridge-studio-lifecycle.ts) — ONE
+ * ceiling across the product, not a second invented one for standalone
+ * runs — and `isTurnAlive`, the SAME ownership-proof liveness check the
+ * cancel route already trusts.
+ *
+ * NO `turnAlive && !hasChannel` exemption (the sibling rule
+ * `deriveSessionLifecycle:159` applies for SESSION-bound dispatches, whose
+ * tracked turn.pid can live in a directory with no heartbeat/events channel
+ * at all). A standalone run's `turn.pid`, `events.jsonl` and `stderr.log`
+ * are ALL written into this SAME directory by `spawnAgentDispatch` — so a
+ * live pid always shares its directory with a real events channel once
+ * anything has landed, and a live-but-silent-past-ceiling standalone run (a
+ * wedged tool call, a hung SDK turn) is exactly the zombie shape this
+ * exists to catch, not exempt from. Applying the session's exemption here
+ * would mean a standalone run could NEVER be caught stalled while its
+ * process happens to still be alive — the real leaked dirs on disk today
+ * (`_agent-onboarding-agent-*`, `_agent-w7-throwaway-agent-*`) are dead
+ * processes with no live pid at all, where the exemption is moot anyway;
+ * a live-but-wedged one is the case it would wrongly protect.
+ */
+function applyStandaloneStaleness(
+  state: StandaloneRunState['state'],
+  liveness: { idleMs: number | null },
+): StandaloneRunState['state'] {
+  if (state !== 'running') return state;
+  if (liveness.idleMs === null) return 'running';
+  return liveness.idleMs > DEFAULT_STALL_CEILING_MS ? 'stalled' : 'running';
+}
+
+/** The ONE seam every caller of `deriveStandaloneStateFromEvents` routes a
+ *  result through before using it — so a future caller cannot forget the
+ *  staleness override, mirroring `deriveRowLifecycle`'s same role for
+ *  sessions. When the override promotes 'running' to 'stalled' AND a real
+ *  stderr.log exists, `errorText` carries the runner's own last words
+ *  (`extractErrorMessage` — the SAME crash-message extraction sessions use)
+ *  rather than the bare word "stalled"; a stalled run with an empty/absent
+ *  stderr stays honestly errorText-less, same as a stalled SESSION's
+ *  `error: null`. */
+function withStandaloneLiveness(logsRoot: string, runEntryName: string, base: StandaloneRunState): StandaloneRunState {
+  const liveness = readStandaloneLivenessFacts(logsRoot, runEntryName);
+  const state = applyStandaloneStaleness(base.state, liveness);
+  if (state === base.state) return base;
+  return {
+    ...base,
+    state,
+    ...(liveness.stderr !== null ? { errorText: extractErrorMessage(liveness.stderr.text) } : {}),
+  };
+}
+
 /** Full derivation for a standalone run directory: handles the "dispatched,
  *  no event has landed yet" state (no `events.jsonl` at all, OR a poisoned
  *  entry the guard rejected — both collapse to the same honest "no events
  *  observed" outcome, never a leak) honestly — `running`/`costUsd: null` —
- *  then delegates to the shared per-event derivation above. Used by BOTH
- *  `GET /api/agents/runs/<runId>` and the history route's standalone-path
- *  rows. Takes `logsRoot` + the run's own directory NAME (never a
- *  pre-joined path) so the guarded parse below can identity-check that name
- *  as its own path segment (R6-06 round 6). */
+ *  then delegates to the shared per-event derivation above, then the
+ *  staleness override (ON-7 defect 4). Used by BOTH `GET /api/agents/runs/
+ *  <runId>` and the history route's standalone-path rows. Takes `logsRoot`
+ *  + the run's own directory NAME (never a pre-joined path) so the guarded
+ *  parse below can identity-check that name as its own path segment (R6-06
+ *  round 6). */
 function deriveStandaloneRunState(logsRoot: string, runEntryName: string): StandaloneRunState {
   const parsed = parseGuardedEventsJsonl(logsRoot, runEntryName);
-  if (parsed === null) return { state: 'running', costUsd: null, events: 0, lines: [], outputRefs: [] };
-  return deriveStandaloneStateFromEvents(parsed);
+  const base: StandaloneRunState = parsed === null
+    ? { state: 'running', costUsd: null, events: 0, lines: [], outputRefs: [] }
+    : deriveStandaloneStateFromEvents(parsed);
+  return withStandaloneLiveness(logsRoot, runEntryName, base);
 }
 
 /** D4 (amended, round 3): standalone identity is EXACT EQUALITY against the
@@ -1213,7 +1344,10 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
     // design) -> nothing to prove identity against; honestly unattributable
     // to any slug, so it produces no row (never a guess, never a leak).
     if (parsed === null || !standaloneRunMatchesSlug(parsed, slug)) continue;
-    const derived = deriveStandaloneStateFromEvents(parsed);
+    // W8-A2 (ON-7 defect 4) — routed through the SAME staleness seam
+    // `deriveStandaloneRunState` uses, so a zombie run shows 'stalled' here
+    // too, not just on its own detail route.
+    const derived = withStandaloneLiveness(logsRoot, entry, deriveStandaloneStateFromEvents(parsed));
     // R6-06 ROUND 9 MEASUREMENT: `when` is this run's own FIRST event's
     // `started_at` — the same `parsed` array already in hand, no second
     // read. `what` is honestly absent server-side (run-agent.ts's own
@@ -1371,7 +1505,8 @@ function collectRecentAgentRuns(
     if (parsed === null) continue;
     const slug = standaloneRunSlug(parsed);
     if (slug === null) continue; // unattributable — never a fabricated row
-    const derived = deriveStandaloneStateFromEvents(parsed);
+    // W8-A2 (ON-7 defect 4) — same staleness seam as collectStandaloneRows.
+    const derived = withStandaloneLiveness(logsRoot, entry, deriveStandaloneStateFromEvents(parsed));
     const firstStartedAt = parsed[0]?.['started_at'];
     seenIds.add(entry);
     rows.push({
@@ -1657,6 +1792,67 @@ function readGuardedSessionIndexSummary(
  * traversal surface at all (unlike the single-session GET, whose `kind` path
  * segment IS request-derived and validated against the registry).
  */
+/**
+ * W8-A2 (ON-7 defect 1) — the ONE seam every session-list surface routes
+ * through to get `{terminal, lifecycle}` for a row: the generic aggregate
+ * index's `pushRow` below, AND each of the four bespoke per-kind list
+ * routes (`GET /api/architect/sessions` etc.) — so a lifecycle-carrying row
+ * can never omit the derivation by forgetting to call
+ * `deriveSessionLifecycleFor` inline. Before this fix the four bespoke
+ * routes never called `deriveSessionLifecycleFor` at all (imported once,
+ * called once, by `pushRow` alone) — this is the wiring fix, not a second
+ * derivation: `terminal` + `lifecycle` are computed EXACTLY the way
+ * `pushRow` already computed them, just callable from five places instead
+ * of copy-pasted or reinvented at four of them.
+ */
+function deriveRowLifecycle(
+  ctx: { projectsRoot: string; logsRoot: string },
+  descriptor: SessionKindDescriptor,
+  phase: string,
+  project: string,
+  sessionId: string,
+): { terminal: boolean; lifecycle: SessionLifecycle } {
+  // Review fix (pre-existing, `pushRow`'s own note): `terminal` is derived
+  // FIRST — cheap, and a terminal phase never has an affordance-table row.
+  const terminal = isTerminalPhase(descriptor, phase);
+  // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
+  // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
+  // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
+  // computed at read time, never stored.
+  const lifecycle = deriveSessionLifecycleFor({
+    descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
+  });
+  return { terminal, lifecycle };
+}
+
+/**
+ * W8-A2 (ON-7 defect 1, review fix) — `loadSessionKinds` THROWS when
+ * `studio/session-kinds.yaml` is missing/unreadable/malformed
+ * (`loadSessionKindsSequence`'s own contract, orchestrator/studio/
+ * session-kinds.ts). The pre-existing aggregate-index call site
+ * (`collectStudioSessionIndexRows` below) accepted that risk unguarded —
+ * every REAL forge install always has this file, so it never threw there in
+ * practice. The four bespoke per-kind list routes this WI wires
+ * `deriveRowLifecycle` into are exercised by many MORE pre-existing test
+ * fixtures that never needed the registry before (their routes never called
+ * `loadSessionKinds` at all) and do not set it up. An uncaught throw
+ * mid-request there is not a clean 500 — none of these four GET handlers
+ * wrap their body in try/catch, so the throw left `res.end()` never called
+ * and the caller's `fetch()` hanging forever (reproduced: `cli/ui-bridge-
+ * architect.test.ts` hung indefinitely against this fix before this
+ * helper). Caught HERE, at the one place all four call it, and degrades to
+ * "no descriptor resolved" — the SAME graceful "no lifecycle on this row"
+ * fallback each route already has for a registry that resolved but simply
+ * lacks this kind.
+ */
+function findSessionKindDescriptorSafe(forgeRoot: string, kind: string): SessionKindDescriptor | undefined {
+  try {
+    return loadSessionKinds(forgeRoot).find((d) => d.id === kind);
+  } catch {
+    return undefined;
+  }
+}
+
 function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
@@ -1669,24 +1865,11 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
     modelTier: string | null,
     updatedAt: string,
   ): void => {
-    // Review fix: `terminal` is derived FIRST, and short-circuits `needsYou`
-    // to `false` without even calling `deriveSessionAffordances` — cheap (a
-    // terminal phase never has an affordance-table row anyway, since
-    // `deriveSessionAffordances` itself returns `[]` for any `step:
-    // 'terminal'` row), but it also honors the STATED intent verbatim
-    // (`SessionIndexRow.needsYou`'s own header: "a derivable operator
-    // affordance exists at this phase") — a terminal session, by
-    // definition, needs nothing further from the operator, so this ordering
-    // makes that true structurally rather than merely as an observed
-    // consequence of the affordance table's own shape.
-    const terminal = isTerminalPhase(descriptor, phase);
-    // W7-A2 — ONE lifecycle derivation per row (cli/bridge-studio-lifecycle.ts):
-    // phase-row shape (awaits/step, or the legacy tables) + on-disk liveness
-    // (stderr.log / .heartbeat / events.jsonl / turn.pid / status.json mtime),
-    // computed at read time, never stored. `needsYou` is its truthful verdict.
-    const lifecycle = deriveSessionLifecycleFor({
-      descriptor, phase, terminal, project, sessionId, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot,
-    });
+    // `SessionIndexRow.needsYou`'s own header: "a derivable operator
+    // affordance exists at this phase" — a terminal session, by
+    // definition, needs nothing further from the operator; `deriveRowLifecycle`
+    // derives `terminal` before `lifecycle` so that is true structurally.
+    const { terminal, lifecycle } = deriveRowLifecycle(ctx, descriptor, phase, project, sessionId);
     rows.push({
       kind: descriptor.id,
       sessionId,
@@ -2507,7 +2690,14 @@ async function handleHttp(
     }
     try {
       const current = deriveStandaloneRunState(ctx.logsRoot, runId);
-      if (current.state !== 'running') {
+      // W8-A2 (ON-7 defect 4) — 'stalled' is NOT terminal (applyStandaloneStaleness's
+      // own doc comment: it only ever narrows 'running'). A stalled run is
+      // exactly the shape an operator most wants to cancel — a wedged or
+      // zombie process — so this MUST stay cancellable, or 'stalled' becomes
+      // a state an operator can see but never act on. Before this fix every
+      // non-'running' state WAS terminal; that implicit equivalence broke
+      // the moment 'stalled' stopped being one — caught here, not shipped.
+      if (current.state !== 'running' && current.state !== 'stalled') {
         sendJson(res, 409, { error: `run is already terminal (${current.state}) — nothing to cancel` }, origin);
         return;
       }
@@ -3953,6 +4143,13 @@ async function handleArchitect(
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES.architect.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS.architect.logPrefix, s.session_id);
     }
+    // W8-A2 (ON-7 defect 1) — loaded ONCE per request (a single YAML parse),
+    // not once per row; `deriveRowLifecycle` below takes the already-resolved
+    // descriptor. `undefined` only if the registry itself lacks 'architect'
+    // (never true for the real studio/session-kinds.yaml — architect is
+    // "permanently bespoke", isTerminalPhase's own doc comment) — degrades to
+    // no lifecycle on the row rather than 500ing the whole list.
+    const architectDescriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'architect');
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — this used a RAW `architectSessionDir` join and
       // then raw-appended each leaf (worse than dir-guarded): a symlinked
@@ -3979,16 +4176,22 @@ async function handleArchitect(
         .map((f) => f.slice(0, -'.md'.length))
         .sort();
 
-      // staleMs: ms since the last sign of life — heartbeat mtime if present,
-      // else the status.json updated_at timestamp.
-      const heartbeatPath = join(ctx.logsRoot, `_architect-${s.session_id}`, '.heartbeat');
-      let staleMs: number;
-      if (existsSync(heartbeatPath)) {
-        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
-      } else {
-        const parsedAt = Date.parse(s.updated_at);
-        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
-      }
+      // W8-A2 (ON-7 defect 1) — the derived lifecycle (state/needsYou/error/
+      // idleMs/cancellable): the SAME derivation the aggregate `/api/studio/
+      // sessions` index already carried per row — this dedicated route never
+      // called it before (`deriveSessionLifecycleFor` was imported once,
+      // called once, by that other route alone). `staleMs` now DERIVES from
+      // the same `idleMs` fact (`lifecycle.idleMs ?? 0`) instead of an
+      // independently hand-rolled "heartbeat mtime else updated_at"
+      // calculation — kept only for wire compatibility with
+      // `isSessionStale` (forge-ui/lib/architect-hex.ts), which still reads
+      // `session.staleMs`. `idleMs === null` (no log dir at all — an honest
+      // "no liveness signal", never a guess) falls back to `0`, matching
+      // this field's pre-existing "always a number" wire contract.
+      const rowLifecycle = architectDescriptor
+        ? deriveRowLifecycle(ctx, architectDescriptor, s.phase, s.project, s.session_id).lifecycle
+        : null;
+      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
 
       return {
         sessionId: s.session_id,
@@ -4000,6 +4203,7 @@ async function handleArchitect(
         questions,
         planUrl,
         staleMs,
+        ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
         completenessCritic: s.completenessCritic ?? null,
         initiativeIds,
       };
@@ -4336,6 +4540,8 @@ async function handleInstructions(
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES.instructions.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS.instructions.logPrefix, s.session_id);
     }
+    // W8-A2 (ON-7 defect 1) — see the architect route's identical comment.
+    const instructionsDescriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'instructions');
     const sessions = statuses.map((s) => {
       // SEC-04 — resolve through the shared guard (the enumeration is already
       // guarded, so this is the same contained dir; keeps this file free of
@@ -4353,16 +4559,13 @@ async function handleInstructions(
         ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
         : null;
 
-      // staleMs: ms since the last sign of life — heartbeat mtime if present,
-      // else the status.json updated_at timestamp.
-      const heartbeatPath = join(ctx.logsRoot, `_instructions-${s.session_id}`, '.heartbeat');
-      let staleMs: number;
-      if (existsSync(heartbeatPath)) {
-        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
-      } else {
-        const parsedAt = Date.parse(s.updated_at);
-        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
-      }
+      // W8-A2 (ON-7 defect 1) — see the architect route's identical comment:
+      // the derived lifecycle, and `staleMs` derived from its `idleMs`
+      // rather than an independent heartbeat-or-updated_at calculation.
+      const rowLifecycle = instructionsDescriptor
+        ? deriveRowLifecycle(ctx, instructionsDescriptor, s.phase, s.project, s.session_id).lifecycle
+        : null;
+      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
 
       // Surface the current AGENTS.md so the briefing screen can show the file
       // the operator is editing (and the read-only context for their notes).
@@ -4380,6 +4583,7 @@ async function handleInstructions(
         currentInstructions: current ? current.content : null,
         currentInstructionsFile: current ? current.file : null,
         staleMs,
+        ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
       };
     });
     sendJson(res, 200, { sessions }, origin);
@@ -4932,6 +5136,11 @@ async function handleDemoBuilder(
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES.demo.has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS['demo-builder'].logPrefix, s.session_id);
     }
+    // W8-A2 (ON-7 defect 1) — see the architect route's identical comment.
+    // The registry id for this kind is 'demo' (SPAWN_AGENT_SPECS's own key
+    // is 'demo-builder', but its logPrefix — and the session-kinds.yaml id —
+    // is 'demo'; see the top-of-file note at collectStudioSessionIndexRows).
+    const demoDescriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'demo');
     const sessions = statuses.map((s) => {
       // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
       // (it is status.json content, git-plantable, not a routing input). These
@@ -4956,16 +5165,13 @@ async function handleDemoBuilder(
         .filter((f) => f.endsWith('.html'))
         .map((f) => f.slice(0, -'.html'.length));
 
-      // staleMs: ms since the last sign of life — heartbeat mtime if present,
-      // else the status.json updated_at timestamp.
-      const heartbeatPath = join(ctx.logsRoot, `_demo-${s.session_id}`, '.heartbeat');
-      let staleMs: number;
-      if (existsSync(heartbeatPath)) {
-        staleMs = Date.now() - statSync(heartbeatPath).mtimeMs;
-      } else {
-        const parsedAt = Date.parse(s.updated_at);
-        staleMs = Date.now() - (isNaN(parsedAt) ? 0 : parsedAt);
-      }
+      // W8-A2 (ON-7 defect 1) — see the architect route's identical comment:
+      // the derived lifecycle, and `staleMs` derived from its `idleMs`
+      // rather than an independent heartbeat-or-updated_at calculation.
+      const rowLifecycle = demoDescriptor
+        ? deriveRowLifecycle(ctx, demoDescriptor, s.phase, s.project, s.session_id).lifecycle
+        : null;
+      const staleMs = rowLifecycle ? rowLifecycle.idleMs ?? 0 : 0;
 
       return {
         sessionId: s.session_id,
@@ -4980,6 +5186,7 @@ async function handleDemoBuilder(
         fragments,
         hasLockedDemo: repoContained && guardedFile(s.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null,
         staleMs,
+        ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
       };
     });
     sendJson(res, 200, { sessions }, origin);
@@ -5262,7 +5469,21 @@ async function handleDemoBuilder(
     for (const s of statuses) {
       if (!LEGACY_SESSION_TERMINAL_PHASES['project-brain'].has(s.phase)) ctx.ensureSessionTail(SPAWN_AGENT_SPECS['project-brain'].logPrefix, s.session_id);
     }
-    sendJson(res, 200, { sessions: statuses }, origin);
+    // W8-A2 (ON-7 defect 1) — this route served `statuses` VERBATIM, with no
+    // lifecycle AND no staleness derivation of any kind (unlike the other
+    // three bespoke list routes' now-collapsed heartbeat-or-updated_at
+    // calc) — the worst of the four. Same seam as the other three.
+    const projectBrainDescriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'project-brain');
+    const sessions = statuses.map((s) => {
+      const rowLifecycle = projectBrainDescriptor
+        ? deriveRowLifecycle(ctx, projectBrainDescriptor, s.phase, s.project, s.session_id).lifecycle
+        : null;
+      return {
+        ...s,
+        ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
+      };
+    });
+    sendJson(res, 200, { sessions }, origin);
     return true;
   }
   {

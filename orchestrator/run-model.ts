@@ -154,7 +154,25 @@ export type Run = {
    * nothing stored, so there is no settable "stopped on budget" field for a
    * future writer to forget to flip (`derive-status-dont-store-it`).
    */
-  stopOnBudget?: { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number };
+  stopOnBudget?: {
+    spentUsd: number;
+    ceilingUsd: number;
+    resumable: true;
+    completedWorkItems: number;
+    totalWorkItems: number;
+    /**
+     * W8-A2 (ON-7 defect 2b) — this field was missing from the TYPE even
+     * though `deriveStopOnBudget` (run-model-derive.ts) has always returned
+     * it and this object is built directly from that return value (see
+     * `const stopOnBudget = deriveStopOnBudget(events, workItems);` below):
+     * the resumable boundary the operator needs ("stopped before demo")
+     * silently type-erased at the assignment — a real pre-existing `tsc`
+     * error (`run-model.test.ts` reads it via `.stopOnBudget?.
+     * stoppedBeforeNode`). Omitted, never invented, when the triggering
+     * `flow.cost-ceiling-stop` event did not carry one.
+     */
+    stoppedBeforeNode?: string;
+  };
   /**
    * 2.10 reflector pipeline honesty: set when the cycle merged/closed but its
    * reflection was lost (reflector crash, budget/turn exhaustion, or killed —

@@ -207,6 +207,17 @@ export type Run = {
   gateNote?: string;
   failedAt?: string;
   failNote?: string;
+  /**
+   * W8-A2 (ON-7 defect 2) — mirrors orchestrator/run-model.ts's
+   * `Run.stopOnBudget` verbatim. The server has served this on the wire
+   * (`sendJson(res, 200, { run }, ...)` — the WHOLE aggregated `Run`, no
+   * field allowlist) since `stopOnBudget` first landed; this client TYPE
+   * simply never declared it, so `parseRun` silently dropped it — the same
+   * declared-data-fails-open class `trigger`/`reflectionLost`/`prUrl` below
+   * were already fixed for. `RunControls`/`RunRail` need this to tell a
+   * clean, resumable budget stop apart from an ordinary crash.
+   */
+  stopOnBudget?: { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number; stoppedBeforeNode?: string };
   /** 2.10: the merged cycle's reflection was lost (cause) — mirrors orchestrator/run-model.ts. */
   reflectionLost?: string;
   reflectionLostNote?: string;
@@ -987,6 +998,11 @@ export function parseRun(raw: unknown): Run {
     gateNote:      r.gateNote,
     failedAt:      r.failedAt,
     failNote:      r.failNote,
+    // W8-A2 (ON-7 defect 2): same declared-data-fails-open guard as
+    // trigger/reflectionLost/prUrl below — stopOnBudget was already served
+    // on the wire but silently dropped here before RunControls/RunRail
+    // ever saw it.
+    ...(r.stopOnBudget !== undefined ? { stopOnBudget: r.stopOnBudget } : {}),
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
     // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key
@@ -1754,8 +1770,17 @@ export type AgentRunStatus = {
    *  "bridge unreachable (…)") — W7-FIX-A1 A1-10 keeps the two distinct.
    *  W7-B5 adds `'cancelled'` (the sticky operator-cancel terminal) and
    *  `'budget-exceeded'` (the SDK ceiling stop — served by the bridge since
-   *  R6-04 but previously collapsed to 'unknown' by this parser's cast). */
-  state: 'running' | 'done' | 'suppressed' | 'failed' | 'budget-exceeded' | 'cancelled' | 'unknown';
+   *  R6-04 but previously collapsed to 'unknown' by this parser's cast).
+   *  W8-A2 (ON-7 defect 4) adds `'stalled'` — mirrors `StandaloneRunState
+   *  ['state']` (cli/ui-bridge.ts). This field is parsed via an unchecked
+   *  `as` cast (`getAgentRunStatus` below), not a runtime allowlist, so a
+   *  'stalled' wire value was never REJECTED before this — only mistyped.
+   *  `isStillWatching`/`pollDisplayState` (agent-dispatch.ts) already treat
+   *  any non-'running' state as "stop watching" via a loose `{state:
+   *  string}` parameter, which is the CORRECT behaviour for 'stalled' too
+   *  (no fix needed there) — this is a type-honesty fix, not a behaviour
+   *  change. */
+  state: 'running' | 'done' | 'suppressed' | 'failed' | 'budget-exceeded' | 'cancelled' | 'stalled' | 'unknown';
   costUsd: number;
   events: number;
   /** W7-B5 (agents-19): the run's own recorded failure reason

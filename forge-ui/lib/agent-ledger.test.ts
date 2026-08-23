@@ -877,6 +877,27 @@ test('DEFECT 2 REGRESSION LOCK: fully valid entries across all three linkKinds (
   }
 });
 
+test('W8-A2 (ON-7 defect 4): a standalone entry with status "stalled" is accepted `found` — NOT rejected as the whole response `unresolved`', () => {
+  // KILLS: `AgentStandaloneRunEntry['status']`/`STANDALONE_STATUSES` left
+  // at their pre-W8-A2 five-member vocabulary. `cli/ui-bridge.ts`'s
+  // `StandaloneRunState['state']` grew a 'stalled' member (ON-7 defect 4);
+  // this resolver's per-row validation is the ENFORCEMENT point for what a
+  // standalone row's status may be, and — per this module's own doc
+  // comment on `resolveAgentHistoryFromResponse` — a SINGLE invalid item
+  // rejects the ENTIRE response as 'unresolved', not just that one row.
+  // Reproduced directly: before the fix this asserts 'unresolved', not
+  // 'found' — the whole ledger vanishes the moment ONE zombie run appears
+  // in an agent's history, which is worse than the defect this WI closes.
+  const body = { rows: [validFlowNodeEntry(), validStandaloneEntry({ status: 'stalled' }), validSessionEntry()] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('found');
+  if (result.kind === 'found') {
+    expect(result.rows).toHaveLength(3);
+    const standalone = result.rows.find((r) => r.linkKind === 'standalone');
+    expect(standalone?.status).toBe('stalled');
+  }
+});
+
 // ---------------------------------------------------------------------------
 // DEFECT 2 EVIDENCE + INTEGRATION — the REAL HistoryLedger component, not
 // just the resolver's return value. Proves WHY the rejections above matter

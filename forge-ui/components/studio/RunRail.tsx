@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import type { Run } from '@/lib/studio-client';
 import { initialCollapsed, railStorageKey, serializeCollapsed, visibleGroupRuns, type RailCollapsed } from '@/lib/run-rail-collapse';
+import { describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
 
 // ---------------------------------------------------------------------------
 // RunRail — left panel listing runs grouped by status. Each group is a
@@ -196,6 +197,8 @@ function RunCard({
 }) {
   const isGated   = run.status === 'gated';
   const isFailed  = run.status === 'failed';
+  // W8-A2 (ON-7 defect 2) — see the failure-note render below.
+  const failureNoteKind = runFailureNoteKind(run);
 
   const borderLeft = isGated
     ? '3px solid var(--ember)'
@@ -309,7 +312,25 @@ function RunCard({
         </Link>
       )}
 
-      {isFailed && run.failNote && (
+      {/* W8-A2 (ON-7 defect 2): `runFailureNoteKind` decides "budget" vs
+          "fail-note" ONCE (lib/run-controls.ts) — the same seam
+          RunControls uses, so the two can never independently drift on the
+          "stopOnBudget wins over failNote" rule. Amber, not red, for a
+          budget stop: nothing crashed. */}
+      {failureNoteKind === 'budget' && (
+        <div
+          data-stop-on-budget="true"
+          style={{
+            fontSize: 11,
+            color: 'var(--amber)',
+            lineHeight: 1.4,
+            marginTop: 2,
+          }}
+        >
+          {describeStopOnBudget(run.stopOnBudget!)}
+        </div>
+      )}
+      {failureNoteKind === 'fail-note' && (
         <div
           style={{
             fontSize: 11,
