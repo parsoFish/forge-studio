@@ -1839,6 +1839,32 @@ export const journey = defineJourney({
                 'kb-cleanup-launch: phase="drafting" derives no verdict affordance — no approve button is offered at all');
               check(await page.locator('[data-action="verdict-approve"]').count() === 0,
                 'kb-cleanup-launch: [data-action="verdict-approve"] absent while drafting');
+
+              // W8-B3 (operator note ON-5). Before this, a kb-cleanup session
+              // dir held ONLY status.json until an operator verdict landed, so
+              // the transcript honestly found nothing and the session opened on
+              // an empty pane — even though the operator HAD made a request
+              // (they clicked "Cleanup plan" on THIS KB's health panel). The
+              // request is now written by the REAL start route this beat just
+              // POSTed, so the record starts where the operator did. Asserted
+              // structurally (`data-turn-source="prompt.md"`) plus the KB id in
+              // the turn's text, so a turn derived from some other file, or a
+              // generic sentence naming no KB, both fail.
+              const cleanupTurn0 = await page.evaluate(() => {
+                const el = document.querySelector('[data-turn-index="0"]');
+                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source'), text: el.textContent ?? '' } : null;
+              });
+              check(cleanupTurn0 !== null && cleanupTurn0.role === 'operator' && cleanupTurn0.source === 'prompt.md',
+                `kb-cleanup-launch (ON-5): the operator's own request opens the transcript, derived from prompt.md (got ${JSON.stringify(cleanupTurn0 && { role: cleanupTurn0.role, source: cleanupTurn0.source })})`);
+              check(cleanupTurn0 !== null && cleanupTurn0.text.includes(SCRATCH_KB_CLEANUP_ID),
+                `kb-cleanup-launch (ON-5): that opening turn names the KB the request was made against ("${SCRATCH_KB_CLEANUP_ID}")`);
+              // And because it has a real turn, the shell renders the chat pane
+              // rather than the transcript-less layout — the pane set is DERIVED
+              // per session (deriveSessionPanes), never a per-kind list.
+              const cleanupPanes = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-panes') ?? '');
+              check(cleanupPanes === 'transcript,artifact',
+                `kb-cleanup-launch (ON-5): a session with a real turn renders both panes (data-session-panes="${cleanupPanes}")`);
+
               await frame(page, 'kb-cleanup-1-drafting', 'Sessions — kb-cleanup drafting: dry-bridge suppresses the agent spawn, honestly no plan yet', { key: true });
 
               // Dry-bridge stand-in for the suppressed agent turn: replay the REAL
