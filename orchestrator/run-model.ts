@@ -721,7 +721,15 @@ function buildRun(args: {
     // spine shows under forge-architect + forge-develop).
     flowLineage: computeFlowLineage(Object.keys(phases), manifest.flow_id ?? FALLBACK_FLOW_ID, flowNodeSets),
     ...(gate !== undefined ? { gate, gateNote } : {}),
-    ...(failedAt !== undefined ? { failedAt, failNote } : {}),
+    // W8-A2 (ON-7): `failNote` is NOT gated on `failedAt`. They answer
+    // different questions — failedAt is WHERE, failNote is WHY — and coupling
+    // them meant an unattributable failure (no flow node resolves) silently
+    // dropped its reason. That was invisible while findFailure fabricated
+    // `failedAt: 'unifier'` for every such run; the moment that retired-phase
+    // default was removed, the error text this lane exists to surface would
+    // have vanished with it. Pinned in run-model.test.ts.
+    ...(failedAt !== undefined ? { failedAt } : {}),
+    ...(failNote !== undefined ? { failNote } : {}),
     ...(stopOnBudget !== null ? { stopOnBudget } : {}),
     ...(reflectionLoss !== undefined
       ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }

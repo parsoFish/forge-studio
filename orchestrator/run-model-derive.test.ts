@@ -541,3 +541,72 @@ test('deriveStopOnBudget: negative control — an ordinary terminal PM hidden-co
   const result = deriveStopOnBudget(events, workItems);
   assert.equal(result, null);
 });
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7) — a terminal state must not name a phase that no longer exists.
+//
+// `findFailure` defaulted an unattributable failure to `failedAt: 'unifier'`.
+// The unifier node was RETIRED from the live flow by R4-01-F4 (ADR-039/040);
+// `studio/flows/forge-develop/flow.yaml` mentions it only in a comment
+// explaining that it is gone. So an unattributable failure pointed the
+// operator at a node that exists in no flow — the monitor silently draws no
+// outline for it (no hex has that id) and anyone reading the field is
+// misinformed. Reproduced on the real cycle
+// 2026-08-18T12-42-15_INIT-2026-08-14-betterado-gap-registry, which reports
+// `failedAt: unifier` through the real `listRuns` entry point.
+//
+// Honest unknown beats a confident wrong answer: leave `failedAt` absent when
+// no flow node can be attributed. Every consumer is already null-safe
+// (RunControls, RunRail, flow-ledger gate on `status`, monitor-layout reads it
+// optionally) — enumerated before this change, not assumed.
+// ---------------------------------------------------------------------------
+
+test('findFailure: an unattributable classified failure leaves failedAt ABSENT, never the retired "unifier"', () => {
+  const events = [
+    { event_type: 'error', phase: 'orchestrator', message: 'cost-ceiling: flow spent $80', metadata: {} },
+    { event_type: 'log', phase: 'orchestrator', message: 'failure_classification', metadata: { reason: 'stopped on budget' } },
+  ] as unknown as Parameters<typeof findFailure>[0];
+  // Fixture mirrors PRODUCTION: `orchestrator` maps to null in the real
+  // nodeMapping (run-model.ts:263 "orchestrator: null — ignored for phase
+  // status"), which is exactly why the real 2026-08-18 cycle resolved no node
+  // and fell to the retired-`unifier` default. An empty Map would NOT
+  // reproduce it — eventToNodeId echoes the raw phase back instead.
+  const nodeMapping = new Map<string, string | null>([['orchestrator', null]]);
+  const r = findFailure(events, nodeMapping, new Map());
+  assert.equal(r.failedAt, undefined, 'no flow node resolved — say nothing rather than naming a retired phase');
+  assert.equal(r.failNote, 'stopped on budget');
+});
+
+test('findFailure: an unattributable UNclassified failure also leaves failedAt absent but still carries the error text', () => {
+  const events = [
+    { event_type: 'error', phase: 'orchestrator', message: 'boom: the runner died', metadata: {} },
+  ] as unknown as Parameters<typeof findFailure>[0];
+  const nodeMapping = new Map<string, string | null>([['orchestrator', null]]);
+  const r = findFailure(events, nodeMapping, new Map());
+  assert.equal(r.failedAt, undefined);
+  assert.equal(r.failNote, 'boom: the runner died');
+});
+
+test('deriveStopOnBudget: carries the node the flow stopped BEFORE — the resumable boundary the operator needs', () => {
+  const events = [
+    {
+      event_type: 'log',
+      phase: 'orchestrator',
+      message: 'flow.cost-ceiling-stop',
+      metadata: { spentUsd: 80.83237065, ceilingUsd: 52, pct: 155.4, stoppedBeforeNode: 'demo' },
+    },
+  ] as unknown as Parameters<typeof deriveStopOnBudget>[0];
+  const r = deriveStopOnBudget(events, [{ status: 'complete' }, { status: 'complete' }] as never);
+  assert.ok(r);
+  assert.equal(r.stoppedBeforeNode, 'demo', 'the event already carries it; the derivation must not drop it');
+  assert.equal(r.completedWorkItems, 2);
+});
+
+test('deriveStopOnBudget: a stop event with no stoppedBeforeNode omits the field rather than inventing one', () => {
+  const events = [
+    { event_type: 'log', phase: 'orchestrator', message: 'flow.cost-ceiling-stop', metadata: { spentUsd: 10, ceilingUsd: 5 } },
+  ] as unknown as Parameters<typeof deriveStopOnBudget>[0];
+  const r = deriveStopOnBudget(events, [] as never);
+  assert.ok(r);
+  assert.equal(r.stoppedBeforeNode, undefined);
+});

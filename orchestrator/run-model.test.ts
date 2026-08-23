@@ -1376,3 +1376,82 @@ test('listRuns: an aggregated (claimed) run carries architectSessionId too — n
     cleanup(root);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-A2 (ON-7) — `failNote` must NOT be gated on `failedAt`.
+//
+// Caught by T2 while verifying its own change against the real 2026-08-18
+// cycle. `buildRun` spread the pair together:
+//     ...(failedAt !== undefined ? { failedAt, failNote } : {})
+// which was invisible only because `findFailure` fabricated
+// `failedAt: 'unifier'` for every unattributable failure. Removing that
+// retired-phase default (correct on its own) would have silently deleted the
+// error text — the exact thing this lane exists to surface — for precisely the
+// unattributable case the fallback was written for. The fix re-shipping the
+// lane's own defect, one layer down.
+//
+// No test covered the SPREAD SITE, which is why it was invisible: the
+// derive-level tests in run-model-derive.test.ts were green throughout.
+// This pins the assembled Run, not the derivation.
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: an unattributable failure still carries failNote even though failedAt is absent', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-02-unattributable';
+    const cycleId = '2026-01-02T03-00-00_INIT-2026-01-02-unattributable';
+    const manifestPath = writeManifest(root, 'failed', initId, { cycle_id: cycleId });
+
+    // The ONLY error is orchestrator-phase, which the canonical nodeMapping
+    // resolves to null (run-model.ts: "orchestrator: null — ignored for phase
+    // status"). This is the real shape of a cost-ceiling / flow-runner stop.
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
+      ev('orchestrator', 'error', 'cost-ceiling: flow spent $80.83 which meets or exceeds the $52.00 ceiling — stopping at a clean phase boundary (resumable).'),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'failed', manifestPath, nowMs: Date.now() });
+
+    assert.equal(run.status, 'failed');
+    assert.equal(run.failedAt, undefined, 'no flow node resolved — must not name the retired "unifier"');
+    assert.ok(
+      run.failNote !== undefined && run.failNote.includes('cost-ceiling'),
+      `the reason must survive an absent failedAt (got ${JSON.stringify(run.failNote)})`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('aggregateRun: a cost-ceiling stop derives stopOnBudget with the resumable boundary, not a bare "failed"', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-03-budget';
+    const cycleId = '2026-01-03T03-00-00_INIT-2026-01-03-budget';
+    const manifestPath = writeManifest(root, 'failed', initId, { cycle_id: cycleId });
+
+    // Mirrors the real 2026-08-18 cycle's own event, metadata shape included.
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'architect' }),
+      ev('developer-loop', 'start', undefined, { work_item_id: 'WI-1' }),
+      ev('developer-loop', 'end', undefined, { work_item_id: 'WI-1' }),
+      ev('orchestrator', 'log', 'flow.cost-ceiling-stop', {
+        spentUsd: 80.83237065,
+        ceilingUsd: 52,
+        pct: 155.4,
+        stoppedBeforeNode: 'demo',
+      }),
+      ev('orchestrator', 'error', 'cost-ceiling: flow spent $80.8324 which meets or exceeds the $52.00 ceiling — stopping at a clean phase boundary (resumable).'),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'failed', manifestPath, nowMs: Date.now() });
+
+    assert.ok(run.stopOnBudget, 'a budget stop must be distinguishable from a crash');
+    assert.equal(run.stopOnBudget?.spentUsd, 80.83237065);
+    assert.equal(run.stopOnBudget?.ceilingUsd, 52);
+    assert.equal(run.stopOnBudget?.resumable, true);
+    assert.equal(run.stopOnBudget?.stoppedBeforeNode, 'demo', 'the resumable boundary the operator needs');
+  } finally {
+    cleanup(root);
+  }
+});

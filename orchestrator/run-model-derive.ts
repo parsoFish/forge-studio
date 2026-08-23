@@ -754,8 +754,17 @@ export function findFailure(
       const reason = typeof m.reason === 'string' ? m.reason : undefined;
       // Find the node of the last error event before this classifier
       const failedNode = findLastErrorNode(events, i, nodeMapping, agentSlugToNodeId);
+      // W8-A2 (ON-7): NO `?? 'unifier'` fallback. The unifier node was retired
+      // from the live flow by R4-01-F4 (ADR-039/040) — `forge-develop/flow.yaml`
+      // mentions it only in a comment saying it is gone — so defaulting here
+      // pointed the operator at a node that exists in no flow. The monitor
+      // silently drew no outline (no hex carries that id) and the field
+      // misinformed anyone who read it. An unattributable failure now says
+      // nothing rather than naming a phase that cannot have failed; every
+      // consumer is already null-safe (monitor-layout `run?.failedAt ?? null`,
+      // RunControls/RunRail conditional, flow-ledger gates on `status`).
       return {
-        failedAt: failedNode ?? 'unifier',
+        ...(failedNode !== null ? { failedAt: failedNode } : {}),
         failNote: reason,
       };
     }
@@ -772,7 +781,9 @@ export function findFailure(
     const e = events[i];
     if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
       const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
-      return { failedAt: nodeId ?? 'unifier', failNote: truncateFailNote(e.message) };
+      // Same rule as the classified branch above — honest absence, never the
+      // retired `unifier`.
+      return { ...(nodeId !== null ? { failedAt: nodeId } : {}), failNote: truncateFailNote(e.message) };
     }
   }
 
@@ -905,13 +916,28 @@ export function findReflectionLoss(
 export function deriveStopOnBudget(
   events: readonly EventLogEntry[],
   workItems: readonly { status: RunPhaseStatus }[],
-): { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number } | null {
-  let stop: { spentUsd: number; ceilingUsd: number } | undefined;
+): {
+  spentUsd: number;
+  ceilingUsd: number;
+  resumable: true;
+  completedWorkItems: number;
+  totalWorkItems: number;
+  /** The flow node the run stopped BEFORE — the clean, resumable boundary.
+   *  Carried by `flow.cost-ceiling-stop`'s own metadata (`stoppedBeforeNode`),
+   *  which the real 2026-08-18 cycle records as `"demo"`. Omitted, never
+   *  invented, when the event does not carry it. */
+  stoppedBeforeNode?: string;
+} | null {
+  let stop: { spentUsd: number; ceilingUsd: number; stoppedBeforeNode?: string } | undefined;
   for (const e of events) {
     if (e.message !== 'flow.cost-ceiling-stop' || !e.metadata) continue;
-    const { spentUsd, ceilingUsd } = e.metadata;
+    const { spentUsd, ceilingUsd, stoppedBeforeNode } = e.metadata;
     if (typeof spentUsd === 'number' && typeof ceilingUsd === 'number') {
-      stop = { spentUsd, ceilingUsd };
+      stop = {
+        spentUsd,
+        ceilingUsd,
+        ...(typeof stoppedBeforeNode === 'string' ? { stoppedBeforeNode } : {}),
+      };
     }
   }
   if (!stop) return null;
@@ -923,6 +949,7 @@ export function deriveStopOnBudget(
     resumable: true,
     completedWorkItems,
     totalWorkItems: workItems.length,
+    ...(stop.stoppedBeforeNode !== undefined ? { stoppedBeforeNode: stop.stoppedBeforeNode } : {}),
   };
 }
 
