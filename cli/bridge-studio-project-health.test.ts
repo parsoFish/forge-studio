@@ -39,6 +39,10 @@ type WireProject = {
   id: string;
   name: string;
   configHealth?: { state: string; reason?: string };
+  /** WI-4 — optional on this LOCAL wire type on purpose: the tests below
+   *  assert it becomes present, so declaring it required here would make the
+   *  RED state a compile error rather than an assertion failure. */
+  localSkills?: string[];
 };
 
 function seedProject(id: string, configJson: string | null): string {
@@ -177,22 +181,22 @@ test('W8-C3 WI-1: configHealth is DERIVED, never stored — it agrees with the c
 // ---------------------------------------------------------------------------
 
 test('W8-C3 WI-4: a project\'s own .forge/skills/<id>/SKILL.md ids are surfaced as localSkills', async () => {
-  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  const rows = await roster();
   assert.deepEqual(byId(rows, 'localskillsproj').localSkills, ['demo-design', 'zeta-helper']);
 });
 
 test('W8-C3 WI-4: localSkills is [] — not absent — for a project with no local skills, so "we looked and found none" is distinguishable', async () => {
-  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  const rows = await roster();
   assert.deepEqual(byId(rows, 'healthyproj').localSkills, []);
 });
 
 test('W8-C3 WI-4: a .forge/skills/<id> directory with NO SKILL.md is not a skill — a bare directory must not become a bindable id', async () => {
-  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  const rows = await roster();
   assert.ok(!(byId(rows, 'localskillsproj').localSkills ?? []).includes('not-a-skill'));
 });
 
 test('W8-C3 WI-4: localSkills is derived even when the project CONFIG is broken — a project you cannot build is exactly the one whose bindings you need to see', async () => {
-  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  const rows = await roster();
   const row = byId(rows, 'flatkeysproj');
   assert.equal(row.configHealth?.state, 'invalid');
   assert.deepEqual(row.localSkills, ['broken-proj-skill']);
