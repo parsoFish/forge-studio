@@ -5,6 +5,9 @@ import type { Agent, Flow, Kb, Project, Run } from '@/lib/studio-client';
 import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 import { deriveFlowStatus, runsForFlow } from '@/lib/home-view';
 import { deriveProjectHealth, type ProjectHealthLevel } from '@/lib/projects-index-health';
+import { deriveProjectActivity } from '@/lib/projects-index-activity';
+import { formatWhen } from '@/lib/history-ledger';
+import type { Cycle, ProjectAttentionItem } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,7 +36,33 @@ const HEALTH_COLOR: Record<ProjectHealthLevel, string> = {
   unknown: 'var(--faint)',
 };
 
-export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb[]; index: number }) {
+export function ProjectCard({
+  project,
+  kbs,
+  index,
+  attention,
+  cycles,
+  nowMs,
+}: {
+  project: Project;
+  kbs: Kb[];
+  index: number;
+  /**
+   * W8-C3 (projects-08): the RAW sources an activity signal is derived from,
+   * never a pre-computed activity value. Passing the derivation instead of its
+   * inputs is exactly how a prop becomes a place for a stale copy to live —
+   * the same reason `health` above is not a prop either.
+   *
+   * BOTH absent = this shelf does not show activity (the Library's projects
+   * section). That is a different fact from "present but empty", which means
+   * the sources were read and had nothing for this project.
+   */
+  attention?: readonly ProjectAttentionItem[];
+  cycles?: readonly Cycle[];
+  /** Injected so the relative time is deterministic under test (D7: never read
+   *  `Date.now()` inside a formatter). */
+  nowMs?: number;
+}) {
   const skillCount = (project.skills ?? []).length;
   const kbLabel = project.kb ? (kbs.find((k) => k.id === project.kb)?.name ?? project.kb) : null;
   // W8-C3 (projects-08 / forge-j1e): DERIVED here, from the project itself, on
@@ -42,6 +71,8 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
   // projects section and the /projects index), which is exactly how two
   // callers end up disagreeing. One derivation, both shelves.
   const health = deriveProjectHealth(project);
+  const showsActivity = attention !== undefined || cycles !== undefined;
+  const activity = showsActivity ? deriveProjectActivity(project.id, attention ?? [], cycles ?? []) : null;
 
   return (
     <Link
@@ -71,6 +102,41 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
           {health.label}
         </span>
       </div>
+      {activity && (
+        <div
+          className="card-meta"
+          data-field="project-activity"
+          /* Machine-readable and EXACT: the server's own ISO verbatim, and the
+             explicit tokens `none` / `unknown` rather than an empty string, so
+             "we looked and there is nothing" and "we could not look" stay
+             distinguishable in the DOM contract. */
+          data-last-activity={activity.lastActivityIso ?? 'none'}
+          data-open-count={activity.openCount === null ? 'unknown' : String(activity.openCount)}
+          data-progress-done={activity.progress === null ? 'unknown' : String(activity.progress.done)}
+          data-progress-total={activity.progress === null ? 'unknown' : String(activity.progress.total)}
+          data-flagged={activity.queue === null ? 'unknown' : String(activity.queue.flagged)}
+          style={{ marginTop: 6 }}
+        >
+          <span className="card-stat">
+            {activity.lastActivityIso === null ? 'no activity yet' : formatWhen(activity.lastActivityIso, nowMs ?? Date.now())}
+          </span>
+          <span className="card-stat">
+            {activity.openCount === null
+              ? 'work unknown'
+              : activity.openCount === 0
+                ? 'nothing queued'
+                : plural(activity.openCount, 'open initiative')}
+          </span>
+          {activity.progress !== null && (
+            <span className="card-stat">{activity.progress.done}/{activity.progress.total} merged</span>
+          )}
+          {activity.queue !== null && activity.queue.flagged > 0 && (
+            <span className="card-stat" style={{ color: 'var(--ember)' }}>
+              {plural(activity.queue.flagged, 'flagged plan')}
+            </span>
+          )}
+        </div>
+      )}
       {/* The reason, in the words of whatever judged it — the operator cannot
           fix "unhealthy", only "the flat gate keys moved to the typed
           testProcess object". Rendered only when there IS one, so a healthy

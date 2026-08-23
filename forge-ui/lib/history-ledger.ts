@@ -300,8 +300,13 @@ export type LedgerRow = {
  * a validity check), one per caller. Both callers below go through this
  * single helper so the definition of "valid" can never diverge between
  * them again.
+ *
+ * EXPORTED (W8-C3): `./projects-index-activity.ts` asks the same question of a
+ * cycle's timestamps when picking a project's most-recent activity. It reuses
+ * this rather than re-deriving "is this a real time", for exactly the reason
+ * above — a second definition is a second thing to drift.
  */
-function parseWhenMs(raw: string | undefined): number | null {
+export function parseWhenMs(raw: string | undefined): number | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;

@@ -5,6 +5,7 @@ import { StudioPage } from '@/components/StudioPage';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { ProjectCard } from './LibraryCard';
 import { summariseProjectHealth } from '@/lib/projects-index-health';
+import type { Cycle, ProjectAttentionItem } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // ProjectsIndexBody — the real /projects index (W6-IA-1), replacing the
@@ -29,6 +30,10 @@ export function ProjectsIndexBody({
   ready,
   error = null,
   onRetry,
+  attention,
+  cycles,
+  activityError = null,
+  nowMs,
 }: {
   projects: Project[];
   kbs: Kb[];
@@ -37,6 +42,17 @@ export function ProjectsIndexBody({
    *  failure state INSTEAD of the "No projects yet" zero-state. */
   error?: ProjectsIndexFetchError | null;
   onRetry?: () => void;
+  /**
+   * W8-C3 (projects-08): the RAW activity sources, read INDEPENDENTLY of the
+   * roster. Both absent = the secondary read has not settled yet.
+   * `activityError` = it settled and failed — which degrades one signal and
+   * must never take the page down, nor read as a quiet roster.
+   */
+  attention?: readonly ProjectAttentionItem[];
+  cycles?: readonly Cycle[];
+  activityError?: ProjectsIndexFetchError | null;
+  /** Deterministic "now" for relative times under test. */
+  nowMs?: number;
 }) {
   // Zero-state is honest: only once the first fetch has actually settled
   // (`ready`) AND the roster is genuinely empty AND the fetch did not fail —
@@ -48,6 +64,14 @@ export function ProjectsIndexBody({
   // never fetched separately, so it cannot drift from what the cards show.
   const health = summariseProjectHealth(projects);
 
+  // A failed secondary read is the newest truth about activity, so it wins.
+  // Both sources present = 'ok'; anything less has not settled. Deliberately
+  // strict: a half-populated pair would render half the signal as if it were
+  // whole, which is the fail-open shape in miniature.
+  const activityStatus: 'ok' | 'loading' | 'error' =
+    activityError ? 'error' : attention !== undefined && cycles !== undefined ? 'ok' : 'loading';
+  const activitySources = activityStatus === 'ok' ? { attention, cycles } : {};
+
   return (
     <StudioPage
       dataPage="projects-index"
@@ -55,6 +79,10 @@ export function ProjectsIndexBody({
       data={{
         'data-project-count': projects.length,
         'data-fetch-status': error ? 'error' : ready ? 'ok' : 'loading',
+        // W8-C3: the activity read has its OWN status. Folding it into
+        // `data-fetch-status` would make a healthy roster with a failed
+        // activity read indistinguishable from a failed roster read.
+        'data-activity-status': activityStatus,
       }}
       eyebrow="forge studio"
       title="Projects"
@@ -86,6 +114,23 @@ export function ProjectsIndexBody({
       {error ? (
         <div style={{ marginBottom: projects.length > 0 ? 18 : 0 }}>
           <FetchErrorState what="the project roster" error={error.message} status={error.status} onRetry={onRetry} />
+        </div>
+      ) : null}
+      {/* W8-C3: the activity read failed but the roster did not. Say so — a
+          silently-missing activity row reads as "nothing is happening on any
+          project", which is the exact fail-open story crosscut-01 closed for
+          the roster itself. */}
+      {activityError ? (
+        <div
+          data-component="projects-activity-error"
+          style={{
+            marginBottom: 14, padding: '10px 14px', fontSize: 12.5, color: 'var(--dim)',
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          Activity and progress are unavailable — {activityError.message}
+          {activityError.status !== undefined ? ` (HTTP ${activityError.status})` : ''}. The roster below is
+          still live; only the per-project activity signal is missing.
         </div>
       ) : null}
       {error && projects.length === 0 ? null : isEmpty ? (
@@ -144,7 +189,7 @@ export function ProjectsIndexBody({
           style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}
         >
           {projects.map((p, i) => (
-            <ProjectCard key={p.id} project={p} kbs={kbs} index={i} />
+            <ProjectCard key={p.id} project={p} kbs={kbs} index={i} nowMs={nowMs} {...activitySources} />
           ))}
         </div>
       )}
