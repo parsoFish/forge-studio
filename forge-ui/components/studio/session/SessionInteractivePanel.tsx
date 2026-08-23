@@ -9,6 +9,7 @@ import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import type { EventLogEntry } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
+import { deriveApproveGate } from '@/lib/session-verdict-gate';
 
 // ---------------------------------------------------------------------------
 // SessionInteractivePanel — the GENERIC interaction panel (W6-B6, ADR-043
@@ -436,45 +437,20 @@ export function SessionInteractivePanel({
           // computed once, outside this map, from `artifact.kind` — never
           // from `affordance` or `kind`.
           const requiresFields = affordance.meta?.requires ?? [];
-          const providedFields: Record<string, string> = packageArtifact !== null ? { id: packageId } : {};
-          const requiresSatisfied = requiresFields.every((field) => (providedFields[field] ?? '').trim().length > 0);
-          // The "shape unresolved" advisory stays a SEPARATE, artifact-driven
-          // check (never a duplicate of the server's own requirement): it is
-          // UX-only heads-up data ("this will 409 — the draft has no
-          // SKILL.md/hook.yaml yet"), not a business rule the server also
-          // enforces via a wire signal — same distinction the label text
-          // ("Skill id" vs "Hook id") already relies on.
-          const shapeResolved = packageArtifact === null || packageShape !== 'unknown';
-          // community-14 (W7 re-gate, S1) — that advisory is SCOPED to the
-          // kinds it actually speaks for. It only ever meant "the id this
-          // verdict requires is derived from a shape we can't see yet", so
-          // it may gate Approve only when the affordance's OWN `requires`
-          // asks for that id (authoring/kb-cleanup). community-refresh's
-          // staging package is registry.yaml + evidence.* BY DESIGN — no
-          // SKILL.md/hook.yaml will ever land in it — and its awaiting-review
-          // row declares no `requires` at all, so an unconditional
-          // `!shapeResolved` disabled its Approve button forever, with no
-          // matching server-side rule (`handleCommunityRefreshVerdict`
-          // accepts the verdict as-is).
-          const shapeBlocksApprove = requiresFields.includes('id') && !shapeResolved;
-          // W7-C2 (library-22) — a client-side ADVISORY mirror of the
-          // server's own id rule (the write route now 400s a non-slug id
-          // with the same rule text): disable + hint instead of letting the
-          // click bounce off a 400. The server check remains the
-          // enforcement; this is UX, exactly like `shapeResolved` above.
-          const idValue = (providedFields['id'] ?? '').trim();
-          const idBadSlug = requiresFields.includes('id') && idValue.length > 0 && !CLIENT_SLUG_RE.test(idValue);
-          const approveDisabled = busy || !requiresSatisfied || shapeBlocksApprove || idBadSlug;
-          // W7-C2 (sessions-kinds-23) — the disabled Approve finally SAYS
-          // why: name the first unmet requires field (or the bad slug), as
-          // an inline hint the operator can act on, not a silent 50%-opacity
-          // button.
-          const unmetRequires = requiresFields.filter((field) => (providedFields[field] ?? '').trim().length === 0);
-          const requiresHint = idBadSlug
-            ? `"${idValue}" is not a valid id — use lowercase letters/digits separated by hyphens, starting with a letter (e.g. "pr-diff-summary").`
-            : unmetRequires.length > 0
-              ? `Enter ${unmetRequires.map((f) => (f === 'id' && packageShape !== null && packageShape !== 'unknown' ? `a ${packageShape} id` : `"${f}"`)).join(', ')} to enable Approve.`
-              : null;
+          // W8-B3 (sessions-kinds-06/R01) — keyed on the phase row's OWN
+          // authored `requires:` list, not on `artifact.kind === 'file-package'`.
+          // The artifact kind was never the right source of truth for "does
+          // this verdict need an id": `file-package` is deliberately REUSED by
+          // community-refresh (a registry.yaml + evidence draft that will never
+          // contain a SKILL.md), so keying off it rendered a "Skill id
+          // (directory name)" field on a kind whose awaiting-review row asks
+          // for no id at all — and then gated Approve on a shape that draft can
+          // never have. `requires:` is the one wire signal the SERVER also
+          // enforces, so client and server now gate on the same fact.
+          // ONE derivation, in lib/session-verdict-gate.ts — see that module's
+          // header for why this is not four locals here any more.
+          const gate = deriveApproveGate({ requires: requiresFields, idValue: packageId, packageShape, busy });
+          const idRequired = gate.idRequired;
           return (
             <div key={affordance.id} data-section="session-affordance" data-affordance-kind="verdict" style={sectionStyle}>
               {generations.length > 0 && (
@@ -495,7 +471,7 @@ export function SessionInteractivePanel({
                   </select>
                 </div>
               )}
-              {packageArtifact && (
+              {idRequired && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={labelStyle}>{packageShape === 'hook' ? 'Hook id (directory name)' : 'Skill id (directory name)'}</div>
                   <input
@@ -505,7 +481,7 @@ export function SessionInteractivePanel({
                     data-field="session-package-id"
                     style={inputStyle}
                   />
-                  {packageShape === 'unknown' && (
+                  {gate.shapeBlocksApprove && (
                     <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>
                       Waiting for the draft to include a SKILL.md or hook.yaml before this can be saved.
                     </div>
@@ -529,9 +505,9 @@ export function SessionInteractivePanel({
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 />
               </div>
-              {requiresHint && (
+              {gate.hint !== null && (
                 <div data-requires-hint style={{ fontSize: 11.5, color: 'var(--dim)', margin: '0 0 8px' }}>
-                  {requiresHint}
+                  {gate.hint}
                 </div>
               )}
               {error && <ErrorLine message={error} />}
@@ -541,22 +517,24 @@ export function SessionInteractivePanel({
                     type="button"
                     className="btn btn-primary"
                     data-action="verdict-approve"
-                    {...disabledAttrs(busy ? 'Submitting…' : shapeBlocksApprove ? 'The draft’s shape is still resolving' : !requiresSatisfied ? 'Fill in every field this verdict requires first' : null)}
+                    {...disabledAttrs(gate.disabledReason)}
                     onClick={() =>
                       void submit(affordance, {
                         verdict: 'approve',
                         ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
                         ...(notesText.trim().length > 0 ? { notes: notesText.trim() } : {}),
                         // Generic: every field the server's own meta.requires
-                        // names rides along, sourced from providedFields —
-                        // never a per-kind {kind,id} literal. `kind` itself is
-                        // NOT sent at all (W6-B9): the write route derives it
-                        // server-side from the REAL staged files, never a
-                        // client-supplied guess.
-                        ...Object.fromEntries(requiresFields.map((field) => [field, (providedFields[field] ?? '').trim()])),
+                        // names rides along, sourced from the SAME
+                        // `gate.providedFields` map the gate judged — never a
+                        // per-kind {kind,id} literal, and never a second copy
+                        // collected differently from the one that decided the
+                        // button was clickable. `kind` itself is NOT sent at
+                        // all (W6-B9): the write route derives it server-side
+                        // from the REAL staged files, never a client guess.
+                        ...gate.providedFields,
                       })
                     }
-                    style={{ opacity: approveDisabled ? 0.5 : 1 }}
+                    style={{ opacity: gate.disabledReason !== null ? 0.5 : 1 }}
                   >
                     {busy ? 'Working…' : 'Approve'}
                   </button>
@@ -670,7 +648,6 @@ export function SessionInteractivePanel({
  *  (orchestrator/skill-path.ts), per this file set's no-cross-boundary-
  *  import convention. ADVISORY only (disable + hint); the write route's own
  *  check is the enforcement. */
-const CLIENT_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 /** W7-C2 (sessions-kinds-36) — the permanent "what this session produced"
  *  link, rendered in the zero-affordance (terminal) branch whenever the

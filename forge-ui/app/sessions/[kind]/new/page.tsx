@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
+import { NotFound } from '@/components/NotFound';
 import { NewIdeaBox } from '@/components/NewIdeaBox';
 import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, startOnboardingSession, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
@@ -12,7 +13,7 @@ import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components
 import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
 import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
-import { reconcileProjectPrefill } from '@/lib/kickoff-form';
+import { reconcileProjectPrefill, reconcileSelectPrefill } from '@/lib/kickoff-form';
 import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
 import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/kickoff-view';
 
@@ -95,9 +96,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // lib/kickoff-form.ts) — a miss surfaces `data-unknown-project` instead.
   const [project, setProject] = useState('');
   const [unknownPrefill, setUnknownPrefill] = useState<string | null>(null);
-  // The `?kb=` prefill (main, W7-B2) is kept as-is: the KB select is seeded
-  // directly from it.
-  const [kbId, setKbId] = useState(prefillKb);
+  // W8-B3 (sessions-kinds-R03) — the `?kb=` prefill goes through the SAME
+  // reconcile rule as `?project=` (lib/kickoff-form.ts). It used to be seeded
+  // raw, so `/sessions/kb-cleanup/new?kb=not-a-real-kb` showed the select's
+  // "select a KB…" placeholder while Start stayed enabled and POSTed the value
+  // the operator could not see, straight into a 404. Start empty; the loader
+  // below seeds it only when the roster really has that id.
+  const [kbId, setKbId] = useState('');
+  const [unknownKbPrefill, setUnknownKbPrefill] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [modelTier, setModelTier] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -142,6 +148,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         setUnknownPrefill(reconciled.unknownPrefill);
         setCapability(cap);
         setKbs(kbList);
+        // W8-B3 (sessions-kinds-R03) — same treatment, same rule, same notice
+        // shape as the project prefill above.
+        const reconciledKb = reconcileSelectPrefill(prefillKb, kbList.map((k) => k.id));
+        if (reconciledKb.selected) setKbId(reconciledKb.selected);
+        setUnknownKbPrefill(reconciledKb.unknownPrefill);
         setActiveSessions(sessions);
         // W7-B3 (community-12) / W7-B2 (knowledge-26): pre-select the tier the
         // agent will ACTUALLY run on when nothing is chosen — the cheapest of
@@ -321,6 +332,18 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // longer bounces the operator through a link to /architect/new.
     return (
       <StudioArchitectShell dataPage="session-kickoff" ready={true} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
+        {/* W8-B3 (sessions-kinds-R07) — architect was the only one of the eight
+            kickoffs with no way back: the other seven get `data-action=
+            "kickoff-back"` from KickoffContextCard, but this branch returns
+            early with its own shell and never reaches it. Same link, same DOM
+            action name, so the escape hatch is now uniform across all eight. */}
+        <Link
+          href="/sessions"
+          data-action="kickoff-back"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}
+        >
+          ← back to sessions
+        </Link>
         <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: '0 0 16px' }}>
           Describe the idea; forge reads the project and the brain, asks only what it can&apos;t
           resolve itself, then drafts a plan for your approval. Same form as{' '}
@@ -338,12 +361,22 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   }
 
   if (!spec) {
+    // W8-B3 (crosscut-R08) — the shared NotFound, exactly what the sibling
+    // route `/sessions/<bogus>/<sid>` already renders. This branch used to
+    // return a full kickoff SHELL (`data-page="session-kickoff"`,
+    // `data-page-ready="true"`, a breadcrumb and an h1 both naming the bogus
+    // kind) whose entire body was one sentence, with zero buttons, no
+    // `data-not-found-*` attributes and no way out but the top nav. Two
+    // addresses one character apart answered "this does not exist" in two
+    // different shapes, and only one of them let the operator leave.
     return (
-      <StudioArchitectShell dataPage="session-kickoff" ready={true} title={kind}>
-        <div data-section="kickoff-unknown-kind" style={{ fontSize: 13, color: 'var(--dim)' }}>
-          Session kind &quot;{kind}&quot; has no kickoff entry.
-        </div>
-      </StudioArchitectShell>
+      <NotFound
+        kind="session kind"
+        id={kind}
+        backHref="/sessions"
+        backLabel="Sessions"
+        detail={`No session kind "${kind}" is registered, so there is nothing to start here.`}
+      />
     );
   }
 
@@ -387,6 +420,14 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           {spec.selector === 'kb' ? (
             <>
               <div style={rowLabel}>Knowledge base</div>
+              {/* W8-B3 (sessions-kinds-R03) — the honest notice the project
+                  select already had: a prefill the roster does not know is
+                  surfaced, never silently submitted. */}
+              {unknownKbPrefill && (
+                <div data-unknown-kb={unknownKbPrefill} style={{ color: 'var(--red, #f87171)', fontSize: 12, marginBottom: 8 }}>
+                  Knowledge base &quot;{unknownKbPrefill}&quot; is not in the roster — pick a real one below.
+                </div>
+              )}
               <select value={kbId} onChange={(e) => setKbId(e.target.value)} data-field="kickoff-kb" style={inputStyle}>
                 <option value="">select a KB…</option>
                 {kbs.map((k) => (

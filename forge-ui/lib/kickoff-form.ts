@@ -33,18 +33,40 @@ export function kickoffCeilingInvalidReason(ceilingUsd: number | undefined): str
 }
 
 /**
- * W7-B6 review F2 — reconcile a `?project=` prefill against the loaded
- * roster. A prefill naming a real roster id seeds the select; anything else
- * (a deleted project, a pre-B6 NAME-based link, junk) yields an empty select
- * plus the offending value for an honest `data-unknown-project` notice —
- * never a hidden non-roster value a still-enabled Start would submit.
+ * W7-B6 review F2 — reconcile a URL prefill against the loaded roster. A
+ * prefill naming a real roster id seeds the select; anything else (a deleted
+ * project, a pre-B6 NAME-based link, junk) yields an empty select plus the
+ * offending value for an honest `data-unknown-*` notice — never a hidden
+ * non-roster value a still-enabled Start would submit.
+ *
+ * W8-B3 (sessions-kinds-R03) — GENERALISED from `reconcileProjectPrefill` to
+ * cover the `?kb=` prefill too. Only the project prefill was ever routed
+ * through this rule; the kickoff page's own comment said so outright ("The
+ * ?kb= prefill is kept as-is: the KB select is seeded directly from it"), and
+ * the consequence was exactly the shape this function exists to prevent:
+ * `/sessions/kb-cleanup/new?kb=not-a-real-kb` rendered the select showing its
+ * "select a KB…" placeholder while Start stayed ENABLED and submitted the
+ * invisible value into a 404. The server failed closed, so this was a
+ * guard-SYMMETRY gap rather than data loss — but a control that submits a
+ * value the operator cannot see is the defect either way, and the fix is one
+ * shared rule rather than a second copy for the second field.
  */
+export function reconcileSelectPrefill(
+  prefill: string,
+  rosterIds: readonly string[],
+): { selected: string; unknownPrefill: string | null } {
+  if (prefill === '') return { selected: '', unknownPrefill: null };
+  return rosterIds.includes(prefill)
+    ? { selected: prefill, unknownPrefill: null }
+    : { selected: '', unknownPrefill: prefill };
+}
+
+/** The project-shaped alias, kept so existing callers read naturally. Thin by
+ *  design — it must never grow a rule of its own. */
 export function reconcileProjectPrefill(
   prefill: string,
   rosterIds: readonly string[],
 ): { project: string; unknownPrefill: string | null } {
-  if (prefill === '') return { project: '', unknownPrefill: null };
-  return rosterIds.includes(prefill)
-    ? { project: prefill, unknownPrefill: null }
-    : { project: '', unknownPrefill: prefill };
+  const { selected, unknownPrefill } = reconcileSelectPrefill(prefill, rosterIds);
+  return { project: selected, unknownPrefill };
 }
