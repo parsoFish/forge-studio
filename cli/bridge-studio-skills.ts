@@ -9,7 +9,9 @@
  *                                         (MOVED VERBATIM from bridge-studio-writes.ts;
  *                                         behaviour unchanged, same test coverage)
  *   POST /api/studio/skills/install    → install an already-materialised package (D2)
- *   POST /api/studio/skills/:id/approve → approve a draft (D4: never restores runtime)
+ *   POST /api/studio/skills/:id/approve → approve a draft (D4: never restores runtime), OR
+ *                                         re-pin a needs-review skill (W8-B4, library-36) —
+ *                                         see the dispatch comment at the route itself
  *
  * Matches the existing handler contract exactly: `sendJson`/`allowedOrigin`/
  * `sanitizeError`/`readJson`/`pathOnly` from bridge-studio.ts, returning `true`
@@ -48,6 +50,7 @@ import {
   skillTrustDetail,
   installSkillPackage,
   approveSkillDraft,
+  repinSkillPackage,
   type SkillLibraryEntry,
 } from '../orchestrator/studio/skill-library.ts';
 import { removeInstallLedgerEntry } from '../orchestrator/studio/skill-install-ledger.ts';
@@ -312,14 +315,42 @@ export async function handleStudioSkillsRoutes(
         return true;
       }
 
+      // W8-B4 (library-36 regate): `SkillTrust` has exactly three arms
+      // ('draft' | 'needs-review' | 'ready' — skill-library.ts). A sibling
+      // fix (227ca073) made /skills/<id> RENDER an Approve control for
+      // needs-review, but this route still refused every non-draft — a
+      // surfaced-but-unbacked control, the campaign's dominant
+      // declared-data-fails-open defect. Each arm now gets its own dispatch:
+      //   draft        -> approveSkillDraft (unchanged; do not widen its own
+      //                    contract, the dispatch belongs here)
+      //   needs-review -> repinSkillPackage — the operator's review act ("I
+      //                    looked at this edit, it is mine, pin it"),
+      //                    re-anchoring the pinned contentHash to the
+      //                    current on-disk bytes and keeping the
+      //                    install-ledger row's pin in step
+      //   ready        -> still 409, naming the real trust value
       const { trust } = skillTrustDetail(ctx.forgeRoot, id);
-      if (trust !== 'draft') {
-        sendJson(res, 409, { error: `skill "${id}" is not a draft (trust: ${trust}) — only a draft install can be approved` }, origin);
+      if (trust === 'draft') {
+        approveSkillDraft({ forgeRoot: ctx.forgeRoot, id });
+        sendJson(res, 200, { ok: true, id }, origin);
         return true;
       }
-
-      approveSkillDraft({ forgeRoot: ctx.forgeRoot, id });
-      sendJson(res, 200, { ok: true, id }, origin);
+      if (trust === 'needs-review') {
+        // `repinSkillPackage` throws when the skill has no provenance block
+        // to re-pin — a hand-authored needs-review skill (or one whose
+        // provenance block was itself stripped, the `provenance-tampered`
+        // reason with nothing left) has nothing for a re-pin to anchor to.
+        // That is a caller-facing 409 naming the real reason, never a 500.
+        try {
+          repinSkillPackage({ forgeRoot: ctx.forgeRoot, id });
+        } catch (err) {
+          sendJson(res, 409, { error: `skill "${id}" cannot be approved: ${sanitizeError(err)}` }, origin);
+          return true;
+        }
+        sendJson(res, 200, { ok: true, id }, origin);
+        return true;
+      }
+      sendJson(res, 409, { error: `skill "${id}" is not a draft or needs-review skill (trust: ${trust}) — only a draft install or a needs-review skill can be approved` }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

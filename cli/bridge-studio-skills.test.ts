@@ -255,6 +255,144 @@ test('AT-53: POST /api/studio/skills/<id>/approve succeeds for a draft, 409 for 
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/studio/skills/:id/approve — needs-review dispatch (W8-B4,
+// library-36 regate). Commit 227ca073 made /skills/<id> RENDER an Approve
+// control for a needs-review skill; the server still 409ed everything that
+// wasn't a draft, so the rendered control was declared-data-fails-open (the
+// campaign's dominant defect class). `SkillTrust` has exactly THREE arms
+// ('ready' | 'draft' | 'needs-review' — orchestrator/studio/skill-library.ts)
+// and the route must give each its own dispatch:
+//   draft        -> approveSkillDraft (regression-guarded below)
+//   needs-review -> repinSkillPackage (the new arm these tests pin)
+//   ready        -> still 409, naming the real trust value
+// ---------------------------------------------------------------------------
+
+function readSkillFrontmatter(id: string): Record<string, unknown> {
+  const raw = readFileSync(join(forgeRoot, 'skills', id, 'SKILL.md'), 'utf8');
+  return (matter(raw, {}).data ?? {}) as Record<string, unknown>;
+}
+
+/** Install + approve a skill through the REAL routes (a real provenance
+ *  block + a real install-ledger row), then hand-edit the BODY on disk only
+ *  — bypassing the pipeline, exactly like a direct edit or the PUT route
+ *  (W7-B4 library-05) would — so the recomputed package hash no longer
+ *  matches the pinned provenance hash. This is the "hash-drift" needs-review
+ *  shape: ledger entry present, provenance present and agreeing with the
+ *  ledger, but the actual bytes have moved on. */
+async function makeNeedsReviewSkillViaHashDrift(id: string): Promise<void> {
+  const install = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id,
+    entries: makeEntries({ name: 'Needs Review Fixture', description: 'drifts after approval' }),
+    upstream: { source: 'https://example.com/needs-review-fixture' },
+  });
+  assert.equal(install.status, 200, 'fixture setup: install must succeed');
+  const approve = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(approve.status, 200, 'fixture setup: draft approve must succeed');
+
+  const mdPath = join(forgeRoot, 'skills', id, 'SKILL.md');
+  const { data, content } = matter(readFileSync(mdPath, 'utf8'), {});
+  writeFileSync(mdPath, matter.stringify(`\n${content.replace(/^\n+/, '')}\nHand-edited after approval.\n`, data as Record<string, unknown>), 'utf8');
+}
+
+test('library-36 pin 1: approving a needs-review skill returns 200 and flips trust to ready — asserts the ARTIFACT (re-reads skillTrustDetail via GET), not just the status code', async () => {
+  const id = 'library-36-needs-review-approve';
+  await makeNeedsReviewSkillViaHashDrift(id);
+
+  const before = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(before['trust'], 'needs-review', 'sanity: the drifted fixture must read back as needs-review');
+
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  const resBody = await res.clone().json().catch(() => null);
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(resBody)}`);
+
+  const after = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(after['trust'], 'ready', 'the skill must read back ready — re-derived from skillTrustDetail, never trusted from the 200 alone');
+});
+
+test('library-36 pin 2 (regression): approving a draft STILL returns 200 and still flips library:true / drops status:draft — the dispatch must not replace the draft path', async () => {
+  const id = 'library-36-draft-still-works';
+  const install = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id,
+    entries: makeEntries({ name: 'Draft Still Works', description: 'must still approve via approveSkillDraft' }),
+    upstream: { source: 'https://example.com/draft-still-works' },
+  });
+  assert.equal(install.status, 200);
+  assert.equal(readSkillFrontmatter(id)['status'], 'draft', 'fixture sanity: a fresh install is a draft');
+
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(res.status, 200);
+
+  const fm = readSkillFrontmatter(id);
+  assert.equal(fm['library'], true, 'an approved draft must carry library: true');
+  assert.equal('status' in fm, false, 'an approved draft must drop status: draft entirely');
+});
+
+test('library-36 pin 3 (enumeration): the trust value that is neither draft nor needs-review ("ready") still 409s, and the message names the real trust value', async () => {
+  // "existing-skill" is the top-level before() fixture: hand-authored, no
+  // provenance, no install-ledger row — skillTrustDetail returns { trust: 'ready' }.
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/existing-skill/approve`, {});
+  assert.equal(res.status, 409);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /ready/, 'the 409 message must name the real trust value ("ready")');
+});
+
+test('library-36 pin 4: a needs-review skill with NO provenance block hits a 409 naming the real reason, never a 500', async () => {
+  // Deliberately no "provenance" substring in the id itself — the id is
+  // echoed back into 409 messages, and a matching substring there would give
+  // a false-positive /provenance/i match unrelated to the actual reason text.
+  const id = 'library-36-stripped-block-needs-review';
+  const install = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id,
+    entries: makeEntries({ name: 'No Provenance After Strip', description: 'provenance stripped by hand post-install' }),
+    upstream: { source: 'https://example.com/no-provenance' },
+  });
+  assert.equal(install.status, 200);
+  const approve = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(approve.status, 200, 'fixture setup: draft approve must succeed');
+
+  // Strip the provenance block ENTIRELY by hand, leaving the install-ledger
+  // row intact — skillTrustDetail's ledger-exists-but-provenance-missing
+  // branch ("provenance-tampered"), the exact needs-review shape that leaves
+  // repinSkillPackage nothing to anchor a re-pin to.
+  const mdPath = join(forgeRoot, 'skills', id, 'SKILL.md');
+  const { data, content } = matter(readFileSync(mdPath, 'utf8'), {});
+  const stripped = { ...(data as Record<string, unknown>) };
+  delete stripped['provenance'];
+  writeFileSync(mdPath, matter.stringify(`\n${content.replace(/^\n+/, '')}\n`, stripped), 'utf8');
+
+  const detail = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(detail['trust'], 'needs-review', 'fixture sanity: a stripped provenance block must still read as needs-review');
+
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(res.status, 409, `must 409, never 500 — got ${res.status}`);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /provenance/i, 'the 409 message must name the real reason (no provenance block to re-pin)');
+});
+
+test("library-36 pin 5: after a needs-review approve, the install-ledger row's pin is in step with the new on-disk hash — re-read both artifacts, do not trust repinSkillPackage's own unit tests", async () => {
+  const id = 'library-36-ledger-in-step';
+  await makeNeedsReviewSkillViaHashDrift(id);
+
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(res.status, 200);
+
+  const fm = readSkillFrontmatter(id);
+  const provenance = fm['provenance'] as Record<string, unknown> | undefined;
+  assert.ok(provenance && typeof provenance['contentHash'] === 'string', 'sanity: the approved skill must still carry a provenance block with a contentHash');
+
+  const ledger = installLedgerDoc();
+  const row = (ledger.installed ?? []).find((e) => e.id === id) as { id: string; contentHash?: string } | undefined;
+  assert.ok(row, "the install-ledger row must still exist for this id");
+  assert.equal(row!.contentHash, provenance!['contentHash'], "the ledger row's pinned contentHash must match the re-pinned SKILL.md provenance hash");
+
+  // Prove it does NOT immediately fall back to needs-review on the very next
+  // independent read — skillTrustDetail recomputes and cross-checks both
+  // artifacts, so this only stays ready if the ledger truly moved in step.
+  const after = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(after['trust'], 'ready', 'must stay ready on a fresh re-read — ledger and provenance must both be in step');
+});
+
+// ---------------------------------------------------------------------------
 // Sanitized errors on 500 — AT-54
 // ---------------------------------------------------------------------------
 
