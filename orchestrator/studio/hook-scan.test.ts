@@ -359,13 +359,18 @@ describe('benign fixture', () => {
 describe('manifest cross-check: declared vs undeclared network egress (D-H — declared NEVER vanishes)', () => {
   const NETWORK_ONLY_SCRIPT = `#!/usr/bin/env bash\ncurl -s https://api.example.com/health\n`;
 
-  it('UNDECLARED network (network: false) produces a critical, undeclared network-egress finding, verdict "findings"', () => {
+  // W8-B6 FIX-1 layer 2 REVISION: the verdict assertion here read 'findings'.
+  // It now reads 'blocked' — not because this case changed meaning, but
+  // because `critical` is now sufficient on its own. An UNDECLARED network
+  // call is exactly the shape that should cost an operator a written reason:
+  // the script does something its own manifest says it does not do.
+  it('UNDECLARED network (network: false) produces a critical, undeclared network-egress finding, verdict "blocked"', () => {
     const report = scanHookScript({ body: NETWORK_ONLY_SCRIPT, permissions: { env: [], read: [], network: false } });
     assert.equal(report.findings.length, 1);
     assert.equal(report.findings[0]!.category, 'network-egress');
     assert.equal(report.findings[0]!.severity, 'critical');
     assert.equal(report.findings[0]!.declared, false);
-    assert.equal(report.verdict, 'findings');
+    assert.equal(report.verdict, 'blocked');
   });
 
   it('DECLARED network (network: true) is STILL EMITTED — marked declared, downgraded severity, not vanished', () => {
@@ -381,13 +386,15 @@ describe('manifest cross-check: declared vs undeclared network egress (D-H — d
 describe('manifest cross-check: env read — D-K RETIRES the downgrade (declared no longer lowers severity)', () => {
   const ENV_ONLY_SCRIPT = `#!/usr/bin/env bash\necho "using $MY_API_KEY" > /tmp/out.log\n`;
 
-  it('UNDECLARED env var produces a critical, undeclared env-read finding, verdict "findings"', () => {
+  // W8-B6 FIX-1 layer 2 REVISION: 'findings' → 'blocked', same reason as the
+  // network case above — a critical finding no longer needs a partner.
+  it('UNDECLARED env var produces a critical, undeclared env-read finding, verdict "blocked"', () => {
     const report = scanHookScript({ body: ENV_ONLY_SCRIPT, permissions: { env: [], read: [], network: false } });
     assert.equal(report.findings.length, 1);
     assert.equal(report.findings[0]!.category, 'env-read');
     assert.equal(report.findings[0]!.severity, 'critical');
     assert.equal(report.findings[0]!.declared, false);
-    assert.equal(report.verdict, 'findings');
+    assert.equal(report.verdict, 'blocked');
   });
 
   // BLOCKER 2 (D-K): this is the exact inversion the review found — the OLD
@@ -405,7 +412,14 @@ describe('manifest cross-check: env read — D-K RETIRES the downgrade (declared
       'critical',
       'THE BLOCKER 2 FIX: a declared secret-shaped grant must stay critical, exactly like an undeclared one — this is what makes declaring the exfiltration NOT a way to dodge the override bar',
     );
-    assert.equal(report.verdict, 'findings', 'a LONE env-read finding, with no accompanying network-egress finding, is still "findings" not "blocked" — the combo needs both categories (D-G)');
+    // W8-B6 FIX-1 layer 2 REVISION — THIS IS THE LINE THE REVIEW ATTACKED.
+    // It used to assert 'findings', pinning D-G's combo rule: a lone env-read
+    // finding needed a *detected* network-egress partner to block. The
+    // reviewer defeated the partner half (this module's header already listed
+    // `/dev/tcp/`, `python3 -c`, `ssh`, `dig` as undetected), approved such a
+    // hook through the ordinary one-click path, and its child printed the real
+    // GH_TOKEN. D-G's pairing is retired: critical is sufficient.
+    assert.equal(report.verdict, 'blocked', 'a LONE critical env-read finding now blocks on its own — the pairing was evadable, so it was never the gate it read as');
   });
 });
 
@@ -805,6 +819,98 @@ describe('MINOR: approval pins the TRIGGER (on/matcher) too, not only script + p
 
     const d = hashHookTrigger('SessionEnd', 'Bash(gh pr create)');
     assert.notEqual(a, d, 'adding a matcher must change the hash even when `on` is unchanged');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 FIX-1 LAYER 2 (2026-08-24 hostile review) — a lone CRITICAL finding
+// must block on its own. The env+network PAIRING was the only route to
+// `blocked` for an env-read finding, and that pairing is trivially evadable:
+// this module's own header lists the egress shapes the four literal patterns
+// miss (`/dev/tcp/`, `python3 -c`, `ssh`, `dig`). "No egress finding" is
+// therefore not evidence of no egress path — so a gate whose second half is
+// documented as evadable is not a gate.
+//
+// Proven end-to-end by the reviewer before this block existed: a hook
+// declaring `permissions.env: ["GH_TOKEN"]`, approved through the ordinary
+// one-click path with NO override and NO reason, printed
+// `CHILD SAW GH_TOKEN=<the real value>` from a real spawnSync.
+//
+// This does not FORBID anything. `blocked` keeps its escape hatch —
+// `overrideHookBlock`, which demands a non-empty reason and stamps the ledger
+// `overridden: true`. The change converts a silent one-click into a
+// deliberate, audited decision.
+//
+// The rule keys off SEVERITY, not category: `critical` blocks, `info` does
+// not. That keeps the one pre-existing downgrade (a DECLARED network egress
+// scores `info`) doing exactly the friction-reduction job it was added for,
+// and it means a future finding category inherits the rule instead of needing
+// a new clause in computeVerdict.
+// ---------------------------------------------------------------------------
+
+describe('W8-B6 FIX-1 layer 2: any CRITICAL finding blocks on its own', () => {
+  const ENV_ONLY_SCRIPT = `#!/usr/bin/env bash\necho "using $MY_API_KEY" > /tmp/out.log\n`;
+
+  it('THE REVIEWER REPRO: a hook whose ONLY finding is a declared secret-shaped env grant is BLOCKED, not one-click approvable', () => {
+    const root = makeForgeRoot();
+    // The body is deliberately inert and matches NO egress pattern, present or
+    // future — so this case can only ever reach `blocked` via the severity
+    // rule, never by accidentally tripping the old pairing once layer 3 widens
+    // the egress list. The capability grant alone is the whole finding, which
+    // is the point: the manifest is what actually hands the child the real
+    // value at spawn time (hook-runtime.ts), so a grant needs no detectable
+    // exfiltration in the body to be worth an operator's explicit decision.
+    const script = `#!/usr/bin/env bash\necho "hook ran"\n`;
+    writeHookPackage(root, 'lone-env-grant-hook', script, { env: ['GH_TOKEN'], read: [], network: false });
+
+    const report = scanHookPackage(root, 'lone-env-grant-hook');
+    assert.ok(
+      report.findings.some((f: HookScanFinding) => f.category === 'env-read' && f.severity === 'critical'),
+      'sanity: the declared GH_TOKEN grant is a critical env-read finding',
+    );
+    assert.equal(report.verdict, 'blocked', 'a critical capability grant must not score one tier below the override bar');
+
+    assert.throws(
+      () => approveHook({ forgeRoot: root, id: 'lone-env-grant-hook' }),
+      /blocked/i,
+      'the one-click approve path must refuse it — that path is what made the reviewer repro a silent success',
+    );
+    assert.equal(isHookRunnable(root, 'lone-env-grant-hook'), false);
+
+    overrideHookBlock({ forgeRoot: root, id: 'lone-env-grant-hook', reason: 'operator needs a GitHub token for this guard and accepts the risk' });
+    assert.equal(isHookRunnable(root, 'lone-env-grant-hook'), true, 'the escape hatch is intact — this fix audits the decision, it does not forbid it');
+
+    const entry = readHookApprovalLedger(root).get('lone-env-grant-hook');
+    assert.equal(entry!.overridden, true, 'the decision is recorded as an override, distinguishable from an ordinary approval');
+    assert.match(entry!.reason ?? '', /GitHub token/, 'and it carries the operator\'s written reason');
+  });
+
+  it('a lone critical env-read finding blocks with NO network-egress finding present at all', () => {
+    const report = scanHookScript({ body: ENV_ONLY_SCRIPT, permissions: { env: ['MY_API_KEY'], read: [], network: false } });
+    assert.equal(report.findings.length, 1, 'sanity: exactly one finding, and it is not a network one');
+    assert.equal(report.findings[0]!.category, 'env-read');
+    assert.equal(report.verdict, 'blocked');
+  });
+
+  it('an UNDECLARED network egress is critical, so it blocks on its own too', () => {
+    const report = scanHookScript({ body: `#!/usr/bin/env bash\ncurl -s https://api.example.com/health\n`, permissions: DENY_ALL });
+    assert.equal(report.findings[0]!.severity, 'critical');
+    assert.equal(report.verdict, 'blocked');
+  });
+
+  it('SEVERITY, not category, is the lever: a DECLARED network egress scores info and still stays "findings"', () => {
+    const report = scanHookScript({ body: `#!/usr/bin/env bash\ncurl -s https://api.example.com/health\n`, permissions: { env: [], read: [], network: true } });
+    assert.equal(report.findings.length, 1);
+    assert.notEqual(report.findings[0]!.severity, 'critical', 'sanity: declaring network access is the one downgrade this module has');
+    assert.equal(
+      report.verdict,
+      'findings',
+      'the fix must not become "everything is blocked" — a benign declared-network hook keeps its one-click approve',
+    );
+  });
+
+  it('an empty finding list is still "clean" — the rule adds a blocking route, it does not remove the clean one', () => {
+    assert.equal(scanHookScript({ body: BENIGN_SCRIPT, permissions: DENY_ALL }).verdict, 'clean');
   });
 });
 

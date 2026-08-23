@@ -327,23 +327,40 @@ function scanObfuscation(body: string): HookScanFinding[] {
 }
 
 /**
- * BLOCKER 2 fix (D-K): the combo condition is now PRESENCE-based — an
- * env-read finding together with a network-egress finding, REGARDLESS of
- * either one's `severity`/`declared` — not severity-based as before (which
- * required BOTH to be undeclared-critical, so a fully-declared exfiltration
- * shape scored `findings`, one tier short of the override bar it should have
- * hit). Declaring everything no longer launders the exfiltration shape past
- * `blocked`. A lone network-egress finding with no accompanying env-read
- * finding still stays `findings` — declaring network access ALONE, with no
- * secret-shaped grant/reference anywhere, still reduces friction for a
- * genuinely benign hook; this fix does not become "everything is blocked".
+ * W8-B6 FIX-1 layer 2 (2026-08-24, hostile review of the first production
+ * caller of `runHookScript`): ANY `critical` finding blocks on its own.
+ *
+ * This REPLACES the four-clause rule below it — obfuscation blocks,
+ * file-read blocks, env-read+network-egress blocks, everything else is
+ * `findings` — which the review broke by attacking its weakest clause. An
+ * env-read finding could only reach `blocked` PAIRED with a *detected*
+ * network-egress finding, and this module's own header documents the egress
+ * shapes the pattern list misses (`/dev/tcp/`, `python3 -c`, `ssh`, `dig`).
+ * "No egress finding" is therefore not evidence of no egress path, so a lone
+ * critical capability grant scored `findings` — which `approveHook` accepts
+ * with no override and no reason, and which `forge-ui/app/hooks/[id]` renders
+ * with the same one-click Approve as `clean`. The reviewer approved a hook
+ * declaring `permissions.env: ["GH_TOKEN"]` through that ordinary path and its
+ * child printed the operator's real token. A gate whose second half is
+ * documented as evadable is not a gate.
+ *
+ * Keyed off SEVERITY rather than category, for three reasons: it subsumes all
+ * three old blocking clauses exactly (obfuscation and file-read are
+ * unconditionally `critical`, and the pairing's members are `critical`
+ * whenever they matter); it leaves the module's ONE deliberate downgrade — a
+ * DECLARED network egress scores `info` — doing precisely the friction
+ * reduction it was added for, so a genuinely benign declared-network hook
+ * keeps its one-click approve and this does NOT become "everything is
+ * blocked"; and a future finding category inherits the rule by construction
+ * instead of needing a fifth clause someone must remember to add.
+ *
+ * This FORBIDS nothing. `blocked` keeps its escape hatch — `overrideHookBlock`
+ * demands a non-empty reason and stamps the ledger `overridden: true`, a
+ * separately-recorded act. What changes is that granting a hook a credential
+ * costs a deliberate, audited decision instead of a silent click.
  */
 function computeVerdict(findings: readonly HookScanFinding[]): HookScanVerdict {
-  if (findings.some((f) => f.category === 'obfuscation')) return 'blocked';
-  if (findings.some((f) => f.category === 'file-read')) return 'blocked';
-  const hasEnvRead = findings.some((f) => f.category === 'env-read');
-  const hasNetworkEgress = findings.some((f) => f.category === 'network-egress');
-  if (hasEnvRead && hasNetworkEgress) return 'blocked';
+  if (findings.some((f) => f.severity === 'critical')) return 'blocked';
   return findings.length > 0 ? 'findings' : 'clean';
 }
 

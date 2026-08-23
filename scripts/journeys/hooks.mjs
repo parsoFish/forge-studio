@@ -127,8 +127,10 @@ const STACK_BASE_SCRIPT = [
 // host; the only difference is whether the manifest DECLARES the grant. A
 // secret-shaped name is a critical env-read finding either way (severity now
 // keys off the capability GRANT, never downgraded by declaration —
-// hook-scan.ts's scanEnvReads), and computeVerdict blocks on env-read +
-// network-egress PRESENCE regardless of severity, so BOTH land verdict
+// hook-scan.ts's scanEnvReads), and computeVerdict blocks on ANY critical
+// finding (W8-B6 FIX-1 layer 2, which retired the older env-read +
+// network-egress PAIRING rule after a hostile review defeated its second half
+// via the egress detector's documented blind spots), so BOTH land verdict
 // "blocked". The names are obviously demo-invented (JOURNEY_DEMO_* prefix,
 // never a real credential name), chosen only for their secret SHAPE (a
 // `_KEY`/`_SECRET` suffix) so the scanner's real detection logic is genuinely
@@ -143,7 +145,8 @@ const STACK_BASE_SCRIPT = [
 // `approveHook` with no override and no reason. Now: network-egress is
 // `info` (declared, the pre-existing rule for that category) but env-read
 // STAYS `critical` even though it's declared — that one finding is the whole
-// lesson, and is why the combo still blocks.
+// lesson, and since W8-B6 FIX-1 layer 2 that one critical finding is by
+// itself why this blocks; it no longer needs the network finding beside it.
 const DECLARED_EXFIL_SCRIPT = [
   '#!/usr/bin/env bash',
   'set -euo pipefail',
@@ -157,8 +160,10 @@ const DECLARED_EXFIL_ENV_VAR = 'JOURNEY_DEMO_API_KEY';
 // findings are critical here — network-egress is undeclared too, so it does
 // NOT get the info downgrade the declared hook's does), but it is
 // STRUCTURALLY INERT: buildHookChildEnv only ever forwards a manifest-listed
-// var into the child, so even a hook this shaped, if somehow approved and
-// run, would see an empty $JOURNEY_DEMO_SECRET and have nothing to exfiltrate.
+// var into the child (and, since W8-B6 FIX-1 layer 1, not even that for a
+// HOOK_ENV_CREDENTIAL_EXCLUSIONS name), so even a hook this shaped, if somehow
+// approved and run, would see an empty $JOURNEY_DEMO_SECRET and have nothing
+// to exfiltrate.
 const UNDECLARED_EXFIL_SCRIPT = [
   '#!/usr/bin/env bash',
   'set -euo pipefail',

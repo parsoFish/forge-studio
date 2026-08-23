@@ -237,9 +237,17 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
     // already-'blocked' verdict, so it never needed an approval to run.
     // Now that approval genuinely gates every verdict, an unapproved hook
     // is correctly refused before ever reaching the env-stripping code this
-    // test actually means to exercise — approve it so the real subject is
+    // test actually means to exercise — resolve it so the real subject is
     // what's under test, not the (already separately covered) gate itself.
-    approveHook({ forgeRoot: root, id: 'credential-exfil-probe-hook' });
+    //
+    // W8-B6 FIX-1 layer 2: overrideHookBlock, not approveHook. This probe's
+    // BODY references ANTHROPIC_API_KEY without declaring it — a critical
+    // env-read finding, which now blocks on its own. That is the correct
+    // reading of this fixture: a script that reaches for the operator's API
+    // credential is worth a written reason, whatever its manifest says. The
+    // property under test is unchanged and still proven below — the child
+    // sees ABSENT.
+    overrideHookBlock({ forgeRoot: root, id: 'credential-exfil-probe-hook', reason: 'test fixture: exercising env stripping, not the approval gate' });
     const logger = createLogger('credential-exfil-probe-cycle', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK' };

@@ -349,7 +349,16 @@ test('GET /api/studio/hooks/<id>: the scan report surfaces a REAL finding, inclu
   try {
     const res = await fetch(`${bridgeUrl}/api/studio/hooks/detail-findings-hook`);
     const body = (await res.json()) as { scan: { verdict: string; findings: Array<Record<string, unknown>> } };
-    assert.equal(body.scan.verdict, 'findings', 'a lone env-read finding with no accompanying network-egress finding stays "findings", not "blocked"');
+    // W8-B6 FIX-1 layer 2 REVISION: this line used to assert 'findings' and
+    // cite the env+network pairing. That pairing is retired — a hostile
+    // review defeated its second half (the egress detector's own documented
+    // blind spots: `/dev/tcp/`, `python3 -c`, `ssh`, `dig`) and approved a
+    // GH_TOKEN-granting hook through the ordinary one-click path. A lone
+    // critical finding now blocks on its own; the route through is an
+    // explicit, reasoned override. What this test is REALLY about — the
+    // declared finding staying visible and staying critical — is unchanged
+    // and still asserted below.
+    assert.equal(body.scan.verdict, 'blocked', 'a lone critical env-read finding blocks on its own since W8-B6 FIX-1 layer 2');
     assert.equal(body.scan.findings.length, 1, 'the declared finding must still appear — still visible, never hidden');
     assert.equal(body.scan.findings[0]!['category'], 'env-read');
     assert.equal(body.scan.findings[0]!['declared'], true);
