@@ -16,6 +16,7 @@ import {
   buildConstellation,
   buildHomeAttention,
   buildKbAttention,
+  buildKbDraftAttention,
   buildHomeLedgerRows,
   buildHomeSessionsStrip,
   deriveWatchLiveRun,
@@ -118,7 +119,10 @@ export default function HomePage() {
   // poll — see this file's header + scripts/home-no-new-polling.test.ts).
   const gateAttentionItems = buildHomeAttention(attention);
   const kbAttentionItems = buildKbAttention(kbs).filter((i): i is Extract<HomeAttentionItem, { kind: 'kb' }> => i.kind === 'kb');
-  const attentionCount = gateAttentionItems.length + kbAttentionItems.length;
+  // W8-B2 (ON-4): brain edits parked for review. Same already-fetched
+  // `sessions` array — no new read (scripts/home-no-new-polling.test.ts).
+  const kbDraftItems = buildKbDraftAttention(sessions).filter((i): i is Extract<HomeAttentionItem, { kind: 'kb-draft' }> => i.kind === 'kb-draft');
+  const attentionCount = gateAttentionItems.length + kbAttentionItems.length + kbDraftItems.length;
   // W6-B11 — the sessions strip: ≤4 cards, needs-you first (the fetched
   // `sessions` array already arrives needs-you-first-then-newest, straight
   // off the bridge's own sort — see buildHomeSessionsStrip's header).
@@ -289,6 +293,59 @@ export default function HomePage() {
             </Link>
             );
           })}
+        </section>
+      )}
+
+      {/* ===== BRAIN EDITS AWAITING REVIEW — W8-B2 (ON-4). A drain-gated
+          edit to a real brain theme used to surface ONLY as an 11px text
+          link inside a round-grouped finding row on one KB's Health tab;
+          Home said nothing at all, so a KB holding an unreviewed, unapplied
+          rewrite looked exactly like one that had never been drained. This
+          strip fires on the bridge's own needs-you verdict for a kb-cleanup
+          session and links to where the operator can actually act. It sits
+          ABOVE the lint strip deliberately: an edit already made and waiting
+          on a decision outranks a finding nobody has touched. */}
+      {kbDraftItems.length > 0 && (
+        <section
+          data-section="brain-edits-awaiting-review"
+          aria-label="Brain edits awaiting your review"
+          style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 6 }}
+        >
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
+            Brain edits awaiting your review
+          </h2>
+          {kbDraftItems.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              data-attention-item
+              data-attention-kind="kb-draft"
+              data-attention-status={item.status}
+              data-attention-session={item.sessionId}
+              data-attention-project={item.project}
+              data-action="review-brain-draft"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '9px 14px',
+                background: 'var(--panel-2)',
+                border: '1px solid var(--ember)',
+                borderRadius: 'var(--radius)',
+                textDecoration: 'none',
+                color: 'var(--text)',
+              }}
+            >
+              <span className="badge badge-kb">KB</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
+                <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
+              </span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ember)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+                Review the diff →
+              </span>
+            </Link>
+          ))}
         </section>
       )}
 

@@ -31,6 +31,7 @@ import {
   drainStateCopy, findingsByTier, resolveUserTierStep, isKbDrainTerminal,
   findingRounds, formatDrainElapsed, deriveDrainDisplayState,
   findingDisposition, findingRefusalReasons, findingHasDetail, deriveFindingNodeHref,
+  pendingDraftSessions,
   KB_DRAIN_MAX_ROUNDS_DISPLAY, KB_DRAIN_OUTCOME_GLYPH, type KbDrainDisplayState,
 } from '@/lib/kb-drain-view';
 import { ActivityLog } from '@/components/studio/ActivityLog';
@@ -364,6 +365,9 @@ export function KbDrainPanelView({
   const rounds = findingRounds(progressFindings);
   const roundsDisplay = maxRounds ?? KB_DRAIN_MAX_ROUNDS_DISPLAY;
   const elapsed = displayState === 'running' ? formatDrainElapsed(startedAt, nowMs) : null;
+  // W8-B2 (ON-4): drain-gated edits waiting on the operator. Derived from the
+  // rows themselves — no `pendingDraft` flag for a writer to forget.
+  const pendingDrafts = pendingDraftSessions(perFinding);
 
   return (
     <div
@@ -500,6 +504,43 @@ export function KbDrainPanelView({
       {displayState === 'green' && (
         <div data-component="drain-green" style={{ marginTop: 12, fontSize: 12, color: 'var(--c-kb)' }}>
           All lint findings resolved ✓
+        </div>
+      )}
+
+      {/* W8-B2 (ON-4) — "the review draft button for edits to the brains is so
+          unnoticeable it's insane." It was an 11px text link nested inside a
+          round-grouped finding row. The per-row link stays (it names WHICH
+          finding), but the fact that unapplied edits to a real brain are
+          sitting here waiting now gets a sticky, panel-width affordance in the
+          GateBar/DemoReviewSurface idiom, plus a Home attention row. */}
+      {pendingDrafts.length > 0 && (
+        <div
+          data-component="drain-pending-drafts-bar"
+          data-pending-draft-count={pendingDrafts.length}
+          style={{
+            position: 'sticky', bottom: 12, zIndex: 5, marginTop: 12,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            padding: '9px 13px', background: 'var(--panel-2)',
+            border: '1px solid var(--ember)', borderRadius: 'var(--radius)',
+          }}
+        >
+          <span className="badge badge-kb">KB</span>
+          <span style={{ flex: 1, minWidth: 180, fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
+            {pendingDrafts.length === 1
+              ? '1 brain edit is waiting for your review — nothing has been applied.'
+              : `${pendingDrafts.length} brain edits are waiting for your review — nothing has been applied.`}
+          </span>
+          {pendingDrafts.map((d, i) => (
+            <Link
+              key={d.id}
+              data-action="review-drain-draft"
+              data-draft-session={d.id}
+              href={`/sessions/kb-cleanup/${encodeURIComponent(d.id)}?project=${encodeURIComponent(d.project)}`}
+              style={{ ...btn, borderColor: 'var(--ember)', color: 'var(--ember)', fontWeight: 600, textDecoration: 'none' }}
+            >
+              {pendingDrafts.length === 1 ? 'Review the diff →' : `Review #${i + 1} →`}
+            </Link>
+          ))}
         </div>
       )}
 

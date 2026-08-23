@@ -462,3 +462,36 @@ test('the pending outcome renders a glyph rather than a blank cell', () => {
   const html = render({ displayState: 'running', kbId: 'gitpulse', perFinding: [finding({ outcome: 'pending' })] });
   expect(tagContaining(html, 'data-drain-finding-outcome')).toContain('data-drain-finding-outcome="pending"');
 });
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-4) — the pending-draft affordance stops being invisible.
+// ---------------------------------------------------------------------------
+
+test('a parked draft raises a sticky panel-width bar, not just an 11px in-row link (ON-4)', () => {
+  const html = render({
+    displayState: 'needs-you', kbId: 'gitpulse',
+    perFinding: [finding({ outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } })],
+  });
+  expect(html).toContain('data-component="drain-pending-drafts-bar"');
+  expect(html).toContain('data-pending-draft-count="1"');
+  expect(html).toContain('data-action="review-drain-draft"');
+  expect(html).toContain('nothing has been applied');
+  // The per-row link stays — it names WHICH finding — so the bar is additive.
+  expect(html).toContain('data-action="open-drain-draft"');
+});
+
+test('two findings gated into ONE session raise ONE bar entry — a doubled count would overstate the review load', () => {
+  const html = render({
+    displayState: 'needs-you', kbId: 'gitpulse',
+    perFinding: [
+      finding({ key: 'a', outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } }),
+      finding({ key: 'b', outcome: 'needs-you', draftSession: { id: 's1', project: '.kb-gitpulse' } }),
+    ],
+  });
+  expect(html).toContain('data-pending-draft-count="1"');
+});
+
+test('no parked draft, no bar — the affordance fires on a real condition only', () => {
+  const html = render({ displayState: 'green', kbId: 'gitpulse', perFinding: [finding({ outcome: 'cleared' })] });
+  expect(html).not.toContain('data-component="drain-pending-drafts-bar"');
+});

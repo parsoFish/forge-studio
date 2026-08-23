@@ -34,6 +34,7 @@ import {
   // new tests below that actually CALL these two go red, on an honest
   // "is not a function" reason.
   buildKbAttention,
+  buildKbDraftAttention,
   runsForFlow,
   splitRunsForFlow,
   // W6-IA-4 additions
@@ -1006,4 +1007,65 @@ test('WI-1b PRECEDENCE decision, cross-source: a gated attention row PLUS a genu
   const attention = [makeAttention({ projectId: 'p1', gated: 1 })];
   const failed = [makeSessionRow({ kind: 'instructions', sessionId: 's1', project: 'p1', state: 'terminal', terminal: true, phase: 'failed' })];
   expect(deriveProjectStatus('p1', attention, failed)).toBe('failed');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B2 (ON-4) — buildKbDraftAttention: brain edits awaiting review.
+//
+// The defect: a KB holding an unreviewed, unapplied edit to a real brain theme
+// looked IDENTICAL on Home to a KB that had never been drained. Every test
+// below kills a specific wrong implementation — firing on mere existence,
+// firing on the wrong session kind, and re-deriving needs-you client-side.
+// ---------------------------------------------------------------------------
+
+function draftSessionRow(overrides: Partial<SessionIndexRow> = {}): SessionIndexRow {
+  return {
+    kind: 'kb-cleanup',
+    sessionId: '2026-08-22T10-00-00-abcd1234',
+    project: '.kb-gitpulse',
+    phase: 'awaiting-approval',
+    terminal: false,
+    needsYou: true,
+    state: 'awaiting-operator',
+    error: null,
+    idleMs: 1000,
+    modelTier: null,
+    updatedAt: '2026-08-22T10:00:00.000Z',
+    href: '/sessions/kb-cleanup/2026-08-22T10-00-00-abcd1234?project=.kb-gitpulse',
+    ...overrides,
+  };
+}
+
+test('buildKbDraftAttention: a kb-cleanup session that needs the operator raises a row that links to the SESSION', () => {
+  const [row] = buildKbDraftAttention([draftSessionRow()]);
+  expect(row.kind).toBe('kb-draft');
+  expect(row.status).toBe('gated');
+  expect(row.href).toBe('/sessions/kb-cleanup/2026-08-22T10-00-00-abcd1234?project=.kb-gitpulse');
+  expect(row).toMatchObject({ sessionId: '2026-08-22T10-00-00-abcd1234', project: '.kb-gitpulse' });
+  expect(row.text).toContain('waiting for your review');
+});
+
+test('buildKbDraftAttention: fires on the bridge\'s OWN needsYou verdict, never on mere existence', () => {
+  expect(buildKbDraftAttention([draftSessionRow({ needsYou: false })])).toEqual([]);
+  // …not even when the phase LOOKS like it is waiting: needsYou is the
+  // bridge's derived lifecycle truth and is the only thing consulted here.
+  expect(buildKbDraftAttention([draftSessionRow({ needsYou: false, phase: 'awaiting-approval' })])).toEqual([]);
+});
+
+test('buildKbDraftAttention: only kb-cleanup — a needs-you architect session belongs to the sessions strip, not here', () => {
+  expect(buildKbDraftAttention([draftSessionRow({ kind: 'architect' })])).toEqual([]);
+  expect(buildKbDraftAttention([draftSessionRow({ kind: 'authoring' })])).toEqual([]);
+});
+
+test('buildKbDraftAttention: an empty sessions list honestly means nothing is waiting', () => {
+  expect(buildKbDraftAttention([])).toEqual([]);
+});
+
+test('buildKbDraftAttention: two pending drafts raise two rows with distinct ids', () => {
+  const rows = buildKbDraftAttention([
+    draftSessionRow(),
+    draftSessionRow({ sessionId: 'other', project: '.kb-cycles', href: '/sessions/kb-cleanup/other?project=.kb-cycles' }),
+  ]);
+  expect(rows).toHaveLength(2);
+  expect(new Set(rows.map((r) => r.id)).size).toBe(2);
 });

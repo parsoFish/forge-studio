@@ -20,6 +20,7 @@ import {
   findingHasDetail,
   deriveFindingNodeHref,
   KB_DRAIN_OUTCOME_GLYPH,
+  pendingDraftSessions,
 } from './kb-drain-view';
 import type { KbDrainPerFinding } from './studio-client';
 
@@ -265,4 +266,18 @@ test('KB_DRAIN_OUTCOME_GLYPH covers every outcome the wire can carry, including 
   for (const o of ['cleared', 'not-cleared', 'needs-you', 'pending'] as const) {
     expect(KB_DRAIN_OUTCOME_GLYPH[o]).toBeTruthy();
   }
+});
+
+test('pendingDraftSessions: dedupes by session id and preserves row order', () => {
+  const f = (key: string, draft?: { id: string; project: string }): KbDrainPerFinding => ({
+    key, check: 'c', kind: 'k', file: 'themes/x.md', message: 'm', tier: 'agent',
+    outcome: 'needs-you', ...(draft ? { draftSession: draft } : {}),
+  });
+  expect(pendingDraftSessions([
+    f('a', { id: 's1', project: 'p' }),
+    f('b', { id: 's1', project: 'p' }),
+    f('c'),
+    f('d', { id: 's2', project: 'q' }),
+  ])).toEqual([{ id: 's1', project: 'p' }, { id: 's2', project: 'q' }]);
+  expect(pendingDraftSessions([f('a')])).toEqual([]);
 });

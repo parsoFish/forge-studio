@@ -222,3 +222,25 @@ export function deriveFindingNodeHref(
   if (slug === '' || slug === 'README') return null;
   return `/knowledge?id=${encodeURIComponent(kbId)}&node=${encodeURIComponent(slug)}`;
 }
+
+/**
+ * W8-B2 (ON-4) — the distinct kb-cleanup drafts this run parked, in row order.
+ *
+ * Derived from `perFinding` alone; nothing on the wire says "a draft is
+ * pending". Deduplicated by session id: one gated turn can touch several files
+ * but mints ONE session, and a count that double-counted them would overstate
+ * how much the operator has to review.
+ */
+export function pendingDraftSessions(
+  perFinding: readonly KbDrainPerFinding[],
+): Array<{ id: string; project: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ id: string; project: string }> = [];
+  for (const f of perFinding) {
+    const d = f.draftSession;
+    if (!d || seen.has(d.id)) continue;
+    seen.add(d.id);
+    out.push(d);
+  }
+  return out;
+}
