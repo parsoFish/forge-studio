@@ -46,6 +46,7 @@ import type { CommunityRegistryItem } from '../orchestrator/studio/types.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir, assertSkillSlug } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile, PathGuardContainmentError } from './studio-path-guard.ts';
+import { removeInstallLedgerEntry } from '../orchestrator/studio/skill-install-ledger.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE, isReservedId, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
@@ -1339,6 +1340,21 @@ export async function handleStudioWriteRoutes(
           }, origin);
           return true;
         }
+        // W8-B4 FIX-2 (library-35 x4): this route addresses `skills/<slug>`
+        // (agents and library skills share the same package layout — see the
+        // isStudioAgent kind-confusion note above), so a package this delete
+        // destroys can carry an install-ledger row exactly like the skills
+        // route's own DELETE — e.g. a skill installed then hand-converted to
+        // an agent (provenance stripped, runtime added) still has a
+        // provenance-installed history. Prune BEFORE the rmSync, mirroring
+        // cli/bridge-studio-skills.ts's DELETE route ordering: a crash
+        // between the two steps then fails CLOSED (an orphaned package that
+        // still needs re-review) rather than fails OPEN (a gone package
+        // whose stale ledger row would taint a future skill reusing the id).
+        // Tolerant / idempotent — removeInstallLedgerEntry never throws on
+        // "nothing to prune", the common case for a real studio agent that
+        // was authored by hand and never went through installSkillPackage.
+        removeInstallLedgerEntry(ctx.forgeRoot, slug);
         rmSync(dirname(skillMdPath), { recursive: true, force: true });
         sendJson(res, 200, { ok: true, slug }, origin);
         return true;
