@@ -295,3 +295,85 @@ test('dryBridgeAgentTurnMarker() under FORGE_DRY_BRIDGE=1 returns the marker and
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// bead forge-8nw / forge-720 — the run's OWN events.jsonl must carry a
+// terminal marker for the ONE standalone-dispatch route
+// (POST /api/agents/:slug/run), the file `deriveStandaloneRunState`
+// (cli/ui-bridge.ts) actually reads to derive a standalone run's state.
+// Before this fix, `dryBridgeAgentTurnMarker` wrote ONLY into the shared
+// `DRY_BRIDGE_LOG_BUCKET` — the run's own `<logsRoot>/<runId>/events.jsonl`
+// never received a terminal fact, so the run derived `state: 'running'`
+// forever (the real zombie `_agent-*` dirs bead forge-720 found on disk).
+// ---------------------------------------------------------------------------
+
+async function withDryBridgeEnv(fn: () => Promise<void>): Promise<void> {
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    await fn();
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+}
+
+test('forge-8nw AT-1: dryBridgeAgentTurnMarker() for the standalone dispatch route (/api/agents/:slug/run) writes a terminal marker into the RUN\'S OWN events.jsonl — the exact path deriveStandaloneRunState reads (<logsRoot>/<runId>/events.jsonl) — whose message is one deriveStandaloneStateFromEvents recognises ("run-agent.spawn-suppressed", cli/ui-bridge.ts, same literal orchestrator/run-agent.ts already writes for a REAL suppressed spawn)', async () => {
+  await withTmp(async (logsRoot) => {
+    await withDryBridgeEnv(async () => {
+      const runId = '_agent-forge-8nw-fixture-2026-08-23T00-00-00-000-abcd';
+
+      const marker = dryBridgeAgentTurnMarker(logsRoot, '/api/agents/:slug/run', runId);
+      assert.deepEqual(marker, { dryBridge: { skipped: ['agent-turn'] } });
+
+      // Assert on the FILE CONTENT at the exact path deriveStandaloneRunState
+      // reads (logsRoot/<runEntryName>/events.jsonl, cli/ui-bridge.ts) — never
+      // on a helper's return value, which would look identical whether or not
+      // the run's own log was ever touched.
+      const ownEventsPath = join(logsRoot, runId, 'events.jsonl');
+      assert.ok(existsSync(ownEventsPath), `expected the run's own events.jsonl to exist at ${ownEventsPath} — this is the file deriveStandaloneRunState actually reads`);
+      const ownLines = readFileSync(ownEventsPath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+      const terminalMarker = ownLines.find((e) => e.message === 'run-agent.spawn-suppressed');
+      assert.ok(
+        terminalMarker,
+        `expected a 'run-agent.spawn-suppressed' event in the run's own events.jsonl — got: ${JSON.stringify(ownLines)}`,
+      );
+
+      // The shared bucket still gets its diagnostic event too (unchanged
+      // behaviour, not replaced by the fix).
+      const bucketPath = join(logsRoot, DRY_BRIDGE_LOG_BUCKET, 'events.jsonl');
+      assert.ok(existsSync(bucketPath), 'the shared DRY_BRIDGE_LOG_BUCKET diagnostic event must still be written');
+    });
+  });
+});
+
+test('forge-8nw AT-2 (scope control): dryBridgeAgentTurnMarker() for a SESSION route (e.g. /api/architect/start) does NOT write into <logsRoot>/<sessionId>/ — only the one standalone-dispatch route gets the run\'s-own-log write, so this must not pollute a session\'s directory with a phantom, nobody-reads-it events.jsonl', async () => {
+  await withTmp(async (logsRoot) => {
+    await withDryBridgeEnv(async () => {
+      const sessionId = 'sid-not-a-runid';
+      dryBridgeAgentTurnMarker(logsRoot, '/api/architect/start', sessionId);
+      const phantomPath = join(logsRoot, sessionId, 'events.jsonl');
+      assert.ok(
+        !existsSync(phantomPath),
+        `a session-kind route must never get the standalone-run write — found an unexpected ${phantomPath}`,
+      );
+    });
+  });
+});
+
+test('forge-8nw AT-3 (negative control): dryBridgeAgentTurnMarker() for the standalone dispatch route writes NOTHING (shared bucket OR run log) when dry-bridge is inactive', async () => {
+  await withTmp(async (logsRoot) => {
+    const priorDry = process.env.FORGE_DRY_BRIDGE;
+    delete process.env.FORGE_DRY_BRIDGE;
+    try {
+      const runId = '_agent-forge-8nw-inactive-2026-08-23T00-00-00-000-wxyz';
+      const marker = dryBridgeAgentTurnMarker(logsRoot, '/api/agents/:slug/run', runId);
+      assert.deepEqual(marker, {});
+      assert.ok(!existsSync(join(logsRoot, runId, 'events.jsonl')), 'no run-own write when dry-bridge is inactive');
+      assert.ok(!existsSync(join(logsRoot, DRY_BRIDGE_LOG_BUCKET)), 'no shared-bucket write when dry-bridge is inactive');
+    } finally {
+      if (priorDry === undefined) delete process.env.FORGE_DRY_BRIDGE;
+      else process.env.FORGE_DRY_BRIDGE = priorDry;
+    }
+  });
+});
