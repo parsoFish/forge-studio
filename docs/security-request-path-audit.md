@@ -758,6 +758,24 @@ consequences of step (2), both expected and both already-guarded:
 | `orchestrator/interactive-runner.ts` (`runFinalizeStep`) | `mkdirSync` | none — `libraryRootGuard.realPath`, where `libraryRootGuard = resolveGuardedPath(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME])`; `forgeRoot` is config-derived, never request data | guarded `[read]` | GUARD-TERMINAL create: only runs when the dedicated `_interactive-library/` root does not exist yet (a fresh forge install), and only creates the already-guard-verified `realPath` — never a fresh root. **This IS on the finalize (`committing`) path** — the one sink among this section's rows that the route's own turn actually executes. |
 | `orchestrator/interactive-runner.ts` (`readSkillPrompt`) | `readFileSync` | `skillPath(agentId)`, where `agentId = descriptor.agent` — a value from the trusted, server-loaded `studio/session-kinds.yaml` descriptor, never from the HTTP request body | guarded `[read]` | Fixed, config-derived path (the agent's own `SKILL.md` under the real forge install) — no request data reaches this call at all. Not reachable from the finalize (`committing`) step (see the file-level-vs-per-function note above); documented for completeness since the ratchet counts the whole file. |
 
+### Not request-path sinks at all in W8-B4/WI-5 — `removeInstallLedgerEntry`'s FIXED-path writes
+
+`scripts/check-request-path-sinks.mjs` flagged `orchestrator/studio/skill-install-ledger.ts`
+(`mkdirSync` 1→2, `writeFileSync` 1→2) after WI-5 added `removeInstallLedgerEntry` — the
+delete-side inverse of `writeInstallLedgerEntry` that library-35 needed. The scanner's
+reachability heuristic is FILE-level: the module is reachable from a bridge route that
+carries a request-derived `id`, so every new fs sink in it is reported. Classified below
+after reading both new lines.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/studio/skill-install-ledger.ts` (`removeInstallLedgerEntry`) | `mkdirSync` | **none** | not-request-derived `[read]` | The argument is `join(forgeRoot, 'studio')` — a constant sub-path of the TRUSTED root, with no request-derived component. Byte-identical to `writeInstallLedgerEntry`'s own `mkdirSync` two functions above, which is already baselined at 1 for exactly this reason. |
+| `orchestrator/studio/skill-install-ledger.ts` (`removeInstallLedgerEntry`) | `writeFileSync` | **none** | not-request-derived `[read]` | The argument is `ledgerPath(forgeRoot)` — a FIXED path (`studio/installed-skills.yaml`). The request-derived `id` reaches this function but is used ONLY as a `Map` key (`ledger.has(id)` / `ledger.delete(id)`); it never enters a path expression, so no traversal shape exists to guard. A traversal-shaped id simply matches no row and the function returns early. Byte-identical in shape to `writeInstallLedgerEntry`'s `writeFileSync`, already baselined at 1. |
+
+Accepted by a **surgical two-row edit** to `scripts/request-path-sinks.baseline.txt`, not
+`--write` — the same discipline WI-3 used in the section below, so the accepted growth is
+exactly the two rows reasoned about here and nothing else rides along.
+
 ### Guarded in W8-B4/WI-3 — `kind:'template'` finalize + the library-37 landed-copy cleanup fix
 
 Two consequences of this WI, both flagged by `scripts/check-request-path-sinks.mjs`
