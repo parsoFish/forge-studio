@@ -2148,6 +2148,77 @@ inventory rather than one shared page-level contract:
   itself. An upstream link's href is not the same claim as the destination's
   own DOM contract — this beat exists to cover the latter, not duplicate the
   former.
+- **`/projects` — health, activity, progress and filter/sort/search (W8-C3,
+  2026-08-24; projects-08 / forge-j1e / bead forge-6gv.13.2).** The index
+  rendered an identical card for every project: a contract-broken project
+  (gitpulse, whose `.forge/project.json` is still on the R1-03 flat gate keys —
+  the shape `GET /api/studio/projects/:id/contract-stages` already answers 409
+  for) was visually indistinguishable from a fully-onboarded one, and there was
+  no last-activity signal, no in-flight-work signal, and no filter, sort or
+  search. Three additions, all **derived per read and stored nowhere**:
+  - **Health.** The bridge now judges every project by running its config
+    through the SAME validator the orchestrator runs the project through
+    (`validateProjectConfig`), shipping `configHealth: {state, reason}` on
+    `GET /api/studio/projects` — `ok` | `unconfigured` | `invalid`, with the
+    validator's OWN message as the reason. `fetchStudioProjects` PARSES it
+    fail-closed (absent/garbage → `'unknown'`, never `'ok'`). `ProjectCard`
+    calls `deriveProjectHealth` **itself** rather than taking a `health` prop —
+    the card renders on two shelves, which is precisely the arrangement in
+    which two callers pass different values. Contract:
+    `[data-card-type="project"][data-health="healthy|attention|broken|unknown"]`,
+    `[data-field="project-health"]`, and `[data-field="project-health-reason"]`
+    (rendered only when there IS a reason). The grid carries the roster rollup
+    `[data-health-healthy][data-health-attention][data-health-broken][data-health-unknown]`,
+    computed by the same function the cards call, and the four always sum to
+    `[data-total]`.
+  - **Activity + progress.** From the two aggregates that already existed —
+    `GET /api/studio/projects/attention` (R4-11-F4) and `GET /api/cycles`. **No
+    new bridge route.** `[data-field="project-activity"]` carries
+    `[data-last-activity]` (the server's own ISO, or the token `none`),
+    `[data-open-count]`, `[data-progress-done]`, `[data-progress-total]` and
+    `[data-flagged]` — each either a real value or the explicit token
+    `unknown`, never a fabricated zero. The activity read is a SEPARATE fetch
+    from the roster read, so its failure degrades one signal instead of taking
+    the page down: the root carries `[data-activity-status="ok|loading|error"]`
+    and an error renders `[data-component="projects-activity-error"]` rather
+    than silently reading as a quiet roster.
+  - **Filter / sort / search.** `[data-section="projects-filters"]` with
+    `[data-field="filter-search"]` (matches id, name and north star; a
+    whitespace-only query is not a constraint), `[data-field="filter-health"]`
+    (options built from the roster present, with the W7-B1 `filterOptions`
+    guard so a vanished-but-active value still shows), `[data-field="sort"]`
+    (`''` = the server's order untouched | `name` | `activity` | `health`), and
+    `[data-action="filter-needs-you"]` / `[data-action="clear-filters"]`. The
+    grid declares what it is applying —
+    `[data-filter-search][data-filter-health][data-sort][data-filter-needs-you]`
+    — and `[data-count]` now describes the GRID (rows rendered) while
+    `[data-total]` carries the roster size; they are equal in the default,
+    unfiltered state every pre-existing journey drives. An empty filter result
+    renders `[data-component="projects-filter-empty"]`, never the zero-state.
+    All three derivations are pure libs (`lib/projects-index-health.ts`,
+    `lib/projects-index-activity.ts`, `lib/projects-index-filter.ts`) with the
+    filter reading the SAME health/activity functions the cards do.
+  Journey coverage: `scripts/journeys/projects.mjs` (`projects-index-health`,
+  `projects-index-filter`, `projects-skill-bindings`) — a new journey rather
+  than more `home` beats, because `home`'s single `home-projects-index` beat is
+  a "the index renders" check inside a journey whose subject is Home.
+- **`/projects/[id]` — skill bindings that resolve (W8-C3, projects-06 +
+  projects-43).** `SkillsBind`'s picker was forge-wide only, while the
+  forge↔project contract puts skills INSIDE the project
+  (`.forge/skills/<id>/SKILL.md`) — so a project-local skill, once unbound,
+  could never be re-bound; and its search matched `name`/`desc` only, so typing
+  the id an operator reads off `project.json` found nothing (projects-06).
+  Separately, `catalog.find(...)` + `{item?.name ?? sid}` rendered a binding
+  that resolved to NOTHING as its own raw id, reading as a healthy chip
+  (projects-43). Both now go through one derivation
+  (`lib/project-skills-bind.ts`): the bridge derives `localSkills` per read
+  (`guardedReadDir` + a per-leaf `guardedFile`; a bare directory with no
+  `SKILL.md` is not a skill), the picker offers forge-wide ∪ project-local
+  (each id exactly once), and every chip resolves against that offered set.
+  Contract: library rows carry
+  `[data-skill-id][data-skill-source="forge|project"]`; chips carry
+  `[data-skill-id][data-resolved="ok|missing"][data-skill-source="forge|project|missing"]`
+  and a missing one renders the word MISSING plus a `title` saying why.
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
