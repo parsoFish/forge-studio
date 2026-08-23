@@ -76,6 +76,19 @@ before(async () => {
   // the CONFLICT shape: flat keys ALONGSIDE testProcess (migrate refuses this)
   seedProject('conflictproj', JSON.stringify({ quality_gate_cmd: 'npm test', testProcess: { local: { cmd: ['npm', 'test'] } } }));
 
+  // W8-C3 WI-4: project-LOCAL skills (the forge<->project contract's own
+  // `.forge/skills/demo-design/SKILL.md` shape), plus a bare directory that
+  // carries no SKILL.md and therefore is not a skill.
+  const localSkills = seedProject('localskillsproj', JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } } }));
+  for (const slug of ['demo-design', 'zeta-helper']) {
+    mkdirSync(join(localSkills, '.forge', 'skills', slug), { recursive: true });
+    writeFileSync(join(localSkills, '.forge', 'skills', slug, 'SKILL.md'), `---\nname: ${slug}\n---\n`, 'utf8');
+  }
+  mkdirSync(join(localSkills, '.forge', 'skills', 'not-a-skill'), { recursive: true });
+  // ...and one on the BROKEN-config project, to prove the two derivations are independent.
+  mkdirSync(join(forgeRoot, 'projects', 'flatkeysproj', '.forge', 'skills', 'broken-proj-skill'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'projects', 'flatkeysproj', '.forge', 'skills', 'broken-proj-skill', 'SKILL.md'), '---\nname: x\n---\n', 'utf8');
+
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
 });
 
@@ -90,7 +103,7 @@ after(async () => {
 
 test('W8-C3 WI-1: every project on the roster carries a derived configHealth — no project is silently unjudged', async () => {
   const rows = await roster();
-  assert.equal(rows.length, 5, 'all five seeded projects must still be LISTED — a broken config must never make a project disappear');
+  assert.equal(rows.length, 6, 'all six seeded projects must still be LISTED — a broken config must never make a project disappear');
   for (const row of rows) {
     assert.ok(row.configHealth, `project "${row.id}" came off the wire with NO configHealth — that is the fail-open shape this WI closes`);
     assert.ok(
@@ -147,4 +160,40 @@ test('W8-C3 WI-1: configHealth is DERIVED, never stored — it agrees with the c
   const stages = await fetch(`${url}/api/studio/projects/flatkeysproj/contract-stages`);
   assert.equal(stages.status, 409, 'contract-stages already 409s this shape today (cli/bridge-studio.ts:1131)');
   assert.equal(row.configHealth?.state, 'invalid', 'the roster must agree with the route that already knows — two derivations of one fact must never disagree');
+});
+
+// ---------------------------------------------------------------------------
+// W8-C3 WI-4 — project-LOCAL skills (projects-06 / projects-43)
+//
+// RED at branch base: the roster carries no notion of a skill living inside
+// the project. The forge↔project contract puts one there by name
+// (`.forge/skills/demo-design/SKILL.md`, docs/forge-project-contract.md:445),
+// but `GET /api/studio/catalog` only ever lists forge-wide skills, so
+// `SkillsBind`'s picker is forge-wide only: a project-local skill that is
+// unbound can NEVER be re-bound (projects-06), and a bound id the picker
+// cannot resolve renders as a normal healthy chip (projects-43).
+//
+// Derived per request from disk, like `configHealth`. Nothing stored.
+// ---------------------------------------------------------------------------
+
+test('W8-C3 WI-4: a project\'s own .forge/skills/<id>/SKILL.md ids are surfaced as localSkills', async () => {
+  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  assert.deepEqual(byId(rows, 'localskillsproj').localSkills, ['demo-design', 'zeta-helper']);
+});
+
+test('W8-C3 WI-4: localSkills is [] — not absent — for a project with no local skills, so "we looked and found none" is distinguishable', async () => {
+  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  assert.deepEqual(byId(rows, 'healthyproj').localSkills, []);
+});
+
+test('W8-C3 WI-4: a .forge/skills/<id> directory with NO SKILL.md is not a skill — a bare directory must not become a bindable id', async () => {
+  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  assert.ok(!(byId(rows, 'localskillsproj').localSkills ?? []).includes('not-a-skill'));
+});
+
+test('W8-C3 WI-4: localSkills is derived even when the project CONFIG is broken — a project you cannot build is exactly the one whose bindings you need to see', async () => {
+  const rows = (await roster()) as Array<WireProject & { localSkills?: string[] }>;
+  const row = byId(rows, 'flatkeysproj');
+  assert.equal(row.configHealth?.state, 'invalid');
+  assert.deepEqual(row.localSkills, ['broken-proj-skill']);
 });

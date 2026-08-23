@@ -709,6 +709,14 @@ export type Project = {
    * NEVER rounded up to `'ok'` (see `parseProjectConfigHealth`).
    */
   configHealth?: ProjectConfigHealth;
+  /**
+   * W8-C3 (projects-06 / projects-43): the ids of skills that live INSIDE this
+   * project (`.forge/skills/<id>/SKILL.md`), derived from disk by the bridge on
+   * every read. Optional on the TYPE so pre-existing `Project` literals keep
+   * compiling; `fetchStudioProjects` always attaches a real array (`[]` at
+   * worst) for every project that came off the wire.
+   */
+  localSkills?: string[];
 };
 
 /**
@@ -742,6 +750,16 @@ export function parseProjectConfigHealth(raw: unknown): ProjectConfigHealth {
   if (state === undefined) return { state: 'unknown' };
   const reason = obj['reason'];
   return typeof reason === 'string' && reason !== '' ? { state, reason } : { state };
+}
+
+/**
+ * Parse a wire list of skill ids. Absent / non-array normalises to `[]`, and
+ * non-string elements are dropped rather than carried — the honest empty is
+ * "we looked and found none", and a malformed element must never become a
+ * bindable id.
+ */
+export function parseSkillIdList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : [];
 }
 
 export type KbBinding =
@@ -1369,6 +1387,10 @@ export async function fetchStudioProjects(): Promise<Project[]> {
     // an absent/garbage verdict must normalise to the honest `'unknown'`,
     // never pass through raw and never default to `'ok'`.
     configHealth: parseProjectConfigHealth((raw as Record<string, unknown> | null)?.['configHealth']),
+    // W8-C3: parsed, not cast. A non-array or an array with non-string
+    // elements must not reach the picker — a `{}` in a skill-id slot renders
+    // as `[object Object]` and binds nothing.
+    localSkills: parseSkillIdList((raw as Record<string, unknown> | null)?.['localSkills']),
   }));
 }
 

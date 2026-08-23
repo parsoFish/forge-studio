@@ -54,7 +54,7 @@ import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
@@ -376,6 +376,12 @@ type ProjectWithMeta = {
    *  (`validateProjectConfig`). Never persisted — there is no field on disk a
    *  writer could forget to update, so it cannot go stale. Always present. */
   configHealth: ProjectConfigHealth;
+  /** W8-C3 (projects-06 / projects-43): the ids of skills that live INSIDE this
+   *  project (`.forge/skills/<id>/SKILL.md` — the shape the forge<->project
+   *  contract already names, docs/forge-project-contract.md:445). Derived from
+   *  disk on every read, never stored. `[]` means "we looked and found none",
+   *  which is a different fact from an absent field. */
+  localSkills: string[];
 };
 
 /**
@@ -404,6 +410,19 @@ export type ProjectConfigHealth = {
  * caller owns every filesystem decision (absent file, unreadable file, bad
  * JSON), so this function has exactly one job: ask the real validator.
  */
+function deriveProjectLocalSkills(projectsDir: string, dirName: string): string[] {
+  const entries = guardedReadDir(projectsDir, [dirName, '.forge', 'skills']);
+  if (entries === null) return [];
+  // A bare directory is not a skill: the SKILL.md is what makes an id
+  // bindable, and offering a directory with no SKILL.md would re-create
+  // projects-43 in the picker itself (an id that resolves to nothing).
+  // Every leaf read rides the SAME per-segment guard as the rest of this
+  // function (SEC-04): a symlinked skill dir escaping projectsDir is refused.
+  return entries
+    .filter((entry) => guardedFile(projectsDir, [dirName, '.forge', 'skills', entry, 'SKILL.md'], 'read') !== null)
+    .sort((a, b) => a.localeCompare(b));
+}
+
 function deriveConfigHealth(raw: unknown): ProjectConfigHealth {
   try {
     validateProjectConfig(raw);
@@ -439,6 +458,10 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       path: ref.path,
       provenance: PROJECT_PROVENANCE,
       configHealth: { state: 'unconfigured', reason: NO_PROJECT_CONFIG_REASON },
+      // Derived BEFORE any config short-circuit below: a project whose config
+      // is broken or missing is exactly the one whose bindings the operator
+      // needs to see in order to fix it.
+      localSkills: deriveProjectLocalSkills(projectsDir, basename(ref.absPath)),
     };
     // SEC-04 (bd forge-ebj): every read of a per-project leaf rides `guardedFile`
     // against the TRUSTED `projectsDir` root, with the on-disk project directory
