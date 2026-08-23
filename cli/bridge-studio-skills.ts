@@ -50,6 +50,7 @@ import {
   approveSkillDraft,
   type SkillLibraryEntry,
 } from '../orchestrator/studio/skill-library.ts';
+import { removeInstallLedgerEntry } from '../orchestrator/studio/skill-install-ledger.ts';
 
 // SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept
 // at or below the transport's MAX_BODY_BYTES (~1 MiB, cli/bridge-studio.ts) so
@@ -425,6 +426,16 @@ export async function handleStudioSkillsRoutes(
         }, origin);
         return true;
       }
+      // W8-B4 (library-35): prune BEFORE removing the directory — a crash
+      // between the two steps then fails CLOSED (an orphaned package that
+      // still needs re-review, since its own on-disk provenance.contentHash
+      // no longer agrees with a ledger that has already forgotten it) rather
+      // than fails OPEN (a gone package whose stale ledger row would taint a
+      // future hand-authored skill reusing the id). Tolerant / idempotent —
+      // removeInstallLedgerEntry never throws on "nothing to prune", the
+      // common case for a hand-authored skill that was never installed
+      // through installSkillPackage.
+      removeInstallLedgerEntry(ctx.forgeRoot, id);
       // rm the whole package dir, derived from the ALREADY-GUARDED real path.
       rmSync(dirname(pathGuard.realPath), { recursive: true, force: true });
       sendJson(res, 200, { ok: true, id }, origin);

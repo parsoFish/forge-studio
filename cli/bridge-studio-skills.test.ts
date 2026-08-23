@@ -32,6 +32,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
 
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
@@ -481,4 +482,98 @@ test('SEC-05 q80 (CONTAINMENT): POST /api/studio/skills/install with a traversal
   );
   assert.equal(existsSync(join(forgeRoot, 'skills', 'evil')), false, 'no skills/evil dir may be authored');
   assert.deepEqual(stagingLeftover(), [], 'the _skill-staging area must be left clean after a rejected install (finally rmSync)');
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/studio/skills/:id (W8-B4, library-35) — delete must prune the
+// install ledger too, or a fresh hand-authored skill reusing the id inherits
+// a stranger's provenance row and is wrongly needs-review.
+// ---------------------------------------------------------------------------
+
+async function sendMethod(method: string, url: string): Promise<Response> {
+  return fetch(url, { method, headers: { 'x-forge-csrf': '1' } });
+}
+
+function installLedgerDoc(): { installed?: Array<{ id: string }> } {
+  const path = join(forgeRoot, 'studio', 'installed-skills.yaml');
+  if (!existsSync(path)) return {};
+  return yaml.load(readFileSync(path, 'utf8')) as { installed?: Array<{ id: string }> };
+}
+
+test('library-35: install -> approve -> delete -> a fresh hand-authored skill reusing the id must NOT be wrongly needs-review', async () => {
+  const id = 'library-35-recreate-skill';
+
+  const install = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id,
+    entries: makeEntries({ name: 'Library 35 Skill', description: 'installed via the bridge route' }),
+    upstream: { source: 'https://example.com/library-35' },
+  });
+  assert.equal(install.status, 200, 'install must succeed');
+
+  const approve = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
+  assert.equal(approve.status, 200, 'approve must succeed on a fresh draft');
+
+  const approvedDetail = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(approvedDetail['trust'], 'ready', 'sanity: ready/approved before delete');
+
+  const del = await sendMethod('DELETE', `${bridgeUrl}/api/studio/skills/${id}`);
+  assert.equal(del.status, 200, 'delete of an installed skill must succeed');
+  assert.equal(existsSync(join(forgeRoot, 'skills', id)), false, 'the package directory must be gone');
+
+  // Assert the LEDGER ARTIFACT itself — not merely a status code.
+  const ledgerAfterDelete = installLedgerDoc();
+  assert.ok(
+    !(ledgerAfterDelete.installed ?? []).some((e) => e.id === id),
+    'studio/installed-skills.yaml must carry NO row for a deleted skill id',
+  );
+
+  // Recreate the SAME id BY HAND — a brand-new, plain composable skill, no
+  // provenance block at all, via the create route (not install).
+  const recreate = await postJson(`${bridgeUrl}/api/studio/skills`, {
+    id,
+    name: 'Hand-Authored Replacement',
+    description: 'a completely unrelated, hand-authored skill reusing the id',
+    body: '# Hand-authored\n\nNothing to do with the deleted package.',
+  });
+  assert.equal(recreate.status, 200, 'recreating the id by hand must succeed (the old dir is gone)');
+
+  const recreatedDetail = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(recreatedDetail['trust'], 'ready', 'a fresh hand-authored skill reusing a deleted id must be ready, not needs-review');
+  assert.equal(recreatedDetail['paletteVisible'], true);
+});
+
+test('library-35 control: an UNREGISTERED provenance block (never installed through the pipeline) is STILL correctly flagged needs-review — proves the fix did not neuter the general trust check', async () => {
+  const id = 'library-35-control-unregistered-skill';
+  const dir = join(forgeRoot, 'skills', id);
+  mkdirSync(dir, { recursive: true });
+  // A provenance block with NO matching install-ledger row — i.e. never
+  // actually installed through installSkillPackage. Exercises skillTrustDetail's
+  // ledger-absent-but-provenance-present branch, untouched by this fix.
+  const body = matter.stringify('\n# Fabricated\n\nBody.\n', {
+    name: 'Fabricated',
+    description: 'a fabricated provenance block',
+    provenance: { source: 'https://x', contentHash: 'sha256:doesnotmatter', installedAt: new Date().toISOString() },
+  });
+  writeFileSync(join(dir, 'SKILL.md'), body, 'utf8');
+
+  const detail = (await (await fetch(`${bridgeUrl}/api/studio/skills/${id}`)).json()) as Record<string, unknown>;
+  assert.equal(
+    detail['trust'],
+    'needs-review',
+    'an unregistered provenance block must still be flagged — the general trust mechanism must keep working',
+  );
+});
+
+test('library-35: DELETE of a skill NEVER installed through the pipeline succeeds (no throw, no 500) and leaves the ledger untouched', async () => {
+  const id = 'library-35-never-installed-skill';
+  mkdirSync(join(forgeRoot, 'skills', id), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'skills', id, 'SKILL.md'),
+    matter.stringify('\n# Plain\n\nBody.\n', { name: 'Plain', description: 'hand-authored, never installed' }),
+    'utf8',
+  );
+
+  const del = await sendMethod('DELETE', `${bridgeUrl}/api/studio/skills/${id}`);
+  assert.equal(del.status, 200, 'deleting a never-installed skill must succeed, never 500');
+  assert.equal(existsSync(join(forgeRoot, 'skills', id)), false);
 });

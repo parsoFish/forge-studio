@@ -135,3 +135,32 @@ export function writeInstallLedgerEntry(forgeRoot: string, entry: InstalledSkill
   const installed = [...ledger.values()].sort((a, b) => a.id.localeCompare(b.id));
   writeFileSync(ledgerPath(forgeRoot), yaml.dump({ installed }), 'utf8');
 }
+
+/**
+ * W8-B4 (library-35) — the inverse of {@link writeInstallLedgerEntry} that
+ * never existed: remove one id's row, if present, and rewrite the ledger.
+ *
+ * Deleting a skill package left its ledger row behind forever — a brand-new,
+ * hand-authored skill later reusing that same id inherited a STRANGER'S
+ * provenance row (a different `contentHash`, since the new file is genuinely
+ * different content), which `skillTrustDetail` reads as `needs-review` /
+ * `provenance-tampered`: a fresh, legitimate skill instantly distrusted for
+ * an edit it never made. This is the ONE function every skill-destroying call
+ * site should call before removing the package directory — see
+ * cli/bridge-studio-skills.ts's DELETE route, its only production caller
+ * today.
+ *
+ * Tolerant / idempotent by design: removing an id with no row (the common
+ * case — most deleted skills were hand-authored and never went through
+ * `installSkillPackage`) is a silent no-op, never a throw. A delete must
+ * never 500 merely because the object it is deleting was never installed
+ * through this pipeline.
+ */
+export function removeInstallLedgerEntry(forgeRoot: string, id: string): void {
+  const ledger = readInstallLedger(forgeRoot);
+  if (!ledger.has(id)) return;
+  ledger.delete(id);
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  const installed = [...ledger.values()].sort((a, b) => a.id.localeCompare(b.id));
+  writeFileSync(ledgerPath(forgeRoot), yaml.dump({ installed }), 'utf8');
+}
