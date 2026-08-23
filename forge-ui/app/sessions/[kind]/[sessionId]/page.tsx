@@ -453,6 +453,10 @@ export default function SessionShellPage({
                 project={project ?? undefined}
                 sessionId={sessionId}
                 onFinalizeGeneration={onFinalizeGeneration}
+                // W8-B3 (sessions-kinds-R08) — the settled phase, so the
+                // destination line can stop promising a verdict that has
+                // already been given. Both facts were already on the payload.
+                terminalPhase={viewState.terminal ? viewState.phase : null}
                 draftContext={
                   summary?.kind === 'instructions'
                     ? {

@@ -495,11 +495,6 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // words. The DURABLE per-round record is verdicts.json's own `feedback`
   // field, rendered below.
   const feedbackBody = readCandidate(FEEDBACK_FILENAME);
-  if (feedbackBody !== null) {
-    const staged = resolveStage(undefined);
-    if (!staged.ok) return { ok: false, error: { message: staged.message } };
-    turns.push({ index: index++, role: 'operator', stage: staged.value, text: feedbackBody, source: FEEDBACK_FILENAME });
-  }
 
   // verdicts.json (W7-C2, sessions-kinds-29) — one operator turn per
   // recorded decision: "Verdict: <verdict>" plus the rationale when one was
@@ -518,12 +513,39 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
   // `#<n>` in `source` is the record's POSITION IN THE FILE (1-based), not
   // its display position — it names the durable record a reader can go find.
   const verdictsRaw = readCandidate(VERDICTS_FILENAME);
+  let verdictRecords: readonly ParsedVerdictRecord[] = [];
   if (verdictsRaw !== null) {
     const parsedV = parseVerdictsJson(verdictsRaw);
     if (!parsedV.ok) return { ok: false, error: { message: parsedV.message } };
+    verdictRecords = parsedV.value;
+  }
+
+  // W8-B3 (sessions-kinds-R05) — the same revise instruction was rendered
+  // TWICE: once as a bare operator turn from `feedback.md`, then again inside
+  // "Verdict: revise <the identical text>" from the durable verdicts.json
+  // record the SAME write created. Every revise round doubled the transcript
+  // and an operator re-reading their own history saw each instruction twice.
+  //
+  // Derived, not de-duplicated by guesswork: the feedback.md turn is dropped
+  // only when a verdict record verifiably CARRIES that exact text, so the
+  // record shows it with its decision. If no record carries it — a
+  // feedback.md written by any path that did not also append a verdict — the
+  // turn still renders, because dropping it would lose the operator's words.
+  if (feedbackBody !== null && feedbackBody.trim().length > 0) {
+    const carriedByAVerdict = verdictRecords.some(
+      (r) => r.feedback !== undefined && r.feedback.trim() === feedbackBody.trim(),
+    );
+    if (!carriedByAVerdict) {
+      const staged = resolveStage(undefined);
+      if (!staged.ok) return { ok: false, error: { message: staged.message } };
+      turns.push({ index: index++, role: 'operator', stage: staged.value, text: feedbackBody, source: FEEDBACK_FILENAME });
+    }
+  }
+
+  if (verdictRecords.length > 0) {
     const staged = resolveStage(undefined);
     if (!staged.ok) return { ok: false, error: { message: staged.message } };
-    const ordered = parsedV.value
+    const ordered = verdictRecords
       .map((record, position) => ({ record, position }))
       .sort((a, b) => (a.record.at < b.record.at ? -1 : a.record.at > b.record.at ? 1 : a.position - b.position));
     for (const { record, position } of ordered) {

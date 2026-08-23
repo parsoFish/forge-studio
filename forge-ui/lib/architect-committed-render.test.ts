@@ -97,3 +97,27 @@ test('one row per initiative, an unknown row carries no run link', () => {
   expect(html).toContain('data-initiative-id="INIT-2026-01-01-b"');
   expect(html.match(/data-action="open-initiative-run"/g)?.length).toBe(1);
 });
+
+// ---------------------------------------------------------------------------
+// W8-B3 (sessions-kinds-08) — "Watch it build →" must never be a dead end.
+//
+// Live evidence from the wave-7 re-gate: 22 of 63 runs carry the `"unknown"`
+// flow sentinel, and on 8 of 12 committed architect sessions this CTA
+// navigated to `/flows/unknown`, which renders «flow "unknown" is retired».
+// ---------------------------------------------------------------------------
+
+test('sessions-kinds-08: with no live flow monitor, "Watch it build →" falls back to the initiative\'s OWN run page — never /flows/unknown', () => {
+  const html = render({
+    linkage: [link('complete', { flowId: 'unknown', runHref: `/flows/unknown/run/${INIT}`, monitorHref: null })],
+  });
+  expect(html).toContain(`data-action="watch-it-build"`);
+  expect(html).toContain(`href="/flows/unknown/run/${INIT}"`);
+  expect(html).not.toContain('href="/flows/unknown"');
+});
+
+test('sessions-kinds-08: a live flow monitor is still preferred when one exists', () => {
+  const html = render({
+    linkage: [link('building', { flowId: 'forge-develop', runHref: `/flows/forge-develop/run/${INIT}`, monitorHref: '/flows/forge-develop' })],
+  });
+  expect(html).toContain('href="/flows/forge-develop"');
+});

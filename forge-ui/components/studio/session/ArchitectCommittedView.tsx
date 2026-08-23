@@ -70,7 +70,17 @@ export function ArchitectCommittedView({
   const view = linkageReady
     ? describePostCommit(linkage, scheduler)
     : { tone: 'unknown' as const, headline: 'Reading the queue…', needsSchedulerStart: false };
-  const watchHref = linkage.find((l) => l.monitorHref)?.monitorHref ?? '/flows';
+  // W8-B3 (sessions-kinds-08) — the loop-closure CTA, in preference order:
+  // a live flow monitor, else the initiative's OWN run page (which resolves
+  // without a flow definition — W7-FIX-A3 — and is what the operator actually
+  // wants to watch anyway), else the flows index. Before this, `monitorHref`
+  // was minted from the run's `flowId` unconditionally, so on every legacy
+  // session carrying the `"unknown"` sentinel the biggest, greenest control on
+  // the panel landed on a retired-flow not-found page.
+  const watchHref =
+    linkage.find((l) => l.monitorHref)?.monitorHref
+    ?? linkage.find((l) => l.runHref)?.runHref
+    ?? '/flows';
 
   return (
     <div

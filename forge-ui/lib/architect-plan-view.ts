@@ -102,14 +102,33 @@ const QUEUE_STATE_FOR_RUN: Record<Run['status'], InitiativeQueueState> = {
 };
 
 /** One row per initiative id (input order), matched on the run's OWN
- *  `initiativeId` — a neighbour's run is never cross-attributed. */
-export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[]): InitiativeLinkage[] {
+ *  `initiativeId` — a neighbour's run is never cross-attributed.
+ *
+ *  W8-B3 (sessions-kinds-08) — `knownFlowIds` is the LIVE flows roster, and
+ *  `monitorHref` is now derived against it instead of being minted from the
+ *  run's `flowId` unconditionally. 22 of 63 runs carry the `"unknown"`
+ *  sentinel the runs payload uses for pre-S8 manifests, so on 8 of 12
+ *  committed architect sessions the biggest, greenest control on the panel
+ *  ("Watch it build →") navigated to `/flows/unknown` — a retired-flow
+ *  not-found page. A sentinel check would have closed that ONE id; deriving
+ *  against the roster closes the whole class, because a run naming any
+ *  since-deleted flow is exactly as dead an address, and it needs no mirror
+ *  of the sentinel literal on this side of the wire. The run's OWN page stays
+ *  linked either way — `/flows/<id>/run/<initiative>` resolves without a flow
+ *  definition (that route derives from the runs list, W7-FIX-A3), which is
+ *  precisely why only the monitor link was broken.
+ *
+ *  An UNRESOLVED roster (`undefined` — the flows list has not loaded, or its
+ *  read failed) yields `monitorHref: null` rather than an optimistic link:
+ *  the caller renders one fewer link for a moment, instead of a dead end. */
+export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[], knownFlowIds?: readonly string[]): InitiativeLinkage[] {
   return initiativeIds.map((initiativeId) => {
     const run = runs.find((r) => r.initiativeId === initiativeId) ?? null;
     if (!run) {
       return { initiativeId, runId: null, flowId: null, runStatus: null, queueState: 'unknown', runHref: null, monitorHref: null };
     }
     const flow = encodeURIComponent(run.flowId);
+    const flowIsReal = knownFlowIds !== undefined && knownFlowIds.includes(run.flowId);
     return {
       initiativeId,
       runId: run.id,
@@ -120,7 +139,7 @@ export function deriveInitiativeLinkage(initiativeIds: string[], runs: Run[]): I
       // matches it in every queue state); a run's own `id` flips from the
       // initiative id to the cycle id the moment the scheduler claims it.
       runHref: `/flows/${flow}/run/${encodeURIComponent(initiativeId)}`,
-      monitorHref: `/flows/${flow}`,
+      monitorHref: flowIsReal ? `/flows/${flow}` : null,
     };
   });
 }

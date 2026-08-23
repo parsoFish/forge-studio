@@ -14,7 +14,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-import { fetchRuns, type Run } from './studio-client';
+import { fetchRuns, fetchStudioFlows, type Flow, type Run } from './studio-client';
 import { deriveInitiativeLinkage, type InitiativeLinkage } from './architect-plan-view';
 import { useSchedulerStatus, SCHEDULER_POLL_MS, type SchedulerStatusState } from './use-scheduler-status';
 
@@ -26,6 +26,11 @@ export type LoopClosureState = SchedulerStatusState & {
 export function useLoopClosureState(initiativeIds: string[] | undefined, enabled = true, pollMs: number = SCHEDULER_POLL_MS): LoopClosureState {
   const scheduler = useSchedulerStatus(pollMs, enabled);
   const [runs, setRuns] = useState<Run[]>([]);
+  // W8-B3 (sessions-kinds-08) — the live flows roster, so a run naming a flow
+  // that no longer exists (22 of 63 real runs carry the `"unknown"` sentinel)
+  // does not mint a monitor link into a not-found page. `undefined` until it
+  // resolves: an unresolved roster suppresses the link rather than guessing.
+  const [flowIds, setFlowIds] = useState<string[] | undefined>(undefined);
   const [linkageReady, setLinkageReady] = useState(false);
   const alive = useRef(true);
   const idsKey = (initiativeIds ?? []).join('\n');
@@ -39,13 +44,15 @@ export function useLoopClosureState(initiativeIds: string[] | undefined, enabled
       // false negative "no queue entry found"); the next tick retries and the
       // app-shell BridgeStatus banner owns the outage message.
       let r: Run[];
+      let flows: Flow[];
       try {
-        r = await fetchRuns();
+        [r, flows] = await Promise.all([fetchRuns(), fetchStudioFlows()]);
       } catch {
         return;
       }
       if (!alive.current) return;
       setRuns(r);
+      setFlowIds(flows.map((f) => f.id));
       setLinkageReady(true);
     };
     void load();
@@ -59,6 +66,6 @@ export function useLoopClosureState(initiativeIds: string[] | undefined, enabled
     };
   }, [enabled, pollMs]);
 
-  const linkage = deriveInitiativeLinkage(idsKey ? idsKey.split('\n') : [], runs);
+  const linkage = deriveInitiativeLinkage(idsKey ? idsKey.split('\n') : [], runs, flowIds);
   return { ...scheduler, linkage, linkageReady };
 }

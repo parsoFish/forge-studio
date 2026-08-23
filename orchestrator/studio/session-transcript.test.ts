@@ -2309,3 +2309,61 @@ describe('deriveSessionTranscript — W8-B3 sourcesFound + blank-opener rule (ON
     assert.equal(result.turns[0].text, 'emphasise the build/test conventions');
   });
 });
+
+describe('deriveSessionTranscript — W8-B3 revise de-duplication (sessions-kinds-R05)', () => {
+  // Live repro from the wave-7 re-gate, on a real authoring session: Request
+  // changes -> feedback "Add a short \"Examples\" section with one echo
+  // example." -> Send for revision. The transcript then read OPERATOR "Add a
+  // short …" followed by OPERATOR "Verdict: revise Add a short …" — the same
+  // instruction twice, because the ONE write appends the durable verdicts.json
+  // record AND leaves the transient feedback.md the next turn will consume.
+  const FEEDBACK = 'Add a short "Examples" section with one echo example.';
+
+  it('R05: a revise whose feedback is carried by its verdict record renders ONCE — as the verdict, with the words as its body', () => {
+    const dir = makeTmpDir('b3-revise-dedup');
+    writeFileSync(join(dir, 'feedback.md'), FEEDBACK);
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: FEEDBACK }]);
+
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    const operatorTurns = result.turns.filter((t) => t.role === 'operator');
+    assert.equal(operatorTurns.length, 1, `expected ONE turn, got ${operatorTurns.length}: ${JSON.stringify(operatorTurns.map((t) => t.source))}`);
+    assert.equal(operatorTurns[0].source, 'verdicts.json#1');
+    assert.match(operatorTurns[0].text, /Verdict: revise/);
+    // The operator's words are NOT lost — they are the verdict turn's body.
+    assert.ok(operatorTurns[0].text.includes(FEEDBACK));
+  });
+
+  it('R05: TWO revise rounds each render exactly once, with their own words', () => {
+    const dir = makeTmpDir('b3-revise-dedup-2');
+    writeFileSync(join(dir, 'feedback.md'), 'second round words');
+    writeJson(dir, 'verdicts.json', [
+      { at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: 'first round words' },
+      { at: '2026-08-23T11:00:00.000Z', verdict: 'revise', feedback: 'second round words' },
+    ]);
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 2);
+    assert.equal(result.turns.filter((t) => t.text.includes('second round words')).length, 1);
+    assert.equal(result.turns.filter((t) => t.text.includes('first round words')).length, 1);
+  });
+
+  it('R05: feedback.md that NO verdict record carries still renders — de-duplication must never lose the operator\'s words', () => {
+    const dir = makeTmpDir('b3-revise-orphan');
+    writeFileSync(join(dir, 'feedback.md'), 'a note no verdict recorded');
+    writeJson(dir, 'verdicts.json', [{ at: '2026-08-23T10:00:00.000Z', verdict: 'revise', feedback: 'something else entirely' }]);
+    const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'analyzing' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 2);
+    assert.ok(result.turns.some((t) => t.source === 'feedback.md' && t.text === 'a note no verdict recorded'));
+  });
+
+  it('R05: feedback.md with NO verdicts.json at all still renders (the architect shape — feedback with no verdict record)', () => {
+    const dir = makeTmpDir('b3-revise-nofile');
+    writeFileSync(join(dir, 'feedback.md'), 'tighten the scope');
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir: dir, phase: 'awaiting-verdict' });
+    assert.ok(result.ok);
+    assert.equal(result.turns.length, 1);
+    assert.equal(result.turns[0].source, 'feedback.md');
+  });
+});
