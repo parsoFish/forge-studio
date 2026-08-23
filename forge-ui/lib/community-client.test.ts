@@ -32,6 +32,9 @@ const WELL_FORMED_SKILL_ITEM = {
   kind: 'skill',
   name: 'Handoff',
   desc: 'Compress the current session into a markdown transfer doc.',
+  // W8-B5 (community-05 / exit row E11): a registry-sourced skill carries its
+  // own real category over the wire.
+  category: 'memory',
   upstream: 'https://github.com/obra/superpowers',
   hub: { id: 'superpowers', name: 'obra/superpowers', url: 'https://github.com/obra/superpowers', kinds: 'skills' },
   signals: { stars: '228k', attributedTo: 'obra/superpowers + Matt Pocock', starsNumeric: 228000 },
@@ -49,6 +52,9 @@ const WELL_FORMED_TOOL_ITEM = {
   kind: 'tool',
   name: 'git',
   desc: 'Worktrees, branches, commits.',
+  // A catalog connection has NO registry row, so it honestly carries null —
+  // the key is still PRESENT (this module's absent-vs-explicit-null rule).
+  category: null,
   upstream: 'https://git-scm.com/',
   hub: null,
   signals: null,

@@ -433,9 +433,17 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
 @keyframes toast-in { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------- misc ---------- */
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 12.5px; }
+/* W8-B5 (community-31): a `1fr` track's default `min-width: auto` cannot
+   shrink below its longest unbreakable string, so one 100-character
+   `sourceUrl` in a `.kv` dd widened the grid — and, with no ancestor setting
+   `overflow-x`, the whole DOCUMENT — past the viewport. `minmax(0, 1fr)`
+   lets the value track shrink; `overflow-wrap: anywhere` on the value cell
+   gives the URL somewhere to break. Fixing the cause deliberately, rather
+   than hiding it behind `overflow-x: hidden` on body, which would clip the
+   value instead of wrapping it. */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; font-size: 12.5px; }
 .kv dt { color: var(--faint); }
-.kv dd { margin: 0; color: var(--text); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
 .muted { color: var(--dim); }
 .faint { color: var(--faint); }
 .spacer { flex: 1; }

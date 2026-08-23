@@ -1729,3 +1729,65 @@ adds one delete sink. `check-request-path-sinks.mjs` delta:
 `node scripts/check-request-path-sinks.mjs --write` accepted this delta —
 `scripts/request-path-sinks.baseline.txt` now records
 `orchestrator/interactive-runner.ts` `rmSync` at 1.
+
+### W8-B5 WI-3 — the deterministic community refresh becomes bridge-reachable (five fixed-path sinks in ONE new module)
+
+Wave-8 lane B5, exit rows E1 + E7 (bead `forge-6gv.9`). `POST
+/api/studio/community/refresh` and `forge community refresh` share ONE
+load → refresh → write implementation (`cli/community-refresh-run.ts`), so
+that module becomes reachable from a bridge route and its five fs sinks
+enter the scan.
+
+**The delta is structurally unavoidable, and that is the first thing to
+say about it.** Any route that writes a file necessarily puts write sinks in
+a route-reachable module: in a NEW module they are new `(file, sink)` pairs,
+in an EXISTING one they are grown counts. There is no implementation of E7
+that leaves the baseline at 490 rows. The question the audit has to answer is
+therefore not "can this be avoided" but "can any request-derived byte reach
+any of these paths", and the answer is no — by construction, not by
+validation:
+
+> **The refresh route takes no parameters and reads no request body.** Its URL
+> is the literal `/api/studio/community/refresh` (no `:id`, no query it reads,
+> no JSON body it parses). There is no request-derived value in scope anywhere
+> in the arm, so there is nothing that *could* be folded into a path. The CLI
+> verb's argv is likewise never a path: the only flag it accepts is
+> `--dry-run`, and anything else exits 2 before the runner is called.
+
+| file | op(s) | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/community-refresh-run.ts` (`runCommunityRefresh`) | `existsSync` | none — `communityRegistryPath(opts.forgeRoot)`, a fixed `studio/community/registry.yaml` literal under the trusted forge root (`orchestrator/studio/registry.ts`) | fixed-path (accidentally-safe by construction) | The probe answers "is there a registry to refresh at all"; a missing file is the typed `registry-missing` refusal and NOTHING is created (`cli/community-refresh-cmd.test.ts` R8 asserts the file still does not exist afterwards). |
+| `cli/community-refresh-run.ts` (`writeRegistryAtomically`) | `mkdirSync` + `writeFileSync` | none — `dirname(destPath)` / a sibling `.registry.yaml.tmp-<server-random>` whose suffix is `randomBytes(6).toString('hex')`, never request text | fixed-path | The same temp-then-rename idiom `mutateCommunityRegistry` (`cli/bridge-studio-writes.ts`, W7-B3 row above) already uses on the same file, extracted into the shared runner rather than re-invented per surface. |
+| `cli/community-refresh-run.ts` (`writeRegistryAtomically`) | `renameSync` | none — same two fixed paths | fixed-path | The rename happens ONLY after `loadCommunityRegistry(tempPath)` re-parses the candidate through the ONE loader: a document the loader refuses never replaces the real registry. |
+| `cli/community-refresh-run.ts` (`writeRegistryAtomically`) | `unlinkSync` | none — the temp sibling this function itself just created | fixed-path | Best-effort cleanup on a failed round-trip, so a refused write leaves no debris beside the real registry. It can only ever target the path this function minted. |
+
+**Two properties this audit row exists to record, both `[exec]`-verified:**
+
+1. **A refused refresh writes nothing at all.** A missing/invalid `GH_TOKEN`,
+   an exhausted rate limit, and a pass in which every upstream failed each
+   leave the registry BYTE-IDENTICAL — asserted on the bytes, not on the exit
+   code, in `cli/community-refresh-cmd.test.ts` (R1/R2/R3/R4/R6) and through
+   the real bridge in `cli/bridge-studio-community-refresh.test.ts`
+   (B1/B2/B3/B4/B6). Stamping `meta.lastRefresh` on an unverified pass would
+   make an unchecked registry read as freshly verified — the
+   `declared-data-fails-open` shape, here closed on the write decision itself.
+2. **The credential never reaches a path, a log, a response or a written
+   byte.** `GH_TOKEN` is read once (`cli/community-refresh-run.ts`), passed as
+   a parameter into the fetch core, and used only as an `Authorization`
+   header. It is deliberately absent from `AGENT_ENV_ALLOWLIST`
+   (`orchestrator/spawn-env.ts`), so no spawned agent child ever sees it.
+   Pinned by C6/C7 (no output stream, not even a 12-char prefix) and B2 (not
+   in the response body).
+
+**Dry-bridge:** this is the FIRST bridge route in forge's history that calls a
+third-party API, so `DryBridgeAction` gains `network` and the route is
+classified `refuse` / `guard: 'route'` in `BRIDGE_ROUTE_CLASSIFICATION`
+(`cli/dry-bridge.ts`). Under `FORGE_DRY_BRIDGE=1` it answers the typed 409
+before any request is attempted — a harness run can neither spend the
+operator's GitHub rate limit nor write live upstream numbers into the
+repo-tracked registry (B6).
+
+Baseline delta pending: 5 new rows (`cli/community-refresh-run.ts` ×
+`existsSync` / `mkdirSync` / `renameSync` / `unlinkSync` / `writeFileSync`,
+each at count 1), 490 → 495. Accept with
+`node scripts/check-request-path-sinks.mjs --write`.

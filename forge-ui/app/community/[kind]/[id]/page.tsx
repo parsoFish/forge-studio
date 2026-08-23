@@ -20,7 +20,7 @@ import {
   type CommunityInstallOutcome,
   type HookScanReport,
 } from '@/lib/community-client';
-import { installStateLabel, signalsLabel, hubLabel, installActionForItem } from '@/lib/community-view';
+import { installStateLabel, signalsLabel, hubLabel, installActionForItem, connectionPageLinkFor } from '@/lib/community-view';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
@@ -413,11 +413,19 @@ function InstallSection({
   });
   const owningHref = owningHrefFor(item);
   const routedTo = routedToForKind(item.kind);
+  // W8-B5 (community-18 / exit row E16): a NOT-installed mcp/tool still has a
+  // real /connections/<id> page — its env vars, its probe, how to connect it —
+  // and had no route to it from here at all. This is rendered IN ADDITION to
+  // the install action above, never instead of it, and is null whenever the
+  // action already links that page (no duplicate link) or the kind has no
+  // connection page.
+  const connectionHref = connectionPageLinkFor(item, action);
 
   return (
     <section
       data-section="install"
       data-install-action={action.action}
+      {...(connectionHref !== null ? { 'data-connection-link': 'true' } : {})}
       {...(isConnectionDetail(item) ? { 'data-install-method': item.install.method } : {})}
       style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
     >
@@ -484,6 +492,19 @@ function InstallSection({
         <p style={{ fontSize: 13, color: 'var(--text)', margin: 0 }}>
           {installStateLabel(item.installState)} — continue at{' '}
           <Link href={owningHref} data-action="open-owning-page">{owningHref}</Link>.
+        </p>
+      )}
+
+      {/* W8-B5 (community-18): the SECONDARY route to the connection's own
+          page, rendered beside whichever install arm is showing — a
+          not-installed mcp/tool had no way to reach its config vars, its
+          probe or its connection instructions from here. Same
+          data-action vocabulary as the open-owning arm above (one word for
+          one destination), never a second one. */}
+      {connectionHref !== null && (
+        <p style={{ fontSize: 12.5, color: 'var(--dim)', margin: 0 }} data-component="connection-page-link">
+          Its connection page — env vars, probe state and how forge talks to it — is at{' '}
+          <Link href={connectionHref} data-action="open-owning-page">{connectionHref}</Link>.
         </p>
       )}
 

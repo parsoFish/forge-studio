@@ -55,6 +55,7 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 
 import { FINALIZERS, resolveFinalizer, commitRegistryDraft } from './interactive-finalizers.ts';
+import { lockCommunityRegistry } from '../cli/community-registry-lock.ts';
 
 type Scratch = {
   base: string;
@@ -82,6 +83,11 @@ function cleanup(...roots: string[]): void {
   for (const r of roots) rmSync(r, { recursive: true, force: true });
 }
 
+// W8-B5 schema v2: an item carries curation only; the per-item stamp
+// (fetchedAt/fetchedBy) and the repo facts (stars/upstreamUpdatedAt) moved to
+// the shared `sources` row, keyed by sourceUrl. `commitRegistryDraft`'s
+// evidence gate is translated onto that map: a source row is committed from
+// the draft only when EVERY item resolving to it was marked "verified".
 const ALPHA_LIVE = {
   id: 'alpha',
   kind: 'skill',
@@ -91,7 +97,15 @@ const ALPHA_LIVE = {
   sourceUrl: 'https://github.com/example/alpha',
   provenance: 'example/alpha',
   tier: 'sonnet',
-  signals: { stars: 100, starsDisplay: '100', attributedTo: 'example/alpha' },
+  signals: { attributedTo: 'example/alpha' },
+};
+
+const ALPHA_KEY = 'github:example/alpha';
+const BETA_KEY = 'github:example/beta';
+
+const ALPHA_LIVE_SOURCE = {
+  stars: 100,
+  starsDisplay: '100',
   upstreamUpdatedAt: null,
   fetchedAt: null,
   fetchedBy: 'seed',
@@ -104,25 +118,34 @@ const BETA_LIVE = {
   category: 'testing',
   sourceUrl: 'https://github.com/example/beta',
   provenance: 'example/beta',
-  signals: { stars: null, starsDisplay: null, attributedTo: null },
+  signals: { attributedTo: null },
+};
+
+const BETA_LIVE_SOURCE = {
+  stars: null,
+  starsDisplay: null,
   upstreamUpdatedAt: null,
   fetchedAt: null,
   fetchedBy: 'seed',
 };
 
-function writeLiveRegistry(s: Scratch, items: unknown[]): void {
-  writeFileSync(s.registryPath, yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }));
+function writeLiveRegistry(s: Scratch, items: unknown[], sources: Record<string, unknown> = {}): void {
+  writeFileSync(s.registryPath, yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources, items }));
 }
 
-function writeDraft(s: Scratch, items: unknown[]): void {
-  writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }));
+function writeDraft(s: Scratch, items: unknown[], sources: Record<string, unknown> = {}): void {
+  writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources, items }));
 }
 
 function writeEvidence(s: Scratch, evidence: Record<string, { status: 'verified' | 'verifyFailed'; source?: string; note?: string }>): void {
   writeFileSync(join(s.stagingDir, 'evidence.json'), JSON.stringify(evidence, null, 2));
 }
 
-function readLive(s: Scratch): { meta: { schemaVersion: number; lastRefresh: string | null }; items: Record<string, unknown>[] } {
+function readLive(s: Scratch): {
+  meta: { schemaVersion: number; lastRefresh: string | null };
+  sources: Record<string, Record<string, unknown>>;
+  items: Record<string, unknown>[];
+} {
   return yaml.load(readFileSync(s.registryPath, 'utf8')) as never;
 }
 
@@ -158,17 +181,19 @@ test('commitRegistryDraft is registered in FINALIZERS and resolveFinalizer', () 
 test('verified-CHANGED row is stamped: real new signals carried through, fetchedAt/fetchedBy are the finalizer\'s own stamp, never the draft\'s', async () => {
   const s = mkScratch('cr-verified-changed-');
   try {
-    writeLiveRegistry(s, [ALPHA_LIVE, BETA_LIVE]);
-    const alphaUpdated = {
-      ...ALPHA_LIVE,
-      signals: { stars: 250, starsDisplay: '250', attributedTo: 'example/alpha' },
-      upstreamUpdatedAt: '2026-08-01T00:00:00.000Z',
-      // The draft is instructed never to set these — commitRegistryDraft
-      // must discard whatever it carries here regardless.
-      fetchedAt: '1999-01-01T00:00:00.000Z',
-      fetchedBy: 'a-lying-draft',
-    };
-    writeDraft(s, [alphaUpdated, BETA_LIVE]);
+    writeLiveRegistry(s, [ALPHA_LIVE, BETA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE, [BETA_KEY]: BETA_LIVE_SOURCE });
+    writeDraft(s, [ALPHA_LIVE, BETA_LIVE], {
+      [ALPHA_KEY]: {
+        stars: 250,
+        starsDisplay: '250',
+        upstreamUpdatedAt: '2026-08-01T00:00:00.000Z',
+        // The draft is instructed never to set these — commitRegistryDraft
+        // must discard whatever it carries here regardless.
+        fetchedAt: '1999-01-01T00:00:00.000Z',
+        fetchedBy: 'a-lying-draft',
+      },
+      [BETA_KEY]: { ...BETA_LIVE_SOURCE, stars: 9999, starsDisplay: '9999' },
+    });
     writeEvidence(s, {
       alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'stargazers_count=250' },
       beta: { status: 'verifyFailed', source: 'https://github.com/example/beta', note: '404 Not Found' },
@@ -180,20 +205,22 @@ test('verified-CHANGED row is stamped: real new signals carried through, fetched
 
     assert.deepEqual(wrote, [s.registryPath]);
     const out = readLive(s);
-    const outAlpha = out.items.find((i) => i.id === 'alpha')!;
-    const outBeta = out.items.find((i) => i.id === 'beta')!;
+    const outAlpha = out.sources[ALPHA_KEY];
+    const outBeta = out.sources[BETA_KEY];
 
-    assert.equal((outAlpha.signals as { stars: number }).stars, 250);
+    assert.equal(outAlpha.stars, 250);
     assert.equal(outAlpha.upstreamUpdatedAt, '2026-08-01T00:00:00.000Z');
     assert.notEqual(outAlpha.fetchedAt, '1999-01-01T00:00:00.000Z');
     assert.equal(outAlpha.fetchedBy, 'community-refresh/sess-001');
     const stampedAt = new Date(outAlpha.fetchedAt as string);
     assert.ok(stampedAt >= before && stampedAt <= after, 'fetchedAt must be the real commit time');
 
-    // verifyFailed row: byte-identical to the live entry — never restamped.
-    assert.deepEqual(outBeta, BETA_LIVE);
+    // verifyFailed source: byte-identical to the live row — never restamped,
+    // and the draft's tampered 9999 is discarded.
+    assert.deepEqual(outBeta, BETA_LIVE_SOURCE);
+    assert.deepEqual(out.items.find((i) => i.id === 'beta'), BETA_LIVE);
 
-    assert.equal(out.meta.schemaVersion, 1);
+    assert.equal(out.meta.schemaVersion, 2);
     assert.ok(out.meta.lastRefresh !== null);
     const lastRefresh = new Date(out.meta.lastRefresh as string);
     assert.ok(lastRefresh >= before && lastRefresh <= after);
@@ -205,10 +232,10 @@ test('verified-CHANGED row is stamped: real new signals carried through, fetched
 test('verified-UNCHANGED row is STILL stamped: an honest re-verification with the same numbers is not fabrication', async () => {
   const s = mkScratch('cr-verified-unchanged-');
   try {
-    writeLiveRegistry(s, [ALPHA_LIVE]);
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
     // Draft proposes the EXACT same content as live — the agent re-checked
     // and nothing had changed, but it DID genuinely verify it this pass.
-    writeDraft(s, [ALPHA_LIVE]);
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
     writeEvidence(s, {
       alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'still 100 stars, confirmed live' },
     });
@@ -218,9 +245,9 @@ test('verified-UNCHANGED row is STILL stamped: an honest re-verification with th
     const after = new Date();
 
     const out = readLive(s);
-    const outAlpha = out.items.find((i) => i.id === 'alpha')!;
+    const outAlpha = out.sources[ALPHA_KEY];
     // The whole point of this test: content-unchanged does NOT mean
-    // untouched. A genuinely verified row is stamped regardless.
+    // untouched. A genuinely verified source is stamped regardless.
     assert.equal(outAlpha.fetchedBy, 'community-refresh/sess-001');
     assert.ok(outAlpha.fetchedAt !== null);
     const stampedAt = new Date(outAlpha.fetchedAt as string);
@@ -233,16 +260,17 @@ test('verified-UNCHANGED row is STILL stamped: an honest re-verification with th
 test('verifyFailed row is untouched BYTE-IDENTICAL even when the draft proposes different content for it — the draft is never trusted for an unverified row', async () => {
   const s = mkScratch('cr-failed-tampered-');
   try {
-    writeLiveRegistry(s, [BETA_LIVE]);
+    writeLiveRegistry(s, [BETA_LIVE], { [BETA_KEY]: BETA_LIVE_SOURCE });
     // The draft proposes DIFFERENT content for beta despite marking it
     // verifyFailed — this must be ignored entirely; the live row wins.
-    const betaTampered = { ...BETA_LIVE, signals: { stars: 9999, starsDisplay: '9999', attributedTo: 'attacker' } };
-    writeDraft(s, [betaTampered]);
+    const betaTampered = { ...BETA_LIVE, signals: { attributedTo: 'attacker' } };
+    writeDraft(s, [betaTampered], { [BETA_KEY]: { ...BETA_LIVE_SOURCE, stars: 9999, starsDisplay: '9999' } });
     writeEvidence(s, { beta: { status: 'verifyFailed', note: 'timeout fetching sourceUrl' } });
 
     await commitRegistryDraft(ctxFor(s));
     const out = readLive(s);
     assert.deepEqual(out.items.find((i) => i.id === 'beta'), BETA_LIVE, 'the committed row must be the LIVE entry, ignoring the draft\'s tampered content');
+    assert.deepEqual(out.sources[BETA_KEY], BETA_LIVE_SOURCE, 'the shared source row must be the LIVE one, byte-identical');
   } finally {
     cleanup(s.base);
   }
@@ -251,13 +279,16 @@ test('verifyFailed row is untouched BYTE-IDENTICAL even when the draft proposes 
 test('a draft item with NO evidence entry at all is treated exactly like verifyFailed — untouched, live wins', async () => {
   const s = mkScratch('cr-noevidence-');
   try {
-    writeLiveRegistry(s, [ALPHA_LIVE]);
-    writeDraft(s, [{ ...ALPHA_LIVE, signals: { stars: 999, starsDisplay: '999', attributedTo: 'nope' } }]);
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
+    writeDraft(s, [{ ...ALPHA_LIVE, signals: { attributedTo: 'nope' } }], {
+      [ALPHA_KEY]: { ...ALPHA_LIVE_SOURCE, stars: 999, starsDisplay: '999' },
+    });
     writeEvidence(s, {}); // no entry for "alpha" at all
 
     await commitRegistryDraft(ctxFor(s));
     const out = readLive(s);
     assert.deepEqual(out.items.find((i) => i.id === 'alpha'), ALPHA_LIVE);
+    assert.deepEqual(out.sources[ALPHA_KEY], ALPHA_LIVE_SOURCE, 'no evidence ⇒ the shared source row is untouched too');
   } finally {
     cleanup(s.base);
   }
@@ -266,7 +297,7 @@ test('a draft item with NO evidence entry at all is treated exactly like verifyF
 test('a proposed NEW item (no live counterpart) marked verified is stamped and committed', async () => {
   const s = mkScratch('cr-new-verified-');
   try {
-    writeLiveRegistry(s, [ALPHA_LIVE]);
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
     const gamma = {
       id: 'gamma',
       kind: 'skill',
@@ -274,12 +305,18 @@ test('a proposed NEW item (no live counterpart) marked verified is stamped and c
       category: 'testing',
       sourceUrl: 'https://github.com/example/gamma',
       provenance: 'example/gamma',
-      signals: { stars: 42, starsDisplay: '42', attributedTo: 'example/gamma' },
-      upstreamUpdatedAt: '2026-08-01T00:00:00.000Z',
-      fetchedAt: null,
-      fetchedBy: 'seed',
+      signals: { attributedTo: 'example/gamma' },
     };
-    writeDraft(s, [ALPHA_LIVE, gamma]);
+    writeDraft(s, [ALPHA_LIVE, gamma], {
+      [ALPHA_KEY]: ALPHA_LIVE_SOURCE,
+      'github:example/gamma': {
+        stars: 42,
+        starsDisplay: '42',
+        upstreamUpdatedAt: '2026-08-01T00:00:00.000Z',
+        fetchedAt: null,
+        fetchedBy: 'seed',
+      },
+    });
     writeEvidence(s, {
       alpha: { status: 'verified', note: 'still current' },
       gamma: { status: 'verified', source: 'https://github.com/example/gamma', note: 'new item found via forge-seed hub' },
@@ -287,7 +324,9 @@ test('a proposed NEW item (no live counterpart) marked verified is stamped and c
 
     await commitRegistryDraft(ctxFor(s));
     const out = readLive(s);
-    const outGamma = out.items.find((i) => i.id === 'gamma')!;
+    assert.ok(out.items.some((i) => i.id === 'gamma'), 'the verified new item is committed');
+    const outGamma = out.sources['github:example/gamma'];
+    assert.equal(outGamma.stars, 42);
     assert.equal(outGamma.fetchedBy, 'community-refresh/sess-001');
     assert.ok(outGamma.fetchedAt !== null);
   } finally {
@@ -323,12 +362,13 @@ test('a fresh forge root with no live registry.yaml yet: a verified draft row co
   const s = mkScratch('cr-fresh-');
   try {
     assert.equal(existsSync(s.registryPath), false);
-    writeDraft(s, [ALPHA_LIVE]);
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
     writeEvidence(s, { alpha: { status: 'verified' } });
     const wrote = await commitRegistryDraft(ctxFor(s));
     assert.deepEqual(wrote, [s.registryPath]);
     const out = readLive(s);
-    assert.equal(out.items[0].fetchedBy, 'community-refresh/sess-001');
+    assert.equal(out.items[0].id, 'alpha');
+    assert.equal(out.sources[ALPHA_KEY].fetchedBy, 'community-refresh/sess-001');
   } finally {
     cleanup(s.base);
   }
@@ -343,7 +383,7 @@ test('malformed draft (items not an array): throws a named error and leaves the 
   try {
     writeLiveRegistry(s, [ALPHA_LIVE]);
     const beforeRaw = readFileSync(s.registryPath, 'utf8');
-    writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items: 'not-an-array' }));
+    writeFileSync(join(s.stagingDir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources: {}, items: 'not-an-array' }));
     writeEvidence(s, { alpha: { status: 'verified' } });
 
     let caught: unknown;
@@ -478,7 +518,7 @@ test('containment: a symlinked staging/registry.yaml pointing outside the sessio
 
     const secretPath = join(s.base, 'secret-registry.yaml');
     const secretItem = { ...ALPHA_LIVE, id: 'exfiltrated-secret' };
-    writeFileSync(secretPath, yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items: [secretItem] }));
+    writeFileSync(secretPath, yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources: {}, items: [secretItem] }));
 
     const draftPath = join(s.stagingDir, 'registry.yaml');
     try {
@@ -498,6 +538,57 @@ test('containment: a symlinked staging/registry.yaml pointing outside the sessio
     assertNamedThrow(caught, 'symlinked staging draft');
     assert.equal(readFileSync(s.registryPath, 'utf8'), beforeRaw, 'the live registry must be untouched');
     assert.doesNotMatch(readFileSync(s.registryPath, 'utf8'), /exfiltrated-secret/, 'the secret content must never reach the live registry');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5 security review, FINDING 1 — commitRegistryDraft is the THIRD writer
+// of studio/community/registry.yaml, and must participate in the same mutex
+// as the refresh and the CRUD routes. A lock only two of three writers honour
+// is not a lock: this finalizer's own load → stamp → rename would still
+// silently discard whatever the third writer landed in between.
+// ---------------------------------------------------------------------------
+
+test('commitRegistryDraft REFUSES (named error, zero bytes written) while another writer holds the registry lock', async () => {
+  const s = mkScratch('cr-locked-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
+    const before = readFileSync(s.registryPath, 'utf8');
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: { ...ALPHA_LIVE_SOURCE, stars: 999, starsDisplay: '999' } });
+    writeEvidence(s, { alpha: { status: 'verified' } });
+
+    const release = await lockCommunityRegistry(s.forgeRoot);
+    let caught: unknown;
+    try {
+      await commitRegistryDraft(ctxFor(s));
+    } catch (err) {
+      caught = err;
+    } finally {
+      await release();
+    }
+    assertNamedThrow(caught, 'registry locked by another writer');
+    assert.match((caught as Error).message, /lock/i);
+    assert.equal(readFileSync(s.registryPath, 'utf8'), before, 'a lock-refused commit must leave the live registry byte-identical');
+  } finally {
+    cleanup(s.base);
+  }
+});
+
+test('commitRegistryDraft RELEASES the lock on success — a second commit is not wedged by the first', async () => {
+  const s = mkScratch('cr-lock-release-');
+  try {
+    writeLiveRegistry(s, [ALPHA_LIVE], { [ALPHA_KEY]: ALPHA_LIVE_SOURCE });
+    writeDraft(s, [ALPHA_LIVE], { [ALPHA_KEY]: { ...ALPHA_LIVE_SOURCE, stars: 999, starsDisplay: '999' } });
+    writeEvidence(s, { alpha: { status: 'verified' } });
+
+    await commitRegistryDraft(ctxFor(s));
+    await commitRegistryDraft(ctxFor(s));
+    // And the mutex is genuinely free afterwards, not merely re-entrant.
+    const release = await lockCommunityRegistry(s.forgeRoot);
+    await release();
+    assert.equal(readLive(s).sources[ALPHA_KEY].stars, 999);
   } finally {
     cleanup(s.base);
   }

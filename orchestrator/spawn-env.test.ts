@@ -31,6 +31,42 @@ test('AGENT_ENV_ALLOWLIST: includes ANTHROPIC_API_KEY (the one auth var forge do
   assert.ok(AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_API_KEY'));
 });
 
+test('AGENT_ENV_ALLOWLIST: does NOT include GH_TOKEN — the GitHub PAT never reaches a spawned agent child (W8-B5)', () => {
+  // W8-B5 built forge's first outbound third-party API call (the deterministic
+  // community-registry refresh, orchestrator/studio/community-refresh-api.ts).
+  // The naive move when a feature needs a credential is to add it here; that
+  // would be a SECURITY REGRESSION, not a fix. This allowlist governs SDK-
+  // spawned agent CHILDREN, and forge's design is that only the ORCHESTRATOR
+  // PROCESS holds GH_TOKEN — spawned agents are instructed never to call `gh`
+  // themselves and the refresh runs in-process, outside this seam entirely.
+  // Adding it would hand the operator's GitHub PAT to every agent forge spawns,
+  // which is the exact leak class R5-02 closed after it recurred three times.
+  //
+  // Pinned as NON-membership, deliberately: the module docstring already says
+  // "GH_TOKEN is also deliberately excluded", and a comment is not a gate.
+  assert.ok(
+    !AGENT_ENV_ALLOWLIST.includes('GH_TOKEN'),
+    'GH_TOKEN must never be inheritable by a spawned agent — the orchestrator process reads it directly',
+  );
+  assert.ok(
+    AGENT_ENV_ALLOWLIST.every((name) => !/^(GH|GITHUB)_/.test(name)),
+    'no GitHub credential var of any spelling may enter the agent-child allowlist',
+  );
+});
+
+test('buildChildEnv: a parent env carrying a real GH_TOKEN produces a child that cannot see it', () => {
+  const parentWithPat: NodeJS.ProcessEnv = {
+    PATH: '/usr/bin:/bin',
+    HOME: '/home/operator',
+    GH_TOKEN: 'ghp_operator_personal_access_token',
+    GITHUB_TOKEN: 'ghp_second_spelling',
+  };
+  const child = buildChildEnv(parentWithPat);
+  assert.equal(child.GH_TOKEN, undefined, 'the PAT leaked into a spawned agent child');
+  assert.equal(child.GITHUB_TOKEN, undefined);
+  assert.ok(!JSON.stringify(child).includes('ghp_'), 'no credential-shaped value may reach the child env');
+});
+
 test('buildChildEnv: F1 AC — a polluted parent env (ANTHROPIC_BASE_URL + a canary var) produces a child receiving NEITHER', () => {
   const pollutedParent: NodeJS.ProcessEnv = {
     PATH: '/usr/bin:/bin',

@@ -81,8 +81,9 @@ test('forge studio lint: a well-formed studio/community/registry.yaml → zero c
     writeRegistry(
       root,
       `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources: {}
 items:
   - id: clean-skill
     kind: skill
@@ -90,10 +91,7 @@ items:
     category: testing
     sourceUrl: "https://example.com/clean-skill"
     provenance: "Test Author"
-    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Test Author" }
 `,
     );
     const result = runStudioLint(root);
@@ -128,8 +126,9 @@ test('forge studio lint: a duplicate (kind, id) pair in registry.yaml surfaces a
     writeRegistry(
       root,
       `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources: {}
 items:
   - id: dup-skill
     kind: skill
@@ -137,20 +136,14 @@ items:
     category: testing
     sourceUrl: "https://example.com/dup-skill"
     provenance: "Test Author"
-    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Test Author" }
   - id: dup-skill
     kind: skill
     name: Dup Two
     category: testing
     sourceUrl: "https://example.com/dup-skill-2"
     provenance: "Test Author"
-    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Test Author" }
 `,
     );
     const result = runStudioLint(root);
@@ -168,8 +161,9 @@ test('forge studio lint: an invalid tier in registry.yaml surfaces a real commun
     writeRegistry(
       root,
       `meta:
-  schemaVersion: 1
+  schemaVersion: 2
   lastRefresh: null
+sources: {}
 items:
   - id: bad-tier-skill
     kind: skill
@@ -178,10 +172,7 @@ items:
     sourceUrl: "https://example.com/bad-tier-skill"
     provenance: "Test Author"
     tier: turbo
-    signals: { stars: null, starsDisplay: null, attributedTo: "Test Author" }
-    upstreamUpdatedAt: null
-    fetchedAt: null
-    fetchedBy: seed
+    signals: { attributedTo: "Test Author" }
 `,
     );
     const result = runStudioLint(root);

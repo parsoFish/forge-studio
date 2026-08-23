@@ -524,13 +524,21 @@ export type CommunitySkill = {
 export const COMMUNITY_REGISTRY_KINDS = ['skill', 'hook', 'mcp', 'tool'] as const;
 export type CommunityRegistryKind = (typeof COMMUNITY_REGISTRY_KINDS)[number];
 
-/** Adoption signals for a registry item. `stars` is the parsed NUMERIC value
- *  (null when the curated display string names a different unit, e.g. "156k
- *  installs" — never fabricated); `starsDisplay` is the curated free-form
- *  string shown to operators; `attributedTo` is the curated attribution. */
+/**
+ * Per-ITEM curation signals. Schema v2 (W8-B5, exit row E5) leaves exactly one
+ * field here: `attributedTo`, which is genuine per-item curation ("who to
+ * credit for THIS skill").
+ *
+ * `stars` / `starsDisplay` were REMOVED, not deprecated. They are properties of
+ * the upstream REPOSITORY, and v1 gave every item its own copy: nine items
+ * across five distinct `sourceUrl`s each carried a `signals.stars`, so one
+ * repo's count was written onto N rows and the copies drifted (the reverted
+ * Wave-0 refresh diff left six rows at 275713 and two at 170882). A validation
+ * would only have caught the divergence after the fact; removing the field
+ * means the item has nowhere to hold a mis-scoped copy at all. Repo facts live
+ * in `CommunityRegistry.sources` below and are resolved at read time.
+ */
 export type CommunityRegistrySignals = {
-  stars: number | null;
-  starsDisplay: string | null;
   attributedTo: string | null;
 };
 
@@ -544,15 +552,77 @@ export type CommunityRegistryItem = {
   provenance: string;
   tier?: string; // recommended model tier (haiku | sonnet | opus) — skill items only
   signals: CommunityRegistrySignals;
+};
+
+/**
+ * Facts about ONE upstream source, keyed in `CommunityRegistry.sources` by the
+ * normalized key `orchestrator/studio/community-source-url.ts` derives from a
+ * `sourceUrl` (e.g. `github:obra/superpowers`). Written ONLY by a refresh pass
+ * that actually received a 200 from the upstream API — a failed, rate-limited
+ * or 404'd fetch leaves the row byte-identical (W8-B5, exit row E2).
+ *
+ * `starsDisplay` is DERIVED from `stars` (`formatStarCount`), never hand-typed:
+ * under v1 the two were independent fields and could disagree.
+ */
+export type CommunityRegistrySource = {
+  stars: number | null;
+  starsDisplay: string | null;
+  /** ISO timestamp the upstream last published a change (GitHub `pushed_at`,
+   *  npm `time.modified`, MCP registry `updatedAt`). Null when unknown. */
   upstreamUpdatedAt: string | null;
-  fetchedAt: string | null; // null until a refresh pass has actually run
-  fetchedBy: string; // e.g. "seed"
+  /** ISO timestamp this source was last VERIFIED against its API. Null until a
+   *  refresh actually received a 200 for it — never stamped on a failure. */
+  fetchedAt: string | null;
+  /** Where the recorded facts came from: "seed" (hand-curated, never fetched)
+   *  or `api:github` / `api:npm` / `api:mcp-registry`. */
+  fetchedBy: string;
+  // W8-B5 adversarial review, FINDING 2 — what the three fields below are
+  // actually FOR, corrected from a doc comment that promised a surfacing that
+  // does not exist.
+  //
+  // They are CHANGE-DETECTION INPUTS, and that is their whole current job:
+  // read by `sameFacts` (orchestrator/studio/community-refresh-api.ts), the
+  // comparison that decides whether a verified source is reported `refreshed`
+  // or `unchanged` — and by nothing else. `toCommunitySkill`
+  // (orchestrator/studio/registry.ts) does not project them, so they reach
+  // neither `CommunityItem`, nor `forge-ui/lib/community-client.ts`, nor any
+  // page. A repo that flipped to archived, retitled its topics, or shipped a
+  // new version IS a genuinely changed source and must not read `unchanged`;
+  // that consumer is what earns each of them a place in the persisted schema,
+  // and `community-refresh-api.test.ts` pins one test per field so the claim
+  // is enforced rather than merely written here.
+  //
+  // Surfacing `archived` in the UI is worth doing and is deliberately NOT done
+  // here: a newly rendered field needs its `data-*` attribute, a
+  // `docs/forge-ui-dom-and-harness.md` entry and a journey beat in the same
+  // change (the `journey-sync` contract) — its own piece of work.
+
+  /** GitHub only: the upstream repository is archived. Omitted when unknown. */
+  archived?: boolean;
+  /** GitHub `topics`. Omitted when unknown/empty. */
+  topics?: string[];
+  /** npm `dist-tags.latest` / MCP registry `server.version`. Omitted when N/A. */
+  version?: string;
 };
 
 export type CommunityRegistry = {
   schemaVersion: number;
   lastRefresh: string | null;
+  /** Repo-level facts, keyed by normalized source key. Two items sharing a
+   *  `sourceUrl` resolve to the SAME entry — by construction they cannot carry
+   *  different star counts (exit row E5). */
+  sources: Record<string, CommunityRegistrySource>;
   items: CommunityRegistryItem[];
+  /** The file's leading comment block, captured at load and re-emitted
+   *  verbatim by `serializeCommunityRegistry` — `js-yaml` cannot round-trip
+   *  comments, so without this every write destroys the curation header
+   *  (exit row E4, community-28). `''` for a document with no header. */
+  leadingComments: string;
+  /** 1-based line numbers of comments found INSIDE the `items:` block — the
+   *  comments the serializer provably cannot preserve. `forge studio lint`
+   *  reports these as errors, closing the class rather than the instance:
+   *  what the linter refuses cannot later be silently lost. */
+  itemsCommentLines: readonly number[];
   path: string;
 };
 

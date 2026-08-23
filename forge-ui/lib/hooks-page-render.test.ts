@@ -66,7 +66,11 @@ function okEntry(overrides: Partial<HookLibraryEntryOk> & { id: string }): HookL
 
 function communityHookItem(id: string, overrides: Partial<CommunityItem> = {}): CommunityItem {
   return {
-    id, kind: 'hook', name: id, desc: '', upstream: '', hub: null, signals: null,
+    // W8-B5 landed schemaVersion 2: `category` is REQUIRED (`string | null`) on
+    // CommunityItem, and filterCommunityItems now matches on it. Resolved FORWARD
+    // onto B5's shape -- the fixture supplies the field rather than the type being
+    // loosened back to optional.
+    id, kind: 'hook', name: id, desc: '', category: null, upstream: '', hub: null, signals: null,
     vendored: false, installState: 'not-installed', probeState: null, origin: 'catalog',
     fetchedAt: null, fetchedBy: 'seed', upstreamUpdatedAt: null,
     ...overrides,

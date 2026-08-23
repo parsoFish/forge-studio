@@ -93,6 +93,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
+import { communitySourceKey } from '../orchestrator/studio/community-source-url.ts';
 
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -136,14 +137,22 @@ after(async () => {
 function writeRegistry(communitySkills: Array<Record<string, unknown>>): void {
   const dir = join(forgeRoot, 'studio', 'community');
   mkdirSync(dir, { recursive: true });
+  // W8-B5 schema v2 — repo facts keyed by source URL, curation on the item.
+  const sourceUrlFor = (s: Record<string, unknown>): string =>
+    (s['source'] as string | undefined) ?? `https://github.com/test-owner/${s['id']}`;
   const items = (communitySkills ?? []).map((s) => ({
     id: s['id'], kind: 'skill', name: s['id'], provenance: s['provenance'] ?? 'Test Author',
-    sourceUrl: s['source'] ?? `https://example.com/${s['id']}`, category: 'testing',
+    sourceUrl: sourceUrlFor(s), category: 'testing',
     desc: `${s['id']} description`,
-    signals: { stars: null, starsDisplay: s['stars'] ?? null, attributedTo: s['provenance'] ?? 'Test Author' },
-    upstreamUpdatedAt: null, fetchedAt: null, fetchedBy: 'seed',
+    signals: { attributedTo: s['provenance'] ?? 'Test Author' },
   }));
-  writeFileSync(join(dir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 1, lastRefresh: null }, items }), 'utf8');
+  const sources: Record<string, unknown> = {};
+  for (const s of communitySkills ?? []) {
+    const key = communitySourceKey(sourceUrlFor(s));
+    if (key === null || s['stars'] === undefined) continue;
+    sources[key] = { stars: null, starsDisplay: s['stars'], upstreamUpdatedAt: null, fetchedAt: null, fetchedBy: 'seed' };
+  }
+  writeFileSync(join(dir, 'registry.yaml'), yaml.dump({ meta: { schemaVersion: 2, lastRefresh: null }, sources, items }), 'utf8');
 }
 
 function writeCatalog(opts: {
@@ -797,7 +806,7 @@ test('W7-B3 meta: GET /api/studio/community carries meta.lastRefresh from the re
   writeCatalog({});
   writeFileSync(
     join(forgeRoot, 'studio', 'community', 'registry.yaml'),
-    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T10:00:00.000Z' }, items: [] }),
+    yaml.dump({ meta: { schemaVersion: 2, lastRefresh: '2026-08-19T10:00:00.000Z' }, sources: {}, items: [] }),
     'utf8',
   );
   const res = await fetch(`${bridgeUrl}/api/studio/community`);
@@ -823,7 +832,7 @@ test('W7-B3 meta: registryDirty is false after a commit and true once the file i
 
   writeFileSync(
     join(forgeRoot, 'studio', 'community', 'registry.yaml'),
-    yaml.dump({ meta: { schemaVersion: 1, lastRefresh: '2026-08-19T11:00:00.000Z' }, items: [] }),
+    yaml.dump({ meta: { schemaVersion: 2, lastRefresh: '2026-08-19T11:00:00.000Z' }, sources: {}, items: [] }),
     'utf8',
   );
   const dirty = (await (await fetch(`${bridgeUrl}/api/studio/community`)).json()) as { meta: { registryDirty: boolean | null } };

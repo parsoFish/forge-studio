@@ -13,6 +13,7 @@ import {
   seedAuthoringSkillDraft, cleanAuthoringSkillArtifacts,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
+import { loadCommunityRegistryDoc, communitySourceRowFor } from '../lib/journey-community-registry.mjs';
 
 // ── R3-01-F3/F4 helpers: real, disk-derived cross-checks ────────────────────
 // These mirror orchestrator/studio/skill-library.ts's own derivations (read
@@ -237,14 +238,22 @@ export const journey = defineJourney({
               // loadRegistryDoc), never the now community-skills-less catalog.
               console.log('\n[SK-1] OOTB skill library (community-sourced)');
               let community = [];
+              let registryDoc = null;
               try {
-                const registryDoc = yaml.load(readFileSync(join(FORGE_ROOT, 'studio', 'community', 'registry.yaml'), 'utf8'));
+                registryDoc = loadCommunityRegistryDoc(FORGE_ROOT);
                 community = (registryDoc?.items ?? []).filter((i) => i.kind === 'skill');
               } catch { /* */ }
               check(community.length >= 5, `SK-1: registry.yaml ships an OOTB skill library (${community.length} community skills)`);
               const handoffSkill = community.find((s) => s.id === 'handoff');
               check(/github\.com|firecrawl|http/.test(handoffSkill?.sourceUrl ?? ''), `SK-1: an OOTB skill cites an online source (${handoffSkill?.sourceUrl ?? 'none'})`);
-              check(!!handoffSkill?.provenance && !!handoffSkill?.signals?.starsDisplay, `SK-1: OOTB skill carries provenance + stars (${handoffSkill?.provenance ?? '?'}, ${handoffSkill?.signals?.starsDisplay ?? '?'})`);
+              // W8-B5 schema v2: the star display string is a fact about the
+              // skill's SOURCE REPO, resolved through its sourceUrl — the item
+              // itself no longer has (and must not have) a copy of it. Reading
+              // the retired per-item field here returned undefined, which would
+              // have failed this check silently on the strength of a schema
+              // change this journey never followed.
+              const handoffSource = communitySourceRowFor(registryDoc, handoffSkill ?? {});
+              check(!!handoffSkill?.provenance && !!handoffSource?.starsDisplay, `SK-1: OOTB skill carries provenance + its source repo's stars (${handoffSkill?.provenance ?? '?'}, ${handoffSource?.starsDisplay ?? '?'})`);
               await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
               await caption(page, 'Every OOTB skill is a curated community skill (superpowers, TDD, security-review) — drag it into an agent.');

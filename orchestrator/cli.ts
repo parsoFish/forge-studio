@@ -12,6 +12,7 @@
  *   forge serve [--once]                    the scheduler daemon (spawned by the bridge + harnesses)
  *   forge architect run <sid>               advance one architect turn (spawned by the bridge per operator action)
  *   forge brain index|lint                  brain-integrity gate (mirrors studio lint)
+ *   forge community refresh [--dry-run]     deterministic community-registry refresh (needs GH_TOKEN)
  */
 
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -30,6 +31,7 @@ import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '../cli/agent-run.ts';
 import { cmdProjectMigrate } from '../cli/project-migrate.ts';
+import { cmdCommunity } from '../cli/community-refresh-cmd.ts';
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 const args = process.argv.slice(2);
@@ -110,6 +112,15 @@ process.chdir(FORGE_ROOT);
       if (args[1] === 'fix') return await cmdPreflightFix(args.slice(2));
       if (args[1] === 'converge') return cmdPreflightConverge(args.slice(2));
       return cmdPreflight(args.slice(1));
+    case 'community':
+      // W8-B5 (exit row E1): `forge community refresh` — the deterministic
+      // community-registry refresh. Two-level noun/verb like `project` below;
+      // the sub-verb parse, the usage text and the exit code all live in
+      // cmdCommunity, which shares its whole implementation with the bridge
+      // route POST /api/studio/community/refresh. Hidden from help (the
+      // Studio surface is the operator's entry point — DEC-6).
+      process.exit(await cmdCommunity(args.slice(1), FORGE_ROOT));
+      break;
     case 'project':
       // W7-B6 (projects-01): `forge project migrate <id>` — the one-shot
       // flat-gate-keys → testProcess config migration the contract-stages
