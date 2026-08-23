@@ -349,3 +349,118 @@ test('W6-B1: reasoning + thinking blocks are forwarded to the log (kind: reasoni
     cleanup(forgeRoot);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-B2 — the verification lens must cover the file it is verifying.
+//
+// WHICH WRONG IMPLEMENTATION THIS KILLS: verifying with
+// `runBrainLint({scope:'single-file'})` alone. `checkSourceLinks` and
+// `checkDanglingEdges` are CHECK_SCOPE 'forge-themes' and iterate
+// `readThemeFiles`, which never walks brain/projects/*/themes/ — so for a
+// PROJECT theme they produced no finding at all and `cleared` came back
+// unconditionally true. That is why the live 2026-08-22 drain reported a link
+// repointed at a second dead path as cleared. Every fixture in this file
+// before now lived under brain/cycles/themes, where the defect cannot exist.
+// ---------------------------------------------------------------------------
+
+/** A project theme (ADR 035: brain/projects/<name>/themes/) carrying a link
+ *  that resolves to nothing, plus a dangling related_themes entry. */
+function buildProjectThemeFixture(): { forgeRoot: string; themePath: string } {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'brain-fix-project-scope-'));
+  const brain = join(forgeRoot, 'brain');
+  mkdirSync(join(brain, 'cycles', 'themes'), { recursive: true });
+  mkdirSync(join(brain, 'forge-dev'), { recursive: true });
+  writeFileSync(join(brain, 'INDEX.md'), '# Brain\n');
+  const themes = join(brain, 'projects', 'gitpulse', 'themes');
+  mkdirSync(themes, { recursive: true });
+  writeFileSync(join(brain, 'projects', 'gitpulse', 'patterns.md'), '# patterns\n\n- [broken-link-theme](./themes/broken-link-theme.md)\n');
+  const themePath = join(themes, 'broken-link-theme.md');
+  writeFileSync(themePath, [
+    '---',
+    'title: broken link theme',
+    'description: carries a link that resolves to nothing.',
+    'category: pattern',
+    'created_at: 2026-01-01T00:00:00Z',
+    'updated_at: 2026-01-01T00:00:00Z',
+    'related_themes: [no-such-theme-anywhere]',
+    '---',
+    '',
+    '# broken link theme',
+    '',
+    'See [eval-driven development](../../../forge/themes/eval-driven-development.md).',
+    '',
+  ].join('\n'));
+  return { forgeRoot, themePath };
+}
+
+test('W8-B2: a PROJECT theme whose broken link the turn never fixed reports cleared=false (it used to report true unconditionally)', async () => {
+  const { forgeRoot, themePath } = buildProjectThemeFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-project-scope-links',
+      kbId: 'gitpulse',
+      file: themePath,
+      check: 'checkSourceLinks',
+      kind: 'links.broken',
+      message: 'broken link: ../../../forge/themes/eval-driven-development.md',
+      forgeRoot,
+      queryFn: makeFakeQueryThatDoesNothing(),
+    });
+    assert.equal(result.cleared, false);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-B2: the same holds for a PROJECT theme dangling related_themes entry', async () => {
+  const { forgeRoot, themePath } = buildProjectThemeFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-project-scope-edges',
+      kbId: 'gitpulse',
+      file: themePath,
+      check: 'checkDanglingEdges',
+      kind: 'edge.dangling',
+      message: 'dangling related_themes entry: "no-such-theme-anywhere"',
+      forgeRoot,
+      queryFn: makeFakeQueryThatDoesNothing(),
+    });
+    assert.equal(result.cleared, false);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-B2: a project-theme finding the turn genuinely DOES fix still reports cleared=true — the lens was widened, not stuck closed', async () => {
+  const { forgeRoot, themePath } = buildProjectThemeFixture();
+  seedSkillMd(forgeRoot);
+  const realTarget = join(forgeRoot, 'brain', 'cycles', 'themes', 'eval-driven-development.md');
+  writeFileSync(realTarget, '---\ntitle: edd\ndescription: d.\ncategory: pattern\ncreated_at: 2026-01-01T00:00:00Z\nupdated_at: 2026-01-01T00:00:00Z\n---\n\n# edd\n');
+  try {
+    const fixingQuery: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(themePath, readFileSync(themePath, 'utf8').replace(
+          '../../../forge/themes/eval-driven-development.md',
+          '../../../cycles/themes/eval-driven-development.md',
+        ));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8b2-project-scope-fixed',
+      kbId: 'gitpulse',
+      file: themePath,
+      check: 'checkSourceLinks',
+      kind: 'links.broken',
+      message: 'broken link',
+      forgeRoot,
+      queryFn: fixingQuery,
+    });
+    assert.equal(result.cleared, true);
+  } finally {
+    cleanup(forgeRoot);
+  }
+});

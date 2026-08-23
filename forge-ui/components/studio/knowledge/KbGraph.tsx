@@ -218,6 +218,10 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
   const neighbours = hoveredNode ? getNeighbours(hoveredNode) : null;
   const nodeCount = graph.nodes.length;
   const edgeCount = graph.edges.length;
+  // forge-9kr: links this KB declares to real themes in ANOTHER KB. Not
+  // drawable here — there is no node to draw them to — but counted, so the
+  // graph stops implicitly claiming they do not exist.
+  const externalEdgeCount = graph.externalEdges?.length ?? 0;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative',
@@ -230,6 +234,7 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         data-kb-id={kbId}
         data-node-count={nodeCount}
         data-edge-count={edgeCount}
+        data-external-edge-count={externalEdgeCount}
         data-selected-node={selectedNodeId ?? ''}
         style={{ flex: 1, width: '100%', height: '100%', cursor: 'grab', display: 'block', touchAction: 'none' }}
       >
@@ -446,6 +451,15 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
           <span style={{ color: 'var(--faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
             edges: <span style={{ color: 'var(--text)', fontWeight: 600 }} id="stat-edges">{edgeCount}</span>
           </span>
+          {externalEdgeCount > 0 && (
+            <span
+              data-component="kb-external-edges"
+              title="Links this KB declares to real themes in another knowledge base. They exist and resolve — this per-KB graph simply has no node to draw them to."
+              style={{ color: 'var(--faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            >
+              leaving this KB: <span style={{ color: 'var(--text)', fontWeight: 600 }} id="stat-external-edges">{externalEdgeCount}</span>
+            </span>
+          )}
         </div>
       </div>
     </div>

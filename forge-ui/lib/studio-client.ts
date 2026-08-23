@@ -752,7 +752,13 @@ export type KbNode = {
 
 export type KbEdge = { from: string; to: string };
 
-export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
+/** W8-B2 (forge-9kr) — a declared `related_themes` edge whose target is a REAL
+ *  theme in ANOTHER KB. It cannot be drawn here (this graph has no node for
+ *  it), but it exists, and used to be dropped with no signal at all. Optional
+ *  on the wire: a status written before this field existed simply has none. */
+export type KbExternalEdge = { from: string; toSlug: string };
+
+export type KbGraph = { nodes: KbNode[]; edges: KbEdge[]; externalEdges?: KbExternalEdge[] };
 
 /** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
  *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint

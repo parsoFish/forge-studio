@@ -22,7 +22,7 @@ import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts'
 import { withIdleDeadline } from './stream-deadline.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
-import { runBrainLint } from '../cli/brain-lint.ts';
+import { runBrainLint, lintThemeFiles, classify } from '../cli/brain-lint.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
@@ -235,12 +235,26 @@ export async function runBrainFixTurn(
   const relFile = relative(input.forgeRoot, input.file);
   let cleared = false;
   try {
-    const lintResult = runBrainLint({
-      cwd: input.forgeRoot,
-      scope: 'single-file',
-      file: relFile,
-    });
-    cleared = !lintResult.findings.some(
+    // W8-B2 — the verification lens must cover the file it is verifying.
+    //
+    // `runBrainLint`'s `checkSourceLinks` and `checkDanglingEdges` are both
+    // CHECK_SCOPE 'forge-themes': they iterate `readThemeFiles`, which walks
+    // ONLY brain/cycles/themes and brain/forge-dev/themes (its own comment
+    // still says project themes live in separate repos — ADR 035 centralised
+    // them into brain/projects/<name>/themes/ in 2026-06). So for a project
+    // theme those two checks produced NO finding at all, cleared or not, and
+    // `cleared` came back unconditionally TRUE for exactly the two check kinds
+    // both 2026-08-22 drain defects involved. That is how a link repointed at
+    // a second dead path got reported cleared.
+    //
+    // `lintThemeFiles` is the project-aware lens the KB drain already surfaces
+    // findings through (via `collectKbFindings`). Unioning it in means the
+    // thing that raises a finding and the thing that verifies its fix agree
+    // about which files exist — two derivations disagreeing is the exact shape
+    // of forge-d8l.
+    const scoped = runBrainLint({ cwd: input.forgeRoot, scope: 'single-file', file: relFile }).findings;
+    const perFile = lintThemeFiles(input.forgeRoot, [input.file]).map((f) => (f.resolution ? f : classify(f)));
+    cleared = ![...scoped, ...perFile].some(
       (f) => f.kind === input.kind && (f.file === input.file || f.file === relFile),
     );
   } catch {

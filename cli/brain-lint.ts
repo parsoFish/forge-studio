@@ -381,6 +381,21 @@ export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
     const themeFiles = readdirSync(themesDir).filter(
       (e) => e.endsWith('.md') && e !== 'README.md',
     );
+    // A project brain holding only a README is SKIPPED, deliberately (forge-4qf,
+    // W8-B2 — attempted and reverted on evidence). Flagging it looks right and
+    // is not: this check is `resolution:'agent'`, so the finding would be
+    // dispatched to a brain-fix turn carrying an index-sync fixHint, against a
+    // brain with no themes to index. The turn can only no-op — burning a drain
+    // round and real money every round without ever clearing — or invent theme
+    // content to make the finding go away. Both are worse than silence, and the
+    // second is the exact class this lane exists to stop.
+    //
+    // The bead's own remedy is to cross-reference `discoverProjects`
+    // (orchestrator/studio/registry.ts), and that cannot live here: `projects/`
+    // is gitignored, so on a fresh checkout and in CI it is absent, and every
+    // project brain would flag on every run. An empty brain dir and a
+    // freshly-seeded one are indistinguishable from the brain alone — which is
+    // precisely why this needs the project roster, not another brain check.
     if (themeFiles.length === 0) continue;
 
     // A project brain with themes but no category index files is unindexed — its
