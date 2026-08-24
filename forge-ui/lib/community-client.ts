@@ -615,10 +615,20 @@ export function deleteRegistryItem(id: string): Promise<RegistryCrudResult> {
 //                           shape has), so it is distinguished from the two
 //                           shapes below by field presence, never by status
 //                           code alone (dry-bridge is ALSO a 409).
-//   - `server-error`       the bare `{ error }` 500 catch-all —
-//                           `statusForRefreshReason` never emits 500 for a
-//                           typed refusal, so this really is the one case
-//                           that is a genuine server fault.
+//   - `server-error`       the bare `{ error }` catch-all: a body carrying
+//                           NEITHER `error:'dry-bridge'` NOR a `reason` key.
+//                           In practice that is the route's own
+//                           `catch { sendJson(res, 500, { error: … }) }`.
+//                           NOT "any 500": `statusForRefreshReason` maps
+//                           `write-failed` to 500 TOO, and that one IS a
+//                           typed refusal carrying `reason` + `remedy`. The
+//                           status code alone can therefore never separate
+//                           these two — which is exactly why the parse below
+//                           dispatches on FIELD PRESENCE and nothing else.
+//                           Rewriting it as `status === 500 -> server-error`
+//                           would silently reclassify every failed registry
+//                           WRITE as an anonymous server fault and discard
+//                           the operator's remedy.
 //   - `transport-error`    the bridge was never reached, or answered with a
 //                           body that parsed as neither of the above — "the
 //                           request never got a real answer", the same
@@ -815,9 +825,12 @@ export function parseCommunityRefreshResponse(status: number, raw: unknown): Com
     };
   }
 
-  // The bare `{ error }` 500 catch-all — no `reason`, no `remedy`. The one
-  // case that genuinely IS a server fault; every typed refusal always carries
-  // `reason` (see cli/bridge-studio-community.ts / statusForRefreshReason).
+  // Neither a dry-bridge refusal nor a typed one: no `reason`, no `remedy` —
+  // the route's own `catch` arm. Reached by ELIMINATION, never by status
+  // code: `statusForRefreshReason` (cli/bridge-studio-community.ts:641)
+  // answers 500 for `write-failed` as well, and that is a typed refusal the
+  // branch above has already claimed on its `reason` key. Do not "simplify"
+  // this to a 500 check — see this section's header.
   return { state: 'server-error', status, error };
 }
 

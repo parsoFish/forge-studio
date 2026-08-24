@@ -130,23 +130,39 @@ function CommunityBrowserInner() {
   const [refreshResult, setRefreshResult] = useState<CommunityRefreshResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // W8-B5b — the index read is a REUSABLE callback, not an effect-local
+  // closure, because a successful deterministic refresh REWRITES the very
+  // file this read derives from. Before this, `meta.lastRefresh` was captured
+  // once at mount and never re-read, so a real refresh left the page stating
+  // two contradictory things at once: the result strip saying "Refreshed — N
+  // updated" beside `[data-component="registry-last-refresh"]` still saying
+  // "never refreshed", with `data-last-refresh` and every item's freshness
+  // badge equally stale. One fact, one source — the same rule the hub chips
+  // and the empty state already share through `isHubDeclaredOnly`.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const loadIndex = useCallback(async () => {
+    const r = await fetchCommunityIndex();
+    if (!mounted.current) return;
+    if (!r.ok) {
+      setStatus('error');
+      setError(r.error ?? 'could not reach the forge bridge');
+      return;
+    }
+    setHubs(r.hubs);
+    setItems(r.items);
+    setMeta(r.meta);
+    setStatus('ready');
+    setError(null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      const r = await fetchCommunityIndex();
-      if (cancelled) return;
-      if (!r.ok) {
-        setStatus('error');
-        setError(r.error ?? 'could not reach the forge bridge');
-        return;
-      }
-      setHubs(r.hubs);
-      setItems(r.items);
-      setMeta(r.meta);
-      setStatus('ready');
-      setError(null);
-    }
-    void load();
+    void loadIndex();
     // W7-B3 review F2: activeOnly=false is load-bearing — the default
     // (?active=1) excludes every TERMINAL row, which made
     // lastTerminalRefresh permanently null and the
@@ -231,9 +247,16 @@ function CommunityBrowserInner() {
   const handleRefreshClick = useCallback(async () => {
     setRefreshing(true);
     const result = await postCommunityRefresh();
+    if (!mounted.current) return;
     setRefreshResult(result);
     setRefreshing(false);
-  }, []);
+    // The registry file just changed on disk — re-read the index so the
+    // freshness the page STATES is the freshness the registry now HAS. Only
+    // on a real write: a dry-bridge refusal, a typed refusal and a partial
+    // pass that wrote nothing all leave the file untouched, and re-reading
+    // after those would be a request that cannot tell anyone anything new.
+    if (result.state === 'ok' && result.wrote) await loadIndex();
+  }, [loadIndex]);
 
   return (
     <StudioPage
