@@ -5,10 +5,11 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving). The 18 journeys, in that order:
- * home → monitor → sessions-index → skills → hooks → templates → connections →
- * stand-up-onboard → stand-up-create → knowledge → agents → flows-author →
- * flows-run → flows-onboard → roadmap → demo-showcase → demo-builder →
+ * interleaving). The 19 journeys, in that order:
+ * home → monitor → sessions-index → projects → skills → hooks → templates →
+ * connections → stand-up-onboard → stand-up-create → knowledge → agents →
+ * flows-author → flows-run → flows-onboard → roadmap → demo-showcase →
+ * demo-builder →
  * community (R3-07 — deliberately
  * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
  * real hook, mutating /skills, /hooks and the agent-builder palette counts
@@ -276,15 +277,14 @@ export const RUN_ORDER = [
   // because home's own home-projects-index beat has already asserted the
   // index's baseline contract by this point.
   //
-  // NOTE for whoever registers the NEXT journey: this file's header prose
-  // still narrates "The 17 journeys" and lists them by name. That count is
-  // now stale by one (this entry), and W8-B5 recorded that the same prose had
-  // ALREADY drifted once before — which is why the runner derives the list by
-  // parsing the array below rather than by reading the prose. It is left
-  // untouched here on an explicit W8 coordinator instruction to keep this
-  // file's diff to the two array hunks while a concurrent lane registers its
-  // own journey; the correct fix is one edit by whichever lane lands last,
-  // covering both new journeys at once.
+  // The header prose was deliberately left stale while W8-B1 (monitor) and this
+  // lane registered concurrently, on the understanding that whichever landed
+  // last would make one edit covering both. This lane landed last, so it is
+  // done: the header now reads 19 and names both `monitor` and `projects` in
+  // their real RUN_ORDER positions — derived from the array by walking
+  // RUN_ORDER, not written by hand. Note that the runner reads the array, never
+  // the prose (W8-B5 recorded this same prose drifting once before), so the
+  // prose is documentation only and cannot make a journey run or not run.
   ['projects', 'projects-index-health'],
   ['projects', 'projects-index-filter'],
   ['projects', 'projects-skill-bindings'],
