@@ -1327,6 +1327,17 @@ supplied value reaches any of the three.
 
 ### Guarded in W6-CR-3 — `commitRegistryDraft`'s temp+rename commit write
 
+> **RETIRED IN W8-B5b — the three sinks below NO LONGER EXIST.** The
+> `community-refresh` agent session kind was retired and its `committing`-phase
+> finalizer `commitRegistryDraft` deleted with it; the registry is now written
+> by the deterministic, LLM-free `runCommunityRefresh`
+> (`cli/community-refresh-run.ts`), whose own sinks are audited further down
+> this document. **This section is kept, not deleted, on purpose:** an audit
+> record is a record of what was examined and what was concluded, and deleting
+> it would erase the evidence that these sinks were ever reasoned about — which
+> is exactly what a reader checking the ratchet's history needs. Read everything
+> below as past tense.
+
 `orchestrator/interactive-finalizers.ts` grew three new tracked sinks
 (`writeFileSync` 0→1, `renameSync` 0→1, `unlinkSync` 0→1) — the
 `community-refresh` session's `committing`-phase finalizer,
