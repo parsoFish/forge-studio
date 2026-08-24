@@ -17,9 +17,13 @@
  * name / stars / updated / source, no search/facets/tags sort) and
  * `freshnessBadge` (never renders a date for a null `fetchedAt` — see each
  * function's own doc comment below for the full contract).
+ *
+ * W8-B5b adds `refreshOutcomeView` — the pure derivation from a
+ * `postCommunityRefresh()` transport result (community-client.ts) to what the
+ * /community page's "Refresh registry" button renders.
  */
 
-import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals } from './community-client.ts';
+import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals, CommunityRefreshResult } from './community-client.ts';
 
 // ---------------------------------------------------------------------------
 // Filtering
@@ -435,4 +439,89 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
  */
 export function lastTerminalRefreshOf<T extends { terminal: boolean; sessionId: string }>(rows: readonly T[]): T | null {
   return rows.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// refreshOutcomeView — W8-B5b: the ONE pure derivation from a
+// `postCommunityRefresh()` transport result to what the /community page
+// button renders. No React, no fetch, no DOM (this module's own convention,
+// restated in its header) — the page reads `state`/`headline`/`detail`
+// verbatim.
+//
+// THREE rules this function exists to hold:
+//
+//  1. The dry-bridge refusal renders as an HONEST, NAMED refusal that states
+//     the route it reached — never a generic error, and never rounded up to
+//     a faked success. Tone mirrors `connection-library-view.ts`'s own
+//     "Install suppressed — nothing was run (dry-bridge / no-spawn mode)."
+//  2. A 200 whose `errors` array is non-empty is a PARTIAL outcome, not a
+//     clean success — it is never rounded up to "refreshed" (the exact lie
+//     `all-sources-failed` answering 502 instead of 200 exists to prevent one
+//     level up, at the route; this is the same discipline one level down, at
+//     the render).
+//  3. Never fabricate a count, a date or an age: every figure below is read
+//     straight off the server's own `counts`/`lastRefresh` — nothing here
+//     re-derives or guesses at a number the bridge did not send.
+// ---------------------------------------------------------------------------
+
+export type CommunityRefreshOutcomeView = { state: string; headline: string; detail: string | null };
+
+function describeRefreshFailures(errors: readonly { source: string; message: string }[]): string {
+  return errors.map((e) => `${e.source}: ${e.message}`).join('\n');
+}
+
+export function refreshOutcomeView(result: CommunityRefreshResult): CommunityRefreshOutcomeView {
+  switch (result.state) {
+    case 'refused-dry-bridge':
+      return {
+        state: 'refused-dry-bridge',
+        headline: 'Refresh suppressed — nothing was run (dry-bridge / no-spawn mode).',
+        detail: `The bridge refused ${result.method} ${result.route} rather than making the real outbound GitHub/npm call.`,
+      };
+
+    case 'ok': {
+      if (result.errors.length > 0) {
+        // RULE 2 — a partial pass is never presented as a clean refresh.
+        const verified = result.counts.refreshed + result.counts.unchanged;
+        return {
+          state: 'partial',
+          headline: `Partial refresh — ${verified} of ${result.counts.total} row(s) verified, ${result.errors.length} source(s) failed.`,
+          detail: describeRefreshFailures(result.errors),
+        };
+      }
+      if (!result.wrote) {
+        return {
+          state: 'no-op',
+          headline: result.dryRun
+            ? `Dry run — computed ${result.counts.total} row(s), wrote nothing.`
+            : 'Nothing to verify — the registry has no queryable rows, so nothing was written.',
+          detail: null,
+        };
+      }
+      return {
+        state: 'refreshed',
+        headline: `Refreshed — ${result.counts.refreshed} updated, ${result.counts.unchanged} unchanged of ${result.counts.total}.`,
+        // RULE 3 — only rendered when the server actually sent a stamp.
+        detail: result.lastRefresh !== null ? `Registry stamp: ${result.lastRefresh}.` : null,
+      };
+    }
+
+    case 'refused':
+      return { state: 'refused', headline: result.error, detail: result.remedy };
+
+    case 'server-error':
+      return { state: 'server-error', headline: result.error, detail: null };
+
+    case 'transport-error':
+      return {
+        state: 'transport-error',
+        headline: 'Could not reach the forge bridge.',
+        detail: result.error,
+      };
+
+    default: {
+      const exhaustive: never = result;
+      throw new Error(`refreshOutcomeView: unrecognised result state ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }

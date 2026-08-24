@@ -54,10 +54,11 @@ import {
   lastRefreshLabel,
   lastTerminalRefreshOf,
   installActionForItem,
+  refreshOutcomeView,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
 } from './community-view.ts';
-import type { CommunityItem, CommunityHub } from './community-client.ts';
+import type { CommunityItem, CommunityHub, CommunityRefreshResult } from './community-client.ts';
 
 function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
   return {
@@ -606,4 +607,116 @@ test('lastTerminalRefreshOf: picks the NEWEST terminal row (timestamp-prefixed s
 test('lastTerminalRefreshOf: null when no terminal row exists — and an all-ACTIVE list (the ?active=1 fetch shape) yields null, which is exactly why the page must fetch with activeOnly=false', () => {
   expect(lastTerminalRefreshOf([])).toBeNull();
   expect(lastTerminalRefreshOf([{ terminal: false, sessionId: '2026-08-19T09-00-00-cc' }])).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b — refreshOutcomeView. The pure derivation from a
+// `postCommunityRefresh()` transport result to what the /community page's
+// "Refresh registry" button renders. DOES NOT EXIST YET — the import above
+// (`refreshOutcomeView`) is the expected RED until community-view.ts exports
+// it.
+// ---------------------------------------------------------------------------
+
+const OK_COUNTS = { total: 5, refreshed: 2, unchanged: 3, noUpstream: 0, failed: 0 };
+
+test('refreshOutcomeView: a clean 200 with no errors renders "refreshed", never "partial"', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: OK_COUNTS,
+    outcomes: [],
+    errors: [],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refreshed');
+  expect(view.headline).toContain('2 updated');
+  expect(view.headline).toContain('3 unchanged');
+  expect(view.headline).not.toMatch(/partial/i);
+  // RULE 3 — the stamp is rendered ONLY because the server actually sent one.
+  expect(view.detail).toContain('2026-08-24T10:00:00.000Z');
+});
+
+test('refreshOutcomeView: a 200 with a non-empty "errors" array is a PARTIAL outcome, never rounded up to a clean refresh', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
+    outcomes: [],
+    errors: [
+      { source: 'github.com/obra/superpowers', kind: 'timeout', message: 'request timed out after 10000ms' },
+      { source: 'github.com/example/thing', kind: 'not-found', message: '404' },
+    ],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).not.toBe('refreshed');
+  expect(view.state).toBe('partial');
+  expect(view.headline).toMatch(/partial/i);
+  expect(view.headline).toContain('2 of 4');
+  expect(view.detail).toContain('github.com/obra/superpowers: request timed out after 10000ms');
+  expect(view.detail).toContain('github.com/example/thing: 404');
+});
+
+test('refreshOutcomeView: a 200 that verified nothing and wrote nothing renders an honest no-op, not a fabricated "refreshed"', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: false,
+    dryRun: false,
+    lastRefresh: null,
+    counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [],
+    errors: [],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('no-op');
+  expect(view.headline).not.toMatch(/refreshed/i);
+  // RULE 3 — no lastRefresh was sent, so none is fabricated.
+  expect(view.detail).toBeNull();
+});
+
+test('refreshOutcomeView: the dry-bridge refusal renders as an honest, NAMED refusal that states the route it reached — never a generic error or a faked success', () => {
+  const result: CommunityRefreshResult = {
+    state: 'refused-dry-bridge',
+    route: '/api/studio/community/refresh',
+    method: 'POST',
+    action: 'network',
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refused-dry-bridge');
+  expect(view.headline.toLowerCase()).toContain('suppressed');
+  expect(view.headline).not.toMatch(/refreshed/i);
+  expect(view.detail).toContain('POST /api/studio/community/refresh');
+});
+
+test('refreshOutcomeView: a typed server refusal surfaces the server\'s own reason and remedy verbatim, never a generic message', () => {
+  const result: CommunityRefreshResult = {
+    state: 'refused',
+    status: 409,
+    error: `GitHub rejected the credential currently in FORGE_GH_TOKEN.`,
+    reason: 'invalid-token',
+    remedy: 'Issue a fresh token with public-repository read access and re-export FORGE_GH_TOKEN, then re-run.',
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refused');
+  expect(view.headline).toBe(result.error);
+  expect(view.detail).toBe(result.remedy);
+});
+
+test('refreshOutcomeView: a bare 500 server-error renders the server\'s own message with no fabricated remedy', () => {
+  const result: CommunityRefreshResult = { state: 'server-error', status: 500, error: 'unexpected token in JSON' };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('server-error');
+  expect(view.headline).toBe('unexpected token in JSON');
+  expect(view.detail).toBeNull();
+});
+
+test('refreshOutcomeView: a transport error (bridge never reached) is distinguished from every refusal above', () => {
+  const result: CommunityRefreshResult = { state: 'transport-error', error: 'bridge unreachable: TypeError: fetch failed' };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('transport-error');
+  expect(view.headline.toLowerCase()).toContain('could not reach');
+  expect(view.detail).toBe(result.error);
 });

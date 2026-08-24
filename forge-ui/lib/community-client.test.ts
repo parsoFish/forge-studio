@@ -23,7 +23,14 @@
  * response, never silently treated the same as an explicit null.
  */
 import { test, expect } from 'vitest';
-import { parseCommunityHub, parseCommunityHubWithCount, parseCommunityItem, parseCommunityIndexMeta, parseRegistryItemResponse } from './community-client.ts';
+import {
+  parseCommunityHub,
+  parseCommunityHubWithCount,
+  parseCommunityItem,
+  parseCommunityIndexMeta,
+  parseRegistryItemResponse,
+  parseCommunityRefreshResponse,
+} from './community-client.ts';
 
 const WELL_FORMED_HUB = { id: 'mcp-servers', name: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', kinds: 'MCPs' };
 
@@ -267,4 +274,108 @@ test('parseRegistryItemResponse: THROWS on a body with no "item" object — neve
 test('parseRegistryItemResponse: THROWS when a required string field is missing (e.g. sourceUrl) — never defaulted', () => {
   const { sourceUrl: _dropped, ...rest } = WELL_FORMED_REGISTRY_ROW.item;
   expect(() => parseRegistryItemResponse({ item: rest })).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b — parseCommunityRefreshResponse (postCommunityRefresh's parse step,
+// cli/bridge-studio-community.ts's `POST /api/studio/community/refresh`).
+// DOES NOT EXIST YET — the import above is the expected RED until
+// community-client.ts exports it. Same refuse-don't-coerce discipline as
+// every parser in this file: a malformed shape THROWS.
+// ---------------------------------------------------------------------------
+
+const WELL_FORMED_REFRESH_OK = {
+  wrote: true,
+  dryRun: false,
+  lastRefresh: '2026-08-24T10:00:00.000Z',
+  counts: { total: 2, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 0 },
+  outcomes: [
+    { id: 'handoff', source: 'github.com/obra/superpowers', status: 'refreshed', detail: 'stars 228000 -> 229000' },
+    { id: 'dependency-diff-review', source: 'github.com/obra/superpowers', status: 'unchanged', detail: 'no change' },
+  ],
+  errors: [],
+};
+
+test('parseCommunityRefreshResponse: a well-formed 200 body round-trips to state:"ok" with every field intact, including an empty "errors" array', () => {
+  const r = parseCommunityRefreshResponse(200, WELL_FORMED_REFRESH_OK);
+  expect(r).toEqual({ state: 'ok', ...WELL_FORMED_REFRESH_OK });
+});
+
+test('parseCommunityRefreshResponse: a 200 with a non-empty "errors" array still parses as state:"ok" — refreshOutcomeView, not the parser, decides "partial"', () => {
+  const withErrors = { ...WELL_FORMED_REFRESH_OK, errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }] };
+  const r = parseCommunityRefreshResponse(200, withErrors);
+  expect(r.state).toBe('ok');
+  expect(r.state === 'ok' && r.errors).toEqual(withErrors.errors);
+});
+
+test('parseCommunityRefreshResponse: THROWS on a 200 body missing "counts" — never defaulted to a fabricated tally', () => {
+  const { counts: _dropped, ...rest } = WELL_FORMED_REFRESH_OK;
+  expect(() => parseCommunityRefreshResponse(200, rest)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a 200 body whose "outcomes" is not an array — never coerced from `?? []`', () => {
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, outcomes: null })).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a 200 body with an unrecognised outcome status', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, outcomes: [{ id: 'x', source: null, status: 'bogus-status', detail: 'x' }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: the 409 dry-bridge refusal parses to state:"refused-dry-bridge", surfacing the route the server echoed back', () => {
+  const r = parseCommunityRefreshResponse(409, {
+    error: 'dry-bridge',
+    route: '/api/studio/community/refresh',
+    method: 'POST',
+    action: 'network',
+  });
+  expect(r).toEqual({ state: 'refused-dry-bridge', route: '/api/studio/community/refresh', method: 'POST', action: 'network' });
+});
+
+test('parseCommunityRefreshResponse: a TYPED refusal (reason+remedy) parses to state:"refused" — distinguished from dry-bridge by the "reason" key, not by the shared 409 status', () => {
+  const r = parseCommunityRefreshResponse(409, {
+    error: 'GitHub rejected the credential currently in FORGE_GH_TOKEN.',
+    reason: 'invalid-token',
+    remedy: 'Issue a fresh token and re-export FORGE_GH_TOKEN, then re-run.',
+    wrote: false,
+  });
+  expect(r).toEqual({
+    state: 'refused',
+    status: 409,
+    error: 'GitHub rejected the credential currently in FORGE_GH_TOKEN.',
+    reason: 'invalid-token',
+    remedy: 'Issue a fresh token and re-export FORGE_GH_TOKEN, then re-run.',
+  });
+});
+
+test('parseCommunityRefreshResponse: a TYPED refusal carrying optional counts/outcomes/errors (all-sources-failed) carries them through', () => {
+  const r = parseCommunityRefreshResponse(502, {
+    error: 'no source produced a verified answer, so nothing was written',
+    reason: 'all-sources-failed',
+    remedy: 'Re-run once the upstreams answer.',
+    wrote: false,
+    counts: { total: 1, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 1 },
+    outcomes: [{ id: 'x', source: 'github.com/x/y', status: 'failed', detail: 'timeout' }],
+    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }],
+  });
+  expect(r.state).toBe('refused');
+  expect(r.state === 'refused' && r.counts).toEqual({ total: 1, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 1 });
+});
+
+test('parseCommunityRefreshResponse: THROWS on a typed refusal carrying an unrecognised "reason" — never silently accepted as a plausible string', () => {
+  expect(() =>
+    parseCommunityRefreshResponse(409, { error: 'x', reason: 'some-new-reason-nobody-taught-the-client', remedy: 'y', wrote: false }),
+  ).toThrow();
+});
+
+test('parseCommunityRefreshResponse: the bare 500 catch-all ({error} only, no "reason") parses to state:"server-error", never mistaken for a typed refusal', () => {
+  const r = parseCommunityRefreshResponse(500, { error: 'unexpected token in JSON' });
+  expect(r).toEqual({ state: 'server-error', status: 500, error: 'unexpected token in JSON' });
+});
+
+test('parseCommunityRefreshResponse: THROWS on a malformed payload — not an object, or missing the required "error" string on a refusal — REFUSED, never coerced', () => {
+  expect(() => parseCommunityRefreshResponse(500, null)).toThrow();
+  expect(() => parseCommunityRefreshResponse(500, '<!doctype html>')).toThrow();
+  expect(() => parseCommunityRefreshResponse(500, {})).toThrow();
+  expect(() => parseCommunityRefreshResponse(200, { wrote: 'yes', dryRun: false, lastRefresh: null, counts: WELL_FORMED_REFRESH_OK.counts, outcomes: [], errors: [] })).toThrow();
 });
