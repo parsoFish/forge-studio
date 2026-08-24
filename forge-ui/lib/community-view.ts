@@ -428,18 +428,24 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
 }
 
 /**
- * W7-B3 review F2 (community-16): pick the newest TERMINAL community-refresh
- * session — the row the "open-last-refresh-session" link targets when nothing
- * is in flight. CONTRACT: `rows` must come from `fetchStudioSessions(false)`
- * (all sessions) — the default `activeOnly=true` fetch excludes every
- * terminal row, which silently turns this into a constant `null` and the
- * link into dead code (the exact defect this helper pins against).
- * Session ids are timestamp-prefixed (`2026-08-18T12-54-32...`), so a
- * lexicographic sort IS the recency sort.
+ * W8-B5b — `lastTerminalRefreshOf` USED TO LIVE HERE, and its deletion is the
+ * point, not a side effect.
+ *
+ * It answered "when was the registry last refreshed?" by scanning SESSION
+ * rows for the newest terminal `community-refresh` session. The registry file
+ * carries that answer itself — `meta.lastRefresh` (`studio/community/
+ * registry.yaml`), which `lastRefreshLabel` above already reads — so the page
+ * had two sources for one fact, and the session-shaped one was about to
+ * outlive the session kind that fed it.
+ *
+ * That is what made the old "never refreshed" line a DERIVATION defect rather
+ * than a missing-kind defect: it was right for the wrong reason. Both sources
+ * currently agree (this checkout's `meta.lastRefresh` is genuinely `null` and
+ * every source row is genuinely `fetchedBy: seed`), so the rendered STRING did
+ * not change when the derivation did. Tests must therefore assert the SOURCE,
+ * never the string — `community-view.test.ts` pins that the registry file is
+ * where the answer comes from and that no session-derived path survives.
  */
-export function lastTerminalRefreshOf<T extends { terminal: boolean; sessionId: string }>(rows: readonly T[]): T | null {
-  return rows.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
-}
 
 // ---------------------------------------------------------------------------
 // refreshOutcomeView — W8-B5b: the ONE pure derivation from a

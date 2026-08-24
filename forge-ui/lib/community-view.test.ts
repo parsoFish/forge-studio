@@ -41,6 +41,9 @@
  * `communityBadgeForSkill` is not yet exported from `./community-view.ts`.
  */
 import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import yaml from 'js-yaml';
 import {
   filterByKind,
   filterCommunityItems,
@@ -52,7 +55,6 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
-  lastTerminalRefreshOf,
   installActionForItem,
   refreshOutcomeView,
   COMMUNITY_SORT_KEYS,
@@ -595,18 +597,78 @@ test('installActionForItem: a system-provided connection not present has nothing
 // fetchStudioSessions(false); this helper owns the selection.
 // ---------------------------------------------------------------------------
 
-test('lastTerminalRefreshOf: picks the NEWEST terminal row (timestamp-prefixed session ids sort lexicographically)', () => {
-  const rows = [
-    { terminal: true, sessionId: '2026-08-17T10-00-00-aa' },
-    { terminal: false, sessionId: '2026-08-19T09-00-00-cc' },
-    { terminal: true, sessionId: '2026-08-18T12-54-32-bb' },
-  ];
-  expect(lastTerminalRefreshOf(rows)?.sessionId).toBe('2026-08-18T12-54-32-bb');
+// ---------------------------------------------------------------------------
+// W8-B5b — freshness is DERIVED FROM THE REGISTRY, and the session-derived
+// path is GONE. `lastTerminalRefreshOf`'s two tests used to live here.
+//
+// WHY THESE ASSERT THE SOURCE AND NOT THE STRING. Both derivations currently
+// produce the SAME rendered words: this checkout's registry genuinely has
+// `meta.lastRefresh: null` and every source row is genuinely `fetchedBy:
+// seed`, so "never refreshed — every row is still the hand-curated seed" was
+// already the honest answer — the old code just reached it for the wrong
+// reason (no terminal session row existed). A test pinned to that sentence
+// would have passed identically before and after the fix and proved nothing.
+// So these pin WHERE the answer comes from.
+// ---------------------------------------------------------------------------
+
+const REGISTRY_DOC = yaml.load(
+  readFileSync(resolve(__dirname, '..', '..', 'studio', 'community', 'registry.yaml'), 'utf8'),
+) as { meta?: { lastRefresh?: string | null }; sources?: Record<string, { fetchedAt?: string | null; fetchedBy?: string }> };
+
+test('registry-derived freshness: the registry-level line is a pure function of the REAL registry file\'s own meta.lastRefresh', () => {
+  // The registry file is the source of truth, so this test reads it rather
+  // than a fixture: `meta.lastRefresh` must be a key that EXISTS (an absent
+  // key is a schema break, not a null), and whatever it holds is what the
+  // label renders.
+  expect(REGISTRY_DOC.meta, 'studio/community/registry.yaml must declare meta').toBeTruthy();
+  expect('lastRefresh' in (REGISTRY_DOC.meta ?? {}), 'meta.lastRefresh must be PRESENT, even when null').toBe(true);
+
+  const fromFile = REGISTRY_DOC.meta?.lastRefresh ?? null;
+  const label = lastRefreshLabel(fromFile, NOW);
+  if (fromFile === null) {
+    expect(label).toMatch(/never refreshed/);
+  } else {
+    expect(label).toMatch(/last refreshed/);
+    expect(label).not.toMatch(/never/);
+  }
 });
 
-test('lastTerminalRefreshOf: null when no terminal row exists — and an all-ACTIVE list (the ?active=1 fetch shape) yields null, which is exactly why the page must fetch with activeOnly=false', () => {
-  expect(lastTerminalRefreshOf([])).toBeNull();
-  expect(lastTerminalRefreshOf([{ terminal: false, sessionId: '2026-08-19T09-00-00-cc' }])).toBeNull();
+test('registry-derived freshness: per-source provenance also comes from the registry — every seed row reads seed, and a fetchedAt stamp is what moves it', () => {
+  const sources = Object.values(REGISTRY_DOC.sources ?? {});
+  expect(sources.length, 'the registry must declare at least one source row').toBeGreaterThan(0);
+  for (const src of sources) {
+    expect('fetchedAt' in src, 'every source row must carry fetchedAt as a PRESENT key').toBe(true);
+    // The badge is a pure function of that field and nothing else — no
+    // session, no run history, no wall-clock guess.
+    const badge = freshnessBadge(src.fetchedAt ?? null, NOW);
+    if ((src.fetchedAt ?? null) === null) expect(badge.state).toBe('seed');
+  }
+});
+
+test('the SESSION-derived freshness path is GONE from the module, not merely unused', () => {
+  const viewSource = readFileSync(resolve(__dirname, 'community-view.ts'), 'utf8');
+  // A helper that selects a freshness answer out of session rows must not
+  // exist here in any form — leaving it exported but uncalled is how a
+  // deleted derivation comes back.
+  expect(viewSource).not.toMatch(/export function lastTerminalRefreshOf/);
+  expect(viewSource).not.toMatch(/terminal: boolean; sessionId: string/);
+});
+
+test('the /community page reads NO sessions index at all — one fact, one source', () => {
+  const pageSource = readFileSync(resolve(__dirname, '..', 'app', 'community', 'page.tsx'), 'utf8');
+  // This is the assertion that actually kills the defect class: the page may
+  // not reach for the sessions index to answer a question the registry
+  // already answers. An import is the whole capability, so the import is what
+  // is pinned.
+  expect(pageSource).not.toMatch(/fetchStudioSessions/);
+  expect(pageSource).not.toMatch(/from '@\/lib\/studio-client'/);
+  // POSITIVE CONTROL — this one assertion passed BEFORE this change too, and
+  // that is deliberate: the two above are satisfiable by deleting the whole
+  // freshness feature, so this pins that the registry-derived line survived
+  // the deletion of the session-derived one. Verified against `git show
+  // ae3cc433:` that the two `not.toMatch` assertions genuinely FAIL on the
+  // pre-change source — they are regression catchers, not decoration.
+  expect(pageSource).toMatch(/lastRefreshLabel\(meta\?\.lastRefresh/);
 });
 
 // ---------------------------------------------------------------------------

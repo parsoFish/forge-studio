@@ -15,7 +15,6 @@ import {
   type CommunityIndexMeta,
   type CommunityRefreshResult,
 } from '@/lib/community-client';
-import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 import {
   filterByKind,
   filterByHub,
@@ -26,7 +25,6 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
-  lastTerminalRefreshOf,
   isHubDeclaredOnly,
   communityEmptyState,
   refreshOutcomeView,
@@ -118,11 +116,6 @@ function CommunityBrowserInner() {
   // address bar catches up on the debounce below.
   const [queryDraft, setQueryDraft] = useState(viewState.query);
   const [nowMs] = useState(() => Date.now());
-  // W7-B3 (community-16): the refresh sessions this surface used to lose —
-  // in-flight (non-terminal) + the most recent terminal one, from the SAME
-  // sessions index /sessions reads. Advisory: a failed read keeps [] (the
-  // strip renders nothing false; the index itself carries its own state).
-  const [refreshSessions, setRefreshSessions] = useState<SessionIndexRow[]>([]);
   // W8-B5b — the deterministic (LLM-free) refresh: null until the operator
   // has clicked the button at least once (data-section="refresh-result" is
   // deliberately absent until then — no empty shell). `refreshing` gates the
@@ -160,22 +153,14 @@ function CommunityBrowserInner() {
     setError(null);
   }, []);
 
+  // W8-B5b — this effect used to ALSO fetch the whole sessions index just to
+  // find rows for the retired refresh SESSION kind, feeding the strip below.
+  // That read is gone with the derivation it fed: the registry states its own freshness
+  // (`meta.lastRefresh`, carried on the index payload this page already
+  // fetches), so there is nothing here a second request can tell us.
   useEffect(() => {
-    let cancelled = false;
     void loadIndex();
-    // W7-B3 review F2: activeOnly=false is load-bearing — the default
-    // (?active=1) excludes every TERMINAL row, which made
-    // lastTerminalRefresh permanently null and the
-    // "open-last-refresh-session" link dead code (the community-16 defect).
-    fetchStudioSessions(false)
-      .then((rows) => {
-        if (!cancelled) setRefreshSessions(rows.filter((row) => row.kind === 'community-refresh'));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [loadIndex]);
 
   /** A router write already issued but not yet reflected in the URL. A router
    *  write is ASYNCHRONOUS, so a second interaction landing before the first
@@ -233,8 +218,6 @@ function CommunityBrowserInner() {
   const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
-  const inFlightRefresh = refreshSessions.filter((row) => !row.terminal);
-  const lastTerminalRefresh = lastTerminalRefreshOf(refreshSessions);
   const refreshView = refreshResult !== null ? refreshOutcomeView(refreshResult) : null;
 
   // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
@@ -308,7 +291,6 @@ function CommunityBrowserInner() {
         {status === 'ready' && (
           <section
             data-section="refresh-registry-state"
-            data-in-flight-count={inFlightRefresh.length}
             style={{
               display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 14,
               fontSize: 12.5, color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 12px',
@@ -320,26 +302,6 @@ function CommunityBrowserInner() {
                 Uncommitted changes — <code style={{ fontSize: 11.5 }}>studio/community/registry.yaml</code> has been
                 written by Studio but not yet committed; commit it via your normal git flow.
               </span>
-            )}
-            {inFlightRefresh.map((row) => (
-              <Link
-                key={row.sessionId}
-                href={row.href}
-                data-action="open-refresh-session"
-                data-session-state={row.state}
-                style={{ color: 'var(--ember)', textDecoration: 'none' }}
-              >
-                Refresh in flight ({row.state}) — {row.sessionId} →
-              </Link>
-            ))}
-            {inFlightRefresh.length === 0 && lastTerminalRefresh && (
-              <Link
-                href={lastTerminalRefresh.href}
-                data-action="open-last-refresh-session"
-                style={{ color: 'var(--dim)', textDecoration: 'underline' }}
-              >
-                Last refresh session: {lastTerminalRefresh.sessionId} ({lastTerminalRefresh.phase}) →
-              </Link>
             )}
           </section>
         )}
