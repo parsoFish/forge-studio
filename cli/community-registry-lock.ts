@@ -2,17 +2,21 @@
  * W8-B5 security review, FINDING 1 — the ONE mutex every writer of
  * `studio/community/registry.yaml` takes.
  *
- * WHY THIS EXISTS. That file has three independent read-modify-write callers:
+ * WHY THIS EXISTS. That file has two independent read-modify-write callers:
  *
  *   1. `runCommunityRefresh`      (cli/community-refresh-run.ts)
  *   2. `mutateCommunityRegistry`  (cli/bridge-studio-writes.ts — the CRUD routes)
- *   3. `commitRegistryDraft`      (orchestrator/interactive-finalizers.ts)
+ *
+ * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
+ * (orchestrator/interactive-finalizers.ts), existed until the community-
+ * refresh interactive session kind it finalized — mechanism A — retired,
+ * superseded by `runCommunityRefresh`'s deterministic refresh, W8-B5.)
  *
  * Each loaded the document, computed a new one, then temp-wrote + renamed.
  * The rename is atomic, so the file was never CORRUPT — it was silently
  * WRONG: last rename wins, and the loser's update disappeared with no error
- * surfaced to either caller. A lock only one of the three honours is not a
- * lock, so all three call THIS function; there is no second way to write the
+ * surfaced to either caller. A lock only one of the two honours is not a
+ * lock, so both call THIS function; there is no second way to write the
  * file.
  *
  * `proper-lockfile` is already a direct dependency and already this repo's
@@ -30,8 +34,8 @@
  * nothing to serialise on. `studio/community/` always exists by the time any
  * writer may legitimately write, so locking it keeps the free canonicalisation
  * (every caller agrees on one lock even when `forgeRoot` reaches them through
- * a symlink — `commitRegistryDraft` writes through a `realpath`'d guard while
- * the other two join a raw config path) AND covers the create-the-file case.
+ * a symlink — both surviving writers join `communityRegistryPath(forgeRoot)`,
+ * a raw config path) AND covers the create-the-file case.
  * The lock itself is `studio/community.lock`, a directory proper-lockfile
  * makes and removes; a crashed holder's leftover self-clears once stale.
  *
@@ -51,7 +55,7 @@ import { communityRegistryPath } from '../orchestrator/studio/registry.ts';
 /**
  * Retry budget for a contended registry lock: 5 retries from 50ms with
  * `retry`'s default factor of 2 — ~1.55s of total patience. Long enough to
- * ride out any other writer's fs-only critical section (all three are
+ * ride out any other writer's fs-only critical section (both are
  * sub-millisecond once they hold the lock: no writer performs I/O over the
  * network while holding it), short enough that a genuinely wedged lock
  * answers the operator rather than hanging their request. Mirrors the
@@ -83,7 +87,7 @@ export class CommunityRegistryLockError extends Error {
 /** The lock target: the registry's containing directory. Callers must ensure
  *  it exists — `runCommunityRefresh` only locks once it has confirmed the
  *  registry file itself is there, and `mutateCommunityRegistry` creates the
- *  directory before locking so a fresh forge root's first two writers still
+ *  directory before locking so a fresh forge root's two writers still
  *  serialise against each other.
  *
  *  Exported so `cli/community-registry-lock.test.ts` can plant a stale lock at

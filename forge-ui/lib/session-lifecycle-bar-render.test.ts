@@ -1,13 +1,16 @@
 /**
  * W7-B3 render pins for SessionLifecycleBar's crashed state (community-01 /
- * sessions-kinds-32, the operator's stuck community-refresh session
- * 2026-08-18T12-54-32-abdfd26b as the fixture shape):
+ * sessions-kinds-32, historical origin: the operator's stuck community-refresh
+ * session 2026-08-18T12-54-32-abdfd26b gave this fixture its shape — that
+ * session kind is retired (W8-B5b WI-3), so the fixture is re-pointed at
+ * `kb-cleanup`, a surviving generic-panel kind, to keep pinning live behavior
+ * rather than a route that now 404s):
  *
  *  - a crashed session renders the runner's own error verbatim (A2's
  *    contract, re-pinned here against THIS fixture), and
  *  - offers a "start a new session" way forward — `[data-action=
  *    "start-new-session"]` linking to /sessions/<kind>/new — so the operator
- *    standing in front of a dead refresh is one click from a fresh one
+ *    standing in front of a dead session is one click from a fresh one
  *    instead of a dead end.
  *
  * `renderToStaticMarkup` over the component (repo render-test convention —
@@ -23,33 +26,33 @@ import type { SessionLifecycle } from './session-lifecycle-client';
 /** The operator's real stuck session, as A2's lifecycle derivation reads it
  *  from disk: runner crashed with the containment refusal, phase still
  *  `gathering`. */
-const CRASHED_COMMUNITY_REFRESH: SessionLifecycle = {
+const CRASHED_SESSION: SessionLifecycle = {
   state: 'crashed',
   needsYou: true,
   error:
-    'InteractiveRunnerError: runInteractiveTurn: session kind "community-refresh" phase "gathering" declares writes: [staging], but the turn produced no files there — refusing to advance the session with an empty package',
+    'InteractiveRunnerError: runInteractiveTurn: session kind "kb-cleanup" phase "gathering" declares writes: [staging], but the turn produced no files there — refusing to advance the session with an empty package',
   idleMs: 2_100_000,
   cancellable: true,
 };
 
-function render(lifecycle: SessionLifecycle, kind = 'community-refresh', phase = 'gathering'): string {
+function render(lifecycle: SessionLifecycle, kind = 'kb-cleanup', phase = 'gathering'): string {
   return renderToStaticMarkup(
     React.createElement(SessionLifecycleBar, {
       lifecycle,
       phase,
       kind,
       sessionId: '2026-08-18T12-54-32-abdfd26b',
-      project: '.community-registry',
+      project: '.kb-forge-dev',
     }),
   );
 }
 
-test('crashed community-refresh: error verbatim + a start-new-session link to the kind kickoff', () => {
-  const html = render(CRASHED_COMMUNITY_REFRESH);
+test('crashed session: error verbatim + a start-new-session link to the kind kickoff', () => {
+  const html = render(CRASHED_SESSION);
   expect(html).toContain('data-lifecycle-state="crashed"');
   expect(html).toContain('produced no files there');
   expect(html).toContain('data-action="start-new-session"');
-  expect(html).toContain('href="/sessions/community-refresh/new"');
+  expect(html).toContain('href="/sessions/kb-cleanup/new"');
 });
 
 test('working session renders NO start-new-session link (crash/stall/terminal only — never noise on a healthy run)', () => {
@@ -77,26 +80,26 @@ test('terminal session offers the start-new-session way forward too', () => {
 const TERMINAL_LIFECYCLE: SessionLifecycle = { state: 'terminal', needsYou: false, error: null, idleMs: null, cancellable: false };
 
 test('WI-1b terminal-SUCCEEDED (phase "committed"): data-lifecycle-terminal-outcome="succeeded", and data-lifecycle-state still reads "terminal" (protects the journeys this lane cannot run)', () => {
-  const html = render(TERMINAL_LIFECYCLE, 'community-refresh', 'committed');
+  const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', 'committed');
   expect(html).toContain('data-lifecycle-state="terminal"');
   expect(html).toContain('data-lifecycle-terminal-outcome="succeeded"');
 });
 
 test('WI-1b terminal-FAILED (phase "failed"): data-lifecycle-terminal-outcome="failed", and data-lifecycle-state STILL reads "terminal" — the exact ON-7 gap (a failed session used to be indistinguishable, in the queryable DOM, from a succeeded one)', () => {
-  const html = render(TERMINAL_LIFECYCLE, 'community-refresh', 'failed');
+  const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', 'failed');
   expect(html).toContain('data-lifecycle-state="terminal"');
   expect(html).toContain('data-lifecycle-terminal-outcome="failed"');
 });
 
 test('WI-1b terminal-CANCELLED (phase "cancelled"): data-lifecycle-terminal-outcome="cancelled" — a DISTINCT outcome from "failed" (an operator-chosen stop is not a system failure — kills a fix that folds cancelled into the failed bucket)', () => {
-  const html = render(TERMINAL_LIFECYCLE, 'community-refresh', 'cancelled');
+  const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', 'cancelled');
   expect(html).toContain('data-lifecycle-terminal-outcome="cancelled"');
   expect(html).not.toContain('data-lifecycle-terminal-outcome="failed"');
 });
 
 test('WI-1b terminal "rejected"/"abandoned" also classify as "failed" (the remaining SESSION_STOPPED_PHASES members, once "cancelled" is carved out)', () => {
   for (const phase of ['rejected', 'abandoned']) {
-    const html = render(TERMINAL_LIFECYCLE, 'community-refresh', phase);
+    const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', phase);
     expect(html, `phase=${phase}`).toContain('data-lifecycle-terminal-outcome="failed"');
   }
 });
@@ -104,7 +107,7 @@ test('WI-1b terminal "rejected"/"abandoned" also classify as "failed" (the remai
 test('WI-1b: data-lifecycle-terminal-outcome is ADDITIVE — present ONLY on a terminal row, never on working/crashed/stalled/awaiting-operator (kills a fix that always renders the attribute, e.g. blank/"n/a", instead of omitting it)', () => {
   const working = render({ state: 'working', needsYou: false, error: null, idleMs: 4_000, cancellable: true });
   expect(working).not.toContain('data-lifecycle-terminal-outcome');
-  const crashed = render(CRASHED_COMMUNITY_REFRESH);
+  const crashed = render(CRASHED_SESSION);
   expect(crashed).not.toContain('data-lifecycle-terminal-outcome');
   const awaiting = render({ state: 'awaiting-operator', needsYou: true, error: null, idleMs: null, cancellable: true });
   expect(awaiting).not.toContain('data-lifecycle-terminal-outcome');
@@ -114,13 +117,13 @@ test('WI-1b: data-lifecycle-terminal-outcome is ADDITIVE — present ONLY on a t
 
 test('WI-1b: a terminal-FAILED session with a real lifecycle.error shows that reason verbatim — never a log-file path instead (the exact defect class this lane exists to remove)', () => {
   const withError: SessionLifecycle = { state: 'terminal', needsYou: false, error: 'the review verdict rejected the plan: missing AC-3 coverage', idleMs: null, cancellable: false };
-  const html = render(withError, 'community-refresh', 'failed');
+  const html = render(withError, 'kb-cleanup', 'failed');
   expect(html).toContain('missing AC-3 coverage');
   expect(html).not.toMatch(/_logs\//);
   expect(html).not.toMatch(/stderr\.log/i);
 });
 
 test('WI-1b: a terminal-FAILED session with NO lifecycle.error (the normal case — the bridge never populates .error for a terminal row) shows only the honest phase-aware sentence, never a fabricated reason', () => {
-  const html = render(TERMINAL_LIFECYCLE, 'community-refresh', 'failed');
+  const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', 'failed');
   expect(html).toContain('Failed — nothing further to do here.');
 });

@@ -1301,38 +1301,17 @@ export async function startAuthoring(input: {
 // wrapper is gone, per the task brief's "do not leave a third half-wired
 // path": a function with no caller is not a caller that should exist.
 
-// ---- Community refresh (W6-CR-3 — the community-registry refresh agent) ----
-
-/**
- * Start a community-refresh session (kind: 'community-refresh', agent:
- * community-refresh) — `POST /api/studio/community-refresh/start`.
- * UNLIKE every other session-kickoff route, this one takes NO
- * `project`/prompt at all: the community registry is forge's own single,
- * forge-wide file, not a per-project artifact — the session anchors under a
- * fixed pseudo-project the bridge resolves server-side and returns as
- * `project` on the response (mirrors {@link startProjectBrain}'s own
- * server-resolved-project shape, kb-cleanup's own precedent).
- */
-export async function startCommunityRefresh(input: {
-  /** W6-B6 (ADR-043 2026-08-15 amendment §3) — see {@link startInstructions}'s
-   *  own doc; validated against community-refresh's own SKILL.md envelope. */
-  modelTier?: string;
-  /** W7-B3 (community-08) — optional operator focus ("find me skills for X").
-   *  Omitted entirely when absent: the agent reads no-brief as a full
-   *  refresh. */
-  brief?: string;
-}): Promise<{ ok: boolean; sessionId?: string; project?: string; error?: string }> {
-  const r = await bridgePost('/api/studio/community-refresh/start', {
-    ...(input.modelTier ? { modelTier: input.modelTier } : {}),
-    ...(input.brief ? { brief: input.brief } : {}),
-  });
-  if (!r.ok) return { ok: false, error: r.error };
-  return {
-    ok: true,
-    sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined,
-    project: typeof r.data?.project === 'string' ? r.data.project : undefined,
-  };
-}
+// W8-B5b WI-3 — `startCommunityRefresh()` (a typed wrapper over the RETIRED
+// interactive `POST /api/studio/community-refresh/start` route, the W6-CR-3
+// community-refresh LLM agent session kind) was removed here: that whole
+// session kind is gone (`studio/session-kinds.yaml` entry,
+// `skills/community-refresh/SKILL.md`, the `/sessions/community-refresh/new`
+// kickoff branch) in favour of the deterministic, LLM-free `forge community
+// refresh` / `POST /api/studio/community/refresh` (NO hyphen) shipped by
+// W8-B5 — see the `finalizeAuthoring()` removal note just above this one for
+// the standing rationale: a function with no caller is not a caller that
+// should exist, and this one's sole caller (`app/sessions/[kind]/new/page.tsx`'s
+// `community-refresh` branch) is retired in the same lane.
 
 /** One demo-element kind from the forge library (the demoProcess composition palette). */
 export type DemoElementSummary = {

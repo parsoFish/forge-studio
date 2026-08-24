@@ -11,12 +11,12 @@
  *
  * This is the STRONGEST acceptance test in the migration suite: it proves
  * the eventual sweep commit moved every single declared guard id across all
- * 20 composition-bearing SKILL.mds and dropped none.
+ * 19 composition-bearing SKILL.mds and dropped none.
  *
  * A1 — `EXPECTED_GUARDS_BY_SLUG` below is a HARDCODED literal table, GENERATED
  * by reading the on-disk `composition.hooks` data (`grep`/manual transcription)
  * BEFORE any sweep happens — frozen ground truth, deliberately independent of
- * whatever the sweep commit does to disk. It covers all 20 SKILL.mds that
+ * whatever the sweep commit does to disk. It covers all 19 SKILL.mds that
  * declare a `composition:` block (`architect`, `architect-completeness-critic`,
  * `brain-fix`, `demo-builder`, `instructions-creator`, `preflight-fix`,
  * `project-brain-builder` included — NOT just the 11 in the composable
@@ -26,10 +26,10 @@
  * roster (it declares `library: true`) — R4-21 added `creation-agent`
  * (18th, `library: false`, with its own real `event-log` guard) — and
  * R4-19-F2 added `brain-maintenance` (19th, `library: false`, its own
- * single `event-log` guard, same shape as `brain-fix`/`creation-agent`) —
- * and W6-CR-3 added `community-refresh` (20th, `library: true`, its own
- * single `event-log` guard, same shape as the three above); all four were
- * appended rather than backdated into the "generated" set.
+ * single `event-log` guard, same shape as `brain-fix`/`creation-agent`);
+ * these three were appended rather than backdated into the "generated" set.
+ * W6-CR-3 briefly added a 20th, `community-refresh`; that SKILL.md and its
+ * whole kind were retired in W8-B5b, so the table reverts to 19 entries.
  * The test asserts `composition.guards` (once it exists) deep-equals this
  * table for every one of them, sorted for stable comparison.
  *
@@ -94,13 +94,10 @@ const EXPECTED_GUARDS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   // composed into a flow) — declares only the `event-log` guard, the same
   // single-guard shape as `brain-fix`/`creation-agent`.
   'brain-maintenance': ['event-log'],
-  // W6-CR-3: community-refresh — a new `library: true` interactive agent
-  // (the community-registry refresh agent, kicked off from /community) —
-  // declares only the `event-log` guard, the same single-guard shape as
-  // brain-fix/creation-agent/brain-maintenance above; added to this frozen
-  // table so the sweep-completeness assertion below stays meaningful for
-  // this newly-added composition-bearing SKILL.md too.
-  'community-refresh': ['event-log'],
+  // W6-CR-3 once added community-refresh here (a `library: true` interactive
+  // agent, the community-registry refresh agent kicked off from /community)
+  // with the same single `event-log` guard shape as the rows above; W8-B5b
+  // retired that SKILL.md and its whole kind, so the entry is gone too.
   // R4-18: contract-check declares the onboard-preflight band guard (its
   // display identity + composition.guards entry — see skills/contract-check).
   'contract-check': ['event-log', 'onboard-preflight'],
@@ -149,7 +146,7 @@ test('A1: every composition-bearing SKILL.md carries composition.guards matching
   assert.deepEqual(
     foundSlugs,
     expectedSlugs,
-    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (20) — if this fails, the table itself is stale, not the migration',
+    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (19) — if this fails, the table itself is stale, not the migration',
   );
 
   const mismatches: Array<{ slug: string; expected: readonly string[]; actual: string[] | undefined }> = [];

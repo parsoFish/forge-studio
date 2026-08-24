@@ -63,10 +63,11 @@ import type { Finding } from './validate.ts';
  *  sequence (contract→instructions→secrets→demo→roadmap→brain) the other six
  *  tokens encode.
  *
- *  W6-CR-3: 'community' is the SECOND extension, an 8th token, mirroring
- *  'authoring's own precedent exactly — a single-stage session kind
- *  (community-refresh) with no natural fit among the ordered onboarding
- *  sequence, appended at the end rather than squeezed into that ordering. */
+ *  W6-CR-3 added an 8th token, 'community', mirroring 'authoring's own
+ *  precedent, for the single-stage `community-refresh` session kind. That
+ *  kind was retired in W8-B5b (superseded by the deterministic `forge
+ *  community refresh` mechanism) and 'community' had no other consumer, so
+ *  the vocabulary reverts to the 7 tokens above. */
 export const SESSION_STAGES = Object.freeze([
   'contract',
   'instructions',
@@ -75,7 +76,6 @@ export const SESSION_STAGES = Object.freeze([
   'roadmap',
   'brain',
   'authoring',
-  'community',
 ] as const);
 export type SessionStage = (typeof SESSION_STAGES)[number];
 
@@ -199,17 +199,18 @@ export type TurnStep = (typeof TURN_STEPS)[number]['id'];
  *  intent (that test pinned kb-cleanup's OWN phase table needing none, not a
  *  blanket freeze on this registry's size — see its updated comment).
  *
- *  W6-CR-3: `commitRegistryDraft` is added alongside — it IS dispatched via
- *  `turnSpec` (the `community-refresh` kind's `committing` phase), so it
- *  lives in `FINALIZERS` too (`orchestrator/interactive-finalizers.ts`) and
- *  therefore also in `DISPATCHABLE_FINALIZER_IDS` below, unlike
- *  `writeToRepoRoot`/`recordLockedDemo` immediately above. Typed `readonly`,
- *  as TURN_STYLES. */
+ *  W6-CR-3 added `commitRegistryDraft` alongside — it WAS dispatched via
+ *  `turnSpec` (the `community-refresh` kind's `committing` phase), living in
+ *  `FINALIZERS` too (`orchestrator/interactive-finalizers.ts`) and therefore
+ *  also in `DISPATCHABLE_FINALIZER_IDS` below, unlike
+ *  `writeToRepoRoot`/`recordLockedDemo` immediately above. W8-B5b retired the
+ *  `community-refresh` kind (superseded by the deterministic `forge
+ *  community refresh` mechanism) and `commitRegistryDraft` with it, so this
+ *  row is removed again. Typed `readonly`, as TURN_STYLES. */
 export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
   Object.freeze({ id: 'copyStagingToLibrary' }),
   Object.freeze({ id: 'writeToRepoRoot' }),
   Object.freeze({ id: 'recordLockedDemo' }),
-  Object.freeze({ id: 'commitRegistryDraft' }),
 ]);
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
@@ -311,8 +312,8 @@ export type VerdictValueRow = { readonly id: string };
  *  sessions-kinds-09/23, library-24): `revise` joins the vocabulary — the
  *  operator's "apply this feedback and draft again" branch every draft
  *  runner already supports (instructions/demo bespoke routes; the generic
- *  spine's re-run of the row's own agent phase for authoring / kb-cleanup /
- *  community-refresh). A row opts in by DECLARING it in `verdicts:`; the
+ *  spine's re-run of the row's own agent phase for authoring / kb-cleanup).
+ *  A row opts in by DECLARING it in `verdicts:`; the
  *  ADR default for an undeclared row stays `['approve','reject']` — revise
  *  is never fabricated onto a kind whose runner has no revise turn. */
 export const VERDICT_VALUES: readonly VerdictValueRow[] = Object.freeze([

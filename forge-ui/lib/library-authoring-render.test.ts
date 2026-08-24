@@ -314,7 +314,6 @@ test('TemplateEditor surfaces a save error verbatim', () => {
 // ---------------------------------------------------------------------------
 
 test('sessionEntryHrefForAgent derives /sessions/<kind>/new from the ONE kickoff table', () => {
-  expect(sessionEntryHrefForAgent('community-refresh')).toBe('/sessions/community-refresh/new');
   expect(sessionEntryHrefForAgent('creation-agent')).toBe('/sessions/authoring/new');
   expect(sessionEntryHrefForAgent('brain-maintenance')).toBe('/sessions/kb-cleanup/new');
   expect(sessionEntryHrefForAgent('instructions-creator')).toBe('/sessions/instructions/new');
@@ -322,8 +321,11 @@ test('sessionEntryHrefForAgent derives /sessions/<kind>/new from the ONE kickoff
   expect(sessionEntryHrefForAgent('project-brain-builder')).toBe('/sessions/project-brain/new');
   // architect keeps its bespoke entry (ADR-043 §4).
   expect(sessionEntryHrefForAgent('architect')).toBe('/architect/new');
-  // an agent with no session kind has NO fabricated href.
+  // an agent with no session kind has NO fabricated href — including the
+  // retired community-refresh agent (W8-B5b WI-3), same as any other
+  // never-registered slug.
   expect(sessionEntryHrefForAgent('developer-ralph')).toBeNull();
+  expect(sessionEntryHrefForAgent('community-refresh')).toBeNull();
 });
 
 test('every SESSION_KIND_META row resolves back through sessionEntryHrefForAgent (no drift)', () => {

@@ -475,15 +475,17 @@ export function SessionInteractivePanel({
           // W8-B3 (sessions-kinds-06/R01) — keyed on the phase row's OWN
           // authored `requires:` list, not on `artifact.kind === 'file-package'`.
           // The artifact kind was never the right source of truth for "does
-          // this verdict need an id": `file-package` is deliberately REUSED by
-          // community-refresh (a registry.yaml + evidence draft that will never
-          // contain a SKILL.md), so keying off it rendered a "Skill id
-          // (directory name)" field on a kind whose awaiting-review row asks
-          // for no id at all — and then gated Approve on a shape that draft can
-          // never have. `requires:` is the one wire signal the SERVER also
-          // enforces, so client and server now gate on the same fact.
-          // ONE derivation, in lib/session-verdict-gate.ts — see that module's
-          // header for why this is not four locals here any more.
+          // this verdict need an id": `file-package` used to be deliberately
+          // REUSED by the now-retired community-refresh kind (W8-B5b WI-3, a
+          // registry.yaml + evidence draft that never contained a SKILL.md),
+          // so keying off it rendered a "Skill id (directory name)" field on a
+          // kind whose awaiting-review row asked for no id at all — and then
+          // gated Approve on a shape that draft could never have. `requires:`
+          // is the one wire signal the SERVER also enforces, so client and
+          // server gate on the same fact regardless of which kind reuses
+          // `file-package` next. ONE derivation, in lib/session-verdict-gate.ts
+          // — see that module's header for why this is not four locals here
+          // any more.
           const gate = deriveApproveGate({ requires: requiresFields, idValue: packageId, packageShape, busy });
           const idRequired = gate.idRequired;
           return (

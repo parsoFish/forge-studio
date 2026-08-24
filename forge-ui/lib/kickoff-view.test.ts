@@ -8,16 +8,22 @@
  *    `resolveSessionModel` applies server-side). community-12: neither radio
  *    was checked yet Start was enabled — the operator could not tell what
  *    would run.
- *  - `sessionDirPreview` — the context card must show the REAL anchor for a
- *    selector-less kind (`projects/.community-registry/_community-refresh/…`),
- *    never the literal placeholder `<forge-anchor>`.
- *  - `briefFromPrompt` — an optional brief is sent only when the operator
- *    typed one; whitespace is never a brief.
+ *  - `sessionDirPreview` — the context card must show an honest placeholder
+ *    for every kind, never the literal `<forge-anchor>` string. W8-B5b WI-3
+ *    retired community-refresh, the one kind that used to key a REAL anchor
+ *    (`projects/.community-registry/_community-refresh/…`) off its own kind
+ *    id (community-12) — `sessionDirPreview` is purely generic now (selector
+ *    shape only), so this file no longer pins a kind-specific real-anchor
+ *    case, only the honest-placeholder one every kind gets.
+ *
+ * `briefFromPrompt` (community-08's optional focus brief) was removed from
+ * `kickoff-view.ts` along with it: community-refresh's kickoff branch
+ * (`app/sessions/[kind]/new/page.tsx`) was its one caller anywhere in the
+ * codebase.
  */
 import { test, expect } from 'vitest';
 
-import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from './kickoff-view';
-import { COMMUNITY_REGISTRY_ANCHOR } from './session-shell-view';
+import { defaultKickoffTier, sessionDirPreview } from './kickoff-view';
 
 // ---- defaultKickoffTier -----------------------------------------------------
 
@@ -31,20 +37,15 @@ test('defaultKickoffTier is empty for a fixed-strategy agent (no operator choice
 
 // ---- sessionDirPreview ------------------------------------------------------
 
-test('selector:none previews the real community anchor, never a placeholder', () => {
-  const preview = sessionDirPreview('community-refresh', 'none', '');
-  expect(preview).toBe(`projects/${COMMUNITY_REGISTRY_ANCHOR}/_community-refresh/<sessionId>`);
-  expect(preview).not.toContain('<forge-anchor>');
-});
-
-// W7-B3 review F9: the community anchor is keyed on the KIND — it is
-// community-refresh's OWN pseudo-project. A FUTURE selector-less kind must
-// get an honest generic placeholder, never a real-looking path under an
-// anchor it does not use (the community-12 fabricated-context-card class).
-test('a future selector:none kind does NOT inherit the community anchor — honest placeholder instead', () => {
+// W7-B3 review F9, generalized after W8-B5b WI-3 retired community-refresh
+// (the one kind that used to key a REAL anchor off its own kind id): every
+// selector:'none' kind now gets the SAME honest generic placeholder, never a
+// real-looking path under an anchor it does not use (the community-12
+// fabricated-context-card class this guards against).
+test('selector:none previews an honest generic placeholder, never the literal <forge-anchor> string', () => {
   const preview = sessionDirPreview('some-future-kind', 'none', '');
-  expect(preview).not.toContain(COMMUNITY_REGISTRY_ANCHOR);
   expect(preview).toBe('projects/<anchor>/_some-future-kind/<sessionId>');
+  expect(preview).not.toContain('<forge-anchor>');
 });
 
 test('selector:project previews the typed project (placeholder until typed)', () => {
@@ -54,12 +55,4 @@ test('selector:project previews the typed project (placeholder until typed)', ()
 
 test('selector:kb previews the kb-project placeholder', () => {
   expect(sessionDirPreview('kb-cleanup', 'kb', '')).toBe('projects/<kb-project>/_kb-cleanup/<sessionId>');
-});
-
-// ---- briefFromPrompt --------------------------------------------------------
-
-test('briefFromPrompt trims and drops empty/whitespace briefs', () => {
-  expect(briefFromPrompt('  find me skills for X  ')).toBe('find me skills for X');
-  expect(briefFromPrompt('   ')).toBeUndefined();
-  expect(briefFromPrompt('')).toBeUndefined();
 });

@@ -18,7 +18,10 @@
  * disk and asserts this module mirrors it kind-for-kind (ids, titles,
  * agents), so a registry edit that misses this module turns the suite red
  * instead of silently drifting — the same pin discipline
- * `agent-ledger.test.ts`'s round-8 title check established.
+ * `agent-ledger.test.ts`'s round-8 title check established. (W8-B5b WI-3:
+ * the `community-refresh` kind that drifted alongside architect in
+ * home-sessions-19 has since been retired outright — see the removal note
+ * on `startCommunityRefresh()` in `bridge-client.ts`.)
  *
  * Lookups FAIL HONEST: an unknown kind's title is the raw kind id (never a
  * fabricated pretty label), its agent is `null` (never a guessed slug).
@@ -49,7 +52,9 @@ export const SESSION_KIND_META: readonly SessionKindMeta[] = [
   { id: 'onboarding', title: 'Onboarding session', agent: 'onboarding-agent', kickoffHref: '/sessions/onboarding/new' },
   { id: 'authoring', title: 'Authoring session', agent: 'creation-agent', kickoffHref: '/sessions/authoring/new' },
   { id: 'kb-cleanup', title: 'KB cleanup session', agent: 'brain-maintenance', kickoffHref: '/sessions/kb-cleanup/new' },
-  { id: 'community-refresh', title: 'Community refresh session', agent: 'community-refresh', kickoffHref: '/sessions/community-refresh/new' },
+  // W8-B5b WI-3: the 'community-refresh' row (agent: 'community-refresh',
+  // kickoffHref: '/sessions/community-refresh/new') was removed here — that
+  // whole session kind is retired.
 ];
 
 const META_BY_ID: ReadonlyMap<string, SessionKindMeta> = new Map(SESSION_KIND_META.map((m) => [m.id, m]));
@@ -84,8 +89,8 @@ export type KickoffEntry = { kind: string; label: string; href: string };
 
 /**
  * The ONE kickoff list (home-sessions-19 / crosscut-13): every kind an
- * operator can start directly — the six generic `/sessions/<kind>/new`
- * kinds (community-refresh included) plus architect's bespoke entry.
+ * operator can start directly — the generic `/sessions/<kind>/new`
+ * kinds plus architect's bespoke entry.
  * Rendered by `/sessions` in BOTH states (populated AND empty — the CTA row
  * must never vanish just because work is in flight). Labels are the
  * descriptors' own titles, never a second hand-written string.
@@ -116,15 +121,14 @@ export type KickoffKindSpec = {
    *  registry descriptor's own `agent:` by `session-kind-meta.test.ts`. */
   agentSlug: string;
   artifactLabel: string;
-  /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
-   *  route takes neither. */
+  /** 'none' (W6-CR-3, historical — the now-retired community-refresh kind
+   *  was the first with no project/KB selector at all): no project/KB
+   *  selector — the kind's `/start` route takes neither. */
   selector: 'project' | 'kb' | 'none';
   /** A free-text prompt field. `authoring`'s `/start` body REQUIRES one
-   *  (`promptRequired: true`); `community-refresh` takes an OPTIONAL brief
-   *  (W7-B3, community-08 — empty means "full refresh", text means a
-   *  targeted "find me skills for X" pass). Every other kind's `/start`
-   *  route needs no operator prose at kickoff (instructions/demo take their
-   *  brief on a LATER turn, via their own panel's briefing step). */
+   *  (`promptRequired: true`). Every other surviving kind's `/start` route
+   *  needs no operator prose at kickoff (instructions/demo take their brief
+   *  on a LATER turn, via their own panel's briefing step). */
   promptLabel?: string;
   promptPlaceholder?: string;
   promptRequired?: boolean;
@@ -182,15 +186,8 @@ export const KICKOFF_SPECS: Record<string, KickoffKindSpec> = {
     artifactLabel: 'Contract report',
     selector: 'project',
   },
-  'community-refresh': {
-    blurb: 'Refreshes the community registry from the hubs (or hunts for something specific) and drafts the changes — you approve before the registry moves.',
-    agentSlug: 'community-refresh',
-    artifactLabel: 'Registry draft',
-    selector: 'none',
-    // W7-B3 (community-08): the OPTIONAL focus brief — empty means a full
-    // refresh; text becomes the targeted "find me skills for X" pass.
-    promptLabel: 'Focus (optional)',
-    promptPlaceholder: 'e.g. find me skills for terraform drift detection — leave empty for a full refresh',
-    promptRequired: false,
-  },
+  // W8-B5b WI-3: the 'community-refresh' entry (agentSlug:
+  // 'community-refresh', selector: 'none', an optional "Focus" brief) was
+  // removed here — that whole session kind is retired. It was the only
+  // entry ever declared with `selector: 'none'`.
 };

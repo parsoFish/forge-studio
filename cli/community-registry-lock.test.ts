@@ -1,11 +1,15 @@
 /**
  * W8-B5 security review, FINDING 1 — `studio/community/registry.yaml` has
- * THREE independent read-modify-write callers and, before this file existed,
+ * TWO independent read-modify-write callers and, before this file existed,
  * not one of them took a lock:
  *
  *   1. `runCommunityRefresh`      (cli/community-refresh-run.ts)
  *   2. `mutateCommunityRegistry`  (cli/bridge-studio-writes.ts, the CRUD routes)
- *   3. `commitRegistryDraft`      (orchestrator/interactive-finalizers.ts)
+ *
+ * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
+ * (orchestrator/interactive-finalizers.ts), existed until the community-
+ * refresh interactive session kind it finalized — mechanism A — retired,
+ * superseded by `runCommunityRefresh`'s deterministic refresh, W8-B5.)
  *
  * Each loaded the file, computed, then temp-wrote + renamed. The rename is
  * atomic, so the file was never CORRUPT — it was silently WRONG: last rename

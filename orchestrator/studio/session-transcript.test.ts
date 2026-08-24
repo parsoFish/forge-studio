@@ -2275,7 +2275,7 @@ describe('deriveSessionTranscript — W8-B3 sourcesFound + blank-opener rule (ON
     for (const found of result.sourcesFound) assert.ok(result.sourcesScanned.includes(found));
   });
 
-    it('W8-B3: sourcesFound is [] for a session dir holding none of the candidates — the kb-cleanup / community-refresh shape before any verdict', () => {
+    it('W8-B3: sourcesFound is [] for a session dir holding none of the candidates — the kb-cleanup shape before any verdict', () => {
     const dir = makeTmpDir('b3-sources-none');
     writeFileSync(join(dir, 'status.json'), '{"phase":"drafting"}');
     const result = deriveSessionTranscript({ descriptor: authoringDescriptor(), sessionDir: dir, phase: 'drafting' });

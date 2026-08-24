@@ -22,9 +22,14 @@ import { resolve } from 'node:path';
 import { SessionInteractivePanel } from './SessionInteractivePanel';
 import type { SessionAffordance, SessionArtifactPayload } from '@/lib/session-client';
 import type { EventLogEntry } from '@/lib/bridge-client';
-// community-14 — the real session-kind loader + affordance derivation, so the
-// community-refresh regression test at the bottom of this file drives the
-// SAME wire affordance the bridge sends, not a hand-written stand-in.
+// community-14 (historical) — the real session-kind loader + affordance
+// derivation, originally so the community-refresh regression tests at the
+// bottom of this file drove the SAME wire affordance the bridge sends rather
+// than a hand-written stand-in. That kind is retired (W8-B5b WI-3) and no
+// longer in the registry those tests can load, so they now use a hand-built
+// affordance like every other fixture in this file — but the `authoring`
+// counterpart test still exercises this real loader/deriver pair against the
+// live registry, so the import stays live.
 import { loadSessionKinds, deriveSessionAffordances } from '../../../../orchestrator/studio/session-kinds.ts';
 
 const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
@@ -555,7 +560,16 @@ test('C2-UI-7: a committed session with finalized {kind, id} renders a PERMANENT
 test('C2-UI-8: finalized kind "hook" links to /hooks/<id>; "community-registry" links to /community', () => {
   const hook = render({ kind: 'authoring', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'hook', id: 'auto-lint', exists: true } } as never);
   expect(hook).toContain('/hooks/auto-lint');
-  const community = render({ kind: 'community-refresh', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'community-registry', id: 'registry', exists: true } } as never);
+  // FinalizedLink derives purely from `finalized.kind`, never from the
+  // panel's own `kind` prop (community-01/-08 origin: a community-refresh
+  // session's committed registry). That session kind is retired (W8-B5b
+  // WI-3) and no longer reaches this panel at all — see the GENERIC_PANEL_
+  // KINDS note in app/sessions/[kind]/[sessionId]/page.tsx — but two
+  // historical sessions still carry a persisted `finalized.kind:
+  // 'community-registry'` pointer on disk, and /community is still a real
+  // destination, so the mapping itself stays pinned here against an
+  // arbitrary carrier kind rather than deleted with the retired one.
+  const community = render({ kind: 'kb-cleanup', phase: 'committed', affordances: [], terminal: true, finalized: { kind: 'community-registry', id: 'registry', exists: true } } as never);
   expect(community).toContain('data-action="open-finalized"');
   expect(community).toContain('/community');
 });
@@ -648,40 +662,43 @@ test('C2-FIX-A3-3: the per-question interview form carries each question\'s corr
 });
 
 // ===========================================================================
-// community-14 (W7 re-gate, S1) — the community-refresh registry draft's
-// Approve button was PERMANENTLY disabled, so no refresh could ever be
-// committed from Studio.
+// community-14 (W7 re-gate, S1), historical origin — the community-refresh
+// registry draft's Approve button was PERMANENTLY disabled, so no refresh
+// could ever be committed from Studio. That session kind is retired
+// (W8-B5b WI-3): `studio/session-kinds.yaml` no longer declares it, so the
+// affordance below can no longer be pulled from the live registry via
+// `loadSessionKinds`/`deriveSessionAffordances` the way this test originally
+// did (real-registry drift detection was the whole point, and there is
+// nothing left in the registry to drift). The GENERAL mechanism this pinned
+// remains real and load-bearing for whatever kind reuses `file-package` next
+// — see session-verdict-gate.test.ts's own "requires NOTHING" pin for the
+// gate-level unit test — so the DOM-level assertions survive here as an
+// explicit, hand-built affordance (the same convention every other fixture
+// in this file already uses), rather than being deleted outright.
 //
 // `shapeResolved` (the SKILL.md/hook.yaml advisory `draftShapeOf` feeds) was
 // ORed into the Approve gate for EVERY file-package artifact, but
-// community-refresh's staging package is `registry.yaml` + `evidence.*` BY
-// DESIGN — it never contains either marker file, so `packageShape` stayed
+// community-refresh's staging package was `registry.yaml` + `evidence.*` BY
+// DESIGN — it never contained either marker file, so `packageShape` stayed
 // 'unknown' forever. The advisory only ever meant "the id you must type is
 // derived from a shape we can't see yet", so it may only gate a kind whose
-// OWN `meta.requires` actually asks for that id (authoring / kb-cleanup);
-// community-refresh's awaiting-review row declares no `requires` at all, and
-// the server (`handleCommunityRefreshVerdict`) applies no such check.
-//
-// The affordance below is NOT hand-written: it is the real one
-// `deriveSessionAffordances` emits for the real `community-refresh`
-// descriptor in studio/session-kinds.yaml, so this test fails the day that
-// row starts requiring an id (at which point the gate SHOULD return).
+// OWN `meta.requires` actually asks for that id (authoring); a kind whose
+// awaiting-review row declares no `requires` at all must never be blocked by
+// it.
 // ===========================================================================
 
-test('community-14: a community-refresh registry draft (registry.yaml + evidence.*, no SKILL.md/hook.yaml) leaves Approve ENABLED — the SKILL.md/hook.yaml shape advisory only gates kinds whose own meta.requires asks for an id', () => {
-  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'community-refresh');
-  expect(descriptor, 'community-refresh must exist in studio/session-kinds.yaml').toBeTruthy();
-  const derived = deriveSessionAffordances(descriptor!, 'awaiting-review');
-  const verdict = derived.find((a) => a.kind === 'verdict');
-  expect(verdict, 'awaiting-review must derive a verdict affordance').toBeTruthy();
-  // Pin the premise this test rests on: the real row asks for NO fields.
-  expect(verdict!.meta?.requires ?? []).toEqual([]);
-  expect(verdict!.meta?.verdicts).toEqual(['approve', 'revise', 'reject']);
+test('community-14 (historical shape): a file-package artifact with no marker file (no SKILL.md/hook.yaml) leaves Approve ENABLED when the row requires nothing — the shape advisory only gates kinds whose own meta.requires asks for an id', () => {
+  const verdict: SessionAffordance = {
+    id: 'awaiting-review-verdict',
+    kind: 'verdict',
+    phase: 'awaiting-review',
+    meta: { verdicts: ['approve', 'revise', 'reject'] },
+  };
 
   const html = render({
-    kind: 'community-refresh',
+    kind: 'kb-cleanup',
     phase: 'awaiting-review',
-    affordances: [verdict as SessionAffordance],
+    affordances: [verdict],
     artifact: filePackage([
       { path: 'registry.yaml', body: 'entries: []' },
       { path: 'evidence.md', body: '# Evidence' },
@@ -697,24 +714,29 @@ test('community-14: a community-refresh registry draft (registry.yaml + evidence
 });
 
 // ===========================================================================
-// W8-B3 (sessions-kinds-06, second half) — the "Skill id (directory name)"
-// FIELD, not just the Approve button, is keyed on the phase row's own
-// `requires:` list. Keyed on `artifact.kind === 'file-package'` it rendered on
-// community-refresh, a kind that never asked for an id, complete with a
-// "waiting for a SKILL.md or hook.yaml" hint about a file its registry draft
-// will never contain. The button was un-gated by community-14; the field it
-// gates on was not.
+// W8-B3 (sessions-kinds-06, second half), historical origin — the "Skill id
+// (directory name)" FIELD, not just the Approve button, is keyed on the
+// phase row's own `requires:` list. Keyed on `artifact.kind === 'file-package'`
+// it used to render on community-refresh (retired W8-B5b WI-3), a kind that
+// never asked for an id, complete with a "waiting for a SKILL.md or
+// hook.yaml" hint about a file its registry draft would never contain. The
+// button was un-gated by community-14; the field it gates on was not. See
+// the note above this file's community-14 test for why this is now a
+// hand-built affordance rather than one pulled from the live registry.
 // ===========================================================================
 
 test('W8-B3 (sessions-kinds-06): a verdict whose row requires NOTHING renders no id field and no SKILL.md/hook.yaml hint, even on a file-package artifact', () => {
-  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'community-refresh');
-  const verdict = deriveSessionAffordances(descriptor!, 'awaiting-review').find((a) => a.kind === 'verdict');
-  expect(verdict!.meta?.requires ?? []).toEqual([]);
+  const verdict: SessionAffordance = {
+    id: 'awaiting-review-verdict',
+    kind: 'verdict',
+    phase: 'awaiting-review',
+    meta: { verdicts: ['approve', 'revise', 'reject'] },
+  };
 
   const html = render({
-    kind: 'community-refresh',
+    kind: 'kb-cleanup',
     phase: 'awaiting-review',
-    affordances: [verdict as SessionAffordance],
+    affordances: [verdict],
     artifact: filePackage([
       { path: 'registry.yaml', body: 'entries: []' },
       { path: 'evidence.md', body: '# Evidence' },

@@ -200,10 +200,11 @@ function emptyStageMessageFor(
 // thing they are. There is no transcript for many of these sessions."
 //
 // The session shell used to render a chat pane for EVERY kind unconditionally,
-// so a kb-cleanup or community-refresh session — which genuinely has no turns
-// until an operator verdict lands — got half the screen occupied by an empty
-// box explaining its own emptiness, while the thing the operator came to read
-// (the plan, the staged package) was squeezed into the other half.
+// so a kb-cleanup session (or, historically, community-refresh, W8-B5b WI-3
+// retired) — which genuinely has no turns until an operator verdict lands —
+// got half the screen occupied by an empty box explaining its own emptiness,
+// while the thing the operator came to read (the plan, the staged package)
+// was squeezed into the other half.
 //
 // The decision is DERIVED from the session's own observable shape, and there
 // is deliberately no `panes:` field in studio/session-kinds.yaml for it to
@@ -424,13 +425,20 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
 // "." is NEVER a real registered project: `discoverProjects`
 // (orchestrator/studio/registry.ts) categorically filters every dot-prefixed
 // directory out of the real project list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX,
-// cli/bridge-studio-kbs.ts) and ".community-registry" (W6-CR-3's
-// COMMUNITY_REFRESH_PROJECT_ANCHOR, cli/bridge-studio-sessions.ts) are the
-// two known anchor shapes today; a THIRD, unrecognised dot-prefixed anchor
-// still trips `isPseudoProjectAnchor` (the general leading-"." check), it
-// just has no known destination — `pseudoProjectAnchorDestination` returns
-// `null` for it rather than guessing, and the caller renders NOTHING rather
-// than a dead-ended link.
+// cli/bridge-studio-kbs.ts) and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR
+// below, mirroring cli/bridge-studio-sessions.ts's own
+// COMMUNITY_REFRESH_PROJECT_ANCHOR literal) are the two known anchor shapes;
+// a THIRD, unrecognised dot-prefixed anchor still trips `isPseudoProjectAnchor`
+// (the general leading-"." check), it just has no known destination —
+// `pseudoProjectAnchorDestination` returns `null` for it rather than
+// guessing, and the caller renders NOTHING rather than a dead-ended link.
+//
+// W8-B5b WI-3: the community-refresh SESSION KIND that used to mint fresh
+// `.community-registry` sessions is retired — nothing anchors a NEW session
+// there anymore. The mapping below stays regardless: historical sessions
+// already filed under that anchor still exist on disk, `/community` is still
+// a real live route, and `pseudoProjectAnchorDestination` exists precisely so
+// a real destination resolves instead of a silently dropped back-link.
 //
 // forge-ui never imports cli/ at runtime (see this repo's SSOT-parity-test
 // convention, e.g. forge-ui/lib/trigger-kind-parity.test.ts) — this is a

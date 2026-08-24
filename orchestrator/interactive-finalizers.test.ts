@@ -169,22 +169,22 @@ function assertNamedThrow(err: (Error & { name: string }) | null, context: strin
 // Registry structure — FINALIZERS + resolveFinalizer.
 // ---------------------------------------------------------------------------
 
-test('FINALIZERS is seeded with EXACTLY the two real turnSpec finalizers: copyStagingToLibrary, commitRegistryDraft', () => {
+test('FINALIZERS is seeded with EXACTLY the one real turnSpec finalizer: copyStagingToLibrary', () => {
   // ADR-043 §5 seeds the registry incrementally. R4-22 WI-2 pinned "exactly
   // one" as a ratchet against a PRE-population of the other ADR-043-named
   // finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain,
   // demo's snapshot-restore lock) before their own WIs build them.
-  // `commitRegistryDraft` (W6-CR-3) is not a pre-population — it is a real,
-  // dispatched `turnSpec` finalizer (the `community-refresh` kind's
-  // `committing` phase) landing in the SAME change as its own WI, so the
-  // ratchet widens to admit it by id, not by loosening the count check.
+  // `commitRegistryDraft` (W6-CR-3) briefly widened this ratchet as the
+  // `community-refresh` kind's `committing` finalizer; that kind — and this
+  // finalizer with it — was retired in W8-B5b, so the ratchet narrows back
+  // to its original single row.
   const ids = FINALIZERS.map((row) => row.id).sort();
   assert.deepEqual(
     ids,
-    ['commitRegistryDraft', 'copyStagingToLibrary'],
-    `Got ${JSON.stringify(ids)}. This ratchet still kills a pre-population of the remaining ADR-043-named ` +
+    ['copyStagingToLibrary'],
+    `Got ${JSON.stringify(ids)}. This ratchet kills a pre-population of the remaining ADR-043-named ` +
       `finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain, demo's snapshot-restore lock) before ` +
-      `their own WIs build them — it now also asserts commitRegistryDraft is present, not just absent.`,
+      `their own WIs build them.`,
   );
 });
 

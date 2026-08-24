@@ -1081,9 +1081,12 @@ desc: A per-project brain (Brain-3) that legitimately grants the reviewer.
 });
 
 // ---------------------------------------------------------------------------
-// W7-B3 (community-01 / sessions-kinds-32): studio/community/staging/ is
-// pre-fence community-refresh debris — an error naming the cleanup, since no
-// code change can delete an untracked directory from the operator's checkout.
+// W7-B3 (community-01 / sessions-kinds-32), HISTORY (W8-B5b): studio/
+// community/staging/ is debris left by the pre-fence era of the now-retired
+// community-refresh session kind — an error naming the cleanup, since no
+// code change can delete an untracked directory from the operator's
+// checkout. The check stays even though the kind is gone, since the debris
+// can still be sitting on disk.
 // ---------------------------------------------------------------------------
 
 test('W7-B3: a stray studio/community/staging/ dir is a lint ERROR telling the operator to delete it', () => {

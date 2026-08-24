@@ -71,8 +71,10 @@ export function isAuthoringPackageKind(value: unknown): value is AuthoringPackag
  *  paths a `file-package` artifact carries — the ONE derivation
  *  `SessionInteractivePanel.tsx`'s `draftShapeOf` delegates to. `'unknown'`
  *  when none of the marker filenames is present (still drafting, or a
- *  file-package artifact this rule does not describe at all — e.g.
- *  community-refresh's registry.yaml + evidence.* draft, by design). */
+ *  file-package artifact this rule does not describe at all — historically
+ *  the now-retired community-refresh kind's registry.yaml + evidence.* draft,
+ *  W8-B5b WI-3; the same "unknown, by design" fallback covers whatever kind
+ *  reuses `file-package` for a non-skill/hook/template shape next). */
 export function authoringPackageKindOf(paths: readonly string[]): AuthoringPackageKind | 'unknown' {
   const match = AUTHORING_PACKAGE_SHAPES.find((s) => paths.includes(s.filename));
   return match ? match.kind : 'unknown';

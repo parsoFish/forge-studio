@@ -42,9 +42,10 @@ import {
 // render-safe: static markup renders the all-pass default.)
 //
 // Kickoff CTAs (W7-B1, crosscut-13/home-sessions-19): ONE shared list —
-// `lib/session-kind-meta.ts`'s KICKOFF_ENTRIES (the six generic
-// `/sessions/<kind>/new` kinds, community-refresh included, plus
-// architect's bespoke `/architect/new`, ADR-043 amendment §4) — rendered in
+// `lib/session-kind-meta.ts`'s KICKOFF_ENTRIES (the generic
+// `/sessions/<kind>/new` kinds, plus architect's bespoke `/architect/new`,
+// ADR-043 amendment §4 — community-refresh was one of them until it was
+// retired, W8-B5b WI-3) — rendered in
 // BOTH the populated AND the empty state, so the only in-app way to start a
 // session never disappears the moment work is in flight. The old
 // hand-kept KICKOFF_LINKS array (which had drifted against the kickoff

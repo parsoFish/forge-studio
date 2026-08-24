@@ -204,8 +204,9 @@ export function RunPanel({
   // the operator picks a different agent. A hook below the early return means
   // that flip renders FEWER hooks than the previous render — React error #300,
   // which unmounts the whole builder page. Caught by the walkthrough gate on
-  // `/agents/community-refresh` (an interactive agent), not by a unit test:
-  // the same rule `lib/use-cycle-events.ts` cites for its own guard.
+  // `/agents/community-refresh` (an interactive agent, since retired,
+  // W8-B5b WI-3), not by a unit test: the same rule `lib/use-cycle-events.ts`
+  // cites for its own guard.
   const [cancelArmed, setCancelArmed] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
 

@@ -8,13 +8,19 @@
  *
  * The on-disk shapes are the operator's REAL stuck sessions, copied
  * verbatim (status.json + `_logs/_<kind>-<sid>/stderr.log`):
- *   - community-refresh 2026-08-18T12-54-32-abdfd26b — phase `gathering`,
- *     stderr.log = InteractiveRunnerError (writes: [staging] produced no files)
  *   - kb-cleanup 2026-08-18T12-36-59-1b8305ab (.kb-cycles) — phase
  *     `drafting`, stderr.log = InteractiveRunnerError (writes: [plan] …)
  *   - kb-cleanup 2026-08-14T15-07-02-f357b6df (.kb-cycles) — same shape
  * All three were `needsYou:true` on /sessions with a calm "No operator
- * action available" page and no cancel anywhere.
+ * action available" page and no cancel anywhere. (HISTORY, W8-B5b: the
+ * third real incident here was a community-refresh session at
+ * 2026-08-18T12-54-32-abdfd26b, phase `gathering`, writes: [staging]
+ * produced no files. The community-refresh session kind retired with
+ * mechanism A — W8-B5's deterministic `forge community refresh` replaced
+ * it. The fixture below is now a SYNTHETIC authoring-kind stand-in
+ * preserving the exact same crash-detection coverage shape — a turnSpec
+ * kind with a distinct `writes: [staging]` InteractiveRunnerError and no
+ * live-KB requirement — not a copy of a real operator session.)
  *
  * Test shape mirrors cli/ui-bridge-sessions-index.test.ts: a real bridge
  * (startBridge) + fetch for the acceptance level, plus direct import of the
@@ -60,7 +66,11 @@ const KB_CLEANUP_STDERR = [
   '    at async file:///home/parso/forge/orchestrator/cli.ts:101:14',
   '',
 ].join('\n');
-const COMMUNITY_STDERR = KB_CLEANUP_STDERR.replace('kind "kb-cleanup" phase "drafting" declares writes: [plan]', 'kind "community-refresh" phase "gathering" declares writes: [staging]');
+// W8-B5b — the community-refresh kind retired; this is a SYNTHETIC
+// authoring-kind stderr, preserving the same "turnSpec kind, distinct
+// writes: [...]" crash-detection shape the real community-refresh incident
+// used to exercise (see this file's header note).
+const AUTHORING_AGENT_STDERR = KB_CLEANUP_STDERR.replace('kind "kb-cleanup" phase "drafting" declares writes: [plan]', 'kind "authoring" phase "analyzing" declares writes: [staging]');
 
 // ---------------------------------------------------------------------------
 // Unit matrix — deriveSessionLifecycle is pure
@@ -249,7 +259,9 @@ let closeBridge: () => Promise<void>;
 
 const CRASHED_KB_SID = '2026-08-18T12-36-59-1b8305ab';
 const CRASHED_KB_SID_2 = '2026-08-14T15-07-02-f357b6df';
-const CRASHED_CR_SID = '2026-08-18T12-54-32-abdfd26b';
+// W8-B5b — synthetic (see this file's header note); the real community-refresh
+// incident this session id used to name is gone with the retired kind.
+const CRASHED_AUTHORING_SID = '2026-08-18T12-54-32-synthetic1';
 const ARCHITECT_VERDICT_SID = '2026-08-01T10-00-00';
 const STALLED_KB_SID = '2026-08-05T14-00-00';
 const DEMO_WORKING_SID = '2026-08-03T12-00-00';
@@ -326,11 +338,14 @@ before(async () => {
     session_id: CRASHED_KB_SID_2, project: '.kb-cycles', phase: 'drafting', kb_id: 'cycles', findings: [],
   }, T.statusOld);
   writeLog('kb-cleanup', CRASHED_KB_SID_2, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': KB_CLEANUP_STDERR }, T.crash);
-  writeStatus(join(projectsRoot, '.community-registry', '_community-refresh', CRASHED_CR_SID), {
-    session_id: CRASHED_CR_SID, project: '.community-registry', phase: 'gathering', package_id: 'community-registry',
-    registryPath: '/x/registry.yaml', hubsPath: '/x/hubs.yaml', modelTier: 'opus', updated_at: '2026-08-18T12:54:32.132Z',
+  // W8-B5b — synthetic authoring stand-in for the retired community-refresh
+  // fixture (see this file's header note): a real project (authoring has no
+  // dot-anchor/pseudo-project shape), analyzing phase, writes: [staging] —
+  // same crash-detection coverage shape as the incident it replaces.
+  writeStatus(join(projectsRoot, 'proja', '_authoring', CRASHED_AUTHORING_SID), {
+    session_id: CRASHED_AUTHORING_SID, project: 'proja', phase: 'analyzing', modelTier: 'opus', updated_at: '2026-08-18T12:54:32.132Z',
   }, T.statusOld);
-  writeLog('community-refresh', CRASHED_CR_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': COMMUNITY_STDERR }, T.crash);
+  writeLog('authoring', CRASHED_AUTHORING_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': AUTHORING_AGENT_STDERR }, T.crash);
 
   // --- architect at awaiting-verdict: an operator gate the OLD needsYou never flagged
   writeStatus(join(projectsRoot, 'proja', '_architect', ARCHITECT_VERDICT_SID), {
@@ -410,12 +425,12 @@ after(async () => {
 
 // ---- index: state + needsYou truthful in both directions -------------------
 
-test('index: the operator\'s three crashed sessions read state=crashed, needsYou=true, error = the InteractiveRunnerError message — the crash is no longer invisible', async () => {
+test('index: three crashed sessions (two real operator incidents, one synthetic — see header note) read state=crashed, needsYou=true, error = the InteractiveRunnerError message — the crash is no longer invisible', async () => {
   const rows = await indexRows();
   for (const [kind, sid, needle] of [
     ['kb-cleanup', CRASHED_KB_SID, 'declares writes: [plan]'],
     ['kb-cleanup', CRASHED_KB_SID_2, 'declares writes: [plan]'],
-    ['community-refresh', CRASHED_CR_SID, 'declares writes: [staging]'],
+    ['authoring', CRASHED_AUTHORING_SID, 'declares writes: [staging]'],
   ] as const) {
     const r = row(rows, kind, sid);
     assert.equal(r.state, 'crashed', `${kind}/${sid}`);
@@ -480,10 +495,11 @@ test('W8-B3 shell (ON-5): the payload carries `transcriptSources` — the candid
   // generic spine ever runs — so the wire claimed "records no turns" for a
   // kind that has one from second zero. What ships is the derived fact.
   //
-  // community-refresh is a turnSpec kind whose shell resolves without a live
-  // KB (kb-cleanup's shell 409s on an unresolvable kb_id by design — R4-19-F2).
-  // This fixture's session dir holds only status.json, so nothing was found.
-  const cr = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`), 200);
+  // The CRASHED_AUTHORING_SID fixture (synthetic — see header note) is a
+  // turnSpec kind whose shell resolves without a live KB (kb-cleanup's shell
+  // 409s on an unresolvable kb_id by design — R4-19-F2), and its session dir
+  // was seeded with only status.json (no prompt.md), so nothing was found.
+  const cr = await expectJson<{ transcriptSources: unknown }>(await fetch(`${bridgeUrl}/api/studio/sessions/authoring/${CRASHED_AUTHORING_SID}?project=proja`), 200);
   assert.deepEqual(cr.transcriptSources, [], 'no candidate source is on disk for this session — the honest empty list');
   // The instructions fixture writes a real prompt.md; the architect fixture a
   // real idea.md. Both are asserted by NAME, so a change that started
@@ -503,10 +519,15 @@ test('shell: GET /api/studio/sessions/:kind/:sid WITHOUT ?project= resolves the 
   assert.equal(body.lifecycle.cancellable, true);
   assert.ok(body.lifecycle.error?.startsWith('TypeError: Cannot read properties of undefined'), body.lifecycle.error ?? 'null');
 
-  const cr = await fetch(`${bridgeUrl}/api/studio/sessions/community-refresh/${CRASHED_CR_SID}`);
-  const crBody = await expectJson<{ project: string; lifecycle: { state: string } }>(cr, 200);
-  assert.equal(crBody.project, '.community-registry');
-  assert.equal(crBody.lifecycle.state, 'crashed');
+  // W8-B5b — the dot-anchor half of this assertion used to run against the
+  // community-refresh fixture's own `.community-registry` anchor; that kind
+  // retired with mechanism A (see header note). kb-cleanup's own
+  // `.kb-cycles` anchor (CRASHED_KB_SID, seeded above) proves the SAME
+  // dot-anchor resolution path.
+  const kb = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${CRASHED_KB_SID}`);
+  const kbBody = await expectJson<{ project: string; lifecycle: { state: string } }>(kb, 200);
+  assert.equal(kbBody.project, '.kb-cycles');
+  assert.equal(kbBody.lifecycle.state, 'crashed');
 });
 
 test('shell: an explicit ?project= still works and agrees with the resolved one; a terminal session\'s lifecycle is terminal/not cancellable', async () => {

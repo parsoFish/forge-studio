@@ -10,15 +10,18 @@
  *   1. `permissionMode: 'acceptEdits'` auto-accepts Write/Edit/MultiEdit/
  *      NotebookEdit at the SDK level; `canUseTool` is never invoked.
  *   2. `allowedTools` pre-approves every listed tool name; every real
- *      turnSpec agent (`skills/community-refresh/SKILL.md`,
- *      `skills/brain-maintenance/SKILL.md`, `skills/creation-agent/SKILL.md`)
+ *      turnSpec agent (`skills/brain-maintenance/SKILL.md`,
+ *      `skills/creation-agent/SKILL.md`)
  *      lists `Write` there, so `canUseTool` is never invoked for it either.
  *
  * Live evidence: the operator's community-refresh session
  * `2026-08-18T12-54-32-abdfd26b` ran with `writeRoots = [<sessionDir>/staging]`
  * and STILL wrote `/home/parso/forge/studio/community/staging/{registry.yaml,
  * evidence.json,evidence.md}` — outside every declared root — the files
- * exist on disk with mtimes matching the turn's tool_use events.
+ * exist on disk with mtimes matching the turn's tool_use events. (The
+ * `community-refresh` session kind that produced this incident was retired
+ * in W8-B5b; the incident is kept here as the motivating evidence — the fix
+ * and this module's coverage are general, not specific to that one kind.)
  *
  * These pins encode the fix's CONTRACT on the options object handed to the
  * SDK (the only seam a unit test can observe without spending tokens):
@@ -45,9 +48,12 @@ import { join } from 'node:path';
 import { runAgentTurn, type QueryFn } from './interactive-session.ts';
 
 const MODEL = 'claude-sonnet-4-6';
-/** The exact tool grant community-refresh's SKILL.md declares — Write is IN
- *  the allow list, which is precisely the shape that bypassed the fence. */
-const COMMUNITY_REFRESH_TOOLS = ['Read', 'Grep', 'Glob', 'Write', 'WebFetch', 'WebSearch'] as const;
+/** The exact tool grant kb-cleanup's real agent, brain-maintenance
+ *  (`skills/brain-maintenance/SKILL.md`'s `allowed-tools`), declares — Write
+ *  is IN the allow list, which is precisely the shape that bypassed the
+ *  fence. (Originally fixtured on community-refresh's own grant; that kind
+ *  was retired in W8-B5b, so this now points at a surviving turnSpec agent.) */
+const BRAIN_MAINTENANCE_TOOLS = ['Read', 'Grep', 'Glob', 'Write'] as const;
 const FENCE_GATED = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
 function capturingQueryFn(): { queryFn: QueryFn; captured: () => Record<string, unknown> } {
@@ -80,7 +86,7 @@ test('fence-mode: writeRoots non-empty ⇒ permissionMode is NOT acceptEdits (th
   const { queryFn, captured } = capturingQueryFn();
   await runAgentTurn({
     queryFn, prompt: 'p', cwd: writeRoot, model: MODEL,
-    allowedTools: COMMUNITY_REFRESH_TOOLS, writeRoots: [writeRoot],
+    allowedTools: BRAIN_MAINTENANCE_TOOLS, writeRoots: [writeRoot],
   });
   const o = captured();
   assert.notEqual(o.permissionMode, 'acceptEdits', 'acceptEdits auto-approves Write/Edit before canUseTool runs — the fence is dead code under it');
@@ -93,7 +99,7 @@ test('fence-mode: writeRoots non-empty ⇒ allowedTools handed to the SDK carrie
   const { queryFn, captured } = capturingQueryFn();
   await runAgentTurn({
     queryFn, prompt: 'p', cwd: writeRoot, model: MODEL,
-    allowedTools: COMMUNITY_REFRESH_TOOLS, writeRoots: [writeRoot],
+    allowedTools: BRAIN_MAINTENANCE_TOOLS, writeRoots: [writeRoot],
   });
   const allowed = captured().allowedTools as readonly string[];
   assert.ok(Array.isArray(allowed), 'allowedTools must still be an array');
@@ -101,8 +107,8 @@ test('fence-mode: writeRoots non-empty ⇒ allowedTools handed to the SDK carrie
     assert.ok(!allowed.includes(gated), `${gated} must NOT be pre-approved via allowedTools when a write-root fence is active (pre-approval skips canUseTool)`);
   }
   // Every non-gated grant survives verbatim — the fence never widens or
-  // narrows the read/network grant.
-  for (const t of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']) {
+  // narrows the read grant.
+  for (const t of ['Read', 'Grep', 'Glob']) {
     assert.ok(allowed.includes(t), `non-gated grant ${t} must survive`);
   }
 });
@@ -112,7 +118,7 @@ test('fence-mode: writeRoots non-empty ⇒ the fence-gated tools are NOT pushed 
   const { queryFn, captured } = capturingQueryFn();
   await runAgentTurn({
     queryFn, prompt: 'p', cwd: writeRoot, model: MODEL,
-    allowedTools: COMMUNITY_REFRESH_TOOLS, disallowedTools: ['Bash'], writeRoots: [writeRoot],
+    allowedTools: BRAIN_MAINTENANCE_TOOLS, disallowedTools: ['Bash'], writeRoots: [writeRoot],
   });
   const disallowed = captured().disallowedTools as readonly string[];
   assert.deepEqual([...disallowed], ['Bash'], 'disallowedTools must pass through verbatim — Write must stay usable inside the root');
@@ -120,18 +126,18 @@ test('fence-mode: writeRoots non-empty ⇒ the fence-gated tools are NOT pushed 
 
 test('fence-mode: writeRoots absent ⇒ byte-identical prior behaviour: acceptEdits, allowedTools verbatim, no canUseTool', async () => {
   const { queryFn, captured } = capturingQueryFn();
-  await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: COMMUNITY_REFRESH_TOOLS });
+  await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: BRAIN_MAINTENANCE_TOOLS });
   const o = captured();
   assert.equal(o.permissionMode, 'acceptEdits');
-  assert.deepEqual([...(o.allowedTools as readonly string[])], [...COMMUNITY_REFRESH_TOOLS]);
+  assert.deepEqual([...(o.allowedTools as readonly string[])], [...BRAIN_MAINTENANCE_TOOLS]);
   assert.equal(o.canUseTool, undefined);
 });
 
 test('fence-mode: writeRoots EMPTY array ⇒ same as absent (no fence, acceptEdits, allowedTools verbatim)', async () => {
   const { queryFn, captured } = capturingQueryFn();
-  await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: COMMUNITY_REFRESH_TOOLS, writeRoots: [] });
+  await runAgentTurn({ queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: BRAIN_MAINTENANCE_TOOLS, writeRoots: [] });
   const o = captured();
   assert.equal(o.permissionMode, 'acceptEdits');
-  assert.deepEqual([...(o.allowedTools as readonly string[])], [...COMMUNITY_REFRESH_TOOLS]);
+  assert.deepEqual([...(o.allowedTools as readonly string[])], [...BRAIN_MAINTENANCE_TOOLS]);
   assert.equal(o.canUseTool, undefined);
 });

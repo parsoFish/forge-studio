@@ -49,10 +49,3 @@ test('every turnSpec-declared session kind is wired into GENERIC_PANEL_KINDS (co
     expect(panelKinds.has(kind), `session kind "${kind}" declares a turnSpec but is missing from GENERIC_PANEL_KINDS — its operator affordances (verdicts included) would render as a blank page`).toBe(true);
   }
 });
-
-test('community-refresh specifically declares an approve/revise/reject verdict the panel must reach (W7-C2: revise joined)', () => {
-  const cr = SESSION_KINDS.find((d) => d.id === 'community-refresh') as { turnSpec?: { phases?: Array<{ awaits?: string; verdicts?: string[] }> } } | undefined;
-  expect(cr, 'community-refresh must stay declared in studio/session-kinds.yaml').toBeTruthy();
-  const verdictRow = cr?.turnSpec?.phases?.find((p) => p.awaits === 'verdict');
-  expect(verdictRow?.verdicts).toEqual(['approve', 'revise', 'reject']);
-});

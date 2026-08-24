@@ -1554,12 +1554,12 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
 
     // Pinned against the REAL repo (captured 2026-08-04 against commit
     // 23f414fe: `listAgentDefinitions(skillsDir())` → 10 agents; bumped to 11
-    // for R4-18's `contract-check` def; bumped to 12 for W6-CR-3's
-    // `community-refresh` def — the first interactive session-kind agent to
-    // declare `library: true`, see orchestrator/studio/seed-data.test.ts's
-    // own roster pin for why) so the fix cannot quietly delete agents from
-    // the roster while closing the hole.
-    const REAL_AGENT_COUNT = 12;
+    // for R4-18's `contract-check` def. W6-CR-3 briefly bumped it to 12 for
+    // its `community-refresh` def (the first interactive session-kind agent
+    // to declare `library: true`); W8-B5b retired that whole kind — SKILL.md
+    // included — so the count reverts to 11) so the fix cannot quietly
+    // delete agents from the roster while closing the hole.
+    const REAL_AGENT_COUNT = 11;
     assert.equal(
       listAgentDefinitions(skillsDir(REPO_ROOT)).length,
       REAL_AGENT_COUNT,
