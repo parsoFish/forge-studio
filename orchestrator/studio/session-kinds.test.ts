@@ -2372,6 +2372,11 @@ describe('W7-C2 — revise verdict vocabulary + real-yaml three-way gates', () =
   // the same verdict phase would silently pick whichever the yaml happened to
   // list first — the revise would re-run the wrong turn, with no signal at
   // all. Pinned against the SHIPPED yaml, for every revise-declaring row.
+  // W8-B5b: the covered count drops 5 -> 4 with the retirement of the
+  // `community-refresh` session kind, which was one of the five
+  // revise-declaring rows. The count assertion is KEPT rather than relaxed to
+  // `> 0`: its whole job is to fail when a revise-declaring kind stops being
+  // reached by this loop, and a floor of zero would pass on an empty yaml.
   it('C2-K6: every revise-declaring verdict row in the REAL yaml has EXACTLY ONE agent-step producer landing on it', () => {
     const descs = loadSessionKinds(REPO_ROOT);
     let checked = 0;
@@ -2388,6 +2393,6 @@ describe('W7-C2 — revise verdict vocabulary + real-yaml three-way gates', () =
         checked += 1;
       }
     }
-    assert.equal(checked, 5, `all five revise-declaring kinds must be covered, checked ${checked}`);
+    assert.equal(checked, 4, `all four revise-declaring kinds must be covered, checked ${checked} (was five until W8-B5b retired community-refresh)`);
   });
 });

@@ -10,15 +10,11 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
-
-// mirrors cli/bridge-studio-affordances.test.ts's own REPO_ROOT derivation.
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 

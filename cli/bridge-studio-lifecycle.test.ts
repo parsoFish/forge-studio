@@ -326,6 +326,21 @@ before(async () => {
   // The REAL registry — real kinds, real phase tables.
   copyFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), join(forgeRoot, 'studio', 'session-kinds.yaml'));
 
+  // W8-B5b — the `cycles` KB descriptor the kb-cleanup fixture below needs.
+  // The kb-cleanup session-DETAIL route computes real cleanup findings, and
+  // `computeAgentCleanupFindings` THROWS by design ("fail loud, never a silent
+  // empty findings array for an unresolvable KB") when the kb id resolves to no
+  // brain directory. Before this, the fixture seeded a session whose `kb_id`
+  // pointed at nothing, so the detail GET answered 409 — which never showed up
+  // while the dot-anchor assertion ran against community-refresh's own anchor
+  // (a kind whose detail route computes nothing). Seeding the real descriptor
+  // shape is the honest fix: the fixture now describes a KB that exists.
+  mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'brain', 'cycles', 'kb.yaml'),
+    ['id: cycles', 'name: Cycle Patterns', 'desc: Fixture KB for the lifecycle suite.', 'backend: filesystem', 'origin: seed', ''].join('\n'),
+  );
+
   const now = Date.now();
   const T = { statusOld: now - 10 * MIN, crash: now - 8 * MIN, recent: now - 5_000, stale: now - 30 * MIN };
 
