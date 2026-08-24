@@ -208,12 +208,24 @@ function vendorSkillPackage(id: string): void {
   );
 }
 
-function vendorHookPackage(id: string, script = '#!/usr/bin/env bash\nexit 0\n'): void {
+function vendorHookPackage(
+  id: string,
+  script = '#!/usr/bin/env bash\nexit 0\n',
+  trigger: { on?: string; matcher?: string } = {},
+): void {
   const dir = join(forgeRoot, 'studio', 'community', 'hooks', id);
   mkdirSync(join(dir, 'scripts'), { recursive: true });
   writeFileSync(
     join(dir, 'hook.yaml'),
-    yaml.dump({ id, name: id, description: `${id} description`, on: 'PreToolUse', script: 'scripts/run.sh', permissions: { env: [], read: [], network: false } }),
+    yaml.dump({
+      id,
+      name: id,
+      description: `${id} description`,
+      on: trigger.on ?? 'PreToolUse',
+      ...(trigger.matcher !== undefined ? { matcher: trigger.matcher } : {}),
+      script: 'scripts/run.sh',
+      permissions: { env: [], read: [], network: false },
+    }),
     'utf8',
   );
   writeFileSync(join(dir, 'scripts', 'run.sh'), script, 'utf8');
@@ -402,17 +414,26 @@ test('GET .../community/hook/<id>: reachable pre-install, carries files AND the 
   const body = (await res.json()) as { files: Array<{ path: string }>; scan: { verdict: string; findings: unknown[] } };
   assert.ok(body.files.some((f) => f.path === 'scripts/run.sh'));
   assert.ok(body.scan, 'expected a scan field on hook detail');
-  assert.equal(body.scan.verdict, 'findings', `expected the REAL scanner to flag the curl call, got verdict: ${body.scan.verdict}`);
+  // W8-B6 FIX-1 layer 2 REVISION ('findings' → 'blocked'): this fixture curls
+  // an evil host with `network: false` declared — an UNDECLARED critical
+  // network egress, which now blocks on its own. The assertion's real subject
+  // is unchanged: the community detail route runs the REAL scanner pre-install
+  // and reports what it found, rather than a placeholder.
+  assert.equal(body.scan.verdict, 'blocked', `expected the REAL scanner to flag the undeclared curl call, got verdict: ${body.scan.verdict}`);
   assert.ok(body.scan.findings.length > 0);
 });
 
 test('the hook detail\'s pre-install scan verdict EQUALS scanHookPackage\'s verdict for the SAME bytes after install (F2 headline AC #5 — "the browser shows the same scan the gate will")', async () => {
-  // A non-trivial (non-"clean") verdict, but NOT "blocked" — D2 says a
-  // community install materialises unconditionally ("materialise, then
-  // STOP"); gating on verdict is R3-03's `approveHook` step, which this
-  // surface never calls. Using a single-category ("findings") verdict keeps
-  // this test's install call uncontroversial regardless of how a future
-  // "blocked" case is handled.
+  // A non-trivial (non-"clean") verdict. D2 says a community install
+  // materialises unconditionally ("materialise, then STOP"); gating on
+  // verdict is R3-03's `approveHook` step, which this surface never calls —
+  // so the install call below stays uncontroversial whatever the verdict is.
+  // W8-B6 FIX-1 layer 2 note: this fixture's undeclared curl now scores
+  // `blocked` rather than `findings`. The parity property this test exists
+  // for — pre-install and post-install scans of the SAME bytes agree — is
+  // asserted by equality, so it holds at any verdict tier and needs no
+  // fixture change; only this comment's old "but NOT blocked" claim was
+  // stale, and a stale comment is a false claim.
   vendorHookPackage('parity-hook', '#!/usr/bin/env bash\ncurl https://example.com\nexit 0\n');
 
   const preRes = await fetch(`${bridgeUrl}/api/studio/community/hook/parity-hook`);
@@ -483,6 +504,41 @@ test('POST .../community/hook/<vendored>/install: routes to the hook pipeline (r
   const body = (await res.json()) as { ok: boolean; routedTo: string };
   assert.equal(body.ok, true);
   assert.equal(body.routedTo, 'hook-needs-approval');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 — trigger coherence on the FIFTH write path into studio/hooks/.
+// A vendored community package is third-party bytes: the LAST place to assume
+// the matcher/event pair is coherent. A matcher on a tool-less event can never
+// be honoured by hook dispatch, so the hook would install, list, and silently
+// never fire. Same shared predicate the lint, both hook write routes and the
+// creation-agent finalize route use.
+// ---------------------------------------------------------------------------
+
+test('W8-B6: POST .../community/hook/<vendored>/install: 400s a vendored matcher on a tool-less event, and materialises NOTHING under studio/hooks/', async () => {
+  vendorHookPackage('route-hook-bad-trigger', '#!/usr/bin/env bash\nexit 0\n', { on: 'SessionEnd', matcher: 'Bash(gh pr create)' });
+  const res = await postJson(`${bridgeUrl}/api/studio/community/hook/route-hook-bad-trigger/install`, {});
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /SessionEnd/);
+  assert.match(body.error, /PreToolUse or PostToolUse/);
+  // Assert the ARTIFACT, not the status code.
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'route-hook-bad-trigger')),
+    false,
+    'a refused install must leave nothing materialised under studio/hooks/<id>',
+  );
+});
+
+test('W8-B6: the SAME vendored matcher on a tool-scoped event still installs — the gate refuses the incoherent pair, not the matcher', async () => {
+  vendorHookPackage('route-hook-good-trigger', '#!/usr/bin/env bash\nexit 0\n', { on: 'PostToolUse', matcher: 'Bash(gh pr create)' });
+  const res = await postJson(`${bridgeUrl}/api/studio/community/hook/route-hook-good-trigger/install`, {});
+  assert.equal(res.status, 200);
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'route-hook-good-trigger', 'hook.yaml')),
+    true,
+    'a coherent vendored package must still install — pins that the new gate is not over-broad',
+  );
 });
 
 test('POST .../community/mcp/<installable>/install: routes to the connections pipeline (routedTo: "connection-install")', async () => {

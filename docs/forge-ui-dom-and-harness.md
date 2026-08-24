@@ -20,15 +20,16 @@ every route below owns its own `data-page="<name>"` root (+
 inventory rather than one shared page-level contract:
 
 - **Global nav — `StudioNav` (`[data-component="studio-nav"]`,
-  `components/StudioNav.tsx`, W6-IA-5).** The six-pillar top nav rendered on
-  every page. Data contract (`NAV_ITEMS`) and active-pillar rules
-  (`isNavItemActive`, a pure function exported for direct table-driven
-  testing — `components/StudioNav.test.ts`) are both plain data, not scraped
-  from markup:
+  `components/StudioNav.tsx`, W6-IA-5; Monitor added W8-B1).** The
+  seven-pillar top nav rendered on every page. Data contract (`NAV_ITEMS`)
+  and active-pillar rules (`isNavItemActive`, a pure function exported for
+  direct table-driven testing — `components/StudioNav.test.ts`) are both
+  plain data, not scraped from markup:
 
   | id | label | href |
   | --- | --- | --- |
   | `home` | Home | `/` |
+  | `monitor` | Monitor | `/monitor` |
   | `projects` | Projects | `/projects` |
   | `flows` | Flows | `/flows` |
   | `agents` | Agents | `/agents` |
@@ -37,19 +38,25 @@ inventory rather than one shared page-level contract:
 
   Each link carries `data-nav="<id>"` and lights an `active` class per a
   data-driven prefix table (replacing R6-03-F3's original per-id
-  special-cases): `home` matches the exact root `/` only; `projects`,
-  `flows`, `agents`, `knowledge` match their own href as a prefix (`p` or
-  `p/*` — boundary-checked, so `/agentsomething` does NOT light `agents`);
-  `library` matches `/library` **plus** the five-shelf "library island" —
-  `/skills`, `/hooks`, `/connections`, `/templates`, `/community` (those
-  routes are library sub-kinds, not separate pillars). Session-shell routes
-  (`/sessions/*`, `/architect/*`, `/project-brain/*`, `/instructions/*`,
-  `/demo/*`) and `/artifact` deliberately light no pillar — they're reached
-  from within a page, not the nav. Before W6-IA-5, Flows/Agents deep-linked
-  straight into a specific build/monitor surface (`/flows/forge-develop`,
-  `/agents/new`); now every pillar points at its own kind's real browse
-  index (built by IA-1/2/3), and a specific flow/agent is reached via a card
-  on that index — see the `/flows`, `/agents`, `/projects` entries below.
+  special-cases): `home` matches the exact root `/` only; `monitor`,
+  `projects`, `flows`, `agents`, `knowledge` match their own href as a
+  prefix (`p` or `p/*` — boundary-checked, so `/agentsomething` does NOT
+  light `agents`); `library` matches `/library` **plus** the five-shelf
+  "library island" — `/skills`, `/hooks`, `/connections`, `/templates`,
+  `/community` (those routes are library sub-kinds, not separate pillars).
+  Session-shell routes (`/sessions/*`, `/architect/*`, `/project-brain/*`,
+  `/instructions/*`, `/demo/*`) and `/artifact` deliberately light no
+  pillar — they're reached from within a page, not the nav. Before W6-IA-5,
+  Flows/Agents deep-linked straight into a specific build/monitor surface
+  (`/flows/forge-develop`, `/agents/new`); now every pillar points at its
+  own kind's real browse index (built by IA-1/2/3), and a specific
+  flow/agent is reached via a card on that index — see the `/flows`,
+  `/agents`, `/projects` entries below. **W8-B1 (operator note 8) added
+  the seventh pillar, `monitor` → `/monitor`** — the aggregate "everything
+  running" surface (flow runs, standalone agent runs, interactive sessions,
+  the queue/scheduler and attention, in ONE place); Home keeps a summary
+  strip fed by the SAME derivation Monitor renders in full — see the
+  `/monitor` entry below, placed near Home in this doc's route order.
   Journey coverage: `scripts/journeys/flows-onboard.mjs`'s `FOB.nav`
   assertions (pillar count + Home/Library hrefs) and
   `scripts/journeys/flows-run.mjs`'s `run-build-monitor` clip (a real
@@ -325,8 +332,26 @@ inventory rather than one shared page-level contract:
   (`scripts/home-no-new-polling.test.ts` now asserts these invariants against
   the hook file rather than comparing `app/page.tsx`'s source to
   `app/library/page.tsx`'s). Root:
-  `main[data-page="home"][data-page-ready][data-live-count][data-attention-
-  count][data-hex-count]`. Header actions: `[data-action="onboard-project-
+  `main[data-page="home"][data-page-ready][data-live-count][data-hex-active-
+  count][data-needs-you-count][data-failed-count][data-attention-count]
+  [data-hex-count]`. **W8-B1: `data-live-count` is now the honest "what is
+  running" figure** — runs in flight plus live sessions, derived from the
+  SAME merged everything-ledger rows the activity section (below) renders,
+  via `buildMonitorSummary` (`lib/monitor-view.ts`) — NOT the count of
+  active constellation hexes, which is a different question ("which
+  registered objects are busy") answered by the hex grid alone. Before this
+  lane the root's headline WAS the hex count, and Home could read "0 live"
+  directly above ten in-flight ledger rows; the hex figure is now exposed
+  under its OWN name, `data-hex-active-count` (unchanged value,
+  `hexActiveCount`, see the constellation section below), so the two
+  questions can no longer be conflated. `data-needs-you-count` and
+  `data-failed-count` are the same summary's other two counts. All four ride
+  on the shared `section[data-section="monitor-summary"]
+  [data-monitor-variant="home"]` too (`MonitorSummaryStrip`, tiles linking
+  out via `a[data-action="open-monitor"] href="/monitor"`) — see the
+  `/monitor` entry below for that component's full tile-by-tile contract,
+  documented once there since Home and Monitor render the identical
+  component over the identical value. Header actions: `[data-action="onboard-project-
   cta"]` (`href="/projects/new"`, always) and the live-run CTA — W6-IA-4
   sweep finding C1#2: this USED to hardcode `href="/flows/forge-develop"`
   unconditionally; `home-view.ts` derives it from an ACTUAL live run
@@ -459,9 +484,14 @@ inventory rather than one shared page-level contract:
     claim on operator attention than a routine review-gate wait); `idle` is
     the fail-closed floor. The `.hex-frame`'s own `data-status` (styling
     only, `HOME_STATUS_FRAME` in `home-view.ts`) maps `failed` onto the
-    shared red terminal-failure token. The header's "N live" count derives
-    from the hexes, so 13 in-flight sessions can never again read
-    "0 live / all idle". A KB with no `.kb-<id>`-anchored session stays
+    shared red terminal-failure token. The constellation section's own
+    inline label (`{hexActiveCount} of {constellation.length} active`, next
+    to the "Active status" `h2`) derives from the hexes, and that same count
+    rides the page root as `data-hex-active-count` (W8-B1 — see the root
+    selector above), so 13 in-flight sessions can never again read
+    "0 live / all idle" THERE; the root's separate `data-live-count` is the
+    honest ledger+sessions figure covered above, a deliberately different
+    question. A KB with no `.kb-<id>`-anchored session stays
     `idle` (a project-BOUND KB's sessions anchor under the real project and
     light that hex instead — never double-attributed). Empty state (a
     genuinely empty fleet ONLY — a
@@ -558,10 +588,90 @@ inventory rather than one shared page-level contract:
   a real instructions session via the harness's existing
   `writeInstrStatus`/`cleanInstructionsSession` helpers, `HOME_SESSION_SID`)
   + `scripts/journeys/sessions-index.mjs` (the strip's own overflow-link
-  entry point into `/sessions`, below).
+  entry point into `/sessions`, below) + `scripts/journeys/monitor.mjs`'s
+  `monitor-pillar-entry` beat (asserts Home's own `monitor-summary` section
+  and its four counts before following the pillar through to `/monitor`).
+- **`/monitor` — the aggregate "everything running" surface (W8-B1, operator
+  note 8, `app/monitor/page.tsx`).** The seventh pillar: flow runs,
+  standalone agent runs, interactive sessions, the queue/scheduler daemon,
+  and everything waiting on the operator, in ONE place — before this an
+  operator chasing a run visited Home for the ledger, a flow page for the
+  run rail, `/sessions` for the sessions, and a project page for its gates,
+  and Home's own headline count disagreed with the ledger printed directly
+  beneath it (see the Home entry above). **LIFT, DO NOT FORK** is the
+  load-bearing rule for this page: every part of it is an EXISTING piece,
+  never re-derived — the same seven cross-object reads
+  (`useStudioHomeData`, shared with Home), the merged flow+agent ledger
+  (`useEverythingLedger`, LIFTED out of `app/page.tsx` by this lane into
+  `lib/use-everything-ledger.ts` so Home and Monitor read the SAME list),
+  the headline counts (`buildMonitorSummary`, `lib/monitor-view.ts`, over
+  the SAME rows the ledger below renders), the run rail (`RunRail`),
+  sessions (`HomeSessionsStrip` + `buildHomeSessionsStrip`), and the
+  scheduler (`SchedulerCard`). No new bridge route: both endpoints this
+  page needs (`GET /api/agents/runs/recent`, `GET /api/scheduler/status`)
+  already existed, reached through their existing typed wrappers.
+  Structurally enforced by `scripts/home-no-new-polling.test.ts`, extended
+  by this lane to cover this page, the lifted hook and the pure
+  derivation. Root: `main[data-page="monitor"][data-page-ready]
+  [data-monitor-live][data-monitor-needs-you][data-monitor-failed]
+  [data-attention-count][data-ledger-total][data-fetch-status]`
+  (`data-fetch-status` — loading|ok|error — an outage is an honest error
+  state, never the first-run "nothing is running" screen). Header action:
+  `a[data-action="browse-flows"] href="/flows"`. Sections, in render order:
+  - `section[data-section="monitor-summary"][data-monitor-variant="home"|
+    "monitor"]` — the shared four-tile headline (`MonitorSummaryStrip.tsx`),
+    rendered on BOTH Home (`variant="home"`, tiles are real links,
+    `[data-action="open-monitor"]`, `href="/monitor"`) and here
+    (`variant="monitor"`, tiles are plain text — a self-link back to the
+    page already open would be a dead control). Both variants are handed
+    the SAME `MonitorSummary` value, so the headline and the list beneath
+    it cannot disagree. Every count rides on the section itself, never
+    scraped from tile text: `data-monitor-live`, `data-monitor-runs-live`,
+    `data-monitor-sessions-live`, `data-monitor-needs-you`,
+    `data-monitor-gated-runs`, `data-monitor-sessions-needing-you`,
+    `data-monitor-attention`, `data-monitor-failed`, `data-monitor-queued`,
+    `data-monitor-total`, `data-monitor-ready="true"|"false"`. Four tiles,
+    always rendered including at zero (a tile that appears and vanishes
+    makes "nothing is running" indistinguishable from "the strip broke"):
+    `[data-summary-tile="live"|"needs-you"|"failed"|"queued"][data-count]`.
+    Pinned by `lib/monitor-summary-strip-render.test.ts`.
+  - `section[data-section="scheduler"]` — the shared `SchedulerCard` (full
+    contract under the Home entry above); its own component owns its read,
+    so Monitor adds no extra fetch or interval here.
+  - `section[data-section="monitor-attention"][data-attention-count]` —
+    "Waiting on you": the SAME three attention builders Home renders
+    (`buildHomeAttention`/`buildKbAttention`/`buildKbDraftAttention`, over
+    the same already-fetched data, never re-derived), listed densely in ONE
+    section instead of three named strips. Rows: `a[data-attention-item]
+    [data-attention-kind][data-attention-status]`. Empty state (a genuine
+    zero, not a failed read): `[data-component="monitor-attention-empty"]`.
+  - The reused `section[data-section="sessions-needing-you"]` strip
+    (`HomeSessionsStrip` — full contract documented under the Home entry
+    above), given a bigger card budget here (`MONITOR_SESSION_CARDS` = 12
+    vs. Home's 4) because this is the surface that owns the depth.
+  - `section[data-section="monitor-runs"][data-run-count]` — flow runs in
+    the shared `RunRail` (grouped by ITS OWN status vocabulary — NEEDS YOU /
+    ACTIVE / FAILED / QUEUED / COMPLETE, e.g. `[data-run-group="failed"]`),
+    height-bounded (420px) so the rail scrolls internally instead of
+    pushing the ledger off-screen. Empty state:
+    `[data-component="monitor-runs-empty"]` — Monitor states its own case
+    ("No flow runs recorded yet.") rather than borrowing the rail's own
+    per-flow "No runs yet for this flow" sentence, which would be a small
+    lie here.
+  - `section[data-section="activity"][data-recent-runs-unresolved]
+    [data-ledger-total]` — the merged everything-ledger (the SAME rows the
+    headline counts above are computed from), rendered by the shared
+    `HistoryLedger` (`showKindChip`, paged at 25 rows via
+    `MONITOR_LEDGER_PAGE`, `filterable`) — the same component and row
+    contract documented under the Home entry above.
+  Journey coverage: `scripts/journeys/monitor.mjs`'s `monitor-pillar-entry`
+  (Home's summary section + the nav hop in), `monitor-one-surface` (all six
+  sections present, `monitor-runs`' empty/failed state), and
+  `monitor-counts-agree` (the headline totals reconcile with the rail and
+  the ledger under them, and Home reads the same numbers back) beats.
 - **Sessions `/sessions`** (W6-B11) — the aggregate in-flight sessions index.
-  Deliberately NOT a `StudioNav` pillar (operator decision — the six-pillar
-  nav stays closed); reached from Home's active-sessions strip header (above)
+  Deliberately NOT a `StudioNav` pillar (operator decision — the
+  seven-pillar nav stays closed); reached from Home's active-sessions strip header (above)
   and from a secondary-nav link on the Agents index
   (`a[data-nav="sessions-secondary"]`, `components/studio/AgentsIndexView.tsx`,
   next to the "+ New agent" CTA). Data: `GET /api/studio/sessions?active=1`
@@ -703,8 +813,8 @@ inventory rather than one shared page-level contract:
   live product (its own render-test coverage,
   `lib/library-card-render.test.ts`, is unaffected).
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
-  — see the Global nav entry above (W6-IA-5) for the current six-pillar
-  set/order/hrefs and active-state rules.
+  — see the Global nav entry above (W6-IA-5; Monitor added W8-B1) for the
+  current seven-pillar set/order/hrefs and active-state rules.
   Journey coverage: `scripts/journeys/stand-up-create.mjs`'s
   `su-create-library` beat (the five shelves + the KB cross-link); every
   OTHER journey beat that used to enter creation through a Library shelf now
@@ -1707,7 +1817,19 @@ inventory rather than one shared page-level contract:
   `[data-ready-count]` excludes it while unready. The
   descriptor's `interactive` fact also surfaces as its own informational
   (non-gating) chip,
-  `[data-capability-interactive]`. A saved **non-interactive** agent gets a run
+  `[data-capability-interactive]`. **W8-B1 (ON-8): the Run panel is pinned
+  FIRST in the right column.** `RunPanel` (`components/studio/agent-
+  builder/RunPanel.tsx`) renders as the FIRST child of `aside.col-right`
+  (`app/agents/[id]/page.tsx`) — ahead of `YamlPreview` and
+  `ReadinessPanel`, which used to sit above it — and is sticky
+  (`RUN_PANEL_STYLE`: `position: 'sticky', top: 0`), height-bounded to
+  `calc(100vh - 96px)` with its own internal scroll (`overflowY: 'auto'`)
+  so it cannot grow tall enough (project picker, ceiling, materials,
+  standing triggers, a live run's log) to push its own primary button off
+  the bottom of the viewport. No new attribute — this is a layout/position
+  fact, not a `data-*` this doc otherwise pins; `UsedInFlows` and the
+  history ledger (below) are unaffected and keep their existing order.
+  A saved **non-interactive** agent gets a run
   surface (R2-01-F3 generic run host): `[data-section="agent-run"]
   [data-run-dispatchable="true"]` with a `[data-action="run-agent"]` button, a
   generic `[data-run-inputs]` textarea (one `key: value` per line → the run

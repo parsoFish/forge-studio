@@ -793,7 +793,7 @@ export const journey = defineJourney({
         'The parts of Studio no single page owns. Before W7-C3 every route in the '
         + 'product rendered the identical browser tab "forge" — twelve pinned tabs were '
         + 'twelve identical labels — no route had a skip link, so a keyboard user walked '
-        + 'the brand link plus six nav pillars before reaching content on every page, and '
+        + 'the brand link plus every nav pillar before reaching content on every page, and '
         + 'detail pages gave no trail back to the index they came from. This beat walks a '
         + 'cross-section of routes and reads the shared chrome off each one: a distinct '
         + 'document title, exactly one h1 inside a real main landmark, a skip link whose '

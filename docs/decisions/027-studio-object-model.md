@@ -327,6 +327,123 @@ hijack path. It does not make band selection safe against an operator editing
 `composition/band-guard` lint plus `execAgent`'s runtime slug backstop, which
 are unchanged by this amendment.
 
+## Amendment (W8-B6, 2026-08-23): `composition.hooks` DISPATCHES
+
+The R3-03 amendment above introduced `composition.hooks` as "library lifecycle hook
+ids only, bound only in the Agent Builder". It defined the field, its vocabulary and
+its symmetric lint. It did **not** define dispatch, and none was built: at
+`parsoFish/main` `1df6727e` — 19 days later — `runHookScript`
+(`orchestrator/studio/hook-runtime.ts:138`) had **zero production callers** and no
+`hooks` option reached any Agent SDK spawn. An operator could author, scan, approve
+and bind a hook through the full Studio UI, watch `/hooks` report it "carried by"
+that agent, and it could never fire. Regate finding `library-39` / bead `forge-vvp`.
+
+That is this codebase's dominant defect class — a value parsed, surfaced and enforced
+nowhere — and it appeared in the pillar built to be the operator's own extension
+point.
+
+### Decision — dispatch at the SPAWN, in the SDK's own hook mechanism
+
+1. **The seam is `Options.hooks`, not a forge-side lifecycle bus.** All six ids in
+   `HOOK_LIFECYCLE_EVENTS` (`orchestrator/studio/hook-library.ts:44`) are members of
+   the Claude Agent SDK's `HOOK_EVENTS`, and the SDK accepts
+   `hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>`. Forge therefore hands
+   the SDK one in-process callback per bound hook. Building a lifecycle-event bus of
+   forge's own would have been a re-invention of a mechanism the runtime already ships
+   (PRINCIPLES.md; CLAUDE.md's "Never re-invent…").
+
+2. **Every spawn site carries it — the enumeration is the decision.** There is no
+   shared SDK-options builder in this repo; seven production sites hand-build their
+   own bag. `forge-vvp` asserted `orchestrator/run-agent.ts` was "the sole dispatch
+   entrypoint"; it is one of seven. Wiring only it would have left the architect, the
+   developer loop, brain-fix, preflight-fix, release-finalize, demo-builder,
+   project-brain-builder, instructions-creator, completeness-critic and every
+   interactive session kind hook-blind while `/hooks` kept reporting them carried.
+   The seven are `orchestrator/interactive-session.ts` (`runStructuredTurn`,
+   `runAgentTurn`), `orchestrator/run-agent.ts` (one-shot and legacy invocation),
+   `loops/ralph/claude-agent.ts`, `orchestrator/brain-fix-runner.ts`,
+   `orchestrator/preflight-fix-runner.ts` and
+   `orchestrator/phases/release-finalize.ts`.
+
+3. **Derived, never stored.** A site is never handed a hook list; it passes the
+   SKILL.md path it already holds (`PhaseAgentSpec.skill`) and the bindings are
+   re-derived from it. `on`, `matcher` and runnability are re-read from disk on every
+   fire. No object anywhere gets a field in which to keep a stale copy — the
+   structural cure this campaign converged on, rather than another detection tax.
+
+4. **The approval gate is enforced at the dispatch point, per fire.** `runHookScript`
+   is called unmodified and its `hookRunState(...).runnable` refusal is re-evaluated
+   every time, so revoking an approval mid-run stops the very next fire. Dispatch
+   passes **no** `parentEnv`, so `buildHookChildEnv`'s narrow
+   `HOOK_ENV_BASE_ALLOWLIST` — never `AGENT_ENV_ALLOWLIST` — still governs the child.
+   Neither guard is relaxed to make dispatch work; that was a stated park-point.
+   **Both guards were STRENGTHENED in the same lane (2026-08-24), after a hostile
+   review attacked exactly the sinks this dispatch made reachable.** The env fence
+   turned out to be a two-layer composition enforced on one layer: a manifest that
+   declared `ANTHROPIC_API_KEY` in `permissions.env` received the real value, because
+   those names become `buildChildEnv` `overrides`, which apply unconditionally by
+   design. `HOOK_ENV_CREDENTIAL_EXCLUSIONS` is now consulted by both layers, and a
+   refused grant is emitted rather than silently dropped. The approval gate gained
+   real teeth for a lone capability grant: `computeVerdict` blocks on ANY `critical`
+   finding, retiring an env-read + network-egress PAIRING whose second half was
+   evadable through the egress detector's own documented blind spots. The gates were
+   older than this dispatch and unchanged by it — but they were INERT until it, which
+   is why this lane both made them live and closed them.
+
+5. **The exit-code contract is Claude Code's, adopted rather than invented.** `0`
+   allows; `2` blocks (on `PreToolUse` as a real `permissionDecision: 'deny'` carrying
+   the hook's stderr, elsewhere as `{continue:false, stopReason}`); any other non-zero
+   is a recorded non-blocking error. A refusal, spawn failure or timeout is recorded
+   and the run continues — **an unapproved hook never gains a veto it was not
+   granted**, and a broken hook must not wedge an operator's cycle. Those three are
+   recorded as three DISTINCT outcomes (2026-08-24): `runHookScript` throws a typed
+   reason and the dispatch event carries `metadata.failure` of
+   `not-runnable | timeout | spawn-failed`. One line saying "refused or failed to
+   spawn" answered neither of an operator's two questions — did I forget to approve
+   this, or did my script hang and (the spawn being synchronous) stall the daemon for
+   thirty seconds — which have opposite fixes.
+
+6. **The declared `matcher` is enforced in forge's syntax, not the SDK's.** The SDK's
+   `HookCallbackMatcher.matcher` is a tool-NAME pattern; forge's authored matcher is
+   the Claude Code permission-rule shape (`forge-ui/app/hooks/new/page.tsx:109`
+   places `Bash(gh pr create)` in the form, and the OOTB `pre-pr-security-review`
+   ships exactly that). Passing it through would have registered a hook that is bound,
+   displayed as carried, and can never match — the same defect in a new field. So the
+   SDK-side matcher is left absent and forge matches inside the callback: absent ⇒
+   every occurrence; `Tool` ⇒ tool-name equality; `Tool(prefix)` ⇒ tool name plus a
+   `tool_input.command` prefix. A matcher on a tool-less event cannot be honoured, so
+   it does not fire, and `forge studio lint` reports it. A matcher that cannot PARSE
+   at all is a third state (2026-08-24): `Bash(gh pr create` — one missing paren —
+   used to fall through to "the whole string is a tool name", which no tool is ever
+   called, so the hook was authored, approved, displayed as carried, and never fired
+   with no log on any fire. Malformed now fails closed and is refused by all five
+   write paths at the one predicate they share (`hookTriggerError`, which reuses
+   dispatch's own parse rather than retyping its regex). It deliberately does NOT
+   collapse into "absent": absent means fire-always, so folding a typo into it would
+   hand a broken guard a veto over every tool call.
+
+### Stated limits, not overclaimed
+
+- Hook **stdout is not injected into the agent's context**
+  (`hookSpecificOutput.additionalContext`). That would route third-party script output
+  into a model prompt; it is a prompt-injection surface deserving its own review round.
+  Both OOTB hooks only print, and both say in their own headers that they never block.
+- `hook-runtime.ts`'s existing limits are unchanged and inherited: `permissions.read`
+  and `permissions.network` are declared and statically scanned but **not** enforced at
+  spawn, and file writes are not modelled at all. Making a hook fire does not change
+  that — it does mean an operator who authors, approves and binds a hook is now
+  running that code for real.
+- Dispatch is claude-side. `loops/_adapters/gemini/index.ts` has no equivalent hook
+  mechanism; a hook bound to an agent whose `runtime.sdk` is non-claude does not fire.
+
+### Blast radius at the time of the decision
+
+Zero on shipped data: no `skills/*/SKILL.md` or `studio/starters/agents/*/SKILL.md`
+declares a `hooks:` key, and the options bag omits the `hooks` key entirely for an
+agent that binds none — so the golden spawn-capture fixtures
+(`orchestrator/test-fixtures/spawn-capture/`) stay byte-identical, which is the
+independent proof that the unbound spawn shape did not change.
+
 ## Amendment (R2-10, 2026-08-05): the session kind as a typed studio object
 
 **Wave-5 R2-10 mints a new first-class studio object type: the *session kind*,

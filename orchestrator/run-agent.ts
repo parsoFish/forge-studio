@@ -50,6 +50,7 @@ import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
@@ -476,6 +477,16 @@ async function runOneShotSpawn(
     disallowedTools: [...spec.disallowedTools],
   };
   if (def.budgets.maxTurns !== undefined) options['maxTurns'] = def.budgets.maxTurns;
+  // W8-B6 — the agent's bound library hooks. Derived from `spec.skill` (the
+  // SKILL.md this spec came from) rather than from a copy carried on the spec,
+  // so nothing here can hold a stale binding. Absent for every agent that binds
+  // none, which keeps the golden spawn-capture option bags byte-identical.
+  const oneShotHooks = sdkHooksForAgent({
+    skill: spec.skill,
+    logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs'),
+    initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId,
+  });
+  if (oneShotHooks !== undefined) options['hooks'] = oneShotHooks;
   // R6-04 (WI-2): an explicit operator ceiling WINS over the agent's own
   // declared budget — not max()/min() of the two. `??` gives exactly that:
   // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
@@ -507,6 +518,16 @@ async function runOneShotSpawn(
   let tokensIn = 0;
   let tokensOut = 0;
   let resultSubtype: string | undefined;
+  // Defect fix: this path used to return `outputRefs: []` unconditionally, so
+  // every one-shot run (reflector/adversarial-review/PM/demo-agent/
+  // contract-check/release-finalizer) reported zero outputs even when it
+  // really wrote files. Derive real refs the same way the sibling adapter
+  // path does (`loops/ralph/claude-agent.ts`'s `filesChanged`): accumulate
+  // file-modifying tool_use paths — via the SAME shared `extractLiveToolDetails`
+  // helper the adapter path's `fileChangeForTool` backs — into an
+  // order-preserving dedup Set.
+  const outputRefs = new Set<string>();
+  let toolSeq = 0;
 
   for await (const msg of stream) {
     ctx.onMessage?.(msg);
@@ -517,7 +538,15 @@ async function runOneShotSpawn(
       total_cost_usd?: number;
       duration_ms?: number;
       usage?: { input_tokens?: number; output_tokens?: number };
+      message?: unknown;
     };
+    if (m.type === 'assistant') {
+      const details = extractLiveToolDetails(m.message, toolSeq);
+      for (const detail of details) {
+        if (detail.filePath) outputRefs.add(detail.filePath);
+      }
+      toolSeq += details.length;
+    }
     if (m.type !== 'result') continue;
     if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
     if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
@@ -531,7 +560,7 @@ async function runOneShotSpawn(
 
   return {
     costUsd,
-    outputRefs: [],
+    outputRefs: [...outputRefs],
     tokensIn,
     tokensOut,
     suppressed: false,
@@ -598,6 +627,12 @@ async function runInvocationSpawn(
     // transcript (tool calls + file changes + heartbeats), not just
     // start/end lines.
     ...(turnSink !== undefined ? { onToolUse: turnSink.onToolUse, onHeartbeat: turnSink.onHeartbeat } : {}),
+    // W8-B6 — same derivation as the one-shot path above; this path already
+    // holds the run's real logger, so no thunk is needed.
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: spec.skill, logger, initiativeId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
     // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
     // optional — the closure always supplies one, so the cast is sound.
     queryFn: (ctx.queryFn ?? pinnedStreamQuery) as QueryFn,

@@ -1,23 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useStudioHomeData } from '@/lib/use-studio-home-data';
-import { fetchRecentAgentRunsWithMeta } from '@/lib/agents-index';
-import type { LedgerRow } from '@/lib/history-ledger';
+import { useEverythingLedger } from '@/lib/use-everything-ledger';
 import { StudioPage } from '@/components/StudioPage';
 import { FetchErrorState } from '@/components/FetchErrorState';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { UnresolvedHistoriesNotice } from '@/components/studio/UnresolvedHistoriesNotice';
 import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
+import { MonitorSummaryStrip } from '@/components/studio/MonitorSummaryStrip';
 import { SchedulerCard } from '@/components/SchedulerCard';
-import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import {
   buildConstellation,
   buildHomeAttention,
   buildKbAttention,
   buildKbDraftAttention,
-  buildHomeLedgerRows,
   buildHomeSessionsStrip,
   deriveWatchLiveRun,
   gateAttentionStatusDot,
@@ -26,6 +24,7 @@ import {
   type HomeAttentionItem,
   type HomeHex,
 } from '@/lib/home-view';
+import { buildMonitorSummary } from '@/lib/monitor-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
@@ -41,12 +40,13 @@ import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 // even related). Home is the hook's only caller.
 //
 // The MERGED everything-ledger (flow runs + standalone agent runs, W6-IA-4
-// item 2) is Home-only, layered on top of the shared hook: once the shared
-// roster (`agents`) is ready, a second, independent effect fans out
-// `lib/agents-index.ts`'s `fetchRecentAgentRuns` — mirroring
-// `app/agents/page.tsx`'s own two-effect precedent exactly (the roster must
-// resolve first; the runs ledger is a SEPARATE readiness fact so it never
-// blocks the rest of the page).
+// item 2) is no longer Home-only: W8-B1 LIFTED it into
+// `lib/use-everything-ledger.ts` so `/monitor` reads the SAME list instead
+// of growing a second copy of the fetch-and-merge. Home keeps the summary
+// (`MonitorSummaryStrip`, fed by `buildMonitorSummary` over those same
+// rows); Monitor owns the depth. The hook keeps the two-effect shape this
+// page had — the roster must resolve first, and the runs ledger stays a
+// SEPARATE readiness fact so it never blocks the rest of the page.
 // ---------------------------------------------------------------------------
 
 // HOME_STATUS_FRAME (HomeStatus -> the shared 5-state .hex-frame/.status-dot
@@ -68,42 +68,8 @@ export default function HomePage() {
   const { agents, flows, projects, kbs, runs, attention, sessions, ready, error, reload, refreshSessions } = useStudioHomeData();
   const nowMs = useNowTicker();
 
-  // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
-  const [recentAgentRuns, setRecentAgentRuns] = useState<LedgerRow[]>([]);
-  const [recentAgentRunsReady, setRecentAgentRunsReady] = useState(false);
-  // W7-FIX-A1 (A1-09): per-agent history reads that came back 'unresolved'
-  // — surfaced above the ledger, never discarded (a total outage is not "no
-  // activity"). Retry re-runs the fan-out only (the rest of Home is unchanged).
-  const [recentAgentRunsMeta, setRecentAgentRunsMeta] = useState<{ unresolved: number; total: number }>({ unresolved: 0, total: 0 });
-  const [recentAgentRunsKey, setRecentAgentRunsKey] = useState(0);
-  const retryRecentAgentRuns = useCallback(() => setRecentAgentRunsKey((k) => k + 1), []);
-
-  useEffect(() => {
-    if (!ready) return;
-    let cancelled = false;
-    async function loadRecentAgentRuns(): Promise<void> {
-      // `'standalone'` (review round 1): Home already renders its OWN
-      // flow-run rows and `buildHomeLedgerRows` drops every duplicate,
-      // keeping Home's copy. Asking for the flow half too meant that on an
-      // install with 20+ recent flow runs the whole 20-row window came back
-      // as rows Home discarded — and no standalone agent run reached the
-      // ledger at all. The server applies the filter before the bound, so
-      // the budget is spent on the rows only this route can supply.
-      const { rows, unresolved, total } = await fetchRecentAgentRunsWithMeta(agents, undefined, 'standalone');
-      if (cancelled) return;
-      setRecentAgentRuns(rows);
-      setRecentAgentRunsMeta({ unresolved, total });
-      setRecentAgentRunsReady(true);
-    }
-    void loadRecentAgentRuns();
-    return () => { cancelled = true; };
-    // `agents` is set ONLY by useStudioHomeData's full load (mount / Retry /
-    // bridge recovery — the runs+sessions live refresh never touches it), so
-    // depending on it re-runs the fan-out exactly when the roster was
-    // re-read: after an outage the agent rows refill with the roster instead
-    // of freezing at the outage result (W7-FIX-A1 review) — mirrors
-    // app/agents/page.tsx. `recentAgentRunsKey`: the notice's Retry alone.
-  }, [ready, agents, recentAgentRunsKey]);
+  // ---- the merged everything-ledger, LIFTED and shared with /monitor ----
+  const ledger = useEverythingLedger({ agents, runs, ready });
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   // W7-B1 (home-sessions-14): the in-flight `sessions` index feeds hex
@@ -130,7 +96,6 @@ export default function HomePage() {
   // W7A2-02 — the last cancel from the strip: held here so the outcome
   // notice survives the refetch that drops the card.
   const [lastCancel, setLastCancel] = useState<{ row: SessionIndexRow; outcome: CancelOutcome } | null>(null);
-  const flowLedgerRows = deriveFlowLedgerRows(runs);
   // W6-IA-4: the flow-run rows render immediately (they come from `ready`,
   // the same gate the rest of the page uses); the agent rows fold in once
   // their own independent fetch resolves — never a fabricated wait, and
@@ -140,12 +105,18 @@ export default function HomePage() {
   // merged list is derived once (same pure merge, uncapped), the page
   // renders a growing slice, and the footer says "showing X of N" with a
   // Show-more control instead of truncating silently.
-  const allLedgerRows = recentAgentRunsReady
-    ? buildHomeLedgerRows(flowLedgerRows, recentAgentRuns, Number.MAX_SAFE_INTEGER)
-    : flowLedgerRows;
+  const allLedgerRows = ledger.rows;
   const [ledgerShown, setLedgerShown] = useState(HOME_LEDGER_LIMIT);
   const ledgerRows = allLedgerRows.slice(0, ledgerShown);
-  const liveCount = constellation.filter((h) => h.status === 'active').length;
+  // W8-B1 — the ONE aggregate derivation, over the SAME rows the ledger
+  // below renders. Home's headline used to be `constellation.filter(active)`
+  // — a completely different source from the list beneath it, which is how
+  // this page came to read "0 live" above ten in-flight rows. The hex grid
+  // keeps its own, separately NAMED count (`hexActiveCount`): it answers a
+  // different question ("which registered objects are busy"), and conflating
+  // the two answers was the defect.
+  const summary = buildMonitorSummary({ ledgerRows: allLedgerRows, runs, sessions, attentionCount });
+  const hexActiveCount = constellation.filter((h) => h.status === 'active').length;
   // W6-IA-4 sweep finding C1#2 → W7-B1 (home-sessions-15): derived from an
   // ACTUAL live run — and the page now also KNOWS whether the target is
   // live, so the fallback renders as a plain "Browse flows", never a
@@ -157,7 +128,12 @@ export default function HomePage() {
       dataPage="home"
       ready={ready}
       data={{
-        'data-live-count': liveCount,
+        // The honest "what is running" count — runs in flight plus live
+        // sessions, derived from the rendered ledger, never from the hexes.
+        'data-live-count': summary.live,
+        'data-hex-active-count': hexActiveCount,
+        'data-needs-you-count': summary.needsYou,
+        'data-failed-count': summary.failed,
         'data-attention-count': attentionCount,
         'data-hex-count': constellation.length,
         // W7-A1: loading | ok | error — an outage is an honest ERROR state,
@@ -209,6 +185,14 @@ export default function HomePage() {
       ) : null}
       {error && constellation.length === 0 ? null : (
       <>
+      {/* ===== WHAT IS RUNNING — the summary strip (W8-B1). The SAME
+          component and the SAME derived value `/monitor` renders as its
+          headline, over the SAME merged ledger printed lower down this page.
+          Home gets the glance and a way through; Monitor owns the depth. A
+          count here that contradicts the list below is no longer
+          expressible, which is precisely the defect this closes. ===== */}
+      <MonitorSummaryStrip summary={summary} variant="home" ready={ready} />
+
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
           (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip
           (review fix) so its data-* contract gets a renderToStaticMarkup
@@ -421,7 +405,7 @@ export default function HomePage() {
             Active status
           </h2>
           <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-            {ready ? `${liveCount} live` : '—'}
+            {ready ? `${hexActiveCount} of ${constellation.length} active` : '—'}
           </span>
         </div>
         <div className="home-constellation" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
@@ -459,15 +443,15 @@ export default function HomePage() {
       <section
         data-section="activity"
         aria-label="Recent activity"
-        data-recent-runs-unresolved={recentAgentRunsReady ? recentAgentRunsMeta.unresolved : 0}
+        data-recent-runs-unresolved={ledger.agentRowsReady ? ledger.unresolved : 0}
         data-ledger-shown={ledgerRows.length}
         data-ledger-total={allLedgerRows.length}
       >
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
           Recent activity
         </h2>
-        {recentAgentRunsReady ? (
-          <UnresolvedHistoriesNotice unresolved={recentAgentRunsMeta.unresolved} total={recentAgentRunsMeta.total} onRetry={retryRecentAgentRuns} />
+        {ledger.agentRowsReady ? (
+          <UnresolvedHistoriesNotice unresolved={ledger.unresolved} total={ledger.total} onRetry={ledger.retry} />
         ) : null}
         <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
         {/* W7-B1 (home-sessions-25): the cap is PAGING now, and it says so —

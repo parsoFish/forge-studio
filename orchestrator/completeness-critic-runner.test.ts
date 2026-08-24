@@ -4,8 +4,14 @@
  * The critic is a one-shot structured-output SDK turn (no session-dir state
  * machine of its own) — so these tests exercise `runCompletenessCritic`
  * directly with an injectable `queryFn`, mirroring architect-runner.test.ts's
- * fake-generator pattern. No live LLM, no logger dependency (the module never
- * emits events itself — the caller owns that).
+ * fake-generator pattern. No live LLM.
+ *
+ * ⚑ AMENDED W8-B6: "no logger dependency" is no longer true. The critic now
+ * takes the caller's `logger` + `initiativeId` so its own bound library hooks
+ * can fire and record (`sdkHooksForAgent`). The module still emits no events of
+ * its own — the logger is threaded THROUGH to hook dispatch, not used here —
+ * but it is a required input, so these tests supply an in-memory stub rather
+ * than touching the filesystem.
  */
 
 import { test } from 'node:test';
@@ -22,12 +28,23 @@ import {
   type QueryFn,
   type RunCompletenessCriticInput,
 } from './completeness-critic-runner.ts';
+import type { EventLogEntry, EventLogger } from './logging.ts';
+
+/** In-memory logger stub — the critic threads it to hook dispatch and never
+ *  emits through it itself, so nothing needs to reach disk. */
+const STUB_LOGGER: EventLogger = {
+  emit: (entry) => ({ event_id: 'stub', cycle_id: 'stub', started_at: '1970-01-01T00:00:00.000Z', ...entry }) as EventLogEntry,
+  cycleId: 'stub',
+  logFilePath: '',
+};
 
 const BASE_INPUT: RunCompletenessCriticInput = {
   idea: 'Migrate every resource to the plugin framework.',
   interviewSummary: '1. Q: Any resources out of scope?\n   A: No, all of them.',
   planMarkdown: '# PLAN\n\nMigrate all resources.',
   manifestsSummary: '- INIT-1 (release_definition): migrate release_definition\n',
+  logger: STUB_LOGGER,
+  initiativeId: 'architect-session-stub',
 };
 
 function queryFnReturning(structured: unknown): QueryFn {

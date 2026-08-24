@@ -141,6 +141,7 @@ import { installSkillPackage, SkillIdOccupiedError } from '../orchestrator/studi
 import {
   hookDir,
   hooksDir,
+  hookTriggerError,
   HOOK_LIFECYCLE_EVENTS,
   FORBIDDEN_HOOK_BINDING_KEYS,
   type HookLifecycleEvent,
@@ -307,6 +308,18 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
     return { ok: false, status: 400, error: sanitizeError(err) };
   }
   const matcher = optString(doc, 'matcher');
+
+  // W8-B6 — the SAME trigger-coherence predicate lintHookDefinitions,
+  // POST /api/studio/hooks and PUT /api/studio/hooks/:id use. This is the
+  // FOURTH write path into studio/hooks/, and it exists precisely because a
+  // creation agent — not a human filling in a form — authored these bytes; a
+  // model is at least as likely to emit a matcher on SessionEnd as an
+  // operator is. Gating three of four would be the one-of-N shape. Checked
+  // BEFORE any filesystem write, exactly like the forbidden-key rejection above.
+  const triggerError = hookTriggerError(on, matcher);
+  if (triggerError) {
+    return { ok: false, status: 400, error: `drafted hook.yaml: ${triggerError}` };
+  }
 
   const permissions = parseFinalizeHookPermissions(doc['permissions']);
   if ('error' in permissions) {

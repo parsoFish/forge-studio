@@ -481,6 +481,72 @@ test('WI2-3c: a drafted hook.yaml whose "on" is outside HOOK_LIFECYCLE_EVENTS ->
   assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'bad-event-hook')), false, 'an invalid "on" hook.yaml must result in NOTHING written under hooks/<id>');
 });
 
+// ===========================================================================
+// W8-B6 — trigger coherence on the FOURTH write path into studio/hooks/.
+//
+// A matcher on a tool-less lifecycle event can never be honoured by hook
+// dispatch (`orchestrator/studio/hook-dispatch.ts`'s `hookMatcherMatches`
+// needs a `tool_name`), so the hook would be finalized, listed, bindable —
+// and silently never fire. `lintHookDefinitions`, POST /api/studio/hooks and
+// PUT /api/studio/hooks/:id all refuse it; this route is the fourth, and it
+// matters MORE than the other three, because these bytes were authored by a
+// creation AGENT rather than typed into a form with a PreToolUse default.
+// Gating three of four is the one-of-N shape this wave keeps paying for.
+// ===========================================================================
+
+test('W8-B6: a drafted hook.yaml with a matcher on a tool-less event -> 400 naming the event and the tool-scoped set; nothing written under hooks/<id>', async () => {
+  const draftedYaml = hookYamlDraft({
+    name: 'Incoherent Trigger Hook',
+    description: 'a matcher on SessionEnd can never be honoured by dispatch',
+    on: 'SessionEnd',
+    matcher: 'Bash(gh pr create)',
+    script: 'scripts/run.sh',
+    permissions: { env: [], read: [], network: false },
+  });
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: 'incoherent-trigger-hook' });
+  const text = await res.text();
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && /SessionEnd/.test(body.error), `400 must name the offending event, got: ${JSON.stringify(body)}`);
+  assert.ok(body.error!.includes('PreToolUse'), `400 must name the tool-scoped set, got: ${JSON.stringify(body)}`);
+
+  // Assert the ARTIFACT, not the status code.
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'incoherent-trigger-hook')),
+    false,
+    'an incoherent trigger must leave NOTHING under hooks/<id>',
+  );
+});
+
+test('W8-B6: the SAME matcher on a tool-scoped event finalizes normally — the rule refuses the incoherent pair, never the matcher', async () => {
+  const draftedYaml = hookYamlDraft({
+    name: 'Coherent Trigger Hook',
+    description: 'a matcher on PreToolUse is exactly what dispatch can honour',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create)',
+    script: 'scripts/run.sh',
+    permissions: { env: [], read: [], network: false },
+  });
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: 'coherent-trigger-hook' });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'coherent-trigger-hook', 'hook.yaml')),
+    true,
+    'a coherent trigger must still install — this pins that the new gate is not over-broad',
+  );
+});
+
 const MALFORMED_HOOK_DRAFTS: { label: string; staging: Record<string, string> }[] = [
   {
     label: 'missing hook.yaml entirely',

@@ -43,6 +43,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { dirname, join, resolve, sep } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 
 import {
   runAgentTurn,
@@ -370,6 +371,10 @@ async function runGenerateStep(args: {
     model: resolveSessionModel(demoBuilderAgentSpec, status.modelTier),
     allowedTools: demoBuilderAgentSpec.allowedTools,
     disallowedTools: demoBuilderAgentSpec.disallowedTools,
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: demoBuilderAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
     maxTurns: 24,
     onToolUse,
     onHeartbeat,
