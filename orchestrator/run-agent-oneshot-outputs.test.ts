@@ -2,12 +2,25 @@
  * ACCEPTANCE TESTS (wave-8, b1) — `runOneShotSpawn` must report the files an
  * agent actually wrote instead of a hardcoded `outputRefs: []`.
  *
- * Every catalog agent declaring `loopStrategy: 'one-shot'` (reflector,
- * adversarial-review, project-manager, demo-agent, contract-check,
- * release-finalizer) dispatches down this path. Before this fix, the run
- * view rendered "No outputs recorded for this run" /
- * `data-outputs-count="0"` for every one of them regardless of what the
- * agent actually did.
+ * WHO THIS ACTUALLY FIXES (corrected by a hostile review that grepped the
+ * consumers instead of trusting the bead's list): the beneficiary is the
+ * GENERIC standalone one-shot dispatch — `agent-dispatch.ts`'s
+ * `dispatchAgentRun` and `flow-runner.ts`'s `execAgent`, both `'self'`
+ * lifecycle — whose result feeds `runAgent`'s own `end` event, then
+ * `GET /api/agents/runs/:runId`, then the run view's Outputs section. That
+ * section rendered "No outputs recorded for this run" /
+ * `data-outputs-count="0"` over real work.
+ *
+ * It is NOT true that the six catalog one-shot agents all gain from it, and
+ * the first draft of this file said so: `contract-check` spawns no agent at
+ * all (ADR-036 — `flow-runner.ts`'s own comment), `release-finalizer` spawns
+ * through its own `pinnedSdkQuery` and never enters `run-agent.ts`, and
+ * reflector / adversarial-review / project-manager / demo-agent do reach
+ * `runOneShotSpawn` (caller lifecycle) but build their own `output_refs`
+ * from literal paths and never read this result's. Threading it into those
+ * four pipelines is real, separate, undone work — named here rather than
+ * left implied, since an over-claimed close-out is how the previous attempt
+ * at this defect got recorded as fixed while staying broken.
  *
  * Harness pattern copied from `run-agent-w7b5.test.ts` (the canonical stub
  * for this exact spawn path — a fake `queryFn` that records calls and yields
@@ -130,6 +143,40 @@ test('one-shot self lifecycle: the same file touched twice (across two assistant
       ]),
     });
     assert.deepEqual(result.outputRefs, ['/tmp/w8b1-dup.md']);
+  } finally {
+    restore();
+    cleanup();
+  }
+});
+
+test('one-shot self lifecycle: refs ACCUMULATE across assistant messages — two different files in two turns both survive', async () => {
+  // ADDED after a hostile review's mutation experiment: clearing the ref Set
+  // at the top of each assistant message (i.e. keeping only the LAST turn's
+  // files) left the original five tests 5/5 GREEN. The dedup test above
+  // could not see it, because it touches the SAME file in both messages, so
+  // "last message only" and "accumulate" produce the identical answer. This
+  // test is the one that fails: two DIFFERENT files, two DIFFERENT turns,
+  // both required, in first-seen order across the whole stream.
+  const restore = withoutSpawnSuppressionEnv();
+  const { logsRoot, cleanup } = makeRunDir('w8b1-outputs-accumulate-');
+  try {
+    const def = oneShotClone(getFixtureDef(listAgentDefinitions(join(ROOT, 'skills')), 'project-scoped-review'));
+    const result = await runAgent(def, {
+      runId: '_agent-oneshot-accumulate',
+      workdir: logsRoot,
+      prompt: 'test',
+      logsRoot,
+      queryFn: toolStreamQueryFn([
+        [{ name: 'Write', input: { file_path: '/tmp/w8b1-first-turn.md' } }],
+        [{ name: 'Write', input: { file_path: '/tmp/w8b1-second-turn.md' } }],
+        [{ name: 'Edit', input: { file_path: '/tmp/w8b1-third-turn.md' } }],
+      ]),
+    });
+    assert.deepEqual(result.outputRefs, [
+      '/tmp/w8b1-first-turn.md',
+      '/tmp/w8b1-second-turn.md',
+      '/tmp/w8b1-third-turn.md',
+    ]);
   } finally {
     restore();
     cleanup();
