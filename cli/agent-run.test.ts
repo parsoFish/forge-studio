@@ -94,6 +94,7 @@ import {
   existsSync,
   rmSync,
   statSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -242,18 +243,79 @@ function setupTurnspecFixture(): TurnspecFixture {
 /** Opaque to callers (forge-q1z): per events.jsonl, existed-at-snapshot + byte size. */
 type LogBaseline = Map<string, { existed: boolean; size: number }>;
 
+/** forge-1im. A path that is GONE at read time is, by definition, outside the
+ *  baseline-scoped world this walk inspects — the same exclusion the former
+ *  `if (!existsSync(p)) continue;` intended, spelled race-free.
+ *
+ *  WHY THIS IS NEEDED. AT-2 walks the REAL repo root (see its own comment: the
+ *  legacy fast-fail paths never touch the filesystem, so there is nothing to
+ *  isolate into a tmp fixture), and `_logs/` under the real root is shared with
+ *  every sibling test process `node --test` runs concurrently. `existsSync(p)`
+ *  followed by `readFileSync(p)` is a TOCTOU: a sibling that removes a `_logs/`
+ *  entry between the check and the read makes the read throw ENOENT and
+ *  false-fails a test with no regression behind it. That is bead forge-1im.
+ *
+ *  WHY NOT "just isolate the dispatch into a tmp root" — the structural cure
+ *  considered first, and REJECTED: AT-2 exists to assert that the REAL
+ *  `studio/session-kinds.yaml` does not route these four ids to the interactive
+ *  spine. Re-pointing it at a fixture root would make it assert about the
+ *  fixture's config instead of the shipped one — a strictly WEAKER test. And the
+ *  observation surface cannot be moved either: `runInteractiveTurn` writes to
+ *  `resolve(forgeRoot, '_logs')` (orchestrator/interactive-runner.ts:249), so
+ *  `ROOT/_logs` is the only place a real violation could ever appear.
+ *
+ *  NOT a retry and NOT a widened tolerance: nothing is re-attempted, and ONLY
+ *  ENOENT/ENOTDIR (the path is gone) is tolerated. Every other error still
+ *  throws, so this hardening can never decay into a silent swallow — pinned by
+ *  its own test below. */
+function readIfPresent(p: string): Buffer | null {
+  try {
+    return readFileSync(p);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    throw err;
+  }
+}
+
+/** Same race, same rule, for the directory listing itself — but NARROWER on
+ *  purpose: **ENOENT only**. A `_logs` that is absent is a gone path and lists
+ *  as empty; a `_logs` that EXISTS but is not a directory (ENOTDIR) is a real,
+ *  broken-repo fault, and the pre-fix code threw on it (`existsSync` answers
+ *  true for a plain file, then `readdirSync` throws). Tolerating ENOTDIR here
+ *  would have been a behaviour regression — a swallow introduced by the very
+ *  fix meant to remove a false failure. Pinned by this file's forge-1im test. */
+function readdirIfPresent(p: string): string[] {
+  try {
+    return readdirSync(p);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
+/** Same race, same rule, for the snapshot's stat. */
+function statSizeIfPresent(p: string): number | null {
+  try {
+    return statSync(p).size;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    throw err;
+  }
+}
+
 function* walkEventJsonLines(forgeRoot: string, baseline?: LogBaseline): Generator<{
   eventsPath: string;
   line: string;
   parsed: Record<string, unknown> | undefined;
 }> {
   const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return;
-  for (const entry of readdirSync(logsRoot)) {
+  for (const entry of readdirIfPresent(logsRoot)) {
     const eventsPath = join(logsRoot, entry, 'events.jsonl');
-    if (!existsSync(eventsPath)) continue;
+    const buf = readIfPresent(eventsPath);
+    if (buf === null) continue;
     const prior = baseline?.get(eventsPath);
-    const buf = readFileSync(eventsPath);
     // Buffer.prototype.subarray clamps rather than throwing when start >
     // length — a file that SHRANK below its snapshotted size has unknowable
     // provenance, so re-scan it from byte 0 instead of trusting a stale offset.
@@ -296,11 +358,12 @@ function findInteractiveRunnerStartEvent(
 function snapshotLogs(forgeRoot: string): LogBaseline {
   const baseline: LogBaseline = new Map();
   const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return baseline;
-  for (const entry of readdirSync(logsRoot)) {
+  // forge-1im: same TOCTOU as the walk — a sibling test process can remove a
+  // `_logs/` entry between this readdir and this stat.
+  for (const entry of readdirIfPresent(logsRoot)) {
     const eventsPath = join(logsRoot, entry, 'events.jsonl');
-    const existed = existsSync(eventsPath);
-    baseline.set(eventsPath, { existed, size: existed ? statSync(eventsPath).size : 0 });
+    const size = statSizeIfPresent(eventsPath);
+    baseline.set(eventsPath, { existed: size !== null, size: size ?? 0 });
   }
   return baseline;
 }
@@ -1068,6 +1131,94 @@ test('forge-q1z: a shrunken events.jsonl is re-scanned in full, not clamped to e
       () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'shrunken file must be re-scanned, not skipped'),
       /interactive-runner/,
       "a `subarray(startByte)` that clamps to empty when the file shrank, silently hiding every event in it",
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+
+// ===========================================================================
+// forge-1im (W8-C2b, acceptance test) — the _logs/ read seam must EXCLUDE a
+// path that is gone, and must still THROW on every other fault.
+//
+// THE DEFECT: AT-2 above walks the REAL repo root, whose `_logs/` is shared
+// with every sibling test process `node --test` runs concurrently. The former
+// `existsSync(p)` -> `readFileSync(p)` pair is a TOCTOU: a sibling that removes
+// the entry inside that window makes the read throw ENOENT and false-fails a
+// test with no regression behind it. That is bead forge-1im.
+//
+// HONEST LIMIT OF THIS TEST, stated rather than papered over. The real race
+// needs `existsSync` to answer TRUE and the file to vanish before the read.
+// That is not deterministically stageable: `existsSync` IS a stat, so any
+// fixture that makes the read fail with ENOENT (a dangling symlink, an absent
+// file) ALSO makes `existsSync` answer false, and the OLD code skipped it too.
+// I verified exactly that before writing this — a dangling-symlink fixture does
+// NOT reproduce the pre-fix throw. So this test does not stage the race (a
+// concurrent deleter would just add the flake this lane exists to remove); it
+// pins the CONTRACT of the seam the fix introduces, which is what makes the
+// race harmless: gone -> excluded, everything else -> throw.
+//
+// Both halves are REQUIRED. Half 1 alone is satisfied by a catch-everything —
+// precisely the "make it green by swallowing" failure this lane must not ship.
+// ===========================================================================
+
+test('forge-1im: the _logs/ read seam EXCLUDES a gone path (ENOENT) and still THROWS on any other fault — an exclusion, never a swallow', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), '1im-read-seam-'));
+  try {
+    // --- Half 1: a GONE path is excluded, and callers get a usable empty. ---
+    const missingFile = join(forgeRoot, '_logs', 'never-existed', 'events.jsonl');
+    assert.equal(readIfPresent(missingFile), null, 'a missing events.jsonl must read as null (excluded), not throw');
+    assert.equal(statSizeIfPresent(missingFile), null, 'a missing events.jsonl must stat as null (excluded), not throw');
+    assert.deepEqual(readdirIfPresent(join(forgeRoot, '_logs')), [], 'a missing _logs/ must list as empty, not throw');
+
+    // A dangling symlink — what a sibling's rmSync leaves for an instant.
+    const goneDir = join(forgeRoot, '_logs', 'sibling-deleted-mid-walk');
+    mkdirSync(goneDir, { recursive: true });
+    symlinkSync(join(forgeRoot, '_logs', 'no-such-target.jsonl'), join(goneDir, 'events.jsonl'));
+    assert.equal(readIfPresent(join(goneDir, 'events.jsonl')), null, 'a dangling events.jsonl symlink must read as null (excluded)');
+
+    // ...and the WALK keeps going past it: a live neighbour is still inspected.
+    const liveDir = join(forgeRoot, '_logs', 'live-neighbour');
+    mkdirSync(liveDir, { recursive: true });
+    writeFileSync(join(liveDir, 'events.jsonl'), fakeInteractiveRunnerStartLine('live-sid', 'live-kind') + '\n');
+    const baseline = snapshotLogs(forgeRoot);
+    assert.doesNotThrow(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'pre-existing bytes stay invisible'),
+      'the walk must complete across a gone entry, and pre-existing bytes stay baseline-invisible',
+    );
+    appendFileSync(join(liveDir, 'events.jsonl'), fakeInteractiveRunnerStartLine('appended-sid', 'appended-kind') + '\n');
+    assert.throws(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'appended event must still be caught'),
+      /appended event must still be caught/,
+      'excluding the gone entry must not abandon the walk — the neighbour\'s appended event must still fail the assertion',
+    );
+
+    // --- Half 2: every NON-gone fault must STILL throw. ---------------------
+    // events.jsonl as a DIRECTORY yields EISDIR on read: a real, unexpected
+    // fault that must never be tolerated.
+    const eisdir = join(forgeRoot, '_logs', 'events-is-a-directory');
+    mkdirSync(join(eisdir, 'events.jsonl'), { recursive: true });
+    assert.throws(
+      () => readIfPresent(join(eisdir, 'events.jsonl')),
+      (err: NodeJS.ErrnoException) => err.code === 'EISDIR',
+      'only a GONE path (ENOENT/ENOTDIR) may be tolerated — EISDIR must still throw',
+    );
+    assert.throws(
+      () => [...walkEventJsonLines(forgeRoot)],
+      (err: NodeJS.ErrnoException) => err.code === 'EISDIR',
+      'the walk must surface a non-gone read fault, never swallow it',
+    );
+    // A FILE where a log directory is expected yields ENOTDIR on the inner
+    // read — that IS a gone path (no such directory to hold events.jsonl) and
+    // is correctly excluded, while readdir on a FILE still throws ENOTDIR.
+    const notdir = join(forgeRoot, '_logs', 'plain-file');
+    writeFileSync(notdir, 'not a directory\n');
+    assert.equal(readIfPresent(join(notdir, 'events.jsonl')), null, 'ENOTDIR under a non-directory entry is a gone path — excluded');
+    assert.throws(
+      () => readdirIfPresent(notdir),
+      (err: NodeJS.ErrnoException) => err.code === 'ENOTDIR',
+      'readdirIfPresent tolerates a MISSING dir, but listing a plain FILE is a real fault and must throw',
     );
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });

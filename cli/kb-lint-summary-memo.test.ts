@@ -33,7 +33,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -377,13 +377,47 @@ describe('runBrainLintFullMemoized — ADR 044 read-path memo (proof tests)', ()
     }
   });
 
-  test('invalidates when a theme file is edited (real-world edit — mtime and size both move naturally)', () => {
+  test('invalidates when a theme file is edited (same-length edit — the mtime key alone can carry it, so the mtime is pinned not raced)', () => {
     const { forgeRoot, themeFile } = makeCleanRoot('memo-edit-');
     try {
       const first = runBrainLintFullMemoized(forgeRoot);
       assert.equal(first.findings.filter((f) => f.check === 'checkFrontmatter').length, 0);
 
-      writeFileSync(themeFile, themeContent({ title: 'Memo Fixture Theme', valid: false }));
+      // W8-C2b (bead forge-b0n). This test's former title claimed "real-world
+      // edit — mtime and size both move naturally". SIZE DOES NOT MOVE, and
+      // that wrong comment is what hid this flake. `themeContent`'s two
+      // variants are byte-identical in length BY DELIBERATE DESIGN (see this
+      // file's header: valid:false swaps `updated_at` for the equal-length
+      // placeholder `xxxxxxxxxx`), so `totalSize` is unchanged by this edit and
+      // `maxMtimeMs` is the memo fingerprint's ONLY discriminator here. The
+      // test therefore raced the filesystem's mtime tick: whenever
+      // makeCleanRoot's write and this edit landed in the SAME tick the
+      // fingerprint was identical, the memo served a stale HIT, and
+      // checkFrontmatter stayed 0 instead of 1. Reproduced deterministically
+      // before this fix by pinning both writes to one mtime — identical
+      // fingerprint {fileCount:2,maxMtimeMs:…,totalSize:326}, findings 0.
+      //
+      // The fix stamps the mtime forward explicitly, exactly as the
+      // fingerprint-unit tests above already do, so the invalidation this test
+      // pins is measured against a deterministic input instead of the host
+      // clock's resolution — which is no contract of forge's. NOTE this does
+      // NOT weaken the assertion: the 0 -> 1 findings check below is unchanged,
+      // and the precondition immediately below makes the pin load-bearing
+      // rather than decorative by failing loudly if a future edit ever makes
+      // the two variants differ in size.
+      const brokenContent = themeContent({ title: 'Memo Fixture Theme', valid: false });
+      assert.equal(
+        Buffer.byteLength(brokenContent),
+        statSync(themeFile).size,
+        'fixture precondition: this edit is byte-identical in SIZE, so mtime is the only fingerprint key that can carry the invalidation — which is exactly why it must be pinned rather than raced',
+      );
+      writeFileSync(themeFile, brokenContent);
+      // Math.floor: as in the mtime-isolation test above — utimesSync writes
+      // whole-millisecond precision while statfs reports sub-millisecond, so
+      // stamping from the raw fractional value would not round-trip.
+      const stampedMs = Math.floor(statSync(themeFile).mtimeMs) + 2000;
+      utimesSync(themeFile, new Date(stampedMs), new Date(stampedMs));
+
       const second = runBrainLintFullMemoized(forgeRoot);
       assert.equal(
         second.findings.filter((f) => f.check === 'checkFrontmatter').length,
