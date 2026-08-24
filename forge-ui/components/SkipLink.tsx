@@ -5,7 +5,7 @@ import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 /**
  * SkipLink — the first tab stop on every route (W7-C3, crosscut-18).
  *
- * A keyboard user was forced through the brand link + six nav pillars on
+ * A keyboard user was forced through the brand link + every nav pillar on
  * every page before reaching content. This link is visually hidden until
  * focused (`.skip-link` in globals.css) and jumps focus to the page's
  * `<main>` landmark.

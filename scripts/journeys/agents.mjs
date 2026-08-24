@@ -869,6 +869,37 @@ export const journey = defineJourney({
                     document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
                   check(runDispatchable === 'true',
                     `agent-builder (R2-01-F3): the saved unattended agent shows a dispatchable run surface (got "${runDispatchable}")`);
+                  // W8-B1 (ON-8): the run surface is REACHABLE, not merely
+                  // present. It used to render third in the right column,
+                  // below the whole YAML preview and the readiness list, so
+                  // on a real agent the one control this page exists for sat
+                  // off-screen. It now renders FIRST and is pinned there —
+                  // asserted two ways, because either alone can silently
+                  // regress: DOM order, and the panel's real position inside
+                  // the viewport on arrival (no scrolling).
+                  const runReach = await page.evaluate(() => {
+                    const run = document.querySelector('[data-section="agent-run"]');
+                    const yaml = document.querySelector('[data-component="yaml-preview"]');
+                    const readiness = document.querySelector('[data-component="readiness-panel"]');
+                    if (!run) return null;
+                    const before = (a, b) => !!a && !!b
+                      && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+                    const box = run.getBoundingClientRect();
+                    return {
+                      beforeYaml: before(run, yaml),
+                      beforeReadiness: before(run, readiness),
+                      top: Math.round(box.top),
+                      withinViewport: box.top < window.innerHeight && box.bottom > 0,
+                      sticky: getComputedStyle(run).position,
+                    };
+                  });
+                  check(runReach !== null, 'agent-builder (W8-B1): the run surface is mounted on the agent page');
+                  check(runReach?.beforeYaml === true && runReach?.beforeReadiness === true,
+                    `agent-builder (W8-B1): Run renders BEFORE the YAML preview and the readiness panel (yaml ${runReach?.beforeYaml}, readiness ${runReach?.beforeReadiness})`);
+                  check(runReach?.withinViewport === true,
+                    `agent-builder (W8-B1): the run surface is inside the viewport on arrival — reachable without scrolling (top ${runReach?.top}px)`);
+                  check(runReach?.sticky === 'sticky',
+                    `agent-builder (W8-B1): and it is PINNED to its scrolling column, so it stays reachable (computed position "${runReach?.sticky}")`);
                   // R4-02-F1: the generic key:value inputs surface (the onboarding
                   // agent's repo/northStar ride through it). Assert it's present +
                   // type a line so the inputs surface is inside the regression gate.

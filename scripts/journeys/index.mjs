@@ -5,8 +5,8 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving). The 17 journeys, in that order:
- * home → sessions-index → skills → hooks → templates → connections →
+ * interleaving). The 18 journeys, in that order:
+ * home → monitor → sessions-index → skills → hooks → templates → connections →
  * stand-up-onboard → stand-up-create → knowledge → agents → flows-author →
  * flows-run → flows-onboard → roadmap → demo-showcase → demo-builder →
  * community (R3-07 — deliberately
@@ -196,6 +196,7 @@
  * can recognise a prior interrupted run's residue).
  */
 import { journey as home } from './home.mjs';
+import { journey as monitor } from './monitor.mjs';
 import { journey as sessionsIndex } from './sessions-index.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
@@ -215,6 +216,7 @@ import { journey as community } from './community.mjs';
 
 export const JOURNEYS = [
   home,
+  monitor,
   sessionsIndex,
   skills,
   hooks,
@@ -239,6 +241,17 @@ export const RUN_ORDER = [
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
   ['home', 'home-crosscut-chrome'],
+
+  // W8-B1 — the Monitor pillar. Runs immediately after home for two reasons:
+  // its entry-point beat STARTS on Home (the summary strip, then the nav
+  // click that is this journey's trigger), and it seeds NOTHING — its
+  // assertions are structural and relational (the summary equals the list it
+  // summarises; Home and Monitor agree), so it neither depends on nor
+  // disturbs any other journey's fixtures. Placing it here preserves both of
+  // this registry's hard orderings untouched.
+  ['monitor', 'monitor-pillar-entry'],
+  ['monitor', 'monitor-one-surface'],
+  ['monitor', 'monitor-counts-agree'],
 
   // W6-B11 — self-contained (its own disjoint instructions-session fixture,
   // seeded/swept entirely within its own two beats); runs right after home

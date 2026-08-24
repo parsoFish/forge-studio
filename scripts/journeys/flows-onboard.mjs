@@ -124,9 +124,14 @@ export const journey = defineJourney({
         check(retiredIds.every((rid) => !cardIds.includes(rid)),
           `FOB.1: the retired reflect/onboard flow wrappers are GONE from the index (got ${JSON.stringify(cardIds)})`);
 
-        // R6-03-F3 pins carried over: six-pillar nav + server-sourced provenance.
+        // R6-03-F3 pins carried over: pillar nav + server-sourced provenance.
+        // W8-B1 added the seventh pillar (Monitor, /monitor); the nav roster
+        // itself is pinned as a plain value by components/StudioNav.test.ts,
+        // so this beat asserts the rendered count matches that roster.
         const navCount = await page.locator('[data-component="studio-nav"] [data-nav]').count();
-        check(navCount === 6, `FOB.nav: the six-pillar nav renders — got ${navCount}`);
+        check(navCount === 7, `FOB.nav: the seven-pillar nav renders — got ${navCount}`);
+        check(await page.locator('[data-component="studio-nav"] [data-nav="monitor"]').count() === 1,
+          'FOB.nav: the Monitor pillar renders in the top nav');
         check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"][data-provenance="ootb"]').count() > 0,
           'FOB.prov: forge-develop is marked data-provenance="ootb"');
 
