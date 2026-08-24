@@ -164,7 +164,7 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 /* W7-B1 (home-sessions-26): below ~760px the fixed-height nav row (brand +
-   six pillars at 28px gaps) was the widest element on `/` and `/sessions`,
+   the pillar links at 28px gaps) was the widest element on `/` and `/sessions`,
    forcing PAGE-level horizontal scroll. Let the nav wrap instead — wide
    CONTENT (the sessions table) already scrolls inside its own container. */
 @media (max-width: 760px) {

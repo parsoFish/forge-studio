@@ -4,13 +4,18 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
- * Sticky top nav — the six-pillar Studio IA.
+ * Sticky top nav — the seven-pillar Studio IA.
  *
  * R6-03-F3 added the Home pillar and moved Library off `/`; W6-IA-5
  * repointed every pillar at its real per-kind browse index (once IA-1/2/3
  * built /projects, /flows, /agents) and rewrote active-pillar detection as
  * a data-driven prefix table instead of per-id special cases:
  *   Home      → /            (Home surface, R6-07 — `/` no longer redirects)
+ *   Monitor   → /monitor     (W8-B1: the aggregate "everything running"
+ *               surface — flow runs, standalone agent runs, interactive
+ *               sessions, queue/scheduler and attention in ONE place. Home
+ *               keeps a summary strip fed by the SAME derivation
+ *               (`lib/monitor-view.ts`); Monitor owns the depth.)
  *   Projects  → /projects
  *   Flows     → /flows       (the flows index; a specific flow's own
  *               monitor — e.g. the OOTB forge-develop flow — is reached via
@@ -32,6 +37,7 @@ export type NavItem = { label: string; href: string; id: string };
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/', id: 'home' },
+  { label: 'Monitor', href: '/monitor', id: 'monitor' },
   { label: 'Projects', href: '/projects', id: 'projects' },
   { label: 'Flows', href: '/flows', id: 'flows' },
   { label: 'Agents', href: '/agents', id: 'agents' },
@@ -48,6 +54,7 @@ type ActiveRule = { exact: string } | { prefixes: string[] };
 
 const ACTIVE_RULES: Record<string, ActiveRule> = {
   home: { exact: '/' },
+  monitor: { prefixes: ['/monitor'] },
   projects: { prefixes: ['/projects'] },
   flows: { prefixes: ['/flows'] },
   agents: { prefixes: ['/agents'] },

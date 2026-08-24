@@ -70,11 +70,30 @@ import { useCycleEvents } from '@/lib/use-cycle-events';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { deriveRunGating, runStateOf } from '@/lib/run-panel-gating';
 
+// W8-B1 (ON-8): the panel is PINNED to the top of its scrolling column.
+// It renders first in `.col-right` (app/agents/[id]/page.tsx) and sticks
+// there, so the one control this page exists for cannot be scrolled away
+// behind the YAML preview and the readiness list. Same idiom as the
+// GateBar's fixed verdict bar and DemoReviewSurface's sticky verdict form —
+// the existing prior art for "a control that would otherwise sit arbitrarily
+// far down normal flow", not a new pattern.
+//
+// The height bound matters: this panel grows (project picker, ceiling,
+// materials, standing triggers, a live run's log), and an unbounded sticky
+// element taller than the viewport pins its TOP and pushes its own primary
+// button off the bottom — the same defect wearing a different hat. Bounded,
+// it scrolls internally and the button stays reachable.
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
   borderRadius: 'var(--radius)',
   padding: '12px 14px',
   marginTop: 12,
+  position: 'sticky',
+  top: 0,
+  zIndex: 30,
+  background: 'var(--bg-2)',
+  maxHeight: 'calc(100vh - 96px)',
+  overflowY: 'auto',
 };
 
 type Project = { id: string; name: string };
