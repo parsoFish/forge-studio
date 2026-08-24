@@ -50,6 +50,7 @@ import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
@@ -476,6 +477,16 @@ async function runOneShotSpawn(
     disallowedTools: [...spec.disallowedTools],
   };
   if (def.budgets.maxTurns !== undefined) options['maxTurns'] = def.budgets.maxTurns;
+  // W8-B6 — the agent's bound library hooks. Derived from `spec.skill` (the
+  // SKILL.md this spec came from) rather than from a copy carried on the spec,
+  // so nothing here can hold a stale binding. Absent for every agent that binds
+  // none, which keeps the golden spawn-capture option bags byte-identical.
+  const oneShotHooks = sdkHooksForAgent({
+    skill: spec.skill,
+    logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs'),
+    initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId,
+  });
+  if (oneShotHooks !== undefined) options['hooks'] = oneShotHooks;
   // R6-04 (WI-2): an explicit operator ceiling WINS over the agent's own
   // declared budget — not max()/min() of the two. `??` gives exactly that:
   // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
@@ -616,6 +627,12 @@ async function runInvocationSpawn(
     // transcript (tool calls + file changes + heartbeats), not just
     // start/end lines.
     ...(turnSink !== undefined ? { onToolUse: turnSink.onToolUse, onHeartbeat: turnSink.onHeartbeat } : {}),
+    // W8-B6 — same derivation as the one-shot path above; this path already
+    // holds the run's real logger, so no thunk is needed.
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: spec.skill, logger, initiativeId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
     // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
     // optional — the closure always supplies one, so the cast is sound.
     queryFn: (ctx.queryFn ?? pinnedStreamQuery) as QueryFn,

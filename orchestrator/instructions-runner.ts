@@ -43,6 +43,7 @@ import {
   type InterviewAnswer,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { sdkHooksForAgent, type SdkHooksOption } from './studio/hook-dispatch.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
@@ -263,7 +264,7 @@ export async function runInstructionsTurn(
     // symlinked answers.json inside the real, contained session dir collapses to
     // [] rather than leaking out-of-root content into the interview prompt.
     const interview = readAnswerRounds(input.projectRoot, dirSegments);
-    const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
+    const decision = await runInterviewStep({ status, interview, queryFn, logger, initiativeId, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
       // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
@@ -336,10 +337,20 @@ const INTERVIEW_SCHEMA = {
   required: ['done'],
 };
 
+/** W8-B6 — instructions-creator's own bound library hooks, spread into the
+ *  turn options. One helper so both steps derive it identically. */
+function instructionsHooks(logger: EventLogger, initiativeId: string): { hooks?: SdkHooksOption } {
+  const hooks = sdkHooksForAgent({ skill: instructionsAgentSpec.skill, logger, initiativeId });
+  return hooks !== undefined ? { hooks } : {};
+}
+
 async function runInterviewStep(args: {
   status: InstructionsStatus;
   interview: InterviewAnswer[];
   queryFn: QueryFn;
+  /** W8-B6 — required, so this step cannot spawn hook-blind. */
+  logger: EventLogger;
+  initiativeId: string;
   skillPromptPath?: string;
   matchedSeeds?: readonly InstructionSeed[];
   onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
@@ -379,6 +390,7 @@ async function runInterviewStep(args: {
     queryFn, prompt, schema: INTERVIEW_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
+    ...instructionsHooks(args.logger, args.initiativeId),
     onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
@@ -446,6 +458,7 @@ async function runDraftStep(args: {
     queryFn, prompt, schema: DRAFT_SCHEMA,
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
+    ...instructionsHooks(args.logger, args.initiativeId),
     onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
 

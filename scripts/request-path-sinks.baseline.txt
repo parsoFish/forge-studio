@@ -453,6 +453,8 @@ orchestrator/studio/connection-probe.ts statSync 2
 orchestrator/studio/hook-library.ts existsSync 2
 orchestrator/studio/hook-library.ts readdirSync 1
 orchestrator/studio/hook-library.ts realpathSync 1
+orchestrator/studio/hook-runtime.ts readFileSync 1
+orchestrator/studio/hook-runtime.ts spawnSync 1
 orchestrator/studio/hook-scan.ts existsSync 2
 orchestrator/studio/hook-scan.ts mkdirSync 1
 orchestrator/studio/hook-scan.ts readFileSync 3

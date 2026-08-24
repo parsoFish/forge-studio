@@ -80,6 +80,7 @@ import {
   FORBIDDEN_HOOK_BINDING_KEYS,
   type HookLifecycleEvent,
   type HookPermissionManifest,
+  hookTriggerError,
 } from '../orchestrator/studio/hook-library.ts';
 import {
   scanHookPackage,
@@ -308,6 +309,13 @@ export async function handleStudioHooksRoutes(
         return true;
       }
       if (!scriptBody) { sendJson(res, 400, { error: 'scriptBody is required' }, origin); return true; }
+      // W8-B6 — the SAME predicate lintHookDefinitions and hook dispatch use.
+      // Gated on BOTH write routes: gating create alone would leave PUT as the
+      // open door, which is the one-of-N shape this repo keeps paying for.
+      {
+        const triggerError = hookTriggerError(on as HookLifecycleEvent, matcher);
+        if (triggerError) { sendJson(res, 400, { error: triggerError }, origin); return true; }
+      }
 
       const permissions = parseCreatePermissions(b['permissions']);
       if ('error' in permissions) { sendJson(res, 400, { error: permissions.error }, origin); return true; }
@@ -535,6 +543,10 @@ export async function handleStudioHooksRoutes(
       let matcher = def.matcher;
       if ('matcher' in b) {
         matcher = typeof b['matcher'] === 'string' && b['matcher'].trim() ? b['matcher'].trim() : undefined;
+      }
+      {
+        const triggerError = hookTriggerError(on, matcher);
+        if (triggerError) { sendJson(res, 400, { error: triggerError }, origin); return true; }
       }
       let permissions = def.permissions;
       if (b['permissions'] !== undefined) {

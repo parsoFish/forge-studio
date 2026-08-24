@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 
 import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
@@ -141,6 +142,10 @@ export async function runPreflightFixTurn(
     allowedTools: [...preflightFixAgentSpec.allowedTools],
     disallowedTools: [...preflightFixAgentSpec.disallowedTools],
     maxTurns: 8,
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: preflightFixAgentSpec.skill, logger, initiativeId: cycleId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
   };
 
   const abortController = new AbortController();

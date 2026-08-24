@@ -52,6 +52,121 @@ export const HOOK_LIFECYCLE_EVENTS = [
 export type HookLifecycleEvent = (typeof HOOK_LIFECYCLE_EVENTS)[number];
 
 /**
+ * The lifecycle events whose SDK hook input carries a `tool_name` — the only
+ * ones a declared `matcher` can be evaluated against. `SessionStart`,
+ * `SessionEnd`, `Notification` and `UserPromptSubmit` inputs have no tool at
+ * all, so a matcher on one of them can never be honoured.
+ *
+ * DERIVED FROM DISPATCH, not a second opinion about it: `hook-dispatch.ts`'s
+ * `hookMatcherMatches` returns false the moment `input.tool_name` is not a
+ * string, which is exactly this set. Kept next to the event registry so the
+ * lint and the dispatch cannot drift apart — this repo's standing lesson is
+ * that defense-in-depth lint must mirror the dispatch it backstops.
+ */
+export const TOOL_SCOPED_HOOK_EVENTS = ['PreToolUse', 'PostToolUse'] as const;
+
+// ---------------------------------------------------------------------------
+// Matcher parsing — forge's own `Tool` / `Tool(commandPrefix)` syntax.
+//
+// Lives HERE, next to the definition it validates, rather than in
+// hook-dispatch.ts where it started: `hookTriggerError` below is the shape
+// check on all five write paths and it must reuse dispatch's own parse rather
+// than retype the regex (this repo's standing lesson — a defense-in-depth
+// check that reimplements the thing it backstops drifts from it). The other
+// direction, hook-library importing hook-dispatch, would be an import cycle
+// that drags the whole dispatch graph — registry, derive, hook-runtime — into
+// every lint and bridge route that reads a hook definition.
+//
+// hook-dispatch.ts keeps the ENFORCEMENT (`hookMatcherMatches`); only the
+// parse moved.
+// ---------------------------------------------------------------------------
+
+export type ParsedHookMatcher = { tool: string; commandPrefix?: string };
+
+/**
+ * Three outcomes, not two.
+ *
+ * W8-B6 FIX-2 (2026-08-24 hostile review): this used to return
+ * `ParsedHookMatcher | undefined`, where `undefined` meant "no matcher ⇒ fires
+ * on every occurrence of the event". A string that did not match the
+ * `Tool(args)` regex — `Bash(gh pr create`, one missing paren — fell through
+ * to `{tool: <the whole raw string>}`, which `hookMatcherMatches` then
+ * compared against a real `tool_name`. No tool is called
+ * `"Bash(gh pr create"`, so the hook was permanently inert, and the no-match
+ * branch logged nothing at all.
+ *
+ * `malformed` cannot collapse into `absent`: absent means "fire always", so
+ * folding a typo into it would hand a broken guard a veto over EVERY tool
+ * call — strictly worse than the silence it replaces. It is its own state,
+ * refused by the write paths and never fired by dispatch.
+ */
+export type HookMatcherParse =
+  | { kind: 'absent' }
+  | { kind: 'matcher'; matcher: ParsedHookMatcher }
+  | { kind: 'malformed'; reason: string };
+
+/** A bare tool name: no parens, no whitespace. `Bash`, `Read`,
+ *  `mcp__server__tool` — the shape an SDK `tool_name` can actually take. */
+const MATCHER_BARE_TOOL = /^[^()\s]+$/;
+const MATCHER_WITH_ARGS = /^([^()\s]+)\((.*)\)$/;
+
+/** Parse a declared `matcher`. Absent/blank ⇒ `{kind:'absent'}` ⇒ matches
+ *  every occurrence of the event. Exported for the lint + the five write
+ *  paths that mirror this dispatch (via `hookTriggerError`). */
+export function parseHookMatcher(raw: string | undefined): HookMatcherParse {
+  const trimmed = raw?.trim();
+  if (!trimmed) return { kind: 'absent' };
+  const withArgs = MATCHER_WITH_ARGS.exec(trimmed);
+  if (withArgs) return { kind: 'matcher', matcher: { tool: withArgs[1]!, commandPrefix: withArgs[2]!.trim() } };
+  if (MATCHER_BARE_TOOL.test(trimmed)) return { kind: 'matcher', matcher: { tool: trimmed } };
+  return {
+    kind: 'malformed',
+    reason:
+      'is neither a bare tool name nor Tool(commandPrefix) — dispatch compares a matcher against a real tool name, ' +
+      'and this string can never equal one, so the hook would be authored, approved, displayed as carried, and never fire',
+  };
+}
+
+/**
+ * The trigger-coherence rule, as a pure predicate so it has ONE implementation
+ * and five callers (`lintHookDefinitions` below, the hook create and update
+ * bridge routes, the authoring-session finalize route, and the community
+ * install route). Returns an operator-facing message, or `undefined` when the
+ * trigger is coherent.
+ *
+ * It checks TWO independent things, in order:
+ *
+ *  1. SHAPE (W8-B6 FIX-2) — the matcher must parse into something dispatch can
+ *     evaluate. Reuses `parseHookMatcher` above rather than retyping its
+ *     regex: one source of truth, so the backstop cannot drift from the
+ *     dispatch it backstops.
+ *  2. EVENT COHERENCE — a matcher needs a `tool_name` to match against, and
+ *     only `TOOL_SCOPED_HOOK_EVENTS` carry one.
+ *
+ * Shape first, because a malformed matcher is wrong on every event, including
+ * the two the coherence rule would otherwise wave through.
+ *
+ * A blank/whitespace matcher counts as none — that is literally what the
+ * authoring form submits for an empty field — and stays legal.
+ */
+export function hookTriggerError(on: HookLifecycleEvent, matcher: string | undefined): string | undefined {
+  const parse = parseHookMatcher(matcher);
+  if (parse.kind === 'absent') return undefined;
+  if (parse.kind === 'malformed') {
+    return (
+      `matcher ${JSON.stringify(matcher)} ${parse.reason}. ` +
+      `Write it as a tool name (e.g. "Bash") or as Tool(commandPrefix) (e.g. "Bash(gh pr create)").`
+    );
+  }
+  if ((TOOL_SCOPED_HOOK_EVENTS as readonly string[]).includes(on)) return undefined;
+  return (
+    `matcher ${JSON.stringify(matcher)} is declared on "${on}", which carries no tool — a matcher can only be ` +
+    `honoured on ${TOOL_SCOPED_HOOK_EVENTS.join(' or ')}. Dispatch would never fire this hook. ` +
+    `Remove the matcher, or move the hook to a tool-scoped event.`
+  );
+}
+
+/**
  * A `hook.yaml` declaring any of these top-level keys is REJECTED — a
  * definition never names a binding (round-4 mockup rule). This makes
  * "definitions land unbound" structural, not conventional: no amount of
@@ -313,7 +428,17 @@ export function lintHookDefinitions(forgeRoot: string): Finding[] {
   const findings: Finding[] = [];
   for (const id of listHookIds(forgeRoot)) {
     try {
-      loadHookDefinition(id, forgeRoot);
+      const def = loadHookDefinition(id, forgeRoot);
+      // W8-B6 — mirror hook dispatch's matcher rule (see hookTriggerError).
+      const triggerError = hookTriggerError(def.on, def.matcher);
+      if (triggerError) {
+        findings.push({
+          level: 'error',
+          object: `hook:${id}`,
+          check: 'hook-library/trigger',
+          message: triggerError,
+        });
+      }
     } catch (e) {
       findings.push({
         level: 'error',

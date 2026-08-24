@@ -23,6 +23,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '../studio/hook-dispatch.ts';
+import { releaseFinalizeAgentSpec } from '../release-finalize-invocation.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { loadProjectConfig } from '../project-config.ts';
@@ -156,6 +158,10 @@ export async function runReleaseFinalize(
     disallowedTools: [...RELEASE_FINALIZE_DISALLOWED_TOOLS],
     maxTurns: RELEASE_FINALIZE_LIVE_MAX_TURNS,
     maxBudgetUsd: RELEASE_FINALIZE_LIVE_MAX_BUDGET_USD,
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: releaseFinalizeAgentSpec.skill, logger, initiativeId: input.initiativeId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
   };
 
   const toolUseSummary: ReleaseFinalizeToolUseSummary = { editWrites: 0, bashCalls: 0 };

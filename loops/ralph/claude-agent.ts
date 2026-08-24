@@ -14,6 +14,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { pinnedSdkQuery as sdkQuery } from '../../orchestrator/pinned-sdk-query.ts';
+import type { SdkHooksOption } from '../../orchestrator/studio/hook-dispatch.ts';
 
 import { withIdleDeadline } from '../../orchestrator/stream-deadline.ts';
 import { gitIdentityEnvOverlay, type GitIdentity } from '../../orchestrator/config.ts';
@@ -70,6 +71,15 @@ export type ClaudeAgentOptions = {
    * inherits the ambient identity exactly like before this wave.
    */
   gitIdentity?: GitIdentity;
+  /**
+   * W8-B6 — the running agent's bound library hooks, as the SDK's
+   * `options.hooks` shape. Built by the CALLER (which holds the agent's
+   * `PhaseAgentSpec.skill` and the run's logger) via
+   * `orchestrator/studio/hook-dispatch.ts`'s `sdkHooksForAgent`; this adapter
+   * only forwards it. Absent for every agent that binds none, which leaves
+   * the SDK call byte-identical.
+   */
+  hooks?: SdkHooksOption;
   /** Inject a fake `query` for testing. */
   queryFn?: QueryFn;
   /**
@@ -227,6 +237,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;
     if (opts.systemPrompt !== undefined) options.systemPrompt = opts.systemPrompt;
+    if (opts.hooks !== undefined) options.hooks = opts.hooks;
     // G8 wave 2 (R5-02: now a small override delta, not a pre-merged env —
     // see gitIdentityEnvOverlay + pinned-sdk-query.ts's override semantics).
     // Only set options.env at all when a gitIdentity was supplied, so an
