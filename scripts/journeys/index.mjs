@@ -5,10 +5,11 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving). The 18 journeys, in that order:
- * home → monitor → sessions-index → skills → hooks → templates → connections →
- * stand-up-onboard → stand-up-create → knowledge → agents → flows-author →
- * flows-run → flows-onboard → roadmap → demo-showcase → demo-builder →
+ * interleaving). The 19 journeys, in that order:
+ * home → monitor → sessions-index → projects → skills → hooks → templates →
+ * connections → stand-up-onboard → stand-up-create → knowledge → agents →
+ * flows-author → flows-run → flows-onboard → roadmap → demo-showcase →
+ * demo-builder →
  * community (R3-07 — deliberately
  * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
  * real hook, mutating /skills, /hooks and the agent-builder palette counts
@@ -198,6 +199,7 @@
 import { journey as home } from './home.mjs';
 import { journey as monitor } from './monitor.mjs';
 import { journey as sessionsIndex } from './sessions-index.mjs';
+import { journey as projects } from './projects.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
@@ -218,6 +220,7 @@ export const JOURNEYS = [
   home,
   monitor,
   sessionsIndex,
+  projects,
   skills,
   hooks,
   templates,
@@ -261,6 +264,30 @@ export const RUN_ORDER = [
   // flows-run before roadmap) untouched.
   ['sessions-index', 'sessions-index-home-strip'],
   ['sessions-index', 'sessions-index-overflow'],
+
+  // W8-C3 — the projects index's own story (health / activity / filter-sort-
+  // search / honest skill bindings). Self-contained: three throwaway scratch
+  // projects (journey-projects-broken / -unfinished / -ready, projects.mjs —
+  // never mdtoc, never J4_PROJECT, never home.mjs's own HOME_* fixtures) are
+  // seeded by projects-index-health behind its own crash-safe leading sweep
+  // and swept by projects-skill-bindings' finally, the last beat that needs
+  // them — mirroring home's own cross-beat seed/sweep shape. Placed here
+  // because it is the earliest slot that disturbs NEITHER hard ordering
+  // (stand-up-onboard before flows-author; flows-run before roadmap), and
+  // because home's own home-projects-index beat has already asserted the
+  // index's baseline contract by this point.
+  //
+  // The header prose was deliberately left stale while W8-B1 (monitor) and this
+  // lane registered concurrently, on the understanding that whichever landed
+  // last would make one edit covering both. This lane landed last, so it is
+  // done: the header now reads 19 and names both `monitor` and `projects` in
+  // their real RUN_ORDER positions — derived from the array by walking
+  // RUN_ORDER, not written by hand. Note that the runner reads the array, never
+  // the prose (W8-B5 recorded this same prose drifting once before), so the
+  // prose is documentation only and cannot make a journey run or not run.
+  ['projects', 'projects-index-health'],
+  ['projects', 'projects-index-filter'],
+  ['projects', 'projects-skill-bindings'],
 
   ['skills', 'skills-library'],
   ['skills', 'skills-detail-package'],

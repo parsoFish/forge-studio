@@ -4,6 +4,10 @@ import Link from 'next/link';
 import type { Agent, Flow, Kb, Project, Run } from '@/lib/studio-client';
 import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 import { deriveFlowStatus, runsForFlow } from '@/lib/home-view';
+import { deriveProjectHealth, type ProjectHealthLevel } from '@/lib/projects-index-health';
+import { deriveProjectActivity } from '@/lib/projects-index-activity';
+import { formatWhen } from '@/lib/history-ledger';
+import type { Cycle, ProjectAttentionItem } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,9 +26,58 @@ function plural(n: number, word: string): string {
 // Project card
 // ---------------------------------------------------------------------------
 
-export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb[]; index: number }) {
+/** W8-C3: the health chip's colour token per level. `healthy` is deliberately
+ *  the QUIET one — a roster of ready projects should not glow; the eye belongs
+ *  on the two that need the operator. */
+const HEALTH_COLOR: Record<ProjectHealthLevel, string> = {
+  healthy: 'var(--faint)',
+  attention: 'var(--amber, var(--ember))',
+  broken: 'var(--ember)',
+  unknown: 'var(--faint)',
+};
+
+export function ProjectCard({
+  project,
+  kbs,
+  index,
+  attention,
+  cycles,
+  nowMs,
+}: {
+  project: Project;
+  kbs: Kb[];
+  index: number;
+  /**
+   * W8-C3 (projects-08): the RAW sources an activity signal is derived from,
+   * never a pre-computed activity value. Passing the derivation instead of its
+   * inputs is exactly how a prop becomes a place for a stale copy to live —
+   * the same reason `health` above is not a prop either.
+   *
+   * BOTH absent = this shelf does not show activity (the Library's projects
+   * section). That is a different fact from "present but empty", which means
+   * the sources were read and had nothing for this project.
+   */
+  attention?: readonly ProjectAttentionItem[];
+  cycles?: readonly Cycle[];
+  /** Injected so the relative time is deterministic under test (D7: never read
+   *  `Date.now()` inside a formatter). */
+  nowMs?: number;
+}) {
   const skillCount = (project.skills ?? []).length;
   const kbLabel = project.kb ? (kbs.find((k) => k.id === project.kb)?.name ?? project.kb) : null;
+  // W8-C3 (projects-08 / forge-j1e): DERIVED here, from the project itself, on
+  // every render. Deliberately NOT a prop — a `health` prop is a place for a
+  // stale copy to live, and the derivation belongs with the thing that renders
+  // it. (Correction, verified rather than assumed: this card has exactly ONE
+  // consumer today — `ProjectsIndex.tsx`. The Library's projects shelf that
+  // used to be the second one was retired by W6-IA-4 in favour of that index,
+  // so "one card, two shelves" is no longer true and is not the argument here.
+  // The argument is that the NEXT consumer cannot introduce a disagreement,
+  // because there is no value for it to pass. `lib/projects-index-health.test.ts`
+  // pins the consumer count so this claim cannot rot silently.)
+  const health = deriveProjectHealth(project);
+  const showsActivity = attention !== undefined || cycles !== undefined;
+  const activity = showsActivity ? deriveProjectActivity(project.id, attention ?? [], cycles ?? []) : null;
 
   return (
     <Link
@@ -33,6 +86,7 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
       data-card-type="project"
       data-card-id={project.id}
       data-provenance={project.provenance}
+      data-health={health.level}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
@@ -44,7 +98,62 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
       <div className="card-meta">
         <span className="card-stat">{plural(skillCount, 'skill')}</span>
         {kbLabel && <span className="badge badge-kb">{kbLabel}</span>}
+        <span
+          className="card-stat"
+          data-field="project-health"
+          data-health={health.level}
+          style={{ color: HEALTH_COLOR[health.level], fontWeight: health.level === 'broken' ? 700 : 400 }}
+        >
+          {health.label}
+        </span>
       </div>
+      {activity && (
+        <div
+          className="card-meta"
+          data-field="project-activity"
+          /* Machine-readable and EXACT: the server's own ISO verbatim, and the
+             explicit tokens `none` / `unknown` rather than an empty string, so
+             "we looked and there is nothing" and "we could not look" stay
+             distinguishable in the DOM contract. */
+          data-last-activity={activity.lastActivityIso ?? 'none'}
+          data-open-count={activity.openCount === null ? 'unknown' : String(activity.openCount)}
+          data-progress-done={activity.progress === null ? 'unknown' : String(activity.progress.done)}
+          data-progress-total={activity.progress === null ? 'unknown' : String(activity.progress.total)}
+          data-flagged={activity.queue === null ? 'unknown' : String(activity.queue.flagged)}
+          style={{ marginTop: 6 }}
+        >
+          <span className="card-stat">
+            {activity.lastActivityIso === null ? 'no activity yet' : formatWhen(activity.lastActivityIso, nowMs ?? Date.now())}
+          </span>
+          <span className="card-stat">
+            {activity.openCount === null
+              ? 'work unknown'
+              : activity.openCount === 0
+                ? 'nothing queued'
+                : plural(activity.openCount, 'open initiative')}
+          </span>
+          {activity.progress !== null && (
+            <span className="card-stat">{activity.progress.done}/{activity.progress.total} merged</span>
+          )}
+          {activity.queue !== null && activity.queue.flagged > 0 && (
+            <span className="card-stat" style={{ color: 'var(--ember)' }}>
+              {plural(activity.queue.flagged, 'flagged plan')}
+            </span>
+          )}
+        </div>
+      )}
+      {/* The reason, in the words of whatever judged it — the operator cannot
+          fix "unhealthy", only "the flat gate keys moved to the typed
+          testProcess object". Rendered only when there IS one, so a healthy
+          card gains no empty row. */}
+      {health.reasons.length > 0 && (
+        <div
+          data-field="project-health-reason"
+          style={{ fontSize: 11, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}
+        >
+          {health.reasons.join(' · ')}
+        </div>
+      )}
     </Link>
   );
 }

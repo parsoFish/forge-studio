@@ -695,7 +695,72 @@ export type Project = {
    * worst) for every project that actually came off the wire.
    */
   provenance?: Provenance;
+  /**
+   * W8-C3 (projects-08 / forge-j1e): the server's per-request contract-health
+   * verdict for this project — derived by running `.forge/project.json`
+   * through the SAME validator the orchestrator runs the project through
+   * (`validateProjectConfig`), never persisted anywhere.
+   *
+   * Optional on the client TYPE (not the wire payload) so pre-existing
+   * `Project` literals elsewhere in forge-ui keep compiling;
+   * `fetchStudioProjects` always attaches a real value — `{ state: 'unknown' }`
+   * at worst — for every project that actually came off the wire. `'unknown'`
+   * is the honest fail-CLOSED normalisation of an absent/garbage field; it is
+   * NEVER rounded up to `'ok'` (see `parseProjectConfigHealth`).
+   */
+  configHealth?: ProjectConfigHealth;
+  /**
+   * W8-C3 (projects-06 / projects-43): the ids of skills that live INSIDE this
+   * project (`.forge/skills/<id>/SKILL.md`), derived from disk by the bridge on
+   * every read. Optional on the TYPE so pre-existing `Project` literals keep
+   * compiling; `fetchStudioProjects` always attaches a real array (`[]` at
+   * worst) for every project that came off the wire.
+   */
+  localSkills?: string[];
 };
+
+/**
+ * The client-side mirror of the bridge's `ProjectConfigHealth`
+ * (`cli/bridge-studio.ts`), plus the one state only a client can be in:
+ * `'unknown'`, meaning the wire carried nothing this boundary could parse.
+ */
+export type ProjectConfigHealth = {
+  state: 'ok' | 'unconfigured' | 'invalid' | 'unknown';
+  /** The judging component's OWN message. Absent when there is nothing to say. */
+  reason?: string;
+};
+
+const PROJECT_CONFIG_HEALTH_STATES = ['ok', 'unconfigured', 'invalid', 'unknown'] as const;
+
+/**
+ * Parse the server's contract-health verdict. Fail CLOSED: an absent field, a
+ * non-object, or an unrecognised state token all normalise to
+ * `{ state: 'unknown' }` — an honest "we do not know" — and NEVER to `'ok'`.
+ * Defaulting an unknown to healthy is the identical fabrication
+ * `parseKbLint` exists to refuse (`{errors:0,flags:0}` invented for an absent
+ * summary), and it would silently restore the exact defect W8-C3 closes.
+ *
+ * A non-string `reason` is DROPPED rather than carried: the UI renders it as
+ * text, and an object reaching a text slot is a render crash, not a message.
+ */
+export function parseProjectConfigHealth(raw: unknown): ProjectConfigHealth {
+  if (typeof raw !== 'object' || raw === null) return { state: 'unknown' };
+  const obj = raw as Record<string, unknown>;
+  const state = PROJECT_CONFIG_HEALTH_STATES.find((s) => s === obj['state']);
+  if (state === undefined) return { state: 'unknown' };
+  const reason = obj['reason'];
+  return typeof reason === 'string' && reason !== '' ? { state, reason } : { state };
+}
+
+/**
+ * Parse a wire list of skill ids. Absent / non-array normalises to `[]`, and
+ * non-string elements are dropped rather than carried — the honest empty is
+ * "we looked and found none", and a malformed element must never become a
+ * bindable id.
+ */
+export function parseSkillIdList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : [];
+}
 
 export type KbBinding =
   | {
@@ -1307,16 +1372,25 @@ export async function fetchStandingTriggers(): Promise<StandingTrigger[]> {
 
 /**
  * Fetch all projects. Every other field is carried through as the wire sent
- * it (an existing cast, unchanged); `provenance` (forge-3oq) is the one
- * field REAL-parsed at this boundary rather than cast — an absent/garbage
- * wire value must normalise to `'unknown'`, never pass through raw or
- * default to `'operator'`.
+ * it (an existing cast, unchanged); `provenance` (forge-3oq) and
+ * `configHealth` (W8-C3) are the TWO fields REAL-parsed at this boundary
+ * rather than cast — an absent/garbage wire value must normalise to the
+ * honest `'unknown'` in both cases, never pass through raw, never default to
+ * `'operator'`, and never default to `'ok'`.
  */
 export async function fetchStudioProjects(): Promise<Project[]> {
   const body = await studioRead<{ projects?: unknown[] }>('/api/studio/projects');
   return (body.projects ?? []).map((raw) => ({
     ...(raw as Project),
     provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
+    // W8-C3: the SECOND field real-parsed at this boundary rather than cast —
+    // an absent/garbage verdict must normalise to the honest `'unknown'`,
+    // never pass through raw and never default to `'ok'`.
+    configHealth: parseProjectConfigHealth((raw as Record<string, unknown> | null)?.['configHealth']),
+    // W8-C3: parsed, not cast. A non-array or an array with non-string
+    // elements must not reach the picker — a `{}` in a skill-id slot renders
+    // as `[object Object]` and binds nothing.
+    localSkills: parseSkillIdList((raw as Record<string, unknown> | null)?.['localSkills']),
   }));
 }
 

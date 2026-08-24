@@ -2,23 +2,38 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-
-type SkillItem = { id: string; name: string; desc?: string };
+import {
+  offeredSkills,
+  filterSkillCatalog,
+  resolveSkillBinding,
+  type SkillItem,
+} from '@/lib/project-skills-bind';
 
 export function SkillsBind({
-  skills, onChange, catalog,
+  skills, onChange, catalog, localSkills = [],
 }: {
   skills: string[];
   onChange: (s: string[]) => void;
+  /** The forge-wide library (`GET /api/studio/catalog`). */
   catalog: SkillItem[];
+  /**
+   * W8-C3 (projects-06): the ids of skills that live INSIDE this project
+   * (`.forge/skills/<id>/SKILL.md`), derived per request by the bridge. Without
+   * these the picker is forge-wide only, so a project-local skill that is
+   * unbound can never be re-bound.
+   */
+  localSkills?: readonly string[];
 }) {
   const [search, setSearch] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const [dragSkillId, setDragSkillId] = useState<string | null>(null);
 
-  const filtered = catalog.filter((s) =>
-    !search || s.name.toLowerCase().includes(search.toLowerCase()) || (s.desc ?? '').toLowerCase().includes(search.toLowerCase())
-  );
+  // ONE offered set, derived from every real source; the library lists it and
+  // every chip resolves against it. That is what makes "the picker cannot
+  // offer this back" (projects-06) and "this chip is lying" (projects-43) the
+  // same fact, judged in one place instead of two.
+  const offered = offeredSkills(catalog, localSkills);
+  const filtered = filterSkillCatalog(offered, search);
 
   function addSkill(id: string) {
     if (skills.includes(id)) return;
@@ -55,6 +70,8 @@ export function SkillsBind({
                   <div
                     key={sk.id}
                     draggable
+                    data-skill-id={sk.id}
+                    data-skill-source={sk.source ?? 'forge'}
                     onDragStart={() => setDragSkillId(sk.id)}
                     onDragEnd={() => setDragSkillId(null)}
                     style={{
@@ -98,18 +115,39 @@ export function SkillsBind({
                 {skills.length === 0
                   ? <span className="placeholder">Drop skills here — agents will load these when working this project</span>
                   : skills.map((sid) => {
-                      const item = catalog.find((c) => c.id === sid);
+                      // W8-C3 (projects-43): resolved against the OFFERED set,
+                      // not against `catalog` with a `?? sid` fallback. The
+                      // fallback was the defect: it rendered an unresolvable
+                      // binding as its own raw id, which reads as a healthy chip.
+                      const binding = resolveSkillBinding(sid, offered);
                       return (
-                        <span key={sid} className="chip" data-kind="skill">
-                          <span className="dot" />
-                          {item?.name ?? sid}
+                        <span
+                          key={sid}
+                          className="chip"
+                          data-kind="skill"
+                          data-skill-id={sid}
+                          data-resolved={binding.resolved ? 'ok' : 'missing'}
+                          data-skill-source={binding.source}
+                          title={binding.resolved
+                            ? (binding.source === 'project' ? `${binding.label} — lives in this project (.forge/skills)` : binding.label)
+                            : `${sid} — missing: no skill with this id exists forge-wide or in this project`}
+                          style={binding.resolved ? undefined : { borderColor: 'var(--ember)', color: 'var(--ember)' }}
+                        >
+                          <span className="dot" style={binding.resolved ? undefined : { background: 'var(--ember)' }} />
+                          {binding.label}
+                          {!binding.resolved && (
+                            <span style={{ fontSize: 10.5, marginLeft: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>missing</span>
+                          )}
+                          {binding.resolved && binding.source === 'project' && (
+                            <span style={{ fontSize: 10.5, marginLeft: 6, color: 'var(--faint)' }}>project</span>
+                          )}
                           {/* W7-B6 (projects-07): a REAL button — keyboard-
                               reachable, announced ("Remove skill X") — not a
                               click-only bare span. */}
                           <button
                             type="button"
                             className="x"
-                            aria-label={`Remove skill ${item?.name ?? sid}`}
+                            aria-label={binding.resolved ? `Remove skill ${binding.label}` : `Remove missing skill ${sid}`}
                             onClick={() => removeSkill(sid)}
                             style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', font: 'inherit', padding: 0 }}
                           >×</button>
