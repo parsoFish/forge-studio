@@ -122,6 +122,21 @@ function CommunityBrowserInner() {
   // button through disabledAttrs while the request is in flight.
   const [refreshResult, setRefreshResult] = useState<CommunityRefreshResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // W8-B5b hostile-review FINDING 1 — whether the post-WRITE re-read (below)
+  // failed to come back. This is deliberately NOT `status`: `status` answers
+  // "do we have index data to show at all", and a failed re-read after an
+  // already-successful write does not retract that data — it only means what
+  // is on screen may now be stale. Reconciled with `refreshResult` in
+  // `refreshOutcomeView` so the result region can state BOTH true facts at
+  // once, never letting one clobber the other.
+  const [postWriteReloadFailed, setPostWriteReloadFailed] = useState(false);
+  // W8-B5b hostile-review FINDING 2 — a SYNCHRONOUS re-entrancy guard. React
+  // only commits `disabled` (state-derived, via `disabledAttrs` below) on the
+  // NEXT render, so two fast clicks both enter this callback before either
+  // sees it disabled. A ref is checked/set before the first `await`, so the
+  // second entry returns immediately — `disabledAttrs` stays the visible
+  // affordance; this is the correctness guard underneath it.
+  const refreshInFlight = useRef(false);
 
   // W8-B5b — the index read is a REUSABLE callback, not an effect-local
   // closure, because a successful deterministic refresh REWRITES the very
@@ -138,12 +153,24 @@ function CommunityBrowserInner() {
     return () => { mounted.current = false; };
   }, []);
 
-  const loadIndex = useCallback(async () => {
+  // W8-B5b hostile-review FINDING 1 — `mode` distinguishes the MOUNT read
+  // (nothing has been shown yet — a failure genuinely IS a page-level error,
+  // unchanged from before) from a POST-WRITE re-read (the page already has a
+  // just-rendered write success on screen — a failure here must not retract
+  // it or bury the ready page beneath a full-page error banner). Only the
+  // 'initial' mode may ever set `status`/`error`; 'post-write' surfaces its
+  // failure ONLY through `postWriteReloadFailed`, consumed below by
+  // `refreshOutcomeView`.
+  const loadIndex = useCallback(async (mode: 'initial' | 'post-write' = 'initial') => {
     const r = await fetchCommunityIndex();
     if (!mounted.current) return;
     if (!r.ok) {
-      setStatus('error');
-      setError(r.error ?? 'could not reach the forge bridge');
+      if (mode === 'initial') {
+        setStatus('error');
+        setError(r.error ?? 'could not reach the forge bridge');
+      } else {
+        setPostWriteReloadFailed(true);
+      }
       return;
     }
     setHubs(r.hubs);
@@ -151,6 +178,7 @@ function CommunityBrowserInner() {
     setMeta(r.meta);
     setStatus('ready');
     setError(null);
+    if (mode === 'post-write') setPostWriteReloadFailed(false);
   }, []);
 
   // W8-B5b — this effect used to ALSO fetch the whole sessions index just to
@@ -218,7 +246,9 @@ function CommunityBrowserInner() {
   const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
-  const refreshView = refreshResult !== null ? refreshOutcomeView(refreshResult) : null;
+  const refreshView = refreshResult !== null
+    ? refreshOutcomeView(refreshResult, { postWriteReloadFailed })
+    : null;
 
   // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
   // (every failure — transport, dry-bridge, a typed refusal, a bare 500 — is
@@ -228,17 +258,29 @@ function CommunityBrowserInner() {
   // that fetch is advisory strip decoration; this one is the operator's own
   // explicit request.
   const handleRefreshClick = useCallback(async () => {
-    setRefreshing(true);
-    const result = await postCommunityRefresh();
-    if (!mounted.current) return;
-    setRefreshResult(result);
-    setRefreshing(false);
-    // The registry file just changed on disk — re-read the index so the
-    // freshness the page STATES is the freshness the registry now HAS. Only
-    // on a real write: a dry-bridge refusal, a typed refusal and a partial
-    // pass that wrote nothing all leave the file untouched, and re-reading
-    // after those would be a request that cannot tell anyone anything new.
-    if (result.state === 'ok' && result.wrote) await loadIndex();
+    // FINDING 2 — synchronous re-entrancy guard, checked/set before the
+    // first `await` so a second synchronous click is a no-op.
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    try {
+      setRefreshing(true);
+      setPostWriteReloadFailed(false);
+      const result = await postCommunityRefresh();
+      if (!mounted.current) return;
+      setRefreshResult(result);
+      setRefreshing(false);
+      // The registry file just changed on disk — re-read the index so the
+      // freshness the page STATES is the freshness the registry now HAS.
+      // Only on a real write: a dry-bridge refusal, a typed refusal and a
+      // partial pass that wrote nothing all leave the file untouched, and
+      // re-reading after those would be a request that cannot tell anyone
+      // anything new. FINDING 1 — this re-read's own failure is handled
+      // entirely inside `loadIndex('post-write')`; it can never clobber the
+      // success we just rendered above.
+      if (result.state === 'ok' && result.wrote) await loadIndex('post-write');
+    } finally {
+      refreshInFlight.current = false;
+    }
   }, [loadIndex]);
 
   return (

@@ -379,3 +379,110 @@ test('parseCommunityRefreshResponse: THROWS on a malformed payload — not an ob
   expect(() => parseCommunityRefreshResponse(500, {})).toThrow();
   expect(() => parseCommunityRefreshResponse(200, { wrote: 'yes', dryRun: false, lastRefresh: null, counts: WELL_FORMED_REFRESH_OK.counts, outcomes: [], errors: [] })).toThrow();
 });
+
+// ---------------------------------------------------------------------------
+// W8-B5b hostile-review FINDING 3 — a parser type-check with no test that it
+// fires. The reviewer mutated `parseCommunityRefreshOutcome`'s "source" field
+// from a validating `parseNullableField(... typeof v !== 'string' -> throw)`
+// to a bare `(r['source'] as string) ?? null` coercion — the exact
+// "coerce instead of refuse" shape this file's own header bans — and ALL
+// pre-existing tests still passed, because nothing ever gave `outcome.source`
+// a non-string, non-null value.
+//
+// Below is ONE dedicated test per explicit type-check in the community-refresh
+// parsing section (parseCommunityRefreshCounts through
+// parseCommunityRefreshResponse) that was not already covered by an existing
+// test above. Each gives THAT field a wrong-typed (or, for an enum, an
+// unrecognised) value and asserts the parse REFUSES. Already-covered sites
+// (not duplicated here): the "outcomes" array check, the outcome "status"
+// enum, the top-level "wrote" boolean, and the refusal "reason" enum — all
+// four already have a dedicated throw-test above this block.
+//
+// See this campaign's `scripts/w8b5b-scratch-mutation-proof.sh` (run
+// separately, output in the session report) for proof that at least three of
+// these NEW tests actually fail against a coerced implementation — the same
+// check the reviewer applied to find this gap in the first place.
+// ---------------------------------------------------------------------------
+
+// --- parseCommunityRefreshCounts: 5 requireNumber call sites -----------------
+
+for (const field of ['total', 'refreshed', 'unchanged', 'noUpstream', 'failed'] as const) {
+  test(`parseCommunityRefreshResponse: THROWS when counts.${field} is not a number (e.g. a string) — never coerced`, () => {
+    const bad = { ...WELL_FORMED_REFRESH_OK, counts: { ...WELL_FORMED_REFRESH_OK.counts, [field]: 'not-a-number' } };
+    expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+  });
+}
+
+// --- top-level "dryRun" requireBoolean ---------------------------------------
+
+test('parseCommunityRefreshResponse: THROWS when "dryRun" is not a boolean (e.g. a string) — never coerced', () => {
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, dryRun: 'false' })).toThrow();
+});
+
+// --- top-level "lastRefresh" inline typeof check (nullable field) -----------
+
+test('parseCommunityRefreshResponse: THROWS when "lastRefresh" is present but not a string or null (e.g. a number) — never coerced', () => {
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, lastRefresh: 12345 })).toThrow();
+});
+
+// --- parseCommunityRefreshOutcome: id / source / detail ----------------------
+
+test('parseCommunityRefreshResponse: THROWS when an outcome\'s "id" is not a string', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, outcomes: [{ id: 42, source: null, status: 'refreshed', detail: 'x' }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS when an outcome\'s "source" is present but not a string or null (e.g. a number) — the EXACT field the reviewer\'s coerce-instead-of-refuse mutation targeted', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, outcomes: [{ id: 'x', source: 42, status: 'refreshed', detail: 'x' }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS when an outcome\'s "detail" is not a string', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, outcomes: [{ id: 'x', source: null, status: 'refreshed', detail: 42 }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+// --- parseCommunityRefreshFailures: the "errors" array check ----------------
+
+test('parseCommunityRefreshResponse: THROWS when "errors" is not an array — never coerced from `?? []`', () => {
+  expect(() => parseCommunityRefreshResponse(200, { ...WELL_FORMED_REFRESH_OK, errors: null })).toThrow();
+});
+
+// --- parseCommunityRefreshFailure: source / kind / message -------------------
+
+test('parseCommunityRefreshResponse: THROWS when an error entry\'s "source" is not a string', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, errors: [{ source: 42, kind: 'timeout', message: 'x' }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on an error entry with an unrecognised "kind" — the enum-membership check', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, errors: [{ source: 'x', kind: 'made-up-kind', message: 'x' }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS when an error entry\'s "message" is not a string', () => {
+  const bad = { ...WELL_FORMED_REFRESH_OK, errors: [{ source: 'x', kind: 'timeout', message: 42 }] };
+  expect(() => parseCommunityRefreshResponse(200, bad)).toThrow();
+});
+
+// --- refusal-path requireString sites: error / route / method / action / remedy
+
+test('parseCommunityRefreshResponse: THROWS when the top-level "error" field is present but not a string (e.g. a number)', () => {
+  expect(() => parseCommunityRefreshResponse(500, { error: 12345 })).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a dry-bridge refusal whose "route" is not a string', () => {
+  expect(() => parseCommunityRefreshResponse(409, { error: 'dry-bridge', route: 42, method: 'POST', action: 'network' })).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a dry-bridge refusal whose "method" is not a string', () => {
+  expect(() => parseCommunityRefreshResponse(409, { error: 'dry-bridge', route: '/x', method: 42, action: 'network' })).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a dry-bridge refusal whose "action" is not a string', () => {
+  expect(() => parseCommunityRefreshResponse(409, { error: 'dry-bridge', route: '/x', method: 'POST', action: 42 })).toThrow();
+});
+
+test('parseCommunityRefreshResponse: THROWS on a typed refusal whose "remedy" is not a string', () => {
+  expect(() => parseCommunityRefreshResponse(409, { error: 'x', reason: 'invalid-token', remedy: 42, wrote: false })).toThrow();
+});

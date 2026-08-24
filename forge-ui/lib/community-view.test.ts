@@ -782,3 +782,86 @@ test('refreshOutcomeView: a transport error (bridge never reached) is distinguis
   expect(view.headline.toLowerCase()).toContain('could not reach');
   expect(view.detail).toBe(result.error);
 });
+
+// ---------------------------------------------------------------------------
+// W8-B5b hostile-review FINDING 1 — a failed post-write re-read must NOT
+// clobber the write's own already-rendered success. `postWriteReloadFailed`
+// reconciles both true facts onto ONE region instead of letting a full-page
+// error banner (driven by `status`, outside this function) bury a rendered
+// "Refreshed — N updated…" beneath it. Repro this pins against: mount is
+// ready, a write succeeds, the post-write re-read then fails — the region
+// must keep stating the write succeeded AND say the view may be stale.
+// ---------------------------------------------------------------------------
+
+const OK_RESULT: CommunityRefreshResult = {
+  state: 'ok',
+  wrote: true,
+  dryRun: false,
+  lastRefresh: '2026-08-24T10:00:00.000Z',
+  counts: OK_COUNTS,
+  outcomes: [],
+  errors: [],
+};
+
+test('refreshOutcomeView: postWriteReloadFailed on a clean refresh keeps the ORIGINAL success headline verbatim and adds an honest staleness notice — never retracted, never a fabricated reassurance', () => {
+  const clean = refreshOutcomeView(OK_RESULT);
+  const stale = refreshOutcomeView(OK_RESULT, { postWriteReloadFailed: true });
+  // The write IS still a fact — the headline is untouched.
+  expect(stale.headline).toBe(clean.headline);
+  // A NEW, deliberately distinct state — never an overload of 'refreshed'.
+  expect(stale.state).toBe('refreshed-stale-view');
+  expect(stale.state).not.toBe(clean.state);
+  expect(stale.detail).toContain('stale');
+  expect(stale.detail).not.toMatch(/refreshed successfully and everything is up to date/i);
+});
+
+test('refreshOutcomeView: postWriteReloadFailed on a PARTIAL outcome (wrote:true, errors present) still keeps the partial headline and marks it stale distinctly from a clean stale-view', () => {
+  const partialResult: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
+    outcomes: [],
+    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }],
+  };
+  const clean = refreshOutcomeView(partialResult);
+  const stale = refreshOutcomeView(partialResult, { postWriteReloadFailed: true });
+  expect(stale.headline).toBe(clean.headline);
+  expect(stale.state).toBe('partial-stale-view');
+  expect(stale.detail).toContain(clean.detail);
+  expect(stale.detail).toContain('stale');
+});
+
+test('refreshOutcomeView: postWriteReloadFailed is IGNORED when the result never wrote — no fabricated staleness claim for an outcome that never touched the registry', () => {
+  const noOpResult: CommunityRefreshResult = {
+    state: 'ok', wrote: false, dryRun: false, lastRefresh: null,
+    counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [], errors: [],
+  };
+  expect(refreshOutcomeView(noOpResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(noOpResult));
+});
+
+test('refreshOutcomeView: postWriteReloadFailed is IGNORED for a transport-error/refused/server-error result — the flag only ever reconciles onto an actual write', () => {
+  const transportResult: CommunityRefreshResult = { state: 'transport-error', error: 'bridge unreachable' };
+  expect(refreshOutcomeView(transportResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(transportResult));
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b hostile-review FINDING 4 — the `dryRun:true` no-op arm is
+// UNREACHABLE from the /community page's only production caller today (the
+// bridge route never sets `dryRun`), but it mirrors the server's real type
+// and must not silently rot: pin its output so it is not dead-and-untested.
+// ---------------------------------------------------------------------------
+
+test('refreshOutcomeView: a dryRun no-op (unreachable from the UI today — see the comment above this arm — but a real server-typed shape) renders the dry-run headline, distinct from the non-dry-run no-op', () => {
+  const dryRunResult: CommunityRefreshResult = {
+    state: 'ok', wrote: false, dryRun: true, lastRefresh: null,
+    counts: { total: 7, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [], errors: [],
+  };
+  const view = refreshOutcomeView(dryRunResult);
+  expect(view.state).toBe('no-op');
+  expect(view.headline).toBe('Dry run — computed 7 row(s), wrote nothing.');
+  expect(view.detail).toBeNull();
+});

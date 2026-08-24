@@ -454,7 +454,7 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
 // restated in its header) — the page reads `state`/`headline`/`detail`
 // verbatim.
 //
-// THREE rules this function exists to hold:
+// FOUR rules this function exists to hold:
 //
 //  1. The dry-bridge refusal renders as an HONEST, NAMED refusal that states
 //     the route it reached — never a generic error, and never rounded up to
@@ -468,15 +468,57 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
 //  3. Never fabricate a count, a date or an age: every figure below is read
 //     straight off the server's own `counts`/`lastRefresh` — nothing here
 //     re-derives or guesses at a number the bridge did not send.
+//  4. (W8-B5b hostile-review FINDING 1) A successful write is never retracted
+//     or buried by a SECOND, independent failure — the caller's own
+//     `postWriteReloadFailed` (see `RefreshOutcomeViewOptions` below) is
+//     reconciled onto the base outcome, never allowed to replace it.
 // ---------------------------------------------------------------------------
 
 export type CommunityRefreshOutcomeView = { state: string; headline: string; detail: string | null };
+
+/**
+ * W8-B5b hostile-review FINDING 1 — `postWriteReloadFailed` is the caller's
+ * (the /community page's) own honest report that the re-read it issued AFTER
+ * a successful write did not come back. Both facts are true at once and both
+ * must be stated: the write happened (the base headline/detail below,
+ * UNCHANGED), and the page below may now be showing stale data because the
+ * re-read that would have refreshed it failed. This function must NEVER
+ * retract or bury the write's own success just because a second, independent
+ * read failed — that clobbering (a rendered success sitting under a rendered
+ * full-page failure) is the exact defect this option exists to close.
+ *
+ * Only meaningful when the result actually wrote (`state:'ok', wrote:true`)
+ * — the ONE case the page's own re-read is triggered from; any other result
+ * state ignores the flag rather than fabricate a "stale" claim for an
+ * outcome that never touched the registry file.
+ */
+export type RefreshOutcomeViewOptions = { postWriteReloadFailed?: boolean };
 
 function describeRefreshFailures(errors: readonly { source: string; message: string }[]): string {
   return errors.map((e) => `${e.source}: ${e.message}`).join('\n');
 }
 
-export function refreshOutcomeView(result: CommunityRefreshResult): CommunityRefreshOutcomeView {
+export function refreshOutcomeView(
+  result: CommunityRefreshResult,
+  opts: RefreshOutcomeViewOptions = {},
+): CommunityRefreshOutcomeView {
+  const base = baseRefreshOutcomeView(result);
+  if (opts.postWriteReloadFailed && result.state === 'ok' && result.wrote) {
+    // A NEW, deliberately distinct state — e.g. 'refreshed-stale-view' for
+    // the clean-success case — never an overload of the plain 'refreshed' /
+    // 'partial' values, so a caller cannot mistake a stale view for a fresh
+    // one by string-matching the old state alone.
+    const staleNotice = 'The page below could not be re-read after this write — what is shown may now be stale. Reload to see the latest.';
+    return {
+      state: `${base.state}-stale-view`,
+      headline: base.headline,
+      detail: base.detail !== null ? `${base.detail}\n\n${staleNotice}` : staleNotice,
+    };
+  }
+  return base;
+}
+
+function baseRefreshOutcomeView(result: CommunityRefreshResult): CommunityRefreshOutcomeView {
   switch (result.state) {
     case 'refused-dry-bridge':
       return {
@@ -498,6 +540,17 @@ export function refreshOutcomeView(result: CommunityRefreshResult): CommunityRef
       if (!result.wrote) {
         return {
           state: 'no-op',
+          // W8-B5b hostile-review FINDING 4 — `postCommunityRefresh` (this
+          // function's ONE production caller, via the /community page's
+          // "Refresh registry" button) POSTs cli/bridge-studio-community.ts's
+          // route, whose handler calls `runCommunityRefresh({ forgeRoot })`
+          // with NO `dryRun` key — so a 200 reaching the UI always carries
+          // `dryRun: false`, and the `result.dryRun` arm below is
+          // UNREACHABLE from the browser today. It stays, and is pinned by a
+          // dedicated test (community-view.test.ts), because it mirrors the
+          // SERVER's own real `CommunityRefreshResult.dryRun` type (`--dry-run`
+          // is a real CLI flag) rather than a screen an operator can actually
+          // reach right now — an honest defensive mirror, not dead code.
           headline: result.dryRun
             ? `Dry run — computed ${result.counts.total} row(s), wrote nothing.`
             : 'Nothing to verify — the registry has no queryable rows, so nothing was written.',
