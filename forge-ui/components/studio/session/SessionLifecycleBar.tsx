@@ -10,8 +10,8 @@ import { CancelOutcomeNotice } from './CancelOutcomeNotice';
 // ---------------------------------------------------------------------------
 // SessionLifecycleBar — W7-A2: the per-session lifecycle banner every kind
 // renders above its two panes (architect and project-brain included — this
-// is shell-level, not panel-level, so a kind with no generic panel — e.g.
-// community-refresh today — still gets crash/stall/cancel).
+// is shell-level, not panel-level, so a kind with its own bespoke panel, or
+// none at all, still gets crash/stall/cancel).
 //
 // Renders EXCLUSIVELY from the shell payload's server-derived `lifecycle`
 // (cli/bridge-studio-lifecycle.ts): never re-derives crashed/stalled from

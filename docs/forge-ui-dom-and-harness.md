@@ -695,9 +695,11 @@ inventory rather than one shared page-level contract:
   one `a[data-action="kickoff-<kind>"]` per entry of
   `lib/session-kind-meta.ts`'s `KICKOFF_ENTRIES`: the six generic kickoff
   kinds (`/sessions/<kind>/new` — instructions/demo/project-brain/
-  kb-cleanup/authoring/**community-refresh**) plus architect's bespoke
+  kb-cleanup/authoring/onboarding) plus architect's bespoke
   native entry (`/architect/new` — ADR-043 amendment §4), labels = the
-  descriptors' own titles. **W7-B1 (home-sessions-07): a filter bar**,
+  descriptors' own titles. (The interactive `community-refresh` kind was a
+  seventh generic kickoff kind until W8-B5b WI-3 retired it.)
+  **W7-B1 (home-sessions-07): a filter bar**,
   `section[data-section="sessions-filters"]` (rendered only with rows
   present): `select[data-field="filter-kind"|"filter-project"|"filter-state"]`
   (options = the values actually present in the set, first-seen order —
@@ -1491,18 +1493,20 @@ inventory rather than one shared page-level contract:
   count through the SAME `isHubDeclaredOnly` predicate the chip's
   `data-hub-declared-only` uses — there is no second copy of the flag.
 
-  **Registry state strip (W7-B3, community-16/-03).**
-  `section[data-section="refresh-registry-state"][data-in-flight-count]`:
+  **Registry state strip (W7-B3, community-16/-03; rewritten W8-B5b WI-3).**
+  `section[data-section="refresh-registry-state"]` (rendered only once
+  `status === 'ready'`):
   `[data-component="registry-last-refresh"]` states the registry-level
   freshness (`meta.lastRefresh` — `null` honestly reads "never refreshed —
-  every row is still the hand-curated seed");
-  `[data-component="registry-dirty"]` renders ONLY when git reports
-  uncommitted changes to the repo-tracked registry file, naming the commit
-  step; `[data-action="open-refresh-session"][data-session-state]` links
-  every in-flight community-refresh session, and
-  `[data-action="open-last-refresh-session"]` the most recent terminal one
-  when nothing is in flight — the sessions this browser kicks off are
-  findable again from the browser itself.
+  every row is still the hand-curated seed"), and
+  `[data-component="registry-dirty"]` renders ONLY when `meta.registryDirty`
+  reports uncommitted changes to the repo-tracked registry file, naming the
+  commit step. Both are DETERMINISTIC facts read straight from the registry's
+  own metadata — nothing here is session-derived any more: the interactive
+  community-refresh session kind (and with it `data-in-flight-count` and the
+  `open-refresh-session`/`open-last-refresh-session` links this strip used to
+  carry) is retired (W8-B5b WI-3) in favour of the deterministic refresh
+  below, which has no session to link to at all.
 
   `[data-component="hub-strip"]` renders every real hub from
   `studio/community/hubs.yaml`. **W7-B3 (community-17): a hub chip is a
@@ -1568,22 +1572,36 @@ inventory rather than one shared page-level contract:
   `[data-component="fetch-error"]`, because a down bridge is not evidence of
   absence (the same rule `bridge-result.ts` holds for every other read).
 
-  **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
-  (a real `<a href="/sessions/community-refresh/new">`, rendered via
-  `StudioPage`'s `actions` header slot — never a bespoke button) is the
-  ONLY thing on this browser that can ever change what it shows: the
-  registry is a declared list forge does not crawl on its own (D10 —
-  `studio/community/hubs.yaml`'s own header), so an operator explicitly asks
-  the community-refresh agent for a verified pass. The link lands on the
-  SAME generic `/sessions/[kind]/new` kickoff surface B6 built for every
-  other interactive kind (see below), just with `selector:"none"` — no
-  project/KB to pick, since the registry is forge's own single file. The
-  agent's draft (a `staging/registry.yaml` diff + `staging/evidence.md`)
-  stops for an explicit operator `approve`/`reject` verdict before anything
-  here ever changes; a `reject`ed draft never touches this browser's data at
-  all. Registry rows this browser has never been refreshed for keep
-  rendering the honest "seed — never verified" freshness state below —
-  refreshing is additive, never retroactive.
+  **Refresh entry (W6-CR-3, 2026-08-15; replaced by W8-B5, retired-session-kind
+  cutover W8-B5b WI-3).** The interactive community-refresh session kind
+  described in earlier revisions of this doc is GONE — no
+  `/sessions/community-refresh/new`, no staged `registry.yaml`/`evidence.md`
+  draft, no approve/reject verdict. In its place:
+  `button[type="button"][data-action="refresh-community-registry"]`
+  ("Refresh registry", rendered via `StudioPage`'s `actions` header slot)
+  POSTs the deterministic, LLM-free `POST /api/studio/community/refresh`
+  (`cli/bridge-studio-community.ts` → `orchestrator/studio/community-refresh-api.ts`
+  → `runCommunityRefresh`) — real outbound GitHub/npm calls, no agent turn,
+  no operator verdict step. The button disables while a refresh is already in
+  flight (`disabledAttrs`), and is otherwise the ONLY thing on this browser
+  that can ever change what it shows: the registry is a declared list forge
+  does not crawl on its own (D10 — `studio/community/hubs.yaml`'s own
+  header).
+  Its outcome renders in `section[data-section="refresh-result"]
+  [data-refresh-state]` (absent until the operator has clicked at least
+  once — no empty shell), `data-refresh-state` set from
+  `refreshOutcomeView`'s own `state` (`forge-ui/lib/community-view.ts`) —
+  real values include `'refreshed'`, `'partial'`, `'no-op'`, `'refused'`,
+  `'refused-dry-bridge'`, `'server-error'`, `'transport-error'`, and a
+  `-stale-view` suffix variant when a successful write's own post-write
+  re-read fails (never invent others; read that function for the full,
+  current set). `data-refresh-route` is present **only** on a
+  `'refused-dry-bridge'` outcome, and is set from the route the SERVER
+  echoed back — never a hardcoded client-side literal, so its presence is
+  evidence the request actually reached that route. Registry rows this
+  browser has never been refreshed for keep rendering the honest "seed —
+  never verified" freshness state below — refreshing is additive, never
+  retroactive.
 
   **Sorting (W6-CR-2), operator-locked — SIMPLE SORTS ONLY**: `name`,
   `stars`, `updated`, `source`; there is deliberately no search/facets/tags
@@ -1612,10 +1630,12 @@ inventory rather than one shared page-level contract:
   span (`forge-ui/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
   null` renders the spec-literal "seed — never verified" (every item sourced
   from `studio/community/registry.yaml` today reads this way — the
-  community-refresh agent's `commitRegistryDraft` finalizer stamps a real
-  `fetchedAt` only on a row it actually verified this pass, W6-CR-3; an item
-  no operator has ever run a refresh against keeps this honest seed state
-  indefinitely, never a fabricated verification date); a `fetchedAt` older than 30 days
+  deterministic `runCommunityRefresh` (the "Refresh registry" button's own
+  handler, W8-B5, replacing W6-CR-3's now-retired `commitRegistryDraft`
+  finalizer) stamps a real `fetchedAt` only on a row it actually verified
+  this pass; an item no operator has ever run a refresh against keeps this
+  honest seed state indefinitely, never a fabricated verification date); a
+  `fetchedAt` older than 30 days
   reads "stale"; anything fresher renders a relative time ("3h ago", "2d
   ago"). **A raw date is NEVER rendered for a null `fetchedAt`** — this is
   the freshness-honesty contract the badge exists to enforce.
@@ -2800,10 +2820,11 @@ inventory rather than one shared page-level contract:
   `deriveSessionTranscript`'s own binding rule ("an empty transcript reads
   'scanned N sources, none found' — never 'unknown, rendered empty'") finally
   reaching the operator. The shell used to render a transcript pane for every kind
-  unconditionally, so a `kb-cleanup` or `community-refresh` session — which
-  genuinely has no turns until a verdict lands — spent half the screen on an
-  empty box explaining its own emptiness while the plan or staged package the
-  operator came to read was squeezed into the other half. The decision is
+  unconditionally, so a `kb-cleanup` session (or, historically,
+  `community-refresh`, W8-B5b WI-3 retired) — which genuinely has no turns
+  until a verdict lands — spent half the screen on an empty box explaining
+  its own emptiness while the plan or staged package the operator came to
+  read was squeezed into the other half. The decision is
   derived in `deriveSessionPanes` (`lib/session-shell-view.ts`) from the
   session's OWN turns plus its live affordances: turns exist, or a
   `question-form` affordance is asking the operator for text right now (the
@@ -2831,11 +2852,12 @@ inventory rather than one shared page-level contract:
   available, `"settled"` once it is not. A rejected AGENTS.md draft used to
   sit under the present-tense header "Approving writes /…/AGENTS.md (new
   file)", promising a verdict that can never be given again.
-  **W7-B3 (sessions-kinds-06 / community-14): `community-refresh` joined
-  `GENERIC_PANEL_KINDS`** — its declared approve/reject verdict (the
+  **W7-B3 (sessions-kinds-06 / community-14, historical): `community-refresh`
+  joined `GENERIC_PANEL_KINDS`** — its declared approve/reject verdict (the
   `awaiting-review` row in `studio/session-kinds.yaml`) and activity drawer
-  render through the SAME generic `SessionInteractivePanel` as every other
-  turnSpec kind; parity with the registry is pinned by
+  rendered through the SAME generic `SessionInteractivePanel` as every other
+  turnSpec kind. That kind is retired (W8-B5b WI-3) and removed from the set;
+  parity with the registry is still pinned by
   `forge-ui/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
   except the two bespoke-panel kinds must be in the set, so a newly declared
   kind can never render a blank page again).
@@ -3383,13 +3405,19 @@ inventory rather than one shared page-level contract:
   library-22). A committed session with a persisted `finalized` pointer
   renders `[data-section="session-finalized"]` +
   `[data-action="open-finalized"]` — the PERMANENT link to the object the
-  session produced (skill/hook detail page, or /community for a
-  community-refresh commit; sessions-kinds-36). **W7-C2 T1 review (P0-4):
-  ALL FIVE finalizing kinds now write the pointer** (instructions →
-  `{kind:'agents-md', id:<project>}` → `/projects/<project>`; demo →
-  `{kind:'demo', id:<project>}` → `/projects/<project>/showcase`;
-  kb-cleanup → `{kind:'kb', id:<kb_id>}` → `/knowledge`), and the pointer's
-  LIVENESS is DERIVED server-side on every read:
+  session produced (skill/hook detail page, or, historically, /community for
+  a community-refresh commit — the `finalized.kind === 'community-registry'`
+  → `/community` mapping stays in `FinalizedLink`
+  (`SessionInteractivePanel.tsx`) even though the community-refresh kind
+  itself is retired (W8-B5b WI-3), since it is the only thing that renders a
+  working link for the historical sessions that already carry that pointer
+  on disk; sessions-kinds-36). **W7-C2 T1 review (P0-4): all of the (then
+  five, now four surviving) finalizing kinds write the pointer**
+  (instructions → `{kind:'agents-md', id:<project>}` →
+  `/projects/<project>`; demo → `{kind:'demo', id:<project>}` →
+  `/projects/<project>/showcase`; kb-cleanup → `{kind:'kb', id:<kb_id>}` →
+  `/knowledge`), and the pointer's LIVENESS is DERIVED server-side on every
+  read:
   `[data-finalized-exists="true"|"false"]`. A pointer at a deleted or
   renamed object renders the honest record WITHOUT
   `[data-action="open-finalized"]` — never a dead link.** Plus TWO artifact-driven
@@ -3470,7 +3498,10 @@ inventory rather than one shared page-level contract:
   computes for the StageHex burst chips on the bespoke panels, now also
   handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
-  (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 adds the `selector:"none"` case).**
+  (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 added the `selector:"none"` case
+  for the community-refresh kind — retired W8-B5b WI-3, but the generic
+  `selector:"none"` branch stays in the page as live mechanism for whatever
+  forge-wide, non-project kind comes next; no live kind uses it today).**
   `app/sessions/[kind]/new/page.tsx`. **W7-C1 (sessions-kinds-01,
   crosscut-14, flows-20):** `onboarding` is a generic kickoff kind here too
   (`data-kickoff-kind="onboarding"`, project select → `POST
@@ -3500,30 +3531,33 @@ inventory rather than one shared page-level contract:
   disabled Start explains itself via `data-disabled-reason` +
   `[data-section="start-session-hint"]`, crosscut-25), or, for `kb-cleanup`
   only, a KB select
-  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
-  `community-refresh` only, **no selector section renders at all**
-  (`[data-section="kickoff-selector"]` is absent from the DOM, not merely
-  empty — the community registry is forge's own single, forge-wide file,
-  not a per-project/per-KB artifact) — plus a
-  free-text prompt field (`[data-field="kickoff-prompt"]`) for the two kinds
-  that take one: `authoring`, whose `/start` body REQUIRES it (Start stays
-  disabled until filled), and — W7-B3 (community-08) — `community-refresh`,
-  whose "Focus (optional)" brief is OPTIONAL: empty = a full refresh, text =
-  a targeted "find me skills for X" pass, sent as `{brief}` to
-  `POST /api/studio/community-refresh/start` (string, non-blank, ≤ 2000
-  chars; stored on `status.json` for the SKILL's targeted-pass contract) —
-  Start stays enabled either way. Every other kickoff kind takes its brief
-  on a LATER turn instead, not at kickoff — instructions'
+  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`); a
+  `selector:"none"` kind (W6-CR-3's community-refresh was the one and only,
+  now retired) would render **no selector section at all**
+  (`[data-section="kickoff-selector"]` absent from the DOM, not merely
+  empty — the generic branch stays for a forge-wide, non-project kind that
+  is not per-project/per-KB) — plus a
+  free-text prompt field (`[data-field="kickoff-prompt"]`) for the kinds
+  that take one: today only `authoring`, whose `/start` body REQUIRES it
+  (Start stays disabled until filled). (W7-B3/community-08's optional
+  "Focus" brief on community-refresh — empty = a full refresh, text = a
+  targeted "find me skills for X" pass, `POST
+  /api/studio/community-refresh/start` — is retired along with the kind and
+  `briefFromPrompt`, its one client-side helper.) Every other kickoff kind
+  takes its brief on a LATER turn instead, not at kickoff — instructions'
   own `briefing` phase, W6-B9, now takes it via the generic
   `SessionInteractivePanel`'s `question-form` affordance, above, rather than
   a bespoke panel step. W7-B3 honesty fixes on this screen (community-12/
   -22): the model-tier picker PRE-SELECTS the envelope's cheapest tier — the
   same default the server applies when the request omits `modelTier` — so
   the checked radio always names what will actually run; the
-  session-directory preview names the REAL anchor
-  (`projects/.community-registry/…` for `selector:"none"`, via
-  `lib/kickoff-view.ts`'s `sessionDirPreview`), never a `<forge-anchor>`
-  placeholder; the `?initiative=` context card renders ONLY for a run the
+  session-directory preview names an honest generic placeholder for every
+  kind (`lib/kickoff-view.ts`'s `sessionDirPreview`), never the literal
+  `<forge-anchor>` string — W6-CR-3/community-12 originally keyed a REAL
+  anchor (`projects/.community-registry/…`) off community-refresh's own kind
+  id for `selector:"none"`, but W8-B5b WI-3 retired that special case along
+  with the kind, so the function is purely generic (selector shape only)
+  now; the `?initiative=` context card renders ONLY for a run the
   bridge resolves (`[data-section="kickoff-initiative-context"]`), an
   unknown ref reads `[data-section="kickoff-initiative-ignored"]`, and a
   `?project=` prefill on a forge-wide kind states it is ignored
@@ -3547,7 +3581,9 @@ inventory rather than one shared page-level contract:
   **W7-A2 duplicate guard:** the page also reads `GET /api/studio/sessions?active=1`
   (the SAME index /sessions and Home read); when a non-terminal session of
   THIS kind already exists on the chosen target (project id, `.kb-<id>` for
-  the KB selector, `.community-registry` for the selector-less kind) it
+  the KB selector, `COMMUNITY_REGISTRY_ANCHOR`/`.community-registry` for a
+  `selector:"none"` kind — generic mechanism, no live kind reaches it since
+  community-refresh retired) it
   renders `section[data-section="kickoff-existing-sessions"]
   [data-existing-count]` listing each (`li[data-existing-session]
   [data-session-state]` with `a[data-action="open-existing-session"]`, phase
@@ -3557,17 +3593,18 @@ inventory rather than one shared page-level contract:
   a `[data-action="start-session-abort"]` "keep the existing one" link
   beside it) and only the second click POSTs; a changed target disarms it.
   `[data-action="start-session"]`
-  POSTs the kind's existing `/start` route (now every one of the six client
+  POSTs the kind's existing `/start` route (now every one of the five client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
-  `startAuthoring`/`startKbCleanup`/`startCommunityRefresh` — threads an
+  `startAuthoring`/`startKbCleanup` — threads an
   optional `modelTier` onto the wire, validated server-side against the
   SKILL-declared envelope, W6-B5's seam) and `router.push`es onto
-  `/sessions/<kind>/<sid>?project=<p>` on success (`project` for
-  `community-refresh` is the server-resolved fixed anchor
-  `.community-registry`, echoed back on the `/start` response — the
-  kickoff page never invents or requires one). Kickoff kinds:
+  `/sessions/<kind>/<sid>?project=<p>` on success (`startCommunityRefresh`,
+  a sixth wrapper whose `project` echoed back the server-resolved fixed
+  anchor `.community-registry` since it took no project itself, was removed
+  along with the retired kind, W8-B5b WI-3 — the kickoff page never invents
+  or requires a project for the kinds that remain). Kickoff kinds:
   `instructions`, `demo`, `kb-cleanup`, `authoring`, `project-brain`,
-  `community-refresh`. `architect` is explicitly OUT —
+  `onboarding`. `architect` is explicitly OUT —
   `kind === 'architect'` renders a small link-out card to `/architect/new`
   rather than duplicating `NewIdeaBox` (ADR-043 amendment §4: architect
   stays bespoke, kickoff included).

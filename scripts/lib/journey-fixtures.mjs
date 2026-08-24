@@ -1224,8 +1224,9 @@ export function cleanInstructionsSession(sid) {
  * OLDER mtime, plus `_logs/_instructions-<sid>/stderr.log` holding a runner
  * error written AFTER it — the exact on-disk shape the operator's stuck
  * community-refresh 2026-08-18T12-54-32 / kb-cleanup 12-36-59 sessions had
- * (provenance: their real stderr.log text, transposed to the instructions
- * kind so it lives under the shared mdtoc reference project like every other
+ * (historical: community-refresh itself is retired, W8-B5b WI-3; provenance
+ * here is their real stderr.log text, transposed to the instructions kind so
+ * it lives under the shared mdtoc reference project like every other
  * instructions fixture). The bridge derives `state: crashed` + the error at
  * read time from these two facts (cli/bridge-studio-lifecycle.ts) — nothing
  * is written into status.json to say "crashed".

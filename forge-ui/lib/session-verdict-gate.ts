@@ -21,11 +21,15 @@
  * `requires` is the phase row's own authored list (studio/session-kinds.yaml),
  * arriving on the wire as `affordance.meta.requires` — the SAME signal the
  * server's write route enforces. It is deliberately the source of truth here
- * instead of `artifact.kind === 'file-package'`: that artifact kind is
- * REUSED by community-refresh for a registry.yaml + evidence draft that will
- * never contain a SKILL.md, so keying off it rendered a "Skill id" field the
- * kind never asked for and gated Approve on a shape the draft can never reach
- * (sessions-kinds-06). Client and server now gate on one fact.
+ * instead of `artifact.kind === 'file-package'`: that artifact kind used to be
+ * REUSED by the now-retired community-refresh kind (W8-B5b WI-3) for a
+ * registry.yaml + evidence draft that never contained a SKILL.md, so keying
+ * off it rendered a "Skill id" field the kind never asked for and gated
+ * Approve on a shape the draft could never reach (sessions-kinds-06). Only
+ * `authoring` declares a `file-package` artifact today, but the fix is
+ * general — client and server gate on one fact (`requires`), not on the
+ * artifact kind, so the NEXT kind to reuse `file-package` for a different
+ * shape hits this same correct behaviour for free.
  */
 
 import type { AuthoringPackageKind } from './authoring-package-shape';

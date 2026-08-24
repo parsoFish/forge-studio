@@ -10,12 +10,13 @@
  * is re-derived on every read from the newest facts (derive-don't-store: the
  * wave-5/6 campaigns' dominant defect class was a parsed+surfaced field
  * enforced nowhere, and the constructive fix is to give the object no field
- * to hold a stale copy in). The operator's real stuck sessions
- * (community-refresh 2026-08-18T12-54-32, kb-cleanup 12-36-59 and
- * 2026-08-14T15-07-02) are the fixtures: each threw
- * `InteractiveRunnerError` into stderr.log AFTER its last status.json write,
- * left no live turn, and read as a calm "needs you / no operator action"
- * on every Studio surface.
+ * to hold a stale copy in). The operator's real stuck sessions (kb-cleanup
+ * 12-36-59 and 2026-08-14T15-07-02, plus — HISTORY, W8-B5b — a now-retired
+ * community-refresh session at 2026-08-18T12-54-32, whose kind's own test
+ * fixture is now a synthetic stand-in: see cli/bridge-studio-lifecycle.
+ * test.ts's header) are the fixtures: each threw `InteractiveRunnerError`
+ * into stderr.log AFTER its last status.json write, left no live turn, and
+ * read as a calm "needs you / no operator action" on every Studio surface.
  *
  * Findings: home-sessions-05/08/09/15, sessions-kinds-11/15/33,
  * community-02/15, knowledge-16.

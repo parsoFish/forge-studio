@@ -70,9 +70,10 @@ function scanRegistry(): Array<{ id: string; agent: string; title: string }> {
 
 test('SESSION_KIND_META mirrors studio/session-kinds.yaml exactly — same kind set, same titles, same agents (drift pin)', () => {
   const registry = scanRegistry();
-  // Sanity: the scanner found a plausible registry (8 kinds today; a shape
-  // change that breaks the scanner fails HERE, not silently).
-  expect(registry.length).toBeGreaterThanOrEqual(8);
+  // Sanity: the scanner found a plausible registry (7 kinds today, since
+  // W8-B5b WI-3 retired community-refresh; a shape change that breaks the
+  // scanner fails HERE, not silently).
+  expect(registry.length).toBeGreaterThanOrEqual(7);
   for (const kind of registry) {
     expect(kind.agent, `registry kind ${kind.id} has an agent line the scanner could read`).toBeTruthy();
     expect(kind.title, `registry kind ${kind.id} has a title line the scanner could read`).toBeTruthy();
@@ -100,7 +101,7 @@ test('sessionKindAgent returns null for an unknown kind — never a guessed slug
 
 // ---- the ONE kickoff list (home-sessions-19 / crosscut-13) ----------------
 
-test('KICKOFF_ENTRIES carries all seven generic kickoff kinds (community-refresh AND onboarding INCLUDED) plus architect\'s bespoke /architect/new entry', () => {
+test('KICKOFF_ENTRIES carries all six generic kickoff kinds (onboarding INCLUDED; community-refresh retired W8-B5b WI-3) plus architect\'s bespoke /architect/new entry', () => {
   const byKind = new Map(KICKOFF_ENTRIES.map((e) => [e.kind, e.href]));
   expect(byKind.get('architect')).toBe('/architect/new');
   expect(byKind.get('instructions')).toBe('/sessions/instructions/new');
@@ -108,9 +109,9 @@ test('KICKOFF_ENTRIES carries all seven generic kickoff kinds (community-refresh
   expect(byKind.get('project-brain')).toBe('/sessions/project-brain/new');
   expect(byKind.get('kb-cleanup')).toBe('/sessions/kb-cleanup/new');
   expect(byKind.get('authoring')).toBe('/sessions/authoring/new');
-  expect(byKind.get('community-refresh')).toBe('/sessions/community-refresh/new');
   expect(byKind.get('onboarding')).toBe('/sessions/onboarding/new');
-  expect(KICKOFF_ENTRIES.length).toBe(8);
+  expect(byKind.has('community-refresh')).toBe(false);
+  expect(KICKOFF_ENTRIES.length).toBe(7);
 });
 
 test('every KICKOFF_ENTRIES label is the descriptor\'s own declared title — never a second hand-written label', () => {
@@ -131,7 +132,7 @@ test('W7-C1 (sessions-kinds-01/crosscut-14): onboarding IS a generic kickoff kin
 
 // ---- KICKOFF_SPECS (the kickoff page's per-kind form spec) ----------------
 
-test('KICKOFF_SPECS covers exactly the seven generic kickoff kinds (architect keeps its bespoke native entry, ADR-043 §4)', () => {
+test('KICKOFF_SPECS covers exactly the six generic kickoff kinds (architect keeps its bespoke native entry, ADR-043 §4)', () => {
   const specKinds = Object.keys(KICKOFF_SPECS).sort();
   const genericKinds = KICKOFF_ENTRIES.filter((e) => e.kind !== 'architect').map((e) => e.kind).sort();
   expect(specKinds).toEqual(genericKinds);

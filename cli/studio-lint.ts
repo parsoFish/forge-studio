@@ -470,21 +470,24 @@ export function runStudioLint(root: string): StudioLintResult {
     }
   }
 
-  // W7-B3 (community-01 / sessions-kinds-32): studio/community/staging/ is
-  // NEVER a legitimate location — it is the debris of the pre-fence era,
-  // when a community-refresh agent resolved its relative "staging/"
-  // instruction beside registryPath and dumped its draft into the repo.
-  // Drafts live under the session's own dir; the fence (W7-A2) plus the
-  // absolute-path prompt (W7-B3) prevent new debris — this check tells the
-  // operator to delete what already leaked (it is untracked, so no code
-  // change can remove it from their checkout).
+  // W7-B3 (community-01 / sessions-kinds-32), HISTORY (W8-B5b): studio/
+  // community/staging/ was NEVER a legitimate location — it was the debris
+  // of the pre-fence era, when the now-retired community-refresh
+  // interactive session kind (mechanism A; superseded by the deterministic
+  // `forge community refresh`, W8-B5) resolved its relative "staging/"
+  // instruction beside registryPath and dumped its draft into the repo. The
+  // fence (W7-A2) plus the absolute-path prompt (W7-B3) prevented new debris
+  // for as long as the kind ran, and the kind itself is gone now — but the
+  // debris is untracked, so it can still be sitting on an operator's disk
+  // from before either fix landed. This check keeps flagging it until they
+  // delete it; no code change can remove it from their checkout for them.
   const strayStaging = join(root, 'studio', 'community', 'staging');
   if (existsSync(strayStaging)) {
     findings.push({
       level: 'error',
       object: 'studio:community-registry',
       check: 'community/stray-staging',
-      message: `"${strayStaging}" exists — pre-fence community-refresh debris (an agent draft that escaped its session dir). Delete the directory; drafts belong under the session's own staging/ and are committed only via the approve verdict.`,
+      message: `"${strayStaging}" exists — leftover debris from the pre-fence era of the now-retired community-refresh session kind (an agent draft that once escaped its session dir). Delete the directory; it has no legitimate use.`,
     });
   }
 

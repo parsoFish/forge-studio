@@ -39,8 +39,12 @@ is loud, not silent.
 | brain-ingest | haiku | ingest turns are cheap | **$2** |
 | developer-ralph | (ralph loop) | standalone dispatch refused — the develop flow's initiative `cost_budget_usd` governs it | — |
 
-`community-refresh` is interactive (session-kind turn budget — W7-B3's lane
-owns it) and never reaches the standalone dispatch path.
+(Historical: the interactive `community-refresh` agent used a session-kind
+turn budget instead of a standalone dispatch ceiling and never reached the
+path above. That agent, and the session kind it backed, are retired —
+W8-B5b WI-3 — in favour of the deterministic `forge community refresh` /
+`POST /api/studio/community/refresh`, which is not an SDK agent spawn at all
+and so has no ceiling of this kind to declare.)
 
 The one-shot agents (project-manager, reflector, demo-agent,
 adversarial-review, contract-check) already declared budgets; unchanged.

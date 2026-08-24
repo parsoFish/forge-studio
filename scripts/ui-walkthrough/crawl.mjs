@@ -144,7 +144,8 @@ async function seeds() {
   const sessions = (await j('/api/studio/sessions'))?.sessions ?? [];
   const seenKind = new Map();
   for (const x of sessions) { const n = seenKind.get(x.kind) ?? 0; if (n < 2) { seenKind.set(x.kind, n + 1); s.add(x.href); } }
-  for (const kind of ['architect', 'demo', 'instructions', 'kb-cleanup', 'community-refresh', 'project-brain', 'authoring', 'onboarding']) s.add(`/sessions/${kind}/new`);
+  // W8-B5b WI-3: 'community-refresh' removed here — that session kind is retired.
+  for (const kind of ['architect', 'demo', 'instructions', 'kb-cleanup', 'project-brain', 'authoring', 'onboarding']) s.add(`/sessions/${kind}/new`);
   const cycles = (await j('/api/cycles'))?.recent ?? [];
   for (const c of cycles.slice(0, 3)) s.add(`/artifact?cycle=${encodeURIComponent(c.cycleId)}`);
   const community = await j('/api/studio/community');

@@ -26,10 +26,11 @@
  *      denied. Only an allowlist of read-only commands passes without a
  *      path check.
  *   4. The REAL descriptors: `authoring` (creation-agent grants Bash) opts
- *      in and gets inspection; `kb-cleanup` and `community-refresh` do not
- *      opt in and deny Bash outright — checked through `runInteractiveTurn`
- *      with a queryFn that captures the real `options.canUseTool`, i.e. the
- *      live-shaped seam, no tokens spent.
+ *      in and gets inspection; `kb-cleanup` does not opt in and denies Bash
+ *      outright — checked through `runInteractiveTurn` with a queryFn that
+ *      captures the real `options.canUseTool`, i.e. the live-shaped seam, no
+ *      tokens spent. (`community-refresh` was a third non-opted-in real
+ *      descriptor exercised here until it was retired in W8-B5b.)
  *
  * RUN: node --test --experimental-strip-types orchestrator/bash-fence.test.ts
  */
@@ -388,9 +389,9 @@ test('bash-fence REAL authoring (creation-agent grants Bash; turnSpec opts in): 
   assert.equal((await cut('Bash', { command: 'git commit -am x' }, {})).behavior, 'deny');
 });
 
-test('bash-fence REAL kb-cleanup + community-refresh (no opt-in): Bash is denied outright by the fence even for `ls`', async () => {
+test('bash-fence REAL kb-cleanup (no opt-in): Bash is denied outright by the fence even for `ls`', async () => {
+  // community-refresh was a second non-opted-in real descriptor probed here
+  // (identical `deny` shape) until it was retired in W8-B5b.
   const kb = await captureRealCanUseTool('kb-cleanup', { phase: 'drafting', kb_id: 'k', findings: [] }, 'plan');
   assert.equal((await kb.cut('Bash', { command: 'ls' }, {})).behavior, 'deny');
-  const cr = await captureRealCanUseTool('community-refresh', { phase: 'gathering', package_id: 'community-registry', registryPath: '/x/registry.yaml', hubsPath: '/x/hubs.yaml' }, 'staging');
-  assert.equal((await cr.cut('Bash', { command: 'ls' }, {})).behavior, 'deny');
 });

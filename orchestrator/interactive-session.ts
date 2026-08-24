@@ -377,18 +377,20 @@ export async function runStructuredTurn<T>(args: {
 // /forge/studio/community/registry.yaml") and "when the prompt hands an
 // agent a sensitive absolute path, an unfenced Write reaches it" (this
 // turn's own `buildTurnPrompt` inlines the WHOLE session status as JSON —
-// community-refresh's own `registryPath`/`hubsPath` fields included).
+// historically this included community-refresh's own `registryPath`/
+// `hubsPath` fields; that kind was retired in W8-B5b, but any future kind
+// whose status.json carries an absolute path is exposed the same way).
 //
-// Generic, not community-refresh-specific: this lives in the shared spine
-// because the gap is the WHOLE turnSpec roster's (authoring's `staging/`,
-// kb-cleanup's `plan/`, community-refresh's `staging/` all reach it), not
-// one kind's. `writeRoots` is caller-supplied, TRUSTED, already-realpath-
-// resolved, ALREADY-EXISTING absolute directory paths — this module
-// performs no mkdir and no identity check on the roots themselves (mirrors
-// how `cwd` is already trusted); `orchestrator/interactive-runner.ts`
-// derives them from each phase row's OWN declared `writes:` entries
-// (never hardcoded), GUARD-TERMINAL-provisioning each one via
-// `resolveGuardedPath` before the turn starts.
+// Generic, not per-kind-specific: this lives in the shared spine because the
+// gap is the WHOLE turnSpec roster's (authoring's `staging/`, kb-cleanup's
+// `plan/` both reach it — community-refresh's `staging/` was a third example
+// before that kind's retirement), not one kind's. `writeRoots` is
+// caller-supplied, TRUSTED, already-realpath-resolved, ALREADY-EXISTING
+// absolute directory paths — this module performs no mkdir and no identity
+// check on the roots themselves (mirrors how `cwd` is already trusted);
+// `orchestrator/interactive-runner.ts` derives them from each phase row's
+// OWN declared `writes:` entries (never hardcoded), GUARD-TERMINAL-
+// provisioning each one via `resolveGuardedPath` before the turn starts.
 // ---------------------------------------------------------------------------
 
 /** Tool names whose input names a file this fence must evaluate — mirrors
@@ -606,12 +608,14 @@ export async function runAgentTurn(args: {
   //   - `permissionMode: 'acceptEdits'` auto-accepts Write/Edit/MultiEdit/
   //     NotebookEdit at the SDK level;
   //   - `allowedTools` pre-approves every listed name, and every real
-  //     turnSpec agent (community-refresh / brain-maintenance /
-  //     creation-agent SKILL.md) lists `Write` there.
+  //     turnSpec agent (brain-maintenance / creation-agent SKILL.md) lists
+  //     `Write` there.
   // Live evidence: the operator's community-refresh 2026-08-18T12-54-32 turn
   // ran with a non-empty writeRoots and still wrote three files under
   // /home/parso/forge/studio/community/staging/ — outside every declared
-  // root. So when a fence is requested the turn runs in `default` mode and
+  // root. (That kind was retired in W8-B5b; the incident stands as the
+  // motivating history for a fence that is general, not per-kind.) So when a
+  // fence is requested the turn runs in `default` mode and
   // the fence-gated tool names are STRIPPED from `allowedTools` (they stay
   // callable — never pushed into disallowedTools — the SDK just routes each
   // call through `canUseTool`, which allows in-root writes and denies the

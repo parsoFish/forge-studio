@@ -40,12 +40,13 @@ import { makeCoalescedRefresh } from '@/lib/coalesce-refresh';
  *  ONLY kind left on its own panel, permanently (ADR-043 amendment §4: its
  *  branching council/interview control flow has no linear phase-table seam
  *  a generic ladder could express). */
-/** W7-B3 (sessions-kinds-06 / community-14): community-refresh joined — its
- *  approve/reject verdict (studio/session-kinds.yaml `awaiting-review` row)
- *  was unreachable with NO panel at all. Parity with the registry is pinned
- *  by lib/generic-panel-kinds.test.ts: every turnSpec-declared kind must be
+/** W7-B3 (sessions-kinds-06 / community-14, historical): community-refresh
+ *  joined here — its approve/reject verdict (studio/session-kinds.yaml
+ *  `awaiting-review` row) was unreachable with NO panel at all — before being
+ *  retired outright (W8-B5b WI-3). Parity with the registry is pinned by
+ *  lib/generic-panel-kinds.test.ts: every turnSpec-declared kind must be
  *  here, so the next declared kind can never render a blank page. */
-const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring', 'instructions', 'community-refresh']);
+const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring', 'instructions']);
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -145,9 +146,9 @@ export default function SessionShellPage({
         .then((list) => settle(toDemoSummary(list.find((s) => s.sessionId === sessionId) ?? null)))
         .catch(() => {});
     }
-    // Every other kind (kb-cleanup / authoring / community-refresh /
-    // onboarding) has no per-kind list route — the shell route alone carries
-    // the page, resolving the project itself (W7-A2).
+    // Every other kind (kb-cleanup / authoring / onboarding) has no per-kind
+    // list route — the shell route alone carries the page, resolving the
+    // project itself (W7-A2).
     return Promise.resolve();
   }, [kind, sessionId]);
 
@@ -184,10 +185,10 @@ export default function SessionShellPage({
   // URL knows it: the bridge resolves the anchor project server-side
   // (`findSessionProject`) and echoes it back on the payload, so a bare
   // `/sessions/<kind>/<sid>` deep link is a working address for EVERY kind
-  // (kb-cleanup / authoring / community-refresh / onboarding included —
-  // none of which has a per-kind list branch above, and whose anchor is a
-  // pseudo-project no operator would guess). "Session not found" is now
-  // ONLY the shell route's own 404, never a missing query param.
+  // (kb-cleanup / authoring / onboarding included — none of which has a
+  // per-kind list branch above, and whose anchor is a pseudo-project no
+  // operator would guess). "Session not found" is now ONLY the shell
+  // route's own 404, never a missing query param.
   const [shellResult, setShellResult] = useState<SessionShellFetchResult | null>(null);
   // W7A2-02 — the last cancel's real outcome; the bar keeps showing it once
   // the shell has refetched to terminal (the cancel button is gone by then).
@@ -265,9 +266,11 @@ export default function SessionShellPage({
   // W6-B9 reviewer fix — computed ONCE, pure (lib/session-shell-view.ts),
   // never re-derived inline in the JSX below: null for a non-terminal
   // session, one with no project known, OR a pseudo-project anchor with no
-  // recognised destination (an unbound kb-cleanup/community-refresh session
-  // anchored under ".kb-<id>"/".community-registry" is never a REAL
-  // registered project — /projects/<that> would be a dead end).
+  // recognised destination (an unbound kb-cleanup session anchored under
+  // ".kb-<id>", or a historical session anchored under ".community-registry"
+  // — W8-B5b WI-3 retired the kind that used to mint the latter, but the
+  // sessions already filed under it are still real — is never a REAL
+  // registered project; /projects/<that> would be a dead end).
   // W7-A2 (sessions-kinds-35): rendered in EVERY phase now (backToProjectLink
   // no longer gates on `terminal`) — the operator most needs a way out of a
   // session they are actively working on; a `.kb-<id>` anchor resolves to
@@ -431,11 +434,11 @@ export default function SessionShellPage({
               `viewState.panes` is derived in lib/session-shell-view.ts from
               the session's own turns + affordances, never from a per-kind
               list here and never from a stored `transcript` flag (the wire's
-              old proxy, which was wrong for `authoring`). A kb-cleanup or
-              community-refresh session that has recorded nothing no longer
-              gets half the screen occupied by an empty box apologising for
-              itself — the plan/package pane it exists to show gets the room
-              instead. */}
+              old proxy, which was wrong for `authoring`). A kb-cleanup
+              session (or, historically, community-refresh, W8-B5b WI-3
+              retired) that has recorded nothing no longer gets half the
+              screen occupied by an empty box apologising for itself — the
+              plan/package pane it exists to show gets the room instead. */}
           <div style={{ display: 'grid', gridTemplateColumns: viewState.panes.transcript ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,340px) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
             {viewState.panes.transcript ? (
               <SessionTranscript turns={viewState.turnsForStage} emptyMessage={viewState.emptyStageMessage} error={viewState.transcriptError}>

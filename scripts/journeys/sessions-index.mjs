@@ -165,7 +165,7 @@ export const journey = defineJourney({
 
           // W7-B1 (crosscut-13/home-sessions-19): the kickoff CTAs render in
           // the POPULATED state too — with real rows on screen, starting a
-          // new session (community-refresh included) stays one click away.
+          // new session stays one click away.
           const kickoff = await page.evaluate(() => {
             const el = document.querySelector('[data-section="sessions-kickoff"]');
             return el ? {
@@ -175,12 +175,12 @@ export const journey = defineJourney({
           check(kickoff !== null, 'SESSIONS-IDX.2 (W7-B1): [data-section="sessions-kickoff"] renders alongside the populated table');
           // W7-C1 (sessions-kinds-01/crosscut-14) made `onboarding` a real
           // generic kickoff kind — the onboard-project FLOW was retired in
-          // favour of the session — so the ONE shared list is eight entries,
-          // pinned at 8 in `forge-ui/lib/session-kind-meta.test.ts`. The
-          // identities matter more than the count: a list that silently swaps
-          // one kind for another keeps the same length.
-          check((kickoff?.entries ?? []).length === 8, `SESSIONS-IDX.2 (W7-B1/C1): all eight kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
-          check((kickoff?.entries ?? []).includes('kickoff-community-refresh'), 'SESSIONS-IDX.2 (W7-B1): community-refresh is among them (home-sessions-19)');
+          // favour of the session. W8-B5b WI-3 retired community-refresh, so
+          // the ONE shared list is seven entries, pinned at 7 in
+          // `forge-ui/lib/session-kind-meta.test.ts`. The identities matter
+          // more than the count: a list that silently swaps one kind for
+          // another keeps the same length.
+          check((kickoff?.entries ?? []).length === 7, `SESSIONS-IDX.2 (W7-B1/C1): all seven kickoff entries render (got ${(kickoff?.entries ?? []).length})`);
           check((kickoff?.entries ?? []).includes('kickoff-onboarding'), 'SESSIONS-IDX.2 (W7-C1): onboarding is among them too — the retired onboard-project flow\'s replacement is reachable from the sessions index');
 
           // W7-B1 (home-sessions-07) — the filter bar is live state: present

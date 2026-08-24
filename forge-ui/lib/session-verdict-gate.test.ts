@@ -66,12 +66,15 @@ test('06: a verdict that requires an id IS blocked while the draft shape is unre
 });
 
 test('06: a verdict that requires NOTHING is never blocked by a draft shape it does not depend on — and asks for no id field', () => {
-  // The community-refresh shape: its awaiting-review row declares no
-  // `requires:` at all, and its staging package is registry.yaml + evidence.*
-  // BY DESIGN, so `packageShape` is 'unknown' forever. Keyed off the artifact
-  // kind (file-package, deliberately REUSED), this rendered a "Skill id" field
-  // the kind never asked for and disabled Approve permanently, with no
-  // matching server-side rule.
+  // Historical motivating case (W8-B5b WI-3 retired the kind itself): the
+  // community-refresh shape's awaiting-review row declared no `requires:` at
+  // all, and its staging package was registry.yaml + evidence.* BY DESIGN, so
+  // `packageShape` was 'unknown' forever. Keyed off the artifact kind
+  // (file-package, deliberately REUSED), this rendered a "Skill id" field the
+  // kind never asked for and disabled Approve permanently, with no matching
+  // server-side rule. The general shape below (requires: [] with an unknown
+  // packageShape) stays a live regression pin for whatever kind reuses
+  // file-package the same way next.
   const gate = deriveApproveGate({ requires: [], idValue: '', packageShape: 'unknown', busy: false });
   expect(gate.idRequired).toBe(false);
   expect(gate.shapeBlocksApprove).toBe(false);

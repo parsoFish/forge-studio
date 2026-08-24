@@ -17,8 +17,8 @@
  * body claims (never a fabricated verification timestamp; the freshness
  * badge reads such a row as never-verified, which is the truth).
  *
- * Harness mirrors cli/ui-bridge-community-refresh-start.test.ts: one real
- * bridge on a temp forge root.
+ * Harness mirrors this repo's other real-bridge suites (e.g. cli/
+ * ui-bridge-agent-run.test.ts): one real bridge on a temp forge root.
  */
 
 import { test, before, after } from 'node:test';

@@ -134,7 +134,7 @@ test('SessionsIndexBody: every non-terminal row renders button[data-action="canc
 
 test('HomeSessionsStrip: cards carry data-session-state and a cancel button that is NOT nested inside the card link', () => {
   const strip = buildHomeSessionsStrip([
-    makeRow({ kind: 'community-refresh', sessionId: 'c1', project: '.community-registry', state: 'crashed', needsYou: true, error: 'InteractiveRunnerError: boom' }),
+    makeRow({ kind: 'kb-cleanup', sessionId: 'c1', project: '.kb-forge-dev', state: 'crashed', needsYou: true, error: 'InteractiveRunnerError: boom' }),
   ]);
   const html = renderToStaticMarkup(React.createElement(HomeSessionsStrip, { strip }));
   expect(html).toContain('data-session-state="crashed"');

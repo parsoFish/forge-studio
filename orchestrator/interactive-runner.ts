@@ -384,9 +384,11 @@ export async function runInteractiveTurn(
 /**
  * bead forge-eip (W6-CR-3) — derives `runAgentTurn`'s `writeRoots` from the
  * phase row's OWN declared `writes:` entries, never a hardcoded `staging`
- * literal (so kb-cleanup's `plan/` gets the identical fence authoring's/
- * community-refresh's `staging/` does — this is a spine fix, not a
- * per-kind one). Each declared dir name is resolved through the SAME
+ * literal (so kb-cleanup's `plan/` gets the identical fence authoring's
+ * `staging/` does — this is a spine fix, not a per-kind one; the
+ * `community-refresh` kind that originally motivated this alongside
+ * authoring was retired in W8-B5b, but the rule stays general). Each
+ * declared dir name is resolved through the SAME
  * `resolveGuardedPath` containment guard every other write in this file
  * uses, GUARD-TERMINAL `mkdirSync`'d into existence if absent — mirrors
  * `runFinalizeStep`'s own `libraryRootGuard` pattern exactly — so
@@ -469,11 +471,12 @@ async function runAgentStyleStep(args: {
   if (turnSpec.style === 'agent') {
     // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
     // phase row's own declared `writes:` (never hardcoded to `staging`, so
-    // kb-cleanup's `plan/` gets the identical protection authoring's/
-    // community-refresh's `staging/` does). Absent/empty `writes:` yields an
-    // empty writeRoots, which `runAgentTurn` correctly reads as "no fence" —
-    // matching this phase's pre-existing behaviour (an `agent` step with no
-    // declared writes, e.g. a Q&A-only turn, never needed one).
+    // kb-cleanup's `plan/` gets the identical protection authoring's
+    // `staging/` does — community-refresh's `staging/` was a third example
+    // here before that kind was retired in W8-B5b). Absent/empty `writes:`
+    // yields an empty writeRoots, which `runAgentTurn` correctly reads as
+    // "no fence" — matching this phase's pre-existing behaviour (an `agent`
+    // step with no declared writes, e.g. a Q&A-only turn, never needed one).
     //
     // W7-B3 (sessions-kinds-32 / home-sessions-06): the roots are resolved
     // BEFORE the prompt is built so the prompt can name the EXACT realpaths
@@ -796,7 +799,9 @@ function readSkillPrompt(agentId: string): string {
  * enforcement can never disagree. The old relative wording ("the following
  * sub-directory of your working directory: staging") let a live
  * community-refresh agent resolve `staging` beside `status.registryPath`,
- * landing three files in the repo and crashing the session.
+ * landing three files in the repo and crashing the session. (That kind was
+ * retired in W8-B5b; the incident is kept as the motivating history — the
+ * fix is general, applying to every `agent`-style phase's `writeRoots`.)
  */
 function buildTurnPrompt(
   descriptor: SessionKindDescriptor,

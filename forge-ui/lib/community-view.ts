@@ -17,9 +17,13 @@
  * name / stars / updated / source, no search/facets/tags sort) and
  * `freshnessBadge` (never renders a date for a null `fetchedAt` — see each
  * function's own doc comment below for the full contract).
+ *
+ * W8-B5b adds `refreshOutcomeView` — the pure derivation from a
+ * `postCommunityRefresh()` transport result (community-client.ts) to what the
+ * /community page's "Refresh registry" button renders.
  */
 
-import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals } from './community-client.ts';
+import type { CommunityItem, CommunityKind, CommunityInstallState, CommunityHub, CommunityHubWithCount, CommunitySignals, CommunityRefreshResult } from './community-client.ts';
 
 // ---------------------------------------------------------------------------
 // Filtering
@@ -424,15 +428,159 @@ export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): str
 }
 
 /**
- * W7-B3 review F2 (community-16): pick the newest TERMINAL community-refresh
- * session — the row the "open-last-refresh-session" link targets when nothing
- * is in flight. CONTRACT: `rows` must come from `fetchStudioSessions(false)`
- * (all sessions) — the default `activeOnly=true` fetch excludes every
- * terminal row, which silently turns this into a constant `null` and the
- * link into dead code (the exact defect this helper pins against).
- * Session ids are timestamp-prefixed (`2026-08-18T12-54-32...`), so a
- * lexicographic sort IS the recency sort.
+ * W8-B5b — `lastTerminalRefreshOf` USED TO LIVE HERE, and its deletion is the
+ * point, not a side effect.
+ *
+ * It answered "when was the registry last refreshed?" by scanning SESSION
+ * rows for the newest terminal `community-refresh` session. The registry file
+ * carries that answer itself — `meta.lastRefresh` (`studio/community/
+ * registry.yaml`), which `lastRefreshLabel` above already reads — so the page
+ * had two sources for one fact, and the session-shaped one was about to
+ * outlive the session kind that fed it.
+ *
+ * That is what made the old "never refreshed" line a DERIVATION defect rather
+ * than a missing-kind defect: it was right for the wrong reason. Both sources
+ * currently agree (this checkout's `meta.lastRefresh` is genuinely `null` and
+ * every source row is genuinely `fetchedBy: seed`), so the rendered STRING did
+ * not change when the derivation did. Tests must therefore assert the SOURCE,
+ * never the string — `community-view.test.ts` pins that the registry file is
+ * where the answer comes from and that no session-derived path survives.
  */
-export function lastTerminalRefreshOf<T extends { terminal: boolean; sessionId: string }>(rows: readonly T[]): T | null {
-  return rows.filter((row) => row.terminal).sort((a, b) => b.sessionId.localeCompare(a.sessionId))[0] ?? null;
+
+// ---------------------------------------------------------------------------
+// refreshOutcomeView — W8-B5b: the ONE pure derivation from a
+// `postCommunityRefresh()` transport result to what the /community page
+// button renders. No React, no fetch, no DOM (this module's own convention,
+// restated in its header) — the page reads `state`/`headline`/`detail`
+// verbatim.
+//
+// FOUR rules this function exists to hold:
+//
+//  1. The dry-bridge refusal renders as an HONEST, NAMED refusal that states
+//     the route it reached — never a generic error, and never rounded up to
+//     a faked success. Tone mirrors `connection-library-view.ts`'s own
+//     "Install suppressed — nothing was run (dry-bridge / no-spawn mode)."
+//  2. A 200 whose `errors` array is non-empty is a PARTIAL outcome, not a
+//     clean success — it is never rounded up to "refreshed" (the exact lie
+//     `all-sources-failed` answering 502 instead of 200 exists to prevent one
+//     level up, at the route; this is the same discipline one level down, at
+//     the render).
+//  3. Never fabricate a count, a date or an age: every figure below is read
+//     straight off the server's own `counts`/`lastRefresh` — nothing here
+//     re-derives or guesses at a number the bridge did not send.
+//  4. (W8-B5b hostile-review FINDING 1) A successful write is never retracted
+//     or buried by a SECOND, independent failure — the caller's own
+//     `postWriteReloadFailed` (see `RefreshOutcomeViewOptions` below) is
+//     reconciled onto the base outcome, never allowed to replace it.
+// ---------------------------------------------------------------------------
+
+export type CommunityRefreshOutcomeView = { state: string; headline: string; detail: string | null };
+
+/**
+ * W8-B5b hostile-review FINDING 1 — `postWriteReloadFailed` is the caller's
+ * (the /community page's) own honest report that the re-read it issued AFTER
+ * a successful write did not come back. Both facts are true at once and both
+ * must be stated: the write happened (the base headline/detail below,
+ * UNCHANGED), and the page below may now be showing stale data because the
+ * re-read that would have refreshed it failed. This function must NEVER
+ * retract or bury the write's own success just because a second, independent
+ * read failed — that clobbering (a rendered success sitting under a rendered
+ * full-page failure) is the exact defect this option exists to close.
+ *
+ * Only meaningful when the result actually wrote (`state:'ok', wrote:true`)
+ * — the ONE case the page's own re-read is triggered from; any other result
+ * state ignores the flag rather than fabricate a "stale" claim for an
+ * outcome that never touched the registry file.
+ */
+export type RefreshOutcomeViewOptions = { postWriteReloadFailed?: boolean };
+
+function describeRefreshFailures(errors: readonly { source: string; message: string }[]): string {
+  return errors.map((e) => `${e.source}: ${e.message}`).join('\n');
+}
+
+export function refreshOutcomeView(
+  result: CommunityRefreshResult,
+  opts: RefreshOutcomeViewOptions = {},
+): CommunityRefreshOutcomeView {
+  const base = baseRefreshOutcomeView(result);
+  if (opts.postWriteReloadFailed && result.state === 'ok' && result.wrote) {
+    // A NEW, deliberately distinct state — e.g. 'refreshed-stale-view' for
+    // the clean-success case — never an overload of the plain 'refreshed' /
+    // 'partial' values, so a caller cannot mistake a stale view for a fresh
+    // one by string-matching the old state alone.
+    const staleNotice = 'The page below could not be re-read after this write — what is shown may now be stale. Reload to see the latest.';
+    return {
+      state: `${base.state}-stale-view`,
+      headline: base.headline,
+      detail: base.detail !== null ? `${base.detail}\n\n${staleNotice}` : staleNotice,
+    };
+  }
+  return base;
+}
+
+function baseRefreshOutcomeView(result: CommunityRefreshResult): CommunityRefreshOutcomeView {
+  switch (result.state) {
+    case 'refused-dry-bridge':
+      return {
+        state: 'refused-dry-bridge',
+        headline: 'Refresh suppressed — nothing was run (dry-bridge / no-spawn mode).',
+        detail: `The bridge refused ${result.method} ${result.route} rather than making the real outbound GitHub/npm call.`,
+      };
+
+    case 'ok': {
+      if (result.errors.length > 0) {
+        // RULE 2 — a partial pass is never presented as a clean refresh.
+        const verified = result.counts.refreshed + result.counts.unchanged;
+        return {
+          state: 'partial',
+          headline: `Partial refresh — ${verified} of ${result.counts.total} row(s) verified, ${result.errors.length} source(s) failed.`,
+          detail: describeRefreshFailures(result.errors),
+        };
+      }
+      if (!result.wrote) {
+        return {
+          state: 'no-op',
+          // W8-B5b hostile-review FINDING 4 — `postCommunityRefresh` (this
+          // function's ONE production caller, via the /community page's
+          // "Refresh registry" button) POSTs cli/bridge-studio-community.ts's
+          // route, whose handler calls `runCommunityRefresh({ forgeRoot })`
+          // with NO `dryRun` key — so a 200 reaching the UI always carries
+          // `dryRun: false`, and the `result.dryRun` arm below is
+          // UNREACHABLE from the browser today. It stays, and is pinned by a
+          // dedicated test (community-view.test.ts), because it mirrors the
+          // SERVER's own real `CommunityRefreshResult.dryRun` type (`--dry-run`
+          // is a real CLI flag) rather than a screen an operator can actually
+          // reach right now — an honest defensive mirror, not dead code.
+          headline: result.dryRun
+            ? `Dry run — computed ${result.counts.total} row(s), wrote nothing.`
+            : 'Nothing to verify — the registry has no queryable rows, so nothing was written.',
+          detail: null,
+        };
+      }
+      return {
+        state: 'refreshed',
+        headline: `Refreshed — ${result.counts.refreshed} updated, ${result.counts.unchanged} unchanged of ${result.counts.total}.`,
+        // RULE 3 — only rendered when the server actually sent a stamp.
+        detail: result.lastRefresh !== null ? `Registry stamp: ${result.lastRefresh}.` : null,
+      };
+    }
+
+    case 'refused':
+      return { state: 'refused', headline: result.error, detail: result.remedy };
+
+    case 'server-error':
+      return { state: 'server-error', headline: result.error, detail: null };
+
+    case 'transport-error':
+      return {
+        state: 'transport-error',
+        headline: 'Could not reach the forge bridge.',
+        detail: result.error,
+      };
+
+    default: {
+      const exhaustive: never = result;
+      throw new Error(`refreshOutcomeView: unrecognised result state ${JSON.stringify(exhaustive)}`);
+    }
+  }
 }

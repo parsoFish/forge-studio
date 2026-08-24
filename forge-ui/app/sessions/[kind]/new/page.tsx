@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { NotFound } from '@/components/NotFound';
 import { NewIdeaBox } from '@/components/NewIdeaBox';
-import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
+import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchAgentCapability, fetchStudioKbs, fetchStudioSessions, fetchRun, startKbCleanup, startOnboardingSession, type AgentCapability, type Kb, type SessionIndexRow } from '@/lib/studio-client';
 import { KickoffModelTierPicker, allowedTiersFromCapability } from '@/components/studio/session/KickoffModelTierPicker';
 import { KickoffContextCard } from '@/components/studio/session/KickoffContextCard';
@@ -15,7 +15,7 @@ import { describeLifecycle } from '@/lib/session-lifecycle-client';
 import { KB_SEEDING_ANCHOR_PREFIX, COMMUNITY_REGISTRY_ANCHOR } from '@/lib/session-shell-view';
 import { reconcileProjectPrefill, reconcileSelectPrefill } from '@/lib/kickoff-form';
 import { kickoffSpecFor, sessionKindTitle } from '@/lib/session-kind-meta';
-import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/kickoff-view';
+import { defaultKickoffTier, sessionDirPreview } from '@/lib/kickoff-view';
 
 // ---------------------------------------------------------------------------
 // SessionKickoffPage — the ONE kickoff screen for every session kind (W6-B6,
@@ -40,14 +40,18 @@ import { defaultKickoffTier, sessionDirPreview, briefFromPrompt } from '@/lib/ki
 // Kinds: instructions, demo, kb-cleanup (KB select, not project), authoring
 // (the only one that takes a free-text prompt — its `/start` body REQUIRES
 // one), project-brain, onboarding (W7-C1 — the retired onboard-project flow
-// wrapper's replacement entry; project select only), community-refresh (W6-CR-3 — the ONLY kind with
-// `selector: 'none'`: the community registry is forge's own single,
-// forge-wide file, not a per-project artifact, so there is nothing for the
-// operator to select — just Start + a model-tier picker). `architect` is
+// wrapper's replacement entry; project select only). `architect` is
 // explicitly OUT — it keeps its own native entry, `/architect/new`
 // (`NewIdeaBox`) — this page links to it rather than duplicating it
 // (ADR-043 amendment §4: architect stays bespoke end to end, panel AND
 // kickoff alike).
+//
+// W8-B5b WI-3: the `community-refresh` kind (W6-CR-3) — the ONLY kind ever to
+// use `selector: 'none'` (the community registry is forge's own single,
+// forge-wide file, not a per-project artifact) — is retired; the generic
+// `selector === 'none'` branches below are kept as live generic mechanism for
+// any future forge-wide, non-project kind, but currently have no real
+// consumer (`kickoffSpecFor` never returns one).
 // ---------------------------------------------------------------------------
 
 // W7-B1 (home-sessions-19): the per-kind form specs moved to
@@ -208,7 +212,8 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
 
   const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
   // W7-B3 (community-08): a prompt field is only a Start-gate when the kind
-  // REQUIRES it (authoring) — community-refresh's focus brief is optional.
+  // REQUIRES it (authoring) — an optional prompt (`promptRequired: false`)
+  // never blocks Start.
   const promptFilled = spec?.promptLabel && spec.promptRequired ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
   // W7-B6 (crosscut-25): why Start is disabled, stated next to the button.
@@ -226,9 +231,11 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
   // a `project`-bound KB nests its sessions under that real project, every
   // other binding under the `.kb-<id>` dot-anchor (`POST /api/studio/kbs/
   // :id/cleanup/start`, cli/ui-bridge.ts — mirrored here, never guessed
-  // from the id alone); `.community-registry` for the selector-less
-  // community refresh (the bridge's own COMMUNITY_REFRESH_PROJECT_ANCHOR
-  // literal — see forge-ui/lib/session-shell-view.ts's parity-tested mirror).
+  // from the id alone); `COMMUNITY_REGISTRY_ANCHOR` (`.community-registry`)
+  // remains the dot-anchor for any selector-less kind — the retired
+  // community-refresh kind was its one real consumer (W8-B5b WI-3); the two
+  // historical sessions filed under it, and `/community` itself, are still
+  // real (see `pseudoProjectAnchorDestination`, session-shell-view.ts).
   const selectedKb = spec?.selector === 'kb' ? kbs.find((k) => k.id === kbId.trim()) ?? null : null;
   const targetAnchor =
     spec?.selector === 'kb'
@@ -293,9 +300,6 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           break;
         case 'project-brain':
           result = await startProjectBrain({ project: project.trim(), modelTier: tier });
-          break;
-        case 'community-refresh':
-          result = await startCommunityRefresh({ modelTier: tier, brief: briefFromPrompt(prompt) });
           break;
         case 'kb-cleanup': {
           const r = await startKbCleanup(kbId.trim(), tier);
@@ -394,9 +398,10 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         <KickoffContextCard
           kind={kind}
           spec={spec}
-          // W7-B3 (community-12): the REAL anchor for community-refresh —
-          // never the literal `<forge-anchor>` placeholder; other kinds keep
-          // their honest placeholders (kickoff-view.sessionDirPreview).
+          // W7-B3 (community-12, historical — the pattern's one real
+          // consumer, community-refresh, is retired): a selector-less kind
+          // would get its REAL anchor here, never the literal `<forge-anchor>`
+          // placeholder other kinds keep (kickoff-view.sessionDirPreview).
           sessionDirHint={sessionDirPreview(kind, spec.selector, project)}
           // W7-B3 (community-22): only a run the bridge actually knows renders
           // as context — an unknown ref shows the "ignored" notice below.

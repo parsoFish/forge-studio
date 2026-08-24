@@ -10,15 +10,11 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
-
-// mirrors cli/bridge-studio-affordances.test.ts's own REPO_ROOT derivation.
-const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -62,19 +58,6 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'skills', 'test-interactive'), { recursive: true });
   writeFileSync(join(forgeRoot, 'skills', 'test-runnable', 'SKILL.md'), studioAgent('test-runnable', 'unattended'));
   writeFileSync(join(forgeRoot, 'skills', 'test-interactive', 'SKILL.md'), studioAgent('test-interactive', 'interactive'));
-  // W6-CR-3 (bead forge-eip): the REAL, checked-in community-refresh
-  // SKILL.md — copied verbatim, not a synthetic fixture, so this suite
-  // proves the boundary against the actual shipped agent (the FIRST
-  // `library: true` interactive agent in the roster — see
-  // orchestrator/agent-dispatch.test.ts's COMPLEMENT PIN for why that
-  // matters: it is now genuinely reachable through listAgentDefinitions,
-  // unlike creation-agent/brain-maintenance, which the pre-existing
-  // synthetic "test-interactive" fixture above already covers generically).
-  mkdirSync(join(forgeRoot, 'skills', 'community-refresh'), { recursive: true });
-  writeFileSync(
-    join(forgeRoot, 'skills', 'community-refresh', 'SKILL.md'),
-    readFileSync(join(REPO_ROOT, 'skills', 'community-refresh', 'SKILL.md'), 'utf8'),
-  );
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
@@ -103,18 +86,44 @@ test('POST /api/agents/<slug>/run: an interactive agent is refused → 400', asy
   assert.match((await res.json() as { error: string }).error, /is interactive/);
 });
 
-// W6-CR-3 (bead forge-eip, LOW item 3): community-refresh is a real,
-// turnSpec-driven interactive session-kind agent — it runs EXCLUSIVELY
-// through runInteractiveTurn (its own session-kickoff route + the generic
-// affordance write route), never through this one-shot generic run host.
-// Proves the REAL shipped agent — not just the synthetic "test-interactive"
-// fixture above — is refused here, closing the same class as that test for
-// the one agent in the roster this initiative made newly reachable.
-test('POST /api/agents/community-refresh/run: the REAL community-refresh agent is refused → 4xx (interactive session-kind agents run only through their own kickoff route)', async () => {
-  const res = await fetch(`${url}/api/agents/community-refresh/run`, { method: 'POST', headers: CSRF, body: '{}' });
-  assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx refusal, got ${res.status}`);
-  assert.match((await res.json() as { error: string }).error, /is interactive/);
-});
+// W8-B5b — the "REAL roster agent is refused" test THAT USED TO LIVE HERE is
+// deleted, and the reason is a measured fact rather than a tidy-up.
+//
+// It copied the real, checked-in `community-refresh` SKILL.md into the fixture
+// root and asserted the generic one-shot run host refused it. That agent was
+// the ONLY real agent that was both IN the roster and INTERACTIVE, and it
+// retired with mechanism A in this same change. There is no replacement,
+// because the tree contains no other candidate — measured, not assumed:
+//
+//   listAgentDefinitions = isStudioAgent = has a `runtime:` block AND
+//   `library !== false` (orchestrator/studio/registry.ts:126-137).
+//
+//   - The four real `surface: interactive` agents WITH a runtime block
+//     (brain-maintenance, creation-agent, demo-builder, instructions-creator)
+//     every one declares `library: false` — deliberately, as bridge-dispatched
+//     setup helpers — so none of them enters the roster.
+//   - `cruft-sweep` is `library: true` + `surface: interactive` but has NO
+//     runtime block, so `isStudioAgent` rejects it and it is not a roster
+//     member either. (An earlier pass in this lane re-pointed the test at
+//     cruft-sweep on exactly that misreading; the test then failed with
+//     `no runnable agent "cruft-sweep" in the roster` rather than the
+//     `is interactive` refusal it asserts. Recorded so the next person does
+//     not repeat it.)
+//
+// Verified live: `listAgentDefinitions('skills')` returns 11 defs and its
+// interactive membership is `[]`.
+//
+// NOTHING IS UNIQUELY LOST, and here is where each half of its coverage now
+// lives — the deleted test was the INTERSECTION of two properties that are
+// still each covered:
+//   - the guard over real HTTP, through this bridge: the
+//     `test-interactive` synthetic fixture test immediately above.
+//   - the guard against a REAL agent's shipped frontmatter:
+//     orchestrator/agent-dispatch.test.ts's "R4-21 phase 2, WI-2" pin, which
+//     drives the real `creation-agent` def through `resolveDispatchableAgent`.
+// Only their intersection has no subject in the tree any more, and inventing a
+// fixture to stand in for a real agent would have made the test claim
+// something the repo cannot support.
 
 test('POST /api/agents/<slug>/run: unknown project → 404', async () => {
   const res = await fetch(`${url}/api/agents/test-runnable/run`, {

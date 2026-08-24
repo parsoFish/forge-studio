@@ -41,6 +41,9 @@
  * `communityBadgeForSkill` is not yet exported from `./community-view.ts`.
  */
 import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import yaml from 'js-yaml';
 import {
   filterByKind,
   filterCommunityItems,
@@ -52,12 +55,12 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
-  lastTerminalRefreshOf,
   installActionForItem,
+  refreshOutcomeView,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
 } from './community-view.ts';
-import type { CommunityItem, CommunityHub } from './community-client.ts';
+import type { CommunityItem, CommunityHub, CommunityRefreshResult } from './community-client.ts';
 
 function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
   return {
@@ -594,16 +597,271 @@ test('installActionForItem: a system-provided connection not present has nothing
 // fetchStudioSessions(false); this helper owns the selection.
 // ---------------------------------------------------------------------------
 
-test('lastTerminalRefreshOf: picks the NEWEST terminal row (timestamp-prefixed session ids sort lexicographically)', () => {
-  const rows = [
-    { terminal: true, sessionId: '2026-08-17T10-00-00-aa' },
-    { terminal: false, sessionId: '2026-08-19T09-00-00-cc' },
-    { terminal: true, sessionId: '2026-08-18T12-54-32-bb' },
-  ];
-  expect(lastTerminalRefreshOf(rows)?.sessionId).toBe('2026-08-18T12-54-32-bb');
+// ---------------------------------------------------------------------------
+// W8-B5b — freshness is DERIVED FROM THE REGISTRY, and the session-derived
+// path is GONE. `lastTerminalRefreshOf`'s two tests used to live here.
+//
+// WHY THESE ASSERT THE SOURCE AND NOT THE STRING. Both derivations currently
+// produce the SAME rendered words: this checkout's registry genuinely has
+// `meta.lastRefresh: null` and every source row is genuinely `fetchedBy:
+// seed`, so "never refreshed — every row is still the hand-curated seed" was
+// already the honest answer — the old code just reached it for the wrong
+// reason (no terminal session row existed). A test pinned to that sentence
+// would have passed identically before and after the fix and proved nothing.
+// So these pin WHERE the answer comes from.
+// ---------------------------------------------------------------------------
+
+const REGISTRY_DOC = yaml.load(
+  readFileSync(resolve(__dirname, '..', '..', 'studio', 'community', 'registry.yaml'), 'utf8'),
+) as { meta?: { lastRefresh?: string | null }; sources?: Record<string, { fetchedAt?: string | null; fetchedBy?: string }> };
+
+test('registry-derived freshness: the registry-level line is a pure function of the REAL registry file\'s own meta.lastRefresh', () => {
+  // The registry file is the source of truth, so this test reads it rather
+  // than a fixture: `meta.lastRefresh` must be a key that EXISTS (an absent
+  // key is a schema break, not a null), and whatever it holds is what the
+  // label renders.
+  expect(REGISTRY_DOC.meta, 'studio/community/registry.yaml must declare meta').toBeTruthy();
+  expect('lastRefresh' in (REGISTRY_DOC.meta ?? {}), 'meta.lastRefresh must be PRESENT, even when null').toBe(true);
+
+  const fromFile = REGISTRY_DOC.meta?.lastRefresh ?? null;
+  const label = lastRefreshLabel(fromFile, NOW);
+  if (fromFile === null) {
+    expect(label).toMatch(/never refreshed/);
+  } else {
+    expect(label).toMatch(/last refreshed/);
+    expect(label).not.toMatch(/never/);
+  }
 });
 
-test('lastTerminalRefreshOf: null when no terminal row exists — and an all-ACTIVE list (the ?active=1 fetch shape) yields null, which is exactly why the page must fetch with activeOnly=false', () => {
-  expect(lastTerminalRefreshOf([])).toBeNull();
-  expect(lastTerminalRefreshOf([{ terminal: false, sessionId: '2026-08-19T09-00-00-cc' }])).toBeNull();
+test('registry-derived freshness: per-source provenance also comes from the registry — every seed row reads seed, and a fetchedAt stamp is what moves it', () => {
+  const sources = Object.values(REGISTRY_DOC.sources ?? {});
+  expect(sources.length, 'the registry must declare at least one source row').toBeGreaterThan(0);
+  for (const src of sources) {
+    expect('fetchedAt' in src, 'every source row must carry fetchedAt as a PRESENT key').toBe(true);
+    // The badge is a pure function of that field and nothing else — no
+    // session, no run history, no wall-clock guess.
+    const badge = freshnessBadge(src.fetchedAt ?? null, NOW);
+    if ((src.fetchedAt ?? null) === null) expect(badge.state).toBe('seed');
+  }
+});
+
+test('the SESSION-derived freshness path is GONE from the module, not merely unused', () => {
+  const viewSource = readFileSync(resolve(__dirname, 'community-view.ts'), 'utf8');
+  // A helper that selects a freshness answer out of session rows must not
+  // exist here in any form — leaving it exported but uncalled is how a
+  // deleted derivation comes back.
+  expect(viewSource).not.toMatch(/export function lastTerminalRefreshOf/);
+  expect(viewSource).not.toMatch(/terminal: boolean; sessionId: string/);
+});
+
+test('the /community page reads NO sessions index at all — one fact, one source', () => {
+  const pageSource = readFileSync(resolve(__dirname, '..', 'app', 'community', 'page.tsx'), 'utf8');
+  // This is the assertion that actually kills the defect class: the page may
+  // not reach for the sessions index to answer a question the registry
+  // already answers. An import is the whole capability, so the import is what
+  // is pinned.
+  expect(pageSource).not.toMatch(/fetchStudioSessions/);
+  expect(pageSource).not.toMatch(/from '@\/lib\/studio-client'/);
+  // POSITIVE CONTROL — this one assertion passed BEFORE this change too, and
+  // that is deliberate: the two above are satisfiable by deleting the whole
+  // freshness feature, so this pins that the registry-derived line survived
+  // the deletion of the session-derived one. Verified against `git show
+  // ae3cc433:` that the two `not.toMatch` assertions genuinely FAIL on the
+  // pre-change source — they are regression catchers, not decoration.
+  expect(pageSource).toMatch(/lastRefreshLabel\(meta\?\.lastRefresh/);
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b — refreshOutcomeView. The pure derivation from a
+// `postCommunityRefresh()` transport result to what the /community page's
+// "Refresh registry" button renders. DOES NOT EXIST YET — the import above
+// (`refreshOutcomeView`) is the expected RED until community-view.ts exports
+// it.
+// ---------------------------------------------------------------------------
+
+const OK_COUNTS = { total: 5, refreshed: 2, unchanged: 3, noUpstream: 0, failed: 0 };
+
+test('refreshOutcomeView: a clean 200 with no errors renders "refreshed", never "partial"', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: OK_COUNTS,
+    outcomes: [],
+    errors: [],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refreshed');
+  expect(view.headline).toContain('2 updated');
+  expect(view.headline).toContain('3 unchanged');
+  expect(view.headline).not.toMatch(/partial/i);
+  // RULE 3 — the stamp is rendered ONLY because the server actually sent one.
+  expect(view.detail).toContain('2026-08-24T10:00:00.000Z');
+});
+
+test('refreshOutcomeView: a 200 with a non-empty "errors" array is a PARTIAL outcome, never rounded up to a clean refresh', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
+    outcomes: [],
+    errors: [
+      { source: 'github.com/obra/superpowers', kind: 'timeout', message: 'request timed out after 10000ms' },
+      { source: 'github.com/example/thing', kind: 'not-found', message: '404' },
+    ],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).not.toBe('refreshed');
+  expect(view.state).toBe('partial');
+  expect(view.headline).toMatch(/partial/i);
+  expect(view.headline).toContain('2 of 4');
+  expect(view.detail).toContain('github.com/obra/superpowers: request timed out after 10000ms');
+  expect(view.detail).toContain('github.com/example/thing: 404');
+});
+
+test('refreshOutcomeView: a 200 that verified nothing and wrote nothing renders an honest no-op, not a fabricated "refreshed"', () => {
+  const result: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: false,
+    dryRun: false,
+    lastRefresh: null,
+    counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [],
+    errors: [],
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('no-op');
+  expect(view.headline).not.toMatch(/refreshed/i);
+  // RULE 3 — no lastRefresh was sent, so none is fabricated.
+  expect(view.detail).toBeNull();
+});
+
+test('refreshOutcomeView: the dry-bridge refusal renders as an honest, NAMED refusal that states the route it reached — never a generic error or a faked success', () => {
+  const result: CommunityRefreshResult = {
+    state: 'refused-dry-bridge',
+    route: '/api/studio/community/refresh',
+    method: 'POST',
+    action: 'network',
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refused-dry-bridge');
+  expect(view.headline.toLowerCase()).toContain('suppressed');
+  expect(view.headline).not.toMatch(/refreshed/i);
+  expect(view.detail).toContain('POST /api/studio/community/refresh');
+});
+
+test('refreshOutcomeView: a typed server refusal surfaces the server\'s own reason and remedy verbatim, never a generic message', () => {
+  const result: CommunityRefreshResult = {
+    state: 'refused',
+    status: 409,
+    error: `GitHub rejected the credential currently in FORGE_GH_TOKEN.`,
+    reason: 'invalid-token',
+    remedy: 'Issue a fresh token with public-repository read access and re-export FORGE_GH_TOKEN, then re-run.',
+  };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('refused');
+  expect(view.headline).toBe(result.error);
+  expect(view.detail).toBe(result.remedy);
+});
+
+test('refreshOutcomeView: a bare 500 server-error renders the server\'s own message with no fabricated remedy', () => {
+  const result: CommunityRefreshResult = { state: 'server-error', status: 500, error: 'unexpected token in JSON' };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('server-error');
+  expect(view.headline).toBe('unexpected token in JSON');
+  expect(view.detail).toBeNull();
+});
+
+test('refreshOutcomeView: a transport error (bridge never reached) is distinguished from every refusal above', () => {
+  const result: CommunityRefreshResult = { state: 'transport-error', error: 'bridge unreachable: TypeError: fetch failed' };
+  const view = refreshOutcomeView(result);
+  expect(view.state).toBe('transport-error');
+  expect(view.headline.toLowerCase()).toContain('could not reach');
+  expect(view.detail).toBe(result.error);
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b hostile-review FINDING 1 — a failed post-write re-read must NOT
+// clobber the write's own already-rendered success. `postWriteReloadFailed`
+// reconciles both true facts onto ONE region instead of letting a full-page
+// error banner (driven by `status`, outside this function) bury a rendered
+// "Refreshed — N updated…" beneath it. Repro this pins against: mount is
+// ready, a write succeeds, the post-write re-read then fails — the region
+// must keep stating the write succeeded AND say the view may be stale.
+// ---------------------------------------------------------------------------
+
+const OK_RESULT: CommunityRefreshResult = {
+  state: 'ok',
+  wrote: true,
+  dryRun: false,
+  lastRefresh: '2026-08-24T10:00:00.000Z',
+  counts: OK_COUNTS,
+  outcomes: [],
+  errors: [],
+};
+
+test('refreshOutcomeView: postWriteReloadFailed on a clean refresh keeps the ORIGINAL success headline verbatim and adds an honest staleness notice — never retracted, never a fabricated reassurance', () => {
+  const clean = refreshOutcomeView(OK_RESULT);
+  const stale = refreshOutcomeView(OK_RESULT, { postWriteReloadFailed: true });
+  // The write IS still a fact — the headline is untouched.
+  expect(stale.headline).toBe(clean.headline);
+  // A NEW, deliberately distinct state — never an overload of 'refreshed'.
+  expect(stale.state).toBe('refreshed-stale-view');
+  expect(stale.state).not.toBe(clean.state);
+  expect(stale.detail).toContain('stale');
+  expect(stale.detail).not.toMatch(/refreshed successfully and everything is up to date/i);
+});
+
+test('refreshOutcomeView: postWriteReloadFailed on a PARTIAL outcome (wrote:true, errors present) still keeps the partial headline and marks it stale distinctly from a clean stale-view', () => {
+  const partialResult: CommunityRefreshResult = {
+    state: 'ok',
+    wrote: true,
+    dryRun: false,
+    lastRefresh: '2026-08-24T10:00:00.000Z',
+    counts: { total: 4, refreshed: 1, unchanged: 1, noUpstream: 0, failed: 2 },
+    outcomes: [],
+    errors: [{ source: 'github.com/x/y', kind: 'timeout', message: 'timed out' }],
+  };
+  const clean = refreshOutcomeView(partialResult);
+  const stale = refreshOutcomeView(partialResult, { postWriteReloadFailed: true });
+  expect(stale.headline).toBe(clean.headline);
+  expect(stale.state).toBe('partial-stale-view');
+  expect(stale.detail).toContain(clean.detail);
+  expect(stale.detail).toContain('stale');
+});
+
+test('refreshOutcomeView: postWriteReloadFailed is IGNORED when the result never wrote — no fabricated staleness claim for an outcome that never touched the registry', () => {
+  const noOpResult: CommunityRefreshResult = {
+    state: 'ok', wrote: false, dryRun: false, lastRefresh: null,
+    counts: { total: 0, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [], errors: [],
+  };
+  expect(refreshOutcomeView(noOpResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(noOpResult));
+});
+
+test('refreshOutcomeView: postWriteReloadFailed is IGNORED for a transport-error/refused/server-error result — the flag only ever reconciles onto an actual write', () => {
+  const transportResult: CommunityRefreshResult = { state: 'transport-error', error: 'bridge unreachable' };
+  expect(refreshOutcomeView(transportResult, { postWriteReloadFailed: true })).toEqual(refreshOutcomeView(transportResult));
+});
+
+// ---------------------------------------------------------------------------
+// W8-B5b hostile-review FINDING 4 — the `dryRun:true` no-op arm is
+// UNREACHABLE from the /community page's only production caller today (the
+// bridge route never sets `dryRun`), but it mirrors the server's real type
+// and must not silently rot: pin its output so it is not dead-and-untested.
+// ---------------------------------------------------------------------------
+
+test('refreshOutcomeView: a dryRun no-op (unreachable from the UI today — see the comment above this arm — but a real server-typed shape) renders the dry-run headline, distinct from the non-dry-run no-op', () => {
+  const dryRunResult: CommunityRefreshResult = {
+    state: 'ok', wrote: false, dryRun: true, lastRefresh: null,
+    counts: { total: 7, refreshed: 0, unchanged: 0, noUpstream: 0, failed: 0 },
+    outcomes: [], errors: [],
+  };
+  const view = refreshOutcomeView(dryRunResult);
+  expect(view.state).toBe('no-op');
+  expect(view.headline).toBe('Dry run — computed 7 row(s), wrote nothing.');
+  expect(view.detail).toBeNull();
 });

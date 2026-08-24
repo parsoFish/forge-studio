@@ -130,7 +130,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, readJson, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
@@ -181,12 +181,12 @@ function unhandledAffordanceBody(kind: SessionAffordanceKind, error: string): Un
 /** The subset of `SpawnableAgentId` (`cli/ui-bridge.ts`) this route ever
  *  spawns a turn for — never `architect` (no writable affordance) or
  *  `project-brain` (no verdict/question-form row in its panel). W7-C2: the
- *  three generic-spine kinds (`authoring`/`kb-cleanup`/`community-refresh`)
- *  joined for the REVISE verdict — a revise sends the session back to its
- *  agent phase and spawns the next turn through the SAME detached
- *  `spawnAgentTurn` their own start routes already use (authoring's APPROVE
- *  still runs its turn INSIDE `runFinalize`, unchanged). */
-export type LegacySpawnableAgentId = 'instructions' | 'demo-builder' | 'authoring' | 'kb-cleanup' | 'community-refresh';
+ *  generic-spine kinds (`authoring`/`kb-cleanup`) joined for the REVISE
+ *  verdict — a revise sends the session back to its agent phase and spawns
+ *  the next turn through the SAME detached `spawnAgentTurn` their own start
+ *  routes already use (authoring's APPROVE still runs its turn INSIDE
+ *  `runFinalize`, unchanged). */
+export type LegacySpawnableAgentId = 'instructions' | 'demo-builder' | 'authoring' | 'kb-cleanup';
 
 /** W7-C2 T1 review (A7) — what `spawnAgentTurn` reports back. It used to
  *  return void with its whole body inside a bare best-effort catch, so
@@ -213,9 +213,9 @@ export type AffordanceRouteContext = StudioContext & {
    *  `broadcastInstructionsChanged`/`broadcastDemoChanged` calls that used
    *  to live inline here: this module no longer keeps its own per-kind list
    *  of which kinds have a list-changed WS event. A kind with no event
-   *  (authoring / kb-cleanup / community-refresh — no `*-list-changed`
-   *  message exists in the bridge's WS vocabulary) honestly no-ops; those
-   *  surfaces refresh on the session shell's own 3s poll (SHELL_POLL_MS,
+   *  (authoring / kb-cleanup — no `*-list-changed` message exists in the
+   *  bridge's WS vocabulary) honestly no-ops; those surfaces refresh on the
+   *  session shell's own 3s poll (SHELL_POLL_MS,
    *  forge-ui/app/sessions/[kind]/[sessionId]/page.tsx). */
   broadcastKindChanged: (kind: string) => void;
 };
@@ -408,10 +408,9 @@ export function verdictWasAccepted(res: { readonly headersSent: boolean; readonl
 // is the `step: agent` row whose own `next` lands on the verdict row this
 // affordance was derived from (instructions drafting→awaiting-verdict, demo
 // generating→awaiting-review, authoring analyzing→awaiting-review,
-// kb-cleanup drafting→awaiting-approval, community-refresh
-// gathering→awaiting-review — all five real tables have exactly one). No
-// such row ⇒ 501, fail LOUD — a yaml row declaring `revise` with no agent
-// producer to re-run is authored-data-with-no-consumer, never guessed
+// kb-cleanup drafting→awaiting-approval — all four real tables have exactly
+// one). No such row ⇒ 501, fail LOUD — a yaml row declaring `revise` with no
+// agent producer to re-run is authored-data-with-no-consumer, never guessed
 // around.
 //
 // `iteration` is bumped when the status already tracks one (demo's
@@ -432,7 +431,6 @@ function reviseSpawnAgentId(descriptorId: string): LegacySpawnableAgentId | null
     case 'demo': return 'demo-builder';
     case 'authoring': return 'authoring';
     case 'kb-cleanup': return 'kb-cleanup';
-    case 'community-refresh': return 'community-refresh';
     default: return null;
   }
 }
@@ -981,130 +979,6 @@ async function handleAuthoringVerdict(
 }
 
 // ---------------------------------------------------------------------------
-// verdict — community-refresh (W6-CR-3). BOTH `approve` and `reject` are
-// meaningful here: a refresh pass may propose changes the operator genuinely
-// wants to discard, never touching the real registry. Its `awaiting-review`
-// row declares all THREE values as of W7-C2 (`verdicts: [approve, revise,
-// reject]`, studio/session-kinds.yaml) — the same three every other
-// verdict-bearing kind now declares; `revise` is handled generically
-// (`handleGenericRevise`) and never reaches this function.
-//
-// `reject` is a plain, SYNC-INVARIANT write (no await before it) straight to
-// the `rejected` terminal phase — mirroring `handleDemoVerdict`'s own reject
-// arm.
-//
-// `approve` is NOT subject to this file's SYNC INVARIANT note: it re-reads
-// status.json ITSELF and writes its OWN atomic `phase:'committing'` claim
-// BEFORE its one `await runInteractiveTurn(...)`, independent of whatever
-// this dispatcher's caller read earlier — exactly the claim-then-await shape
-// `handleAuthoringVerdict`/`runFinalize` (bridge-studio-authoring.ts)
-// established. Inlined here (rather than a separate bespoke finalize route
-// module) because `commitRegistryDraft` has no skill/hook-install-shaped
-// complexity to warrant one — see that finalizer's own header
-// (`orchestrator/interactive-finalizers.ts`).
-// ---------------------------------------------------------------------------
-
-async function handleCommunityRefreshVerdict(
-  ctx: AffordanceRouteContext,
-  res: ServerResponse,
-  origin: string,
-  projectsRoot: string,
-  dirSegs: readonly string[],
-  sessionId: string,
-  verdict: 'approve' | 'reject',
-): Promise<void> {
-  if (verdict === 'reject') {
-    // SYNC INVARIANT: no await between this function's own status read and
-    // its write — see this file's header note.
-    const status = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
-    if (!status) {
-      sendJson(res, 404, { error: 'session not found', sessionId }, origin);
-      return;
-    }
-    if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'rejected' }) === null) {
-      sendJson(res, 400, { error: 'invalid session path', sessionId }, origin);
-      return;
-    }
-    sendJson(res, 200, { ok: true, phase: 'rejected' }, origin);
-    return;
-  }
-
-  // approve => run the committing turn (commitRegistryDraft).
-  const status = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
-  if (!status) {
-    sendJson(res, 404, { error: 'session not found', sessionId }, origin);
-    return;
-  }
-  if (status.phase !== 'awaiting-review') {
-    sendJson(
-      res,
-      409,
-      { error: `cannot commit: session is in phase "${status.phase}", required phase is "awaiting-review"` },
-      origin,
-    );
-    return;
-  }
-  if (guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'committing' }) === null) {
-    sendJson(res, 500, { error: 'failed to advance session status to "committing"' }, origin);
-    return;
-  }
-  const revert = (): void => {
-    try {
-      guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'awaiting-review' });
-    } catch {
-      /* best-effort — see runFinalize's own revertToAwaitingReview note (bridge-studio-authoring.ts) */
-    }
-  };
-
-  try {
-    const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'community-refresh');
-    if (!descriptor) {
-      revert();
-      sendJson(res, 500, { error: 'community-refresh session-kind descriptor not found' }, origin);
-      return;
-    }
-    const sessionGuard = resolveGuardedPath(projectsRoot, dirSegs);
-    if (!sessionGuard.ok || !sessionGuard.exists) {
-      revert();
-      sendJson(res, 404, { error: 'session not found', sessionId }, origin);
-      return;
-    }
-    // sessionGuard.realPath === <projectsRoot realpath>/<anchor>/
-    // _community-refresh/<sessionId> — the project root is the same value
-    // with the trailing two segments stripped (mirrors runFinalize's own
-    // derivation, bridge-studio-authoring.ts).
-    const projectRoot = dirname(dirname(sessionGuard.realPath));
-
-    // Dynamically imported so a static import never pulls the Claude Agent
-    // SDK into bridge start-up (mirrors bridge-studio-authoring.ts's own
-    // runFinalize / cli/agent-run.ts's project-brain-builder-runner
-    // dynamic-import precedent).
-    const { runInteractiveTurn } = await import('../orchestrator/interactive-runner.ts');
-    const turnResult = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot: ctx.forgeRoot });
-    if (turnResult.phase !== 'committed') {
-      // Never report success on an unfinished turn.
-      revert();
-      sendJson(res, 500, { error: `commit turn did not reach phase "committed" (got "${turnResult.phase}")` }, origin);
-      return;
-    }
-    // W7-C2 (sessions-kinds-36) — persist the permanent pointer at what this
-    // session produced (the community registry), so the committed session
-    // page can link to it on every later read, not just navigate once.
-    // Best-effort on top of an already-committed turn: read FRESH (the turn
-    // itself rewrote status.json) and never let a failed pointer write turn
-    // a real commit into a reported failure.
-    const committedStatus = guardedReadSessionStatus<Record<string, unknown>>(projectsRoot, dirSegs);
-    if (committedStatus) {
-      guardedWriteSessionStatus(projectsRoot, dirSegs, { ...committedStatus, finalized: { kind: 'community-registry', id: 'registry' } });
-    }
-    sendJson(res, 200, { ok: true, phase: 'committed' }, origin);
-  } catch (err) {
-    revert();
-    sendJson(res, 500, { error: sanitizeError(err) }, origin);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -1398,15 +1272,11 @@ export async function handleStudioAffordanceRoutes(
             await handleAuthoringVerdict(ctx, res, origin, projectsRoot, dirSegs, status, project, sessionId, verdict, b);
             dispatched = true;
             break;
-          case 'community-refresh':
-            await handleCommunityRefreshVerdict(ctx, res, origin, projectsRoot, dirSegs, sessionId, verdict);
-            dispatched = true;
-            break;
           default:
             // Structurally unreachable today — the only descriptors whose
-            // panel/turnSpec ever derive a verdict affordance are the five
+            // panel/turnSpec ever derive a verdict affordance are the four
             // above. Fails LOUD, never routes an unknown kind through one of
-            // the five handlers as a best guess.
+            // the four handlers as a best guess.
             break;
         }
       }

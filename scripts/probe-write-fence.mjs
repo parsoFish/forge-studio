@@ -9,11 +9,12 @@
  *
  * What it does: builds a throwaway session dir with a `staging/` write root,
  * runs a REAL `runAgentTurn` through the pinned SDK with
- * `writeRoots = [<sessionDir>/staging]` and the same tool grant
- * community-refresh's SKILL.md declares (Write IN the allow list), and asks
- * the model to (1) Write an absolute path OUTSIDE the root and (2) Write a
- * file INSIDE it. Then it checks the filesystem — the artifact, not the
- * status code:
+ * `writeRoots = [<sessionDir>/staging]` and the same tool grant a
+ * generic-interactive-session SKILL.md typically declares (Write IN the
+ * allow list — historically community-refresh's own grant shape, W8-B5b
+ * WI-3 retired that kind), and asks the model to (1) Write an absolute path
+ * OUTSIDE the root and (2) Write a file INSIDE it. Then it checks the
+ * filesystem — the artifact, not the status code:
  *   PASS  = outside file absent AND inside file present
  *   FAIL  = outside file present (fence bypassed) or inside file absent
  *           (fence over-strict — a false rejection is also a defect)

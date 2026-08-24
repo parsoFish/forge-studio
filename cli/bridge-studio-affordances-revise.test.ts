@@ -7,8 +7,8 @@
  * Contract pinned here (RED at branch base):
  *   - `verdict: 'revise'` is legal wherever the yaml row declares it
  *     (instructions awaiting-verdict, demo awaiting-review, authoring
- *     awaiting-review, kb-cleanup awaiting-approval, community-refresh
- *     awaiting-review). A revise REQUIRES a non-empty `feedback` string
+ *     awaiting-review, kb-cleanup awaiting-approval). A revise REQUIRES
+ *     a non-empty `feedback` string
  *     (400 naming it otherwise), writes it to the session's feedback.md, and
  *     sends the session back to its drafting/agent phase (spawning the next
  *     turn — a no-op under FORGE_DRY_BRIDGE, like every sibling test).
@@ -271,25 +271,6 @@ test('C2-REV-9: kb-cleanup reject at awaiting-approval -> 200, phase -> rejected
   const res = await postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'reject' });
   assert.equal(res.status, 200);
   assert.equal(readPhase(sessionDir), 'rejected');
-});
-
-// ---------------------------------------------------------------------------
-// revise — community-refresh
-// ---------------------------------------------------------------------------
-
-test('C2-REV-10: community-refresh revise at awaiting-review -> 200, feedback.md written, phase -> gathering', async () => {
-  const project = '.community-registry';
-  const sessionId = freshSessionId();
-  const sessionDir = seedSession(project, '_community-refresh', sessionId, { session_id: sessionId, project, phase: 'awaiting-review' });
-  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
-  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), 'skills: []\n', 'utf8');
-  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
-    project, verdict: 'revise', feedback: 'Drop the unverified entries.',
-  });
-  const text = await res.text();
-  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
-  assert.equal(readPhase(sessionDir), 'gathering');
-  assert.equal(readFileSync(join(sessionDir, 'feedback.md'), 'utf8'), 'Drop the unverified entries.');
 });
 
 // ---------------------------------------------------------------------------

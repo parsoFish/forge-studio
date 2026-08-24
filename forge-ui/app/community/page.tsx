@@ -4,8 +4,17 @@ import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioPage } from '@/components/StudioPage';
-import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind, type CommunityIndexMeta } from '@/lib/community-client';
-import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
+import {
+  fetchCommunityIndex,
+  postCommunityRefresh,
+  COMMUNITY_KINDS,
+  COMMUNITY_REFRESH_ROUTE,
+  type CommunityItem,
+  type CommunityHubWithCount,
+  type CommunityKind,
+  type CommunityIndexMeta,
+  type CommunityRefreshResult,
+} from '@/lib/community-client';
 import {
   filterByKind,
   filterByHub,
@@ -16,13 +25,14 @@ import {
   sortCommunityItems,
   freshnessBadge,
   lastRefreshLabel,
-  lastTerminalRefreshOf,
   isHubDeclaredOnly,
   communityEmptyState,
+  refreshOutcomeView,
   COMMUNITY_SORT_KEYS,
   COMMUNITY_SORT_LABELS,
   type CommunitySortKey,
 } from '@/lib/community-view';
+import { disabledAttrs } from '@/lib/disabled-reason';
 import {
   parseCommunityViewState,
   communityHrefFor,
@@ -106,42 +116,79 @@ function CommunityBrowserInner() {
   // address bar catches up on the debounce below.
   const [queryDraft, setQueryDraft] = useState(viewState.query);
   const [nowMs] = useState(() => Date.now());
-  // W7-B3 (community-16): the refresh sessions this surface used to lose —
-  // in-flight (non-terminal) + the most recent terminal one, from the SAME
-  // sessions index /sessions reads. Advisory: a failed read keeps [] (the
-  // strip renders nothing false; the index itself carries its own state).
-  const [refreshSessions, setRefreshSessions] = useState<SessionIndexRow[]>([]);
+  // W8-B5b — the deterministic (LLM-free) refresh: null until the operator
+  // has clicked the button at least once (data-section="refresh-result" is
+  // deliberately absent until then — no empty shell). `refreshing` gates the
+  // button through disabledAttrs while the request is in flight.
+  const [refreshResult, setRefreshResult] = useState<CommunityRefreshResult | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // W8-B5b hostile-review FINDING 1 — whether the post-WRITE re-read (below)
+  // failed to come back. This is deliberately NOT `status`: `status` answers
+  // "do we have index data to show at all", and a failed re-read after an
+  // already-successful write does not retract that data — it only means what
+  // is on screen may now be stale. Reconciled with `refreshResult` in
+  // `refreshOutcomeView` so the result region can state BOTH true facts at
+  // once, never letting one clobber the other.
+  const [postWriteReloadFailed, setPostWriteReloadFailed] = useState(false);
+  // W8-B5b hostile-review FINDING 2 — a SYNCHRONOUS re-entrancy guard. React
+  // only commits `disabled` (state-derived, via `disabledAttrs` below) on the
+  // NEXT render, so two fast clicks both enter this callback before either
+  // sees it disabled. A ref is checked/set before the first `await`, so the
+  // second entry returns immediately — `disabledAttrs` stays the visible
+  // affordance; this is the correctness guard underneath it.
+  const refreshInFlight = useRef(false);
 
+  // W8-B5b — the index read is a REUSABLE callback, not an effect-local
+  // closure, because a successful deterministic refresh REWRITES the very
+  // file this read derives from. Before this, `meta.lastRefresh` was captured
+  // once at mount and never re-read, so a real refresh left the page stating
+  // two contradictory things at once: the result strip saying "Refreshed — N
+  // updated" beside `[data-component="registry-last-refresh"]` still saying
+  // "never refreshed", with `data-last-refresh` and every item's freshness
+  // badge equally stale. One fact, one source — the same rule the hub chips
+  // and the empty state already share through `isHubDeclaredOnly`.
+  const mounted = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const r = await fetchCommunityIndex();
-      if (cancelled) return;
-      if (!r.ok) {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  // W8-B5b hostile-review FINDING 1 — `mode` distinguishes the MOUNT read
+  // (nothing has been shown yet — a failure genuinely IS a page-level error,
+  // unchanged from before) from a POST-WRITE re-read (the page already has a
+  // just-rendered write success on screen — a failure here must not retract
+  // it or bury the ready page beneath a full-page error banner). Only the
+  // 'initial' mode may ever set `status`/`error`; 'post-write' surfaces its
+  // failure ONLY through `postWriteReloadFailed`, consumed below by
+  // `refreshOutcomeView`.
+  const loadIndex = useCallback(async (mode: 'initial' | 'post-write' = 'initial') => {
+    const r = await fetchCommunityIndex();
+    if (!mounted.current) return;
+    if (!r.ok) {
+      if (mode === 'initial') {
         setStatus('error');
         setError(r.error ?? 'could not reach the forge bridge');
-        return;
+      } else {
+        setPostWriteReloadFailed(true);
       }
-      setHubs(r.hubs);
-      setItems(r.items);
-      setMeta(r.meta);
-      setStatus('ready');
-      setError(null);
+      return;
     }
-    void load();
-    // W7-B3 review F2: activeOnly=false is load-bearing — the default
-    // (?active=1) excludes every TERMINAL row, which made
-    // lastTerminalRefresh permanently null and the
-    // "open-last-refresh-session" link dead code (the community-16 defect).
-    fetchStudioSessions(false)
-      .then((rows) => {
-        if (!cancelled) setRefreshSessions(rows.filter((row) => row.kind === 'community-refresh'));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    setHubs(r.hubs);
+    setItems(r.items);
+    setMeta(r.meta);
+    setStatus('ready');
+    setError(null);
+    if (mode === 'post-write') setPostWriteReloadFailed(false);
   }, []);
+
+  // W8-B5b — this effect used to ALSO fetch the whole sessions index just to
+  // find rows for the retired refresh SESSION kind, feeding the strip below.
+  // That read is gone with the derivation it fed: the registry states its own freshness
+  // (`meta.lastRefresh`, carried on the index payload this page already
+  // fetches), so there is nothing here a second request can tell us.
+  useEffect(() => {
+    void loadIndex();
+  }, [loadIndex]);
 
   /** A router write already issued but not yet reflected in the URL. A router
    *  write is ASYNCHRONOUS, so a second interaction landing before the first
@@ -199,8 +246,42 @@ function CommunityBrowserInner() {
   const searched = filterCommunityItems(byHub, queryDraft);
   const filtered = sortCommunityItems(searched, sortKey, sortDir);
   const emptyState = communityEmptyState({ hubs, hubFilter, kind, query: queryDraft });
-  const inFlightRefresh = refreshSessions.filter((row) => !row.terminal);
-  const lastTerminalRefresh = lastTerminalRefreshOf(refreshSessions);
+  const refreshView = refreshResult !== null
+    ? refreshOutcomeView(refreshResult, { postWriteReloadFailed })
+    : null;
+
+  // W8-B5b — the deterministic refresh. `postCommunityRefresh` never throws
+  // (every failure — transport, dry-bridge, a typed refusal, a bare 500 — is
+  // a typed result state, not a rejection), so there is no swallowed-error
+  // path here: whatever comes back is rendered, never dropped on the floor
+  // the way the sessions fetch above (`.catch(() => {})`) is allowed to be —
+  // that fetch is advisory strip decoration; this one is the operator's own
+  // explicit request.
+  const handleRefreshClick = useCallback(async () => {
+    // FINDING 2 — synchronous re-entrancy guard, checked/set before the
+    // first `await` so a second synchronous click is a no-op.
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    try {
+      setRefreshing(true);
+      setPostWriteReloadFailed(false);
+      const result = await postCommunityRefresh();
+      if (!mounted.current) return;
+      setRefreshResult(result);
+      setRefreshing(false);
+      // The registry file just changed on disk — re-read the index so the
+      // freshness the page STATES is the freshness the registry now HAS.
+      // Only on a real write: a dry-bridge refusal, a typed refusal and a
+      // partial pass that wrote nothing all leave the file untouched, and
+      // re-reading after those would be a request that cannot tell anyone
+      // anything new. FINDING 1 — this re-read's own failure is handled
+      // entirely inside `loadIndex('post-write')`; it can never clobber the
+      // success we just rendered above.
+      if (result.state === 'ok' && result.wrote) await loadIndex('post-write');
+    } finally {
+      refreshInFlight.current = false;
+    }
+  }, [loadIndex]);
 
   return (
     <StudioPage
@@ -233,14 +314,18 @@ function CommunityBrowserInner() {
           >
             + Add item
           </Link>
-          <Link
-            href="/sessions/community-refresh/new"
+          <button
+            type="button"
             data-action="refresh-community-registry"
             className="btn btn-sm"
-            title="Kick off the community-refresh agent — fetches real upstream signals and drafts a reviewable diff of the registry (W6-CR-3)"
+            onClick={() => { void handleRefreshClick(); }}
+            {...disabledAttrs(
+              refreshing ? 'A refresh is already in flight.' : null,
+              `Fetch real upstream signals for every registry row and write the verified facts back (POST ${COMMUNITY_REFRESH_ROUTE}) — deterministic, no agent involved`,
+            )}
           >
-            Refresh registry (agent)
-          </Link>
+            Refresh registry
+          </button>
         </>
       }
     >
@@ -248,7 +333,6 @@ function CommunityBrowserInner() {
         {status === 'ready' && (
           <section
             data-section="refresh-registry-state"
-            data-in-flight-count={inFlightRefresh.length}
             style={{
               display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 14,
               fontSize: 12.5, color: 'var(--dim)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 12px',
@@ -261,25 +345,28 @@ function CommunityBrowserInner() {
                 written by Studio but not yet committed; commit it via your normal git flow.
               </span>
             )}
-            {inFlightRefresh.map((row) => (
-              <Link
-                key={row.sessionId}
-                href={row.href}
-                data-action="open-refresh-session"
-                data-session-state={row.state}
-                style={{ color: 'var(--ember)', textDecoration: 'none' }}
-              >
-                Refresh in flight ({row.state}) — {row.sessionId} →
-              </Link>
-            ))}
-            {inFlightRefresh.length === 0 && lastTerminalRefresh && (
-              <Link
-                href={lastTerminalRefresh.href}
-                data-action="open-last-refresh-session"
-                style={{ color: 'var(--dim)', textDecoration: 'underline' }}
-              >
-                Last refresh session: {lastTerminalRefresh.sessionId} ({lastTerminalRefresh.phase}) →
-              </Link>
+          </section>
+        )}
+
+        {/* W8-B5b — the deterministic refresh's own outcome. Absent until the
+            operator has clicked "Refresh registry" at least once (no empty
+            shell); `data-refresh-route` is set ONLY from the route the
+            SERVER echoed back in a dry-bridge refusal — never a hardcoded
+            client-side literal, so its presence is evidence the request
+            actually reached that route. */}
+        {refreshResult !== null && refreshView !== null && (
+          <section
+            data-section="refresh-result"
+            data-refresh-state={refreshView.state}
+            {...(refreshResult.state === 'refused-dry-bridge' ? { 'data-refresh-route': refreshResult.route } : {})}
+            style={{
+              marginBottom: 18, fontSize: 12.5, color: 'var(--dim)',
+              border: '1px solid var(--line)', borderRadius: 8, padding: '8px 12px',
+            }}
+          >
+            <div style={{ color: 'var(--text)' }}>{refreshView.headline}</div>
+            {refreshView.detail !== null && (
+              <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{refreshView.detail}</div>
             )}
           </section>
         )}

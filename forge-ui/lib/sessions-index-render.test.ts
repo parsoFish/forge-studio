@@ -105,7 +105,7 @@ test('modelTier renders when present, and an honest placeholder when null (never
 
 // ---- zero-state: honest, never terminal, always the kickoff CTAs ---------
 
-test('zero-state (ready, no sessions): renders "No sessions in flight" plus kickoff CTAs for ALL six generic kickoff kinds + architect (W7-B1 home-sessions-19: community-refresh included)', () => {
+test('zero-state (ready, no sessions): renders "No sessions in flight" plus kickoff CTAs for the generic kickoff kinds + architect (W7-B1 home-sessions-19; community-refresh retired W8-B5b WI-3)', () => {
   const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [], ready: true }));
   expect(html).toContain('data-section="sessions-empty"');
   expect(html).toContain('No sessions in flight');
@@ -115,7 +115,7 @@ test('zero-state (ready, no sessions): renders "No sessions in flight" plus kick
   expect(html).toContain('href="/sessions/project-brain/new"');
   expect(html).toContain('href="/sessions/kb-cleanup/new"');
   expect(html).toContain('href="/sessions/authoring/new"');
-  expect(html).toContain('href="/sessions/community-refresh/new"');
+  expect(html).not.toContain('href="/sessions/community-refresh/new"');
   // A real session set must never ALSO render the zero-state dead end.
   expect(html).not.toContain('data-section="sessions-table"');
 });
@@ -176,7 +176,7 @@ test('W7-A1: error AFTER a successful read (rows already known) keeps the last-k
 // ---- crosscut-13: the kickoff CTAs render with rows PRESENT too — the ----
 // ---- normal steady state must never lose the only way to start one. ------
 
-test('W7-B1 (crosscut-13): the kickoff section renders in the POPULATED state — all seven entries, alongside the table', () => {
+test('W7-B1 (crosscut-13): the kickoff section renders in the POPULATED state — all six entries, alongside the table (community-refresh retired W8-B5b WI-3)', () => {
   const sessions = [makeRow({ kind: 'instructions', sessionId: 's1' })];
   const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions, ready: true }));
   expect(html).toContain('data-section="sessions-table"');
@@ -187,7 +187,7 @@ test('W7-B1 (crosscut-13): the kickoff section renders in the POPULATED state �
   expect(html).toContain('data-action="kickoff-project-brain"');
   expect(html).toContain('data-action="kickoff-kb-cleanup"');
   expect(html).toContain('data-action="kickoff-authoring"');
-  expect(html).toContain('data-action="kickoff-community-refresh"');
+  expect(html).not.toContain('data-action="kickoff-community-refresh"');
 });
 
 // ---- home-sessions-20 / community-21: the Kind cell is the descriptor's ---
@@ -204,11 +204,13 @@ test('W7-B1 (home-sessions-20/community-21): the Kind cell renders the descripto
   expect(html).not.toContain('text-transform:capitalize');
 });
 
-test('W7-B1 (community-21): a community-refresh row reads "Community refresh session" — the declared title, same as the session page', () => {
-  const sessions = [makeRow({ kind: 'community-refresh', sessionId: 's1', project: '.community-registry' })];
-  const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions, ready: true }));
-  expect(html).toContain('Community refresh session');
-});
+// W7-B1 (community-21, historical): a `community-refresh` row used to read
+// "Community refresh session" here, pinning the same declared-title lookup
+// the kb-cleanup test above still covers generically. The kind itself is
+// retired (W8-B5b WI-3); the general principle this test existed to pin —
+// the Kind cell renders the descriptor's own title, never a capitalized raw
+// id — is still exercised by the kb-cleanup test above, so this kind-specific
+// pin is removed rather than re-fixtured onto a kind it was never about.
 
 // ---- home-sessions-03/-24, community-24: the needs-you signal is a --------
 // ---- labelled chip with its OWN status token — never "retrying", never ----

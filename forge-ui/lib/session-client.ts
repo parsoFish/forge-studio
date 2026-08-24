@@ -828,10 +828,10 @@ export type SessionShellPayload = {
   lifecycle: SessionLifecycle;
   /**
    * W7-C2 (sessions-kinds-36) — the persisted {kind, id} pointer at
-   * whatever object a committed session produced (an authoring session's
-   * landed skill/hook, a community-refresh commit's registry), written once
-   * at finalize success and read back on every GET so the committed session
-   * page keeps a PERMANENT link — never a one-shot redirect lost on reload.
+   * whatever object a committed session produced (e.g. an authoring
+   * session's landed skill/hook), written once at finalize success and read
+   * back on every GET so the committed session page keeps a PERMANENT link
+   * — never a one-shot redirect lost on reload.
    * REQUIRED like `modelTier`: `null` IS the honest value for a session
    * that produced nothing, never an omitted key.
    *

@@ -38,20 +38,27 @@ cannot survive a write, so `forge studio lint` **refuses** one
 (`community-registry/lossy-comment`), naming the line. Rationale belongs in the
 header block.
 
-## The three writers (the only three)
+## The two writers (the only two)
 
 | Writer | Path | Stamps |
 | --- | --- | --- |
 | `refreshCommunityRegistry` (orchestrator/studio/community-refresh-api.ts, W8-B5) | `forge community refresh` — deterministic, no LLM: three fixed API calls behind a three-origin allowlist | On a source it got a real 200 for: `fetchedAt: <now>` / `fetchedBy: api:github` (or `api:npm` / `api:mcp-registry`) plus the fetched facts; `meta.lastRefresh: <now>` only when at least one source verified. A missing/invalid `GH_TOKEN` or an exhausted rate limit aborts and writes **nothing**; a 404 / network error / timeout / malformed body leaves that source row **byte-identical** and reports it. It never writes: it returns a next registry and the caller owns the write. |
-| `commitRegistryDraft` (orchestrator/interactive-finalizers.ts) | community-refresh session → operator **approve** verdict | `fetchedAt: <now>` / `fetchedBy: community-refresh/<sid>` on **source rows** every consuming item's evidence marked verified; one unverified consumer keeps the live row; `meta.lastRefresh: <now>` |
 | Studio CRUD routes (cli/bridge-studio-writes.ts, W7-B3) | `POST/PUT/DELETE /api/studio/community/registry/items[/:id]` — `kind: skill` only (the index sources every other kind outside the registry) | Curation only. W7-B3 review F4/F5 had to FORCE `stars`/`starsDisplay`/`upstreamUpdatedAt` server-side; v2 removes the field, so there is nothing to force — a body carrying a real repo fact is **400**, naming `sources:` (an explicit `null` is accepted and dropped). The shared `sources` map and the curation header are carried forward untouched. |
 | A human editing the YAML in a PR | ordinary code review | whatever the diff says — lint is the gate |
 
-All of them converge on the ONE serializer (`serializeCommunityRegistry`,
-orchestrator/studio/registry.ts) — which is exactly why the comment-preservation
-fix lives there and not in any one writer — and, for the programmatic writers,
-temp-then-rename with a re-parse through the ONE loader before the real file
-is replaced — a write that cannot be re-loaded never lands.
+**Historical third writer, retired W8-B5b WI-3:** `commitRegistryDraft`
+(orchestrator/interactive-finalizers.ts) used to write `fetchedAt: <now>` /
+`fetchedBy: community-refresh/<sid>` on source rows a community-refresh
+session's operator-approved verdict marked verified. That interactive session
+kind (W6-CR-3) is retired outright in favour of the deterministic
+`refreshCommunityRegistry` above — there is no longer a finalizer-driven,
+LLM-in-the-loop path to this file.
+
+Both remaining programmatic writers converge on the ONE serializer
+(`serializeCommunityRegistry`, orchestrator/studio/registry.ts) — which is
+exactly why the comment-preservation fix lives there and not in either
+writer — and temp-then-rename with a re-parse through the ONE loader before
+the real file is replaced — a write that cannot be re-loaded never lands.
 
 ## Commit policy (the decision)
 
@@ -71,8 +78,10 @@ bridge-self-merge incident is the standing lesson. Instead:
 ## Debris rule
 
 `studio/community/staging/` is never a legitimate path — it is the
-pre-fence-era escape shape (a community-refresh agent resolving a relative
-`staging/` beside `registryPath`). `forge studio lint` errors on its
-existence (`community/stray-staging`) and names the fix: delete it. Drafts
-live only under the session's own directory and reach the registry only
-through the approve verdict.
+pre-fence-era escape shape (the now-retired community-refresh agent, W6-CR-3
+/ W8-B5b WI-3, resolving a relative `staging/` beside `registryPath`).
+`forge studio lint` errors on its existence (`community/stray-staging`) and
+names the fix: delete it — the guard stays as a backstop against leftover
+debris even though the agent that could create it is gone. Drafts used to
+live only under that session's own directory and reach the registry only
+through the approve verdict; that path no longer exists.

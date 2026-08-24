@@ -334,7 +334,8 @@ test('projects-31: the onboarding panel renders the optional brief inputs (north
  * different agent. When it flipped true on an already-mounted panel, React
  * saw 11 hooks where the previous render had 13 and threw error #300
  * ("Rendered fewer hooks than expected"), unmounting the whole builder page.
- * The walkthrough gate caught it live on `/agents/community-refresh`
+ * The walkthrough gate caught it live on `/agents/community-refresh` (that
+ * agent is since retired, W8-B5b WI-3, but the regression it caught was real)
  * (`never-ready` + a console `pageerror`) — no unit test could, since this
  * repo renders with `renderToStaticMarkup` and has no jsdom/re-render
  * harness (adding one is a dependency decision, not this lane's call).

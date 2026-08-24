@@ -183,16 +183,22 @@ export function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
-// W6-CR-3 — the community-refresh session anchors under this ONE fixed,
-// dot-prefixed pseudo-project (mirrors KB_SEEDING_ANCHOR_PREFIX's own
-// non-project carve-out immediately below, but unparameterized: there is
-// exactly ONE community registry, forge-wide, not N per-id KBs, so a single
-// literal constant is the honest shape rather than a prefix + variable slug).
-// `discoverProjects` (orchestrator/studio/registry.ts) already filters every
-// dot-prefixed directory, so this anchor never surfaces as a phantom
-// project. Exported so cli/ui-bridge.ts's `/api/studio/community-refresh/
-// start` route and cli/bridge-studio-affordances.ts's generic verdict
-// dispatch both use the SAME literal rather than each hand-typing it.
+// W6-CR-3 (HISTORY) — the now-retired community-refresh interactive session
+// kind (mechanism A; superseded by the deterministic `forge community
+// refresh` / `POST /api/studio/community/refresh`, W8-B5) anchored under
+// this ONE fixed, dot-prefixed pseudo-project (mirrors KB_SEEDING_ANCHOR_
+// PREFIX's own non-project carve-out immediately below, but unparameterized:
+// there was exactly ONE community registry, forge-wide, not N per-id KBs,
+// so a single literal constant was the honest shape rather than a prefix +
+// variable slug). `discoverProjects` (orchestrator/studio/registry.ts)
+// already filters every dot-prefixed directory, so this anchor never
+// surfaced as a phantom project. The kickoff route and verdict dispatch that
+// used to import this are gone (W8-B5b), but the constant stays exported:
+// `invalidProjectReason`'s carve-out below still recognizes it so sessions
+// that finished under this anchor before retirement remain reachable, and
+// forge-ui's session-shell "back to project" link (forge-ui/lib/session-
+// shell-view.ts) still maps it to `/community` via a parity test against
+// this SSOT (forge-ui/lib/session-shell-view.test.ts).
 export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
@@ -240,9 +246,11 @@ export function invalidProjectReason(id: string): string | null {
     }
     return `invalid KB seeding anchor "${id}" — the id after "${KB_SEEDING_ANCHOR_PREFIX}" must match ${KB_ID_RE} (the KB id rule)`;
   }
-  // W6-CR-3 — the SAME bounded carve-out for the community-refresh anchor:
-  // EXACTLY this one literal value is allowed, never a general leading-"."
-  // exemption.
+  // W6-CR-3 (HISTORY, W8-B5b) — the SAME bounded carve-out for the retired
+  // community-refresh kind's anchor: EXACTLY this one literal value is
+  // allowed, never a general leading-"." exemption. The kind that used to
+  // create sessions here is gone, but historical sessions still live on
+  // disk under this anchor, so it must keep resolving.
   if (id === COMMUNITY_REFRESH_PROJECT_ANCHOR) {
     return null;
   }
@@ -852,8 +860,10 @@ export async function handleStudioSessionsRoutes(
         // W7-C2 (sessions-kinds-36) — ALWAYS present, mirroring
         // `modelTier`'s own null-is-honest convention: the persisted
         // {kind, id} pointer at whatever object a committed session
-        // produced (runFinalize / the community-refresh approve arm write
-        // it), or null for a session that produced nothing.
+        // produced (runFinalize writes it; historically the now-retired
+        // community-refresh kind's own approve arm did too — those old
+        // sessions still carry the pointer on disk), or null for a session
+        // that produced nothing.
         finalized: deriveFinalized(statusParsed, { forgeRoot: ctx.forgeRoot, projectsRoot, project }),
         // W7-C2 T1 review (P0-3, finding A2/F2) — the transcript's own
         // fail-closed error, SCOPED to the transcript. It used to 409 the
