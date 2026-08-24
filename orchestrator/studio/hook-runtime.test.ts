@@ -146,7 +146,13 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { AGENT_ENV_ALLOWLIST, HOOK_ENV_BASE_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '../spawn-env.ts';
+import {
+  AGENT_ENV_ALLOWLIST,
+  HOOK_ENV_BASE_ALLOWLIST,
+  HOOK_ENV_CREDENTIAL_EXCLUSIONS,
+  MAX_ENV_OVERRIDE_KEYS,
+  buildChildEnv,
+} from '../spawn-env.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import { approveHook, overrideHookBlock, scanHookPackage } from './hook-scan.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
@@ -156,6 +162,7 @@ import {
   detectUndeclaredEnvRefs,
   runHookScript,
   buildHookApprovalGateView,
+  HookRunError,
   type HookRunResult,
 } from './hook-runtime.ts';
 
@@ -231,9 +238,17 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
     // already-'blocked' verdict, so it never needed an approval to run.
     // Now that approval genuinely gates every verdict, an unapproved hook
     // is correctly refused before ever reaching the env-stripping code this
-    // test actually means to exercise — approve it so the real subject is
+    // test actually means to exercise — resolve it so the real subject is
     // what's under test, not the (already separately covered) gate itself.
-    approveHook({ forgeRoot: root, id: 'credential-exfil-probe-hook' });
+    //
+    // W8-B6 FIX-1 layer 2: overrideHookBlock, not approveHook. This probe's
+    // BODY references ANTHROPIC_API_KEY without declaring it — a critical
+    // env-read finding, which now blocks on its own. That is the correct
+    // reading of this fixture: a script that reaches for the operator's API
+    // credential is worth a written reason, whatever its manifest says. The
+    // property under test is unchanged and still proven below — the child
+    // sees ABSENT.
+    overrideHookBlock({ forgeRoot: root, id: 'credential-exfil-probe-hook', reason: 'test fixture: exercising env stripping, not the approval gate' });
     const logger = createLogger('credential-exfil-probe-cycle', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK' };
@@ -248,17 +263,63 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
     assert.doesNotMatch(result.stdout, /sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK/, 'the real secret value must never appear in hook output');
   });
 
-  it('a hook that DECLARES ANTHROPIC_API_KEY in permissions.env DOES receive it — the manifest is the only route in', () => {
+  // -------------------------------------------------------------------
+  // W8-B6 FIX-1 LAYER 1 — THIS TEST IS A REPLACEMENT, NOT A NEW CASE.
+  //
+  // It used to read "a hook that DECLARES ANTHROPIC_API_KEY in
+  // permissions.env DOES receive it — the manifest is the only route in",
+  // and it PASSED. That is the same R3-01 trap this file's own header (D-M)
+  // records twice already: a green test pinning a live credential leak as
+  // intended behaviour, which would have weaponised this suite's gate
+  // against fixing it.
+  //
+  // The defect it pinned, proven end-to-end by an adversarial reviewer
+  // against the FIRST production caller of runHookScript
+  // (orchestrator/studio/hook-dispatch.ts): the credential fence is a
+  // TWO-LAYER composition and was enforced on only one layer.
+  // HOOK_ENV_BASE_ALLOWLIST correctly subtracts
+  // HOOK_ENV_CREDENTIAL_EXCLUSIONS from the BASE — but buildHookChildEnv
+  // then read every permissions.env name straight out of the real,
+  // unfiltered parentEnv into `overrides`, and buildChildEnv applies
+  // overrides UNCONDITIONALLY (spawn-env.ts's own doc says so: "they always
+  // win, even for a key outside the allowlist"). So the exclusion set held
+  // for a manifest that stayed quiet and was bypassed by a manifest that
+  // asked — the exfiltration class spawn-env.ts's header says this whole
+  // feature exists to prevent, obtainable by typing one line of YAML.
+  //
+  // THE FIX PINNED HERE: the exclusion set is the source of truth for BOTH
+  // consumers. A declared exclusion name is refused, and the refusal is
+  // RECORDED (see the "refusal is recorded, never silent" block below) —
+  // deny-by-default does not mean deny-and-say-nothing.
+  //
+  // Deliberately NOT changed: GH_TOKEN is not added to
+  // HOOK_ENV_CREDENTIAL_EXCLUSIONS. It is closed one gate earlier instead —
+  // `GH_` is a secret-shaped prefix, so declaring it scores a `critical`
+  // env-read finding, which computeVerdict now blocks on its own; the grant
+  // stays POSSIBLE but costs an explicit, reasoned overrideHookBlock. A hook
+  // that genuinely needs a GitHub token is a real thing; a hook that
+  // silently receives forge's own API credential is not.
+  // -------------------------------------------------------------------
+  it('SECURITY: a hook that DECLARES ANTHROPIC_API_KEY in permissions.env is REFUSED it — a manifest cannot re-grant a credential-exclusion name', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'credential-granted-hook', CREDENTIAL_ECHO_SCRIPT, { env: ['ANTHROPIC_API_KEY'], read: [], network: false });
-    approveHook({ forgeRoot: root, id: 'credential-granted-hook' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is the manifest grant, not approval
+    // overrideHookBlock, not approveHook: a declared secret-shaped grant is a
+    // critical finding, and a critical finding blocks. The override is the
+    // audited route through — exercised here so this test's SUBJECT stays the
+    // env fence rather than the (separately covered) approval gate.
+    overrideHookBlock({ forgeRoot: root, id: 'credential-granted-hook', reason: 'test fixture: exercising the env fence, not the approval gate' });
     const logger = createLogger('credential-granted-cycle', makeLogsDir());
 
-    const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-deliberately-granted' };
+    const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK' };
 
     const result = runHookScript({ forgeRoot: root, id: 'credential-granted-hook', logger, initiativeId: 'INIT-test', parentEnv });
 
-    assert.match(result.stdout, /APIKEY=sk-deliberately-granted/, 'an operator can still deliberately grant a credential via the manifest');
+    assert.match(
+      result.stdout,
+      /APIKEY=ABSENT/,
+      'declaring a credential-exclusion name in permissions.env must NOT hand the real value to the child — the exclusion set governs the overrides layer too, not only the base',
+    );
+    assert.doesNotMatch(result.stdout, /sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK/, 'the real secret value must never appear in hook output');
   });
 
   it('a distinctive parent-set var NOT in the manifest is absent from the real child', () => {
@@ -323,7 +384,7 @@ describe('buildHookChildEnv composes orchestrator/spawn-env.ts (over the NARROWE
     };
     const permissions: HookPermissionManifest = { env: ['MY_GRANTED_VAR'], read: [], network: false };
 
-    const viaHookRuntime = buildHookChildEnv(parentEnv, permissions);
+    const viaHookRuntime = buildHookChildEnv(parentEnv, permissions).env;
     const viaDirectComposition = buildChildEnv(pickAllowed(parentEnv, HOOK_ENV_BASE_ALLOWLIST), pickAllowed(parentEnv, permissions.env));
 
     assert.deepEqual(
@@ -336,7 +397,7 @@ describe('buildHookChildEnv composes orchestrator/spawn-env.ts (over the NARROWE
 
   it('HOOK_ENV_BASE_ALLOWLIST process-hygiene vars (PATH/HOME) pass through WITHOUT being declared in the manifest', () => {
     const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', HOME: '/home/operator' };
-    const child = buildHookChildEnv(parentEnv, NO_ENV);
+    const child = buildHookChildEnv(parentEnv, NO_ENV).env;
     for (const name of HOOK_ENV_BASE_ALLOWLIST) {
       if (parentEnv[name] !== undefined) assert.equal(child[name], parentEnv[name]);
     }
@@ -372,7 +433,7 @@ describe('buildHookChildEnv composes orchestrator/spawn-env.ts (over the NARROWE
 
   it('an ambient leak var (ANTHROPIC_BASE_URL) is stripped exactly as buildChildEnv strips it, manifest or not', () => {
     const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', ANTHROPIC_BASE_URL: 'https://evil.example.com' };
-    const child = buildHookChildEnv(parentEnv, NO_ENV);
+    const child = buildHookChildEnv(parentEnv, NO_ENV).env;
     assert.equal(child.ANTHROPIC_BASE_URL, undefined);
   });
 
@@ -386,6 +447,106 @@ describe('buildHookChildEnv composes orchestrator/spawn-env.ts (over the NARROWE
     }
     const permissions: HookPermissionManifest = { env: tooManyEnvNames, read: [], network: false };
     assert.throws(() => buildHookChildEnv(parentEnv, permissions), /overrides/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 FIX-1 LAYER 1 — the credential fence is a TWO-LAYER composition
+// (base allowlist + overrides), and it must be enforced on BOTH.
+//
+// `HOOK_ENV_CREDENTIAL_EXCLUSIONS` is the single source of truth. It already
+// governed the base (HOOK_ENV_BASE_ALLOWLIST is derived from
+// AGENT_ENV_ALLOWLIST by subtracting it). It did NOT govern `overrides`, and
+// `buildChildEnv` applies overrides unconditionally BY DESIGN — so a manifest
+// that simply asked for the excluded name got it. Both consumers now consult
+// the same set.
+//
+// "Fail loudly, never silently drop" is why `buildHookChildEnv` returns the
+// refused names ALONGSIDE the env rather than exposing a second, separate
+// "what would be refused?" helper: a caller cannot obtain the child env
+// without also holding the refusal list, so the record cannot be forgotten by
+// a future call site. `runHookScript` turns it into a structured JSONL event.
+// ---------------------------------------------------------------------------
+
+describe('W8-B6 FIX-1: HOOK_ENV_CREDENTIAL_EXCLUSIONS governs the OVERRIDES layer, not only the base', () => {
+  it('a declared credential-exclusion name never reaches the child env', () => {
+    const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-REAL', MY_GRANTED_VAR: 'fine' };
+    const permissions: HookPermissionManifest = { env: ['ANTHROPIC_API_KEY', 'MY_GRANTED_VAR'], read: [], network: false };
+
+    const { env } = buildHookChildEnv(parentEnv, permissions);
+
+    assert.equal(env.ANTHROPIC_API_KEY, undefined, 'a manifest must not be able to re-grant a name the exclusion set removed from the base');
+    assert.equal(env.MY_GRANTED_VAR, 'fine', 'an ordinary declared grant is unaffected — this fix narrows exactly one class, not the manifest mechanism');
+  });
+
+  it('the refusal is REPORTED, not silently dropped — buildHookChildEnv names what it refused', () => {
+    const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-REAL' };
+    const permissions: HookPermissionManifest = { env: ['ANTHROPIC_API_KEY'], read: [], network: false };
+
+    const { refusedEnvGrants } = buildHookChildEnv(parentEnv, permissions);
+
+    assert.deepEqual(refusedEnvGrants, ['ANTHROPIC_API_KEY']);
+  });
+
+  it('a name is refused for BEING EXCLUDED, not for being absent from the parent — the report is about policy, not presence', () => {
+    // No ANTHROPIC_API_KEY in the parent at all. The grant is still refused on
+    // policy grounds and still reported, so an operator reading the log learns
+    // their manifest asked for something it can never have — rather than
+    // learning nothing and assuming the var merely happened to be unset.
+    const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
+    const permissions: HookPermissionManifest = { env: ['ANTHROPIC_API_KEY'], read: [], network: false };
+
+    const { env, refusedEnvGrants } = buildHookChildEnv(parentEnv, permissions);
+
+    assert.equal(env.ANTHROPIC_API_KEY, undefined);
+    assert.deepEqual(refusedEnvGrants, ['ANTHROPIC_API_KEY']);
+  });
+
+  it('every HOOK_ENV_CREDENTIAL_EXCLUSIONS member is refused — the set is enumerated from the export, never retyped here', () => {
+    // Structural: if a future credential is added to the exclusion set, this
+    // test covers it automatically. A hand-typed list here would silently stop
+    // covering the set the moment it grew — the exact drift the subtraction
+    // derivation above exists to prevent, one layer down.
+    for (const name of HOOK_ENV_CREDENTIAL_EXCLUSIONS) {
+      const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', [name]: 'sk-REAL' };
+      const { env, refusedEnvGrants } = buildHookChildEnv(parentEnv, { env: [name], read: [], network: false });
+      assert.equal(env[name], undefined, `declared exclusion "${name}" must not reach the child`);
+      assert.deepEqual(refusedEnvGrants, [name]);
+    }
+    assert.ok(HOOK_ENV_CREDENTIAL_EXCLUSIONS.size > 0, 'sanity: an empty exclusion set would make every assertion above vacuous');
+  });
+
+  it('nothing is reported when the manifest declares no exclusion name — an empty report is the ordinary case', () => {
+    const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', MY_GRANTED_VAR: 'fine' };
+    const { refusedEnvGrants } = buildHookChildEnv(parentEnv, { env: ['MY_GRANTED_VAR'], read: [], network: false });
+    assert.deepEqual(refusedEnvGrants, []);
+  });
+
+  it('runHookScript emits a structured refusal event — the operator learns their grant was refused, from the log, not from a puzzling empty value', () => {
+    const root = makeForgeRoot();
+    const logsDir = makeLogsDir();
+    writeHookPackage(root, 'refusal-record-hook', `#!/usr/bin/env bash\necho "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"\n`, {
+      env: ['ANTHROPIC_API_KEY'],
+      read: [],
+      network: false,
+    });
+    overrideHookBlock({ forgeRoot: root, id: 'refusal-record-hook', reason: 'test fixture: exercising the refusal event' });
+    const logger = createLogger('refusal-record-cycle', logsDir);
+
+    runHookScript({
+      forgeRoot: root,
+      id: 'refusal-record-hook',
+      logger,
+      initiativeId: 'INIT-test',
+      parentEnv: { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL' },
+    });
+
+    const entries = readJsonlEntries(join(logsDir, 'refusal-record-cycle', 'events.jsonl'));
+    const refusal = entries.find((e) => (e.metadata as { kind?: string } | undefined)?.kind === 'hook-env-grant-refused');
+    assert.ok(refusal, 'a refused credential grant must leave a structured trace — silently dropping it is the failure mode this fix exists to avoid');
+    assert.equal(refusal!.event_type, 'error');
+    assert.match(refusal!.message ?? '', /ANTHROPIC_API_KEY/, 'the event must name the refused grant — an unnamed refusal is not a record');
+    assert.deepEqual((refusal!.metadata as { refusedEnvGrants?: string[] }).refusedEnvGrants, ['ANTHROPIC_API_KEY']);
   });
 });
 
@@ -432,6 +593,66 @@ describe('detectUndeclaredEnvRefs: static, pre-spawn scan', () => {
     const script = `#!/usr/bin/env bash\necho "$PATH $HOME"\n`;
     const refs = detectUndeclaredEnvRefs(script, NO_ENV);
     assert.deepEqual(refs, [], 'PATH/HOME are genuinely always present for a hook (HOOK_ENV_BASE_ALLOWLIST), unlike ANTHROPIC_API_KEY');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 FIX-3 (2026-08-24 hostile review) — a refusal, a spawn failure and a
+// TIMEOUT are three different things and were reported as one.
+//
+// A hook exceeding HOOK_SPAWN_TIMEOUT_MS makes spawnSync set `result.error`
+// with `code: 'ETIMEDOUT'`. runHookScript threw that as
+// "failed to spawn hook ..." and hook-dispatch.ts's catch logged
+// "refused or failed to spawn" — so an operator reading the event log could
+// not tell "the approval gate said no" from "your script hung for 30 seconds
+// and stalled the daemon", which are opposite problems with opposite fixes.
+//
+// The reason is TYPED and carried on the error, not recoverable by
+// string-matching a message — a message is prose that gets reworded, and a
+// caller keying off its wording is a bug waiting for the next edit.
+// ---------------------------------------------------------------------------
+
+describe('W8-B6 FIX-3: runHookScript distinguishes its three failure modes', () => {
+  it('an approval-gate refusal carries reason "not-runnable"', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'fix3-unapproved-hook', '#!/usr/bin/env bash\nexit 0\n', NO_ENV);
+    const logger = createLogger('fix3-unapproved-cycle', makeLogsDir());
+
+    try {
+      runHookScript({ forgeRoot: root, id: 'fix3-unapproved-hook', logger, initiativeId: 'INIT-test' });
+      assert.fail('expected runHookScript to refuse an unapproved hook');
+    } catch (e) {
+      assert.ok(e instanceof HookRunError, `expected a HookRunError, got ${Object.prototype.toString.call(e)}`);
+      assert.equal((e as HookRunError).reason, 'not-runnable');
+    }
+  });
+
+  it('a hook that exceeds its wall-clock budget carries reason "timeout", and the message says so rather than blaming the spawn', () => {
+    const root = makeForgeRoot();
+    // `timeoutMs` keeps this test fast; the real default is unchanged and
+    // dispatch never overrides it (see RunHookScriptInput's own doc).
+    writeHookPackage(root, 'fix3-hanging-hook', '#!/usr/bin/env bash\nsleep 30\n', NO_ENV);
+    approveHook({ forgeRoot: root, id: 'fix3-hanging-hook' });
+    const logger = createLogger('fix3-hanging-cycle', makeLogsDir());
+
+    try {
+      runHookScript({ forgeRoot: root, id: 'fix3-hanging-hook', logger, initiativeId: 'INIT-test', timeoutMs: 200 });
+      assert.fail('expected runHookScript to throw when the hook exceeded its budget');
+    } catch (e) {
+      assert.ok(e instanceof HookRunError, `expected a HookRunError, got ${Object.prototype.toString.call(e)}`);
+      assert.equal((e as HookRunError).reason, 'timeout', 'a hung script is NOT a spawn failure and NOT an approval refusal');
+      assert.match((e as HookRunError).message, /timed out|exceeded/i, 'the message must name the real problem, not "failed to spawn"');
+      assert.match((e as HookRunError).message, /200/, 'and it must name the budget that was exceeded');
+    }
+  });
+
+  it('a hook that finishes inside its budget is unaffected — the timeout path must not fire for an ordinary run', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'fix3-fast-hook', '#!/usr/bin/env bash\necho ok\nexit 0\n', NO_ENV);
+    approveHook({ forgeRoot: root, id: 'fix3-fast-hook' });
+    const logger = createLogger('fix3-fast-cycle', makeLogsDir());
+    const result = runHookScript({ forgeRoot: root, id: 'fix3-fast-hook', logger, initiativeId: 'INIT-test', timeoutMs: 10_000 });
+    assert.equal(result.exitCode, 0);
   });
 });
 

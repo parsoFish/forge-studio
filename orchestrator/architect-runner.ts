@@ -49,6 +49,7 @@ import { join, resolve, dirname } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
 import { runStructuredTurn, makeReasoningSink, makeThinkingSink, type QueryFn } from './interactive-session.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 export type { QueryFn };
 
 import {
@@ -384,6 +385,8 @@ export async function runArchitectTurn(
       status,
       interview,
       queryFn,
+      logger,
+      initiativeId: `architect-session-${input.sessionId}`,
       skillPromptPath: input.skillPromptPath,
       brainIndex,
       onToolUse,
@@ -441,6 +444,8 @@ export async function runArchitectTurn(
         projectRoot: input.projectRoot,
         sessionId: input.sessionId,
         queryFn,
+        logger,
+        initiativeId: `architect-session-${input.sessionId}`,
         skillPromptPath: input.skillPromptPath,
         brainIndex,
         onToolUse,
@@ -557,6 +562,9 @@ async function runInterviewStep(args: {
   status: ArchitectStatus;
   interview: InterviewRound[];
   queryFn: QueryFn;
+  /** W8-B6 — required, so this step cannot spawn hook-blind. */
+  logger: EventLogger;
+  initiativeId: string;
   skillPromptPath?: string;
   /** Brain navigation index (ARCH-1). Injected into the system prompt prefix. */
   brainIndex?: string;
@@ -567,7 +575,7 @@ async function runInterviewStep(args: {
   /** Forward extended-thinking blocks to the event log (W6-B1). */
   onThinking?: (text: string) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { status, interview, queryFn, logger, initiativeId, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'interview', skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -597,6 +605,7 @@ async function runInterviewStep(args: {
   ].join('\n');
 
   const { output: out } = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
+    logger, initiativeId,
     queryFn,
     prompt,
     schema: INTERVIEW_SCHEMA,
@@ -693,6 +702,9 @@ async function runExploreStep(args: {
   projectRoot: string;
   sessionId: string;
   queryFn: QueryFn;
+  /** W8-B6 — required, so this step cannot spawn hook-blind. */
+  logger: EventLogger;
+  initiativeId: string;
   skillPromptPath?: string;
   brainIndex?: string;
   onToolUse?: (d: ToolUseLiveDetail) => void;
@@ -700,7 +712,7 @@ async function runExploreStep(args: {
   onText?: (text: string) => void;
   onThinking?: (text: string) => void;
 }): Promise<ExploreFindings | null> {
-  const { status, projectRoot, sessionId, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+  const { status, projectRoot, sessionId, queryFn, logger, initiativeId, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'explore', skillPromptPath });
   const interview = readInterview(projectRoot, sessionId);
   const priorQa = interview.length
@@ -731,6 +743,7 @@ async function runExploreStep(args: {
   ].join('\n');
 
   const { output } = await runStructured<ExploreFindings>({
+    logger, initiativeId,
     queryFn,
     prompt,
     schema: EXPLORE_SCHEMA,
@@ -867,6 +880,8 @@ async function runDraftStep(args: {
   onThinking?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText, onThinking } = args;
+  // W8-B6 — the same initiative id every event in this session already uses.
+  const initiativeId = `architect-session-${input.sessionId}`;
   const interview = readInterview(input.projectRoot, input.sessionId);
   const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'draft', skillPromptPath: input.skillPromptPath });
 
@@ -901,6 +916,7 @@ async function runDraftStep(args: {
   ].join('\n');
 
   let { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+    logger, initiativeId,
     queryFn,
     prompt,
     schema: DRAFT_SCHEMA,
@@ -930,6 +946,7 @@ async function runDraftStep(args: {
     });
     const forceEmitSection = loadForceEmitTurnSection(input.skillPromptPath);
     const retry = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
+    logger, initiativeId,
       queryFn,
       prompt: `${prompt}\n\n${forceEmitSection}`,
       schema: DRAFT_SCHEMA,
@@ -1104,6 +1121,8 @@ async function runFinalizeCompletenessCritic(args: {
     planMarkdown,
     manifestsSummary,
     queryFn,
+    logger,
+    initiativeId,
   });
 
   if (critic.crashed) {
@@ -1388,6 +1407,11 @@ async function runStructured<T>(args: {
   queryFn: QueryFn;
   prompt: string;
   schema: unknown;
+  /** W8-B6 — the run's logger + initiative id, so the architect's own bound
+   *  library hooks can fire and record. Required, not optional: an optional
+   *  field here would let a call site silently spawn hook-blind. */
+  logger: EventLogger;
+  initiativeId: string;
   /** ADR-043 §3 amendment (wave-6): the session's requested kickoff tier
    *  (`status.modelTier`), resolved against `architectAgentSpec` — absent
    *  resolves to the unchanged `ARCHITECT_MODEL` default. */
@@ -1404,6 +1428,14 @@ async function runStructured<T>(args: {
     model: resolveSessionModel(architectAgentSpec, args.modelTier),
     allowedTools: architectAgentSpec.allowedTools,
     disallowedTools: architectAgentSpec.disallowedTools,
+    ...(() => {
+      const hooks = sdkHooksForAgent({
+        skill: architectAgentSpec.skill,
+        logger: args.logger,
+        initiativeId: args.initiativeId,
+      });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
     onToolUse: args.onToolUse,
     onHeartbeat: args.onHeartbeat,
     onText: args.onText,

@@ -9,9 +9,12 @@
  * *** `orchestrator/spawn-env.ts`'s R5-02 allowlist seam over the NARROWER
  * *** `HOOK_ENV_BASE_ALLOWLIST` — a hook is untrusted third-party code, not
  * *** one of forge's own trusted agent children, so it never inherits
- * *** `AGENT_ENV_ALLOWLIST`'s `ANTHROPIC_API_KEY` by base allowlist alone;
- * *** see spawn-env.ts's own header for the confirmed-then-fixed
- * *** exfiltration defect this closes). The
+ * *** `AGENT_ENV_ALLOWLIST`'s `ANTHROPIC_API_KEY` by base allowlist alone —
+ * *** and, since W8-B6 FIX-1, cannot obtain it by DECLARING it either: every
+ * *** `HOOK_ENV_CREDENTIAL_EXCLUSIONS` name is refused on the overrides layer
+ * *** too, and the refusal is emitted as a `hook-env-grant-refused` event
+ * *** rather than silently dropped; see spawn-env.ts's own header for the
+ * *** confirmed-then-fixed exfiltration defect this closes). The
  * *** declared-vs-referenced mismatch check (`detectUndeclaredEnvRefs`) is a
  * *** STATIC, pre-spawn text scan for `$VAR`/`${VAR}` references against the
  * *** manifest — it flags an under-declared manifest (the hook will likely
@@ -25,10 +28,12 @@
  * *** and cross-checked by hook-scan.ts's pre-approval STATIC TEXT SCAN, but
  * *** nothing at spawn time actually restricts what the real `bash` process
  * *** can touch. A hook can read any file the OS user can read, and reach the
- * *** network via anything the scan's four literal patterns
- * *** (curl/wget/fetch(/nc/raw-socket) don't happen to match — bash's
- * *** `/dev/tcp/` redirection, `python3 -c`, `ssh`, `dig` for DNS exfil, and
- * *** so on. Real enforcement of either would mean an OS-level process
+ * *** network via anything the scan's egress patterns don't happen to match.
+ * *** W8-B6 widened that list — the shapes this block used to name as the
+ * *** live examples (bash's `/dev/tcp/` redirection, `python3 -c`, `ssh`,
+ * *** `dig`) are all detected now — but a widened enumeration is still an
+ * *** enumeration, so the LIMIT is unchanged: only the known holes are.
+ * *** Real enforcement of either would mean an OS-level process
  * *** isolator (a restricted user/namespace/container/seccomp policy) — this
  * *** repo's standing rule (CLAUDE.md: "Never re-invent a job queue, worker
  * *** pool, resource controller, or process isolator") is not to hand-roll
@@ -49,6 +54,15 @@
  * `hookRunState(...).runnable`, i.e. approved, with the approval still covering
  * the current script, permissions and trigger hashes.
  *
+ * A refusal, a spawn failure and a TIMEOUT are three different outcomes, and
+ * since W8-B6 FIX-3 they are reported as three. `runHookScript` throws a
+ * `HookRunError` carrying a typed `reason`
+ * (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a caller distinguishes
+ * "the approval gate said no" from "the operator's script hung and, because
+ * this spawn is synchronous, stalled the daemon for the whole budget" —
+ * without string-matching a message. Both used to surface as "refused or
+ * failed to spawn", which is prose that answers neither question.
+ *
  * It did not always. The gate used to read `verdict === 'blocked' && !runnable`,
  * so `runnable`/`needsReview` were consulted ONLY for an already-blocked hook,
  * and anything scoring clean or findings ran without ever having been approved.
@@ -63,7 +77,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { HOOK_ENV_BASE_ALLOWLIST, buildChildEnv } from '../spawn-env.ts';
+import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '../spawn-env.ts';
 import type { EventLogger } from '../logging.ts';
 import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, hookRunState, scanHookPackage, type HookScanReport } from './hook-scan.ts';
@@ -77,20 +91,73 @@ import { extractEnvVarNames, hookRunState, scanHookPackage, type HookScanReport 
 // before ever reaching buildChildEnv, so buildChildEnv's own internal
 // AGENT_ENV_ALLOWLIST re-filter is a no-op copy of an already-narrow set,
 // not a second, divergent filter.
+//
+// W8-B6 FIX-1 (2026-08-24, hostile review of the FIRST production caller of
+// runHookScript, proven end-to-end with a real spawned child): the credential
+// fence is a TWO-LAYER composition and was enforced on only ONE of them.
+// `HOOK_ENV_BASE_ALLOWLIST` correctly subtracts
+// `HOOK_ENV_CREDENTIAL_EXCLUSIONS` from the BASE — but this function then read
+// every `permissions.env` name straight out of the real, unfiltered
+// `parentEnv` into `overrides`, and `buildChildEnv` applies overrides
+// UNCONDITIONALLY by design (its own doc: "they always win, even for a key
+// outside the allowlist", justified because overrides are forge's OWN
+// composition and never ambient — an assumption a third-party hook manifest
+// breaks). Net effect: the exclusion held for a manifest that stayed quiet and
+// was bypassed by a manifest that simply asked. A reviewer's probe printed the
+// real `ANTHROPIC_API_KEY` value from the child.
+//
+// The exclusion set is now the source of truth for BOTH consumers: the base
+// derivation in spawn-env.ts AND the overrides layer here.
+//
+// The refusal is REPORTED, never silently dropped — that is why this returns
+// `{env, refusedEnvGrants}` rather than exposing a second "what would be
+// refused?" helper beside it. A caller cannot obtain the child env without
+// also holding the refusal list, so a future call site cannot forget to
+// surface it; `runHookScript` turns it into a structured JSONL event. Two
+// parallel functions over one rule would be exactly the drift shape this
+// repo's standing lesson (a check must mirror the thing it backstops) warns
+// about.
+//
+// NOT closed here, deliberately, and closed one gate earlier instead:
+// `GH_TOKEN` (and every other secret-shaped grant that is not a member of the
+// exclusion set). `hook-scan.ts` flags a `GH_`-prefixed name as secret-shaped,
+// and `computeVerdict` now blocks on any critical finding on its own — so such
+// a grant costs an explicit, reasoned `overrideHookBlock` rather than being
+// forbidden outright. A hook that genuinely needs a GitHub token is a real
+// thing an operator may knowingly authorise; a hook that silently receives
+// forge's own API credential is not.
+//
+// HONEST NOTE on the interaction with `detectUndeclaredEnvRefs` below: a
+// script that REFERENCES `$ANTHROPIC_API_KEY` and also DECLARES it is not
+// reported by that check (it is declared), yet the child receives nothing.
+// That case is covered by the refusal event instead — the operator is told,
+// just through the other channel. `detectUndeclaredEnvRefs` is deliberately
+// left alone: its subject is manifest-vs-body coherence, not the fence.
 // ---------------------------------------------------------------------------
 
-export function buildHookChildEnv(parentEnv: NodeJS.ProcessEnv, permissions: HookPermissionManifest): NodeJS.ProcessEnv {
+export function buildHookChildEnv(
+  parentEnv: NodeJS.ProcessEnv,
+  permissions: HookPermissionManifest,
+): { env: NodeJS.ProcessEnv; refusedEnvGrants: string[] } {
   const hookBaseEnv: NodeJS.ProcessEnv = {};
   for (const name of HOOK_ENV_BASE_ALLOWLIST) {
     const value = parentEnv[name];
     if (value !== undefined) hookBaseEnv[name] = value;
   }
   const overrides: NodeJS.ProcessEnv = {};
+  const refusedEnvGrants: string[] = [];
   for (const name of permissions.env) {
+    // Refused on POLICY, before `parentEnv` is even consulted: an operator
+    // must learn their manifest asked for something it can never have,
+    // whether or not the var happens to be set on this host.
+    if (HOOK_ENV_CREDENTIAL_EXCLUSIONS.has(name)) {
+      if (!refusedEnvGrants.includes(name)) refusedEnvGrants.push(name);
+      continue;
+    }
     const value = parentEnv[name];
     if (value !== undefined) overrides[name] = value;
   }
-  return buildChildEnv(hookBaseEnv, overrides);
+  return { env: buildChildEnv(hookBaseEnv, overrides), refusedEnvGrants };
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +181,17 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
 // runHookScript — real spawn, real stdio capture, bounded cwd + timeout.
 // ---------------------------------------------------------------------------
 
+export type HookRunFailureReason = 'not-runnable' | 'timeout' | 'spawn-failed';
+
+export class HookRunError extends Error {
+  readonly reason: HookRunFailureReason;
+  constructor(reason: HookRunFailureReason, message: string) {
+    super(message);
+    this.name = 'HookRunError';
+    this.reason = reason;
+  }
+}
+
 export interface RunHookScriptInput {
   forgeRoot: string;
   id: string;
@@ -121,6 +199,15 @@ export interface RunHookScriptInput {
   initiativeId: string;
   /** Defaults to `process.env` — pure/testable per D-K (never mutates it). */
   parentEnv?: NodeJS.ProcessEnv;
+  /**
+   * Wall-clock budget for this one invocation, defaulting to
+   * `HOOK_SPAWN_TIMEOUT_MS` (30s). Additive and optional: no production caller
+   * passes it — `hook-dispatch.ts` deliberately calls `runHookScript`
+   * unmodified, so every dispatched hook gets the standard budget — and it
+   * exists so the timeout path can be exercised in milliseconds rather than
+   * making a test suite wait 30 seconds to prove one branch.
+   */
+  timeoutMs?: number;
 }
 
 export interface HookRunResult {
@@ -136,7 +223,7 @@ export interface HookRunResult {
 const HOOK_SPAWN_TIMEOUT_MS = 30_000;
 
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
-  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env } = input;
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
 
   // BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST): the gate
   // used to be `verdict === 'blocked' && !runnable`, which only ever
@@ -151,7 +238,8 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
   // re-deriving a narrower rule here.
   const state = hookRunState(forgeRoot, id);
   if (!state.runnable) {
-    throw new Error(
+    throw new HookRunError(
+      'not-runnable',
       `runHookScript: hook "${id}" is not runnable (verdict "${state.verdict}", needsReview: ${state.needsReview}) — refusing to spawn until it is approved (see approveHook/overrideHookBlock)`,
     );
   }
@@ -188,18 +276,46 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     });
   }
 
-  const childEnv = buildHookChildEnv(parentEnv, def.permissions);
+  const { env: childEnv, refusedEnvGrants } = buildHookChildEnv(parentEnv, def.permissions);
+  if (refusedEnvGrants.length > 0) {
+    logger.emit({
+      phase: 'orchestrator',
+      skill: `hook:${id}`,
+      event_type: 'error',
+      initiative_id: initiativeId,
+      input_refs: [],
+      output_refs: [],
+      message: `Hook "${id}" declares credential-fenced env var(s) that are REFUSED regardless of the manifest: ${refusedEnvGrants.join(', ')} — the child receives none of them`,
+      metadata: { kind: 'hook-env-grant-refused', hookId: id, refusedEnvGrants },
+    });
+  }
+
   const start = Date.now();
   const result = spawnSync('bash', [scriptPath], {
     env: childEnv,
     cwd: dir,
-    timeout: HOOK_SPAWN_TIMEOUT_MS,
+    timeout: timeoutMs,
     encoding: 'utf8',
   });
   const durationMs = Date.now() - start;
 
   if (result.error) {
-    throw new Error(`runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
+    // W8-B6 FIX-3: spawnSync reports an exceeded `timeout` as an ordinary
+    // `result.error` — same field a genuine spawn failure (ENOENT, EACCES)
+    // arrives in — so both used to be thrown as "failed to spawn". They are
+    // opposite problems with opposite fixes: one means the operator's hook
+    // package is broken, the other means their script hung and, because the
+    // spawn is synchronous, stalled the daemon for the whole budget. The
+    // discriminator is `code`, and the reason travels as a TYPED field rather
+    // than as words in a message a caller would have to re-parse.
+    const code = (result.error as NodeJS.ErrnoException).code;
+    if (code === 'ETIMEDOUT') {
+      throw new HookRunError(
+        'timeout',
+        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${result.error.message})`,
+      );
+    }
+    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
   }
 
   logger.emit({
