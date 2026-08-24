@@ -84,6 +84,32 @@ describe('the sweep list cannot rot', () => {
     );
   });
 
+  test('RUNTIME ratchet: every INIT-bearing value EXPORTED by journey-fixtures.mjs is covered — catches ids built by concatenation, which no source regex can see', async () => {
+    // The source-scanning ratchet above only sees `INIT-${X}-slug` literals. It
+    // MISSED `AUTO_CYCLE_ID = `${CYCLE_ID}-automated`` (journey-fixtures.mjs:77),
+    // which is assembled at runtime — and that dir accumulated in _logs/ on
+    // every single run. Found from a real run's leftover residue, not by
+    // reading. Inspecting exported VALUES closes that whole class.
+    const fixtures = await import('./lib/journey-fixtures.mjs');
+    const uncovered: string[] = [];
+    let inspected = 0;
+    for (const [name, value] of Object.entries(fixtures)) {
+      if (typeof value !== 'string' || !value.includes('INIT-')) continue;
+      // Basename first (several exports are absolute _logs/ paths), then the
+      // `INIT-…` tail of a `<stamp>_INIT-…` cycle id.
+      const base = value.slice(value.lastIndexOf('/') + 1);
+      const id = base.slice(base.indexOf('INIT-'));
+      inspected++;
+      if (isJourneyOwnedLogDir(id) || isJourneyOwnedQueueFile(`${id}.md`)) continue;
+      const slug = id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '');
+      if (slug in DELIBERATELY_UNSWEPT_SLUGS) continue;
+      uncovered.push(`${name} = ${value}`);
+    }
+    assert.ok(inspected >= 10, `fixture precondition: the runtime scan must actually find exported ids (found ${inspected})`);
+    assert.deepEqual(uncovered, [],
+      `these ids are EXPORTED by journey-fixtures.mjs but are neither swept nor explicitly excluded — a killed run leaves them behind forever:\n  ${uncovered.join('\n  ')}`);
+  });
+
   test('every DELIBERATELY_UNSWEPT_SLUGS entry carries a real written reason — an exclusion list with blank reasons is just a hole', () => {
     for (const [slug, reason] of Object.entries(DELIBERATELY_UNSWEPT_SLUGS)) {
       assert.ok(typeof reason === 'string' && reason.length > 80,

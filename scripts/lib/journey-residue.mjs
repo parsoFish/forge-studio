@@ -114,6 +114,14 @@ export const JOURNEY_INIT_SLUGS = [
   'e2e-repoint-guard',
   'e2e-studio-demo',
   'e2e-toc-write-mode',
+  // AUTO_CYCLE_ID (journey-fixtures.mjs:77) is built by CONCATENATION —
+  // `${CYCLE_ID}-automated` — so it never appears as an `INIT-${X}-slug`
+  // literal and the source-scanning ratchet could not see it. Found from the
+  // real residue a CLEAN full run left behind (~35 of these had accumulated in
+  // the real checkout). The runtime ratchet added alongside this entry now
+  // imports the fixtures module and inspects exported VALUES, so a
+  // concatenation-built id can never hide from it again.
+  'e2e-toc-write-mode-automated',
   'home-fixture-active',
   'home-fixture-gated',
   'monitor-fixture-active',
