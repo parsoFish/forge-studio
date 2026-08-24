@@ -40,6 +40,7 @@ import { join, dirname, basename, sep } from 'node:path';
 
 import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
+import type { SdkHooksOption } from './studio/hook-dispatch.ts';
 import { inspectBashCommand } from './bash-fence.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
 import type { EventLogger, Phase } from './logging.ts';
@@ -287,11 +288,16 @@ export async function runStructuredTurn<T>(args: {
   onThinking?: (text: string) => void;
   /** Diagnostic label for the idle-deadline guard. */
   label?: string;
+  /** W8-B6 — the agent's bound library hooks, built by the CALLER from its own
+   *  `PhaseAgentSpec.skill` via `sdkHooksForAgent`. Absent (the shape for every
+   *  agent that binds none) leaves the options bag byte-identical. */
+  hooks?: SdkHooksOption;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     model: args.model,
     allowedTools: args.allowedTools,
     outputFormat: { type: 'json_schema', schema: args.schema },
+    ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
   };
   if (args.disallowedTools !== undefined && args.disallowedTools.length > 0) {
     options.disallowedTools = args.disallowedTools;
@@ -587,6 +593,8 @@ export async function runAgentTurn(args: {
    *  once per `redacted_thinking` block. */
   onThinking?: (text: string) => void;
   label?: string;
+  /** W8-B6 — the agent's bound library hooks (see `runStructuredTurn`'s field). */
+  hooks?: SdkHooksOption;
 }): Promise<{ costUsd: number }> {
   const abortController = new AbortController();
   const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
@@ -623,6 +631,7 @@ export async function runAgentTurn(args: {
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
+    ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
   };
   if (fenced) {
     options.canUseTool = makeWriteRootCanUseTool(

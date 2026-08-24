@@ -14,6 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 
 import {
   runAgentTurn,
@@ -171,7 +172,7 @@ export async function runProjectBrainTurn(
   let result: RunProjectBrainTurnResult;
 
   if (status.phase === 'analyzing') {
-    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, onToolUse: sink.onToolUse, onHeartbeat, onThinking });
+    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onThinking });
   } else if (status.phase === 'committing') {
     result = runCommitStep({ input, sessionDir, status, forgeRoot, logger, initiativeId });
   } else if (status.phase === 'abandoned') {
@@ -269,6 +270,9 @@ async function runAnalyzeStep(args: {
   status: ProjectBrainStatus;
   forgeRoot: string;
   queryFn: QueryFn;
+  /** W8-B6 — required, so this step cannot spawn hook-blind. */
+  logger: EventLogger;
+  initiativeId: string;
   onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
   onHeartbeat: () => void;
   /** Forward extended-thinking blocks to the event log (W6-B1). */
@@ -289,6 +293,10 @@ async function runAnalyzeStep(args: {
     model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),
     allowedTools: projectBrainAgentSpec.allowedTools,
     disallowedTools: projectBrainAgentSpec.disallowedTools,
+    ...(() => {
+      const hooks = sdkHooksForAgent({ skill: projectBrainAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId });
+      return hooks !== undefined ? { hooks } : {};
+    })(),
     maxTurns: 30,
     onToolUse,
     onHeartbeat,

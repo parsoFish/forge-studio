@@ -711,6 +711,26 @@ third connection kind above); `npm run parity:stories` exits 0.
     `blocked`. Benign combinations (egress with no secret grant) stay
     non-blocked, pinned in both directions so the rule cannot degenerate into
     everything-blocked.
+    **AC amended again 2026-08-24 (W8-B6, hostile review of the first
+    production caller of `runHookScript`).** The PAIRING above — env-read AND
+    network-egress — was the only route to `blocked` for a capability grant,
+    and its second half was evadable: this module's own header already listed
+    the egress shapes the pattern list missed (`/dev/tcp/`, `python3 -c`,
+    `ssh`, `dig`). A reviewer approved a hook declaring
+    `permissions.env: ["GH_TOKEN"]` through the ordinary one-click path and its
+    child printed the real token. The rule is now **any `critical` finding
+    blocks on its own**, keyed off severity rather than category. The
+    "must not degenerate into everything-blocked" pin above is UNCHANGED and
+    still holds through the module's one deliberate downgrade: a *declared*
+    network egress scores `info`, so a benign declared-network hook with no
+    secret-shaped grant anywhere still scores `findings` and keeps its
+    one-click approve. Both pattern lists were widened in the same lane
+    (credential paths += `.netrc`, `.docker/config.json`, `.kube/config`,
+    `.npmrc`, `.config/gh/`, `.git-credentials`, `.azure/`, `.config/gcloud/`;
+    egress += the four shapes named above plus `/dev/udp/` and
+    `openssl s_client`). Both OOTB hook packages were re-measured under the
+    new rules and still scan `clean` with zero findings — no shipped hook
+    needs an override.
   - **R3-03-F3 — Permission model (declare-what-you-access).** Each hook's
     definition carries a permission manifest: which env vars it may read,
     which paths it may touch, whether network egress is allowed.
@@ -1414,7 +1434,9 @@ rather than deferred within it:
   which deliberately refused one because prose is unscannable. Approval refuses
   a blocked verdict; only a separate **recorded override** flips runnability,
   and it leaves the verdict `blocked` — an override records a decision, it never
-  launders a verdict. Declared behaviour is **downgraded but never hidden**.
+  launders a verdict. Declared behaviour is **downgraded but never hidden**
+  (network only; a declared *env* grant has stayed critical since 2026-08-04,
+  and since W8-B6 any critical finding blocks on its own).
   The approval hash covers the **script and the manifest**, so permissions
   cannot be widened without re-entering review. **F3:** deny-by-default
   execution via `HOOK_ENV_BASE_ALLOWLIST`, derived from `AGENT_ENV_ALLOWLIST` by

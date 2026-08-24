@@ -33,6 +33,8 @@ import { existsSync, readFileSync } from 'node:fs';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
+import type { EventLogger } from './logging.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
@@ -78,6 +80,11 @@ export type RunCompletenessCriticInput = {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  /** W8-B6 — the caller's run logger + initiative id. REQUIRED (not additive-
+   *  optional) so a call site cannot silently spawn hook-blind; the sole
+   *  production caller is `architect-runner.ts`, which holds both. */
+  logger: EventLogger;
+  initiativeId: string;
 };
 
 export type RunCompletenessCriticResult = {
@@ -254,6 +261,14 @@ export async function runCompletenessCritic(
       model: COMPLETENESS_CRITIC_MODEL,
       allowedTools: completenessCriticAgentSpec.allowedTools,
       disallowedTools: completenessCriticAgentSpec.disallowedTools,
+      ...(() => {
+        const hooks = sdkHooksForAgent({
+          skill: completenessCriticAgentSpec.skill,
+          logger: input.logger,
+          initiativeId: input.initiativeId,
+        });
+        return hooks !== undefined ? { hooks } : {};
+      })(),
       onToolUse: input.onToolUse,
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,

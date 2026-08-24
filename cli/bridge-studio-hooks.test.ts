@@ -349,7 +349,16 @@ test('GET /api/studio/hooks/<id>: the scan report surfaces a REAL finding, inclu
   try {
     const res = await fetch(`${bridgeUrl}/api/studio/hooks/detail-findings-hook`);
     const body = (await res.json()) as { scan: { verdict: string; findings: Array<Record<string, unknown>> } };
-    assert.equal(body.scan.verdict, 'findings', 'a lone env-read finding with no accompanying network-egress finding stays "findings", not "blocked"');
+    // W8-B6 FIX-1 layer 2 REVISION: this line used to assert 'findings' and
+    // cite the env+network pairing. That pairing is retired — a hostile
+    // review defeated its second half (the egress detector's own documented
+    // blind spots: `/dev/tcp/`, `python3 -c`, `ssh`, `dig`) and approved a
+    // GH_TOKEN-granting hook through the ordinary one-click path. A lone
+    // critical finding now blocks on its own; the route through is an
+    // explicit, reasoned override. What this test is REALLY about — the
+    // declared finding staying visible and staying critical — is unchanged
+    // and still asserted below.
+    assert.equal(body.scan.verdict, 'blocked', 'a lone critical env-read finding blocks on its own since W8-B6 FIX-1 layer 2');
     assert.equal(body.scan.findings.length, 1, 'the declared finding must still appear — still visible, never hidden');
     assert.equal(body.scan.findings[0]!['category'], 'env-read');
     assert.equal(body.scan.findings[0]!['declared'], true);
@@ -656,4 +665,113 @@ test('handleStudioHooksRoutes returns false for a non-matching URL (passthrough 
 
   const handled = await handleStudioHooksRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-hooks URL must return false');
+});
+
+// ---------------------------------------------------------------------------
+// W8-B6 — trigger coherence, gated on BOTH write routes
+//
+// A matcher on a tool-less event can never be honoured by hook dispatch
+// (`orchestrator/studio/hook-dispatch.ts`'s `hookMatcherMatches` needs a
+// `tool_name`), so the hook would be authored, displayed as bound, and never
+// fire. Gating create alone would leave PUT as the open door — the one-of-N
+// shape this repo keeps paying for — so both are pinned here.
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/hooks: 400s a matcher declared on a tool-less event (kills: a matcher field that changes nothing and is reported nowhere)', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-bad-trigger-create',
+    description: 'A matcher on SessionEnd can never be honoured.',
+    on: 'SessionEnd',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /SessionEnd/);
+  assert.match(body.error, /PreToolUse or PostToolUse/);
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'w8b6-bad-trigger-create')),
+    false,
+    'the refusal must land BEFORE any package is written — assert the artifact, not just the status code',
+  );
+});
+
+// W8-B6 FIX-2 — the SAME shared predicate now also refuses a matcher that
+// cannot parse. Pinned at a REAL route, not only as a unit, because this
+// repo's recurring failure is a rule that is implemented, unit-tested and
+// never invoked by production. The other four write paths (PUT here,
+// authoring finalize, community install, lint) call the identical predicate
+// and each already pins it for the tool-less case.
+test('W8-B6 FIX-2: POST /api/studio/hooks 400s a MALFORMED matcher (kills: authoring a guard hook that is displayed as carried and can never fire)', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-malformed-matcher-create',
+    description: 'One missing closing paren makes this hook permanently inert.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /Bash\(gh pr create/, 'the error must quote the matcher the operator typed');
+  assert.equal(
+    existsSync(join(forgeRoot, 'studio', 'hooks', 'w8b6-malformed-matcher-create')),
+    false,
+    'the refusal must land BEFORE any package is written — assert the artifact, not just the status code',
+  );
+});
+
+test('PUT /api/studio/hooks/:id: 400s when an EDIT moves a matcher-bearing hook onto a tool-less event (kills: gating create and leaving update open)', async () => {
+  const created = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-good-trigger-then-edited',
+    description: 'Starts coherent on PreToolUse.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(created.status, 200);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/hooks/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ on: 'SessionEnd' }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(((await res.json()) as { error: string }).error, /SessionEnd/);
+
+    const onDisk = yaml.load(readFileSync(join(forgeRoot, 'studio', 'hooks', id, 'hook.yaml'), 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['on'], 'PreToolUse', 'the rejected edit must not have been written');
+    assert.equal(onDisk['matcher'], 'Bash(gh pr create)');
+  } finally {
+    removeHookFixture(id);
+  }
+});
+
+test('PUT /api/studio/hooks/:id: dropping the matcher while moving to a tool-less event is ACCEPTED — the rule refuses the incoherent pair, not the event', async () => {
+  const created = await postJson(`${bridgeUrl}/api/studio/hooks`, {
+    name: 'w8b6-drop-matcher-on-move',
+    description: 'Starts on PreToolUse with a matcher.',
+    on: 'PreToolUse',
+    matcher: 'Bash(gh pr create)',
+    scriptBody: '#!/usr/bin/env bash\nexit 0\n',
+    permissions: { env: [], read: [], network: false },
+  });
+  assert.equal(created.status, 200);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/hooks/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify({ on: 'SessionEnd', matcher: '' }),
+    });
+    assert.equal(res.status, 200);
+    const onDisk = yaml.load(readFileSync(join(forgeRoot, 'studio', 'hooks', id, 'hook.yaml'), 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['on'], 'SessionEnd');
+    assert.equal('matcher' in onDisk, false, 'a cleared matcher leaves no key behind');
+  } finally {
+    removeHookFixture(id);
+  }
 });

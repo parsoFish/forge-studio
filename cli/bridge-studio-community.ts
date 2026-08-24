@@ -81,12 +81,17 @@ import {
 import { routeCommunityInstall, installCommunityHookPackage } from '../orchestrator/studio/community-install.ts';
 import { installSkillPackage, type PackageFile } from '../orchestrator/studio/skill-library.ts';
 import { scanHookScript, type HookScanReport } from '../orchestrator/studio/hook-scan.ts';
-import type { HookPermissionManifest } from '../orchestrator/studio/hook-library.ts';
+import {
+  HOOK_LIFECYCLE_EVENTS,
+  hookTriggerError,
+  type HookLifecycleEvent,
+  type HookPermissionManifest,
+} from '../orchestrator/studio/hook-library.ts';
 import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
 import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
 import { communitySkillsFromRegistry, communityRegistryPath, loadCommunityRegistry } from '../orchestrator/studio/registry.ts';
-import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
+import { reqString, stringArray, optBool, optString, oneOf } from '../orchestrator/studio/yaml-fields.ts';
 import {
   communityRefreshRemedy,
   runCommunityRefresh,
@@ -361,6 +366,41 @@ function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): Hoo
   return scanHookScript({ body: scriptFile.body, permissions });
 }
 
+
+// ---------------------------------------------------------------------------
+// W8-B6 — trigger coherence on the FIFTH (and least-trusted) write path into
+// studio/hooks/. A vendored community package is authored by a third party, so
+// it is the LAST place to assume the matcher/event pair is coherent. Checked
+// HERE, in the route, rather than inside `installCommunityHookPackage`, for the
+// same reason `cli/bridge-studio-authoring.ts:80-85` gives about its own copy
+// step: the install function is a generic COPY primitive and must not grow
+// hook-shape awareness. Same shared predicate as the other four callers.
+// ---------------------------------------------------------------------------
+
+function vendoredHookTriggerError(id: string, files: readonly PackageFile[]): string | undefined {
+  const label = `studio/community/hooks/${id}/hook.yaml`;
+  const yamlFile = files.find((f) => f.path === 'hook.yaml');
+  if (!yamlFile) return `${label}: no vendored hook.yaml — refusing to install a hook package with no definition`;
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(yamlFile.body);
+  } catch (err) {
+    return `${label}: not valid YAML — ${sanitizeError(err)}`;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return `${label}: YAML root must be a mapping`;
+  const d = parsed as Record<string, unknown>;
+
+  let on: HookLifecycleEvent;
+  try {
+    on = oneOf(reqString(d, 'on', label), HOOK_LIFECYCLE_EVENTS, label, 'on');
+  } catch (err) {
+    return sanitizeError(err);
+  }
+  const triggerError = hookTriggerError(on, optString(d, 'matcher'));
+  return triggerError ? `${label}: ${triggerError}` : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Id resolution — decode + slug-validate. Writes its own 400 and returns null
 // on failure, mirroring bridge-studio-connections.ts's
@@ -538,6 +578,9 @@ function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, 
     }
 
     if (route.pipeline === 'hook') {
+      // Refused BEFORE any byte is materialised under studio/hooks/<id>/.
+      const triggerError = vendoredHookTriggerError(id, readVendoredPackage(ctx.forgeRoot, 'hook', id));
+      if (triggerError) { sendJson(res, 400, { error: triggerError }, origin); return true; }
       const result = installCommunityHookPackage({ forgeRoot: ctx.forgeRoot, id });
       sendJson(res, 200, { ok: true, routedTo: 'hook-needs-approval', alreadyInstalled: result.alreadyInstalled }, origin);
       return true;

@@ -102,6 +102,7 @@ import {
   type BashFenceMode,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger, type Phase } from './logging.ts';
+import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { resolveSessionModel, type ModelTier } from './phase-agent.ts';
@@ -338,6 +339,7 @@ export async function runInteractiveTurn(
         dirSegments,
         status,
         queryFn,
+        logger,
         onToolUse: sink.onToolUse,
         onHeartbeat,
         onText,
@@ -447,6 +449,8 @@ async function runAgentStyleStep(args: {
   dirSegments: string[];
   status: InteractiveTurnStatus;
   queryFn: QueryFn;
+  /** W8-B6 — required, so this step cannot spawn hook-blind. */
+  logger: EventLogger;
   onToolUse: Parameters<typeof runAgentTurn>[0]['onToolUse'];
   onHeartbeat: () => void;
   onText: (text: string) => void;
@@ -493,6 +497,17 @@ async function runAgentStyleStep(args: {
       model,
       allowedTools: agentSpec.allowedTools,
       disallowedTools: agentSpec.disallowedTools,
+      // W8-B6 — this session kind's agent may carry bound library hooks.
+      // Derived from the SAME spec the model/tools came from, so a kind
+      // re-pointed at another agent can never fire the old agent's hooks.
+      ...(() => {
+        const hooks = sdkHooksForAgent({
+          skill: agentSpec.skill,
+          logger: args.logger,
+          initiativeId: ctx.sessionId,
+        });
+        return hooks !== undefined ? { hooks } : {};
+      })(),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
       writeRoots,
       bashFence: resolveBashFence(turnSpec),

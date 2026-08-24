@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
+import { sdkHooksForAgent } from '../studio/hook-dispatch.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { classifyCrash } from '../failure-classifier.ts';
@@ -599,6 +600,18 @@ export async function runDeveloperLoop(
         disallowedTools: [...DEV_DISALLOWED_TOOLS],
         permissionMode: 'acceptEdits',
         systemPrompt,
+        // W8-B6 — developer-ralph's own bound library hooks, derived from its
+        // SKILL.md path (never a copy carried on the spec). The dev loop
+        // spawns one SDK session per Ralph iteration, so hooks fire per
+        // iteration, which is the SDK's own session semantics.
+        ...(() => {
+          const hooks = sdkHooksForAgent({
+            skill: devAgentSpec.skill,
+            logger,
+            initiativeId: input.initiativeId,
+          });
+          return hooks !== undefined ? { hooks } : {};
+        })(),
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
         // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,

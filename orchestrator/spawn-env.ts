@@ -97,7 +97,33 @@ export const MAX_ENV_OVERRIDE_KEYS = 8 as const;
  * the exclusion has to be named explicitly right here for the hook base to
  * stay narrow.
  */
-const HOOK_ENV_CREDENTIAL_EXCLUSIONS: ReadonlySet<string> = new Set(['ANTHROPIC_API_KEY']);
+
+/**
+ * The credential-bearing names a hook child may never receive.
+ *
+ * TWO consumers, one source of truth (W8-B6 FIX-1). Subtracting this set from
+ * `AGENT_ENV_ALLOWLIST` produces `HOOK_ENV_BASE_ALLOWLIST` below — that closes
+ * the BASE layer. It does not close the OVERRIDES layer: `buildChildEnv`
+ * applies overrides unconditionally by design (see its own doc), so
+ * `hook-runtime.ts`'s `buildHookChildEnv` — which turns a hook manifest's
+ * `permissions.env` into exactly those overrides — must consult this same set
+ * before it copies anything out of the real `process.env`. It does, and it
+ * reports what it refused. Enforcing the fence on one layer of a two-layer
+ * composition left a manifest able to re-grant itself the very name the base
+ * had removed; that was a live, reproduced credential leak, not a theoretical
+ * one.
+ *
+ * Exported for that second consumer (it lives in another module) and for the
+ * structural test that enumerates the set rather than retyping its members.
+ *
+ * `GH_TOKEN` is deliberately NOT a member: it is not in `AGENT_ENV_ALLOWLIST`
+ * at all, so nothing to subtract, and a hook that declares it is handled by
+ * the scan/verdict gate (a `GH_`-prefixed name is secret-shaped ⇒ a critical
+ * finding ⇒ `blocked` ⇒ an explicit, reasoned `overrideHookBlock`) rather than
+ * by a structural ban. Membership here means "never, not even under an
+ * operator override" — a bar reserved for forge's own API credential.
+ */
+export const HOOK_ENV_CREDENTIAL_EXCLUSIONS: ReadonlySet<string> = new Set(['ANTHROPIC_API_KEY']);
 
 export const HOOK_ENV_BASE_ALLOWLIST: readonly string[] = AGENT_ENV_ALLOWLIST.filter(
   (name) => !HOOK_ENV_CREDENTIAL_EXCLUSIONS.has(name),
@@ -112,7 +138,12 @@ export const HOOK_ENV_BASE_ALLOWLIST: readonly string[] = AGENT_ENV_ALLOWLIST.fi
  * git-identity SDK overlay's four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` keys) —
  * they always win, even for a key outside the allowlist, because they never
  * originate from ambient/host pollution: the only production call site that
- * sets them is forge's own code, not an inherited shell var. This is what
+ * sets them is forge's own code, not an inherited shell var. **That premise
+ * is the caller's to keep.** A caller whose overrides are derived from
+ * UNTRUSTED input (a third-party hook manifest's `permissions.env`) breaks it,
+ * so such a caller must filter its own overrides against
+ * `HOOK_ENV_CREDENTIAL_EXCLUSIONS` BEFORE calling — `hook-runtime.ts`'s
+ * `buildHookChildEnv` does, and W8-B6 FIX-1 exists because it did not. This is what
  * lets a per-WI/per-UWI override (like a distinct git author per work item)
  * coexist with a strict ambient allowlist without the wrapper needing two
  * different code paths.
