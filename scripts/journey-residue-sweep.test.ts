@@ -27,6 +27,8 @@ import {
   isJourneyOwnedLogDir,
   JOURNEY_INIT_SLUGS,
   JOURNEY_UNDATED_INITS,
+  DELIBERATELY_UNSWEPT_SLUGS,
+  UNTOKENED_SWEPT_SLUGS,
   QUEUE_STATES,
 } from './lib/journey-residue.mjs';
 
@@ -49,6 +51,10 @@ describe('the sweep list cannot rot', () => {
     const sources = [
       ...readdirSync(journeysDir).filter((f) => f.endsWith('.mjs')).map((f) => join(journeysDir, f)),
       join(SCRIPTS_DIR, 'lib', 'journey-fixtures.mjs'),
+      // e2e-journey.mjs carries fixture literals of its own (the develop-trigger
+      // and studio-demo ids). Omitting the file that WIRES the sweep would let a
+      // literal added there escape the ratchet entirely — hostile-review finding.
+      join(SCRIPTS_DIR, 'e2e-journey.mjs'),
     ];
     assert.ok(sources.length > 10, `fixture precondition: expected to scan the real journey sources, found ${sources.length}`);
 
@@ -59,7 +65,9 @@ describe('the sweep list cannot rot', () => {
       // `INIT-${SOME_DATE_CONST}-<slug>` — the dated fixture-id shape.
       for (const m of src.matchAll(/`INIT-\$\{[A-Za-z_][A-Za-z0-9_]*\}-([a-z0-9][a-z0-9-]*)`/g)) {
         found++;
-        if (!JOURNEY_INIT_SLUGS.includes(m[1])) missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: slug "${m[1]}"`);
+        if (!JOURNEY_INIT_SLUGS.includes(m[1]) && !(m[1] in DELIBERATELY_UNSWEPT_SLUGS)) {
+          missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: slug "${m[1]}"`);
+        }
       }
       // 'INIT-<something>' — an undated fixture id written as a plain literal.
       for (const m of src.matchAll(/'(INIT-[a-z0-9][a-z0-9-]*)'/g)) {
@@ -72,8 +80,70 @@ describe('the sweep list cannot rot', () => {
     assert.deepEqual(
       missing,
       [],
-      `these journey fixture ids are NOT covered by the leading sweep, so a killed run would leave them behind and assertNoLiveDaemon would refuse every later run — add the slug to JOURNEY_INIT_SLUGS in scripts/lib/journey-residue.mjs:\n  ${missing.join('\n  ')}`,
+      `these journey fixture ids are neither swept nor explicitly excluded, so a killed run would leave them behind and assertNoLiveDaemon would refuse every later run — add the slug to JOURNEY_INIT_SLUGS (or, with a written reason, to DELIBERATELY_UNSWEPT_SLUGS) in scripts/lib/journey-residue.mjs:\n  ${missing.join('\n  ')}`,
     );
+  });
+
+  test('every DELIBERATELY_UNSWEPT_SLUGS entry carries a real written reason — an exclusion list with blank reasons is just a hole', () => {
+    for (const [slug, reason] of Object.entries(DELIBERATELY_UNSWEPT_SLUGS)) {
+      assert.ok(typeof reason === 'string' && reason.length > 80,
+        `DELIBERATELY_UNSWEPT_SLUGS["${slug}"] must state WHY leaving it unswept is safe (got ${reason?.length ?? 0} chars)`);
+    }
+    for (const [slug, reason] of Object.entries(UNTOKENED_SWEPT_SLUGS)) {
+      assert.ok(typeof reason === 'string' && reason.length > 80,
+        `UNTOKENED_SWEPT_SLUGS["${slug}"] must state why the collision risk is accepted (got ${reason?.length ?? 0} chars)`);
+      assert.ok(JOURNEY_INIT_SLUGS.includes(slug), `${slug} is listed as an untokened SWEPT slug but is not actually swept`);
+    }
+  });
+
+  test('every swept DATED slug carries an "e2e"/"fixture" token, or is an explicitly justified exception — a slug a real title could slugify into must never be swept', () => {
+    // Real ids are INIT-<YYYY-MM-DD>-slugify(title) (orchestrator/architect-runner.ts:1359).
+    // A harness slug indistinguishable from a real slugify output is deletable
+    // real work — that is exactly how `r4-12-ledger-nav` got caught.
+    const untokened = JOURNEY_INIT_SLUGS
+      .filter((s) => !s.includes('e2e') && !s.includes('fixture'))
+      .filter((s) => !(s in UNTOKENED_SWEPT_SLUGS));
+    assert.deepEqual(untokened, [],
+      `these swept slugs carry no harness-only token and no written exception, so a real initiative title could slugify into them and the sweep would silently delete an operator's manifest: ${untokened.join(', ')}`);
+  });
+
+  test('the undated harness ids cannot collide with a real id at all — real ids always carry a YYYY-MM-DD component', () => {
+    for (const id of JOURNEY_UNDATED_INITS) {
+      assert.ok(!/^INIT-\d{4}-\d{2}-\d{2}-/.test(id),
+        `${id} is listed as UNDATED but carries a date stamp — it would then be indistinguishable from a real initiative id and must not be swept by name`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. REGRESSION — the exact hostile-review S1. Keep this test forever.
+// ---------------------------------------------------------------------------
+
+describe('regression: the r4-12-ledger-nav collision (hostile-review S1)', () => {
+  test('a real operator initiative titled "R4-12 Ledger Nav" is NOT swept — before the sweep existed its manifest made the guard REFUSE, so deleting it would turn a loud refusal into silent data loss', () => {
+    const root = makeRoot();
+    try {
+      // slugify("R4-12 Ledger Nav") === 'r4-12-ledger-nav'
+      // (orchestrator/architect-runner.ts:1379 — lowercase, non-alnum runs -> '-')
+      const real = join(root, '_queue', 'in-flight', 'INIT-2026-08-24-r4-12-ledger-nav.md');
+      writeFileSync(real, 'real in-flight operator work\n');
+      const realLog = join(root, '_logs', '2026-08-24T13-00-00Z_INIT-2026-08-24-r4-12-ledger-nav');
+      mkdirSync(realLog, { recursive: true });
+
+      const { removed } = sweepJourneyResidue(root);
+
+      assert.ok(existsSync(real), 'the real operator manifest must survive');
+      assert.ok(existsSync(realLog), 'the real cycle log dir must survive');
+      assert.deepEqual(removed, [], 'nothing may be removed');
+      assert.equal(isJourneyOwnedQueueFile('INIT-2026-08-24-r4-12-ledger-nav.md'), false);
+      assert.equal(isJourneyOwnedLogDir('2026-08-24T13-00-00Z_INIT-2026-08-24-r4-12-ledger-nav'), false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a _logs/ dir that merely MENTIONS journey-scratch-kb mid-name is not owned — the rule is a prefix, not a substring', () => {
+    assert.equal(isJourneyOwnedLogDir('2026-08-01T00-00-00_INIT-2026-08-01-journey-scratch-kb-audit'), false);
+    assert.equal(isJourneyOwnedLogDir('journey-scratch-kb-ingest-activity'), true);
+    assert.equal(isJourneyOwnedLogDir('_brainfix-journey-scratch-kb-maintain-consolidate-msmxvvg9'), true);
   });
 });
 

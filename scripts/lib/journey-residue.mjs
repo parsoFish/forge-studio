@@ -50,17 +50,42 @@
  *
  * CONTAINMENT — why this cannot eat an operator's real work
  * ---------------------------------------------------------
- * It removes ONLY ids whose slug is in `JOURNEY_INIT_SLUGS` (or the one undated
- * id below) — every one of them a fixture literal owned by this harness. It
- * never removes an unrecognised manifest, so `assertNoLiveDaemon` still refuses
- * on genuine strays exactly as before: this sweep narrows what the guard has to
- * complain about, it does not weaken the guard. The `_logs/` sweep is held to
- * the same rule and additionally to prefixes that embed the harness's own
- * scratch KB id (`journey-scratch-kb`), which no real KB can collide with.
+ * It removes ONLY ids this harness owns. It never removes an unrecognised
+ * manifest, so `assertNoLiveDaemon` still refuses on genuine strays exactly as
+ * before: this sweep narrows what the guard must complain about, it does not
+ * weaken the guard.
+ *
+ * That containment claim was ATTACKED by a hostile review and one real hole was
+ * found, so the rules below are narrower than the first version:
+ *
+ *  - **A harness slug must not be something a real title can slugify into.**
+ *    Real initiative ids are `INIT-<YYYY-MM-DD>-<slug>`
+ *    (`orchestrator/architect-runner.ts:1359`, `orchestrator/initiative-id.ts:4`)
+ *    where `slug = slugify(title)` — lowercased, non-alphanumerics collapsed to
+ *    `-`. The review proved `r4-12-ledger-nav` is reachable that way: R4-12 is a
+ *    LIVE roadmap initiative whose F2 is literally "Cycle ledger dig-in", so a
+ *    real initiative titled "R4-12 Ledger Nav" slugifies to exactly the fixture
+ *    id and the sweep deleted its manifest. Before this sweep existed that
+ *    manifest made the guard REFUSE — i.e. the operator was protected — so the
+ *    first version turned "refuse loudly" into "delete silently". That slug is
+ *    now in `DELIBERATELY_UNSWEPT_SLUGS`, at zero cost (see its note).
+ *
+ *  - **Undated ids are structurally safe.** Canonical real ids always carry a
+ *    `YYYY-MM-DD` component, so an id like `INIT-r4-14-showcase-empty-inflight`
+ *    cannot be produced by the real generator at all. Pinned by a test.
+ *
+ *  - **The `_logs/` scratch-KB rule matches by PREFIX, not substring.** The
+ *    first version used `dirname.includes('journey-scratch-kb')`, which would
+ *    also match a real dir that merely mentioned it anywhere in its name.
+ *
+ *  - **Daemon liveness is checked BEFORE this sweep runs**
+ *    (`assertNoLiveDaemonProcess`, `e2e-journey.mjs`), so no deletion can happen
+ *    while a real `forge serve` is mid-cycle.
  *
  * The slug list cannot rot: `scripts/journey-residue-sweep.test.ts` scans the
- * journey sources for every `INIT-…` fixture literal and fails if one is not
- * covered here.
+ * journey sources — `scripts/e2e-journey.mjs` included — for every `INIT-…`
+ * fixture literal and fails if one is neither swept nor explicitly and
+ * justifiably excluded.
  */
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -93,8 +118,36 @@ export const JOURNEY_INIT_SLUGS = [
   'home-fixture-gated',
   'monitor-fixture-active',
   'monitor-fixture-failed',
-  'r4-12-ledger-nav',
 ];
+
+/**
+ * Harness fixture slugs deliberately NOT swept, each with the reason it is safe
+ * to leave. A slug belongs here when sweeping it would risk deleting a real
+ * operator initiative and leaving it costs us nothing.
+ */
+export const DELIBERATELY_UNSWEPT_SLUGS = {
+  'r4-12-ledger-nav':
+    'COLLIDABLE and unnecessary. A real initiative titled "R4-12 Ledger Nav" slugifies to exactly ' +
+    'this id (R4-12 is a live roadmap initiative), so sweeping it could delete real work. Leaving ' +
+    'it costs nothing: it is only ever written to _queue/done/ (scripts/journeys/stand-up-create.mjs:131), ' +
+    'and assertNoLiveDaemon only inspects pending/in-flight/flow-runs (journey-daemon-guard.mjs:54,63) — ' +
+    'so residue here can never block a later run, which is the whole failure this sweep exists to stop.',
+};
+
+/**
+ * A swept DATED slug should carry a token no real initiative title would
+ * produce. `authored-flow-run` is the one exception and is listed here with its
+ * reason, so adding another unmarked slug is a conscious act, not an accident.
+ * Enforced by `scripts/journey-residue-sweep.test.ts`.
+ */
+export const UNTOKENED_SWEPT_SLUGS = {
+  'authored-flow-run':
+    'Kept swept despite carrying neither "e2e" nor "fixture". It is J5_INIT, which moves through ' +
+    'pending/in-flight (cleanFirstFlowRun sweeps all six states), so residue here CAN block the ' +
+    'daemon guard and must be swept — and cleanFirstFlowRun itself runs at e2e-journey.mjs:419, ' +
+    'AFTER the guard, so it cannot cover this. Collision risk accepted as remote: it reads as a ' +
+    'test-fixture description, not a feature title anyone would name an initiative.',
+};
 
 /** Harness initiative ids that carry no date stamp. The R4-14 showcase trio
  *  was MISSED by hand-enumeration and caught by the ratchet test — one of them
@@ -137,7 +190,12 @@ export function isJourneyOwnedQueueFile(filename) {
  *      `journey-scratch-kb-ingest-activity` fixture cycle). A real KB cannot
  *      collide with that id: the knowledge journey creates and destroys it. */
 export function isJourneyOwnedLogDir(dirname) {
-  if (dirname.includes('journey-scratch-kb')) return true;
+  // PREFIX, not substring (hostile-review finding): `includes` would also match
+  // a real directory that merely mentions the scratch KB somewhere in its name.
+  // These two shapes are the only ones the harness actually creates —
+  // `journey-scratch-kb-ingest-activity` (the ingest fixture cycle) and
+  // `_brainfix-journey-scratch-kb-{cleanup,maintain}-consolidate-<runId>`.
+  if (dirname.startsWith('journey-scratch-kb') || dirname.startsWith('_brainfix-journey-scratch-kb')) return true;
   const initPart = dirname.includes('_INIT-') ? dirname.slice(dirname.indexOf('_INIT-') + 1) : dirname;
   const slugs = JOURNEY_INIT_SLUGS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   if (new RegExp(`^INIT-${DATE_STAMP}-(?:${slugs})$`).test(initPart)) return true;

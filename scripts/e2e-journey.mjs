@@ -102,7 +102,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, renameSync
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
-import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
+import { assertNoLiveDaemon, assertNoLiveDaemonProcess } from './lib/journey-daemon-guard.mjs';
 import { sweepJourneyResidue } from './lib/journey-residue.mjs';
 import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
@@ -369,6 +369,14 @@ async function main() {
   //
   // This does NOT weaken the guard: the sweep only removes ids this harness
   // owns, so a genuine stray still refuses exactly as before.
+  //
+  // ORDERING IS LOAD-BEARING (hostile-review finding, W8-C2b): the DAEMON
+  // LIVENESS half of the guard runs BEFORE the sweep. The sweep deletes queue
+  // manifests, and doing that while a real `forge serve` daemon is mid-cycle
+  // could remove the manifest it is actively processing — exactly the
+  // interference assertNoLiveDaemon exists to prevent, reintroduced upstream of
+  // it. Liveness first, then sweep, then the stray check on what remains.
+  await assertNoLiveDaemonProcess(FORGE_ROOT);
   {
     const { removed, failed } = sweepJourneyResidue(FORGE_ROOT);
     if (removed.length) {
