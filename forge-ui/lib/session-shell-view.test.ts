@@ -681,7 +681,7 @@ test('AT-104b: PARITY — forge-ui\'s hardcoded ".community-registry" literal (C
   expect(pseudoProjectAnchorDestination(SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR)).toEqual({ label: 'Community', href: '/community' });
 });
 
-test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the community-refresh anchor resolves to Community; an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {
+test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the `.community-registry` anchor resolves to Community (it belongs to the SURVIVING registry, not the session kind W8-B5b WI-3 retired); an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {
   expect(pseudoProjectAnchorDestination('.kb-forge-dev')).toEqual({ label: 'Knowledge base forge-dev', href: '/knowledge?id=forge-dev' });
   expect(pseudoProjectAnchorDestination('.community-registry')).toEqual({ label: 'Community', href: '/community' });
   expect(pseudoProjectAnchorDestination('.some-future-anchor')).toBeNull();

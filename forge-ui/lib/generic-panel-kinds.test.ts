@@ -41,7 +41,7 @@ function parseGenericPanelKinds(): Set<string> {
   );
 }
 
-test('every turnSpec-declared session kind is wired into GENERIC_PANEL_KINDS (community-refresh included)', () => {
+test('every turnSpec-declared session kind is wired into GENERIC_PANEL_KINDS (derived from SESSION_KINDS, so community-refresh left it when W8-B5b WI-3 retired the descriptor)', () => {
   const panelKinds = parseGenericPanelKinds();
   const turnSpecKinds = SESSION_KINDS.filter((d) => d.turnSpec !== undefined && !BESPOKE_PANEL_KINDS.has(d.id)).map((d) => d.id);
   expect(turnSpecKinds.length).toBeGreaterThan(0);
