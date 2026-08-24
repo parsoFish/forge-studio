@@ -1185,63 +1185,97 @@ export const journey = defineJourney({
       },
     },
     {
+      // BEAT ID AND FRAME KEY ARE FROZEN (W8-B5b). This beat no longer proves
+      // a kickoff — the refresh affordance stopped being an agent session and
+      // became a deterministic route call. The honest name would be
+      // `community-refresh-deterministic`, and it is deliberately NOT renamed:
+      // a beat-id change forces `demos/` to be regenerated across all 19
+      // journeys, a full-run chore this lane is not scoped to do, and a
+      // half-regenerated gallery is worse than a stale beat id. The id is a
+      // gallery key; the title, narration and assertions below are the truth.
       id: 'community-refresh-kickoff',
-      title: 'The refresh entry — kicks off the community-refresh agent\'s kickoff page',
+      title: 'The refresh entry — one deterministic POST, no agent, no session',
       narration:
-        'W6-CR-3: the registry never fetches itself — an operator asks for a ' +
-        'verified pass via [data-action="refresh-community-registry"] on the ' +
-        'browser itself, landing on the SAME generic session-kickoff surface ' +
-        'every other interactive kind uses (B6), just with no project/KB ' +
-        'selector to fill in — the community registry is forge\'s own single, ' +
-        'forge-wide file. This beat proves the entry point and the kickoff ' +
-        'page render correctly; it deliberately never clicks Start — no live ' +
-        'agent spawn belongs in a gate.',
+        'The registry never fetches itself: an operator asks for a verified ' +
+        'pass. What changed in W8-B5b is WHO answers. This used to link to ' +
+        '/sessions/community-refresh/new and start an LLM agent that drafted a ' +
+        'registry diff for review; the deterministic, LLM-free refresh that ' +
+        'replaced it (three fixed API calls behind a three-origin allowlist) ' +
+        'had shipped, but nothing in the UI called it — the only refresh ' +
+        'affordance an operator had was still the agent. The button now POSTs ' +
+        'that route directly and stays on the page. ' +
+        'This beat proves the button REACHES the deterministic route, which is ' +
+        'a stronger claim than "a button exists", and it proves it TWICE and ' +
+        'independently: the rendered [data-refresh-route] is echoed back by the ' +
+        'SERVER (a client-side literal would prove nothing), and the bridge\'s ' +
+        'own dry-bridge refusal event lands in _logs with that same route. The ' +
+        'harness refuses this route on purpose — it is the one bridge route ' +
+        'that makes a real outbound call with the operator\'s GitHub token, and ' +
+        'a gate must never spend that. The refusal IS the evidence of arrival.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
-        console.log('\n[CM-23] /community → refresh entry → session-kickoff');
+        console.log('\n[CM-23] /community → deterministic refresh POST');
+
+        // Server-side evidence, half one: where the dry-bridge refusal log
+        // stands BEFORE the click, so the assertion after it is about THIS
+        // click and not about anything an earlier beat happened to leave.
+        const dryBridgeLog = join(FORGE_ROOT, '_logs', '_dry-bridge', 'events.jsonl');
+        const linesBefore = existsSync(dryBridgeLog)
+          ? readFileSync(dryBridgeLog, 'utf8').split('\n').filter(Boolean).length
+          : 0;
+
         await page.goto(watch.uiUrl + '/community', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
           () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-page-ready') === 'true',
           null, { timeout: 20000 }).catch(() => {});
+
         check(await page.locator('[data-action="refresh-community-registry"]').count() > 0,
-          'CM-23: /community exposes [data-action="refresh-community-registry"] — the entry point into the refresh agent\'s kickoff');
+          'CM-23: /community exposes [data-action="refresh-community-registry"] — the operator\'s refresh affordance');
+        const tag = await page.evaluate(() =>
+          document.querySelector('[data-action="refresh-community-registry"]')?.tagName ?? null);
+        check(tag === 'BUTTON',
+          `CM-23: the affordance is a BUTTON that acts in place, not a link into a session kickoff (got <${String(tag).toLowerCase()}>)`);
+        const label = (await page.evaluate(() =>
+          document.querySelector('[data-action="refresh-community-registry"]')?.textContent ?? '')).trim();
+        check(!/agent/i.test(label), `CM-23: the label no longer says "(agent)" — it is not one (got "${label}")`);
 
         await page.locator('[data-action="refresh-community-registry"]').click().catch(() => {});
-        await page.waitForURL('**/sessions/community-refresh/new', { timeout: 10000 }).catch(() => {});
-        await page.waitForFunction(
-          () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true',
-          null, { timeout: 20000 }).catch(() => {});
-        check(await page.locator('main[data-page="session-kickoff"]').count() > 0, 'CM-23: /sessions/community-refresh/new renders [data-page="session-kickoff"]');
-        const kindChip = await page.evaluate(() => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-kickoff-kind'));
-        check(kindChip === 'community-refresh', `CM-23: the kickoff page's own kind chip reads "community-refresh" (got "${kindChip}")`);
-        check(await page.locator('[data-section="kickoff-context"]').count() > 0, 'CM-23: the context card renders (agent, produces, session directory)');
-        check(await page.locator('[data-section="kickoff-selector"]').count() === 0,
-          'CM-23: NO project/KB selector renders — community-refresh is the one kind with selector:"none" (nothing forge-wide to pick)');
-        check(await page.locator('[data-action="start-session"]').count() > 0, 'CM-23: the Start button is present — never clicked in this gate (no live agent spawn)');
+        await page.waitForSelector('[data-section="refresh-result"]', { timeout: 20000 }).catch(() => {});
 
-        // W7-B3 (community-08): the optional focus brief — targeted "find me
-        // skills for X" is typeable right here; empty still means full
-        // refresh, so Start stays enabled either way.
-        check(await page.locator('[data-section="kickoff-prompt"] [data-field="kickoff-prompt"]').count() > 0,
-          'CM-23: the optional Focus brief field renders (W7-B3, community-08)');
-        check((await page.locator('[data-action="start-session"]').isDisabled().catch(() => true)) === false,
-          'CM-23: Start stays enabled with an EMPTY brief — optional means optional');
+        // It must NOT have navigated. The whole defect this closes is that the
+        // affordance used to leave the page to start a session.
+        const path = await page.evaluate(() => window.location.pathname);
+        check(path === '/community',
+          `CM-23: the click stays on /community — it starts no session and leaves no page (got "${path}")`);
 
-        // W7-B3 (community-12): the tier that will actually run is
-        // pre-selected (the envelope's cheapest = the server default), and
-        // the session-directory preview names the REAL anchor, never a
-        // <forge-anchor> placeholder.
-        await page.waitForFunction(
-          () => document.querySelector('input[name="modelTier"]:checked') !== null,
-          null, { timeout: 10000 }).catch(() => {});
-        const checkedTier = await page.evaluate(() => document.querySelector('input[name="modelTier"]:checked')?.value ?? null);
-        check(checkedTier === 'sonnet', `CM-23: the cheapest envelope tier (sonnet) is pre-selected — what will ACTUALLY run (got "${checkedTier}")`);
-        const contextText = (await page.evaluate(() => document.querySelector('[data-section="kickoff-context"]')?.textContent ?? '')).trim();
-        check(contextText.includes('.community-registry'), 'CM-23: the session-directory preview names the real .community-registry anchor');
-        check(!contextText.includes('<forge-anchor>'), 'CM-23: the <forge-anchor> placeholder is gone');
+        const state = await page.evaluate(() =>
+          document.querySelector('[data-section="refresh-result"]')?.getAttribute('data-refresh-state') ?? null);
+        check(state === 'refused-dry-bridge',
+          `CM-23: the harness's dry-bridge refusal is surfaced honestly, never a faked success (data-refresh-state="${state}")`);
 
-        await caption(page, 'Just Start + a pre-selected tier + an optional focus — the registry is forge\'s own, nothing to select.');
-        await frame(page, 'cm-23-community-refresh-kickoff', 'Part 2 (community) — the refresh agent\'s kickoff page, unattended-safe', { key: true });
+        // The route the SERVER echoed. A hardcoded client literal would render
+        // identically and prove nothing, so this attribute is populated ONLY
+        // from the refusal payload's own `route` field.
+        const route = await page.evaluate(() =>
+          document.querySelector('[data-section="refresh-result"]')?.getAttribute('data-refresh-route') ?? null);
+        check(route === '/api/studio/community/refresh',
+          `CM-23: the SERVER echoed back the deterministic route it was asked for — proof of arrival, not decoration (got "${route}")`);
+
+        // Server-side evidence, half two: the bridge's own JSONL refusal
+        // event, read off disk. Independent of anything the page claims.
+        const linesAfter = existsSync(dryBridgeLog)
+          ? readFileSync(dryBridgeLog, 'utf8').split('\n').filter(Boolean)
+          : [];
+        const fresh = linesAfter.slice(linesBefore).map((l) => { try { return JSON.parse(l); } catch { return null; } });
+        const refusal = fresh.find((e) => e
+          && e.message === 'dry-bridge.refuse'
+          && e.metadata?.route === '/api/studio/community/refresh'
+          && e.metadata?.method === 'POST');
+        check(!!refusal,
+          'CM-23: the BRIDGE logged its own dry-bridge.refuse for POST /api/studio/community/refresh — server-side proof the request arrived, independent of the DOM');
+
+        await caption(page, 'One POST to the deterministic route — no agent, no session, and the harness\'s refusal shown honestly rather than faked green.');
+        await frame(page, 'cm-23-community-refresh-kickoff', 'Part 2 (community) — the deterministic refresh, refused on purpose by the harness', { key: true });
       },
     },
     {
