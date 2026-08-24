@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { fetchStudioKbs, fetchStudioProjects, type Kb, type Project } from '@/lib/studio-client';
+import { fetchCycles, fetchProjectAttention, type Cycle, type ProjectAttentionItem } from '@/lib/bridge-client';
 import { fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
 import { ProjectsIndexBody, type ProjectsIndexFetchError } from '@/components/studio/ProjectsIndex';
@@ -34,6 +35,14 @@ export default function ProjectsIndexPage() {
   const reload = useCallback(() => setLoadKey((k) => k + 1), []);
   useBridgeRecovery(reload);
 
+  // W8-C3 (projects-08): the activity sources are a SEPARATE read with its own
+  // failure. Folding them into the roster's `Promise.all` would let a hiccup in
+  // the attention aggregate turn a perfectly good roster into a full-page error
+  // state. `undefined` = not settled yet; `[]` = settled and empty.
+  const [attention, setAttention] = useState<ProjectAttentionItem[] | undefined>(undefined);
+  const [cycles, setCycles] = useState<Cycle[] | undefined>(undefined);
+  const [activityError, setActivityError] = useState<ProjectsIndexFetchError | null>(null);
+
   useEffect(() => {
     const signal = { cancelled: false };
     (async () => {
@@ -54,5 +63,38 @@ export default function ProjectsIndexPage() {
     return () => { signal.cancelled = true; };
   }, [loadKey]);
 
-  return <ProjectsIndexBody projects={projects} kbs={kbs} ready={ready} error={error} onRetry={reload} />;
+  useEffect(() => {
+    const signal = { cancelled: false };
+    (async () => {
+      try {
+        const [a, c] = await Promise.all([fetchProjectAttention(), fetchCycles()]);
+        if (signal.cancelled) return;
+        setAttention(a);
+        setCycles([...c.live, ...c.recent]);
+        setActivityError(null);
+      } catch (err) {
+        if (signal.cancelled) return;
+        // Never swallowed: the body renders an explicit "activity unavailable"
+        // notice, so a failed read can never read as a quiet roster.
+        const { error: message, status } = fetchErrorPropsFrom(err);
+        setAttention(undefined);
+        setCycles(undefined);
+        setActivityError(status !== undefined ? { message, status } : { message });
+      }
+    })();
+    return () => { signal.cancelled = true; };
+  }, [loadKey]);
+
+  return (
+    <ProjectsIndexBody
+      projects={projects}
+      kbs={kbs}
+      ready={ready}
+      error={error}
+      onRetry={reload}
+      attention={attention}
+      cycles={cycles}
+      activityError={activityError}
+    />
+  );
 }

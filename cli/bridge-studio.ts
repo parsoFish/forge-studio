@@ -54,7 +54,7 @@ import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '../orchestrator/studio/validate.ts';
@@ -63,7 +63,12 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickof
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
-import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
+import {
+  AGENT_INSTRUCTION_FILES,
+  validateProjectConfig,
+  readQualityGateSidecar,
+  injectSidecarIntoTestProcess,
+} from '../orchestrator/project-config.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
@@ -370,7 +375,100 @@ type ProjectWithMeta = {
    *  project concept and discoverProjects is a pure directory scan, so the
    *  server has no field to attest either provenance from. */
   provenance: Provenance;
+  /** W8-C3 (projects-08 / forge-j1e): the project's contract health, DERIVED
+   *  on every read by running `.forge/project.json` through the SAME
+   *  validator the orchestrator runs the project through
+   *  (`validateProjectConfig`). Never persisted — there is no field on disk a
+   *  writer could forget to update, so it cannot go stale. Always present. */
+  configHealth: ProjectConfigHealth;
+  /** W8-C3 (projects-06 / projects-43): the ids of skills that live INSIDE this
+   *  project (`.forge/skills/<id>/SKILL.md` — the shape the forge<->project
+   *  contract already names, docs/forge-project-contract.md:445). Derived from
+   *  disk on every read, never stored. `[]` means "we looked and found none",
+   *  which is a different fact from an absent field. */
+  localSkills: string[];
 };
+
+/**
+ * W8-C3 (projects-08 / forge-j1e) — the derived contract-health verdict for
+ * one project.
+ *
+ * · `ok`           — `.forge/project.json` exists, parses, and `validateProjectConfig` accepts it.
+ * · `unconfigured` — the project directory exists but carries no `.forge/project.json` at all
+ *                    (half-onboarded; `discoverProjects` deliberately still lists it).
+ * · `invalid`      — the file is present but unreadable, is not JSON, or the REAL validator
+ *                    rejects it (e.g. the R1-03 legacy flat gate keys — gitpulse's live state,
+ *                    the shape `GET /api/studio/projects/:id/contract-stages` already 409s on).
+ *
+ * `reason` is the validator's OWN message wherever one exists, never a
+ * re-worded copy: a copy is a second source of truth that drifts.
+ */
+const NO_PROJECT_CONFIG_REASON = 'no .forge/project.json — onboarding is unfinished';
+
+export type ProjectConfigHealth = {
+  state: 'ok' | 'unconfigured' | 'invalid';
+  reason?: string;
+};
+
+/**
+ * Derive one project's contract health from the parsed config.
+ *
+ * REVIEW ROUND 1 (S1) — this used to call `validateProjectConfig(raw)` on the
+ * bare parsed JSON and claim, in three places, that it was "the SAME validator
+ * the orchestrator runs the project through". **That claim was false**, and a
+ * hostile review refuted it with a live project: `loadProjectConfig`
+ * (`orchestrator/project-config.ts`) reads the `.forge/quality_gate_cmd`
+ * sidecar and calls `injectSidecarIntoTestProcess` BEFORE validating, so a
+ * project that single-sources its local gate from the sidecar — a supported,
+ * documented R1-03-F1 shape, and the shape the live
+ * `terraform-provider-betterado` project is in — was accepted by the
+ * orchestrator and reported `invalid` / "contract broken" by this roster. A
+ * healthy, actively-run project rendered bold red on the very index whose
+ * purpose is telling broken from healthy: this lane's own defect class,
+ * reshipped as a FALSE NEGATIVE.
+ *
+ * So the loader's pre-validation step happens here too, through the SAME
+ * exported helper the loader uses (`injectSidecarIntoTestProcess`, whose own
+ * docstring calls itself "the ONE sidecar-injection rule ... shared by the
+ * loader and the bridge's PUT-validation copy") — never a re-implementation.
+ * `cli/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
+ * third fixture: for every shape, `state === 'ok'` iff `loadProjectConfig`
+ * accepts it, because a disagreement in EITHER direction is the defect.
+ *
+ * `sidecarCmd` is read by the CALLER, which owns every filesystem decision, so
+ * this function stays pure.
+ */
+function deriveProjectLocalSkills(projectsDir: string, dirName: string): string[] {
+  const entries = guardedReadDir(projectsDir, [dirName, '.forge', 'skills']);
+  if (entries === null) return [];
+  // A bare directory is not a skill: the SKILL.md is what makes an id
+  // bindable, and offering a directory with no SKILL.md would re-create
+  // projects-43 in the picker itself (an id that resolves to nothing).
+  // Every leaf read rides the SAME per-segment guard as the rest of this
+  // function (SEC-04): a symlinked skill dir escaping projectsDir is refused.
+  return entries
+    .filter((entry) => guardedFile(projectsDir, [dirName, '.forge', 'skills', entry, 'SKILL.md'], 'read') !== null)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function deriveConfigHealth(raw: unknown, sidecarCmd: string[] | null): ProjectConfigHealth {
+  try {
+    // Injection MUTATES its argument, so it gets a shallow copy — the caller's
+    // `raw` is still read for name/northStar/skills/... afterwards and must not
+    // be altered underneath it (return new objects, never mutate inputs).
+    const forValidation: unknown =
+      raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+        ? { ...(raw as Record<string, unknown>) }
+        : raw;
+    if (sidecarCmd && forValidation !== null && typeof forValidation === 'object') {
+      injectSidecarIntoTestProcess(forValidation as Record<string, unknown>, sidecarCmd);
+    }
+    validateProjectConfig(forValidation);
+    return { state: 'ok' };
+  } catch (err) {
+    return { state: 'invalid', reason: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // B1: projects are auto-discovered from disk — scan `<projectsDir>/*` rather
@@ -388,7 +486,21 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   const kbBoundToProject = projectKbBindings(forgeRoot);
 
   return discovered.map((ref) => {
-    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path, provenance: PROJECT_PROVENANCE };
+    // W8-C3: `configHealth` starts PESSIMISTIC. Every path below that learns
+    // better overwrites it; a path that learns nothing leaves the project
+    // honestly marked unconfigured rather than fabricating health. The whole
+    // defect this closes was a fail-OPEN default, so the default fails closed.
+    const result: ProjectWithMeta = {
+      id: ref.id,
+      name: ref.id,
+      path: ref.path,
+      provenance: PROJECT_PROVENANCE,
+      configHealth: { state: 'unconfigured', reason: NO_PROJECT_CONFIG_REASON },
+      // Derived BEFORE any config short-circuit below: a project whose config
+      // is broken or missing is exactly the one whose bindings the operator
+      // needs to see in order to fix it.
+      localSkills: deriveProjectLocalSkills(projectsDir, basename(ref.absPath)),
+    };
     // SEC-04 (bd forge-ebj): every read of a per-project leaf rides `guardedFile`
     // against the TRUSTED `projectsDir` root, with the on-disk project directory
     // NAME (`basename(ref.absPath)`, not the API-facing normalized id) as its OWN
@@ -418,11 +530,45 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       guardedFile(projectsDir, [dirName, '.forge', 'demo', 'demo.lock.json'], 'read') !== null;
     const derivedKb = kbBoundToProject.get(ref.id);
     if (derivedKb !== undefined) result.kb = derivedKb;
+    // `discoverProjects` deliberately lists a directory with no
+    // `.forge/project.json` so a half-onboarded project stays VISIBLE. Before
+    // W8-C3 it was visible AND indistinguishable from a fully-onboarded one.
     if (!ref.hasConfig) return result;
     const projectJsonRaw = guardedReadFile(projectsDir, [dirName, '.forge', 'project.json']);
-    if (projectJsonRaw === null) return result; // absent, unreadable, or containment-refused
+    if (projectJsonRaw === null) {
+      // `hasConfig` said the file is on disk, so this is a real read failure or
+      // a containment refusal (a symlinked config escaping projectsDir) — NOT
+      // the same thing as "never onboarded".
+      result.configHealth = { state: 'invalid', reason: '.forge/project.json is present but could not be read' };
+      return result;
+    }
+    let raw: Record<string, unknown>;
     try {
-      const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
+      raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
+    } catch (err) {
+      result.configHealth = {
+        state: 'invalid',
+        reason: `.forge/project.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      };
+      return result;
+    }
+    // The verdict is taken from the REAL validator — with the SAME sidecar
+    // injection the orchestrator's own loader performs (review round 1, S1) —
+    // and the field extraction below runs REGARDLESS of it: a project whose
+    // contract is broken must still be nameable and openable, or the operator
+    // cannot go fix it.
+    //
+    // The sidecar rides the projectsDir-rooted guard: `readQualityGateSidecar`
+    // treats its argument as a TRUSTED root, so it is handed the guard's
+    // verified realpath for this project dir, never `join(projectsDir,
+    // dirName)` — folding a request-derived name into a trusted root is the
+    // SEC-04 shape the rest of this function exists to avoid.
+    const guardedProjectRoot = resolveGuardedPath(projectsDir, [dirName]);
+    const sidecarCmd = guardedProjectRoot.ok && guardedProjectRoot.exists
+      ? readQualityGateSidecar(guardedProjectRoot.realPath)
+      : null;
+    result.configHealth = deriveConfigHealth(raw, sidecarCmd);
+    try {
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
       // W7-FIX-A4: the STORED `kb` outranks the derived binding in BOTH
@@ -456,8 +602,16 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
             ...(typeof s.element === 'string' && s.element ? { element: s.element as string } : {}),
           }));
       }
-    } catch {
-      // ignore unreadable project.json
+    } catch (err) {
+      // W8-C3: this used to be a SILENT swallow (`catch { /* ignore */ }`) —
+      // the exact fail-open shape this WI closes. Every read above is
+      // typeof-guarded so a throw here means the config is shaped in a way we
+      // genuinely cannot read; say so rather than returning a project that
+      // looks healthy. Still per-project: one bad config never sinks the roster.
+      result.configHealth = {
+        state: 'invalid',
+        reason: `.forge/project.json could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
     return result;
   });

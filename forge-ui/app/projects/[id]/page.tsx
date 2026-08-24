@@ -565,7 +565,16 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
               onChange={(s) => { setDemoSteps(s); markDirty(); }}
               onSessionStarted={handleDemoSessionStarted}
             />
-            <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
+            {/* W8-C3 (projects-06): the picker gets the project's OWN skills
+                (.forge/skills/<id>, derived per read by the bridge) alongside
+                the forge-wide catalog — without them a project-local skill
+                that is unbound can never be re-bound. */}
+            <SkillsBind
+              skills={skills}
+              onChange={(s) => { setSkills(s); markDirty(); }}
+              catalog={skillItems}
+              localSkills={project?.localSkills ?? []}
+            />
 
             {/* R4-12-F2: permanent cycle ledger — the completed-cycle dig-in.
                 Feeds this project's RAW cycles through <ProjectCycleLedger>'s
