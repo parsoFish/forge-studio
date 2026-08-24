@@ -18,14 +18,21 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Refuse to proceed if a live `forge serve` daemon is running, or if the queue
- * already has stray manifests sitting in `pending`/`in-flight` (leftovers from a
- * prior run, or — worse — real work a live scheduler is mid-claim on).
+ * The DAEMON-LIVENESS half of the guard, split out (W8-C2b) so it can run
+ * BEFORE anything mutates `_queue/`.
+ *
+ * Why the split matters: the crash-safe leading sweep
+ * (`scripts/lib/journey-residue.mjs`) deletes residual queue manifests at the
+ * start of a run. Running that sweep before knowing whether a real `forge
+ * serve` daemon is alive would mean a mis-identified manifest could be deleted
+ * out from under a cycle the daemon was actively processing — the precise
+ * interference this guard exists to prevent, reintroduced upstream of it. The
+ * liveness check therefore runs FIRST, unconditionally, before any deletion.
  *
  * @param {string} forgeRoot — absolute path to the forge install root.
- * @throws {Error} if a live daemon or a stray manifest is found.
+ * @throws {Error} if a live daemon is found (and not auto-killed).
  */
-export async function assertNoLiveDaemon(forgeRoot) {
+export async function assertNoLiveDaemonProcess(forgeRoot) {
   const { pidFile } = daemonPaths(forgeRoot);
   const pid = readPid(pidFile);
   if (pid !== null && isAlive(pid)) {
@@ -50,6 +57,21 @@ export async function assertNoLiveDaemon(forgeRoot) {
       );
     }
   }
+
+}
+
+/**
+ * Refuse to proceed if a live `forge serve` daemon is running, or if the queue
+ * already has stray manifests sitting in `pending`/`in-flight` (leftovers from a
+ * prior run, or — worse — real work a live scheduler is mid-claim on).
+ *
+ * @param {string} forgeRoot — absolute path to the forge install root.
+ * @throws {Error} if a live daemon or a stray manifest is found.
+ */
+export async function assertNoLiveDaemon(forgeRoot) {
+  // Idempotent: cheap pid-file read. Callers that already ran the liveness half
+  // before sweeping (e2e-journey.mjs) still get the same answer here.
+  await assertNoLiveDaemonProcess(forgeRoot);
 
   const strays = ['pending', 'in-flight'].flatMap((q) => {
     const dir = join(forgeRoot, '_queue', q);

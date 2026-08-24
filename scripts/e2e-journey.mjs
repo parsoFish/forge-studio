@@ -102,7 +102,8 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, renameSync
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { createAssertions, sleep } from './lib/journey-assertions.mjs';
-import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
+import { assertNoLiveDaemon, assertNoLiveDaemonProcess } from './lib/journey-daemon-guard.mjs';
+import { sweepJourneyResidue } from './lib/journey-residue.mjs';
 import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
@@ -350,6 +351,39 @@ async function main() {
     for (const jid of journeyFilterSet) {
       if (!journeyById[jid]) throw new Error(`[e2e] --journey '${jid}' is not a known journey id. Known ids: ${journeyIds.join(', ')}`);
     }
+  }
+
+  // W8-C2b (beads forge-6lk + forge-yuq) — CRASH-SAFE LEADING SWEEP, and it
+  // must run BEFORE the daemon guard below.
+  //
+  // This harness installs no signal handlers, so no kill — SIGINT included —
+  // ever reaches its end-of-run `finally`, where ~19 of its ~25 cleanup steps
+  // used to live exclusively. A run SIGKILLed at beat 6 was measured leaving
+  // `_queue/in-flight/INIT-<date>-monitor-fixture-active.md` behind, and
+  // `assertNoLiveDaemon` throws on exactly that — so the residue was
+  // self-perpetuating: the only code that could clear it sat DOWNSTREAM of the
+  // guard that refused to start because of it. Sweeping our own residue first
+  // makes a run that begins unable to inherit a dead run's state, which is the
+  // structural property; it is deliberately NOT a cleanup step someone must
+  // remember to call at the end. See scripts/lib/journey-residue.mjs.
+  //
+  // This does NOT weaken the guard: the sweep only removes ids this harness
+  // owns, so a genuine stray still refuses exactly as before.
+  //
+  // ORDERING IS LOAD-BEARING (hostile-review finding, W8-C2b): the DAEMON
+  // LIVENESS half of the guard runs BEFORE the sweep. The sweep deletes queue
+  // manifests, and doing that while a real `forge serve` daemon is mid-cycle
+  // could remove the manifest it is actively processing — exactly the
+  // interference assertNoLiveDaemon exists to prevent, reintroduced upstream of
+  // it. Liveness first, then sweep, then the stray check on what remains.
+  await assertNoLiveDaemonProcess(FORGE_ROOT);
+  {
+    const { removed, failed } = sweepJourneyResidue(FORGE_ROOT);
+    if (removed.length) {
+      console.log(`[e2e] leading sweep: removed ${removed.length} residual path(s) from a previous interrupted run:`);
+      for (const r of removed) console.log(`        ${r}`);
+    }
+    for (const f of failed) console.warn(`[e2e] leading sweep could not remove ${f.path}: ${f.error}`);
   }
 
   // Pre-seed isolation guard (known-gaps #10) — refuse before touching anything
