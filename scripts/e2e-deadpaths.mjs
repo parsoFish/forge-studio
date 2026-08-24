@@ -14,6 +14,7 @@
  */
 
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { createAssertions } from './lib/journey-assertions.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
@@ -26,6 +27,10 @@ const ROUTES = [
   // absence). The crawler still just asserts a real [data-page] renders here.
   { path: '/', name: 'home dashboard (R6-07)' },
   { path: '/library', name: 'library (moved off /)' },
+  // W8-B1: `/agents` — the pillar's own index — was NOT in this list. It has
+  // been a nav pillar since W6-IA-3 and was swept by nothing; the
+  // uncrawled-pillar invariant below found it the moment the invariant existed.
+  { path: '/agents', name: 'agents index (W6-IA-3)' },
   { path: '/agents/new', name: 'agent-builder (new)' },
   { path: '/agents/developer-ralph', name: 'agent detail (real shipped agent)' },
   // R6-04 WI-4: an UNKNOWN runId (never dispatched) — proves the honest
@@ -81,6 +86,12 @@ const ROUTES = [
   // kickoff surface (mirrors `/architect/new` above), the same generic
   // `/sessions/[kind]/new` screen instructions/kb-cleanup/authoring/
   // project-brain also share.
+  // W8-B1: `/sessions` is a [data-nav] target (the `sessions-secondary` entry
+  // on the agents index — Sessions is deliberately NOT a pillar, W6-B11
+  // operator decision) and therefore must be crawled: the nav assertion below
+  // resolves every data-nav href against THIS inventory, so a nav-reachable
+  // page that nothing sweeps is the same hole /monitor and /agents were.
+  { path: '/sessions', name: 'sessions index (secondary nav target, W6-B11)' },
   { path: '/sessions/demo/new', name: 'demo-builder kickoff (dedicated session screen, W6-B10)' },
   // W6-IA-8: `/recovery` is now a wire redirect (next.config.mjs) to
   // `/library`, not a client-shim page — `page.goto` follows the 308 at the
@@ -88,7 +99,50 @@ const ROUTES = [
   // [data-page]/dead-CTA/nav-link assertions land on `/library` and are the
   // honest post-redirect check, unchanged from when it was a client shim.
   { path: '/recovery', name: 'recovery (DEC-6 operator surface, now a wire redirect -> /library)' },
+  // W8-B1: the Monitor pillar. Registered here as well as in StudioNav because
+  // `assertNavIsCanonical` below now REFUSES a nav pillar this list does not
+  // crawl — the hole this row closes is that /monitor shipped as a nav item
+  // and was swept by nothing.
+  { path: '/monitor', name: 'monitor pillar (W8-B1, ON-8)' },
 ];
+
+/**
+ * The canonical nav set, DERIVED from StudioNav's exported `NAV_ITEMS` rather
+ * than retyped here.
+ *
+ * The previous shape was a hand-maintained `known` array whose own comment said
+ * "kept in sync with StudioNav's NAV_ITEMS hrefs". It was not: W8-B1 added the
+ * Monitor pillar and this copy did not move, so a shipped nav link was reported
+ * dead on all 31 routes. A second copy of a list is a second thing to forget.
+ *
+ * Parsed, not imported, because this is a plain .mjs harness and NAV_ITEMS lives
+ * in a .tsx module. The parse THROWS on an implausible result: a regex that
+ * silently yields [] would make every nav assertion below pass vacuously, which
+ * is precisely the fail-open class this crawler exists to catch.
+ */
+function canonicalNavHrefs() {
+  const src = readFileSync(new URL('../forge-ui/components/StudioNav.tsx', import.meta.url), 'utf8');
+  const block = src.match(/export const NAV_ITEMS: NavItem\[\] = \[([\s\S]*?)\n\];/);
+  if (!block) throw new Error('[deadpaths] could not locate NAV_ITEMS in StudioNav.tsx — the nav checks would pass vacuously; fix the parse, do not skip the gate');
+  const hrefs = Array.from(block[1].matchAll(/href:\s*'([^']+)'/g)).map((m) => m[1]);
+  if (hrefs.length < 2) throw new Error(`[deadpaths] NAV_ITEMS parse yielded ${hrefs.length} href(s) — refusing to run a nav gate that cannot fail`);
+  return hrefs;
+}
+
+const NAV_HREFS = canonicalNavHrefs();
+const KNOWN_NAV_TARGETS = new Set([...NAV_HREFS, ...ROUTES.map((r) => r.path)]);
+
+// A nav pillar that ROUTES does not crawl is a page nothing sweeps: it renders
+// in the top nav of all 31 routes while its own [data-page], landmark, tab title
+// and dead-CTA assertions are never run. That is how /monitor shipped. Refuse to
+// start rather than report a clean sweep over an incomplete inventory.
+const uncrawledPillars = NAV_HREFS.filter((h) => !ROUTES.some((r) => r.path === h));
+if (uncrawledPillars.length > 0) {
+  throw new Error(
+    `[deadpaths] nav pillar(s) ${uncrawledPillars.join(', ')} are in StudioNav's NAV_ITEMS but absent from ROUTES — `
+    + 'add a ROUTES row so the pillar is actually swept; a nav gate that skips a pillar is not a gate',
+  );
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -157,14 +211,19 @@ async function sweepOnce(page, baseUrl, check, pass) {
     // Every nav link resolves to a known route.
     const navHrefs = await page.evaluate(() =>
       Array.from(document.querySelectorAll('[data-nav]')).map((el) => el.getAttribute('href')));
-    // W6-IA-5: Flows/Agents now point at their own index (/flows, /agents),
-    // not a deep-link into a specific flow/agent — kept in sync with
-    // StudioNav's NAV_ITEMS hrefs.
+    // W6-IA-5: Flows/Agents point at their own index (/flows, /agents), not a
+    // deep-link into a specific flow/agent.
     // Exact membership, not startsWith — '/' as a prefix made the old check a
-    // no-op (every absolute href passed). Nav hrefs are a closed set.
-    const known = ['/', '/projects', '/flows', '/agents', '/library', '/knowledge'];
+    // no-op (every absolute href passed). Nav hrefs are a closed set, and that
+    // set is DERIVED from StudioNav (see canonicalNavHrefs), never retyped.
+    // "A real route" means a route THIS crawler sweeps and has asserted renders
+    // — the pillars plus every other inventoried path. Resolving against the
+    // pillar list alone was wrong in both directions: it failed the documented
+    // `sessions-secondary` link (a real page, deliberately not a pillar) and it
+    // would have passed a pillar whose page nothing crawls.
+    const known = KNOWN_NAV_TARGETS;
     for (const href of navHrefs) {
-      const ok = typeof href === 'string' && known.includes(href);
+      const ok = typeof href === 'string' && known.has(href);
       check(ok, `[pass ${pass}] route ${route.path}: nav link "${href}" targets a real route`);
     }
   }
