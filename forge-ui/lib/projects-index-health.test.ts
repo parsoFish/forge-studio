@@ -24,6 +24,8 @@
 import { test, expect, vi, afterEach } from 'vitest';
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join as joinPath } from 'node:path';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/projects' }));
 
@@ -187,4 +189,26 @@ test('the index grid carries the health rollup as data-* so the journey can asse
   expect(html).toContain('data-health-attention="1"');
   expect(html).toContain('data-health-broken="1"');
   expect(html).toContain('data-health-unknown="0"');
+});
+
+// ---------------------------------------------------------------------------
+// ENUMERATION PIN — the no-`health`-prop argument rests on a fact about call
+// sites, and this campaign's most-repeated finding is a coverage claim nobody
+// counted. Pinned so the claim in `projects-index-health.ts`'s header cannot
+// rot silently: if a second consumer appears, this test names it and the
+// reviewer gets to ask whether it derives health the same way.
+// ---------------------------------------------------------------------------
+
+test('ProjectCard is rendered by exactly one component — so "derives its own health" covers every site, and a new site is announced here', () => {
+  const roots = [new URL('../app/', import.meta.url).pathname, new URL('../components/', import.meta.url).pathname];
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(joinPath(dir, e.name)) : [joinPath(dir, e.name)],
+    );
+  const consumers = roots
+    .flatMap(walk)
+    .filter((f) => /\.tsx?$/.test(f) && !f.endsWith('LibraryCard.tsx'))
+    .filter((f) => /<ProjectCard\b/.test(readFileSync(f, 'utf8')))
+    .map((f) => f.split('/forge-ui/')[1]);
+  expect(consumers).toEqual(['components/studio/ProjectsIndex.tsx']);
 });

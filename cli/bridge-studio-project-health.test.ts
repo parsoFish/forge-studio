@@ -89,6 +89,16 @@ before(async () => {
     writeFileSync(join(localSkills, '.forge', 'skills', slug, 'SKILL.md'), `---\nname: ${slug}\n---\n`, 'utf8');
   }
   mkdirSync(join(localSkills, '.forge', 'skills', 'not-a-skill'), { recursive: true });
+  // W8-C3 review round 1 (S1): a SIDECAR-ONLY project — no `testProcess` in
+  // the JSON at all, the local gate single-sourced from
+  // `.forge/quality_gate_cmd`. A supported, documented shape (R1-03-F1) and
+  // the shape the live terraform-provider-betterado project is in.
+  const sidecar = seedProject('sidecarproj', JSON.stringify({ name: 'Sidecar' }));
+  writeFileSync(join(sidecar, '.forge', 'quality_gate_cmd'), 'go test ./...\n', 'utf8');
+  // ...and one where the sidecar must NOT rescue a genuinely malformed shape.
+  const sidecarBad = seedProject('sidecarmalformedproj', JSON.stringify({ testProcess: 'not-an-object' }));
+  writeFileSync(join(sidecarBad, '.forge', 'quality_gate_cmd'), 'go test ./...\n', 'utf8');
+
   // ...and one on the BROKEN-config project, to prove the two derivations are independent.
   mkdirSync(join(forgeRoot, 'projects', 'flatkeysproj', '.forge', 'skills', 'broken-proj-skill'), { recursive: true });
   writeFileSync(join(forgeRoot, 'projects', 'flatkeysproj', '.forge', 'skills', 'broken-proj-skill', 'SKILL.md'), '---\nname: x\n---\n', 'utf8');
@@ -107,7 +117,7 @@ after(async () => {
 
 test('W8-C3 WI-1: every project on the roster carries a derived configHealth — no project is silently unjudged', async () => {
   const rows = await roster();
-  assert.equal(rows.length, 6, 'all six seeded projects must still be LISTED — a broken config must never make a project disappear');
+  assert.equal(rows.length, 8, 'all eight seeded projects must still be LISTED — a broken config must never make a project disappear');
   for (const row of rows) {
     assert.ok(row.configHealth, `project "${row.id}" came off the wire with NO configHealth — that is the fail-open shape this WI closes`);
     assert.ok(
@@ -200,4 +210,62 @@ test('W8-C3 WI-4: localSkills is derived even when the project CONFIG is broken 
   const row = byId(rows, 'flatkeysproj');
   assert.equal(row.configHealth?.state, 'invalid');
   assert.deepEqual(row.localSkills, ['broken-proj-skill']);
+});
+
+// ---------------------------------------------------------------------------
+// W8-C3 REVIEW ROUND 1 (S1) — the roster's verdict must match what the
+// ORCHESTRATOR actually does, not just what `validateProjectConfig` says about
+// the bare JSON.
+//
+// The hostile review refuted this lane's own repeated claim ("the SAME
+// validator the orchestrator runs the project through"). It was FALSE: the
+// orchestrator's `loadProjectConfig` reads `.forge/quality_gate_cmd` and calls
+// `injectSidecarIntoTestProcess` BEFORE validating, so a project that
+// single-sources its local gate from the sidecar — which is a SUPPORTED,
+// documented shape, and the shape the live `terraform-provider-betterado`
+// project on this host is in — validated fine for the orchestrator and was
+// reported `invalid` / "contract broken" by the roster.
+//
+// That is this lane's own defect class reshipped as a FALSE NEGATIVE: a
+// healthy, actively-run project rendered bold red on the index whose entire
+// purpose is to tell broken from healthy. The cure is a PARITY pin, not a
+// third fixture: for every shape below, the roster's verdict must AGREE with
+// `loadProjectConfig`'s own accept/reject, because disagreement in either
+// direction is the defect.
+// ---------------------------------------------------------------------------
+
+import { loadProjectConfig } from '../orchestrator/project-config.ts';
+
+/** Does the REAL orchestrator loader accept this project? */
+function orchestratorAccepts(projectId: string): boolean {
+  try {
+    return loadProjectConfig(join(forgeRoot, 'projects', projectId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+test('W8-C3 S1: a project whose local gate comes ONLY from the .forge/quality_gate_cmd sidecar is "ok" — the orchestrator runs it, so the roster must not call it broken', async () => {
+  const row = byId(await roster(), 'sidecarproj');
+  assert.equal(orchestratorAccepts('sidecarproj'), true, 'precondition: the real loader accepts a sidecar-only project');
+  assert.equal(row.configHealth?.state, 'ok', `the roster must agree with the loader — got ${JSON.stringify(row.configHealth)}`);
+});
+
+test('W8-C3 S1 (PARITY, the pin that would have caught it): for EVERY seeded shape, configHealth.state === "ok" iff the real loadProjectConfig accepts it', async () => {
+  const rows = await roster();
+  for (const row of rows) {
+    const accepted = orchestratorAccepts(row.id);
+    const healthy = row.configHealth?.state === 'ok';
+    assert.equal(
+      healthy,
+      accepted,
+      `"${row.id}": roster says ${healthy ? 'ok' : row.configHealth?.state}, the orchestrator ${accepted ? 'ACCEPTS' : 'refuses'} it — a disagreement in EITHER direction is the defect`,
+    );
+  }
+});
+
+test('W8-C3 S1: the sidecar does NOT rescue a config the loader still refuses — a malformed testProcess stays invalid, matching injectSidecarIntoTestProcess\'s own deliberate non-rescue', async () => {
+  const row = byId(await roster(), 'sidecarmalformedproj');
+  assert.equal(orchestratorAccepts('sidecarmalformedproj'), false, 'precondition: the real loader still refuses a malformed testProcess even with a sidecar present');
+  assert.equal(row.configHealth?.state, 'invalid');
 });

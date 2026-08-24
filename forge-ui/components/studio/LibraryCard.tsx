@@ -67,9 +67,14 @@ export function ProjectCard({
   const kbLabel = project.kb ? (kbs.find((k) => k.id === project.kb)?.name ?? project.kb) : null;
   // W8-C3 (projects-08 / forge-j1e): DERIVED here, from the project itself, on
   // every render. Deliberately NOT a prop — a `health` prop is a place for a
-  // stale copy to live, and this card renders on two shelves (the Library's
-  // projects section and the /projects index), which is exactly how two
-  // callers end up disagreeing. One derivation, both shelves.
+  // stale copy to live, and the derivation belongs with the thing that renders
+  // it. (Correction, verified rather than assumed: this card has exactly ONE
+  // consumer today — `ProjectsIndex.tsx`. The Library's projects shelf that
+  // used to be the second one was retired by W6-IA-4 in favour of that index,
+  // so "one card, two shelves" is no longer true and is not the argument here.
+  // The argument is that the NEXT consumer cannot introduce a disagreement,
+  // because there is no value for it to pass. `lib/projects-index-health.test.ts`
+  // pins the consumer count so this claim cannot rot silently.)
   const health = deriveProjectHealth(project);
   const showsActivity = attention !== undefined || cycles !== undefined;
   const activity = showsActivity ? deriveProjectActivity(project.id, attention ?? [], cycles ?? []) : null;

@@ -20,11 +20,14 @@
  *   · this module maps the verdict to a display level, and every renderer
  *     calls it. There is no `health` field on `Project`, no `health` prop on
  *     `ProjectCard`, and no cache — so there is nowhere for a stale copy to
- *     live and nothing for a writer to forget to update.
+ *     live and nothing for a writer to forget to update. `ProjectCard` has
+ *     exactly ONE consumer today (grep-verified, and pinned by the test beside
+ *     this file); the point of giving it no `health` prop is that the SECOND
+ *     consumer cannot introduce a disagreement, because there is no value for
+ *     it to pass.
  *
  * PURE on purpose (mirrors `./sessions-index-filter.ts` and `./home-view.ts`):
- * no fetch, no DOM, no React — unit-testable without a mount, and callable
- * from both shelves that render a `ProjectCard`.
+ * no fetch, no DOM, no React — unit-testable without a mount.
  *
  * See `./projects-index-health.test.ts` for the acceptance contract.
  */

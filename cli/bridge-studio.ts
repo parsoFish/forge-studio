@@ -63,7 +63,12 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickof
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest, initiativeTitle } from '../orchestrator/manifest.ts';
-import { AGENT_INSTRUCTION_FILES, validateProjectConfig } from '../orchestrator/project-config.ts';
+import {
+  AGENT_INSTRUCTION_FILES,
+  validateProjectConfig,
+  readQualityGateSidecar,
+  injectSidecarIntoTestProcess,
+} from '../orchestrator/project-config.ts';
 import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '../orchestrator/work-item.ts';
 import type { WorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
@@ -406,9 +411,32 @@ export type ProjectConfigHealth = {
 };
 
 /**
- * Derive one project's contract health from the parsed config. Pure — the
- * caller owns every filesystem decision (absent file, unreadable file, bad
- * JSON), so this function has exactly one job: ask the real validator.
+ * Derive one project's contract health from the parsed config.
+ *
+ * REVIEW ROUND 1 (S1) — this used to call `validateProjectConfig(raw)` on the
+ * bare parsed JSON and claim, in three places, that it was "the SAME validator
+ * the orchestrator runs the project through". **That claim was false**, and a
+ * hostile review refuted it with a live project: `loadProjectConfig`
+ * (`orchestrator/project-config.ts`) reads the `.forge/quality_gate_cmd`
+ * sidecar and calls `injectSidecarIntoTestProcess` BEFORE validating, so a
+ * project that single-sources its local gate from the sidecar — a supported,
+ * documented R1-03-F1 shape, and the shape the live
+ * `terraform-provider-betterado` project is in — was accepted by the
+ * orchestrator and reported `invalid` / "contract broken" by this roster. A
+ * healthy, actively-run project rendered bold red on the very index whose
+ * purpose is telling broken from healthy: this lane's own defect class,
+ * reshipped as a FALSE NEGATIVE.
+ *
+ * So the loader's pre-validation step happens here too, through the SAME
+ * exported helper the loader uses (`injectSidecarIntoTestProcess`, whose own
+ * docstring calls itself "the ONE sidecar-injection rule ... shared by the
+ * loader and the bridge's PUT-validation copy") — never a re-implementation.
+ * `cli/bridge-studio-project-health.test.ts` pins PARITY rather than adding a
+ * third fixture: for every shape, `state === 'ok'` iff `loadProjectConfig`
+ * accepts it, because a disagreement in EITHER direction is the defect.
+ *
+ * `sidecarCmd` is read by the CALLER, which owns every filesystem decision, so
+ * this function stays pure.
  */
 function deriveProjectLocalSkills(projectsDir: string, dirName: string): string[] {
   const entries = guardedReadDir(projectsDir, [dirName, '.forge', 'skills']);
@@ -423,9 +451,19 @@ function deriveProjectLocalSkills(projectsDir: string, dirName: string): string[
     .sort((a, b) => a.localeCompare(b));
 }
 
-function deriveConfigHealth(raw: unknown): ProjectConfigHealth {
+function deriveConfigHealth(raw: unknown, sidecarCmd: string[] | null): ProjectConfigHealth {
   try {
-    validateProjectConfig(raw);
+    // Injection MUTATES its argument, so it gets a shallow copy — the caller's
+    // `raw` is still read for name/northStar/skills/... afterwards and must not
+    // be altered underneath it (return new objects, never mutate inputs).
+    const forValidation: unknown =
+      raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+        ? { ...(raw as Record<string, unknown>) }
+        : raw;
+    if (sidecarCmd && forValidation !== null && typeof forValidation === 'object') {
+      injectSidecarIntoTestProcess(forValidation as Record<string, unknown>, sidecarCmd);
+    }
+    validateProjectConfig(forValidation);
     return { state: 'ok' };
   } catch (err) {
     return { state: 'invalid', reason: err instanceof Error ? err.message : String(err) };
@@ -514,10 +552,22 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
       };
       return result;
     }
-    // The verdict is taken from the REAL validator, and the field extraction
-    // below runs REGARDLESS of it: a project whose contract is broken must
-    // still be nameable and openable, or the operator cannot go fix it.
-    result.configHealth = deriveConfigHealth(raw);
+    // The verdict is taken from the REAL validator — with the SAME sidecar
+    // injection the orchestrator's own loader performs (review round 1, S1) —
+    // and the field extraction below runs REGARDLESS of it: a project whose
+    // contract is broken must still be nameable and openable, or the operator
+    // cannot go fix it.
+    //
+    // The sidecar rides the projectsDir-rooted guard: `readQualityGateSidecar`
+    // treats its argument as a TRUSTED root, so it is handed the guard's
+    // verified realpath for this project dir, never `join(projectsDir,
+    // dirName)` — folding a request-derived name into a trusted root is the
+    // SEC-04 shape the rest of this function exists to avoid.
+    const guardedProjectRoot = resolveGuardedPath(projectsDir, [dirName]);
+    const sidecarCmd = guardedProjectRoot.ok && guardedProjectRoot.exists
+      ? readQualityGateSidecar(guardedProjectRoot.realPath)
+      : null;
+    result.configHealth = deriveConfigHealth(raw, sidecarCmd);
     try {
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;

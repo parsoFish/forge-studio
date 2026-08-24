@@ -28,8 +28,12 @@ import {
 // in a unit test (`lib/projects-index-render.test.ts`) and inside the real
 // `app/projects/page.tsx` fetch-and-`useState` wrapper (mirrors
 // `app/library/page.tsx`'s own `loadAll` shape, scoped to just
-// projects+kbs). `ProjectCard` is the SAME component the Library page's
-// projects section renders — one card, two shelves.
+// projects+kbs). `ProjectCard` lives in `./LibraryCard.tsx` because the
+// Library page's projects section used to render it too — but W6-IA-4 retired
+// that shelf in favour of this index, so this is now its ONLY consumer
+// (W8-C3, grep-verified; the previous "one card, two shelves" note here had
+// outlived the shelf it described). `lib/projects-index-health.test.ts` pins
+// the consumer count.
 // ---------------------------------------------------------------------------
 
 export type ProjectsIndexFetchError = { message: string; status?: number };
