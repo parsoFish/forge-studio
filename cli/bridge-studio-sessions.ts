@@ -92,6 +92,16 @@
  *     the same local write access as writing the outside content in
  *     directly, so the residual risk is negligible (see
  *     session-transcript.ts's module header for the full rationale).
+ * W8-F6 (bead forge-6gv.27) — READ existence and WRITE existence are different
+ * questions, deliberately. This GET serves a legacy session (working dir gone,
+ * central event log intact) as 200; the cancel route
+ * (cli/bridge-studio-session-cancel.ts) and the affordance dispatch
+ * (cli/bridge-studio-affordances.ts) still 404 the same session, because THEIR
+ * question is "is there a session dir to write into?" and the honest answer is
+ * no. Both 404 BEFORE any write, so no phantom session dir is ever created for
+ * one. The UI never puts an operator in front of that gap: a legacy session's
+ * `lifecycle.cancellable` is false and its `affordances` are `[]`.
+ *
  *   - `deriveSessionTranscript`'s `{ok:false}` (an unknown stage in a
  *     checkpoint, a malformed answers/questions/verdicts file) yields ZERO
  *     turns plus the verbatim reason on the ALWAYS-present `transcriptError`
@@ -400,6 +410,14 @@ export function resolveReadableSession(args: {
   const kindDirName = `_${kind}`;
 
   let project: string | null = args.project ?? null;
+  // Adversarial review, finding 1 — PRESENCE of a `?project=` is not evidence
+  // that it owns this session. Only a real `<project>/_<kind>/<sessionId>` dir
+  // found below confirms ownership, and until W8-F6's own second review round
+  // the unconfirmed caller value still reached the wire: for a Shape-B session
+  // whose dir genuinely lives under project X, `?project=Y` came back as `Y`.
+  // Not an existence oracle (a real-but-unrelated and a nonexistent name give
+  // byte-identical 200s), but silent identity spoofing all the same.
+  let projectConfirmed = false;
   if (project === null) {
     const found = findSessionProject(projectsRoot, kindDirName, sessionId);
     if (found.ok) {
@@ -419,6 +437,9 @@ export function resolveReadableSession(args: {
   if (project !== null) {
     const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
     if (sessionDir !== null) {
+      // A real `_<kind>/<sessionId>` dir exists under this project — whether or
+      // not it holds a usable status.json. THAT is what confirms ownership.
+      projectConfirmed = true;
       // The SAME realpath-guarded choke point every other session file goes
       // through — never `readSessionStatus`'s unguarded existsSync/readFileSync
       // (see this file's header). An escaping symlink is indistinguishable from
@@ -455,15 +476,21 @@ export function resolveReadableSession(args: {
     const derived = legacy.projectFromLog !== '' && invalidProjectReason(legacy.projectFromLog) === null
       ? legacy.projectFromLog
       : '';
-    // The LOG wins over the caller's `?project=` here, and only here. For the
-    // status arm the caller's value names a directory that demonstrably exists,
-    // so it IS evidence; for a legacy session that directory is gone, so
-    // `?project=` is a hint about nothing and the session's own log is the only
-    // evidence there is. Echoing the hint instead would let
-    // `?project=<anything>` put a dead "Back to project" link on the page (and
-    // the whole point of this route is to stop minting links to nowhere). The
-    // caller's value is still the fallback for a log that names no project.
-    return { ok: true, source: 'legacy', project: derived !== '' ? derived : (project ?? ''), logDir: legacy.logDir, phase: legacy.phase };
+    // Precedence, strongest evidence first, and NOTHING else reaches the wire:
+    //   1. a CONFIRMED project — a real `_<kind>/<sessionId>` dir was found
+    //      under it (Shape B: the dir survived, only status.json is gone);
+    //   2. the session's own event log;
+    //   3. `''`, honest-absent — forge-ui then renders no "back to project"
+    //      link at all (`backToProjectLink('')`).
+    // An UNCONFIRMED `?project=` is deliberately NOT in that list. It is a hint
+    // about a directory that does not exist, and echoing it back let
+    // `?project=<anything>` put `<anything>` on the wire — a dead "back to
+    // project" link minted by the very route whose purpose is to stop minting
+    // links to nowhere, and, for a Shape-B session, an unrelated real project
+    // name displacing the genuine owner. Never assert a project we cannot
+    // evidence.
+    const legacyProject = projectConfirmed ? (project as string) : derived;
+    return { ok: true, source: 'legacy', project: legacyProject, logDir: legacy.logDir, phase: legacy.phase };
   }
 
   return { ok: false, reason: statusFailure ?? 'not-found', project };
@@ -831,8 +858,11 @@ export async function handleStudioSessionsRoutes(
     // `sessionDir` for a legacy session is its LOG dir — deliberately, and only
     // so `deriveSessionArtifact` below can run its ONE real derivation against
     // a directory that provably holds none of the files any renderer scans
-    // (a log dir holds events.jsonl / stderr.log / .heartbeat / turn.pid, and
-    // not one of manifests/, themes/, generations/, package/, AGENTS.md).
+    // (a log dir holds events.jsonl / stderr.log / .heartbeat / turn.pid /
+    // cancel.json, and not one of `manifests/`, `themes/`, `generations/`,
+    // `staging/`, `plan/cleanup-plan.md`, `AGENTS.draft.md` — the real names,
+    // orchestrator/studio/session-transcript.ts:125,126,127,758,897,898;
+    // enumerated on BOTH sides, zero intersection).
     // That yields each kind's genuine EMPTY artifact without a second,
     // hand-kept per-kind empty table here — pinned by AT-F6-R1.
     const sessionDir = resolved.source === 'status' ? resolved.sessionDir : resolved.logDir;

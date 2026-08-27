@@ -127,3 +127,46 @@ test('WI-1b: a terminal-FAILED session with NO lifecycle.error (the normal case 
   const html = render(TERMINAL_LIFECYCLE, 'kb-cleanup', 'failed');
   expect(html).toContain('Failed — nothing further to do here.');
 });
+
+// ---------------------------------------------------------------------------
+// W8-F6 (bead forge-6gv.27), adversarial review round 2 finding 2 — a LEGACY
+// session (working files gone, only the central event log survives) is ALWAYS
+// `state: 'terminal'`, and its `phase` is whatever its log last recorded
+// MID-FLIGHT, not a terminal token. `sessionTerminalOutcome` fails CLOSED over
+// a closed vocabulary, so every one of the seven real legacy architect sessions
+// on the reference host (`phase: 'finalizing'`) would have rendered
+// `data-lifecycle-terminal-outcome="failed"` — a fabricated verdict, directly
+// under a banner saying "Read-only history … Last recorded phase: finalizing".
+// KILLS: `state === 'terminal' ? sessionTerminalOutcome(phase) : null`.
+// ---------------------------------------------------------------------------
+
+function renderLegacy(phase: string, legacy: boolean): string {
+  return renderToStaticMarkup(
+    React.createElement(SessionLifecycleBar, {
+      lifecycle: TERMINAL_LIFECYCLE,
+      phase,
+      kind: 'architect',
+      sessionId: '2026-07-11T17-22-24',
+      project: 'gitpulse',
+      legacy,
+    } as never),
+  );
+}
+
+test('F6-BAR-1: a LEGACY terminal session emits NO data-lifecycle-terminal-outcome — its outcome is genuinely unknown, never guessed as "failed"', () => {
+  const html = renderLegacy('finalizing', true);
+  expect(html).toContain('data-lifecycle-state="terminal"');
+  expect(html).not.toContain('data-lifecycle-terminal-outcome');
+  expect(html).toContain('Read-only history — last recorded phase: finalizing');
+});
+
+test('F6-BAR-2: the SAME phase on a NON-legacy terminal session still classifies — the fix is scoped, not a blanket removal', () => {
+  const html = renderLegacy('finalizing', false);
+  expect(html).toContain('data-lifecycle-terminal-outcome="failed"');
+});
+
+test('F6-BAR-3: a legacy session whose log recorded NO phase reads as a sentence, never a dangling one', () => {
+  const html = renderLegacy('', true);
+  expect(html).toContain('Read-only history — this session ended and its working files are gone');
+  expect(html).not.toContain('data-lifecycle-terminal-outcome');
+});

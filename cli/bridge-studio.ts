@@ -388,7 +388,15 @@ function findRun(forgeRoot: string, id: string): Run | null {
  * Derived, never stored: the check runs on every read, so restoring a deleted
  * session dir brings the link back with no write anywhere. Immutable: a
  * stripped run is a NEW object; the cached `Run` (cli/run-list-cache.ts) is
- * never mutated. Memoized per request because many manifests of one roadmap
+ * never mutated.
+ *
+ * `kind: 'architect'` is a literal because `architect_session_id`
+ * (orchestrator/manifest.ts) carries no kind tag and has exactly ONE writer —
+ * `orchestrator/architect-runner.ts:1251`, which writes the id of an ARCHITECT
+ * session. That invariant is not enforced anywhere, so a second writer of a
+ * differently-kinded session id would silently make this probe ask about the
+ * wrong kind; if that day comes, the field needs the kind, not this call site
+ * needs a guess. Memoized per request because many manifests of one roadmap
  * share one architect session — 44 manifests, 13 distinct session ids on the
  * reference host, so the memo is the difference between 44 and 13 guarded
  * stats on a polled route. Runs with no pointer (the overwhelming majority)

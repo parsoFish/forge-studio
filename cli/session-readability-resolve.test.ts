@@ -56,6 +56,12 @@ import { tmpdir } from 'node:os';
 
 import { sessionLogDirName } from './session-readability.ts';
 import { resolveReadableSession, sessionIsReadable, invalidProjectReason } from './bridge-studio-sessions.ts';
+import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+
+/** The REAL repo root — AT-F6-RR-18 runs its ratchet against the shipped
+ *  `studio/session-kinds.yaml`, never a fixture copy, so ADDING a colliding
+ *  kind id fails the gate rather than a hand-kept list going stale. */
+const REPO_ROOT = new URL('..', import.meta.url).pathname;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -184,6 +190,10 @@ test('AT-F6-RR-03: resolveReadableSession — Shape B (project-side dir exists, 
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
+  // Round-2 review, finding 8: asserting only `source` is what let the project
+  // spoof (finding 1) ship untested. The derived VALUES are the contract.
+  assert.equal(result.phase, 'analyzing', 'the last metadata.phase this fixture log records');
+  assert.equal(result.project, PROJ_SHAPE_B, 'the project whose _<kind>/<sid> dir genuinely exists — CONFIRMED, not echoed');
 });
 
 test('AT-F6-RR-04: resolveReadableSession — Shape B WITHOUT an explicit project, exactly ONE enumeration hit -> still resolves via single-hit auto-resolution', () => {
@@ -191,6 +201,8 @@ test('AT-F6-RR-04: resolveReadableSession — Shape B WITHOUT an explicit projec
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) throw new Error('unreachable');
   assert.equal(result.source, 'legacy');
+  assert.equal(result.phase, 'analyzing');
+  assert.equal(result.project, PROJ_SHAPE_B, 'server-enumerated, and it is the real owner');
 });
 
 test('AT-F6-RR-05: resolveReadableSession — project-side dir with a MALFORMED status.json and NO log dir -> {ok:false, reason:"status-missing"}', () => {
@@ -294,4 +306,53 @@ test('AT-F6-RR-15: legacy arm — when the log names NO project, the callers exp
   if (!r.ok) throw new Error('unreachable');
   assert.equal(r.source, 'legacy');
   assert.equal(r.project, PROJ_SHAPE_B);
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial review round 2, finding 1 — the PRESENCE of `?project=` is not
+// evidence that it owns the session. Only a real `<project>/_<kind>/<sid>` dir
+// confirms that. Before this fix an unconfirmed caller value reached the wire,
+// so `?project=<anything>` both minted a dead "back to project" link and, for a
+// Shape-B session, displaced the genuine owner with an unrelated real project.
+// KILLS: `project: project ?? derived` and `project: derived !== '' ? derived
+// : (project ?? '')` — any precedence that lets an UNCONFIRMED caller value out.
+// ---------------------------------------------------------------------------
+
+test('AT-F6-RR-16: an unconfirmed ?project= NEVER reaches the wire — a real but unrelated project cannot displace the confirmed owner', () => {
+  // PROJ_STATUS is a genuinely existing project; it just does not own SID_SHAPE_B.
+  const r = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  if (!r.ok) throw new Error('unreachable');
+  assert.equal(r.source, 'legacy');
+  assert.notEqual(r.project, PROJ_STATUS, 'an unconfirmed caller-supplied project must never reach the wire');
+  assert.equal(r.project, '', 'this fixture log names no project, so the honest answer is honest-absent');
+});
+
+test('AT-F6-RR-17: the two shapes of "cannot evidence a project" are INDISTINGUISHABLE — a nonexistent name and a real-but-unrelated one give the same answer (no project-existence oracle)', () => {
+  const unrelatedReal = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_STATUS });
+  const nonexistent = resolveReadableSession({ projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: 'no-such-project-anywhere' });
+  assert.deepEqual(unrelatedReal, nonexistent);
+});
+
+// ---------------------------------------------------------------------------
+// Adversarial review round 2, informational #10 — the concatenated
+// `_<kind>-<sessionId>` log-dir segment is only unambiguous because no
+// registered session-kind id is a prefix of another id followed by "-". That
+// invariant held by luck: nothing enforced it. This is the ratchet, run against
+// the REAL studio/session-kinds.yaml so ADDING a colliding kind fails here.
+// KILLS: adding e.g. a `kb` kind alongside `kb-cleanup`, after which
+// sessionLogDirName('kb','cleanup-X') and sessionLogDirName('kb-cleanup','X')
+// address the SAME directory.
+// ---------------------------------------------------------------------------
+
+test('AT-F6-RR-18: no REGISTERED session-kind id is a prefix of another id + "-" — the invariant that makes `_<kind>-<sessionId>` unambiguous', () => {
+  const ids = loadSessionKinds(REPO_ROOT).map((d) => d.id);
+  assert.ok(ids.length >= 5, `expected the real registry, got ${JSON.stringify(ids)}`);
+  const collisions: string[] = [];
+  for (const a of ids) {
+    for (const b of ids) {
+      if (a !== b && b.startsWith(`${a}-`)) collisions.push(`"${b}" starts with "${a}-"`);
+    }
+  }
+  assert.deepEqual(collisions, [], `a colliding pair makes two different (kind, sessionId) requests address ONE log dir: ${collisions.join('; ')}`);
 });

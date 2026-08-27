@@ -462,6 +462,7 @@ export default function SessionShellPage({
             kind={kind}
             sessionId={sessionId}
             project={project}
+            legacy={viewState.legacy}
             lastCancel={lastCancel}
             onCancelled={(outcome) => { setLastCancel(outcome); refreshShell(); refreshSummary(); }}
           />
