@@ -125,7 +125,8 @@ cli/forge-watch.ts spawn 4
 cli/forge-watch.ts statSync 1
 cli/forge-watch.ts writeFileSync 2
 cli/kb-drain-edit-soundness.ts mkdirSync 1
-cli/kb-drain-edit-soundness.ts rmSync 1
+cli/kb-drain-edit-soundness.ts realpathSync 1
+cli/kb-drain-edit-soundness.ts rmSync 2
 cli/kb-drain-edit-soundness.ts writeFileSync 1
 cli/kb-drain-structural.ts readdirSync 1
 cli/kb-drain-structural.ts readFileSync 1
