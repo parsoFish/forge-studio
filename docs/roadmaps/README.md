@@ -574,8 +574,11 @@ a green terminal conclusion for the exact head SHA. Standing authority:
 - **Every session kind gets cancel/abandon**, and a session whose runner
   crashed or stalled reads as such (with the error) — never as a calm
   "nothing to do."
-- **Home names its strips**: "Sessions needing you" and "Knowledge bases
-  needing attention" are two visibly different components.
+- **Home names its strips**: "Active sessions" (W7-B1 shipped this as
+  "Sessions needing you"; W8-F4 renamed the heading because the strip lists
+  every live session and only the chip beside it counts the ones waiting on
+  you) and "Knowledge bases needing attention" are two visibly different
+  components.
 - **Drain-to-green is observable and structural-only.** It streams what it
   is doing (per-finding status, live activity, elapsed, cancel); it may
   auto-apply structural fixes (frontmatter, links, index) but any prose
