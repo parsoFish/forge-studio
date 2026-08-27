@@ -183,18 +183,51 @@ function verticalShorthand(value: string | undefined): number[] {
   return picks.map(px).filter((n): n is number => n !== null);
 }
 
-/** Every vertical offset an element contributes above/below its own content. */
-function verticalOffsetsOf(element: Element): { prop: string; value: number }[] {
+const VERTICAL_PROPS = ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'top', 'height', 'min-height'] as const;
+
+/**
+ * Every way an element on the chain could displace what it contains — as
+ * offences, not as numbers, so the check can also refuse what it cannot judge.
+ *
+ * CLOSING THE ENUMERATION (the wave's most repeated defect shape is "you
+ * gated one of N paths"): a px budget alone is trivially evaded by changing
+ * the UNIT (`paddingTop: '50vh'`) or the MECHANISM (`transform:
+ * 'translateY(4000px)'`, `position: 'absolute'` + a `top` in any unit). So a
+ * vertical property whose value this pin cannot evaluate is an OFFENCE in
+ * itself — express it in px, or extend this function deliberately — and a
+ * `transform` or an out-of-flow `position` anywhere on the chain is an
+ * offence outright. The panel needs none of them; the one position it does
+ * need, `sticky` on the root, is named explicitly below.
+ */
+function displacementOffencesOf(element: Element, isRoot: boolean): string[] {
   const style = styleOf(element);
-  const found: { prop: string; value: number }[] = [];
-  for (const prop of ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'top', 'height', 'min-height']) {
-    const value = px(style[prop]);
-    if (value !== null) found.push({ prop, value });
+  const offences: string[] = [];
+  const label = `<${element.tag}>`;
+
+  for (const prop of VERTICAL_PROPS) {
+    const raw = style[prop];
+    if (raw === undefined) continue;
+    const value = px(raw);
+    if (value === null) offences.push(`${label} ${prop}: ${raw} — a unit this pin cannot evaluate`);
+    else if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) offences.push(`${label} ${prop}: ${value}px`);
   }
-  for (const prop of ['padding', 'margin']) {
-    for (const value of verticalShorthand(style[prop])) found.push({ prop, value });
+  for (const prop of ['padding', 'margin'] as const) {
+    const raw = style[prop];
+    if (raw === undefined) continue;
+    const values = verticalShorthand(raw);
+    if (values.length === 0) offences.push(`${label} ${prop}: ${raw} — a unit this pin cannot evaluate`);
+    for (const value of values) {
+      if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) offences.push(`${label} ${prop}: ${value}px`);
+    }
   }
-  return found;
+  if (style['transform'] !== undefined) {
+    offences.push(`${label} transform: ${style['transform']} — displacement this pin cannot evaluate`);
+  }
+  const position = style['position'];
+  if (position !== undefined && position !== 'static' && !(isRoot && position === 'sticky')) {
+    offences.push(`${label} position: ${position} — out of flow`);
+  }
+  return offences;
 }
 
 function scrolls(element: Element): boolean {
@@ -300,14 +333,7 @@ test('no ancestor of the Run control declares a vertical offset that could push 
   // it, because the assertion is over the RENDERED chain, so it does not care
   // WHICH element the space is declared on or what the property is called.
   const chain = chainInsidePanel(dispatchControlOf(panelOf()));
-  const offenders: string[] = [];
-  for (const element of chain) {
-    for (const { prop, value } of verticalOffsetsOf(element)) {
-      if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) {
-        offenders.push(`<${element.tag}> ${prop}: ${value}px`);
-      }
-    }
-  }
+  const offenders = chain.flatMap((element, i) => displacementOffencesOf(element, i === 0));
   expect(offenders).toEqual([]);
 });
 
