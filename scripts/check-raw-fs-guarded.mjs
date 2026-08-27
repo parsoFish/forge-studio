@@ -584,6 +584,16 @@ function findBinding(cleanedLines, name, fromLine) {
   // checks classify it by the collection's origin (trusted ⇒ no finding), the
   // same no-false-positive discipline the simple-for-of case (A7) already has.
   const forDestrRe = new RegExp(`\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{][^\\]}]*\\b${name}\\b[^\\]}]*[\\]}]\\s+of\\s+(.+?)\\s*\\)`);
+  // DESTRUCTURED DECLARATION (W8-F5) — `const { runId } = body;`,
+  // `const { target: { ref } } = req.body;`, `const [first] = parts;` bind `name`
+  // as a MEMBER of the RHS. Without this the name reads as UNRESOLVED (i.e. "a
+  // caller-supplied parameter") and only the curated BARE id list could catch
+  // it — which the sweep model deliberately empties, so
+  // `const { runId } = body` would evade the very member rule that
+  // `body.runId` trips. Binding-wins then classifies it by the RHS: a trusted
+  // RHS stays clean, a request member taints. Nested patterns are covered
+  // because the char class spans the inner braces (no `=`/`;` inside them).
+  const destrRe = new RegExp(`(?:const|let)\\s*[\\[{][^=;]*\\b${name}\\b[^=;]*[\\]}]\\s*=\\s*(.+?);?\\s*$`);
   const declHereRe = new RegExp(`(?:const|let)\\s+${name}\\b|\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{]?[^\\]})]*\\b${name}\\b`);
   const limit = Math.max(0, fromLine - BACKSCAN_LIMIT);
   for (let i = fromLine; i >= limit; i--) {
@@ -594,6 +604,8 @@ function findBinding(cleanedLines, name, fromLine) {
     if (forDestrM) return { kind: 'for', rhs: forDestrM[1].trim() };
     const m = nameRe.exec(line);
     if (m) return { kind: 'const', rhs: m[1].trim() };
+    const destrM = destrRe.exec(line);
+    if (destrM) return { kind: 'const', rhs: destrM[1].trim() };
     // Boundary: a column-0 structural line that ISN'T our own binding stops the
     // walk (we've left the enclosing function). Checked AFTER the binding tests
     // so the enclosing function's own leading `const`/`function` line, if it

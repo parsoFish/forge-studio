@@ -957,3 +957,29 @@ test('G7: the sweep is LIVE and disjoint from the declared surface (false-negati
   const r = runLint({});
   assert.ok((r as { swept?: number }).swept! > 100, 'runLint reports what the sweep actually covered');
 });
+
+test('G8 (RED at the W8-F5 cure, found by hostile self-review): a DESTRUCTURED request member is resolved — in the sweep tier too', () => {
+  // Kills: a sweep tier that only sees `body.runId` written out longhand. The
+  // idiomatic `const { runId } = body` bound NOTHING before this (findBinding
+  // knew `const x =` and destructured for-of, not destructured declarations),
+  // so the name read as an unresolved caller param and fell through to the
+  // curated bare list — which the sweep model deliberately empties. Result: the
+  // most common JS idiom walked straight past the tier that exists to make the
+  // gate name-blind. Nested and array patterns had the same hole, and nested
+  // evaded BOTH tiers.
+  const shapes = {
+    'plain destructure': 'export function h(body) {\n  const { runId } = body;\n  return readFileSync(join(LOGS, runId, "e.jsonl"), "utf8");\n}',
+    'nested destructure': 'export function h(body) {\n  const { target: { ref } } = body;\n  return readFileSync(join(LOGS, ref, "e.jsonl"), "utf8");\n}',
+    'array destructure': 'export function h(req) {\n  const [, id] = req.url.split(SEP);\n  return readFileSync(join(LOGS, id), "utf8");\n}',
+  };
+  const sweepModel = { bareTaint: new Set<string>(), dirParams: new Set<string>() };
+  for (const [name, text] of Object.entries(shapes)) {
+    assert.equal(analyzeModule(text, 'cli/ui-bridge.ts').length, 1, `${name}: the declared surface must fire`);
+    assert.equal(analyzeModule(text, 'orchestrator/x.ts', sweepModel).length, 1, `${name}: the SWEEP must fire (member taint, no bare-id fallback)`);
+  }
+  // No over-fire: a destructure off a TRUSTED root stays clean in both models
+  // (binding-wins classifies by the RHS, it does not taint every destructure).
+  const trusted = 'export function h() {\n  const { logsRoot } = ctx;\n  return readFileSync(join(logsRoot, "x"), "utf8");\n}';
+  assert.deepEqual(analyzeModule(trusted, 'cli/ui-bridge.ts'), []);
+  assert.deepEqual(analyzeModule(trusted, 'orchestrator/x.ts', sweepModel), []);
+});
