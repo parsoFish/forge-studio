@@ -115,7 +115,13 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          # W8-F5, MEASURED: `--depth=1` here RE-SHALLOWS the full clone above
+          # (a .git/shallow graft appears and `git rev-parse
+          # --is-shallow-repository` flips to true), which would make the
+          # ancestry half of the stamp verification unanswerable in the one job
+          # that runs this gate. The checkout already has the whole history —
+          # this fetch only needs to update the remote ref.
+          git fetch --no-tags origin "$BASE_REF"
           node scripts/ui-walkthrough/check-baseline-shrinks.mjs --against "origin/$BASE_REF"
 
       # W7-C3: cache the browser download; the slow half of --with-deps is an

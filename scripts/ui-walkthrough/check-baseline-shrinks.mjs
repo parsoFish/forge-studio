@@ -128,6 +128,19 @@ function verifyRegenerationSha(sha, base) {
     execFileSync('git', ['merge-base', '--is-ancestor', sha, base], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
     return { ok: true };
   } catch {
+    // W8-F5 round 3, MEASURED: in a shallow checkout the bounded fetch above
+    // can make the object RESOLVE while its ancestry link is still outside the
+    // grafted history, so `--is-ancestor` answers "no" for a stamp that is
+    // perfectly legitimate. The refusal stands either way (fail-closed is the
+    // whole point), but the operator must be told the real cause — "your stamp
+    // is bogus" and "this checkout cannot answer the question" are different
+    // problems with different fixes.
+    if (isShallowRepo()) {
+      return {
+        ok: false,
+        reason: `sha ${sha} resolves, but this checkout is SHALLOW and cannot answer whether it is an ancestor of ${base} (the history is grafted, so \`git merge-base --is-ancestor\` says "no" for commits it simply cannot see) — refusing rather than guessing. Re-run where the full history is present (actions/checkout with fetch-depth: 0, and no later \`git fetch --depth=<n>\`, which re-shallows a full clone).`,
+      };
+    }
     return { ok: false, reason: `sha ${sha} resolves but is not an ancestor of ${base} — a regeneration stamp must name a commit actually on this history, not an arbitrary sha; re-stamp from a real ancestor commit and re-run --write-baseline` };
   }
 }
