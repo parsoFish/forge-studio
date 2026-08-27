@@ -27,6 +27,7 @@ import {
   type KbDrainOpts,
 } from './bridge-studio-kb-drain.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
+import { noKbEdits } from './kb-drain-edit-soundness.ts';
 import type { RunBrainFixInput, RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
 import { startBridge } from './ui-bridge.ts';
 
@@ -120,7 +121,7 @@ test('runKbDrain: NO-PROGRESS when the scoped auto+agent finding-key set is unch
     // Same finding before AND after — nothing this round's fixer touched cleared.
     lint: scriptedLint([[stuck], [stuck]]),
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [stuck] }),
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0.01 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0.01, editAudit: noKbEdits() }),
   };
   const status = await runKbDrain(root, 'noprogress-kb', 'noprogress-kb-drain-t1', opts);
   assert.equal(status.state, 'no-progress', JSON.stringify(status));
@@ -147,7 +148,7 @@ test(`runKbDrain: ROUND-CAP after ${KB_DRAIN_MAX_ROUNDS} rounds when progress ke
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [fixtureFinding(brainDir, 'residual', 'agent')] }),
     runFixTurn: async (input) => {
       turnCalls += 1;
-      return { runId: input.runId, cleared: false, costUsd: 0 };
+      return { runId: input.runId, cleared: false, costUsd: 0, editAudit: noKbEdits() };
     },
   };
   const status = await runKbDrain(root, 'roundcap-kb', 'roundcap-kb-drain-t1', opts);
@@ -167,7 +168,7 @@ test('runKbDrain: COST-CEILING stops dispatching mid-round the moment cumulative
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [f1, f2] }),
     runFixTurn: async (input) => {
       turnCalls += 1;
-      return { runId: input.runId, cleared: true, costUsd: 1.5 };
+      return { runId: input.runId, cleared: true, costUsd: 1.5, editAudit: noKbEdits() };
     },
   };
   const status = await runKbDrain(root, 'cost-kb', 'cost-kb-drain-t1', opts);
@@ -182,7 +183,7 @@ test('runKbDrain: default maxCostUsd is DEFAULT_KB_DRAIN_MAX_COST_USD when opts.
   const opts: KbDrainOpts = {
     lint: scriptedLint([[f1], []]),
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [f1] }),
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: DEFAULT_KB_DRAIN_MAX_COST_USD - 0.01 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: DEFAULT_KB_DRAIN_MAX_COST_USD - 0.01, editAudit: noKbEdits() }),
   };
   const status = await runKbDrain(root, 'cost-default-kb', 'cost-default-kb-drain-t1', opts);
   // Cost stayed under the default ceiling, and the second lint call reports
@@ -358,7 +359,7 @@ test('runKbDrain: status.json is written per round (survives nav-away) with roun
   const status = await runKbDrain(root, 'progress-kb', runId, {
     lint: scriptedLint([[r1Before], [r1After], [r1After], []]),
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [r1After] }),
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0, editAudit: noKbEdits() }),
   });
   assert.equal(status.state, 'green', JSON.stringify(status));
   assert.equal(status.round, 2);

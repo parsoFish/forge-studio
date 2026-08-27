@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 
 import { classifyKbEdit, buildUnifiedDiff, snapshotKbFiles, diffKbSnapshot } from './kb-drain-structural.ts';
 import { runKbDrain } from './bridge-studio-kb-drain.ts';
+import { noKbEdits } from './kb-drain-edit-soundness.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import { deriveKbActiveJob } from './kb-job-state.ts';
 import type { Finding } from './brain-lint.ts';
@@ -210,14 +211,25 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
       message: 'theme exceeds the soft line cap', check: 'checkLengthSoftCap',
       kind: 'length.soft-cap', resolution: 'agent',
     };
-    const condensed = THEME_BEFORE.split('\n').slice(0, 10).join('\n') + '\n';
+    // W8-F1: the condense KEEPS the ADR link. The original fixture truncated
+    // at line 10, which also deleted a markdown link whose target exists — so
+    // it was really testing two things at once, and under W8-F1's
+    // class-independent audit the link deletion (not the prose loss) is what
+    // decides the outcome. The lossy prose rewrite orch-01 is about is
+    // preserved exactly; the graph destruction gets its own test below.
+    const condensed = [
+      ...THEME_BEFORE.split('\n').slice(0, 10),
+      '',
+      'See [ADR 010](../../docs/decisions/010-brain-first.md).',
+      '',
+    ].join('\n');
     const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-t1', {
       lint: () => ({ findings: [finding] }),
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
         // The agent "condenses" the theme — the exact orch-01 lossy rewrite.
         writeFileSync(themeFile, condensed);
-        return { runId: input.runId, cleared: true, costUsd: 0.03 };
+        return { runId: input.runId, cleared: true, costUsd: 0.03, editAudit: noKbEdits() };
       },
     });
 
@@ -252,6 +264,61 @@ test('runKbDrain — a prose-touching agent fix NEVER lands directly: reverted +
   }
 });
 
+// ---------------------------------------------------------------------------
+// W8-F1 — the other half of what the orch-01 fixture used to conflate.
+//
+// A prose rewrite that ALSO destroys resolvable graph structure is not a
+// draftable proposal: approving a draft writes `after` back byte-for-byte, so
+// parking it would hand the operator a one-click button for exactly the
+// deletion the drain refuses when the same edit happens to be structural. It
+// is refused instead — and still surfaced, because a refused finding is
+// waiting on a human just as much as a drafted one is.
+// ---------------------------------------------------------------------------
+
+test('W8-F1 — a prose rewrite that ALSO deletes a live link is REFUSED, not drafted, and still reaches the operator', async () => {
+  const { root, themeFile } = makeGateRoot();
+  try {
+    const finding: Finding & { check: string; kind: string } = {
+      category: 'flag', file: themeFile,
+      message: 'theme exceeds the soft line cap', check: 'checkLengthSoftCap',
+      kind: 'length.soft-cap', resolution: 'agent',
+    };
+    // The original orch-01 truncation: condenses the prose AND drops the ADR
+    // link, whose target exists.
+    const condensed = THEME_BEFORE.split('\n').slice(0, 10).join('\n') + '\n';
+    const status = await runKbDrain(root, 'gated-kb', 'gated-kb-drain-w8f1', {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: async (input) => {
+        writeFileSync(themeFile, condensed);
+        return { runId: input.runId, cleared: true, costUsd: 0.03, editAudit: noKbEdits() };
+      },
+    });
+
+    // 1. The bytes are safe — the orch-01 guarantee, unchanged.
+    assert.equal(readFileSync(themeFile, 'utf8'), THEME_BEFORE, 'the theme must be restored byte-for-byte');
+
+    // 2. NO draft session: approving one would re-apply the link deletion.
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    assert.ok(row, JSON.stringify(status.perFinding));
+    assert.equal(row.draftSession, undefined, 'an unsound edit must not become an approvable draft');
+    assert.ok(!existsSync(join(root, 'projects', 'gated-kb', '_kb-cleanup')), 'no kb-cleanup session may be minted');
+
+    // 3. …and it still reaches the operator, with the proposal and the reason.
+    assert.equal(row.outcome, 'needs-you', 'a refused proposal is waiting on a human, not silently not-cleared');
+    assert.equal(status.state, 'needs-you', JSON.stringify(status.state));
+    const proposals = row.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, JSON.stringify(proposals));
+    assert.equal(proposals[0].disposition, 'refused');
+    assert.ok(
+      proposals[0].reasons.some((r) => r.includes('010-brain-first.md')),
+      `the reason must name what was destroyed — got ${JSON.stringify(proposals[0].reasons)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runKbDrain — structural edit within the KB dir is applied, drain reaches green', async () => {
   const { root, themeFile } = makeGateRoot();
   try {
@@ -268,7 +335,7 @@ test('runKbDrain — structural edit within the KB dir is applied, drain reaches
       runFixTurn: async (input) => {
         writeFileSync(themeFile, fixed);
         turnRan = true;
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     assert.equal(status.state, 'green', JSON.stringify(status));
@@ -429,6 +496,90 @@ test('approveKbCleanup — the consolidate path stakes its log dir SYNCHRONOUSLY
     assert.equal(job.runId, outcome.ok === true ? outcome.runId : '', 'the visible job is THIS dispatch, not some other run');
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// W8-F1, ADVERSARIAL REVIEW ROUND 2 (S1) — forge-d8l, fifth instance, one click.
+//
+// The drain audits a proposal when it MINTS the draft, against the file as it
+// stood then. `approveKbCleanup` writes the agent's `after` back byte-for-byte
+// over whatever the file holds at APPROVE time — minutes or days later — so
+// every edge added to that theme in between died silently, with `ok:true` and
+// the session stamped `applied`. Nothing in the draft-apply arm looked at the
+// graph at all.
+//
+// Reachable with no external actor: a later round of the SAME drain run can
+// land a sound structural edit on the same file (`draftedKeys` only blocks
+// re-dispatch of that one finding), and `runBrainConsolidateNow`, `forge brain
+// fix` and the reflector can all touch it while the session waits.
+// ---------------------------------------------------------------------------
+
+/** A draft session whose target theme is a REAL theme carrying a REAL edge. */
+function makeGraphDraftRoot(): { root: string; projectsRoot: string; sid: string; themeFile: string; partnerSlug: string } {
+  const root = mkdtempSync(join(tmpdir(), 'kb-draft-graph-'));
+  const brainDir = join(root, 'brain', 'dkb');
+  mkdirSync(join(brainDir, 'themes'), { recursive: true });
+  writeFileSync(join(brainDir, 'kb.yaml'), 'id: dkb\nname: dkb\nbinding: { kind: unique }\ndesc: draft graph fixture.\n');
+  const theme = (title: string, extra: string[] = []): string => [
+    '---', `title: ${title}`, 'description: d.', 'category: pattern',
+    ...extra,
+    'created_at: 2026-01-01T00:00:00Z', 'updated_at: 2026-01-01T00:00:00Z',
+    '---', '', `# ${title}`, '', 'Long prose line that the agent proposes to condense.', '',
+  ].join('\n');
+  const partnerSlug = 'partner';
+  writeFileSync(join(brainDir, 'themes', `${partnerSlug}.md`), theme('partner'));
+  const themeFile = join(brainDir, 'themes', 'x.md');
+  // At MINT time the theme carries NO edge, so the drain's audit is clean and
+  // the draft is legitimately parked.
+  writeFileSync(themeFile, theme('x'));
+
+  const projectsRoot = join(root, 'projects');
+  const sid = '2026-08-28T10-00-00-w8f1graph';
+  const sessionDir = join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid);
+  mkdirSync(join(sessionDir, 'drafts'), { recursive: true });
+  mkdirSync(join(sessionDir, 'plan'), { recursive: true });
+  // The parked proposal: the same theme with the prose condensed. It does not
+  // mention `related_themes` at all — which is exactly the problem.
+  writeFileSync(join(sessionDir, 'drafts', '0.md'), theme('x').replace('Long prose line that the agent proposes to condense.', 'Condensed.'));
+  writeFileSync(join(sessionDir, 'plan', 'cleanup-plan.md'), '- [length.soft-cap] brain/dkb/themes/x.md — drain-gated prose edit\n');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({
+    session_id: sid, project: '.kb-dkb', phase: 'awaiting-approval', kb_id: 'dkb',
+    draft_apply: [{ file: 'brain/dkb/themes/x.md', draft: 'drafts/0.md' }],
+  }, null, 2));
+  mkdirSync(join(root, '_logs'), { recursive: true });
+  return { root, projectsRoot, sid, themeFile, partnerSlug };
+}
+
+test('W8-F1 r2 (S1): approving a parked draft REFUSES when the theme gained a real edge since it was minted', async () => {
+  const { root, projectsRoot, sid, themeFile, partnerSlug } = makeGraphDraftRoot();
+  try {
+    // Between mint and approve, the theme gains a resolvable related_themes
+    // edge — a later drain round, a consolidate, the reflector, or a human.
+    const withEdge = readFileSync(themeFile, 'utf8').replace('category: pattern', `category: pattern\nrelated_themes: [${partnerSlug}]`);
+    writeFileSync(themeFile, withEdge);
+
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+
+    // THE ASSERTION IS THE ARTIFACT: the edge survives.
+    const after = readFileSync(themeFile, 'utf8');
+    assert.match(after, new RegExp(`related_themes: \\[${partnerSlug}\\]`), `approving the stale draft destroyed a real edge:\n${after}`);
+    assert.equal(outcome.ok, false, `and the operator is told, not given ok:true — got ${JSON.stringify(outcome)}`);
+    const status = JSON.parse(readFileSync(join(projectsRoot, '.kb-dkb', '_kb-cleanup', sid, 'status.json'), 'utf8')) as { phase: string };
+    assert.notEqual(status.phase, 'applied', 'a refused apply must not stamp the session applied');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('W8-F1 r2 CONTROL: a draft that is still sound at approve time applies exactly as before', async () => {
+  const { root, projectsRoot, sid, themeFile } = makeGraphDraftRoot();
+  try {
+    const outcome = await approveKbCleanup(root, projectsRoot, ['.kb-dkb', '_kb-cleanup', sid]);
+    assert.equal(outcome.ok, true, `the re-audit must refuse stale drafts, not all drafts — got ${JSON.stringify(outcome)}`);
+    assert.match(readFileSync(themeFile, 'utf8'), /Condensed\./);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
