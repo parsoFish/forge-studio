@@ -20,7 +20,15 @@
  * header — that file is this module's spec):
  *
  *  D-1. Response envelope: `{ hooks: [...] }` (list) / a flat detail object
- *       (entry fields + `files` + `scan`).
+ *       (entry fields + `files` + `packageHash` + `scan`). `files` is EVERY
+ *       real file under the package directory (`readHookPackage`, hook-
+ *       package.ts), each carrying a `sha256:<hex>` content hash
+ *       (`hashHookScript`); `packageHash` is the whole-package fingerprint
+ *       (`hashHookPackage`) — the exact value the approval ledger pins
+ *       (PIN E, 2026-08-28 hostile review: the file list used to be two
+ *       hardcoded reads, hook.yaml + the declared entry script, so a sibling
+ *       file a script sources — e.g. `scripts/lib.sh` — was invisible to the
+ *       approving operator even though the ledger already covered it).
  *  D-2. Every ok:true entry additionally carries `scanVerdict` (the raw F2
  *       scan verdict), `trust` (D-3), and `runnable` (F2/F3's
  *       `hookRunState().runnable`). The raw `script` relative path is NEVER
@@ -56,7 +64,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import yaml from 'js-yaml';
@@ -93,6 +101,13 @@ import {
   type HookApprovalLedgerEntry,
   type HookRunState,
 } from '../orchestrator/studio/hook-scan.ts';
+// PIN E (2026-08-28 hostile review): the whole-package read/hash primitives
+// the detail route's `files`/`packageHash` are now built from — the SAME
+// primitives the approval ledger's `packageHash` pin is computed from (see
+// hook-package.ts's own header), so what this route lists and what the
+// ledger pins are structurally the same file set, never two independently
+// maintained views that can drift.
+import { readHookPackage, hashHookPackage, hashHookScript } from '../orchestrator/studio/hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // trust derivation (D-3) — the bridge's own composition, not a core export:
@@ -634,11 +649,12 @@ export async function handleStudioHooksRoutes(
         return true;
       }
 
-      // CONTAINMENT: read only through the identity-verified real paths. The
-      // `listHookLibrary` lookup above filters on dirent type, which excludes
-      // a symlinked hook DIR by accident — but not a symlinked or hardlinked
-      // LEAF inside a real dir, and `entry.script` is a hook.yaml-supplied
-      // relative path, so it is walked as segments rather than joined blind.
+      // CONTAINMENT (unknown-hook 404, D-4): the two guards below establish
+      // "this hook genuinely exists" — `listHookLibrary`'s dirent-type filter
+      // excludes a symlinked hook DIR by accident, but not a symlinked or
+      // hardlinked LEAF inside a real dir, and `entry.script` is a
+      // hook.yaml-supplied relative path, so it is walked as segments rather
+      // than joined blind.
       const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
       // Split `script` into guard segments, dropping only the components that
       // carry no meaning — an empty string (from `scripts//run.sh`, which
@@ -651,8 +667,23 @@ export async function handleStudioHooksRoutes(
         sendJson(res, 404, { error: `unknown hook "${id}"` }, origin);
         return true;
       }
-      const yamlBody = readFileSync(yamlGuard.realPath, 'utf8');
-      const scriptBody = readFileSync(scriptGuard.realPath, 'utf8');
+      // PIN E (2026-08-28 hostile review): the file BODIES are no longer read
+      // through the two guards above alone. `readHookPackage` is the SAME
+      // whole-package primitive the approval ledger's `packageHash` pin is
+      // computed from — it walks and leaf-guards EVERY file under the
+      // package directory on its own (independent of yamlGuard/scriptGuard,
+      // which only establish "this id exists"), so what this route lists and
+      // what the ledger pins are now, structurally, the same file set: no
+      // sibling file can be invisible here while still counting toward the
+      // pinned fingerprint. A planted symlink/socket/etc. leaf ANYWHERE in
+      // the package makes `readHookPackage` THROW — refusing to silently omit
+      // an unreadable file from a listing that claims to be complete — and
+      // that throw is caught by this route's own try/catch below and
+      // reported as a plain 500, exactly like any other unexpected failure
+      // past this point (never a fabricated 200 with a partial file list).
+      const packageFiles = readHookPackage(ctx.forgeRoot, id);
+      const files = packageFiles.map((f) => ({ path: f.path, body: f.body, hash: hashHookScript(f.body) }));
+      const packageHash = hashHookPackage(packageFiles);
       const scan = scanHookPackage(ctx.forgeRoot, id);
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
@@ -682,10 +713,8 @@ export async function handleStudioHooksRoutes(
               },
             }
           : {}),
-        files: [
-          { path: 'hook.yaml', body: yamlBody },
-          { path: entry.script, body: scriptBody },
-        ],
+        files,
+        packageHash,
         scan,
       }, origin);
     } catch (err) {

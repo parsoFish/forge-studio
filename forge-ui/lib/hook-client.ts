@@ -83,6 +83,11 @@ export type HookScanFinding = {
   message: string;
   match: string;
   declared: boolean;
+  /** Additive-optional: which PACKAGE FILE this finding came from — present
+   *  only when the server threaded it (more than one file was scanned; see
+   *  hook-scan.ts's `scanHookFiles`). Never defaulted to '' when absent — a
+   *  finding with a fabricated empty path would be a lie about provenance. */
+  path?: string;
 };
 
 export type HookScanReport = {
@@ -90,7 +95,12 @@ export type HookScanReport = {
   findings: HookScanFinding[];
 };
 
-export type HookPackageFile = { path: string; body: string };
+/** `hash` is a `sha256:<hex>` content hash of `body`, added alongside
+ *  `packageHash` (PIN E) so an operator can see, per file, whether it
+ *  changed — DISPLAY-ONLY provenance; the actual approval decision is gated
+ *  by the ledger's own pins server-side, never by this client re-deriving
+ *  trust from a hash it re-displays. */
+export type HookPackageFile = { path: string; body: string; hash: string };
 
 /** W7-B4 (library-09) — the recorded approval the resolved-state panel
  *  renders. Present on the detail wire iff a live ledger entry exists. */
@@ -102,6 +112,12 @@ export type HookApprovalRecord = {
 
 export type HookDetail = HookLibraryEntryOk & {
   files: HookPackageFile[];
+  /** Whole-package sha256 fingerprint (`hashHookPackage`, hook-package.ts) —
+   *  the EXACT value the approval ledger pins. DISPLAY-ONLY on this client:
+   *  the operator reads it to see what they are about to approve, but the
+   *  approve/override routes re-derive and check the real ledger pins
+   *  server-side rather than trusting anything this client sends back. */
+  packageHash: string;
   scan: HookScanReport;
   approval?: HookApprovalRecord;
 };
@@ -223,12 +239,21 @@ function parseHookScanFinding(raw: unknown): HookScanFinding {
   if (severity !== 'critical' && severity !== 'info') {
     throw new Error(`unrecognised hook finding severity: ${JSON.stringify(severity)}`);
   }
+  // `path` is additive-optional (server only threads it when >1 file was
+  // scanned) — a present-but-wrong-typed value THROWS (refused, not
+  // coerced), and an absent value is omitted entirely rather than defaulted
+  // to '' (an empty path would be a fabricated claim about provenance).
+  const pathRaw = r['path'];
+  if (pathRaw !== undefined && typeof pathRaw !== 'string') {
+    throw new Error(`expected "path" to be a string when present, got ${JSON.stringify(pathRaw)}`);
+  }
   return {
     category,
     severity,
     message: reqString(r, 'message'),
     match: reqString(r, 'match'),
     declared: reqBoolean(r, 'declared'),
+    ...(pathRaw !== undefined ? { path: pathRaw } : {}),
   };
 }
 
@@ -244,13 +269,17 @@ function parseHookScanReport(raw: unknown): HookScanReport {
 
 function parseHookPackageFile(raw: unknown): HookPackageFile {
   const r = asRecord(raw);
-  return { path: reqString(r, 'path'), body: reqString(r, 'body') };
+  return { path: reqString(r, 'path'), body: reqString(r, 'body'), hash: reqString(r, 'hash') };
 }
 
 /** Parse a `/api/studio/hooks/:id` detail response — the ok:true entry
- *  fields plus `files` + `scan`. THROWS on any malformed field, same
- *  refusal discipline as `parseHookLibraryEntry`. A `declared: true` finding
- *  round-trips unchanged (no field is dropped or coerced along the way). */
+ *  fields plus `files` + `packageHash` + `scan`. THROWS on any malformed
+ *  field, same refusal discipline as `parseHookLibraryEntry` — `packageHash`
+ *  and every file's `hash` are REQUIRED, never defaulted, so a bridge that
+ *  forgot to send either surfaces as a load error rather than a page that
+ *  silently omits the fingerprint an operator is meant to check. A
+ *  `declared: true` finding round-trips unchanged (no field is dropped or
+ *  coerced along the way). */
 export function parseHookDetail(raw: unknown): HookDetail {
   const entry = parseHookLibraryEntry(raw);
   if (!entry.ok) throw new Error(`hook detail payload must be ok:true, got ok:false ("${entry.error}")`);
@@ -275,6 +304,7 @@ export function parseHookDetail(raw: unknown): HookDetail {
   return {
     ...entry,
     files: files.map(parseHookPackageFile),
+    packageHash: reqString(r, 'packageHash'),
     scan: parseHookScanReport(r['scan']),
     ...(approval !== undefined ? { approval } : {}),
   };

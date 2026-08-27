@@ -74,8 +74,12 @@ function countVendoredCommunityHooksNotLocal() {
     .length;
 }
 
-/** Real file count under a hook's package directory — mirrors the
- *  hook.yaml + its script the detail route always returns (D-2/D-5). */
+/** Real file count under a hook's package directory — mirrors EVERY real
+ *  file the detail route now returns (PIN E, 2026-08-28 hostile review: the
+ *  route used to hand-build `files` from exactly two hardcoded reads —
+ *  hook.yaml + the declared entry script — so a sibling file a script
+ *  sources, e.g. scripts/lib.sh, was invisible; it now returns the whole
+ *  package, `readHookPackage`, hook-package.ts). */
 function countHookPackageFiles(id) {
   const dir = join(FORGE_ROOT, 'studio', 'hooks', id);
   let count = 0;
@@ -88,6 +92,27 @@ function countHookPackageFiles(id) {
   };
   walk(dir);
   return count;
+}
+
+/** PIN E — the real SET of relative (POSIX) paths under a hook's package
+ *  directory, sorted. `countHookPackageFiles` above only ever proved a
+ *  COUNT matched; every shipped hook happened to be exactly two files, so a
+ *  route that returned the right NUMBER of wrong files would have passed
+ *  silently. This is the genuine cross-check: the detail page's
+ *  `[data-file-tab][data-file-path]` set must equal this set exactly, not
+ *  just agree on its size. */
+function hookPackageFilePaths(id) {
+  const dir = join(FORGE_ROOT, 'studio', 'hooks', id);
+  const paths = [];
+  const walk = (d, rel) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(join(d, entry.name), relPath);
+      else if (entry.isFile()) paths.push(relPath);
+    }
+  };
+  walk(dir, '');
+  return paths.sort();
 }
 
 // ── HTML5 DataTransfer DnD helper (agent-builder catalog → drop zone) ──────
@@ -245,7 +270,7 @@ export const journey = defineJourney({
       {
         id: 'hooks-detail',
         title: 'A hook\'s detail page — file package + SECURITY SCAN',
-        narration: 'pre-pr-security-review\'s detail page renders its file package (hook.yaml + its script, tabbed, via the SAME shared FilePackage renderer skills use) and the SECURITY SCAN panel: a clean verdict, zero findings — an unauthored guard nobody has bound to an agent yet. Since W7-B4 the page also carries Edit and Delete: hooks are no longer create-only, and an unbound hook is genuinely deletable (a bound one refuses with the carriers named).',
+        narration: 'pre-pr-security-review\'s detail page renders its file package — EVERY real file in the package, tabbed, via the SAME shared FilePackage renderer skills use, not a hardcoded hook.yaml+entry-script pair (PIN E, 2026-08-28 hostile review) — plus a package-fingerprint section listing each file\'s content hash alongside the whole-package sha256 fingerprint the approval ledger pins, and the SECURITY SCAN panel: a clean verdict, zero findings — an unauthored guard nobody has bound to an agent yet. Since W7-B4 the page also carries Edit and Delete: hooks are no longer create-only, and an unbound hook is genuinely deletable (a bound one refuses with the carriers named).',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── HK-1: a real hook's detail page (file package + SECURITY SCAN) ────────
@@ -266,6 +291,28 @@ export const journey = defineJourney({
                 parseInt(document.querySelector('[data-component="file-package"]')?.getAttribute('data-file-count') ?? '-1', 10));
               check(domFileCount === realFileCount,
                 `HK-1: data-file-count matches the real files under studio/hooks/${targetId}/ (dom=${domFileCount}, real=${realFileCount})`);
+
+              // PIN E (2026-08-28 hostile review): a count agreeing is not
+              // enough — every shipped hook happened to be exactly two files,
+              // so a route returning the right NUMBER of wrong files would
+              // have passed the check above silently. Assert the exact SET of
+              // tab paths equals the real set of relative paths on disk.
+              const realPaths = hookPackageFilePaths(targetId);
+              const domPaths = (await page.locator('[data-file-tab]').evaluateAll((els) =>
+                els.map((el) => el.getAttribute('data-file-path')))).sort();
+              check(JSON.stringify(domPaths) === JSON.stringify(realPaths),
+                `HK-1: the file-package tabs list the EXACT set of real files on disk, not just a matching count (dom=${JSON.stringify(domPaths)}, real=${JSON.stringify(realPaths)})`);
+
+              const packageHash = await page.evaluate(() => document.querySelector('[data-page="hook-detail"]')?.getAttribute('data-package-hash'));
+              check(!!packageHash && /^sha256:[0-9a-f]{64}$/.test(packageHash),
+                `HK-1: [data-page="hook-detail"] carries a real sha256 package fingerprint — the exact value the approval ledger pins (got "${packageHash}")`);
+
+              check(await page.locator('[data-section="package-files"]').count() > 0,
+                'HK-1: [data-section="package-files"] renders the per-file fingerprint list');
+              const packageFileCount = await page.evaluate(() =>
+                document.querySelector('[data-section="package-files"]')?.getAttribute('data-package-file-count'));
+              check(packageFileCount === String(realFileCount),
+                `HK-1: [data-section="package-files"]'s data-package-file-count agrees with the real on-disk file count (got ${packageFileCount}, want ${realFileCount})`);
 
               const scriptTab = page.locator('[data-file-tab]').nth(1); // hook.yaml is tab 0; its script is tab 1
               const tabPath = await scriptTab.getAttribute('data-file-path');

@@ -160,11 +160,17 @@ test('parseHookLibraryEntry: not a plain object (array, null, string, number) TH
 // hidden" rule is load-bearing at every layer, not just the scanner).
 // ---------------------------------------------------------------------------
 
+// W8-F2: `hash` per file and the top-level `packageHash` are REQUIRED wire
+// fields — the detail route always sends them, and they are what the operator
+// is shown before approving. The parser refuses a payload missing either
+// rather than coercing one in, so this fixture carries them; the round-trip
+// claim below is unchanged.
 const WELL_FORMED_DETAIL = {
   ...WELL_FORMED_OK_ENTRY,
+  packageHash: 'sha256:' + 'a'.repeat(64),
   files: [
-    { path: 'hook.yaml', body: 'id: pre-pr-security-review\non: PreToolUse\n' },
-    { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n' },
+    { path: 'hook.yaml', body: 'id: pre-pr-security-review\non: PreToolUse\n', hash: 'sha256:' + 'b'.repeat(64) },
+    { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n', hash: 'sha256:' + 'c'.repeat(64) },
   ],
   scan: {
     verdict: 'findings',
