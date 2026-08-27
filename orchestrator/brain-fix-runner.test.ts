@@ -47,6 +47,15 @@ function buildFixture(): { forgeRoot: string; themePath: string } {
   mkdirSync(cyclesThemes, { recursive: true });
   mkdirSync(forgeDevDir, { recursive: true });
 
+  // W8-F1: a real `kb.yaml`, because `resolveKbBrainDir` requires one and every
+  // production brain has one. Without it this fixture's `kbId` resolved to
+  // NOTHING — which used to mean "run the turn with no edit gate at all", so
+  // these tests were green only by way of the fail-open W8-F1 closes.
+  writeFileSync(
+    join(cyclesDir, 'kb.yaml'),
+    'id: cycles\nname: cycles\nbinding: { kind: unique }\ndesc: runner-test fixture.\n',
+  );
+
   // Required index stubs so checkIndexSync doesn't trip on missing index files.
   writeFileSync(join(brain, 'INDEX.md'), '# Brain\n\nnavigation hub.\n');
   for (const cat of ['patterns', 'antipatterns', 'decisions', 'operations']) {
@@ -149,7 +158,7 @@ test('(a) start + end events written to _logs/_brainfix-<runId>/events.jsonl', a
     const runId = 'test-run-events';
     await runBrainFixTurn({
       runId,
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -188,7 +197,7 @@ test('(b) cleared=true when the agent added the missing description field', asyn
   try {
     const result = await runBrainFixTurn({
       runId: 'test-run-cleared',
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -211,7 +220,7 @@ test('(b) cleared=false when the agent made no edit', async () => {
   try {
     const result = await runBrainFixTurn({
       runId: 'test-run-not-cleared',
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -235,7 +244,7 @@ test('tool_use events from the agent stream are emitted to the log', async () =>
     const runId = 'test-run-tooluse';
     await runBrainFixTurn({
       runId,
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -264,7 +273,7 @@ test('end event metadata carries cleared, kind, and file', async () => {
     const runId = 'test-run-end-metadata';
     await runBrainFixTurn({
       runId,
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -322,7 +331,7 @@ test('W6-B1: reasoning + thinking blocks are forwarded to the log (kind: reasoni
 
     await runBrainFixTurn({
       runId,
-      kbId: 'forge',
+      kbId: 'cycles',
       file: themePath,
       check: 'checkFrontmatter',
       kind: 'frontmatter.missing-field',
@@ -373,6 +382,12 @@ function buildProjectThemeFixture(): { forgeRoot: string; themePath: string } {
   writeFileSync(join(brain, 'INDEX.md'), '# Brain\n');
   const themes = join(brain, 'projects', 'gitpulse', 'themes');
   mkdirSync(themes, { recursive: true });
+  // W8-F1: see buildFixture — the KB must actually resolve, as it does in
+  // production, or the turn used to run entirely ungated.
+  writeFileSync(
+    join(brain, 'projects', 'gitpulse', 'kb.yaml'),
+    'id: gitpulse\nname: gitpulse\nbinding: { kind: project, ref: gitpulse }\ndesc: runner-test fixture.\n',
+  );
   writeFileSync(join(brain, 'projects', 'gitpulse', 'patterns.md'), '# patterns\n\n- [broken-link-theme](./themes/broken-link-theme.md)\n');
   const themePath = join(themes, 'broken-link-theme.md');
   writeFileSync(themePath, [

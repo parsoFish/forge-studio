@@ -44,6 +44,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runKbDrain } from './bridge-studio-kb-drain.ts';
+import { noKbEdits } from './kb-drain-edit-soundness.ts';
 import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
 import type { Finding } from './brain-lint.ts';
 
@@ -140,7 +141,7 @@ test('REGRESSION 1 (gitpulse, 2026-08-22): the drain REFUSES to delete a related
         turns += 1;
         writeFileSync(target, RECURRENCE_AFTER_DELETION);
         // The agent self-reports success — exactly what the live run did.
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
 
@@ -208,7 +209,7 @@ test('REGRESSION 2 (trafficGame, 2026-08-22): the drain REPAIRS a dead link rath
         turns += 1;
         // The live agent's edit: one dead path for another.
         writeFileSync(target, gradingTheme(TG_DEAD_NEW));
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
 
@@ -240,7 +241,7 @@ test('ON-3: a refused finding SHOWS ITS FIX — the row carries the proposed dif
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
         writeFileSync(target, RECURRENCE_AFTER_DELETION);
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     const row = status.perFinding.find((f) => f.tier === 'agent');
@@ -276,7 +277,7 @@ test('ON-3: a REPAIRED finding shows the diff of what LANDED, with the rejected 
       runFixTurn: async (input) => {
         turns += 1;
         writeFileSync(target, gradingTheme(TG_DEAD_NEW));
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     const row = status.perFinding.find((f) => f.tier === 'agent');
@@ -304,7 +305,7 @@ test('REGRESSION 2b: with NO resolvable target anywhere, the drain refuses inste
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
         writeFileSync(target, gradingTheme(TG_DEAD_NEW));
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     assert.equal(readFileSync(target, 'utf8'), before, 'no real target exists, so the swap must be reverted outright');
@@ -325,7 +326,7 @@ test('CONTROL: an honest repoint at a target that really resolves still LANDS �
       runFixTurn: async (input) => {
         turns += 1;
         writeFileSync(target, gradingTheme(TG_REAL));
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     assert.equal(readFileSync(target, 'utf8'), gradingTheme(TG_REAL), 'a sound structural repair must land untouched');
@@ -368,7 +369,7 @@ test('W8-F1 (was: adversarial round 1): a PROSE rewrite that also deletes a vali
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
         writeFileSync(target, condensed);
-        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: { changes: [], refused: [], repaired: [], unsound: [], errors: [] } };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     assert.equal(readFileSync(target, 'utf8'), withEdge, 'the edge survives — as before');
@@ -515,7 +516,7 @@ test('W8-F1 (ON-3, S2): an AUTO-tier row carries its diff — the tier that muta
     const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-auto`, {
       // Real lint, real auto-fixers; the agent turn is a no-op so nothing but
       // the auto tier can be responsible for what lands.
-      runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0, editAudit: { changes: [], refused: [], repaired: [], unsound: [], errors: [] } }),
+      runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0, editAudit: noKbEdits() }),
     });
     assert.notEqual(readFileSync(indexPath, 'utf8'), indexBefore, 'precondition: the auto tier must really have rewritten the index');
     const autoRow = status.perFinding.find((f) => f.tier === 'auto' && f.kind === 'index.not-listed');

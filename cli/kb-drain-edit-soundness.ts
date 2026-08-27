@@ -24,9 +24,18 @@
  *
  * Three deliberate boundaries:
  *
- *   - **Only `structural` changes are audited.** A `prose` change (which
- *     includes every file creation and deletion) is already refused one layer
- *     up; auditing it too would double-count one edit as two findings.
+ *   - **EVERY change is audited, whatever its class** (W8-F1). This boundary
+ *     used to read "only `structural` changes are audited — a `prose` change
+ *     is already refused one layer up". That was true of the DRAIN and false
+ *     of the other two callers, and the C4 hostile re-verification walked
+ *     straight through the gap: `classifyKbEdit` demotes an edit to `prose`
+ *     the moment the body changes, so deleting a resolvable `related_themes`
+ *     edge AND rewording one line reported `{unsound:0, refused:0}` — an
+ *     affirmative all-clear with the edge gone. The modal agent-tier finding
+ *     is `length.soft-cap`, whose remediation is definitionally "condense the
+ *     prose", so this was the common case rather than a corner. Class now
+ *     decides **draft-vs-auto-apply** at the call site; it never decides
+ *     whether soundness is checked.
  *   - **The slug universe is the SAME derivation `checkDanglingEdges` lints
  *     against** — `collectThemeSlugTargets` (cli/brain-lint.ts), brain-wide, one
  *     walk. Two derivations of "does this theme exist" disagreeing is the
@@ -40,12 +49,13 @@
 
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 
-import { splitFrontmatter, diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
+import { splitFrontmatter, diffKbSnapshot, snapshotKbFiles, type KbEditChange } from './kb-drain-structural.ts';
 import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { parseThemeRaw } from './theme-frontmatter.ts';
 import { resolveGuardedPath, guardedWriteFile } from './studio-path-guard.ts';
+import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 
 /**
  * What makes a structurally-shaped edit unsound.
@@ -59,7 +69,24 @@ import { resolveGuardedPath, guardedWriteFile } from './studio-path-guard.ts';
  *   - `link-repoint-unresolved` — a link/wikilink target was introduced that
  *                                 resolves to nothing.
  */
-export type KbEditUnsoundnessKind = 'edge-deleted' | 'link-deleted' | 'link-repoint-unresolved';
+export type KbEditUnsoundnessKind =
+  | 'edge-deleted'
+  | 'link-deleted'
+  | 'link-repoint-unresolved'
+  /** W8-F1 — the change is outside the brain dir the drained KB resolves to.
+   *  Nothing about it is judged on its merits: a turn dispatched for one KB
+   *  has no business writing anywhere else, whatever the edit contains. */
+  | 'out-of-scope-edit'
+  /** W8-F1 — the turn CREATED a file under brain/. A lint-fix turn edits the
+   *  one file it was dispatched for; creating corpus is not a repair. */
+  | 'file-created'
+  /** W8-F1 — the turn DELETED a file under brain/. A deletion destroys the
+   *  file and every edge that resolves to it, and the soundness audit is
+   *  structurally blind to it (`after === null` has no graph to compare). */
+  | 'file-deleted'
+  /** W8-F1 — the gate could not audit or dispose of this change. Recorded so
+   *  "we did not check" can never be read as "we checked and it was fine". */
+  | 'gate-failed';
 
 export type KbEditUnsoundness = {
   kind: KbEditUnsoundnessKind;
@@ -204,28 +231,17 @@ function linkResolves(ctx: KbEditSoundnessCtx, absFile: string, target: string):
 
 /**
  * Audit ONE change. Returns every reason the edit is unsound; an empty array
- * means it may land.
+ * means it destroys no resolvable graph structure.
  *
- * Only `structural` changes are audited — see the module header for why.
+ * W8-F1: this used to open `if (change.klass !== 'structural') return []`, and
+ * a sibling `auditProposedEdit` existed as "the same audit without the class
+ * filter" for the draft path. Two entry points into one audit, one of which
+ * silently answered "sound" for a whole class of edits, is how the class
+ * escaped a fourth time — so there is now ONE function and it has no filter.
+ * The `klass` field still exists and still matters, but only to the CALLER,
+ * for deciding whether a sound edit auto-applies or is parked for approval.
  */
 export function auditKbEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEditUnsoundness[] {
-  if (change.klass !== 'structural') return [];
-  return auditProposedEdit(change, ctx);
-}
-
-/**
- * The same audit, WITHOUT the structural-class filter.
- *
- * For an edit that is being PARKED rather than disposed of — a prose rewrite
- * heading for a kb-cleanup draft. Approving that draft writes `after` back
- * byte-for-byte, so a prose rewrite that ALSO deletes a resolvable edge is a
- * one-click button for exactly the destruction `auditKbEdit` refuses when the
- * same edit happens to be structural (adversarial round 1). The draft plan
- * carries these reasons so the operator approves with them in front of them;
- * the edit is still theirs to accept, because prose IS what they are being
- * asked to judge.
- */
-export function auditProposedEdit(change: KbEditChange, ctx: KbEditSoundnessCtx): KbEditUnsoundness[] {
   const { before, after, relPath } = change;
   if (before === null || after === null) return [];
 
@@ -416,12 +432,23 @@ function linkOccurrences(text: string, target: string): number {
 export type KbEditGateResult = {
   /** Every file the turn changed, as diffed against the pre-turn snapshot. */
   changes: KbEditChange[];
-  /** Structural changes reverted to their pre-turn bytes. */
+  /** Changes reverted to their pre-turn bytes (any class — W8-F1). */
   refused: KbEditChange[];
-  /** Structural changes replaced by a verified repair (carrying it in `after`). */
+  /** Changes replaced by a verified repair (carrying it in `after`). */
   repaired: KbEditChange[];
   /** Every reason, across every change. */
   unsound: KbEditUnsoundness[];
+  /**
+   * W8-F1 — every disposal the gate could NOT carry out, named. Non-empty
+   * means bytes this gate wanted to revert may still be on disk.
+   *
+   * The pre-W8-F1 shape had no such channel: `runBrainFixTurn.applyEditGate`
+   * caught any throw out of this function and returned `undefined`, so the
+   * turn reported normally with the agent's writes intact and nothing
+   * downstream treated a missing audit as a failure. "We could not check" must
+   * never be indistinguishable from "we checked and it was fine".
+   */
+  errors: string[];
 };
 
 /** Restore one change to its pre-turn content — a created file removed, an
@@ -438,7 +465,123 @@ function revertChange(brainDir: string, c: KbEditChange): void {
 }
 
 /**
- * Audit everything an agent turn wrote into `brainDir` and dispose of it.
+ * The audit of a turn that wrote nothing.
+ *
+ * W8-F1 made `RunBrainFixResult.editAudit` REQUIRED, which is the point: a
+ * turn that was not audited must not be representable. Test stubs and the
+ * no-spawn stand-in genuinely write nothing, so they say so EXPLICITLY through
+ * this named constructor rather than by omitting the field — the omission is
+ * exactly what used to be indistinguishable from "the gate threw and we
+ * dropped the result on the floor".
+ *
+ * A function, not a shared constant: the drain merges a turn's audit into its
+ * own by pushing onto the arrays, and a shared literal would accumulate one
+ * caller's findings into the next one's.
+ */
+export function noKbEdits(): KbEditGateResult {
+  return { changes: [], refused: [], repaired: [], unsound: [], errors: [] };
+}
+
+/** `<forgeRoot>/brain` — the ONLY root this gate ever snapshots or diffs. */
+export function brainRootDir(forgeRoot: string): string {
+  return join(forgeRoot, 'brain');
+}
+
+/**
+ * The pre-turn snapshot every caller of {@link guardAgentKbEdits} must take.
+ *
+ * W8-F1: both callers used to snapshot `resolveKbBrainDir(kbId)` — one KB —
+ * while the brain-fix agent runs with `cwd = forgeRoot`. The C4 hostile
+ * re-verification deleted a resolvable `related_themes` edge one directory
+ * over, through the REAL `runKbDrain`, and the gate reported
+ * `{unsound:0, refused:0, changes:0}`: an affirmative all-clear with a real
+ * edge destroyed. The audit was never wrong — it could not SEE the file.
+ *
+ * There is deliberately no parameter for narrowing this. A snapshot scope a
+ * caller can choose is a snapshot scope a caller can get wrong, twice.
+ */
+export function snapshotBrainTree(forgeRoot: string): Map<string, string> {
+  return snapshotKbFiles(brainRootDir(forgeRoot));
+}
+
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Realpath of the brain root, for comparing against `resolveKbBrainDir`'s
+ *  already-realpath-resolved answer. Falls back to the lexical path when the
+ *  root does not exist yet — then nothing resolves under it either, and the
+ *  scope check below fails CLOSED. */
+function realBrainRoot(brainRoot: string): string {
+  try {
+    return realpathSync(brainRoot);
+  } catch {
+    return brainRoot;
+  }
+}
+
+/** Is this brain-relative path inside the drained KB's own brain dir? A null
+ *  `kbBrainDir` (the kbId resolves to no KB) puts EVERYTHING out of scope —
+ *  "no KB to guard" must mean "nothing may be written", never "write freely". */
+function inKbScope(root: string, kbBrainDir: string | null, relPath: string): boolean {
+  if (kbBrainDir === null) return false;
+  return join(root, relPath).startsWith(kbBrainDir + sep);
+}
+
+/**
+ * W8-F1 — a change that CREATES or DELETES a file, which the soundness audit
+ * is structurally unable to judge: `auditKbEdit` compares two graphs, and a
+ * creation/deletion has only one, so it correctly returns `[]` for both.
+ *
+ * That `[]` used to mean "may land". It was safe only by accident: the DRAIN
+ * reverts creations and deletions through its own prose gate
+ * (`classifyKbEdit` classes both as `prose`), and the two callers without a
+ * prose gate — `runBrainConsolidateNow` and `forge brain fix` — therefore let
+ * an agent DELETE a brain theme outright, destroying every edge resolving to
+ * it, with the gate reporting a clean audit. Same escape shape as the class
+ * filter, one field over.
+ *
+ * A lint-fix turn edits the single file it was dispatched for. Creating or
+ * removing corpus is the deterministic auto-tier fixers' job, outside the
+ * turn, so both are refused here rather than judged.
+ */
+function lifecycleReason(c: KbEditChange): KbEditUnsoundness | null {
+  if (c.before === null && c.after !== null) {
+    return {
+      kind: 'file-created',
+      relPath: c.relPath,
+      target: c.relPath,
+      repairTargets: [],
+      message: `refused: creates brain/${c.relPath} — a fix turn repairs the file it was dispatched for, it does not add corpus`,
+    };
+  }
+  if (c.before !== null && c.after === null) {
+    return {
+      kind: 'file-deleted',
+      relPath: c.relPath,
+      target: c.relPath,
+      repairTargets: [],
+      message: `refused: deletes brain/${c.relPath}, destroying the file and every edge that resolves to it — a theme is never removed to clear lint`,
+    };
+  }
+  return null;
+}
+
+function outOfScopeReason(relPath: string, kbId: string, kbBrainDir: string | null): KbEditUnsoundness {
+  return {
+    kind: 'out-of-scope-edit',
+    relPath,
+    target: relPath,
+    repairTargets: [],
+    message: kbBrainDir === null
+      ? `refused: writes brain/${relPath}, but the kb id "${kbId}" resolves to no brain directory — a turn with no KB may not write to the brain at all`
+      : `refused: writes brain/${relPath}, which is outside the drained KB "${kbId}" — a fix turn may only touch the KB it was dispatched for`,
+  };
+}
+
+/**
+ * Audit everything an agent turn wrote anywhere under `brain/` and dispose of
+ * it.
  *
  * **This is the whole class's chokepoint, and that placement is the fix.** The
  * first cut wired the audit into the drain's round loop alone — one of the
@@ -449,41 +592,133 @@ function revertChange(brainDir: string, c: KbEditChange): void {
  * site closes a door; making the turn itself unable to run ungated closes the
  * class.
  *
- * Structural changes only — the PROSE gate is the drain's own policy, and
- * consolidate legitimately rewrites prose for a living.
+ * **W8-F1 — the scope is DERIVED, never supplied.** This function used to take
+ * a `brainDir` from its caller, and both callers handed it one KB's directory
+ * while the agent could write to the whole repo. It now takes the `kbId` and
+ * resolves both the brain root it audits and the KB dir it permits, so no call
+ * site — present or future — can re-narrow it. That, plus the `canUseTool`
+ * fence at the spawn seam (orchestrator/brain-fix-runner.ts), is deliberately
+ * belt AND braces: the write is refused before it happens, and audited if it
+ * happens anyway. A class that has recurred four times does not get a single
+ * point of failure.
  *
- *   - sound              → left on disk;
+ * Disposition, for every change regardless of class:
+ *
+ *   - sound, in scope     → left on disk (the caller decides apply-vs-draft);
  *   - unsound, repairable → the repair is written and RE-AUDITED; a repair that
  *                           is itself unsound is discarded and the change
  *                           reverted, because the fix may not re-ship the defect;
- *   - unsound, otherwise  → reverted to its pre-turn bytes.
+ *   - unsound, otherwise  → reverted to its pre-turn bytes;
+ *   - out of scope        → reverted, unconditionally, unjudged.
+ *
+ * **TOTAL: this function never throws.** Anything it cannot audit or dispose
+ * of is named in `errors` and counted as refused. The old shape let a throw
+ * escape into a caller-side `catch` that returned `undefined` and left the
+ * writes on disk.
  */
 export function guardAgentKbEdits(
   forgeRoot: string,
-  brainDir: string,
+  kbId: string,
   snapshot: ReadonlyMap<string, string>,
 ): KbEditGateResult {
-  const changes = diffKbSnapshot(brainDir, snapshot as Map<string, string>);
-  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainDir);
+  const brainRoot = brainRootDir(forgeRoot);
+  const root = realBrainRoot(brainRoot);
+  const kbBrainDir = resolveKbBrainDir(forgeRoot, kbId);
+
   const refused: KbEditChange[] = [];
   const repaired: KbEditChange[] = [];
   const unsound: KbEditUnsoundness[] = [];
+  const errors: string[] = [];
+
+  let changes: KbEditChange[];
+  try {
+    changes = diffKbSnapshot(brainRoot, snapshot as Map<string, string>);
+  } catch (err) {
+    // The gate cannot even see what changed. Restore every file we hold
+    // pre-turn bytes for and say so — the one thing it may not do is return a
+    // clean audit it never performed.
+    errors.push(`kb-edit-gate: could not diff brain/ (${errText(err)}) — restoring every file from the pre-turn snapshot`);
+    errors.push(...restoreFromSnapshot(brainRoot, snapshot));
+    return { changes: [], refused: [], repaired: [], unsound: [], errors };
+  }
+
+  const ctx = buildKbEditSoundnessCtx(forgeRoot, brainRoot);
 
   for (const c of changes) {
-    if (c.klass !== 'structural') continue;
-    const found = auditKbEdit(c, ctx);
+    let found: KbEditUnsoundness[];
+    try {
+      const lifecycle = lifecycleReason(c);
+      found = !inKbScope(root, kbBrainDir, c.relPath)
+        ? [outOfScopeReason(c.relPath, kbId, kbBrainDir)]
+        : lifecycle !== null
+          ? [lifecycle]
+          : auditKbEdit(c, ctx);
+    } catch (err) {
+      // An audit that threw has not cleared anything. Treat the change as
+      // unsound so it is reverted below.
+      found = [{
+        kind: 'gate-failed',
+        relPath: c.relPath,
+        target: c.relPath,
+        repairTargets: [],
+        message: `refused: the soundness audit of brain/${c.relPath} failed (${errText(err)}) — an edit that could not be checked is not allowed to land`,
+      }];
+    }
     if (found.length === 0) continue;
     unsound.push(...found);
 
-    const fix = repairKbEdit(c, found, ctx);
-    if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0
-        && guardedWriteFile(brainDir, c.relPath.split('/'), fix) !== null) {
-      repaired.push({ ...c, after: fix });
-      continue;
+    try {
+      // `repairKbEdit` synthesizes only for `link-repoint-unresolved` and only
+      // when EVERY reason is repointable, so an out-of-scope or gate-failed
+      // reason in `found` already blocks synthesis — no extra guard needed.
+      const fix = repairKbEdit(c, found, ctx);
+      if (fix !== null && auditKbEdit({ ...c, after: fix }, ctx).length === 0
+          && guardedWriteFile(brainRoot, c.relPath.split('/'), fix) !== null) {
+        repaired.push({ ...c, after: fix });
+        continue;
+      }
+      revertChange(brainRoot, c);
+      refused.push(c);
+    } catch (err) {
+      // The disposal itself failed (a theme replaced by a DIRECTORY of the
+      // same name makes writing the pre-turn bytes back throw EISDIR). The
+      // change is refused in intent; the failure to carry that out is declared
+      // rather than swallowed.
+      errors.push(`kb-edit-gate: could not restore brain/${c.relPath} (${errText(err)}) — the turn's write to that path may still be on disk`);
+      refused.push(c);
     }
-    revertChange(brainDir, c);
-    refused.push(c);
   }
 
-  return { changes, refused, repaired, unsound };
+  return { changes, refused, repaired, unsound, errors };
+}
+
+/** Last-resort disposal: put every file back the way the snapshot holds it,
+ *  and remove anything the snapshot does not know about. Used only when the
+ *  gate could not diff at all. Per-file failures are returned, never thrown —
+ *  one unrestorable file must not abandon the rest. */
+function restoreFromSnapshot(brainRoot: string, snapshot: ReadonlyMap<string, string>): string[] {
+  const problems: string[] = [];
+  let current: Map<string, string>;
+  try {
+    current = snapshotKbFiles(brainRoot);
+  } catch (err) {
+    return [`kb-edit-gate: could not re-walk brain/ to restore it (${errText(err)})`];
+  }
+  for (const [relPath, before] of snapshot) {
+    if (current.get(relPath) === before) continue;
+    try {
+      revertChange(brainRoot, { relPath, before, after: null, klass: 'prose' });
+    } catch (err) {
+      problems.push(`kb-edit-gate: could not restore brain/${relPath} (${errText(err)})`);
+    }
+  }
+  for (const relPath of current.keys()) {
+    if (snapshot.has(relPath)) continue;
+    try {
+      rmSync(join(brainRoot, relPath), { force: true });
+    } catch (err) {
+      problems.push(`kb-edit-gate: could not remove brain/${relPath} written by the turn (${errText(err)})`);
+    }
+  }
+  return problems;
 }

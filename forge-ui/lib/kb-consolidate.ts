@@ -34,6 +34,11 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
     case 'cleared':
       return 'consolidate: cleared ✓';
     case 'not-cleared':
+      // W8-F1 (knowledge-42): a run with nothing to clear (`total === 0`) is
+      // neither "cleared ✓" (it fixed nothing) nor "some findings remain"
+      // (there are none) — derived from the run's OWN counters, never a new
+      // state value, so the poll's state vocabulary stays unchanged.
+      if (status.total === 0) return 'consolidate: nothing to clear';
       return 'consolidate: some findings remain';
     case 'failed':
       return 'consolidate: failed';

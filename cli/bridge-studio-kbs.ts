@@ -143,8 +143,16 @@ function spawnBrainFix(
   proc.unref();
 }
 
-/** Read a brain-fix run's terminal state from its event log. */
-function readBrainFixState(forgeRoot: string, runId: string): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean } {
+/** Read a brain-fix run's terminal state from its event log. `total`/
+ *  `clearedCount` are genuinely OPTIONAL: only a `consolidate` run's terminal
+ *  event (`writeConsolidateTerminalEvent`) carries those counters in its
+ *  metadata — the per-finding `op=fix-agent` runs never write them, and this
+ *  reader must not fabricate them for those (they stay absent, unchanged
+ *  from before this function threaded them through). */
+function readBrainFixState(
+  forgeRoot: string,
+  runId: string,
+): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean; total?: number; clearedCount?: number } {
   // Containment (forge-2zz): `runId` reaching here is only SAFE_ID_RE-gated
   // (charset only, never realpath) at the calling routes — route it through
   // the shared resolveGuardedPath so a symlinked `_logs/_brainfix-<runId>`
@@ -165,11 +173,18 @@ function readBrainFixState(forgeRoot: string, runId: string): { state: 'running'
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean } };
+    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean; total?: number; clearedCount?: number } };
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
       const cleared = ev.metadata?.cleared === true;
-      return { state: cleared ? 'cleared' : 'not-cleared', cleared };
+      const total = ev.metadata?.total;
+      const clearedCount = ev.metadata?.clearedCount;
+      return {
+        state: cleared ? 'cleared' : 'not-cleared',
+        cleared,
+        ...(typeof total === 'number' ? { total } : {}),
+        ...(typeof clearedCount === 'number' ? { clearedCount } : {}),
+      };
     }
     if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') {
       return { state: 'failed', cleared: false };
@@ -196,7 +211,10 @@ function writeConsolidateTerminalEvent(
 ): void {
   const logDir = join(forgeRoot, '_logs', `_brainfix-${runId}`);
   mkdirSync(logDir, { recursive: true });
-  const cleared = outcome.total === 0 || outcome.clearedCount === outcome.total;
+  // W8-F1 (knowledge-42): a run that cleared NOTHING has not cleared
+  // anything — `total === 0` used to short-circuit to `cleared:true`, making
+  // a no-op consolidate byte-identical to a real full clear on the wire.
+  const cleared = outcome.clearedCount > 0 && outcome.clearedCount === outcome.total;
   const line = JSON.stringify({
     event_type: 'end',
     message: `brain-fix-consolidate.end (cleared=${outcome.clearedCount}/${outcome.total})`,
