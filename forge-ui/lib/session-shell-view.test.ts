@@ -141,6 +141,9 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   transcriptSources: ['idea.md', 'answers.json'],
   // W7-A2 — awaiting-verdict is an operator gate.
   lifecycle: { state: 'awaiting-operator' as const, needsYou: true, error: null, idleMs: null, cancellable: true },
+  // F6 (wave-8) — REQUIRED like "terminal": this fixture's session has a
+  // real project-side status.json, so its honest value is false.
+  legacy: false,
 };
 
 // Mandatory multi-stage fixture — no shipped kind is multi-stage today, but
@@ -180,6 +183,9 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   transcriptSources: ['prompt.md'],
   // W7-A2 — a synthetic working phase.
   lifecycle: { state: 'working' as const, needsYou: false, error: null, idleMs: null, cancellable: true },
+  // F6 (wave-8) — REQUIRED like "terminal": this fixture's session has a
+  // real project-side status.json, so its honest value is false.
+  legacy: false,
 };
 
 // ===========================================================================
@@ -652,6 +658,62 @@ test('AT-101: selectStage: "terminal" is UNCHANGED across a stage switch — a s
 });
 
 // ===========================================================================
+// F6 (wave-8, "a linked session must be readable") — the ready state carries
+// the payload's own "legacy" fact (mirrors "terminal"/"lifecycle" above:
+// session-level, threaded through UNCHANGED, never re-derived here), and the
+// shell root's dataAttrs gain "data-session-legacy" so a journey/regression
+// test can assert the DECISION rather than scrape copy — see F6 spec section
+// 4 (forge-ui) and this file's own header note conventions.
+// ===========================================================================
+
+test('F6: sessionShellState: the ready state exposes "legacy" verbatim from the payload, both true and false — the same sibling-fact treatment AT-100 pins for "terminal"', () => {
+  expect(sessionShellState(SINGLE_STAGE_PAYLOAD).legacy).toBe(false);
+  expect(sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: true } as SessionShellPayload).legacy).toBe(true);
+});
+
+// W8-F6 adversarial-review finding 3 — `data-transcript-omitted` is a
+// MACHINE-READABLE claim about WHY the transcript pane is absent, and for a
+// legacy session (turns [], affordances [], transcriptSources []) the old
+// derivation emitted `nothing-recorded`, whose own documented meaning is
+// "nothing has happened here yet". That is the opposite of the truth for a
+// session whose files were written and then deleted — and it is exactly the
+// ambiguity this whole lane exists to remove.
+// KILLS: deriving the reason from `transcriptSources.length === 0` alone.
+test('F6: a LEGACY session with no turns reports "working-files-gone", never "nothing-recorded" — the files were written and deleted, not never written', () => {
+  const legacyPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    legacy: true,
+    turns: [],
+    affordances: [],
+    transcriptSources: [],
+    transcriptError: null,
+  } as SessionShellPayload;
+  const state = sessionShellState(legacyPayload);
+  expect(state.panes.transcript).toBe(false);
+  expect(state.panes.transcriptOmittedReason).toBe('working-files-gone');
+  expect(state.dataAttrs['data-transcript-omitted']).toBe('working-files-gone');
+});
+
+test('F6: a NON-legacy session with the same empty shape still reports "nothing-recorded" — the new reason is scoped, not a blanket rename', () => {
+  const freshPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    legacy: false,
+    turns: [],
+    affordances: [],
+    transcriptSources: [],
+    transcriptError: null,
+  } as SessionShellPayload;
+  expect(sessionShellState(freshPayload).panes.transcriptOmittedReason).toBe('nothing-recorded');
+});
+
+test('F6: sessionShellState: the ready state\'s dataAttrs carry "data-session-legacy" as the string "true"/"false", mirroring how every other data-session-* fact is exposed', () => {
+  const legacyTrue = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: true } as SessionShellPayload);
+  expect(legacyTrue.dataAttrs['data-session-legacy']).toBe('true');
+  const legacyFalse = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: false } as SessionShellPayload);
+  expect(legacyFalse.dataAttrs['data-session-legacy']).toBe('false');
+});
+
+// ===========================================================================
 // W6-B9 reviewer fix — pseudo-project anchors: the generic terminal "back to
 // project" link must be honest for EVERY value `project` can hold, including
 // a pseudo-project session anchor (".kb-<id>", ".community-registry") that
@@ -702,6 +764,10 @@ test('AT-106: backToProjectLink — null when project is null, the real /project
 
 test('AT-107: backToProjectLink — a project id needing URL-encoding is encoded in the href', () => {
   expect(backToProjectLink('my project/weird')).toEqual({ label: 'project', href: '/projects/my%20project%2Fweird' });
+});
+
+test('F6: backToProjectLink — an EMPTY STRING project returns null, never the dead "/projects/" link (today\'s behaviour mints {label:"project", href:"/projects/"} — a link to nowhere)', () => {
+  expect(backToProjectLink('')).toBeNull();
 });
 
 // ---------------------------------------------------------------------------

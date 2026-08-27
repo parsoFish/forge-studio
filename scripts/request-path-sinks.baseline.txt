@@ -163,6 +163,7 @@ cli/run-list-cache.ts existsSync 2
 cli/run-list-cache.ts readdirSync 2
 cli/run-list-cache.ts readFileSync 2
 cli/run-list-cache.ts statSync 2
+cli/session-readability.ts readFileSync 1
 cli/skill-staging.ts mkdirSync 1
 cli/skill-staging.ts writeFileSync 1
 cli/studio-path-guard.ts lstatSync 3
@@ -176,7 +177,7 @@ cli/ui-bridge.ts existsSync 27
 cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
 cli/ui-bridge.ts readdirSync 17
-cli/ui-bridge.ts readFileSync 8
+cli/ui-bridge.ts readFileSync 7
 cli/ui-bridge.ts realpathSync 2
 cli/ui-bridge.ts spawn 2
 cli/ui-bridge.ts statSync 5
@@ -286,11 +287,7 @@ orchestrator/interactive-finalizers.ts lstatSync 1
 orchestrator/interactive-finalizers.ts mkdirSync 1
 orchestrator/interactive-finalizers.ts openSync 2
 orchestrator/interactive-finalizers.ts readdirSync 1
-orchestrator/interactive-finalizers.ts readFileSync 1
 orchestrator/interactive-finalizers.ts realpathSync 1
-orchestrator/interactive-finalizers.ts renameSync 1
-orchestrator/interactive-finalizers.ts unlinkSync 1
-orchestrator/interactive-finalizers.ts writeFileSync 1
 orchestrator/interactive-runner.ts lstatSync 1
 orchestrator/interactive-runner.ts mkdirSync 2
 orchestrator/interactive-runner.ts readdirSync 1

@@ -75,3 +75,44 @@ test('C2-FIX-A10-1: the selected view reads as SELECTED — the active button is
   expect(diffBtnEnd).toContain('data-view-selected="false"');
   expect(diffBtnEnd).toContain('opacity:0.6');
 });
+
+// ---------------------------------------------------------------------------
+// W8-F6 (bead forge-6gv.27), adversarial-review finding 2 — the "settled
+// session names its phase" copy interpolates `terminalPhase` straight into a
+// sentence, and a LEGACY session's phase can honestly be `''` (its event log
+// never recorded one). This is the SECOND site of that shape; the first
+// (SessionInteractivePanel's zero-affordance copy) was fixed in the same
+// wave, and shipping one of two is this campaign's most repeated defect.
+// KILLS: `This session is ${terminalPhase} — …` with no empty-string branch,
+// which renders "This session is  — its demo can no longer be finalized".
+// ---------------------------------------------------------------------------
+
+const GALLERY_ARTIFACT: SessionArtifactPayload = {
+  kind: 'generation-gallery',
+  label: 'Demo generations',
+  generations: [
+    {
+      number: 1,
+      createdAt: '2026-08-27T09:00:00.000Z',
+      feedback: null,
+      targetElement: null,
+      items: [{ path: 'demo.html', kind: 'html', bytes: 128 }],
+    },
+  ],
+  sourcesScanned: ['generations/'],
+};
+
+test('F6-PANE-1: a terminal session with a NAMED phase still names it in the finalize-unavailable reason', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SessionArtifactPane, { artifact: GALLERY_ARTIFACT, terminalPhase: 'locked' } as never),
+  );
+  expect(html).toContain('This session is locked — its demo can no longer be finalized');
+});
+
+test('F6-PANE-2: a terminal session with an EMPTY phase (the legacy shape) reads as a sentence, never "This session is  —"', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SessionArtifactPane, { artifact: GALLERY_ARTIFACT, terminalPhase: '' } as never),
+  );
+  expect(html).not.toContain('This session is  —');
+  expect(html).toContain('This session has ended — its demo can no longer be finalized');
+});

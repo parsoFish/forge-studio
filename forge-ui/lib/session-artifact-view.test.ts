@@ -480,6 +480,9 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
     // W7-A2 — the shell payload's derived lifecycle (required at runtime by
     // emptyStageMessageFor's phase-aware copy).
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
+    // F6 (wave-8) — REQUIRED like "terminal": this fixture's session has a
+    // real project-side status.json, so its honest value is false.
+    legacy: false,
   };
 
   const initial = sessionShellState(payload);

@@ -146,6 +146,26 @@ const ONBOARDING_FAILED_SESSION = '2026-08-10T09-03-00';
 // through rather than the stale `null` placeholder.
 const MODEL_TIER_SESSION = '2026-08-15T11-00-00';
 
+// F6 (wave-8) — "a linked session must be readable": legacy sessions whose
+// state survives ONLY as the central _logs/_<kind>-<sid>/ dir. Shape A: no
+// projects/<p>/_architect/<sid>/ dir anywhere. Shape B: a project-side dir
+// exists but carries no status.json.
+const F6_SHAPE_A_SESSION = '2026-08-27T09-00-00-f6shapea';
+const F6_SHAPE_B_SESSION = '2026-08-27T09-01-00-f6shapeb';
+const F6_SHAPE_B_PROJECT = 'f6shapebproj';
+const F6_NOT_FOUND_SESSION = '2026-08-27T09-02-00-f6notfound';
+const F6_NO_EVENTS_SESSION = '2026-08-27T09-03-00-f6noevents';
+const F6_SYMLINK_ESCAPE_SESSION = '2026-08-27T09-04-00-f6symlink';
+const F6_SECRET_MARKER = 'TOP-SECRET-F6-ROUTE-ESCAPE-MARKER-7734';
+const F6_LAST_PHASE = 'awaiting-verdict';
+const F6_FIRST_PHASE = 'briefing';
+const F6_DERIVED_PROJECT = 'demoproj';
+// AT-F6-R8 — the run-pointer thread: architect_session_id on a REAL queue
+// manifest (_queue/pending/), for GET /api/runs/<id>.
+const F6_RUN_NOWHERE = 'INIT-2026-08-27-f6-run-nowhere';
+const F6_RUN_STATUS_BACKED = 'INIT-2026-08-27-f6-run-status';
+const F6_RUN_LEGACY = 'INIT-2026-08-27-f6-run-legacy';
+
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
   mkdirSync(dir, { recursive: true });
@@ -559,6 +579,73 @@ function writeMalformedContractProjectFixture(projectsRoot: string, project: str
   writeFileSync(join(dir, '.forge', 'project.json'), '{ not valid json [[[', 'utf8');
 }
 
+// ---------------------------------------------------------------------------
+// F6 (wave-8) — "a linked session must be readable" fixtures.
+// ---------------------------------------------------------------------------
+
+/** Shape A: a legacy session whose ONLY surviving state is its central event
+ *  log, with NO project-side `_architect/<sid>/` dir anywhere. Real-shaped
+ *  event lines (the same field set a genuine architect turn writes) with TWO
+ *  different metadata.phase values so "last wins" is observable over the
+ *  wire, and one metadata.project. */
+function writeF6ShapeALogOnly(forgeRoot: string, sessionId: string): void {
+  const dir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  const lines = [
+    {
+      event_id: 'ev-f6-1', cycle_id: 'c-f6', started_at: '2026-08-27T09:00:00.000Z',
+      initiative_id: 'INIT-f6-fixture', phase: 'architect', skill: 'architect',
+      event_type: 'log', message: 'session started',
+      metadata: { session_id: sessionId, phase: F6_FIRST_PHASE, project: F6_DERIVED_PROJECT },
+    },
+    {
+      event_id: 'ev-f6-2', cycle_id: 'c-f6', started_at: '2026-08-27T09:05:00.000Z',
+      initiative_id: 'INIT-f6-fixture', phase: 'architect', skill: 'architect',
+      event_type: 'log', message: 'roadmap drafted',
+      metadata: { session_id: sessionId, phase: F6_LAST_PHASE },
+    },
+  ];
+  writeFileSync(join(dir, 'events.jsonl'), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`, 'utf8');
+}
+
+/** Shape B: a project-side `_architect/<sid>/` dir exists (no status.json)
+ *  plus the companion log dir. */
+function writeF6ShapeBFixture(forgeRoot: string, projectsRoot: string, project: string, sessionId: string): void {
+  mkdirSync(join(projectsRoot, project, '_architect', sessionId), { recursive: true });
+  const dir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'events.jsonl'),
+    `${JSON.stringify({
+      event_id: 'ev-f6-b1', cycle_id: 'c-f6b', started_at: '2026-08-27T09:01:00.000Z',
+      initiative_id: 'INIT-f6-fixture-b', phase: 'architect', skill: 'architect',
+      event_type: 'log', message: 'shape b',
+      metadata: { session_id: sessionId, phase: 'analyzing' },
+    })}\n`,
+    'utf8',
+  );
+}
+
+/** A log dir that exists but has NO events.jsonl (only stderr.log) — the
+ *  spec's "a dir with neither status.json nor events.jsonl stays 404". */
+function writeF6LogDirWithNoEvents(forgeRoot: string, sessionId: string): void {
+  const dir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'stderr.log'), 'some runner noise, no events.jsonl here\n', 'utf8');
+}
+
+/** AT-F6-R7: a legacy log dir whose events.jsonl is a SYMLINK to a file
+ *  OUTSIDE `_logs`, carrying a secret marker. */
+function writeF6SymlinkEscapeFixture(forgeRoot: string, sessionId: string): void {
+  const dir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  const outsideDir = join(forgeRoot, '_f6-escape-outside');
+  mkdirSync(outsideDir, { recursive: true });
+  const outsidePath = join(outsideDir, 'evil-events.jsonl');
+  writeFileSync(outsidePath, `${JSON.stringify({ metadata: { phase: F6_SECRET_MARKER, project: F6_SECRET_MARKER } })}\n`, 'utf8');
+  symlinkSync(outsidePath, join(dir, 'events.jsonl'));
+}
+
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-sessions-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
@@ -697,6 +784,30 @@ before(async () => {
   mkdirSync(nonStringPhaseStatusDir, { recursive: true });
   writeFileSync(join(nonStringPhaseStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
   writeFileSync(join(nonStringPhaseStatusDir, 'status.json'), JSON.stringify({ session_id: NON_STRING_PHASE_STATUS_SESSION, project: 'statusbucketproj', phase: 42 }), 'utf8'); // phase present but not a string
+
+  // F6 (wave-8) — "a linked session must be readable" fixtures.
+  writeF6ShapeALogOnly(forgeRoot, F6_SHAPE_A_SESSION);
+  writeF6ShapeBFixture(forgeRoot, projectsRoot, F6_SHAPE_B_PROJECT, F6_SHAPE_B_SESSION);
+  writeF6LogDirWithNoEvents(forgeRoot, F6_NO_EVENTS_SESSION);
+  writeF6SymlinkEscapeFixture(forgeRoot, F6_SYMLINK_ESCAPE_SESSION);
+  // AT-F6-R8 — a queue manifest whose architect_session_id resolves NOWHERE
+  // (no project dir, no log dir); one whose id is a REAL status-backed
+  // session; one whose id is a REAL legacy-only (Shape A) session.
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', `${F6_RUN_NOWHERE}.md`),
+    serializeManifest(realManifest({ initiative_id: F6_RUN_NOWHERE, project: 'demoproj', architect_session_id: 'nowhere-session-id-000000' })),
+    'utf8',
+  );
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', `${F6_RUN_STATUS_BACKED}.md`),
+    serializeManifest(realManifest({ initiative_id: F6_RUN_STATUS_BACKED, project: 'demoproj', architect_session_id: REAL_ARCHITECT_SESSION })),
+    'utf8',
+  );
+  writeFileSync(
+    join(forgeRoot, '_queue', 'pending', `${F6_RUN_LEGACY}.md`),
+    serializeManifest(realManifest({ initiative_id: F6_RUN_LEGACY, project: 'demoproj', architect_session_id: F6_SHAPE_A_SESSION })),
+    'utf8',
+  );
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -1679,4 +1790,109 @@ test('C2-SHELL-4: a malformed status.finalized (wrong shape) collapses to null �
   assert.equal(res.status, 200);
   const body = (await res.json()) as { finalized: unknown };
   assert.equal(body.finalized, null);
+});
+
+// ---------------------------------------------------------------------------
+// F6 (wave-8) — "a linked session must be readable": GET /api/studio/sessions/
+// :kind/:sessionId must not 404 for a session whose state survives ONLY as
+// the central _logs/_<kind>-<sessionId>/ dir (Shape A: no project-side dir at
+// all; Shape B: a project-side dir exists but carries no status.json). See
+// the F6 spec (scratchpad/F6-spec.md) for the full contract these pin.
+//
+// NOTE on RED: AT-F6-R1/R2/R6/R8 are genuine defect-repros — they FAIL on
+// the current tree (the route 404s Shape A/B today, and never emits a
+// `legacy` field). AT-F6-R3/R4/R5/R7 are negative-space / regression-guard
+// assertions describing behaviour that is ALREADY correct pre-fix (the
+// current route never reaches the code paths they would catch a regression
+// in) — they are expected to already PASS today and must keep passing after
+// the fix; see this task's final report for the measured pass/fail split.
+// ---------------------------------------------------------------------------
+
+test('AT-F6-R1: Shape A over the wire (no ?project=) — GET /api/studio/sessions/architect/<id> is 200, legacy:true, phase = LAST metadata.phase, project = metadata.project, terminal:true, empty affordances/turns/transcriptSources, transcriptError:null, finalized:null, lifecycle.state="terminal"', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${F6_SHAPE_A_SESSION}`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as Record<string, unknown>;
+
+  assert.equal(body.ok, true);
+  assert.equal(body.legacy, true, 'a Shape-A session must be flagged legacy on the wire');
+  assert.equal(body.phase, F6_LAST_PHASE, 'phase must be the LAST metadata.phase recorded in the log');
+  assert.equal(body.project, F6_DERIVED_PROJECT, 'project must be the metadata.project recorded in the log');
+  assert.equal(body.terminal, true, 'a legacy session is structurally terminal — no session dir for a runner to advance or an affordance to write into');
+  assert.deepEqual(body.affordances, []);
+  assert.deepEqual(body.turns, []);
+  assert.deepEqual(body.transcriptSources, []);
+  assert.equal(body.transcriptError, null);
+  assert.equal(body.finalized, null);
+  assert.equal((body.lifecycle as { state: string }).state, 'terminal');
+});
+
+test('AT-F6-R2: Shape B over the wire — a project-side dir with NO status.json, plus a companion log dir with events.jsonl -> 200, legacy:true', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${F6_SHAPE_B_SESSION}?project=${F6_SHAPE_B_PROJECT}`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as Record<string, unknown>;
+  assert.equal(body.ok, true);
+  assert.equal(body.legacy, true);
+});
+
+test('AT-F6-R3: the two EXISTING status.json 404 buckets are unchanged, byte-identical, when there is no log dir', async () => {
+  const missing = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${MISSING_STATUS_SESSION}?project=statusbucketproj`);
+  const missingBody = (await missing.json()) as { error: string };
+  assert.equal(missing.status, 404);
+  assert.equal(missingBody.error, 'session not found (status.json is missing, unreadable, or not valid JSON)');
+
+  const noPhase = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${NO_PHASE_STATUS_SESSION}?project=statusbucketproj`);
+  const noPhaseBody = (await noPhase.json()) as { error: string };
+  assert.equal(noPhase.status, 404);
+  assert.equal(noPhaseBody.error, 'session not found (status.json has no string "phase" field)');
+});
+
+test('AT-F6-R4: a session that exists NOWHERE (no project dir, no log dir) is still 404 "session not found"', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${F6_NOT_FOUND_SESSION}`);
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 404);
+  assert.equal(body.error, 'session not found');
+});
+
+test('AT-F6-R5: a log dir that exists but has NO events.jsonl (only stderr.log) is still 404 — a dir with neither status.json nor events.jsonl stays 404', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${F6_NO_EVENTS_SESSION}`);
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 404, JSON.stringify(body));
+});
+
+test('AT-F6-R6: a normal, status.json-backed session still returns legacy:false and its phase/affordances/terminal are UNCHANGED from AT-38', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as Record<string, unknown>;
+  assert.equal(body.legacy, false);
+  assert.equal(body.phase, 'awaiting-verdict');
+  assert.deepEqual(body.affordances, []);
+  assert.equal(body.terminal, false);
+});
+
+test('AT-F6-R7: (escape, over the REAL wire) a legacy log dir whose events.jsonl is a symlink to a file outside _logs -> 404, marker never appears in the raw response text', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${F6_SYMLINK_ESCAPE_SESSION}`);
+  const text = await res.text();
+  assert.equal(res.status, 404, text);
+  assert.doesNotMatch(text, new RegExp(F6_SECRET_MARKER), 'the escaped marker must never appear anywhere in the raw response');
+});
+
+test('AT-F6-R8: the run pointer — GET /api/runs/<id> drops architectSessionId when the session resolves nowhere, and carries it when the session resolves (status-backed OR legacy)', async () => {
+  const nowhere = await fetch(`${bridgeUrl}/api/runs/${F6_RUN_NOWHERE}`);
+  const nowhereText = await nowhere.text();
+  assert.equal(nowhere.status, 200, nowhereText);
+  const nowhereBody = JSON.parse(nowhereText) as { run: { architectSessionId?: string } };
+  assert.equal(nowhereBody.run.architectSessionId, undefined, 'an unreadable architect_session_id must NOT be carried onto the wire');
+
+  const statusBacked = await fetch(`${bridgeUrl}/api/runs/${F6_RUN_STATUS_BACKED}`);
+  const statusBackedBody = (await statusBacked.json()) as { run: { architectSessionId?: string } };
+  assert.equal(statusBacked.status, 200);
+  assert.equal(statusBackedBody.run.architectSessionId, REAL_ARCHITECT_SESSION, 'a status-backed, resolvable session MUST carry architectSessionId');
+
+  const legacy = await fetch(`${bridgeUrl}/api/runs/${F6_RUN_LEGACY}`);
+  const legacyBody = (await legacy.json()) as { run: { architectSessionId?: string } };
+  assert.equal(legacy.status, 200);
+  assert.equal(legacyBody.run.architectSessionId, F6_SHAPE_A_SESSION, 'a LEGACY-resolvable session (Shape A) MUST also carry architectSessionId');
 });

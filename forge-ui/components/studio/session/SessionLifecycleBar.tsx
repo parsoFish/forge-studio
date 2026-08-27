@@ -52,6 +52,7 @@ export function SessionLifecycleBar({
   kind,
   sessionId,
   project,
+  legacy = false,
   onCancelled,
   lastCancel = null,
 }: {
@@ -60,6 +61,10 @@ export function SessionLifecycleBar({
   kind: string;
   sessionId: string;
   project: string | null;
+  /** W8-F6 (bead forge-6gv.27) — this session's working files are gone and its
+   *  phase is whatever its event log last recorded MID-FLIGHT, not a terminal
+   *  token. See `terminalOutcome` below for why that matters here. */
+  legacy?: boolean;
   /** W7A2-02 — receives the cancel's real outcome (`killed`), never discarded. */
   onCancelled?: (outcome: CancelOutcome) => void;
   lastCancel?: CancelOutcome | null;
@@ -68,7 +73,18 @@ export function SessionLifecycleBar({
   // WI-1b (ON-7): the terminal outcome, ONLY meaningful (and only computed)
   // when state === 'terminal' — null otherwise, so the additive attribute
   // below never renders on a non-terminal row.
-  const terminalOutcome = state === 'terminal' ? sessionTerminalOutcome(phase) : null;
+  // W8-F6 (bead forge-6gv.27), adversarial review finding 2 — NOT derived for a
+  // legacy session. `sessionTerminalOutcome` fails CLOSED over a closed
+  // terminal vocabulary: anything that is not a declared done-phase and not
+  // 'cancelled' is 'failed'. That is right for a real terminal phase and wrong
+  // for a legacy one, whose phase is a MID-FLIGHT snapshot the log happened to
+  // record last — on the reference host all seven legacy architect sessions
+  // read `finalizing`, so every one of them would have rendered
+  // `data-lifecycle-terminal-outcome="failed"` directly beneath a banner saying
+  // "Read-only history … Last recorded phase: finalizing". A fabricated verdict
+  // on the exact page this fix exists to make honest. Omitted entirely rather
+  // than guessed: the session's outcome is genuinely unknown.
+  const terminalOutcome = state === 'terminal' && !legacy ? sessionTerminalOutcome(phase) : null;
   // A real reason is worth showing for a terminal FAILURE too — but only
   // when the lifecycle actually carries one (`error` is null for every
   // terminal row today; this stays honest-absent rather than fabricating
@@ -84,6 +100,9 @@ export function SessionLifecycleBar({
   if (state === 'crashed') headline = 'The agent turn crashed';
   else if (state === 'stalled') headline = `No activity for ${idleMs !== null ? formatIdle(idleMs) : 'a while'} — the agent may have stalled`;
   else if (state === 'awaiting-operator') headline = 'Waiting on you';
+  else if (state === 'terminal' && legacy) headline = phase === ''
+    ? 'Read-only history — this session ended and its working files are gone'
+    : `Read-only history — last recorded phase: ${phase}`;
   else if (state === 'terminal') headline = describeLifecycle('terminal', null, null, phase);
   else headline = idleMs !== null ? `Agent working — last activity ${formatIdle(idleMs)} ago` : 'Agent working';
 

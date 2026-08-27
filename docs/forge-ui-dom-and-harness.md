@@ -2852,6 +2852,29 @@ inventory rather than one shared page-level contract:
   (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
   the transcript pane AND the artifact pane together; a shell refetch keeps
   the operator's choice.
+  **⚑ W8-F6 (bead forge-6gv.27) — a linked session must be readable:**
+  `[data-session-legacy]` (always present, `"true"`/`"false"`) says whether this
+  session's only surviving record is the runner's central log dir
+  (`_logs/_<kind>-<sessionId>/events.jsonl`) — its project-side working dir, and
+  with it `status.json`, the transcript sources and the artifact files, is gone.
+  236 of 249 central session log dirs on the reference host have that shape,
+  because the log dir is never pruned while the managed project tree it belonged
+  to is gitignored and routinely recreated; wave 8 started LINKING to them from
+  the flow-run page, so the walkthrough crawl reported seven first-party 404s.
+  Such a session now reads 200, read-only: `data-session-legacy="true"`, an
+  honest `div[data-component="session-legacy-notice"]` naming what survived, the
+  generic session panel for EVERY kind (the bespoke architect/project-brain
+  panels are driven by the same `status.json` a legacy session no longer has),
+  zero affordances, and the ActivityLog drawer re-opened despite
+  `terminal: true` — the event log is the only thing left to show. Its
+  `[data-transcript-omitted]` is a THIRD value, `"working-files-gone"`: an
+  empty `transcriptSources` looks identical to `"nothing-recorded"` on the
+  wire, but "the writer never ran" and "a lot happened and the files are gone"
+  are opposite claims, and this attribute is what an automated gate reads.
+  Like every other `data-session-*` attribute this shell emits,
+  `data-session-legacy` is written by `readyDataAttrs` and is therefore
+  present only while `[data-session-status="ready"]` — a gate must check that
+  first rather than read the attribute's ABSENCE as "not legacy".
   **⚑ W8-B3 (operator note ON-5) — the pane set is PER SESSION, derived:**
   `[data-session-panes]` names the panes actually rendered, in order
   (`"transcript,artifact"` or `"artifact"`), and `[data-transcript-omitted]`

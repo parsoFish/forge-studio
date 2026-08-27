@@ -282,6 +282,33 @@ export default function SessionShellPage({
   // chat box can never silently drop the operator's controls with it.
   const kindPanel: JSX.Element | null =
     viewState.status !== 'ready' ? null
+    // W8-F6 (bead forge-6gv.27) — a LEGACY session (working dir gone, central
+    // event log intact) gets the GENERIC panel for EVERY kind, checked before
+    // the two bespoke arms below. Not a special case bolted on: the bespoke
+    // architect/project-brain panels are driven by the per-kind summary
+    // endpoints, which read the very `status.json` a legacy session no longer
+    // has — `summary` is null here by construction, so without this arm
+    // `kindPanel` fell through to `null` and the operator got a blank left
+    // column and no activity drawer at all: the page loaded, and showed
+    // nothing. The generic panel is exactly right for this shape — a legacy
+    // session has zero live affordances by definition, and the panel's
+    // zero-affordance branch is what carries the honest copy + the drawer.
+    : viewState.legacy ? (
+        <SessionInteractivePanel
+          kind={kind}
+          sessionId={sessionId}
+          project={project}
+          phase={viewState.phase}
+          affordances={viewState.affordances}
+          artifact={viewState.artifact}
+          modelTier={viewState.modelTier}
+          events={events}
+          terminal={viewState.terminal}
+          legacy
+          lifecycle={viewState.lifecycle}
+          finalized={viewState.finalized}
+        />
+      )
     : summary && summary.kind === 'architect' ? (
         <SessionArchitectPanel session={summary.data} events={events} nowMs={nowMs} />
       )
@@ -312,6 +339,7 @@ export default function SessionShellPage({
           modelTier={viewState.modelTier}
           events={events}
           terminal={viewState.terminal}
+          legacy={viewState.legacy}
           lifecycle={viewState.lifecycle}
           finalized={viewState.finalized}
           onChanged={refreshShell}
@@ -401,6 +429,26 @@ export default function SessionShellPage({
               ← Back to {backTo.label}
             </Link>
           )}
+          {/* W8-F6 (bead forge-6gv.27) — say it out loud. A legacy session's
+              working files are gone; everything on this page is derived from
+              its central event log, which is all that survived. Rendered from
+              the server-derived `legacy` fact, never guessed client-side from
+              an empty transcript. The DOM contract lives on the page root
+              (`data-session-legacy`) — this banner is the human half. */}
+          {viewState.legacy && (
+            <div
+              data-component="session-legacy-notice"
+              style={{ marginBottom: 12, padding: '8px 12px', border: '1px solid var(--line)', borderLeft: '3px solid var(--amber, #d9a441)', borderRadius: 4, fontSize: 12.5, color: 'var(--dim)' }}
+            >
+              <strong style={{ color: 'var(--fg)' }}>Read-only history.</strong>{' '}
+              This session&rsquo;s working files are no longer on disk — only its event log
+              (<code>{`_${kind}-${sessionId}`}</code>) survived, so there is no transcript, no
+              artifact and nothing left to act on.{' '}
+              {viewState.phase === ''
+                ? 'Its log never recorded a phase.'
+                : `Last recorded phase: ${viewState.phase}.`}
+            </div>
+          )}
           {/* W7-A2 — the lifecycle banner for EVERY kind (architect and
               project-brain included, and kinds with no generic panel):
               crashed → the runner's error verbatim; stalled → the silence;
@@ -414,6 +462,7 @@ export default function SessionShellPage({
             kind={kind}
             sessionId={sessionId}
             project={project}
+            legacy={viewState.legacy}
             lastCancel={lastCancel}
             onCancelled={(outcome) => { setLastCancel(outcome); refreshShell(); refreshSummary(); }}
           />

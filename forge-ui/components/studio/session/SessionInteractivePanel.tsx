@@ -208,6 +208,7 @@ export function SessionInteractivePanel({
   modelTier = null,
   events,
   terminal,
+  legacy = false,
   lifecycle,
   onChanged,
   onPackageFinalized,
@@ -245,6 +246,17 @@ export function SessionInteractivePanel({
    *  are all non-renderable (demo's `generating`) reaches this SAME branch
    *  too (see `isRenderableAffordance`'s doc comment) — one gate, not two. */
   terminal: boolean;
+  /** W8-F6 (bead forge-6gv.27) — session-client.ts's `legacy`: this session's
+   *  working dir is gone and its central event log is the ONLY surviving
+   *  record of it. Such a session is ALWAYS `terminal: true` (nothing can
+   *  advance it), so the `!terminal` drawer gate would hide the one thing
+   *  there is left to show. `legacy` therefore re-opens the drawer — with
+   *  `phaseActive` false, because nothing is running: the log is history, not
+   *  a live feed. Optional with a `false` default only so the many pre-W8-F6
+   *  call sites in this repo's own tests need no mechanical update (the same
+   *  reason `events`/`terminal` were introduced that way); every real call
+   *  site passes the wire value. */
+  legacy?: boolean;
   /** W7-A2 — the shell payload's server-derived lifecycle
    *  (session-lifecycle-client.ts). Read ONLY to pick the zero-affordance
    *  copy below (working / stopped / terminal) — the banner that actually
@@ -335,7 +347,9 @@ export function SessionInteractivePanel({
     onChanged?.();
   }
 
-  const drawer = !terminal && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />;
+  const drawer = (!terminal || legacy) && (
+    <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive={!legacy} />
+  );
 
   // W6-B9 reviewer fix — filtered to what this panel can actually RENDER
   // (see isRenderableAffordance's own doc comment); `data-affordance-count`
@@ -356,7 +370,11 @@ export function SessionInteractivePanel({
       : lifecycle?.state === 'crashed' || lifecycle?.state === 'stalled' ? 'stopped'
       : 'working';
     const copy =
-      reason === 'terminal' ? `Session ${phase} — nothing further to do here.`
+      // W8-F6 — a legacy session's phase can honestly be `''` (its log never
+      // recorded one), and `Session  — nothing further to do here.` is not a
+      // sentence. Say what is actually true instead of interpolating a hole.
+      reason === 'terminal' && phase === '' ? 'Session ended — nothing further to do here.'
+      : reason === 'terminal' ? `Session ${phase} — nothing further to do here.`
       : reason === 'stopped' ? 'The agent turn stopped — see the banner above for the error and to cancel this session.'
       : 'Agent is working — no operator action needed right now.';
     return (
