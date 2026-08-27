@@ -56,3 +56,31 @@ it('W7-FIX-A1 review: a timed-out watch whose reads all FAILED (ok:false + error
   // a timed-out watch that DID observe running (last real status ok:true) keeps the running framing
   expect(consolidateResultLabel({ ok: true, state: 'timed-out', cleared: false })).toBe('consolidate: still running — re-check in a moment');
 });
+
+// ---------------------------------------------------------------------------
+// W8-F1 / knowledge-42 — the operator-facing half.
+//
+// The bridge now carries the run's own `total`/`clearedCount`. A consolidate
+// that found nothing is neither "cleared ✓" (it fixed nothing) nor "some
+// findings remain" (there are none) — it is a third thing, and the pill has to
+// be able to say so or the operator reads a run that did nothing as a success.
+// ---------------------------------------------------------------------------
+
+describe('W8-F1 (knowledge-42): a consolidate over zero findings', () => {
+  it('reads "nothing to clear", not the wording a real fix uses', () => {
+    expect(consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 0, clearedCount: 0 }))
+      .toBe('consolidate: nothing to clear');
+  });
+
+  it('is DISTINGUISHABLE from a run that really cleared everything', () => {
+    const noop = consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 0, clearedCount: 0 });
+    const real = consolidateResultLabel({ ok: true, state: 'cleared', cleared: true, total: 3, clearedCount: 3 });
+    expect(noop).not.toBe(real);
+    expect(real).toBe('consolidate: cleared ✓');
+  });
+
+  it('still says "some findings remain" when there really were findings left', () => {
+    expect(consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 3, clearedCount: 1 }))
+      .toBe('consolidate: some findings remain');
+  });
+});

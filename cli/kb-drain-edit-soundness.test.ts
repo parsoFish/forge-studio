@@ -39,6 +39,8 @@ import {
   isUnsound,
   buildKbEditSoundnessCtx,
   scanRelatedThemesBlock,
+  guardAgentKbEdits,
+  snapshotBrainTree,
   type KbEditSoundnessCtx,
 } from './kb-drain-edit-soundness.ts';
 import { collectThemeSlugTargets } from './brain-lint.ts';
@@ -286,12 +288,20 @@ test('REAL EDIT 2: the audit REPAIRS rather than deletes — the synthesized con
 // REACHABLE structural link deletion is on an INDEX page, which
 // `classifyKbEdit` waves through unconditionally, and that is what the two
 // tests after it pin.
-test('a link deletion in a theme BODY is already prose-gated by classifyKbEdit — the audit deliberately adds nothing there', () => {
+// W8-F1 INVERTED. This test used to assert `auditKbEdit` returns [] here,
+// "because classifyKbEdit already prose-gates it". That reasoning was the
+// S1-a escape written down as an acceptance criterion: the prose gate is the
+// DRAIN's policy, and the two operator-clicked callers (`forge brain fix`,
+// `runBrainConsolidateNow`) do not have it. The audit now answers the
+// soundness question for every edit, whatever its class; who reverts and who
+// drafts is decided one layer up.
+test('W8-F1: a link deletion in a theme BODY is refused by the AUDIT — being prose-classified is not a pass', () => {
   const { ctx } = plantRealEdit2();
   const deleted = REAL_EDIT_2_BEFORE.replace(`[eval-driven development](${EDIT_2_BAD_OLD})`, 'eval-driven development');
   const c = change(EDIT_2_REL, REAL_EDIT_2_BEFORE, deleted);
-  assert.equal(c.klass, 'prose', 'the pre-existing gate, not the audit, is what refuses this shape');
-  assert.deepEqual(auditKbEdit(c, ctx), []);
+  assert.equal(c.klass, 'prose', 'the fixture is prose-classified — that used to be the whole escape');
+  const found = auditKbEdit(c, ctx);
+  assert.ok(found.length > 0, `a body link deletion must be audited on its merits — got ${JSON.stringify(found)}`);
 });
 
 const INDEX_REL = 'themes/README.md';
@@ -400,13 +410,15 @@ test('an unresolved repoint with TWO candidate targets is refused and NOT auto-r
 // Cross-cutting invariants
 // ---------------------------------------------------------------------------
 
-test('a PROSE change is out of the audit\'s remit — the structural gate already refuses it (no double-handling)', () => {
+test('W8-F1: a PROSE change that destroys no graph structure is SOUND — the verdict comes from the graph, never from the class', () => {
   const { ctx } = plantRealEdit1();
   const after = REAL_EDIT_1_BEFORE.replace('The same scratch-file commit happened again.', 'Rewritten prose.');
   const c = change(EDIT_1_REL, REAL_EDIT_1_BEFORE, after);
   assert.equal(c.klass, 'prose');
-  // The audit still reports nothing UNSOUND — prose is gated by class, and a
-  // finding must never be double-counted as both prose and unsound.
+  // Every related_themes entry and every link survives, so there is nothing
+  // unsound to report. The reason this passes is now the ABSENCE of graph
+  // damage, not the presence of a class filter — which is exactly the
+  // difference the S1-a counter-repro turned on.
   assert.deepEqual(auditKbEdit(c, ctx), []);
 });
 
@@ -593,4 +605,193 @@ test('no repair is synthesized when the dead target ALSO appears in `before` —
   const found = auditKbEdit(c, ctx);
   assert.ok(found.some((u) => u.kind === 'link-repoint-unresolved'), JSON.stringify(found));
   assert.equal(repairKbEdit(c, found, ctx), null, 'the target is already in `before`; repairing would rewrite lines the turn never touched');
+});
+
+// ===========================================================================
+// W8-F1 — the two SCOPE FILTERS wrapped around the audit (C4 regate, 2×S1).
+//
+// The C4 hostile re-verification refuted "forge-d8l CANNOT RECUR" with one
+// command each. Neither escape is in the audit — the audit resisted every
+// shape thrown at it. Both are in the filters around it:
+//
+//   S1-a  CLASS FILTER. `auditKbEdit` opened `if (klass !== 'structural')
+//         return []` and `guardAgentKbEdits` opened `if (c.klass !==
+//         'structural') continue`. `classifyKbEdit` demotes an edit to
+//         'prose' the moment the body changes — so deleting a real
+//         related_themes edge AND rewording one line produced
+//         `{unsound:0, refused:0}`, an AFFIRMATIVE all-clear, with the edge
+//         gone. The modal agent-tier finding is `length.soft-cap`, whose
+//         remediation is definitionally "condense the prose": this is the
+//         common case, not a corner.
+//
+//   S1-b  SNAPSHOT FILTER. The gate snapshotted only the drained KB's own
+//         brain dir while the agent runs with `cwd=forgeRoot`. An edge
+//         deleted one directory over was never audited — reproduced through
+//         the REAL `runKbDrain`.
+//
+// The cure is structural in both directions: the audit no longer asks what
+// CLASS an edit is (class decides draft-vs-auto-apply, never whether
+// soundness is checked), and the gate's SCOPE is DERIVED from the kbId it is
+// given rather than supplied by the caller — so no call site can re-narrow
+// it, which is how both escapes were reachable in the first place.
+// ===========================================================================
+
+/** A KB the new gate can resolve: `resolveKbBrainDir` requires a `kb.yaml`. */
+function plantKbDescriptor(forgeRoot: string, kbId: string): void {
+  const abs = join(forgeRoot, 'brain', 'projects', kbId, 'kb.yaml');
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, `id: ${kbId}\nname: ${kbId}\nbinding: { kind: project, ref: ${kbId} }\ndesc: W8-F1 fixture.\n`, 'utf8');
+}
+
+test('W8-F1 S1-a: an edge deletion hidden inside a PROSE reword is refused — the audit does not ask what class the edit is', () => {
+  const { ctx } = plantRealEdit1();
+  // Byte-for-byte the 2026-08-22 edge deletion, PLUS one reworded body line.
+  // That single extra line is the whole exploit: it flips `classifyKbEdit`
+  // to 'prose' and the pre-W8-F1 audit returned [] for it.
+  const after = REAL_EDIT_1_AFTER.replace('The same scratch-file commit happened again.', 'Condensed.');
+  const c = change(EDIT_1_REL, REAL_EDIT_1_BEFORE, after);
+  assert.equal(c.klass, 'prose', 'the fixture must really be prose-classified, or it proves nothing');
+  const found = auditKbEdit(c, ctx);
+  assert.equal(found.length, 1, `the reworded line must not buy the edge deletion a pass — got ${JSON.stringify(found)}`);
+  assert.equal(found[0].kind, 'edge-deleted');
+  assert.equal(found[0].target, '2026-06-21-gitignored-scratch-files-double-commit');
+});
+
+test('W8-F1 S1-a: `guardAgentKbEdits` REVERTS that prose+edge-delete edit — the turn-level chokepoint no longer skips non-structural changes', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  const target = join(forgeRoot, 'brain', 'projects', 'gitpulse', EDIT_1_REL);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  // The agent turn: condense the prose AND drop a resolvable edge.
+  writeFileSync(target, REAL_EDIT_1_AFTER.replace('The same scratch-file commit happened again.', 'Condensed.'), 'utf8');
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.equal(gate.unsound.length, 1, `the gate must SEE it — got ${JSON.stringify(gate.unsound)}`);
+  assert.equal(gate.refused.length, 1, `the gate must REFUSE it — got ${JSON.stringify(gate.refused.map((c) => c.relPath))}`);
+  assert.equal(
+    readFileSync(target, 'utf8'),
+    REAL_EDIT_1_BEFORE,
+    'the file must be byte-identical to its pre-turn content — the edge survives',
+  );
+});
+
+test('W8-F1 S1-b: an edit OUTSIDE the drained KB\'s brain dir is refused and audited — the snapshot is the whole brain, not one KB', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  // A theme in a DIFFERENT sub-wiki, carrying a resolvable edge. Nothing in
+  // the gitpulse drain has any business here — but the agent's cwd is
+  // forgeRoot and its Edit tool was unfenced.
+  const victimRel = 'cycles/themes/2026-05-01-victim.md';
+  const victimBefore = [
+    '---',
+    'title: Victim',
+    'category: pattern',
+    'related_themes: [2026-05-01-partner]',
+    'created_at: 2026-05-01T00:00:00.000Z',
+    'updated_at: 2026-05-01T00:00:00.000Z',
+    '---',
+    '',
+    '# Victim',
+    '',
+  ].join('\n');
+  writeTheme(forgeRoot, victimRel, victimBefore);
+  writeTheme(forgeRoot, 'cycles/themes/2026-05-01-partner.md', themeStub('Partner'));
+  const victimAbs = join(forgeRoot, 'brain', victimRel);
+
+  const snapshot = snapshotBrainTree(forgeRoot);
+  writeFileSync(victimAbs, victimBefore.replace('related_themes: [2026-05-01-partner]', 'related_themes: []'), 'utf8');
+
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.equal(
+    readFileSync(victimAbs, 'utf8'),
+    victimBefore,
+    'a real edge one directory outside the drained KB was destroyed — this is forge-d8l, fourth instance',
+  );
+  assert.equal(gate.refused.length, 1, `the out-of-KB edit must be REFUSED — got ${JSON.stringify(gate.refused.map((c) => c.relPath))}`);
+  assert.ok(
+    gate.unsound.some((u) => u.kind === 'out-of-scope-edit'),
+    `the audit must NAME the reason as out-of-scope, not merely revert it — got ${JSON.stringify(gate.unsound)}`,
+  );
+});
+
+test('W8-F1 S1-b: an out-of-scope edit is refused even when it destroys NOTHING — the drained KB is the only place a turn may write', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  // Pure prose, no edges, no links: sound by every soundness rule there is,
+  // and still none of this turn's business. Wave-7's orch-01 lost 26 lines of
+  // amendment history to exactly this shape.
+  const strayRel = 'forge-dev/themes/2026-05-02-stray.md';
+  const strayBefore = themeStub('Stray');
+  writeTheme(forgeRoot, strayRel, strayBefore);
+  const strayAbs = join(forgeRoot, 'brain', strayRel);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  writeFileSync(strayAbs, `${strayBefore}\nRewritten by a turn that was pointed at another KB.\n`, 'utf8');
+
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.equal(readFileSync(strayAbs, 'utf8'), strayBefore, 'an out-of-KB prose rewrite must be reverted too');
+  assert.equal(gate.refused.length, 1, JSON.stringify(gate.refused.map((c) => c.relPath)));
+});
+
+test('W8-F1: an unresolvable kbId refuses EVERY brain edit — "no KB to guard" must never mean "nothing to guard"', () => {
+  const { forgeRoot } = plantRealEdit1();
+  // No kb.yaml planted: resolveKbBrainDir returns null. The pre-W8-F1 runner
+  // skipped the gate entirely in this case (`preTurnSnapshot === null`), so a
+  // turn dispatched with a bogus kbId ran completely ungated.
+  const target = join(forgeRoot, 'brain', 'projects', 'gitpulse', EDIT_1_REL);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  writeFileSync(target, REAL_EDIT_1_AFTER, 'utf8');
+  const gate = guardAgentKbEdits(forgeRoot, 'no-such-kb', snapshot);
+  assert.equal(readFileSync(target, 'utf8'), REAL_EDIT_1_BEFORE, 'an unresolvable KB must fail CLOSED');
+  assert.equal(gate.refused.length, 1, JSON.stringify(gate.refused.map((c) => c.relPath)));
+});
+
+test('W8-F1: `guardAgentKbEdits` is TOTAL — a change it cannot dispose of is recorded in `errors`, never thrown past the caller', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  const target = join(forgeRoot, 'brain', 'projects', 'gitpulse', EDIT_1_REL);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  // The reachable trigger for a disposal failure: the turn replaces the theme
+  // FILE with a DIRECTORY of the same name, so writing `before` back throws
+  // EISDIR. The pre-W8-F1 runner caught that throw, returned `undefined` and
+  // left the agent's writes on disk with no error surfaced anywhere.
+  rmSync(target, { force: true });
+  mkdirSync(target, { recursive: true });
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.ok(gate.errors.length > 0, `an undisposable change must be DECLARED — got ${JSON.stringify(gate)}`);
+  assert.ok(
+    gate.errors.some((e) => e.includes(EDIT_1_REL)),
+    `the error must name the file it could not restore — got ${JSON.stringify(gate.errors)}`,
+  );
+});
+
+test('W8-F1 CONTROL: a sound in-KB structural edit still LANDS through the derived-scope gate', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  const target = join(forgeRoot, 'brain', 'projects', 'gitpulse', EDIT_1_REL);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  // Adding a keyword destroys no graph structure. The gate refuses unsound
+  // edits, not edits.
+  const sound = REAL_EDIT_1_BEFORE.replace('  - gitignore\n', '  - gitignore\n  - added-keyword\n');
+  writeFileSync(target, sound, 'utf8');
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.deepEqual(gate.unsound, [], JSON.stringify(gate.unsound));
+  assert.deepEqual(gate.refused, [], JSON.stringify(gate.refused.map((c) => c.relPath)));
+  assert.deepEqual(gate.errors, []);
+  assert.equal(readFileSync(target, 'utf8'), sound, 'a sound edit must survive the gate');
+});
+
+test('W8-F1 CONTROL: a sound PROSE edit inside the KB is left on disk by the gate — class decides draft-vs-apply, and that is the DRAIN\'s policy, not the gate\'s', () => {
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  const target = join(forgeRoot, 'brain', 'projects', 'gitpulse', EDIT_1_REL);
+  const snapshot = snapshotBrainTree(forgeRoot);
+  // Prose only: every edge and link survives. The gate has no opinion; the
+  // drain reverts-and-drafts it one layer up, and `runBrainConsolidateNow`
+  // legitimately rewrites prose for a living.
+  const prose = REAL_EDIT_1_BEFORE.replace('The same scratch-file commit happened again.', 'Condensed.');
+  writeFileSync(target, prose, 'utf8');
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.deepEqual(gate.unsound, [], JSON.stringify(gate.unsound));
+  assert.equal(readFileSync(target, 'utf8'), prose);
+  assert.equal(gate.changes.length, 1, 'the change is still REPORTED, so the drain can park it as a draft');
+  assert.equal(gate.changes[0].klass, 'prose');
 });

@@ -553,16 +553,218 @@ test('W8-B2: a SOUND structural edit still lands through the turn gate — it re
   }
 });
 
-test('W8-B2: an unknown kbId leaves editAudit ABSENT rather than reporting a clean audit that never ran', async () => {
-  const { forgeRoot, themePath } = buildGuardedKbFixture();
+// W8-F1 INVERTED. This used to assert `editAudit === undefined` for an
+// unresolvable kbId — i.e. the turn ran with NO gate at all and said so by
+// omission. Omitting the audit is not the same as refusing the edit, and
+// nothing downstream ever treated a missing `editAudit` as a failure
+// (`cmdBrainFix` reads only `cleared`). "No KB to guard" must mean "nothing
+// may be written", not "write freely".
+test('W8-F1: an unknown kbId refuses every brain write — the audit is always performed, and fails CLOSED', async () => {
+  const { forgeRoot, themePath, before } = buildGuardedKbFixture();
   seedSkillMd(forgeRoot);
   try {
+    const writing: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(themePath, before.replace('body.', 'rewritten.'));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
     const result = await runBrainFixTurn({
       runId: 'w8b2-turn-gate-nokb', kbId: 'no-such-kb', file: themePath,
       check: 'checkFrontmatter', kind: 'frontmatter.missing-field',
-      message: 'x', forgeRoot, queryFn: makeFakeQueryThatDoesNothing(),
+      message: 'x', forgeRoot, queryFn: writing,
     });
-    assert.equal(result.editAudit, undefined);
+    assert.equal(readFileSync(themePath, 'utf8'), before, 'an unresolvable KB must not be a licence to write');
+    assert.equal(result.editAudit.refused.length, 1, JSON.stringify(result.editAudit));
+    assert.equal(result.cleared, false, 'a turn whose writes were all refused can never report cleared');
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+// ===========================================================================
+// W8-F1 — the C4 regate's two S1s, at the TURN boundary.
+//
+// The C4 hostile re-verification reproduced forge-d8l a FOURTH time through
+// this very runner. Neither escape was in the audit:
+//
+//   - the gate snapshotted only `resolveKbBrainDir(kbId)` while the agent runs
+//     with `cwd=forgeRoot` and an UNFENCED `Edit` tool, so an edge deleted one
+//     directory over audited as `{unsound:0, refused:0, changes:0}` — an
+//     affirmative all-clear with a real edge destroyed;
+//   - `applyEditGate` swallowed any throw out of the gate and returned
+//     `undefined`, leaving the agent's writes on disk with no error surfaced.
+//
+// The cure is BOTH halves, deliberately: the write is refused at the tool seam
+// (so it never happens) AND audited from a brain-wide snapshot (so a write
+// that reaches disk by some other route is still reverted). One without the
+// other is a single point of failure for a class that has now recurred four
+// times.
+// ===========================================================================
+
+/** Plants a resolvable theme + partner in a sub-wiki OUTSIDE the gitpulse KB —
+ *  the C4 counter-repro's `brain/cycles/themes/2026-05-01-victim.md`. */
+function plantOutOfKbVictim(forgeRoot: string): { victimPath: string; victimBefore: string } {
+  const dir = join(forgeRoot, 'brain', 'cycles', 'themes');
+  mkdirSync(dir, { recursive: true });
+  const stub = (t: string): string => [
+    '---', `title: ${t}`, 'description: d.', 'category: pattern',
+    'created_at: 2026-05-01T00:00:00Z', 'updated_at: 2026-05-01T00:00:00Z',
+    '---', '', `# ${t}`, '',
+  ].join('\n');
+  writeFileSync(join(dir, '2026-05-01-partner.md'), stub('partner'));
+  const victimBefore = [
+    '---', 'title: victim', 'description: d.', 'category: pattern',
+    'related_themes: [2026-05-01-partner]',
+    'created_at: 2026-05-01T00:00:00Z', 'updated_at: 2026-05-01T00:00:00Z',
+    '---', '', '# victim', '', 'body.', '',
+  ].join('\n');
+  const victimPath = join(dir, '2026-05-01-victim.md');
+  writeFileSync(victimPath, victimBefore);
+  return { victimPath, victimBefore };
+}
+
+test('W8-F1 S1-b: a turn that edits a theme OUTSIDE the drained KB has that edit REFUSED and AUDITED — the snapshot is the whole brain', async () => {
+  const { forgeRoot, themePath } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  const { victimPath, victimBefore } = plantOutOfKbVictim(forgeRoot);
+  try {
+    // Byte-for-byte the C4 counter-repro: a `gitpulse` drain turn deletes a
+    // resolvable related_themes edge in brain/cycles/themes/. Only the SDK
+    // call is stubbed — this is the production runner and the production gate.
+    const straying: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(victimPath, victimBefore.replace('related_themes: [2026-05-01-partner]\n', 'related_themes: []\n'));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8f1-out-of-kb', kbId: 'gitpulse', file: themePath,
+      check: 'checkLengthSoftCap', kind: 'length.soft-cap',
+      message: 'theme over soft cap', forgeRoot, queryFn: straying,
+    });
+    assert.equal(
+      readFileSync(victimPath, 'utf8'),
+      victimBefore,
+      'a REAL edge one directory outside the drained KB was destroyed — forge-d8l, fourth instance',
+    );
+    assert.ok(result.editAudit.refused.length > 0, `the escape must be REFUSED — got ${JSON.stringify(result.editAudit)}`);
+    assert.ok(
+      result.editAudit.unsound.some((u) => u.kind === 'out-of-scope-edit'),
+      `and NAMED — got ${JSON.stringify(result.editAudit.unsound)}`,
+    );
+    assert.equal(result.cleared, false, 'a turn that had a write refused may not report cleared');
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-F1 S1-a: a prose reword that ALSO deletes a resolvable edge is refused at the turn — `forge brain fix` and Consolidate have no second gate', async () => {
+  const { forgeRoot, themePath, before } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    // `length.soft-cap` is the modal agent-tier finding and its remediation is
+    // definitionally "condense the prose". One reworded line used to flip
+    // classifyKbEdit to 'prose' and buy the edge deletion a free pass.
+    const condensed = before
+      .replace('related_themes: [b]\n', 'related_themes: []\n')
+      .replace('body.', 'Condensed.');
+    const proseDeleting: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        writeFileSync(themePath, condensed);
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8f1-prose-hole', kbId: 'gitpulse', file: themePath,
+      check: 'checkLengthSoftCap', kind: 'length.soft-cap',
+      message: 'theme over soft cap', forgeRoot, queryFn: proseDeleting,
+    });
+    assert.equal(readFileSync(themePath, 'utf8'), before, 'the edge must survive the prose reword');
+    assert.ok(
+      result.editAudit.unsound.some((u) => u.kind === 'edge-deleted'),
+      `the gate must report the edge deletion, not {unsound:0} — got ${JSON.stringify(result.editAudit)}`,
+    );
+    assert.equal(result.cleared, false, '`cmdBrainFix` reads ONLY this field and prints "CLEARED"');
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-F1: the brain-fix turn is FENCED at the spawn seam — permissionMode, allowedTools and canUseTool all three, or the fence is decoration', async () => {
+  const { forgeRoot, themePath } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  let captured: Record<string, unknown> | null = null;
+  try {
+    const capturing: QueryFn = ({ options }) => {
+      captured = options;
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    await runBrainFixTurn({
+      runId: 'w8f1-fence', kbId: 'gitpulse', file: themePath,
+      check: 'checkFrontmatter', kind: 'frontmatter.missing-field',
+      message: 'x', forgeRoot, queryFn: capturing,
+    });
+    assert.ok(captured, 'the turn must have reached the query seam');
+    const opts = captured as Record<string, unknown>;
+    // Wave-7's sessions-kinds-V01 was a live write ESCAPE past a non-empty
+    // writeRoots, because two settings in the same options bag short-circuit
+    // the SDK's permission prompt for exactly the tools the fence gates. All
+    // three must hold together or the fence is never consulted.
+    assert.equal(opts.permissionMode, 'default', "`acceptEdits` auto-accepts Edit at the SDK level — canUseTool never runs");
+    assert.ok(
+      !(opts.allowedTools as string[]).includes('Edit'),
+      `a pre-approved tool is never routed through canUseTool — got ${JSON.stringify(opts.allowedTools)}`,
+    );
+    assert.equal(typeof opts.canUseTool, 'function', 'no canUseTool means no fence at all');
+
+    const canUseTool = opts.canUseTool as (
+      t: string, i: Record<string, unknown>, o: Record<string, unknown>,
+    ) => Promise<{ behavior: string }>;
+    const inside = await canUseTool('Edit', { file_path: themePath }, {});
+    assert.equal(inside.behavior, 'allow', 'the turn must still be able to edit the file it was dispatched for');
+    const outside = await canUseTool(
+      'Edit',
+      { file_path: join(forgeRoot, 'brain', 'cycles', 'themes', '2026-05-01-victim.md') },
+      {},
+    );
+    assert.equal(outside.behavior, 'deny', 'an Edit outside the drained KB must be refused at the tool seam');
+    const repo = await canUseTool('Edit', { file_path: join(forgeRoot, 'orchestrator', 'cli.ts') }, {});
+    assert.equal(repo.behavior, 'deny', 'cwd is forgeRoot — the whole repo was reachable before this fence');
+  } finally {
+    cleanup(forgeRoot);
+  }
+});
+
+test('W8-F1: a turn the gate cannot dispose of fails CLOSED — the error is declared and `cleared` is false, never a silent undefined', async () => {
+  const { forgeRoot, themePath } = buildGuardedKbFixture();
+  seedSkillMd(forgeRoot);
+  try {
+    // The reachable disposal failure: the turn replaces the theme FILE with a
+    // DIRECTORY of the same name, so writing the pre-turn bytes back throws
+    // EISDIR. Pre-W8-F1 `applyEditGate` caught that, returned `undefined`, and
+    // the turn reported normally with the agent's writes still on disk.
+    const hostile: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        rmSync(themePath, { force: true });
+        mkdirSync(themePath, { recursive: true });
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+    const result = await runBrainFixTurn({
+      runId: 'w8f1-gate-throw', kbId: 'gitpulse', file: themePath,
+      check: 'checkFrontmatter', kind: 'frontmatter.missing-field',
+      message: 'x', forgeRoot, queryFn: hostile,
+    });
+    assert.ok(result.editAudit.errors.length > 0, `the failure must be DECLARED — got ${JSON.stringify(result.editAudit)}`);
+    assert.equal(result.cleared, false, 'a turn whose gate could not complete may never report cleared');
   } finally {
     cleanup(forgeRoot);
   }

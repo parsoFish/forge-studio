@@ -44,6 +44,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runKbDrain } from './bridge-studio-kb-drain.ts';
+import { runBrainFixTurn, type RunBrainFixInput, type RunBrainFixResult } from '../orchestrator/brain-fix-runner.ts';
 import type { Finding } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
@@ -333,7 +334,17 @@ test('CONTROL: an honest repoint at a target that really resolves still LANDS �
   }
 });
 
-test('adversarial round 1: a PROSE rewrite that also deletes a valid edge is drafted WITH that consequence on the page, not buried in the diff', async () => {
+// W8-F1 INVERTED (C4 regate, S1-a). This test used to assert the prose+edge
+// edit is DRAFTED with the consequence written on the plan page. That is a
+// one-click button for exactly the destruction the drain refuses when the
+// same edit happens to be structural — and the C4 refuter walked through it:
+// `guardAgentKbEdits` opened `if (c.klass !== 'structural') continue`, so the
+// two operator-clicked callers that have NO prose gate (`forge brain fix`,
+// `runBrainConsolidateNow`) landed it outright. The contract is now strictly
+// stronger: an edit that destroys resolvable graph structure is REFUSED,
+// whatever its class, and the operator is shown the diff and the reason on
+// the row instead of a button that applies it.
+test('W8-F1 (was: adversarial round 1): a PROSE rewrite that also deletes a valid edge is REFUSED, not offered for one-click approval', async () => {
   const withEdge = themeFile(
     'Gitignored scratch files, recurrence',
     'antipattern',
@@ -347,8 +358,8 @@ test('adversarial round 1: a PROSE rewrite that also deletes a valid edge is dra
   const target = join(brainDir, 'themes', `${RECURRENCE_SLUG}.md`);
   try {
     const finding = agentFinding(target, 'checkLengthSoftCap', 'length.soft-cap', 'theme exceeds the soft line cap');
-    // Prose AND an edge deletion in one edit — so `classifyKbEdit` returns
-    // 'prose' for the whole file and the structural gate never audits it.
+    // Prose AND an edge deletion in one edit — `classifyKbEdit` returns
+    // 'prose' for the whole file, which is what used to buy it a pass.
     const condensed = withEdge
       .replace('related_themes: [2026-06-21-gitignored-scratch-files-double-commit]', 'related_themes: []')
       .replace('The same scratch-file commit happened again, at length, over several lines.', 'Condensed.');
@@ -357,18 +368,164 @@ test('adversarial round 1: a PROSE rewrite that also deletes a valid edge is dra
       applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
       runFixTurn: async (input) => {
         writeFileSync(target, condensed);
-        return { runId: input.runId, cleared: true, costUsd: 0.01 };
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: { changes: [], refused: [], repaired: [], unsound: [], errors: [] } };
       },
     });
-    // The prose edit is reverted and parked, exactly as before.
-    assert.equal(readFileSync(target, 'utf8'), withEdge);
+    assert.equal(readFileSync(target, 'utf8'), withEdge, 'the edge survives — as before');
     const row = status.perFinding.find((f) => f.tier === 'agent');
-    const sid = row?.draftSession?.id;
-    assert.ok(sid, `expected a draft session — got ${JSON.stringify(status.perFinding)}`);
-    // …and the plan the operator approves SAYS what approving would destroy.
-    const plan = readFileSync(join(root, 'projects', GITPULSE_KB, '_kb-cleanup', sid, 'plan', 'cleanup-plan.md'), 'utf8');
-    assert.match(plan, /This edit also changes the graph/);
-    assert.match(plan, new RegExp(`deletes the related_themes edge "${DOUBLE_COMMIT_SLUG}"`));
+    assert.ok(row, `expected an agent row — got ${JSON.stringify(status.perFinding)}`);
+    // THE INVERSION: no draft. Approving a draft writes `after` back
+    // byte-for-byte, so minting one here hands the operator the deletion.
+    assert.equal(
+      row.draftSession,
+      undefined,
+      'an unsound prose edit must NOT be parked as an approvable draft — approving it would destroy the edge',
+    );
+    assert.ok(!existsSync(join(root, 'projects', GITPULSE_KB, '_kb-cleanup')), 'no kb-cleanup session may be minted at all');
+    // …and the operator still SEES what was proposed and why it was refused.
+    const proposals = row.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, `the refused proposal must still be shown — got ${JSON.stringify(proposals)}`);
+    assert.equal(proposals[0].disposition, 'refused');
+    assert.ok(
+      proposals[0].reasons.some((r) => r.includes(`deletes the related_themes edge "${DOUBLE_COMMIT_SLUG}"`)),
+      `the reason must name the edge — got ${JSON.stringify(proposals[0].reasons)}`,
+    );
+    assert.match(proposals[0].diff, /Condensed\./, 'the diff must still show the prose the agent proposed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// W8-F1 — the C4 regate's drain-level counter-repros.
+//
+// Reviewer heuristic that produced these: "a test that stubs the gate is not
+// a gate test". Every drain pin above drives `runFixTurn` with a stub, so the
+// production runner's OWN gate is never exercised by them. The two tests
+// below therefore call the REAL `runBrainFixTurn` through the seam, with only
+// the SDK query stubbed — the shape the C4 refuter used to prove the class
+// still recurs "inside a real drain".
+// ===========================================================================
+
+/** The drain seam, wired to the PRODUCTION runner: only the LLM is simulated.
+ *  Everything past the agent turn — both gates included — is the real thing. */
+function realTurn(write: () => void): (input: RunBrainFixInput) => Promise<RunBrainFixResult & { costUsd: number }> {
+  return async (input) => {
+    const result = await runBrainFixTurn({
+      ...input,
+      queryFn: () => {
+        async function* gen(): AsyncGenerator<unknown> {
+          write();
+          yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+        }
+        return gen();
+      },
+    });
+    return { ...result, costUsd: 0 };
+  };
+}
+
+test('W8-F1 S1-b: a real drain of one KB cannot destroy an edge in ANOTHER brain dir — through the production runner, only the SDK stubbed', async () => {
+  const { root, brainDir } = makeKbRoot(GITPULSE_KB, [
+    { slug: RECURRENCE_SLUG, category: 'antipattern', content: themeFile('Recurrence', 'antipattern', [], ['Body.']) },
+  ]);
+  // A victim theme in a DIFFERENT sub-wiki, with a resolvable edge. The
+  // gitpulse drain has no business here; the agent's cwd is forgeRoot.
+  const victimDir = join(root, 'brain', 'cycles', 'themes');
+  mkdirSync(victimDir, { recursive: true });
+  const victimBefore = themeFile('Victim', 'pattern', ['related_themes: [2026-05-01-partner]']);
+  const victimPath = join(victimDir, '2026-05-01-victim.md');
+  writeFileSync(victimPath, victimBefore);
+  writeFileSync(join(victimDir, '2026-05-01-partner.md'), themeFile('Partner', 'pattern'));
+  const target = join(brainDir, 'themes', `${RECURRENCE_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkLengthSoftCap', 'length.soft-cap', 'theme exceeds the soft line cap');
+    const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-outside`, {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: realTurn(() => {
+        writeFileSync(victimPath, victimBefore.replace('related_themes: [2026-05-01-partner]', 'related_themes: []'));
+      }),
+    });
+    assert.equal(
+      readFileSync(victimPath, 'utf8'),
+      victimBefore,
+      'a real drain of "gitpulse" destroyed a resolvable edge in brain/cycles — forge-d8l, fourth instance',
+    );
+    assert.notEqual(status.state, 'green', `an escaped write can never end green — got ${JSON.stringify(status.state)}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('W8-F1 (ON-3): a structural edit the PRODUCTION turn gate refused still shows its diff and reason on the drain row', async () => {
+  const withEdge = themeFile(
+    'Gitignored scratch files, recurrence',
+    'antipattern',
+    [`related_themes: [${DOUBLE_COMMIT_SLUG}]`],
+    ['Body.'],
+  );
+  const { root, brainDir } = makeKbRoot(GITPULSE_KB, [
+    { slug: RECURRENCE_SLUG, category: 'antipattern', content: withEdge },
+    { slug: DOUBLE_COMMIT_SLUG, category: 'antipattern', content: themeFile('Double commit', 'antipattern') },
+  ]);
+  const target = join(brainDir, 'themes', `${RECURRENCE_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkLengthSoftCap', 'length.soft-cap', 'theme exceeds the soft line cap');
+    // Frontmatter-only: 'structural', so the PRODUCTION runner's own gate
+    // reverts it BEFORE the drain diffs the tree. The drain's snapshot then
+    // sees no change at all — which is how "a refused finding SHOWS ITS FIX"
+    // silently stopped being true on the real path while the stubbed pins
+    // above stayed green.
+    const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-realgate`, {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: realTurn(() => {
+        writeFileSync(target, withEdge.replace(`related_themes: [${DOUBLE_COMMIT_SLUG}]`, 'related_themes: []'));
+      }),
+    });
+    assert.equal(readFileSync(target, 'utf8'), withEdge, 'the edge survives');
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    assert.ok(row, JSON.stringify(status.perFinding));
+    const proposals = row.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, `the refused proposal must reach the row — got ${JSON.stringify(proposals)}`);
+    assert.equal(proposals[0].disposition, 'refused');
+    assert.match(proposals[0].diff, /related_themes/, 'the diff must show what the agent proposed');
+    assert.ok(
+      proposals[0].reasons.some((r) => r.includes('deletes the related_themes edge')),
+      `and why it was refused — got ${JSON.stringify(proposals[0].reasons)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('W8-F1 (ON-3, S2): an AUTO-tier row carries its diff — the tier that mutates with no approval gate is the one that must show its work', async () => {
+  // A theme that is NOT listed in its category index → the real `index.not-listed`
+  // auto-fixer rewrites the curated `antipatterns.md`. The C4 refuter watched a
+  // real drain do exactly this with `outcome=cleared` and no diff on the row.
+  const ORPHAN = '2026-06-21-orphan';
+  const { root, brainDir } = makeKbRoot(GITPULSE_KB, []);
+  mkdirSync(join(brainDir, 'themes'), { recursive: true });
+  writeFileSync(join(brainDir, 'themes', `${ORPHAN}.md`), themeFile('Orphan theme', 'antipattern', [], ['Body.']));
+  writeFileSync(join(brainDir, 'antipatterns.md'), '# antipatterns\n\n');
+  const indexPath = join(brainDir, 'antipatterns.md');
+  const indexBefore = readFileSync(indexPath, 'utf8');
+  try {
+    const status = await runKbDrain(root, GITPULSE_KB, `${GITPULSE_KB}-drain-auto`, {
+      // Real lint, real auto-fixers; the agent turn is a no-op so nothing but
+      // the auto tier can be responsible for what lands.
+      runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0, editAudit: { changes: [], refused: [], repaired: [], unsound: [], errors: [] } }),
+    });
+    assert.notEqual(readFileSync(indexPath, 'utf8'), indexBefore, 'precondition: the auto tier must really have rewritten the index');
+    const autoRow = status.perFinding.find((f) => f.tier === 'auto' && f.kind === 'index.not-listed');
+    assert.ok(autoRow, `expected an auto row for the index rewrite — got ${JSON.stringify(status.perFinding)}`);
+    assert.equal(autoRow.outcome, 'cleared', 'precondition: the row really did land unattended');
+    const proposals = autoRow.proposedChanges ?? [];
+    assert.ok(proposals.length > 0, `an auto row that MUTATED the tree must carry its diff — got ${JSON.stringify(autoRow)}`);
+    const indexProposal = proposals.find((p) => p.file.endsWith('antipatterns.md'));
+    assert.ok(indexProposal, `the curated index it rewrote must be in the diff — got ${JSON.stringify(proposals.map((p) => p.file))}`);
+    assert.match(indexProposal.diff, new RegExp(ORPHAN), 'the diff must show what the auto-fixer wrote');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
