@@ -35,8 +35,14 @@ import { isCanonicalInitiativeId } from './initiative-id.ts';
 
 export const DEVELOP_FLOW_ID = 'forge-develop';
 
-/** Matches studio flow-id slugs; a path-traversal guard on the flow ref. */
-const FLOW_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** Matches studio flow-id slugs; a path-traversal guard on the flow ref.
+ *  EXPORTED (W8-F5, bead forge-6gv.23): this guard used to live at ONE of the
+ *  three consumers of a `TriggerTarget.ref`. The widened SEC-04 scan scope
+ *  showed the other two — `stageFlowRunRequest` (ref → the staged filename) and
+ *  `mintTriggeredInitiative` (ref → `studio/flows/<ref>/flow.yaml`, and from
+ *  there into projectRepoPath/artDir) — folded the same value into a path with
+ *  no guard at all. One rule, three consumers; never a second regex. */
+export const FLOW_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export type EnqueueFlowRunStatus =
   | 'enqueued'

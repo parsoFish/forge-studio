@@ -13,8 +13,10 @@
  * derived value that did NOT come out of the guard.
  *
  * THE RULE (taint-source trigger, not a prove-trusted whitelist). In each
- * request-handling module (MODULES below), for every call to one of six raw fs
- * sinks —
+ * module in scope — TIER 1, the declared request-handling surface, DERIVED (see
+ * `targetModules`) from the bridge entry modules + the reachability walk + the
+ * explicit spawn-boundary list, never from a filename glob — for every call to
+ * one of six raw fs sinks —
  *
  *     readFileSync, writeFileSync, readdirSync, existsSync, statSync, mkdirSync
  *
@@ -51,8 +53,12 @@
  * the sibling ratchet's header and the immutable-gates skill warn against. The
  * INTERPROCEDURAL case a taint trigger cannot see in-function — a helper
  * `f(dir){ existsSync(dir) }` whose caller built `dir` from a request id — is
- * ALREADY covered by the sibling ratchet's caller-count dimension
- * (DESIGNATED_UNGUARDED_FUNCTIONS). The two scripts are complementary: the
+ * covered by the sibling ratchet's caller-count dimension ONLY for the
+ * functions someone has NAMED in DESIGNATED_UNGUARDED_FUNCTIONS — a
+ * hand-maintained list, so a brand-new helper of the same shape is not caught
+ * there automatically either (W8-F5 review: the original wording read as "this
+ * class is closed"; it is closed only for the functions already enumerated).
+ * The two scripts are complementary: the
  * ratchet counts callers of designated dir-builders; THIS lint proves the
  * in-function def-use from a request source to a raw leaf.
  *
@@ -92,6 +98,42 @@
  *     `const r = readFileSync; r(...)` evade the unqualified `\bNAME(` match —
  *     every module in scope uses named bare imports, which is what this sees.
  *   - fs/promises IS NOT COVERED. Only the synchronous names above.
+ *   - SCOPE IS DERIVED, AND THE SECOND TIER IS RESTRICTED (W8-F5, bead
+ *     forge-6gv.23 — the C4 refutation: two BYTE-IDENTICAL tainted modules, only
+ *     the `bridge-studio`-named one was scanned). Coverage is now two tiers.
+ *     TIER 1 (`targetModules`, full model): bridge ENTRY modules + every
+ *     bridge-REACHABLE module carrying the HTTP-plumbing signal + the explicit
+ *     spawn-boundary list. TIER 2 (`sweepModules`): every OTHER non-test module
+ *     under `cli/` and `orchestrator/`, scanned for the UNAMBIGUOUS shapes only
+ *     — a value read off an HTTP request MEMBER (`body.*`/`params.*`/`query.*`/
+ *     `req.*`/`request.*`), a raw leaf below a guard producer's output, or one
+ *     of the six bare ids in `SWEEP_MODEL.bareTaint` (the names that are never
+ *     server-enumerated outside the declared surface). So in tier 2 a request
+ *     value laundered through one of the FOUR EXCLUDED bare ids (`cycleId`,
+ *     `initiativeId`, `repoPath`, `runId`) or through an unresolved dir-param
+ *     leaf-append is NOT reported — those rules are calibrated for request
+ *     handlers, and over the whole tree the full model reports 108 findings at
+ *     `c0093918`, nearly all server-built ids, i.e. an allowlist that would
+ *     train blind regeneration. CONCRETELY, the shape this does NOT catch: a
+ *     brand-new DELEGATE HELPER outside the declared surface whose route caller
+ *     hands it a request id under one of those four names, by plain parameter.
+ *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
+ *     for) or give it the HTTP-plumbing signal. A module OUTSIDE `cli/` and
+ *     `orchestrator/` (`loops/`, `forge-ui/`, `scripts/`) is not scanned by
+ *     EITHER tier.
+ *   - TIER 1's ENTRY half is still name-shaped one level up: `listEntryModules`
+ *     treats `cli/ui-bridge.ts` + `cli/bridge-*.ts` as the HTTP entry points, so
+ *     a brand-new top-level dispatcher under a different name, imported by
+ *     nothing that already exists, reaches tier 2 only, not the full model.
+ *     Adding a whole new dispatcher is a far larger architectural event than
+ *     adding a route module (the shape this lint's scope defect was actually
+ *     about), but the seam is named here rather than left implied.
+ *   - TIER 1's reachability half inherits the sibling walker's limits: only
+ *     RELATIVE imports inside `cli/`+`orchestrator/` are followed, so a module
+ *     reached across a process-spawn boundary (the interactive runners) or
+ *     through a bare-package specifier is in tier 1 only because
+ *     `EXPLICIT_MODULES` lists it. An UNREACHABLE new route module (nothing
+ *     imports it yet) is covered by tier 2 only, i.e. by the member shape.
  *
  * Treat a green run as "no request-derived raw fs path escaped the guard among
  * the sinks and shapes this scan can see", never as a containment proof.
@@ -101,9 +143,15 @@
  *   node scripts/check-raw-fs-guarded.mjs --json     # machine-readable findings
  */
 
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// W8-F5: the SIBLING's reachability walk is reused verbatim to derive this
+// lint's scope. There is exactly ONE import-graph walker in scripts/, and it
+// lives in check-request-path-sinks.mjs (both scripts import it main-guarded,
+// so importing it has no side effects).
+import { findReachableModules, listEntryModules } from './check-request-path-sinks.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -284,63 +332,154 @@ export const DIR_PARAM_NAMES = new Set([
   'repoPath',
 ]);
 
-/** Request-handling modules in scope. The explicit singletons plus every
- *  non-test cli/bridge-studio*.ts (the `cli/bridge-studio*.ts` glob in the
- *  charter). Computed against `root` so a fixture tree supplies its own. */
-export function targetModules(root = FORGE_ROOT) {
-  const explicit = [
-    'cli/ui-bridge.ts',
-    'cli/metrics.ts',
-    'cli/contract-stages.ts',
-    'cli/agent-run.ts',
-    'cli/architect-plan.ts',
-    'orchestrator/interactive-session.ts',
-    // R4-22 WI-2: the FINALIZERS registry's sole row today,
-    // copyStagingToLibrary — session-derived staging paths + a
-    // request-derived packageId both reach fs writes; same class as the
-    // legacy interactive runners above.
-    'orchestrator/interactive-finalizers.ts',
-    // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine. It cannot
-    // be reached by check-request-path-sinks.mjs's reachability walker (that
-    // script follows relative imports from the bridge entry points; the
-    // cli/agent-run.ts -> runInteractiveTurn dispatch crosses a process-spawn
-    // boundary, so this module is structurally outside that walk) — this
-    // manual list is therefore the ONLY mechanism that lints it. Same class
-    // as the four legacy runners above: session-derived (kindDir, sessionId)
-    // and finalizer-bound (packageId) paths reach fs sinks.
-    'orchestrator/interactive-runner.ts',
-    'orchestrator/architect-runner.ts',
-    'orchestrator/instructions-runner.ts',
-    'orchestrator/project-brain-builder-runner.ts',
-    'orchestrator/demo-builder-runner.ts',
-    // Not a request handler itself — the shared config-loader HELPER that
-    // multiple request routes DELEGATE their `.forge/project.json` read to
-    // (bridge-studio-runs verdict send-back -> loadProjectConfig(projectRepoPath),
-    // contract-stages, preflight). It is the interprocedural leaf-append SITE for
-    // blind-spot #b: `join(projectRoot, '.forge', 'project.json')` on an
-    // unresolved param, invisible unless the helper's own body is scanned.
-    'orchestrator/project-config.ts',
-    // SEC-05 q80 (FORWARD DEFENSE): the skill-package install + vendored-read
-    // helpers the /api/studio/skills/install and community-install/index routes
-    // DELEGATE their per-entry filesystem walk to. Not request handlers
-    // themselves — the request-derived `id` and package entry paths flow into
-    // these bodies, so the guarded-sink scan must cover them going forward.
-    // (This scope-add is standing forward coverage; it does NOT catch the q80
-    // install defect — the per-entry-containment unit pins do.)
-    'orchestrator/studio/skill-library.ts',
-    'orchestrator/studio/community-install.ts',
-    'orchestrator/studio/community-index.ts',
-  ];
-  const cliDir = join(root, 'cli');
-  const glob = [];
-  if (existsSync(cliDir)) {
-    for (const f of readdirSync(cliDir)) {
-      if (f.startsWith('bridge-studio') && f.endsWith('.ts') && !f.endsWith('.test.ts')) glob.push(`cli/${f}`);
+/** Modules the import-graph walk structurally CANNOT reach, kept explicit.
+ *  Every row states why the walker cannot see it (a process-spawn boundary, or
+ *  a delegated helper whose request-derived arguments arrive by parameter). */
+export const EXPLICIT_MODULES = [
+  // R4-22 WI-2: the FINALIZERS registry's sole row today, copyStagingToLibrary
+  // — session-derived staging paths + a request-derived packageId both reach fs
+  // writes; same class as the legacy interactive runners below.
+  'orchestrator/interactive-finalizers.ts',
+  // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine, and the four
+  // legacy runners. They cannot be reached by the reachability walk (that walk
+  // follows relative imports from the bridge entry points; the
+  // cli/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
+  // boundary), so this list is the only mechanism that lints them. Session-
+  // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
+  // sinks in every one.
+  'cli/agent-run.ts',
+  'orchestrator/interactive-session.ts',
+  'orchestrator/interactive-runner.ts',
+  'orchestrator/architect-runner.ts',
+  'orchestrator/instructions-runner.ts',
+  'orchestrator/project-brain-builder-runner.ts',
+  'orchestrator/demo-builder-runner.ts',
+  // CLI-side operator surfaces that take the same project/initiative ids the
+  // routes do, reached by `forge <verb>` rather than by an HTTP dispatch.
+  'cli/metrics.ts',
+  'cli/contract-stages.ts',
+  'cli/architect-plan.ts',
+  // Not a request handler itself — the shared config-loader HELPER that
+  // multiple request routes DELEGATE their `.forge/project.json` read to
+  // (bridge-studio-runs verdict send-back -> loadProjectConfig(projectRepoPath),
+  // contract-stages, preflight). It is the interprocedural leaf-append SITE for
+  // blind-spot #b: `join(projectRoot, '.forge', 'project.json')` on an
+  // unresolved param, invisible unless the helper's own body is scanned.
+  'orchestrator/project-config.ts',
+  // SEC-05 q80 (FORWARD DEFENSE): the skill-package install + vendored-read
+  // helpers the /api/studio/skills/install and community-install/index routes
+  // DELEGATE their per-entry filesystem walk to. The request-derived `id` and
+  // package entry paths flow into these bodies by parameter.
+  'orchestrator/studio/skill-library.ts',
+  'orchestrator/studio/community-install.ts',
+  'orchestrator/studio/community-index.ts',
+];
+
+/** The HTTP-plumbing signal: a module that speaks the bridge's request/response
+ *  protocol. Deliberately keyed on the PLUMBING (the node:http handler types and
+ *  the bridge's own request helpers), never on a bare `body`/`req` token — a PR
+ *  body, a markdown body and a domain `req` object all carry those names, and
+ *  scoping on them drags the engine in (measured: +86 findings, all mis-fires of
+ *  the curated bare-id list in modules where those ids are server-built). */
+const HTTP_PLUMBING_RE = /(?<![.\w$])(?:IncomingMessage|ServerResponse)\b|(?<![.\w$])(?:sendJson|readJson|pathOnly|allowedOrigin|refuseDryBridge)\s*[(,}]/;
+
+/** Repo-relative non-test `.ts` files under `cli/` and `orchestrator/`. */
+function allSourceModules(root) {
+  const out = [];
+  const walk = (rel) => {
+    const abs = join(root, rel);
+    if (!existsSync(abs) || !statSync(abs).isDirectory()) return;
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const next = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(next);
+      else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') && !entry.name.endsWith('.d.ts')) out.push(next);
     }
-  }
-  const all = new Set([...explicit, ...glob]);
+  };
+  walk('cli');
+  walk('orchestrator');
+  return out.sort();
+}
+
+/**
+ * TIER 1 — the DECLARED request-handling surface, scanned with the full taint
+ * model. Three DERIVATIONS, no filename glob (W8-F5, bead forge-6gv.23):
+ *
+ *   1. every bridge ENTRY module, from the sibling walker's own
+ *      `listEntryModules` (`cli/ui-bridge.ts` + non-test `cli/bridge-*.ts`) —
+ *      until W8-F5 this lint saw only the `cli/bridge-studio*` subset, which is
+ *      how `cli/bridge-recovery.ts` (four routes, `renameSync`/`rmSync` on
+ *      `:id`-derived paths) shipped for two waves outside the dataflow gate;
+ *   2. every module REACHABLE from those entries (the sibling's import walk)
+ *      that carries the HTTP-plumbing signal — a delegated route helper is a
+ *      request handler wherever it lives and whatever it is called;
+ *   3. `EXPLICIT_MODULES` — the process-spawn-boundary and by-parameter
+ *      delegates the walk structurally cannot see.
+ *
+ * Scope may only GROW: `check-raw-fs-guarded.test.ts` G5 pins every module the
+ * pre-W8-F5 hand list covered, so a derivation that silently drops one fails.
+ */
+export function targetModules(root = FORGE_ROOT) {
+  const hasCli = existsSync(join(root, 'cli'));
+  const entries = hasCli ? listEntryModules(root) : [];
+  const reachable = hasCli ? findReachableModules(root) : [];
+  const plumbing = reachable.filter((rel) => {
+    const abs = join(root, rel);
+    return existsSync(abs) && HTTP_PLUMBING_RE.test(readFileSync(abs, 'utf8'));
+  });
+  const all = new Set([...EXPLICIT_MODULES, ...entries, ...plumbing]);
   return [...all].filter((m) => existsSync(join(root, m))).sort();
 }
+
+/**
+ * TIER 2 — the SWEEP: every other non-test module under `cli/` and
+ * `orchestrator/`, scanned for the UNAMBIGUOUS shape only (a value read off an
+ * HTTP request MEMBER — `body.*`/`params.*`/`query.*`/`req.*`/`request.*` — or a
+ * raw leaf appended below a guard producer's output, reaching a raw fs sink).
+ *
+ * WHY A RESTRICTED MODEL AND NOT THE FULL ONE. The full model's curated BARE id
+ * list (`runId`, `repoPath`, `initiativeId`, …) is calibrated FOR request
+ * handlers, where those names carry route values. In the engine those same names
+ * are server-built, so running the full model over the whole tree reports 108
+ * findings at `c0093918` — which could only ship as ~108 allowlist rows, the
+ * "trains blind regeneration" anti-pattern this file's own charter rejects. The
+ * member shape has no benign reading: nothing in this repo reads a filesystem
+ * path off a `params.`/`query.`/`req.` member that is not a request value.
+ *
+ * This is the tier that makes the gate name-blind: a NEW module handling request
+ * data is scanned wherever it lives, whatever it is called, and whether or not
+ * anything imports it yet.
+ */
+export function sweepModules(root = FORGE_ROOT) {
+  const declared = new Set(targetModules(root));
+  return allSourceModules(root).filter((m) => !declared.has(m));
+}
+
+/**
+ * The taint model used in the sweep. HTTP members are always on; the BARE id
+ * list is restricted to the names that are never server-enumerated outside the
+ * declared surface, and the dir-param leaf rule stays off.
+ *
+ * WHY A RESTRICTED BARE LIST RATHER THAN NONE (W8-F5 adversarial review). With
+ * NO bare names, a delegate helper that a route calls by plain PARAMETER —
+ * `export function handleSessionRead(sessionId) { readFileSync(join(LOGS_ROOT,
+ * sessionId, 'e.jsonl')) }` — is invisible, which is the C4 defect one
+ * abstraction level down from where it was fixed. WHY NOT THE FULL LIST:
+ * measured over the 164 swept modules at this tree, each name's MARGINAL cost
+ * (all of them engine sites where the id is SERVER-built) is `cycleId` +24,
+ * `initiativeId` +17, `repoPath` +4, `runId` +3 — versus `sessionId` +0,
+ * `project_repo_path` +0, `url` +0, `rawUrl` +0, `slug` +1, `projectId` +2.
+ * The four expensive names stay TIER-1-only; that residue is disclosed in the
+ * limits section above and tracked as a bead, never hidden.
+ *
+ * EXPORTED so the test that pins the sweep's calibration drives THIS object
+ * rather than a private copy — a pin that rebuilds the model it is testing
+ * cannot notice the model changing under it.
+ */
+export const SWEEP_MODEL = {
+  bareTaint: new Set(['sessionId', 'slug', 'projectId', 'project_repo_path', 'url', 'rawUrl']),
+  dirParams: new Set(),
+};
 
 const BACKSCAN_LIMIT = 400;
 
@@ -486,6 +625,16 @@ function findBinding(cleanedLines, name, fromLine) {
   // checks classify it by the collection's origin (trusted ⇒ no finding), the
   // same no-false-positive discipline the simple-for-of case (A7) already has.
   const forDestrRe = new RegExp(`\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{][^\\]}]*\\b${name}\\b[^\\]}]*[\\]}]\\s+of\\s+(.+?)\\s*\\)`);
+  // DESTRUCTURED DECLARATION (W8-F5) — `const { runId } = body;`,
+  // `const { target: { ref } } = req.body;`, `const [first] = parts;` bind `name`
+  // as a MEMBER of the RHS. Without this the name reads as UNRESOLVED (i.e. "a
+  // caller-supplied parameter") and only the curated BARE id list could catch
+  // it — which the sweep model deliberately empties, so
+  // `const { runId } = body` would evade the very member rule that
+  // `body.runId` trips. Binding-wins then classifies it by the RHS: a trusted
+  // RHS stays clean, a request member taints. Nested patterns are covered
+  // because the char class spans the inner braces (no `=`/`;` inside them).
+  const destrRe = new RegExp(`(?:const|let)\\s*[\\[{][^=;]*\\b${name}\\b[^=;]*[\\]}]\\s*=\\s*(.+?);?\\s*$`);
   const declHereRe = new RegExp(`(?:const|let)\\s+${name}\\b|\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{]?[^\\]})]*\\b${name}\\b`);
   const limit = Math.max(0, fromLine - BACKSCAN_LIMIT);
   for (let i = fromLine; i >= limit; i--) {
@@ -496,6 +645,8 @@ function findBinding(cleanedLines, name, fromLine) {
     if (forDestrM) return { kind: 'for', rhs: forDestrM[1].trim() };
     const m = nameRe.exec(line);
     if (m) return { kind: 'const', rhs: m[1].trim() };
+    const destrM = destrRe.exec(line);
+    if (destrM) return { kind: 'const', rhs: destrM[1].trim() };
     // Boundary: a column-0 structural line that ISN'T our own binding stops the
     // walk (we've left the enclosing function). Checked AFTER the binding tests
     // so the enclosing function's own leading `const`/`function` line, if it
@@ -536,7 +687,7 @@ function identIsGuardBound(full, head, line, cleanedLines, depth = 0) {
  *  request-derived SOURCE (a taint token, or a binding that draws on one)?
  *  Bounded recursion via `depth`. Guard-bound values are NOT tainted (the guard
  *  is a sanitizer); trusted roots short-circuit to not-tainted. */
-function identIsTainted(full, head, line, cleanedLines, depth = 0) {
+function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUEST_TAINT_BARE) {
   if (REQUEST_TAINT_HEADS.has(head)) return true; // body./params./query./req. — always a request source
   if (TRUSTED_ROOTS.has(head)) return false;
   if (depth > 6) return false; // fail toward NOT-tainted at the bound (documented: curated list is the guarantee)
@@ -550,11 +701,11 @@ function identIsTainted(full, head, line, cleanedLines, depth = 0) {
   if (binding) {
     if (rhsIsGuardProducer(binding.rhs)) return false; // guarded → sanitized
     for (const id of governingIdents(binding.rhs)) {
-      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1)) return true;
+      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1, bare)) return true;
     }
     return false;
   }
-  return REQUEST_TAINT_BARE.has(full) || REQUEST_TAINT_BARE.has(head);
+  return bare.has(full) || bare.has(head);
 }
 
 /** Is the whole path expression guard-terminal? `<g>`, `<g>.realPath`,
@@ -584,14 +735,14 @@ function isGuardTerminal(expr, line, cleanedLines) {
  *  already flags leaf-append below a guard). Template `${dir}/leaf` is NOT covered
  *  (cleanStructure blanks the literal tail outside `${}`); the modules in scope
  *  use join()/resolve(). */
-function dirParamLeafAppend(expr, line, cleanedLines, depth = 0) {
+function dirParamLeafAppend(expr, line, cleanedLines, depth = 0, dirParams = DIR_PARAM_NAMES) {
   if (depth > 6) return null;
   const e = expr.trim();
   // inline join/resolve whose FIRST arg is a bare ident + at least one more segment
   const m = /^(?:join|resolve)\(\s*([A-Za-z_$][\w$]*)\s*,/.exec(e);
   if (m) {
     const base = m[1];
-    if (DIR_PARAM_NAMES.has(base) && !TRUSTED_ROOTS.has(base) && findBinding(cleanedLines, base, line) === null) {
+    if (dirParams.has(base) && !TRUSTED_ROOTS.has(base) && findBinding(cleanedLines, base, line) === null) {
       return base;
     }
     return null;
@@ -599,13 +750,18 @@ function dirParamLeafAppend(expr, line, cleanedLines, depth = 0) {
   // sink opens a bare ident — follow ONE binding to a join/resolve (via-const shape)
   if (/^[A-Za-z_$][\w$]*$/.test(e)) {
     const binding = findBinding(cleanedLines, e, line);
-    if (binding) return dirParamLeafAppend(binding.rhs, line, cleanedLines, depth + 1);
+    if (binding) return dirParamLeafAppend(binding.rhs, line, cleanedLines, depth + 1, dirParams);
   }
   return null;
 }
 
-/** Analyze one module's text; return findings [{ file, line, sink, path, why }]. */
-export function analyzeModule(text, relFile) {
+/** Analyze one module's text; return findings [{ file, line, sink, path, why }].
+ *  `model` selects the taint sources: the default is the FULL model used on the
+ *  declared request-handling surface; the sweep passes `SWEEP_MODEL` (HTTP
+ *  members only — see sweepModules for why). */
+export function analyzeModule(text, relFile, model = {}) {
+  const bare = model.bareTaint ?? REQUEST_TAINT_BARE;
+  const dirParams = model.dirParams ?? DIR_PARAM_NAMES;
   const cleaned = cleanStructure(text);
   const cleanedLines = cleaned.split('\n');
   const origLines = text.split('\n');
@@ -636,12 +792,12 @@ export function analyzeModule(text, relFile) {
       let taintTok = null;
       for (const id of idents) {
         if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
-        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines)) taintTok = id.full;
+        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines, 0, bare)) taintTok = id.full;
     }
     // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
     // an unresolved dir-shaped param (the caller laundered the request id into
     // the dir). Fires only when guardBase/taintTok did not already catch it.
-    const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines) : null;
+    const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines, 0, dirParams) : null;
     if (!guardBase && !taintTok && !dirParamBase) continue; // request-independent → safe
     const kind = guardBase ? 'leaf-append' : taintTok ? 'tainted' : 'dir-param-leaf-append';
     const why = guardBase
@@ -960,6 +1116,65 @@ export const ALLOWLIST = [
   // direct `node scripts/check-raw-fs-guarded.mjs` run.
   { file: 'cli/ui-bridge.ts', line: 3109, sink: 'mkdirSync',
     reason: 'RETAIN (isSafeRunId-gated logdir-create): runId = `_agent-${slug}-${newRunStamp()}` with slug URL-derived (newly tainted), but isSafeRunId(runId) (SAFE_RUN_ID_RE + explicit .. check) THROWS a few lines above BEFORE this recursive mkdir of the run\'s own log dir under trusted ctx.logsRoot — the SAME deliberate guard-symmetry check its already-allowlisted siblings at (now) 2107/2515 carry. (Line-drift remap from 1841 — W6-B2\'s ensureSessionTail helper + ctx call-site comment, cumulative +32. Further remap from 1873 — W6-B2 review fix\'s +1 import line, same cause as the cli/ui-bridge.ts rows above.) (Merge remap from 1874 - parsoFish/main B2 session-tails merged into feat/w6-p1-run-list-cache shifted earlier-file line counts; same function, same guard, unchanged - verified against the merged tree.) (Line-drift remap from 1876 -- the feat/w6-b5-model-seam merge with parsoFish/main (W6-B5 kickoff model-tier seam combined with mains own concurrent ui-bridge.ts/architect-runner.ts edits), +2 lines; same function, same guard, unchanged.) (Line-drift remap to 2130 -- W6-B11 (GET /api/studio/sessions aggregate sessions-index route + the isTerminalPhase panel-table widening it reuses), +240 lines; same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run.) (Merge remap to 2143 -- reconciling feat/w6-b11-sessions-index (this branch own +240/+242 shift) with parsoFish/main (W6-CR-2/B10/B12/B13 cumulative, non-overlapping shifts to earlier parts of the file); same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run against the merged tree.) (Merge remap to 2142 -- reconciling feat/w6-b11-sessions-index with parsoFish feat/w6-b8-migrate-cleanup-authoring fix-round commit d5dafa6f (W6-B9: deletes the dead /cleanup/apply route + its approveKbCleanup import, -1 line before that deletion point, and the route handler body itself further down the file); same function, same guard, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run against the merged tree. (Line-drift remap to 2148 -- W6-B6 fix (new GET /api/studio/agents/:slug/capability route: a new import line near the top of the import block, +1 line, plus a new dispatch-chain call + its comment block after the instructions-draft route, +5 lines; net +6 for this row), same function, same guard/probe, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs --json` run.)) (Merge remap from 2149 -- W7-A3 (feat/w7-a3-loop-closure) merged with parsoFish/main; same function, same guard, unchanged -- verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 2199 -- W7-FIX-A3 loop-closure regressions (POST /api/scheduler/start clears .paused (+6), /stop marks the signalled pid (+5), and POST /api/flows/:id/run refuses a done/ initiative (+16) -- cumulative for rows past each edit); same function, same guard/probe, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Line-drift remap from 2209 -- W7-FIX-A3 round-2 fixes in cli/ui-bridge.ts: the scheduler start/stop routes grew the fresh-spawn-only setPaused branch + the already-stopping short-circuit (+24 lines before this sink), and POST /api/flows/:id/run dropped its inlined done/ pre-check onto the allowFinishedSource option on enqueueFlowRun (-9 lines). Same function, same sink expression, unchanged -- re-verified via `node scripts/check-raw-fs-guarded.mjs --json`.) (Merge remap from 2235 -- reconciling feat/w7-b3-community (community-registry CRUD + skill-only/server-owned-signals review round in cli/bridge-studio-writes.ts; the community-refresh brief + W7-B3 routes in cli/ui-bridge.ts) with parsoFish/main post-W7-B1/B7; same function, same guard/probe, unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run against the merged tree.) (Line-drift remap from 2699 -- W7-C2 T1 review: cli/ui-bridge.ts\'s spawnAgentTurn now RETURNS a SpawnTurnOutcome instead of swallowing (A7) and the per-kind broadcast mapping was hoisted into one shared local (A12); cli/bridge-studio-kbs.ts\'s approveKbCleanup writes the finalized produce-pointer (P0-4). Same function, same guard/probe, byte-for-byte unchanged -- re-verified via a direct `node scripts/check-raw-fs-guarded.mjs` run.) (Merge remap to 2727 -- landing feat/w7-c3-polish onto parsoFish/main post-W7-C2 (#198): the C2 cli/ui-bridge.ts edits (spawnAgentTurn returning SpawnTurnOutcome, the hoisted per-kind broadcast mapping, the revise feedback gate) and the C3 /api/artifact isSafeSubPath filename gate shift earlier-file line counts independently. Every row re-derived from a direct `node scripts/check-raw-fs-guarded.mjs --json` run against the merged tree and matched to its finding by sink + path expression; same function, same guard, source text unchanged.) (Line-drift remap from 2727 -- W7-D1: cli/ui-bridge.ts gained the module-scope LEGACY_ROOT_ARTIFACT constant + its header after the imports (+8 lines) and the GET /api/artifact legacy cycle-log-root fallback inside the route (+18 more), so rows above the route moved +8 and rows below +26; same function, same sink expression, unchanged -- each row re-paired to its new line by sink kind and ORDER from a real `node scripts/check-raw-fs-guarded.mjs --json` run, all 18 matching 1:1, never by arithmetic on the file.) (Line-drift remap from 2779 -- W8-A2 (ON-7): cli/ui-bridge.ts gained servedFileHeaders (7 served-file routes hardened), the four bespoke session-list routes wired to deriveSessionLifecycleFor, the sessionStaleMs helper, and the standalone-run stalled derivation; cli/agent-run.ts gained the turn-throw catch. Same function, same sink expression, byte-for-byte unchanged. Re-paired by SINK IDENTITY (file+sink+path-expression), not arithmetic: base-vs-current runLint with an EMPTY allowlist reports 70 residual sinks on BOTH sides, ZERO new and ZERO removed identities, so all 65 rows matched 1:1.) (Line-drift remap from 3113 -- W8-B5b: the community-refresh SESSION KIND was retired; cli/ui-bridge.ts lost its POST /api/studio/community-refresh/start route + spawn-spec entry and orchestrator/interactive-session.ts comments were rewritten, moving every row past them. Same function, same sink, source text unchanged -- re-paired by SINK KIND and ORDER from a real `node scripts/check-raw-fs-guarded.mjs --json` run (21 findings vs 21 stale rows, 1:1, zero new and zero removed sink identities), never by arithmetic on the file.)' },
+  // ---- cli/bridge-recovery.ts (NEW IN SCOPE, W8-F5) ----
+  // This whole file — four live bridge routes, two of them destructive
+  // (`renameSync` into failed/, `rmSync` of verdict sidecars) — sat OUTSIDE the
+  // SEC-04 dataflow lint for two waves because its basename is `bridge-recovery`,
+  // not `bridge-studio`. Entry-derived scope brought it in; every sink below was
+  // then AUDITED (not remapped, not inherited): the id-charset gate is
+  // `INIT_ID_RE.test(id)` with an early 400 at cli/bridge-recovery.ts:182 (GET
+  // inspect), :196 (POST abandon) and :212 (POST requeue) — BEFORE any path
+  // construction — and the manifest-sourced paths are gated by
+  // isContainedWorktreePath / isContainedProjectRepoPath (SEC-02, forge-d1f).
+  // recoveryInspect/recoveryAbandon have NO other production caller (`grep -rn
+  // "recoveryInspect\|recoveryAbandon" --include=*.ts` = this file + its test),
+  // so the route-level gate is the complete entry enumeration. INIT_ID_RE
+  // (`/^INIT-[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(-[a-z0-9]+)*$/`) blocks `/`
+  // and `..` but is symlink-BLIND — the same disclosed residual the other
+  // INIT_ID_RE rows in this list carry (migrate-to-guardedFile follow-up).
+  { file: 'cli/bridge-recovery.ts', line: 69, sink: 'existsSync',
+    reason: 'ID-CHARSET GATE + BOOL-PROBE: locate() probes `join(<queue state dir>, `${initiativeId}.md`)` across the six trusted getPaths(ctx.queueRoot) dirs. `initiativeId` is INIT_ID_RE-gated at every route entry (:182/:196/:212, early 400) and is a single segment; the probe is boolean (no bytes flow through this path).' },
+  { file: 'cli/bridge-recovery.ts', line: 99, sink: 'readFileSync',
+    reason: 'ID-CHARSET GATE: recoveryInspect reads `located.path`, which is locate()\'s own output — a trusted queue-state dir joined with the INIT_ID_RE-gated `<id>.md` leaf (:69), never a caller-supplied path. Same construction the allowlisted cli/bridge-studio-runs.ts INIT_ID_RE rows audit.' },
+  { file: 'cli/bridge-recovery.ts', line: 110, sink: 'existsSync',
+    reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `wt` is the manifest\'s worktree_path, and this existsSync sits INSIDE `if (wt && wtContained && existsSync(wt))` — `wtContained` is isContainedWorktreePath(wt, {forgeRoot, projectsRoot, initiativeId}) evaluated on the line above (SEC-02 forge-d1f). The scanner cannot see that predicate as a guard producer; the containment is real and short-circuits before the probe.' },
+  { file: 'cli/bridge-recovery.ts', line: 116, sinks: ['existsSync', 'readFileSync'],
+    reason: 'MANIFEST-PATH-GUARD: `prPath = join(wt, ".forge", "pr-description.md")` — two LITERAL leaf segments under a `wt` already proven contained by isContainedWorktreePath in the enclosing branch condition (:108-109). The read only measures `.length` (prDraftChars); the guard is what stops the arbitrary-file-length oracle SEC-02 closed.' },
+  { file: 'cli/bridge-recovery.ts', line: 127, sink: 'readFileSync',
+    reason: 'ID-CHARSET GATE: recoveryAbandon\'s manifest read of `located.path` — identical construction and identical gate to the :99 row (locate() output, INIT_ID_RE-gated leaf under a trusted queue dir).' },
+  { file: 'cli/bridge-recovery.ts', line: 142, sink: 'existsSync',
+    reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `projectRepoPath` is the manifest\'s project_repo_path; recoveryAbandon RETURNS EARLY at :137-139 unless isContainedProjectRepoPath(projectRepoPath, {forgeRoot, projectsRoot}) holds, so the probe is unreachable for an out-of-bounds path. Boolean only — it gates the git invocations below, which take the same proven path.' },
+  { file: 'cli/bridge-recovery.ts', line: 143, sink: 'existsSync',
+    reason: 'MANIFEST-PATH-GUARD + BOOL-PROBE: `wt` — recoveryAbandon returns early at :133-135 unless isContainedWorktreePath holds (SEC-02 forge-d1f, "refuse the whole abandon rather than run git -C <wt> against an out-of-bounds path"). Boolean only.' },
+  { file: 'cli/bridge-recovery.ts', line: 152, sink: 'renameSync',
+    reason: 'ID-CHARSET GATE (both path arguments): source `located.path` is locate()\'s INIT_ID_RE-gated output (see :99); destination `join(failedDir, `${initiativeId}.md`)` is the trusted getPaths(ctx.queueRoot).failed dir plus the same INIT_ID_RE-gated single segment. This is the queue state move the recovery route exists to perform; both endpoints stay inside queueRoot by charset.' },
+  { file: 'cli/bridge-recovery.ts', line: 157, sinks: ['existsSync', 'rmSync'],
+    reason: 'ID-CHARSET GATE: `p = join(inFlight, `${initiativeId}${suffix}`)` where `suffix` iterates a LITERAL array ([".verdict-prompt.md", ".verdict-response.md"]) and `inFlight` is the trusted getPaths(ctx.queueRoot).inFlight. INIT_ID_RE-gated id, single segment, no recursion on the rm (`{force:true}` only) — a stale-sidecar cleanup, not a tree delete.' },
+
+  // ---- orchestrator/flow-run-requests.ts (NEW IN SCOPE, W8-F5 sweep tier) ----
+  { file: 'orchestrator/flow-run-requests.ts', line: 147, sink: 'writeFileSync',
+    reason: 'GUARD ADDED IN THIS LANE, then audited: `target.ref` reaches the staged filename `flow-run-<ref>-<ts>.json`. UNGUARDED this escaped — measured at c0093918, `ref: "../../../../pwned"` wrote `<tmpdir>/pwned-<ts>.json`, outside the queue root entirely. W8-F5 added the FLOW_ID_RE gate (exported from orchestrator/enqueue-flow-run.ts, where the SAME value was already described as "a path-traversal guard on the flow ref") at the head of stageFlowRunRequest, throwing before mkdirSync; `ts` is an ISO timestamp with `[:.]` replaced. Residual: the leaf is charset-gated rather than guardedFile-produced, and the gate is symlink-blind — pinned red-first by orchestrator/flow-run-requests.test.ts ("stageFlowRunRequest REFUSES a target ref that is not a flow-id slug").' },
+
+  // ---- orchestrator/mint-triggered-initiative.ts (NEW IN SCOPE, W8-F5 sweep tier) ----
+  { file: 'orchestrator/mint-triggered-initiative.ts', line: 133, sink: 'existsSync',
+    reason: 'GUARD ADDED IN THIS LANE + BOOL-PROBE: `projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project)`. The taint root is `req.target.ref`, which W8-F5 now FLOW_ID_RE-gates at the function head (early typed `{status:"error"}`) before it is folded into `studio/flows/<ref>/flow.yaml`; `flow.project` is then a field of that operator-authored, studio-lint-validated flow definition (config trust boundary), and the sink is a boolean existence probe whose false branch returns an error. Pinned by orchestrator/mint-triggered-initiative.test.ts ("mintTriggeredInitiative REFUSES a target ref that is not a flow-id slug").' },
+  { file: 'orchestrator/mint-triggered-initiative.ts', line: 226, sink: 'mkdirSync',
+    reason: 'SERVER-MINTED ID: `artDir = join(logsRoot, cycleId, "artifacts")` where `cycleId = readManifestCycleId(manifestPath) ?? initiativeId` — both are SERVER-minted (mintAndPersistManifestCycleId at :219; `initiativeId` is built at :167 from validated tokens only, `INIT-<date>-<idToken(origin)>-<idToken(flowId)>-<hms>`, and is INIT_ID_RE-valid by construction — this module\'s header states the posture: "the initiative id is generated from VALIDATED fields only (never payload free-text)"). No request string reaches this path; `logsRoot` is the trusted opts/forgeRoot-derived root.' },
+  { file: 'orchestrator/mint-triggered-initiative.ts', line: 227, sink: 'writeFileSync',
+    reason: 'SERVER-MINTED ID + LITERAL LEAF: `join(artDir, "trigger-payload.json")` — the literal artifact leaf under the same server-minted artDir audited on the line above. The PAYLOAD is untrusted webhook data, but it is written as DATA (JSON.stringify of the typed payload, read-as-data downstream); it never contributes a path segment.' },
+
+  // ---- W8-F5 round 2: the sweep's restricted BARE id list (review response) ----
+  // Widening SWEEP_MODEL.bareTaint to the six never-server-enumerated names
+  // closed the delegate-helper shape an adversarial review demonstrated (a route
+  // passing `sessionId` to a helper by plain parameter). It surfaced exactly
+  // three more sinks tree-wide; both files were read and audited here.
+  { file: 'cli/brain-lint.ts', line: 225, sink: 'existsSync',
+    reason: 'BOOL-PROBE + REPO-CONTENT id: findThemeBySlug builds `join(brainRoot, sub, "themes", `${slug}.md`)` over the two literal THEME_SUBDIRS under the trusted brainRoot. `slug` is a WIKILINK parsed out of a brain markdown file (cli/brain-lint.ts:520 `for (const slug of wikilinks)`) — repo content at the operator/agent trust boundary, never an HTTP value; this module is a CLI lint (`node cli/brain-lint.ts`) and holds no route. The sink is boolean-only (the result decides a lint finding; no bytes are read through the path), so the residual is a link like `[[../../x]]` learning whether a path exists — disclosed, not hidden, and bounded by the fact that whoever authored the wikilink already had repo write access.' },
+  { file: 'orchestrator/project-brain-seed.ts', line: 240, sink: 'mkdirSync',
+    reason: 'TRUSTED-AT-CONSTRUCTION (the module says so at the sink): checkProjectBrainSeedContainment materialises `brainProjectsRoot`, a forgeRoot-derived directory with NO request-derived segment — the in-file comment directly above states it, and `resolveGuardedPath` (used two lines below for every real target) requires its root to exist. The taint the scan sees is `projectId` reaching brainSeedTargets(), whose per-target segments ARE guarded on the very next lines; the root itself carries none of it.' },
+  { file: 'orchestrator/project-brain-seed.ts', line: 243, sink: 'existsSync',
+    reason: 'BOOL-PROBE IMMEDIATELY BEFORE THE GUARD: `if (existsSync(target.absPath)) continue` is the idempotent skip in the SAME loop whose next statement is `resolveGuardedPath(brainProjectsRoot, target.segments)` with a hard throw on failure — this is the containment checker itself. The probe reads no bytes and creates nothing; every path that proceeds past it is guard-verified per segment.' },
+
 ];
 
 function keyOf(f) {
@@ -1428,13 +1643,27 @@ export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
   },
 ];
 
-export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLIST } = {}) {
+export function runLint({ root = FORGE_ROOT, modules = null, sweep = null, allowlist = ALLOWLIST } = {}) {
   const mods = modules ?? targetModules(root);
   const all = [];
   for (const rel of mods) {
     const abs = join(root, rel);
     if (!existsSync(abs)) continue;
     all.push(...analyzeModule(readFileSync(abs, 'utf8'), rel));
+  }
+  // TIER 2 — the name-blind sweep. Explicit `modules` still selects the tier-1
+  // set only (unit tests drive a hand-picked list); `sweep` overrides the
+  // derived sweep set the same way. FOOTGUN, named (W8-F5 review): passing
+  // `modules` WITHOUT `sweep` yields zero tier-2 coverage — deliberate, so a
+  // unit test can isolate tier 1, and visible in the result (`swept: 0`). The
+  // production entry point is `main()`'s `runLint({})`, which derives both and
+  // is pinned live by the test suite; a new caller wanting the whole gate must
+  // call it the same way.
+  const sweptMods = sweep ?? (modules ? [] : sweepModules(root));
+  for (const rel of sweptMods) {
+    const abs = join(root, rel);
+    if (!existsSync(abs)) continue;
+    for (const f of analyzeModule(readFileSync(abs, 'utf8'), rel, SWEEP_MODEL)) all.push({ ...f, scope: 'sweep' });
   }
   const { kept, suppressed, stale, mistargeted } = applyAllowlist(all, allowlist);
 
@@ -1486,6 +1715,7 @@ export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLI
     stale: [...stale, ...foldStale],
     mistargeted,
     scanned: mods.length,
+    swept: sweptMods.length,
     total: all.length + foldFindings.length,
   };
 }
@@ -1504,7 +1734,7 @@ function main() {
     console.warn(`check-raw-fs-guarded: MISTARGETED allowlist entry — ${m.entry.file}:${m.entry.line} audited "${m.entry.sink}" but the line now holds "${m.found.sink}" (not suppressed; re-audit).`);
   }
   if (r.findings.length) {
-    console.error(`check-raw-fs-guarded: FAIL — ${r.findings.length} unguarded request-derived raw fs sink(s) in ${r.scanned} request-handling module(s):`);
+    console.error(`check-raw-fs-guarded: FAIL — ${r.findings.length} unguarded request-derived raw fs sink(s) across ${r.scanned} request-handling module(s) + ${r.swept} swept module(s):`);
     for (const f of r.findings) {
       const label = f.folded !== undefined ? `projects-root-fold [${f.folded}]` : `${f.sink}(${f.path})`;
       console.error(`  ✗ ${f.file}:${f.line} ${label} — ${f.why}`);
@@ -1517,7 +1747,7 @@ function main() {
     console.error('  2. Or added to the ALLOWLIST in scripts/check-raw-fs-guarded.mjs (file+line+reason) if it is an audited-trusted residual.');
     return 1;
   }
-  console.log(`check-raw-fs-guarded: PASS — ${r.scanned} modules scanned, ${r.suppressed.length} allowlisted residual(s), 0 unguarded request-derived raw fs sinks`);
+  console.log(`check-raw-fs-guarded: PASS — ${r.scanned} request-handling module(s) scanned (full model) + ${r.swept} swept for the unambiguous request shapes, ${r.suppressed.length} allowlisted residual(s), 0 unguarded request-derived raw fs sinks`);
   return 0;
 }
 
