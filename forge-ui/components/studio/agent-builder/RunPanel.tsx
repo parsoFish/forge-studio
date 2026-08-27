@@ -78,22 +78,55 @@ import { deriveRunGating, runStateOf } from '@/lib/run-panel-gating';
 // the existing prior art for "a control that would otherwise sit arbitrarily
 // far down normal flow", not a new pattern.
 //
-// The height bound matters: this panel grows (project picker, ceiling,
-// materials, standing triggers, a live run's log), and an unbounded sticky
-// element taller than the viewport pins its TOP and pushes its own primary
-// button off the bottom — the same defect wearing a different hat. Bounded,
-// it scrolls internally and the button stays reachable.
+// W8-F4 (ON-8, hostile re-verification): the panel grows (project picker,
+// ceiling, materials, standing triggers, a live run's log) — putting the
+// scroll bound on this ROOT (the previous shape of this constant) meant the
+// dispatch control rendered INSIDE the panel's own scroll region, reachable
+// only by scrolling past four form blocks first. A `paddingTop: 4000`
+// mutation into this object proved it: the button moved 4000px down and
+// every gate stayed green, because "it scrolls internally and the button
+// stays reachable" is reachable-BY-scrolling, the exact claim's own
+// negation. The fix is a bounded flex COLUMN split into two children: this
+// root only lays out and clips (`overflow: 'hidden'`, no padding of its
+// own); `RUN_PANEL_BODY_STYLE` is the ONE scroll region, holding everything
+// that can grow; `RUN_PANEL_ACTIONS_STYLE` is a non-shrinking footer row
+// that holds the dispatch controls and never scrolls, so content growth can
+// no longer move the control at all. See `lib/agent-run-reachable.test.ts`.
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
   borderRadius: 'var(--radius)',
-  padding: '12px 14px',
   marginTop: 12,
   position: 'sticky',
   top: 0,
   zIndex: 30,
   background: 'var(--bg-2)',
   maxHeight: 'calc(100vh - 96px)',
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+};
+
+/** The panel's ONE scroll region — every block that can grow (the form, the
+ *  live run log, standing triggers) renders inside this, never the dispatch
+ *  controls. Owns the padding `RUN_PANEL_STYLE` gave up (the root is now a
+ *  pure layout box). See `RUN_PANEL_STYLE`'s comment for why this split
+ *  exists. */
+const RUN_PANEL_BODY_STYLE: CSSProperties = {
+  flex: '1 1 auto',
+  minHeight: 0,
   overflowY: 'auto',
+  padding: '12px 14px',
+};
+
+/** The pinned, non-scrolling footer row: the dispatch/cancel buttons and the
+ *  text explaining why they're disabled. `flex: '0 0 auto'` so a tall body
+ *  can never shrink it away — the flex-layout mirror of "content growth
+ *  cannot move the control" that `RUN_PANEL_BODY_STYLE` provides on the
+ *  scroll axis. */
+const RUN_PANEL_ACTIONS_STYLE: CSSProperties = {
+  flex: '0 0 auto',
+  borderTop: '1px solid var(--line)',
+  padding: '12px 14px',
 };
 
 type Project = { id: string; name: string };
@@ -286,17 +319,19 @@ export function RunPanel({
   if (interactive) {
     return (
       <section data-component="run-panel" data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
-        <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
-        {sessionEntryHref ? (
-          <Link data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
-            Go to session
-          </Link>
-        ) : (
-          <p data-component="session-entry-missing" className="muted" style={{ fontSize: 12, margin: 0 }}>
-            Interactive agent — no reachable session entry point yet.
-          </p>
-        )}
-        {standingTriggersList}
+        <div data-run-panel-body style={RUN_PANEL_BODY_STYLE}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
+          {sessionEntryHref ? (
+            <Link data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
+              Go to session
+            </Link>
+          ) : (
+            <p data-component="session-entry-missing" className="muted" style={{ fontSize: 12, margin: 0 }}>
+              Interactive agent — no reachable session entry point yet.
+            </p>
+          )}
+          {standingTriggersList}
+        </div>
       </section>
     );
   }
@@ -414,205 +449,210 @@ export function RunPanel({
       {...(pollState ? { 'data-poll-state': pollState } : {})}
       style={RUN_PANEL_STYLE}
     >
-      <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
+      <div data-run-panel-body style={RUN_PANEL_BODY_STYLE}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
 
-      <select
-        className="input"
-        data-run-project
-        aria-label="Run against project"
-        value={project}
-        onChange={(e) => setProject(e.target.value)}
-        {...disabledAttrs(gating.formDisabledReason, 'Run this agent against a managed project')}
-        style={{ marginBottom: 8 }}
-      >
-        <option value="">no project</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>{p.name}</option>
-        ))}
-      </select>
+        <select
+          className="input"
+          data-run-project
+          aria-label="Run against project"
+          value={project}
+          onChange={(e) => setProject(e.target.value)}
+          {...disabledAttrs(gating.formDisabledReason, 'Run this agent against a managed project')}
+          style={{ marginBottom: 8 }}
+        >
+          <option value="">no project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
 
-      <textarea
-        className="input"
-        data-run-inputs
-        aria-label="Run inputs (one per line, key: value)"
-        rows={2}
-        placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
-        value={inputsText}
-        onChange={(e) => setInputsText(e.target.value)}
-        {...disabledAttrs(gating.formDisabledReason, 'Inputs handed to this run')}
-        style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
-      />
+        <textarea
+          className="input"
+          data-run-inputs
+          aria-label="Run inputs (one per line, key: value)"
+          rows={2}
+          placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
+          value={inputsText}
+          onChange={(e) => setInputsText(e.target.value)}
+          {...disabledAttrs(gating.formDisabledReason, 'Inputs handed to this run')}
+          style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
+        />
 
-      <div data-component="cost-ceiling" style={{ marginBottom: 8 }}>
-        <label className="field-label" htmlFor="run-cost-ceiling" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-          Cost ceiling (USD)
-        </label>
-        <div data-ceiling-enforceable={costCeilingEnforceable ? 'true' : 'false'}>
-          <input
-            className="input"
-            id="run-cost-ceiling"
-            type="number"
-            data-run-cost-ceiling
-            min={0}
-            step="0.01"
-            value={costCeiling}
-            {...disabledAttrs(
-              !costCeilingEnforceable
-                ? "This agent's loop strategy can't enforce a per-run cost ceiling, so the field is disabled — submitting one would be refused by the server anyway."
-                : gating.formDisabledReason,
-              'The cost ceiling this run will be dispatched with',
+        <div data-component="cost-ceiling" style={{ marginBottom: 8 }}>
+          <label className="field-label" htmlFor="run-cost-ceiling" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+            Cost ceiling (USD)
+          </label>
+          <div data-ceiling-enforceable={costCeilingEnforceable ? 'true' : 'false'}>
+            <input
+              className="input"
+              id="run-cost-ceiling"
+              type="number"
+              data-run-cost-ceiling
+              min={0}
+              step="0.01"
+              value={costCeiling}
+              {...disabledAttrs(
+                !costCeilingEnforceable
+                  ? "This agent's loop strategy can't enforce a per-run cost ceiling, so the field is disabled — submitting one would be refused by the server anyway."
+                  : gating.formDisabledReason,
+                'The cost ceiling this run will be dispatched with',
+              )}
+              onChange={(e) => setManualCostCeiling(Number(e.target.value))}
+            />
+            {!costCeilingEnforceable && (
+              <p data-component="ceiling-explanation" className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
+                This agent&apos;s loop strategy can&apos;t enforce a per-run cost ceiling, so the field is disabled —
+                submitting one would be refused by the server anyway.
+              </p>
             )}
-            onChange={(e) => setManualCostCeiling(Number(e.target.value))}
-          />
-          {!costCeilingEnforceable && (
-            <p data-component="ceiling-explanation" className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
-              This agent&apos;s loop strategy can&apos;t enforce a per-run cost ceiling, so the field is disabled —
-              submitting one would be refused by the server anyway.
-            </p>
-          )}
+          </div>
         </div>
+
+        <section
+          data-section="materials-attach"
+          data-materials-declared={declaredMaterialKinds.join(',')}
+          style={{ marginBottom: 8 }}
+        >
+          <label className="field-label" htmlFor="run-materials-input" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+            Attach materials{declaredMaterialKinds.length > 0 ? ` (${declaredMaterialKinds.join(', ')})` : ' (none declared)'}
+          </label>
+          <input
+            type="file"
+            id="run-materials-input"
+            data-run-materials-input
+            multiple
+            onChange={(e) => void onMaterialsChange(e)}
+            {...disabledAttrs(gating.formDisabledReason, 'Attach materials of the kinds this agent declares')}
+          />
+          {materialsError && (
+            <p className="save-hint save-hint-dirty" style={{ fontSize: 11, margin: '4px 0 0' }}>{materialsError}</p>
+          )}
+        </section>
+
+        {runId && (
+          <div style={{ marginTop: 8, fontSize: 12 }}>
+            {/* W7-B5 (agents-26): the runId LINKS to its run page — it used to
+                be inert <code> text with no way through. */}
+            <div>
+              run{' '}
+              <Link data-action="open-run" href={`/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(runId)}`}>
+                <code>{runId}</code>
+              </Link>
+            </div>
+            <div>
+              status: <strong>{runState}</strong>
+              {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+              {status?.ok === false && status.error ? (
+                <span data-run-read-error className="muted" style={{ marginLeft: 6 }}>· status read failed: {status.error}</span>
+              ) : null}
+              {pollState === 'timed-out' && (
+                <>
+                  <span className="muted" data-component="poll-exhausted-note" style={{ marginLeft: 6 }}>
+                    · stopped watching — the run may still be going
+                  </span>
+                  <button
+                    type="button"
+                    data-action="re-check"
+                    className="btn btn-sm"
+                    style={{ marginLeft: 8 }}
+                    onClick={() => setPollNonce((n) => n + 1)}
+                  >
+                    Re-check
+                  </button>
+                </>
+              )}
+            </div>
+            {/* W7-B5 (agents-19): the failure reason, verbatim, right where
+                the failed status is shown — never only the word "failed".
+                Review round 1: suppressed on a CANCELLED run for the same
+                reason RunView's banner is — a child killed by the cancel can
+                write its own `agent-dispatch.failed` marker on the way out,
+                and reporting that as this run's failure misdescribes an
+                outcome the operator chose. */}
+            {status?.errorText && status.state !== 'cancelled' && (
+              <p data-component="run-error" className="save-hint save-hint-dirty" style={{ margin: '4px 0 0' }}>
+                {status.errorText}
+              </p>
+            )}
+          </div>
+        )}
+
+        {standingTriggersList}
+
+        {/* W6-B7: the shared live thinking/working drawer — mounted only once
+            a run actually exists (no cycle id to subscribe to before then). */}
+        {runId && (
+          <ActivityLog
+            label={`agent run · ${slug}`}
+            events={events}
+            phaseLabel={runState}
+            phaseActive={runState === 'running'}
+            costUsd={status?.costUsd}
+          />
+        )}
       </div>
 
-      <section
-        data-section="materials-attach"
-        data-materials-declared={declaredMaterialKinds.join(',')}
-        style={{ marginBottom: 8 }}
-      >
-        <label className="field-label" htmlFor="run-materials-input" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
-          Attach materials{declaredMaterialKinds.length > 0 ? ` (${declaredMaterialKinds.join(', ')})` : ' (none declared)'}
-        </label>
-        <input
-          type="file"
-          id="run-materials-input"
-          data-run-materials-input
-          multiple
-          onChange={(e) => void onMaterialsChange(e)}
-          {...disabledAttrs(gating.formDisabledReason, 'Attach materials of the kinds this agent declares')}
-        />
-        {materialsError && (
-          <p className="save-hint save-hint-dirty" style={{ fontSize: 11, margin: '4px 0 0' }}>{materialsError}</p>
-        )}
-      </section>
-
-      {/* W7-B5 (agents-21): the Run control STATES the ceiling that will be
-          in force — an uncapped dispatch can no longer look identical to a
-          capped one. */}
-      <button
-        className="btn btn-primary"
-        data-action="run-agent"
-        data-run-ceiling={resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable) ?? ''}
-        onClick={() => void onRun()}
-        {...disabledAttrs(gating.runDisabledReason, 'Dispatch this agent standalone')}
-      >
-        {dispatching
-          ? 'Dispatching…'
-          : (() => {
-              const ceiling = resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable);
-              return ceiling !== undefined ? `Run agent ($${ceiling} cap)` : 'Run agent (no cost cap)';
-            })()}
-      </button>
-      {runningNow && runId && (
+      <div data-run-panel-actions style={RUN_PANEL_ACTIONS_STYLE}>
+        {/* W7-B5 (agents-21): the Run control STATES the ceiling that will be
+            in force — an uncapped dispatch can no longer look identical to a
+            capped one. */}
         <button
-          type="button"
-          className="btn"
-          data-action="cancel-run"
-          data-cancel-armed={cancelArmed ? 'true' : 'false'}
-          disabled={cancelBusy}
-          onClick={() => void onCancel()}
-          style={{ marginLeft: 8 }}
+          className="btn btn-primary"
+          data-action="run-agent"
+          data-run-ceiling={resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable) ?? ''}
+          onClick={() => void onRun()}
+          {...disabledAttrs(gating.runDisabledReason, 'Dispatch this agent standalone')}
         >
-          {cancelBusy ? 'Cancelling…' : cancelArmed ? 'Confirm cancel' : 'Cancel run'}
+          {dispatching
+            ? 'Dispatching…'
+            : (() => {
+                const ceiling = resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable);
+                return ceiling !== undefined ? `Run agent ($${ceiling} cap)` : 'Run agent (no cost cap)';
+              })()}
         </button>
-      )}
-      {standaloneBlockedReason && (
-        <p data-component="standalone-blocked" className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
-          {standaloneBlockedReason}
-        </p>
-      )}
-      {blockedMessage && (
-        <p data-component="connection-run-block" className="save-hint save-hint-dirty" style={{ fontSize: 12, margin: '6px 0 0' }}>
-          {blockedMessage}
-        </p>
-      )}
-      {/* W7-B5 (agents-36): the named connections, linked — the message
-          above stays verbatim (a pinned contract); these are the way to go
-          FIX what it names. */}
-      {blockedMessage && unreadyConnectionIds.length > 0 && (
-        <p data-component="connection-run-block-links" style={{ fontSize: 12, margin: '4px 0 0' }}>
-          Fix:{' '}
-          {unreadyConnectionIds.map((id, i) => (
-            <span key={id}>
-              {i > 0 ? ' · ' : ''}
-              <Link data-action="fix-connection" data-connection-id={id} href={`/connections/${encodeURIComponent(id)}`}>
-                {id}
-              </Link>
-            </span>
-          ))}
-        </p>
-      )}
-      {!blockedMessage && !canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
-      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
-      {runId && (
-        <div style={{ marginTop: 8, fontSize: 12 }}>
-          {/* W7-B5 (agents-26): the runId LINKS to its run page — it used to
-              be inert <code> text with no way through. */}
-          <div>
-            run{' '}
-            <Link data-action="open-run" href={`/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(runId)}`}>
-              <code>{runId}</code>
-            </Link>
-          </div>
-          <div>
-            status: <strong>{runState}</strong>
-            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
-            {status?.ok === false && status.error ? (
-              <span data-run-read-error className="muted" style={{ marginLeft: 6 }}>· status read failed: {status.error}</span>
-            ) : null}
-            {pollState === 'timed-out' && (
-              <>
-                <span className="muted" data-component="poll-exhausted-note" style={{ marginLeft: 6 }}>
-                  · stopped watching — the run may still be going
-                </span>
-                <button
-                  type="button"
-                  data-action="re-check"
-                  className="btn btn-sm"
-                  style={{ marginLeft: 8 }}
-                  onClick={() => setPollNonce((n) => n + 1)}
-                >
-                  Re-check
-                </button>
-              </>
-            )}
-          </div>
-          {/* W7-B5 (agents-19): the failure reason, verbatim, right where
-              the failed status is shown — never only the word "failed".
-              Review round 1: suppressed on a CANCELLED run for the same
-              reason RunView's banner is — a child killed by the cancel can
-              write its own `agent-dispatch.failed` marker on the way out,
-              and reporting that as this run's failure misdescribes an
-              outcome the operator chose. */}
-          {status?.errorText && status.state !== 'cancelled' && (
-            <p data-component="run-error" className="save-hint save-hint-dirty" style={{ margin: '4px 0 0' }}>
-              {status.errorText}
-            </p>
-          )}
-        </div>
-      )}
-
-      {standingTriggersList}
-
-      {/* W6-B7: the shared live thinking/working drawer — mounted only once
-          a run actually exists (no cycle id to subscribe to before then). */}
-      {runId && (
-        <ActivityLog
-          label={`agent run · ${slug}`}
-          events={events}
-          phaseLabel={runState}
-          phaseActive={runState === 'running'}
-          costUsd={status?.costUsd}
-        />
-      )}
+        {runningNow && runId && (
+          <button
+            type="button"
+            className="btn"
+            data-action="cancel-run"
+            data-cancel-armed={cancelArmed ? 'true' : 'false'}
+            disabled={cancelBusy}
+            onClick={() => void onCancel()}
+            style={{ marginLeft: 8 }}
+          >
+            {cancelBusy ? 'Cancelling…' : cancelArmed ? 'Confirm cancel' : 'Cancel run'}
+          </button>
+        )}
+        {standaloneBlockedReason && (
+          <p data-component="standalone-blocked" className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            {standaloneBlockedReason}
+          </p>
+        )}
+        {blockedMessage && (
+          <p data-component="connection-run-block" className="save-hint save-hint-dirty" style={{ fontSize: 12, margin: '6px 0 0' }}>
+            {blockedMessage}
+          </p>
+        )}
+        {/* W7-B5 (agents-36): the named connections, linked — the message
+            above stays verbatim (a pinned contract); these are the way to go
+            FIX what it names. */}
+        {blockedMessage && unreadyConnectionIds.length > 0 && (
+          <p data-component="connection-run-block-links" style={{ fontSize: 12, margin: '4px 0 0' }}>
+            Fix:{' '}
+            {unreadyConnectionIds.map((id, i) => (
+              <span key={id}>
+                {i > 0 ? ' · ' : ''}
+                <Link data-action="fix-connection" data-connection-id={id} href={`/connections/${encodeURIComponent(id)}`}>
+                  {id}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
+        {!blockedMessage && !canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
+        {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
+      </div>
     </section>
   );
 }
