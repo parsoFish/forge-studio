@@ -7,6 +7,103 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-28
+
+**Wave 8, "Coherence."** *Make what forge is doing legible to its operator, and
+make what the operator does to forge durable.* Eight operator notes and every
+open P1/P2 bead, driven as sixteen lanes plus a six-lane fix wave (22 in all) lanes and PRs #202–#226, closed
+by a hostile exit gate whose findings became a sixth-lane fix wave. The full
+close-out — exit criteria with their evidence, what the gate found, and the
+lessons — is in [`docs/roadmaps/README.md`](docs/roadmaps/README.md) under
+"Wave 8 — Coherence".
+
+### Added
+
+- **Monitor pillar** (`/monitor`, ON-8): flow runs, standalone agent runs,
+  interactive sessions, queue/scheduler and attention in one place; Home keeps a
+  summary strip fed by the same derivation. The Run button on an agent page is
+  reachable without scrolling — and the journey now hit-tests the control
+  itself, not its panel.
+- **Drain transparency** (ON-3/ON-4): every drain finding carries a
+  before/after diff, deep-links to its node in Explore, and a pending draft
+  raises a Home attention row. The edit-soundness audit covers every edit the
+  agent can make — no class filter, scope derived from the KB, one write-root
+  fence for both spawn paths — so a drain can no longer delete a real brain
+  edge silently (`forge-d8l`, closed at the fourth recurrence).
+- **Session surface fits every kind** (ON-5): panes are derived per session
+  from its real turns and live affordances; no kind shows an empty
+  architect-shaped transcript. Legacy-shape sessions (pre-`status.json`) are
+  readable instead of 404ing behind a link.
+- **Library authoring** (ON-6): templates get an authoring loop through the
+  creation agent; the template editor has one dismiss control. A hook approval
+  pins the **whole package** it authorises — any changed file makes it
+  needs-review, the scanner reads every executable file, and `finalize`
+  preserves every staged file or refuses with a reason.
+- **Community pulls real data** (ON-1): a deterministic API refresh with no
+  LLM turn, a repo-scoped registry, rows that link back to their source; the
+  `community-refresh` session kind is retired.
+- **Library hooks actually dispatch**: a bound, approved hook fires at all seven
+  spawn sites, with a credential fence and an enumeration ratchet that also
+  sees adapter-registry spawn sites.
+- **Failure visible everywhere** (ON-7): a failed architect/PM reads as failed
+  with its error and phase; the last fail-open Studio read is closed; a
+  deterministic PM failure is never classified transient and retries zero
+  times; split work-item ids (`WI-4a`) are accepted and chained.
+- **ADR 045** — the operator workspace (`_local/`) and promotion into forge
+  core (ON-2, design spike; build tracked as beads).
+- **Projects index** tells broken from healthy, with activity/progress derived
+  from the source of truth, and filter/sort/search.
+- **`ui:journey` is crash-idempotent**: one root cause (no signal handlers,
+  ~19 of 25 cleanup steps unreachable) behind two "flaky" beats; a runtime
+  residue ratchet; the journey host lock identifies a checkout's Studio.
+- **Gates that bite**: `check-raw-fs-guarded`'s scope is derived from bridge
+  reachability (which found an unguarded `TriggerTarget.ref` path escape and
+  put `bridge-recovery`'s routes under the lint); forged or non-ancestor
+  `main@sha` baseline stamps are refused; Start Run can no longer silently
+  repoint a queued initiative.
+
+### Changed
+
+- Rate-limit detection in the failure classifier reads the error's own fields
+  (the previous blob scan had zero real-world precision across 354 cycle logs).
+- `MONITOR_SECTIONS` removed; the `/monitor` sessions section is headed
+  "Active sessions".
+- The community registry's freshness is derived from `registry.yaml`
+  `meta.lastRefresh`, never from session rows.
+
+### Fixed
+
+- A deterministic PM failure whose metadata contained a rate-limit token was
+  classified transient and retried twice (F3); a cost-ceiling stop could be
+  outranked by a rate-limit error in the same window (F3).
+- The drain's edge-soundness audit skipped `prose`-classed edits and
+  snapshotted one brain directory while the agent wrote anywhere; a deleted
+  brain file was never audited; `approveKbCleanup` applied parked drafts with
+  no audit; operator-created KBs sat outside the slug universe; a zero-findings
+  consolidate read "cleared" (F1, `forge-d8l` 4th recurrence closed).
+- A hook approval survived a swapped sibling file — the swapped code ran
+  under an approval issued for different bytes; `finalize` silently truncated
+  multi-file hooks; an O(N³) file selection stalled the bridge 1.9 s per hook
+  (F2).
+- The agents journey measured the Run panel's rect, not the control's — the
+  panel was being crushed by the YAML preview and Playwright's auto-scroll hid
+  it; the monitor journey passed vacuously at zero state; three `agents.mjs`
+  fixtures leaked `_logs/_agent-*` dirs (F4).
+- `check-raw-fs-guarded` was scoped by filename — two byte-identical tainted
+  files, only the `bridge-studio*` one scanned; an unguarded `TriggerTarget.ref`
+  wrote outside the queue root; the baseline-stamp CI job re-shallowed itself
+  (F5).
+- Wave-8 surfaces linked to 236 legacy-shape sessions the read route 404'd
+  (F6).
+- `ui:journey` left gitignored session state after a kill and silently failed
+  later runs (C2b); Start Run silently repointed a queued initiative (A3); the
+  refresh registry draft's Approve was permanently disabled (wave-7 residue
+  closed by B5).
+
+### Known gaps carried to wave 9 (named, not rounded)
+
+the wave-8 scope row "every open P1 and P2 bead" is **NOT MET** and is recorded that way. Twenty-six beads are re-homed under a wave-9 head epic (`forge-59ca`): the wave-7 regate residue clusters the lanes partially closed (`forge-6gv.2.1`, `.3.1`, `.5.1`, `.5.2`, `.6.1`, `.7.2`, `.8.1`, `.8.2`, `.9.1`, `.9.2`, `.13.1` — all P1, each annotated per row with what landed), the two P1s the ON-7 real-cycle vehicle surfaced (`.16` cost ceiling enforced only at phase boundaries, `.17` a deliverable in a gitignored path), the F-wave follow-ups (`.20`, `.28`, `forge-ler4`, `forge-u8y2`, `forge-3mxa`, `forge-38dl`, `forge-rofi`, `forge-9694`, `forge-92r7`), the three ADR-045 build beads (`.10.1–.3`), and `forge-hqkm` (the uncapped `_logs/` scan, plus its two unfiled siblings now filed as `forge-omk0`). Behind them: 25 `[W8-C4]` P3 beads minted from the exit gate's S3 findings. R3-02 (skill-generator flow), named wave-9 head by the wave-8 plan, is sequenced against this residue by the operator.
+
 ## [0.8.0] - 2026-08-22
 
 **Wave 7, "Close the loops."** The operator's first week of daily-driving
