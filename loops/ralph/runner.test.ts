@@ -423,3 +423,43 @@ test('G1: the autocommit net sweeping uncommitted agent work invokes onAutoCommi
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// -------------------------------------------------------------------------
+// WI-3 (fix wave, lane F3): pin `deriveWorkItemId`'s split-id support. It is
+// a private helper in this file with a single call site (the autocommit
+// safety net's `workItemId` arg) — pinned through the OBSERVABLE WIP commit
+// message rather than by exporting it. Must go RED if
+// `DEV_WORK_ITEM_ID_PATTERN` (orchestrator/work-item.ts) narrows back to
+// digits-only, since that regresses split work items (`WI-4a`/`WI-4b`) to a
+// dropped id in the autocommit tag.
+// -------------------------------------------------------------------------
+
+test('WI-3: split work-item id (WI-4a) survives into the autocommit WIP tag', async () => {
+  const dir = setupIgnoredScratchRepo();
+  try {
+    const workItemPath = join(dir, 'WI-4a.md');
+    writeFileSync(workItemPath, '# WI-4a: split half of WI-4\n');
+    const input: LoopInput = {
+      workItemSpecPath: workItemPath,
+      worktreePath: dir,
+      initiativeBudget: { iterations: 2, usd: 10 },
+      brainQueryResults: '',
+      cycleId: 'cycle-wi3',
+      initiativeId: 'INIT-wi3',
+      qualityGate: () => true,
+      failOnHollowIter0Gate: false,
+    };
+    const result = await run(input, async () => {
+      // Agent leaves the worktree dirty (no commit) so the autocommit
+      // safety net fires and must tag the WIP commit with the split id.
+      writeFileSync(join(dir, 'forgotten.go'), 'package x\n');
+      return { filesChanged: ['forgotten.go'], costUsd: 0 };
+    });
+
+    assert.equal(result.status, 'complete');
+    const log = execFileSync('git', ['log', '--oneline', '-1'], { cwd: dir }).toString('utf8');
+    assert.match(log, /forge-autocommit: WI-4a iter/, 'the split id WI-4a must be preserved in the WIP tag');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

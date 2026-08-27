@@ -344,7 +344,10 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
  *
  * `DEV_WORK_ITEM_ID_PATTERN` is the exported SSOT (orchestrator/work-item.ts) —
  * the narrower local `/(WI-\d+)\.md$/` this replaces returned `undefined` for a
- * split spec, so the dev-loop lost the WI id for every event it emitted.
+ * split spec. The id's sole downstream use is the `forge-autocommit:` WIP
+ * commit-message tag (`autoCommitWorktreeIfDirty` in stop-conditions.ts);
+ * dev-loop event attribution comes from `wi.work_item_id` in
+ * orchestrator/phases/developer-loop.ts and does not depend on this function.
  */
 function deriveWorkItemId(specPath: string): string | undefined {
   const base = specPath.split(/[/\\]/).pop() ?? '';
