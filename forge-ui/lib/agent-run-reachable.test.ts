@@ -188,6 +188,18 @@ function verticalShorthand(value: string | undefined): number[] {
 const VERTICAL_PROPS = ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'top', 'height', 'min-height'] as const;
 
 /**
+ * Border properties whose WIDTH occupies box-model space exactly like padding.
+ *
+ * Review round 2: the allow-list below used to file `border` and `border-top`
+ * under "paint + identity: cannot move anything". That is false for the width
+ * component, and the reviewer proved it — `borderTop: '4000px solid …'` on the
+ * actions row reproduces the refuter's original clipped-off-panel defect and
+ * left this file 17/17 green. A property that is simultaneously ALLOWED and
+ * NEVER MEASURED is the hole an allow-list is supposed to close.
+ */
+const BORDER_PROPS = ['border', 'border-top', 'border-bottom', 'border-width', 'border-top-width', 'border-bottom-width'] as const;
+
+/**
  * The CLOSED set of CSS properties an element on a control's chain may
  * declare at all.
  *
@@ -207,8 +219,12 @@ const VERTICAL_PROPS = ['padding-top', 'padding-bottom', 'margin-top', 'margin-b
  * which is the maintenance contract this pin is supposed to impose.
  */
 const ALLOWED_CHAIN_PROPS: ReadonlySet<string> = new Set([
-  // paint + identity: cannot move anything
-  'background', 'border', 'border-radius', 'border-top', 'color', 'z-index',
+  // paint + identity: genuinely cannot move anything. `border`/`border-top` are
+  // NOT in this group — their width takes box-model space, and they are bounded
+  // below with the rest of the vertical magnitudes (review round 2).
+  'background', 'border-radius', 'color', 'z-index',
+  // borders: allowed, and their WIDTH is measured (BORDER_PROPS)
+  'border', 'border-top',
   // the panel's own bounded-sticky-column contract
   'position', 'top', 'max-height', 'overflow', 'display', 'flex-direction',
   // flex participation (magnitudes checked below where they can displace)
@@ -254,6 +270,19 @@ function displacementOffencesOf(element: Element, isRoot: boolean): string[] {
     if (values.length === 0) offences.push(`${label} ${prop}: ${raw} — a unit this pin cannot evaluate`);
     for (const value of values) {
       if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) offences.push(`${label} ${prop}: ${value}px`);
+    }
+  }
+  // A border WIDTH pushes content down exactly like padding does. Read every
+  // numeric token out of the shorthand (`1px solid var(--line)` -> 1) so the
+  // colour/style components are ignored and the width never is.
+  for (const prop of BORDER_PROPS) {
+    const raw = style[prop];
+    if (raw === undefined) continue;
+    for (const token of raw.trim().split(/\s+/)) {
+      if (!/^-?\d/.test(token)) continue; // `solid`, `var(--line)`, a colour
+      const value = px(token);
+      if (value === null) offences.push(`${label} ${prop}: ${token} — a unit this pin cannot evaluate`);
+      else if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) offences.push(`${label} ${prop}: ${value}px of border`);
     }
   }
   const position = style['position'];

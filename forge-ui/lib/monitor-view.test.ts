@@ -79,9 +79,18 @@ test('every live-status token in the closed set counts, and nothing else does', 
   // Kills a hardcoded `status === 'active'` check that silently drops the
   // 'running' vocabulary the standalone-agent rows actually use (and the
   // 'retrying' a mid-retry flow phase carries).
+  // W8-F4 review round 2: `linkKind: 'standalone'` is on this list on purpose.
+  // It is the literal value `collectRecentAgentRuns` (cli/ui-bridge.ts) stamps
+  // on EVERY real standalone agent run — the only agent-sourced linkKind that
+  // actually reaches Home's and Monitor's ledger (`use-everything-ledger.ts`
+  // asks for `kind: 'standalone'`) — and no fixture in this file used it, so
+  // rewriting the session filter's PREDICATE (`linkKind !== 'session'` ->
+  // `linkKind === undefined`) silently dropped every standalone run from the
+  // run counts and left all 12 tests green. Deleting the guard was pinned;
+  // inverting it was not.
   const rows = [
     row({ id: 'a', status: 'active' }),
-    row({ id: 'b', status: 'running' }),
+    row({ id: 'b', status: 'running', linkKind: 'standalone' }),
     row({ id: 'c', status: 'retrying' }),
     row({ id: 'd', status: 'complete' }),
     row({ id: 'e', status: 'planned' }),
@@ -132,6 +141,10 @@ test('session rows in the ledger are NOT counted as runs (no double count, no ph
   const rows = [
     row({ id: 's1', status: 'running', linkKind: 'session' }),
     row({ id: 'r1', status: 'running' }),
+    // review round 2: the third kind the surface really carries. The filter
+    // must EXCLUDE 'session' specifically, not "keep only flow rows" — a
+    // standalone agent run is a run and must be counted as one.
+    row({ id: 'a1', status: 'running', linkKind: 'standalone' }),
   ];
   const summary = buildMonitorSummary({
     ledgerRows: rows,
@@ -139,10 +152,10 @@ test('session rows in the ledger are NOT counted as runs (no double count, no ph
     sessions: [session({ sessionId: 's1', phase: 'running' })],
     attentionCount: 0,
   });
-  expect(summary.runsLive).toBe(1);   // the flow run only — NOT the session row
+  expect(summary.runsLive).toBe(2);   // the flow run + the standalone run — NOT the session row
   expect(summary.sessionsLive).toBe(1);
-  expect(summary.live).toBe(2);       // 3 without the guard: the session counted twice
-  expect(summary.total).toBe(2);      // both rows are still ON the surface
+  expect(summary.live).toBe(3);       // 4 without the guard: the session counted twice
+  expect(summary.total).toBe(3);      // all three rows are still ON the surface
 });
 
 test('a session row that failed is not counted in the FAILED headline either', () => {
@@ -154,7 +167,7 @@ test('a session row that failed is not counted in the FAILED headline either', (
   const rows = [
     row({ id: 's1', status: 'failed', linkKind: 'session' }),
     row({ id: 'r1', status: 'failed' }),
-    row({ id: 'r2', status: 'budget-exceeded' }),
+    row({ id: 'r2', status: 'budget-exceeded', linkKind: 'standalone' }),
   ];
   const summary = buildMonitorSummary({
     ledgerRows: rows,
@@ -246,9 +259,10 @@ test('summary.total always equals the row count the surface renders', () => {
   const rows = [
     ...Array.from({ length: 37 }, (_, i) => row({ id: `r${i}`, status: i % 3 === 0 ? 'running' : 'complete' })),
     row({ id: 's1', status: 'running', linkKind: 'session' }),
+    row({ id: 'a1', status: 'running', linkKind: 'standalone' }),
   ];
   const summary = buildMonitorSummary({ ledgerRows: rows, runs: [], sessions: [], attentionCount: 0 });
-  expect(summary.total).toBe(rows.length);          // 38 — 37 without the session row
+  expect(summary.total).toBe(rows.length);          // 39 — the denominator is every row on screen
   expect(summary.runsLive).toBe(rows.filter((r) => r.status === 'running' && r.linkKind !== 'session').length);
 });
 

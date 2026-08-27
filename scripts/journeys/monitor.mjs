@@ -53,6 +53,7 @@ import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { FORGE_ROOT, caption, ACT, READ } from '../lib/journey-fixtures.mjs';
 import { sleep, checkHonestPillarRead } from '../lib/journey-assertions.mjs';
+import { JOURNEY_AGENT_RUN_SUFFIX } from '../lib/journey-residue.mjs';
 
 // ── MONITOR fixture identity — local to this journey, disjoint from every
 // other journey's seeded ids (HOME_*/J4/J5/SK_*/HK_*/SHOWCASE_*/…) ──
@@ -71,8 +72,14 @@ const MON_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', MON_ACTIVE_CYCLE_ID);
 // this constant IS the identity the beats assert on. The slug is resolved from
 // `metadata.agent_slug`; an unattributable run is dropped rather than
 // fabricated, so the marker below carries it explicitly.
+//
+// The `JOURNEY_AGENT_RUN_SUFFIX` tail is what makes the crash-safe sweep able
+// to SEE this dir (scripts/lib/journey-residue.mjs). The `_agent-` prefix is
+// forced by the read route, so it cannot signal ownership; without the suffix
+// this fixture leaked one `_logs/` dir per killed run, invisible to both
+// residue ratchets — found by adversarial review, not by a run.
 const MON_AGENT_SLUG = 'developer-ralph';
-const MON_AGENT_RUN_ID = `_agent-${MON_AGENT_SLUG}-${MON_STAMP}-monitor-fixture`;
+const MON_AGENT_RUN_ID = `_agent-${MON_AGENT_SLUG}-${MON_STAMP}${JOURNEY_AGENT_RUN_SUFFIX}`;
 const MON_AGENT_RUN_DIR = join(FORGE_ROOT, '_logs', MON_AGENT_RUN_ID);
 
 // W8-F4 — the INTERACTIVE session. `onboarding` is a registry-generic kind, so
