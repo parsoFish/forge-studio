@@ -210,6 +210,11 @@ const WELL_FORMED_PAYLOAD = {
   // W7-C2 T1 review (P0-3) — REQUIRED, like `finalized`: null is the honest
   // "the transcript derived cleanly" value.
   transcriptError: null as string | null,
+  // F6 (wave-8) — REQUIRED like "terminal": whether this session's ONLY
+  // surviving record is the central log dir (no project-side session dir /
+  // status.json). This fixture's session has a real project-side status,
+  // so its honest value is false.
+  legacy: false,
 };
 
 // ===========================================================================
@@ -482,6 +487,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: 1200, cancellable: true },
     finalized: null,
     transcriptError: null,
+    legacy: false,
   };
   expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
 
@@ -503,6 +509,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
     lifecycle: { state: 'working', needsYou: false, error: null, idleMs: null, cancellable: true },
     finalized: null,
     transcriptError: null,
+    legacy: false,
   };
   expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
 });
@@ -524,6 +531,33 @@ test('AT-128: parseSessionShellPayload: "terminal" missing or non-boolean THROWS
   expect(() => parseSessionShellPayload(missing)).toThrow(/terminal/);
   expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: 'true' })).toThrow(/terminal/);
   expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, terminal: null })).toThrow(/terminal/);
+});
+
+// ===========================================================================
+// F6 (wave-8, "a linked session must be readable") — parseSessionShellPayload
+// gains "legacy" (boolean, REQUIRED, never omitted or defaulted): true iff
+// this session's ONLY surviving record is the central log dir
+// (_logs/_<kind>-<sessionId>/), with no project-side status.json to read.
+// Same hard-required treatment as "terminal" immediately above — a missing
+// or non-boolean wire field throws by name, never silently defaulted to
+// false. See docs F6 spec section 4 (forge-ui) and cli/session-readability.ts
+// section 2 (the route side that sets this field).
+// ===========================================================================
+
+test('F6: parseSessionShellPayload: "legacy" missing THROWS naming the field — mirrors "terminal"\'s own hard-required treatment (AT-128)', () => {
+  const { legacy: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow(/legacy/);
+});
+
+test('F6: parseSessionShellPayload: "legacy" non-boolean THROWS — never coerced to a permissive default', () => {
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, legacy: 'true' })).toThrow(/legacy/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, legacy: 1 })).toThrow(/legacy/);
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, legacy: null })).toThrow(/legacy/);
+});
+
+test('F6: parseSessionShellPayload: "legacy" round-trips true/false verbatim', () => {
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, legacy: true }).legacy).toBe(true);
+  expect(parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, legacy: false }).legacy).toBe(false);
 });
 
 // ===========================================================================

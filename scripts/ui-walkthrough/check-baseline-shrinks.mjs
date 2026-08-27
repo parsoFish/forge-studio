@@ -15,9 +15,14 @@
 //
 // The one way the file may grow: a stamped REGENERATION from main
 // (`source: "main@<sha> …"` with a new sha, newer generatedAt, expectedRoutes
-// recorded — see assert.mjs isRegeneration). Reported as such; a drop in any
-// `expectedRoutes.<env>` versus prev is called out loudly (coverage regressions
-// must be justified in the PR).
+// recorded — see assert.mjs isRegeneration) WHOSE SHA THIS SCRIPT VERIFIES FOR
+// REAL (W8-F5): it must resolve to a commit (`git cat-file -e <sha>^{commit}`)
+// and be an ancestor of the comparison base (`git merge-base --is-ancestor
+// <sha> <base>`, base = --against when given, else HEAD). A shallow checkout
+// gets exactly one bounded attempt to fetch that single object before this
+// refuses the regeneration — fail-closed, no bypass. Reported as such; a drop
+// in any `expectedRoutes.<env>` versus prev is called out loudly (coverage
+// regressions must be justified in the PR).
 //
 // W7-A0-4 — removals are cross-checked against what the gate crawl actually
 // visited (`--crawled <crawl.json>`): a removed entry whose route the crawl
@@ -74,6 +79,72 @@ function loadCrawledRoutes() {
   return crawl.results.map((r) => String(r.route));
 }
 
+function isShallowRepo() {
+  try {
+    return execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: FORGE_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function commitExists(sha) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${sha}^{commit}`], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** W8-F5 — the ONLY real check standing between a `main@<sha>` stamp and an
+ *  accepted growth: the sha must resolve to a commit object, AND that commit
+ *  must be an ancestor of `base`. A shallow checkout gets exactly ONE bounded
+ *  attempt to fetch precisely that object before this fails closed — never a
+ *  warn-and-continue, never a bypass env var. */
+function verifyRegenerationSha(sha, base) {
+  if (!commitExists(sha)) {
+    if (isShallowRepo()) {
+      try {
+        // W8-F5 review: BOUNDED means bounded in wall-clock too — execFileSync
+        // enforces no time limit unless `timeout` is passed, and a stalled remote
+        // (auth prompt, dead proxy, DNS hang) would otherwise block the gate
+        // indefinitely. 15 s is far more than a single-object fetch needs.
+        execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', sha], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000 });
+      } catch {
+        // The re-check below reports the failure either way.
+      }
+    }
+    if (!commitExists(sha)) {
+      return {
+        ok: false,
+        reason: `sha ${sha} does not resolve to a commit object in this repository`
+          + (isShallowRepo()
+            ? ' (checkout is shallow; a bounded `git fetch --depth=1 origin <sha>` attempt also failed) — regenerate from a checkout that can see this commit (fetch-depth: 0) and re-run --write-baseline'
+            : ' — this is not a real commit; regenerate with `--write-baseline` from an actual checkout of main so the stamp names a real sha'),
+      };
+    }
+  }
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', sha, base], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    return { ok: true };
+  } catch {
+    // W8-F5 round 3, MEASURED: in a shallow checkout the bounded fetch above
+    // can make the object RESOLVE while its ancestry link is still outside the
+    // grafted history, so `--is-ancestor` answers "no" for a stamp that is
+    // perfectly legitimate. The refusal stands either way (fail-closed is the
+    // whole point), but the operator must be told the real cause — "your stamp
+    // is bogus" and "this checkout cannot answer the question" are different
+    // problems with different fixes.
+    if (isShallowRepo()) {
+      return {
+        ok: false,
+        reason: `sha ${sha} resolves, but this checkout is SHALLOW and cannot answer whether it is an ancestor of ${base} (the history is grafted, so \`git merge-base --is-ancestor\` says "no" for commits it simply cannot see) — refusing rather than guessing. Re-run where the full history is present (actions/checkout with fetch-depth: 0, and no later \`git fetch --depth=<n>\`, which re-shallows a full clone).`,
+      };
+    }
+    return { ok: false, reason: `sha ${sha} resolves but is not an ancestor of ${base} — a regeneration stamp must name a commit actually on this history, not an arbitrary sha; re-stamp from a real ancestor commit and re-run --write-baseline` };
+  }
+}
+
 const prev = loadPrev();
 const crawledRoutes = loadCrawledRoutes();
 if (!existsSync(nextFile) && prev && (prev.entries?.length ?? 0) > 0) {
@@ -89,7 +160,25 @@ if (!prev) {
   process.exit(0);
 }
 console.log(`[baseline-shrinks] vs ${label}: ${prev.entries?.length ?? 0} → ${next.entries?.length ?? 0} entries (${shrank.length} removed, ${grew.length} added)`);
-const regenerated = isRegeneration(prev, next);
+// The commit the stamped sha must be an ancestor OF. `--against <ref>` names it
+// explicitly (how every real gate invocation runs — CI passes
+// `--against origin/$BASE_REF`, the wave gate passes `--against parsoFish/main`).
+// A `--prev/--next` file comparison has no named base, so ancestry falls back to
+// local `HEAD` — which on a PR checkout is the PR branch itself, a WEAKER
+// question than "is this really on main". W8-F5 review: say so out loud rather
+// than let a future caller mistake the weaker check for the strong one.
+const compareBase = against ?? 'HEAD';
+let stampRefusal = null;
+const regenerated = isRegeneration(prev, next, {
+  verifyStamp: (sha) => {
+    if (!against) {
+      console.warn(`[baseline-shrinks] NOTE — no --against ref given, so the regeneration stamp's ancestry is checked against local HEAD (${compareBase}), not a named base. A gate invocation should pass --against <ref>.`);
+    }
+    const v = verifyRegenerationSha(sha, compareBase);
+    if (!v.ok) stampRefusal = v.reason;
+    return v.ok;
+  },
+});
 if (regenerated) {
   console.log(`[baseline-shrinks] REGENERATED baseline: ${String(prev.source ?? '(unstamped)').split(' — ')[0]} → ${String(next.source).split(' — ')[0]} (generatedAt ${prev.generatedAt ?? '?'} → ${next.generatedAt}) — growth (+${grew.length}) accepted only because this is a stamped regeneration from main; the host wave gate re-verifies it`);
   for (const k of COVERAGE_KEYS) {
@@ -111,6 +200,9 @@ if (regenerated) {
 } else if (grew.length) {
   console.error('[baseline-shrinks] FAIL — the walkthrough baseline may only shrink. New entries:');
   for (const e of grew) console.error(`  ${e.kind.padEnd(17)} ${e.route}  →  ${e.detail}`);
+  if (stampRefusal) {
+    console.error(`[baseline-shrinks] a \`main@<sha>\` stamp was present but REFUSED (fail-closed) — this growth is not an authorised regeneration: ${stampRefusal}`);
+  }
   console.error('Fix the route/request instead of baselining it (baseline entries are wave-7 known defects, each owned by a lane). The only accepted growth is a stamped `main@<sha>` regeneration via --write-baseline.');
   process.exit(1);
 }

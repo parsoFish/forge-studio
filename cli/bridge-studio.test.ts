@@ -740,6 +740,14 @@ test('GET /api/studio/catalog unions a filesystem plain skill (no runtime block)
 // Non-studio URL → returns false (handler passes through)
 // ---------------------------------------------------------------------------
 
+// W8-F6 (bead forge-6gv.27) — `handleStudioRoutes` now REQUIRES an injected
+// session-readability probe (it gates the runs routes' `architectSessionId`).
+// These pass-through tests never reach a runs payload, so the probe must never
+// be called; it THROWS rather than answering, so a future change that starts
+// consulting it here fails loudly instead of silently taking a stub's
+// permissive answer ("a test that stubs the gate is not a gate test").
+const neverProbed = (): boolean => { throw new Error('sessionIsReadable must not be consulted by this route'); };
+
 test('non-studio URL (e.g. /api/health) returns false from handleStudioRoutes', async () => {
   // Test the handler function directly (not via the bridge) to verify the
   // boolean return contract.
@@ -752,7 +760,7 @@ test('non-studio URL (e.g. /api/health) returns false from handleStudioRoutes', 
   } as unknown as import('node:http').ServerResponse;
 
   const mockReq = {} as import('node:http').IncomingMessage;
-  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), sessionIsReadable: neverProbed };
 
   const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/health', 'GET');
   assert.equal(handled, false, 'non-studio URL must return false');
@@ -762,7 +770,7 @@ test('non-studio URL (e.g. /api/health) returns false from handleStudioRoutes', 
 test('non-GET method returns false from handleStudioRoutes', async () => {
   const mockRes = {} as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
-  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), sessionIsReadable: neverProbed };
 
   const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/runs', 'POST');
   assert.equal(handled, false, 'POST method must return false for studio routes');
@@ -771,7 +779,7 @@ test('non-GET method returns false from handleStudioRoutes', async () => {
 test('/api/studio/nonexistent-endpoint returns false from handleStudioRoutes', async () => {
   const mockRes = {} as import('node:http').ServerResponse;
   const mockReq = {} as import('node:http').IncomingMessage;
-  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const ctx = { forgeRoot, logsRoot: join(forgeRoot, '_logs'), sessionIsReadable: neverProbed };
 
   const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'unknown studio sub-route must return false');

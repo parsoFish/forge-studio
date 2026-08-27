@@ -82,7 +82,8 @@ import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, isTerminalPhase } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, isTerminalPhase, sessionIsReadable, sessionShellHref } from './bridge-studio-sessions.ts';
+import { parseGuardedEventsJsonl } from './session-readability.ts';
 import { handleStudioAffordanceRoutes, MAX_ANSWER_FIELD_BYTES, type SpawnTurnOutcome } from './bridge-studio-affordances.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import {
@@ -1035,14 +1036,11 @@ type StandaloneRunState = {
  * distinguishable from an absent one to any caller (the no-oracle rule).
  * A malformed individual JSONL line is skipped, not fatal — unchanged from
  * the prior behaviour. */
-function parseGuardedEventsJsonl(root: string, entryName: string): Record<string, unknown>[] | null {
-  const guarded = resolveGuardedPath(root, [entryName, 'events.jsonl']);
-  if (!guarded.ok || !guarded.exists) return null;
-  return readFileSync(guarded.realPath, 'utf8')
-    .trim().split('\n').filter(Boolean)
-    .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
-    .filter((e): e is Record<string, unknown> => e !== null);
-}
+// W8-F6 (bead forge-6gv.27): the implementation MOVED, verbatim, to
+// cli/session-readability.ts so the legacy-session read path and these four
+// call sites share ONE guarded parse instead of two copies. Imported at the
+// top of this file; the doc comment above travelled with it.
+
 
 /**
  * The SHARED standalone status/cost derivation — extracted verbatim from
@@ -1938,7 +1936,14 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       idleMs: lifecycle.idleMs,
       modelTier: resolvedTier,
       updatedAt,
-      href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
+      // W8-F6 (bead forge-6gv.27) — the ONE server-side builder of a session
+      // address (cli/bridge-studio-sessions.ts), so the index and the route it
+      // links to can never disagree about where a session lives. Every row
+      // here is status.json-backed by construction (`readGuardedSessionIndexSummary`
+      // above, and the four bespoke per-kind listers), i.e. already
+      // `resolveReadableSession`'s `source:'status'` arm — pinned rather than
+      // re-probed at runtime, which would be a guard that can never fail.
+      href: sessionShellHref(descriptor.id, sessionId, project),
     });
   };
 
@@ -2346,7 +2351,17 @@ async function handleHttp(
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
   if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot }, url, method)) return;
-  if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioRoutes(req, res, {
+    forgeRoot: ctx.forgeRoot,
+    logsRoot: ctx.logsRoot,
+    // W8-F6 (bead forge-6gv.27) — this file is the one place that imports BOTH
+    // cli/bridge-studio.ts and cli/bridge-studio-sessions.ts, so it wires the
+    // readability predicate in rather than letting the runs routes import it
+    // and close a module cycle. Same seam, same reason, as `ensureSessionTail`.
+    sessionIsReadable: ({ kind, sessionId }) => sessionIsReadable({
+      projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot, kind, sessionId,
+    }),
+  }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbDrainRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;

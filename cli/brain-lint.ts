@@ -925,8 +925,26 @@ export function collectThemeSlugTargets(brainRoot: string): Map<string, string[]
       else targets.set(slug, [join(dir, entry)]);
     }
   };
-  for (const sub of THEME_SUBDIRS) {
-    addDir(join(brainRoot, sub, 'themes'));
+  // W8-F1 — EVERY `brain/<x>/themes` dir, not just the two OOTB sub-wikis.
+  //
+  // `POST /api/studio/kbs` scaffolds an operator-created KB at `brain/<id>/`
+  // (cli/bridge-studio-kbs.ts: `resolveGuardedPath(resolve(forgeRoot,'brain'),
+  // [id])` then `mkdirSync(join(kbDir,'themes'))`), which is neither `cycles`,
+  // `forge-dev`, nor under `projects/`. Its themes were therefore absent from
+  // this universe — so `repairsFor()` returned [] for them and the drain's
+  // edit-soundness audit read a deletion of a REAL edge as "a genuinely
+  // dangling entry may go". forge-d8l, wide open, for exactly the KBs the
+  // Studio "Create KB" button makes. Reproduced: the identical fixture under
+  // `brain/projects/<id>` is refused (`edge-deleted`) while under `brain/<id>`
+  // the edge is destroyed with `unsound: []`.
+  //
+  // Widening is safe in BOTH consumers, and only one direction each: more
+  // targets resolve, so `checkDanglingEdges` reports FEWER dangling edges
+  // (never new ones), and the soundness audit refuses MORE deletions. It does
+  // not change which files are LINTED — `readThemeFiles` keeps its own scope.
+  for (const name of existsSync(brainRoot) ? readdirSync(brainRoot) : []) {
+    if (name.startsWith('.') || name === 'projects') continue;
+    addDir(join(brainRoot, name, 'themes'));
   }
   const projectsRoot = join(brainRoot, 'projects');
   if (existsSync(projectsRoot)) {

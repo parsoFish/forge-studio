@@ -92,6 +92,16 @@
  *     the same local write access as writing the outside content in
  *     directly, so the residual risk is negligible (see
  *     session-transcript.ts's module header for the full rationale).
+ * W8-F6 (bead forge-6gv.27) — READ existence and WRITE existence are different
+ * questions, deliberately. This GET serves a legacy session (working dir gone,
+ * central event log intact) as 200; the cancel route
+ * (cli/bridge-studio-session-cancel.ts) and the affordance dispatch
+ * (cli/bridge-studio-affordances.ts) still 404 the same session, because THEIR
+ * question is "is there a session dir to write into?" and the honest answer is
+ * no. Both 404 BEFORE any write, so no phantom session dir is ever created for
+ * one. The UI never puts an operator in front of that gap: a legacy session's
+ * `lifecycle.cancellable` is false and its `affordances` are `[]`.
+ *
  *   - `deriveSessionTranscript`'s `{ok:false}` (an unknown stage in a
  *     checkpoint, a malformed answers/questions/verdicts file) yields ZERO
  *     turns plus the verbatim reason on the ALWAYS-present `transcriptError`
@@ -120,6 +130,7 @@ import { deriveContractStages } from './contract-stages.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
 import { fixedTierForSessionKind } from './session-model-tier.ts';
+import { resolveLegacySession } from './session-readability.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -337,6 +348,174 @@ export function findSessionProject(
   }
   if (hits.length === 1) return { ok: true, project: hits[0] };
   return { ok: false, reason: hits.length === 0 ? 'not-found' : 'ambiguous' };
+}
+
+// ---------------------------------------------------------------------------
+// W8-F6 (bead forge-6gv.27) — THE ONE session-readability predicate
+// ---------------------------------------------------------------------------
+
+/**
+ * The result of asking "is there anything at `<kind>/<sessionId>` this bridge
+ * can honestly render?" — the SINGLE answer both this route and every producer
+ * of a `/sessions/<kind>/<sid>` link is derived from.
+ *
+ * Two on-disk homes, in priority order:
+ *
+ *   - `source: 'status'` — the session's own working dir,
+ *     `<projectsRoot>/<project>/_<kind>/<sessionId>/`, with a readable
+ *     `status.json` carrying a string `phase`. The full, live shape: transcript,
+ *     artifact, affordances, everything. Unchanged from before W8-F6.
+ *   - `source: 'legacy'` — only the runner's central log dir,
+ *     `<logsRoot>/_<kind>-<sessionId>/`, survives (see cli/session-readability.ts
+ *     for why: (2) is never pruned, (1) lives inside a gitignored project tree
+ *     that is routinely deleted). Read-only, honest, no live affordances.
+ *
+ * The `status-missing` / `status-no-phase` rejection reasons exist for exactly
+ * one purpose: so the route can keep emitting the two 404 message buckets
+ * AT-70..74 pin, byte-identical, for a project-side session dir whose
+ * `status.json` is unusable AND which has no log dir to fall back to. They are
+ * never surfaced to a client verbatim.
+ */
+export type ReadableSession =
+  | { ok: true; source: 'status'; project: string; sessionDir: string; status: Record<string, unknown>; phase: string }
+  | { ok: true; source: 'legacy'; project: string; logDir: string; phase: string }
+  | { ok: false; reason: 'not-found' | 'ambiguous' | 'status-missing' | 'status-no-phase'; project: string | null };
+
+/**
+ * Resolve a session to whichever of its two on-disk homes can be read.
+ *
+ * `kind` MUST already have been resolved against the live registry and
+ * `sessionId` MUST already have passed `invalidSessionIdReason`; this function
+ * re-guards every filesystem touch regardless (`resolveGuardedPath`, per-segment
+ * identity walk + `nlink===1` leaf), so a caller that forgets cannot escape —
+ * it can only get a `not-found`.
+ *
+ * Order, and why: the project-side status shape WINS. A session that still has
+ * its working dir is the live, complete thing; the log dir is the fallback, not
+ * a competing source. Falling back only when the status read genuinely fails
+ * also means this function's behaviour for every pre-W8-F6 session is
+ * bit-for-bit what the route did before.
+ */
+export function resolveReadableSession(args: {
+  projectsRoot: string;
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+  /** The caller's explicit `?project=` when it supplied one — already
+   *  `invalidProjectReason`-validated by the route. `null`/absent means
+   *  "resolve it server-side". */
+  project?: string | null;
+}): ReadableSession {
+  const { projectsRoot, logsRoot, kind, sessionId } = args;
+  const kindDirName = `_${kind}`;
+
+  let project: string | null = args.project ?? null;
+  // Adversarial review, finding 1 — PRESENCE of a `?project=` is not evidence
+  // that it owns this session. Only a real `<project>/_<kind>/<sessionId>` dir
+  // found below confirms ownership, and until W8-F6's own second review round
+  // the unconfirmed caller value still reached the wire: for a Shape-B session
+  // whose dir genuinely lives under project X, `?project=Y` came back as `Y`.
+  // Not an existence oracle (a real-but-unrelated and a nonexistent name give
+  // byte-identical 200s), but silent identity spoofing all the same.
+  let projectConfirmed = false;
+  if (project === null) {
+    const found = findSessionProject(projectsRoot, kindDirName, sessionId);
+    if (found.ok) {
+      project = found.project;
+    } else if (found.reason === 'ambiguous') {
+      // Two projects genuinely hold this `_<kind>/<sid>` — the caller must
+      // disambiguate. Never silently pick one, and never fall through to the
+      // log dir, which would answer a DIFFERENT question than the one asked.
+      return { ok: false, reason: 'ambiguous', project: null };
+    }
+  }
+
+  // Remembered so a project-side dir with an unusable status.json AND no log
+  // dir still 404s with the SAME message it did before W8-F6.
+  let statusFailure: 'status-missing' | 'status-no-phase' | null = null;
+
+  if (project !== null) {
+    const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
+    if (sessionDir !== null) {
+      // A real `_<kind>/<sessionId>` dir exists under this project — whether or
+      // not it holds a usable status.json. THAT is what confirms ownership.
+      projectConfirmed = true;
+      // The SAME realpath-guarded choke point every other session file goes
+      // through — never `readSessionStatus`'s unguarded existsSync/readFileSync
+      // (see this file's header). An escaping symlink is indistinguishable from
+      // "missing" here.
+      const statusRaw = safeReadFileInSession(sessionDir, STATUS_FILENAME);
+      let statusParsed: Record<string, unknown> | null = null;
+      if (statusRaw !== null) {
+        try {
+          const parsed: unknown = JSON.parse(statusRaw);
+          if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            statusParsed = parsed as Record<string, unknown>;
+          }
+        } catch {
+          statusParsed = null; // malformed JSON — unreadable, never surfaced
+        }
+      }
+      if (statusParsed === null) {
+        statusFailure = 'status-missing';
+      } else if (typeof statusParsed.phase !== 'string') {
+        statusFailure = 'status-no-phase';
+      } else {
+        return { ok: true, source: 'status', project, sessionDir, status: statusParsed, phase: statusParsed.phase };
+      }
+    }
+  }
+
+  const legacy = resolveLegacySession({ logsRoot, kind, sessionId });
+  if (legacy.ok) {
+    // `projectFromLog` is RAW — it comes out of an on-disk log, which is not a
+    // trusted input just because it is server-side. It goes through the ONE
+    // project-id rule this module owns before it can reach the wire or any
+    // filesystem call; anything that rule refuses becomes `''` (honest-absent),
+    // never a guessed or partially-sanitised name.
+    const derived = legacy.projectFromLog !== '' && invalidProjectReason(legacy.projectFromLog) === null
+      ? legacy.projectFromLog
+      : '';
+    // Precedence, strongest evidence first, and NOTHING else reaches the wire:
+    //   1. a CONFIRMED project — a real `_<kind>/<sessionId>` dir was found
+    //      under it (Shape B: the dir survived, only status.json is gone);
+    //   2. the session's own event log;
+    //   3. `''`, honest-absent — forge-ui then renders no "back to project"
+    //      link at all (`backToProjectLink('')`).
+    // An UNCONFIRMED `?project=` is deliberately NOT in that list. It is a hint
+    // about a directory that does not exist, and echoing it back let
+    // `?project=<anything>` put `<anything>` on the wire — a dead "back to
+    // project" link minted by the very route whose purpose is to stop minting
+    // links to nowhere, and, for a Shape-B session, an unrelated real project
+    // name displacing the genuine owner. Never assert a project we cannot
+    // evidence.
+    const legacyProject = projectConfirmed ? (project as string) : derived;
+    return { ok: true, source: 'legacy', project: legacyProject, logDir: legacy.logDir, phase: legacy.phase };
+  }
+
+  return { ok: false, reason: statusFailure ?? 'not-found', project };
+}
+
+/** The boolean face of `resolveReadableSession`, for link producers: a
+ *  `/sessions/<kind>/<sid>` href is worth minting only for a session this
+ *  bridge can actually serve. Same resolution, same guards — never a second,
+ *  cheaper "does the dir exist" probe that could disagree with the route. */
+export function sessionIsReadable(args: {
+  projectsRoot: string;
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+  project?: string | null;
+}): boolean {
+  return resolveReadableSession(args).ok;
+}
+
+/** The ONE place a `/sessions/<kind>/<sid>` URL is built server-side, so the
+ *  aggregate index and this route can never disagree about the address of a
+ *  session. */
+export function sessionShellHref(kind: string, sessionId: string, project: string): string {
+  const base = `/sessions/${encodeURIComponent(kind)}/${encodeURIComponent(sessionId)}`;
+  return project === '' ? base : `${base}?project=${encodeURIComponent(project)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -644,55 +823,56 @@ export async function handleStudioSessionsRoutes(
     }
 
     const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-    const kindDirName = `_${descriptor.id}`;
-    let project: string;
-    if (projectRaw !== null) {
-      project = projectRaw;
-    } else {
-      const found = findSessionProject(projectsRoot, kindDirName, sessionId);
-      if (!found.ok) {
-        if (found.reason === 'ambiguous') {
-          sendJson(res, 409, { error: `session "${sessionId}" (kind "${kind}") exists under more than one project — pass ?project= to disambiguate`, kind, sessionId }, origin);
-        } else {
-          sendJson(res, 404, { error: 'session not found', kind, sessionId }, origin);
-        }
+
+    // W8-F6 (bead forge-6gv.27) — ONE predicate decides where this session
+    // lives and whether it can be read at all: `resolveReadableSession` (this
+    // file, above). It performs EXACTLY the project resolution + guarded
+    // status read this route used to inline, and only then falls back to the
+    // session's central log dir. Every rejection reason maps back onto the
+    // SAME response this route sent before, byte-identical (AT-70..74 pin the
+    // two status buckets; AT-F6-R3/R4 re-pin them from the outside).
+    const resolved = resolveReadableSession({
+      projectsRoot, logsRoot: ctx.logsRoot, kind: descriptor.id, sessionId, project: projectRaw,
+    });
+    if (!resolved.ok) {
+      if (resolved.reason === 'ambiguous') {
+        sendJson(res, 409, { error: `session "${sessionId}" (kind "${kind}") exists under more than one project — pass ?project= to disambiguate`, kind, sessionId }, origin);
         return true;
       }
-      project = found.project;
-    }
-    const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
-    if (!sessionDir) {
-      sendJson(res, 404, { error: 'session not found', kind, sessionId, project }, origin);
+      const error =
+        resolved.reason === 'status-missing' ? 'session not found (status.json is missing, unreadable, or not valid JSON)'
+        : resolved.reason === 'status-no-phase' ? 'session not found (status.json has no string "phase" field)'
+        : 'session not found';
+      // `project` is echoed only when one was actually resolved — the
+      // no-project 404 stays exactly the two-field body it has always been.
+      sendJson(res, 404, resolved.project !== null ? { error, kind, sessionId, project: resolved.project } : { error, kind, sessionId }, origin);
       return true;
     }
 
-    // `phase` is read from the session's real status.json through the SAME
-    // realpath-guarded choke point every other session file in this route
-    // goes through — never readSessionStatus's unguarded existsSync/
-    // readFileSync (see header). An escaping symlink is indistinguishable
-    // from "missing" here (safeReadFileInSession returns null for both) —
-    // never fabricated, never leaked.
-    const statusRaw = safeReadFileInSession(sessionDir, STATUS_FILENAME);
-    let statusParsed: Record<string, unknown> | null = null;
-    if (statusRaw !== null) {
-      try {
-        const parsed: unknown = JSON.parse(statusRaw);
-        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          statusParsed = parsed as Record<string, unknown>;
-        }
-      } catch {
-        statusParsed = null; // malformed JSON — treated as unreadable, never surfaced
-      }
-    }
-    if (statusParsed === null) {
-      sendJson(res, 404, { error: 'session not found (status.json is missing, unreadable, or not valid JSON)', kind, sessionId, project }, origin);
-      return true;
-    }
-    if (typeof statusParsed.phase !== 'string') {
-      sendJson(res, 404, { error: 'session not found (status.json has no string "phase" field)', kind, sessionId, project }, origin);
-      return true;
-    }
-    const phase = statusParsed.phase;
+    const project = resolved.project;
+    const phase = resolved.phase;
+    // W8-F6 — TRUE iff the only surviving state is the central log dir. Such a
+    // session is served READ-ONLY: no transcript (its sources are gone), no
+    // affordances (there is nowhere to write a turn), no tail.
+    const legacy = resolved.source === 'legacy';
+    // `sessionDir` for a legacy session is its LOG dir — deliberately, and only
+    // so `deriveSessionArtifact` below can run its ONE real derivation against
+    // a directory that provably holds none of the files any renderer scans
+    // (a log dir holds events.jsonl / stderr.log / .heartbeat / turn.pid /
+    // cancel.json, and not one of `manifests/`, `themes/`, `generations/`,
+    // `staging/`, `plan/cleanup-plan.md`, `AGENTS.draft.md` — the real names,
+    // orchestrator/studio/session-transcript.ts:125,126,127,758,897,898;
+    // enumerated on BOTH sides, zero intersection).
+    // That yields each kind's genuine EMPTY artifact without a second,
+    // hand-kept per-kind empty table here — pinned by AT-F6-R1.
+    const sessionDir = resolved.source === 'status' ? resolved.sessionDir : resolved.logDir;
+    const statusParsed: Record<string, unknown> | null = resolved.source === 'status' ? resolved.status : null;
+
+    // W8-F6 — structural, not derived from the phase name: a legacy session has
+    // no session dir left for a runner to advance or an affordance to write
+    // into, so no further event can ever be appended to it, whatever phase its
+    // log last recorded. `isTerminalPhase` still owns every OTHER session.
+    const terminal = legacy ? true : isTerminalPhase(descriptor, phase);
 
     // W6-B2 — live-tail this session's event log (idempotent; no-ops for a
     // kind whose runner never writes `_logs/_<kind>-<sid>/events.jsonl`, e.g.
@@ -705,16 +885,23 @@ export async function handleStudioSessionsRoutes(
     // bridge) — mirrors the legacy per-kind list routes' own terminal-phase
     // filter, derived (not re-invented) from the turnSpec table or
     // LEGACY_SESSION_TERMINAL_PHASES; see isTerminalPhase's own doc comment.
-    if (!isTerminalPhase(descriptor, phase)) ctx.ensureSessionTail(descriptor.id, sessionId);
+    // W8-F6 — gated on the COMPUTED `terminal` (above), so a legacy session
+    // never opens a permanent 200ms tail on a log nothing will ever append to.
+    if (!terminal) ctx.ensureSessionTail(descriptor.id, sessionId);
 
     // W7-C2 T1 review (P0-3) — fail-closed, SCOPED. A malformed transcript
     // source yields ZERO turns plus the verbatim reason on `transcriptError`
     // (below) — never defaulted stages, never a partial transcript, and
     // never a 409 that takes the operator's verdict controls down with it.
     // See the `transcriptError` field comment for the full rationale.
-    const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir, phase });
-    const transcriptError = transcriptResult.ok ? null : transcriptResult.error.message;
-    const turns = transcriptResult.ok ? transcriptResult.turns : [];
+    // W8-F6 — a legacy session has NO transcript sources to scan (the dir that
+    // held them is gone), so the derivation is not run at all: zero turns, zero
+    // sources scanned, and `transcriptError: null` — nothing REFUSED, there was
+    // simply nothing there. Running it against the log dir would report the
+    // same empty result by accident; skipping it says so on purpose.
+    const transcriptResult = legacy ? null : deriveSessionTranscript({ descriptor, sessionDir, phase });
+    const transcriptError = transcriptResult === null || transcriptResult.ok ? null : transcriptResult.error.message;
+    const turns = transcriptResult !== null && transcriptResult.ok ? transcriptResult.turns : [];
 
     let artifact: unknown;
     try {
@@ -726,7 +913,14 @@ export async function handleStudioSessionsRoutes(
       // surfaces as a 409 naming the cause — never a 200 with an empty
       // artifact, mirroring the fail-closed pass-through just above for
       // deriveSessionTranscript.
-      if (descriptor.artifact.kind === 'contract-buildout') {
+      if (legacy) {
+        // W8-F6 — the SAME derivation every other session goes through, handed
+        // this session's log dir (see `sessionDir`'s note above). The two kinds
+        // that REQUIRE caller-supplied data get honest empties: a legacy
+        // onboarding/kb-cleanup session's stages and findings describe live
+        // project/KB state that this dead session neither produced nor owns.
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: [], cleanupFindings: [] });
+      } else if (descriptor.artifact.kind === 'contract-buildout') {
         const contractResult = deriveContractStages({ forgeRoot: ctx.forgeRoot, projectsRoot, projectId: project });
         if (!contractResult.ok) {
           sendJson(res, 409, { ok: false, error: contractResult.error.message }, origin);
@@ -743,7 +937,7 @@ export async function handleStudioSessionsRoutes(
         // to deriveSessionArtifact with no cleanupFindings (which would
         // throw a DIFFERENT, less specific error) or smoothing into a 200
         // with an empty artifact.
-        const kbId = typeof statusParsed.kb_id === 'string' ? statusParsed.kb_id : null;
+        const kbId = typeof statusParsed?.kb_id === 'string' ? statusParsed.kb_id : null;
         if (kbId === null) {
           sendJson(res, 409, { ok: false, error: `session "${sessionId}" status.json has no string "kb_id" — cannot compute live cleanup findings` }, origin);
           return true;
@@ -806,7 +1000,10 @@ export async function handleStudioSessionsRoutes(
         // W7-C2: the question-form affordance additionally carries the
         // PENDING questions at awaiting-answers (attachPendingQuestions —
         // file-backed data the pure derivation cannot read itself).
-        affordances: attachPendingQuestions(deriveSessionAffordances(descriptor, phase), sessionDir, phase),
+        // W8-F6 — a legacy session derives NO affordance: every affordance is a
+        // control that writes into the session dir, and there is no session dir.
+        // An empty array here is the honest answer, not a suppressed one.
+        affordances: legacy ? [] : attachPendingQuestions(deriveSessionAffordances(descriptor, phase), sessionDir, phase),
         // W6-B6 (ADR-043 2026-08-15 amendment §3) — see this file's header
         // note. Read directly off the already-parsed `statusParsed`, the
         // SAME realpath-guarded read every other field on this envelope
@@ -819,7 +1016,10 @@ export async function handleStudioSessionsRoutes(
         // default was at the time, which today's default may no longer be, so
         // "not recorded" stays the honest answer there. Never stored — a
         // skill re-pointed at a different model cannot leave a stale copy.
-        modelTier: typeof statusParsed.modelTier === 'string'
+        // W8-F6: a legacy session recorded no status.json at all, so it falls
+        // straight to the kind's FIXED tier (derived live off the agent's
+        // SKILL.md) or `null` — never a fabricated tier.
+        modelTier: typeof statusParsed?.modelTier === 'string'
           ? statusParsed.modelTier
           : fixedTierForSessionKind(ctx.forgeRoot, descriptor),
         // W6-B8 — the SAME `isTerminalPhase` derivation this route already
@@ -828,7 +1028,12 @@ export async function handleStudioSessionsRoutes(
         // mirrors `affordances`' own unconditional presence) so the generic
         // `SessionInteractivePanel` can gate its ActivityLog drawer without a
         // second, hand-kept terminal-phase table client-side.
-        terminal: isTerminalPhase(descriptor, phase),
+        terminal,
+        // W8-F6 (bead forge-6gv.27) — ALWAYS present, mirroring `terminal`:
+        // this session's project-side working dir is gone and everything above
+        // was derived from its central event log alone. The shell renders an
+        // explicit read-only notice on it rather than an empty live session.
+        legacy,
         // W8-B3 (ON-5) — REPLACES W7-FIX-A2's `transcript: descriptor.turnSpec
         // === undefined`. That boolean was a STORED PROXY for "does this kind
         // record turns", and it was factually wrong: its own comment claimed a
@@ -846,7 +1051,7 @@ export async function handleStudioSessionsRoutes(
         // `turns` + the live affordances — there is no longer any field for a
         // writer to leave a stale per-kind copy in. ALWAYS present, mirroring
         // `terminal`/`affordances`.
-        transcriptSources: transcriptResult.ok ? [...transcriptResult.sourcesFound] : [],
+        transcriptSources: transcriptResult !== null && transcriptResult.ok ? [...transcriptResult.sourcesFound] : [],
         // W7-A2 — the DERIVED lifecycle view (cli/bridge-studio-lifecycle.ts):
         // state (working | awaiting-operator | crashed | stalled | terminal),
         // a truthful `needsYou`, the runner's crash text read live off
@@ -855,7 +1060,7 @@ export async function handleStudioSessionsRoutes(
         // nothing here is ever stored on status.json (derive-don't-store).
         // ALWAYS present, mirroring `affordances`/`terminal`.
         lifecycle: deriveSessionLifecycleFor({
-          descriptor, phase, terminal: isTerminalPhase(descriptor, phase), project, sessionId, projectsRoot, logsRoot: ctx.logsRoot,
+          descriptor, phase, terminal, project, sessionId, projectsRoot, logsRoot: ctx.logsRoot,
         }),
         // W7-C2 (sessions-kinds-36) — ALWAYS present, mirroring
         // `modelTier`'s own null-is-honest convention: the persisted
@@ -864,7 +1069,9 @@ export async function handleStudioSessionsRoutes(
         // community-refresh kind's own approve arm did too — those old
         // sessions still carry the pointer on disk), or null for a session
         // that produced nothing.
-        finalized: deriveFinalized(statusParsed, { forgeRoot: ctx.forgeRoot, projectsRoot, project }),
+        // W8-F6: no status.json ⇒ no persisted pointer ⇒ `null`, the same
+        // honest-absent value a session that produced nothing already gets.
+        finalized: statusParsed === null ? null : deriveFinalized(statusParsed, { forgeRoot: ctx.forgeRoot, projectsRoot, project }),
         // W7-C2 T1 review (P0-3, finding A2/F2) — the transcript's own
         // fail-closed error, SCOPED to the transcript. It used to 409 the
         // WHOLE session GET, which made a corrupt verdicts.json brick the

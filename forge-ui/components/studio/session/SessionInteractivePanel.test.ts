@@ -452,6 +452,12 @@ test('terminal:false renders the ActivityLog drawer', () => {
     terminal: false,
   });
   expect(html).toContain('data-component="activity-drawer"');
+  // W8-F6 adversarial-review finding 4: without this, a regression to a
+  // hardcoded `phaseActive={false}` would leave every test in this file green
+  // while killing the live "agent is working" indicator app-wide — the F6
+  // legacy test asserts "false", which is the SAME value the wrong
+  // implementation produces.
+  expect(html).toContain('data-phase-active="true"');
 });
 
 test('terminal:true hides the ActivityLog drawer — a settled session is not "working"', () => {
@@ -463,6 +469,30 @@ test('terminal:true hides the ActivityLog drawer — a settled session is not "w
     terminal: true,
   });
   expect(html).not.toContain('data-component="activity-drawer"');
+});
+
+// ---------------------------------------------------------------------------
+// F6 (wave-8, "a linked session must be readable") — a LEGACY session (its
+// only surviving record is the central log dir, no project-side status.json)
+// is always `terminal: true` (there is no session dir left for a runner to
+// advance), but the event log IS the only surviving record of what happened,
+// so the drawer must still render — with `phaseActive={false}`, since
+// nothing is actually running. Today the drawer is gated on `!terminal`
+// alone (see the two tests immediately above), so this is RED until the
+// component learns to read a `legacy` prop.
+// ---------------------------------------------------------------------------
+
+test('F6: terminal:true AND legacy:true still renders the ActivityLog drawer (with phaseActive false) — the event log is the ONLY surviving record for a legacy session', () => {
+  const html = render({
+    kind: 'architect',
+    phase: 'awaiting-verdict',
+    affordances: [],
+    events: [FIXTURE_EVENT],
+    terminal: true,
+    legacy: true,
+  } as never);
+  expect(html).toContain('data-component="activity-drawer"');
+  expect(html).toContain('data-phase-active="false"');
 });
 
 // ===========================================================================

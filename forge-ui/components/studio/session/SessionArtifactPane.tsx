@@ -171,7 +171,17 @@ export function SessionArtifactPane({
             // W8-B3 (sessions-kinds-07) — the REAL reason, from the caller
             // that knows it: a settled session names the phase that settled
             // it, instead of the hardcoded "Not available from this view".
-            finalizeUnavailableReason={terminalPhase === null ? null : `This session is ${terminalPhase} — its demo can no longer be finalized`}
+            // W8-F6 (adversarial review, finding 2): `terminalPhase` can
+            // honestly be `''` — a LEGACY session whose event log never
+            // recorded a phase is terminal with no phase name. Interpolating
+            // that produced "This session is  — its demo can no longer be
+            // finalized". Same guard, same wording rule as
+            // SessionInteractivePanel's own zero-affordance copy.
+            finalizeUnavailableReason={
+              terminalPhase === null ? null
+              : terminalPhase === '' ? 'This session has ended — its demo can no longer be finalized'
+              : `This session is ${terminalPhase} — its demo can no longer be finalized`
+            }
             onFinalize={onFinalizeGeneration}
           />
         ) : view.kind === 'contract-buildout' ? (

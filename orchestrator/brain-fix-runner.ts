@@ -17,15 +17,14 @@ import { join, resolve, relative } from 'node:path';
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 
-import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
+import { REDACTED_THINKING_MARKER, makeReasoningSink, makeThinkingSink, writeRootFenceOptions } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { runBrainLint, lintThemeFiles, classify } from '../cli/brain-lint.ts';
-import { snapshotKbFiles } from '../cli/kb-drain-structural.ts';
-import { guardAgentKbEdits, type KbEditGateResult } from '../cli/kb-drain-edit-soundness.ts';
+import { guardAgentKbEdits, snapshotBrainTree, type KbEditGateResult } from '../cli/kb-drain-edit-soundness.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
 
@@ -74,11 +73,26 @@ export type RunBrainFixInput = {
 
 export type RunBrainFixResult = {
   runId: string;
-  /** True when the re-lint after the agent turn found no same-kind finding. */
+  /**
+   * True when the re-lint after the agent turn found no same-kind finding
+   * AND the edit gate left every one of the turn's writes standing.
+   *
+   * W8-F1: `cmdBrainFix` (orchestrator/cli.ts — what the per-finding
+   * `op=fix-agent` button spawns) reads ONLY this field and prints "CLEARED".
+   * A turn whose writes were refused has not cleared anything, so the refusal
+   * is folded in here rather than left for a caller to remember to check.
+   */
   cleared: boolean;
-  /** W8-B2 — what the edit-soundness gate did to this turn's writes. Absent
-   *  only when the KB id resolves to no brain dir (nothing to guard). */
-  editAudit?: KbEditGateResult;
+  /**
+   * What the edit-soundness gate did to this turn's writes.
+   *
+   * W8-F1: REQUIRED. It used to be optional and was omitted whenever the KB
+   * id resolved to no brain dir, or whenever the gate threw — in both cases
+   * the turn ran with NO gate and said so only by omission, which nothing
+   * downstream ever read as a failure. A turn that was not audited must not
+   * be representable.
+   */
+  editAudit: KbEditGateResult;
 };
 
 // ---------------------------------------------------------------------------
@@ -155,13 +169,36 @@ export async function runBrainFixTurn(
 
   const prompt = [skillPrompt, '', userPayload].join('\n');
 
+  // W8-F1 — the WRITE-ROOT FENCE, at the spawn seam.
+  //
+  // The turn runs with `cwd = forgeRoot` and (before this) `permissionMode:
+  // 'acceptEdits'` plus `Edit` pre-approved in `allowedTools`, so the only
+  // thing keeping the agent on-target was the prose instruction "do not touch
+  // any other files" — the declared-data-fails-open shape. The C4 hostile
+  // re-verification had it delete a resolvable `related_themes` edge in a
+  // different sub-wiki entirely.
+  //
+  // `writeRootFenceOptions` (interactive-session.ts) is the SAME fence
+  // `runAgentTurn` installs, and it is one builder rather than two copies
+  // precisely because a fence is three settings together — wave-7's
+  // sessions-kinds-V01 was a live write ESCAPE past a non-empty writeRoots
+  // caused by getting two of the three right.
+  //
+  // An unresolvable kbId yields an EMPTY root list, which denies every write:
+  // `makeWriteRootCanUseTool` drops a root it cannot realpath, and a write
+  // matching no root is refused. Fail closed, deliberately.
+  const guardedBrainDir = resolveKbBrainDir(input.forgeRoot, input.kbId);
+
   const options: Record<string, unknown> = {
     cwd: input.forgeRoot,
     model: BRAIN_FIX_MODEL,
-    permissionMode: 'acceptEdits',
-    allowedTools: [...brainFixAgentSpec.allowedTools],
     disallowedTools: [...brainFixAgentSpec.disallowedTools],
     maxTurns: 8,
+    ...writeRootFenceOptions({
+      writeRoots: guardedBrainDir ? [guardedBrainDir] : [],
+      allowedTools: brainFixAgentSpec.allowedTools,
+      cwd: input.forgeRoot,
+    }),
     ...(() => {
       const hooks = sdkHooksForAgent({ skill: brainFixAgentSpec.skill, logger, initiativeId: cycleId });
       return hooks !== undefined ? { hooks } : {};
@@ -183,8 +220,12 @@ export async function runBrainFixTurn(
   // paths an operator clicks by HAND could still land the exact 2026-08-22
   // edits. Guarding a call site closes a door; guarding the turn closes the
   // class — no caller, present or future, can invoke this ungated.
-  const guardedBrainDir = resolveKbBrainDir(input.forgeRoot, input.kbId);
-  const preTurnSnapshot = guardedBrainDir ? snapshotKbFiles(guardedBrainDir) : null;
+  // W8-F1 — the snapshot is the WHOLE brain, not the drained KB's own dir.
+  // The audit was already brain-wide (`buildKbEditSoundnessCtx` collects theme
+  // targets from `brain/`); only the snapshot was per-KB, so the gate knew the
+  // neighbour theme existed and could not see it change. `snapshotBrainTree`
+  // takes no scope parameter for exactly that reason.
+  const preTurnSnapshot = snapshotBrainTree(input.forgeRoot);
 
   let costUsd = 0;
   let toolSeq = 0;
@@ -247,7 +288,8 @@ export async function runBrainFixTurn(
       metadata: { error: err instanceof Error ? err.message : String(err) },
     });
     sink.flushIteration(1);
-    return { runId: input.runId, cleared: false, ...(applyEditGate() ?? {}) };
+    // A crashed turn's writes are still on disk — gate them before returning.
+    return { runId: input.runId, cleared: false, editAudit: applyEditGate() };
   }
 
   sink.flushIteration(1);
@@ -288,6 +330,11 @@ export async function runBrainFixTurn(
     cleared = false;
   }
 
+  // W8-F1 — a turn that had a write REFUSED, or whose gate could not complete,
+  // has not cleared anything, whatever the re-lint says. Folded in HERE, once,
+  // rather than left to each caller: `cmdBrainFix` reads only this field.
+  if (editAudit.refused.length > 0 || editAudit.errors.length > 0) cleared = false;
+
   logger.emit({
     initiative_id: cycleId,
     parent_event_id: startEv.event_id,
@@ -298,19 +345,37 @@ export async function runBrainFixTurn(
     output_refs: [],
     cost_usd: costUsd,
     message: `brain-fix.end (cleared=${cleared})`,
-    metadata: { runId: input.runId, kind: input.kind, file: input.file, cleared },
+    metadata: {
+      runId: input.runId, kind: input.kind, file: input.file, cleared,
+      refused: editAudit.refused.length,
+      unsound: editAudit.unsound.map((u) => u.kind),
+      ...(editAudit.errors.length > 0 ? { gateErrors: editAudit.errors } : {}),
+    },
   });
 
-  return { runId: input.runId, cleared, ...(editAudit ?? {}) };
+  return { runId: input.runId, cleared, editAudit };
 
-  function applyEditGate(): { editAudit: KbEditGateResult } | undefined {
-    if (!guardedBrainDir || preTurnSnapshot === null) return undefined;
+  /**
+   * W8-F1 — the gate is TOTAL and its verdict is folded into `cleared`.
+   *
+   * This used to `catch` and return `undefined`: the agent's writes stayed on
+   * disk, the turn returned normally, and the two callers with no second gate
+   * (`runBrainConsolidateNow`, `cmdBrainFix`) reported success. Omitting the
+   * audit is not the same as refusing the edit.
+   *
+   * `guardAgentKbEdits` no longer throws — it names what it could not dispose
+   * of in `errors`. The `catch` here is the last line of defence for an
+   * unforeseeable failure (an OOM in the walk, say), and it too refuses rather
+   * than reporting clean.
+   */
+  function applyEditGate(): KbEditGateResult {
     try {
-      return { editAudit: guardAgentKbEdits(input.forgeRoot, guardedBrainDir, preTurnSnapshot) };
-    } catch {
-      // A gate that throws must not take the turn down with it — but it must
-      // also not report a clean audit it never performed.
-      return undefined;
+      return guardAgentKbEdits(input.forgeRoot, input.kbId, preTurnSnapshot);
+    } catch (err) {
+      return {
+        changes: [], refused: [], repaired: [], unsound: [],
+        errors: [`kb-edit-gate: the gate itself failed (${err instanceof Error ? err.message : String(err)}) — this turn's writes were NOT audited`],
+      };
     }
   }
 }

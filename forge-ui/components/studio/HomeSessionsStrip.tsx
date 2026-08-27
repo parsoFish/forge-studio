@@ -58,10 +58,19 @@ export function HomeSessionsStrip({
   const shown = strip.cards.length;
   const truncated = strip.totalCount > shown;
 
+  // W8-F4 (ON-8 S3): the SECTION TOKEN below is a stable DOM handle every
+  // journey and the DOM contract already key on — it is deliberately NOT
+  // renamed (a data-* rename is a cross-journey contract change, and a
+  // selector is not a claim made to the operator). What WAS a false claim is
+  // the heading: `buildHomeSessionsStrip` does not filter, it slices
+  // `sessions` — every live session is listed, needs-you first — so a heading
+  // reading "Sessions needing you" told an operator scanning for a
+  // running-but-unblocked session that this list excluded it. The needs-you
+  // subset is the chip beside it, which is where it always was.
   return (
     <section
       data-section="sessions-needing-you"
-      aria-label="Sessions needing you"
+      aria-label="Active sessions"
       data-active-session-count={strip.totalCount}
       data-needs-you-count={strip.needsYouCount}
       data-session-cards-shown={shown}
@@ -69,7 +78,7 @@ export function HomeSessionsStrip({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
-          Sessions needing you
+          Active sessions
         </h2>
         {strip.needsYouCount > 0 && (
           <span

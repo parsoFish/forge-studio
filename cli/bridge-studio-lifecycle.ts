@@ -32,6 +32,7 @@ import { basename } from 'node:path';
 
 import { LEGACY_SESSION_AWAITS_PHASES, LEGACY_SESSION_WORKING_PHASES } from './bridge-studio.ts';
 import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
+import { sessionLogDirName } from './session-readability.ts';
 import type { SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 
 // ---------------------------------------------------------------------------
@@ -199,14 +200,12 @@ export type SessionLifecycleFacts = {
   hasChannel: boolean;
 };
 
-/** `_logs/_<kind>-<sessionId>` — the SAME directory template
- *  `spawnAgentTurn` (cli/ui-bridge.ts) writes stderr.log/turn.pid into and
- *  `runInteractiveTurn` (orchestrator/interactive-runner.ts) writes
- *  events.jsonl/.heartbeat into (`SPAWN_AGENT_SPECS[..].logPrefix ===
- *  descriptor.id`, pinned by cli/session-tail-kind-parity.test.ts). */
-export function sessionLogDirName(kind: string, sessionId: string): string {
-  return `_${kind}-${sessionId}`;
-}
+/** `_logs/_<kind>-<sessionId>`. W8-F6 (bead forge-6gv.27) MOVED the
+ *  implementation to cli/session-readability.ts — that module is an import
+ *  leaf and needs this template, while this module imports
+ *  cli/bridge-studio.ts and so cannot be imported by it. Re-exported here
+ *  unchanged so every existing importer keeps its one import. */
+export { sessionLogDirName };
 
 /**
  * W8-A2 (ON-7) — the session's own `.heartbeat` mtime, guarded, or null when

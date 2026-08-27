@@ -19,6 +19,7 @@ import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type
 import { getPaths } from './queue.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
+import { FLOW_ID_RE } from './enqueue-flow-run.ts';
 
 export type MintTriggeredResult = {
   status: 'minted' | 'no-project' | 'error';
@@ -113,6 +114,16 @@ export function mintTriggeredInitiative(
   try {
     const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..');
     const flowId = req.target.ref;
+    // W8-F5 (bead forge-6gv.23): `flowId` is a PATH SEGMENT on the very next
+    // line, and from there the value flows into projectRepoPath and artDir.
+    // `enqueueFlowRun` already refuses a ref that is not a flow-id slug (its
+    // FLOW_ID_RE is described as "a path-traversal guard on the flow ref"); the
+    // mint path — reached from cron, the webhook receiver and agent-complete —
+    // read the same field with no guard. Same rule, same regex, fail closed
+    // through this function's existing typed error shape.
+    if (!FLOW_ID_RE.test(flowId ?? '')) {
+      return { status: 'error', detail: `target ref ${JSON.stringify(flowId ?? '')} is not a valid flow id slug` };
+    }
     const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'));
     if (!flow.project) {
       return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };

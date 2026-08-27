@@ -323,3 +323,50 @@ test('(green-on-arrival) [F2 #13] target.kind: "agent" with no injected startAge
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-F5 (bead forge-6gv.23) — the trigger ref is a PATH SEGMENT here.
+// The widened SEC-04 scan scope surfaced this: `enqueueFlowRun` calls
+// FLOW_ID_RE "a path-traversal guard on the flow ref" and refuses an invalid
+// one, but the STAGE path folded the same value straight into a filename.
+// ---------------------------------------------------------------------------
+
+test('W8-F5: stageFlowRunRequest REFUSES a target ref that is not a flow-id slug — the ref never reaches the filename', () => {
+  // MEASURED at c0093918, unguarded: ref `../../../../pwned` writes
+  // `<tmpdir>/pwned-<ts>.json` — fully outside the queue root (the
+  // `flow-run-` prefix eats one `..`, every further one walks up).
+  const sandbox = mkdtempSync(join(tmpdir(), 'flow-runs-escape-'));
+  const queueRoot = join(sandbox, 'q');
+  mkdirSync(queueRoot, { recursive: true });
+  try {
+    for (const escape of ['../../../../pwned', '../../pwned', 'a/b']) {
+      assert.throws(
+        () => stageFlowRunRequest(
+          { target: { kind: 'flow', ref: escape }, origin: 'cron', triggeredBy: 'cron:evil' } as Omit<FlowRunRequest, 'createdAt'>,
+          { queueRoot },
+        ),
+        /flow id slug|target ref/i,
+        `ref ${JSON.stringify(escape)} must fail closed at the stage boundary, exactly as the drain already fails it`,
+      );
+    }
+    const staged = existsSync(flowRunsDir(queueRoot)) ? readdirSync(flowRunsDir(queueRoot)) : [];
+    assert.deepEqual(staged, [], 'no request file was written');
+    assert.deepEqual(readdirSync(sandbox), ['q'], 'nothing escaped the queue root');
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5 (GREEN twin): a valid slug ref still stages normally', () => {
+  const queueRoot = setup();
+  try {
+    const file = stageFlowRunRequest(
+      { target: { kind: 'flow', ref: 'forge-develop' }, origin: 'cron', triggeredBy: 'cron:ok' } as Omit<FlowRunRequest, 'createdAt'>,
+      { queueRoot },
+    );
+    assert.ok(existsSync(file), 'the staged request exists');
+    assert.equal(listFlowRunRequests({ queueRoot }).length, 1);
+  } finally {
+    rmSync(queueRoot, { recursive: true, force: true });
+  }
+});

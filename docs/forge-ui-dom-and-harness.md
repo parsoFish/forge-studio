@@ -530,7 +530,12 @@ inventory rather than one shared page-level contract:
   - `section[data-section="sessions-needing-you"][data-active-session-count]
     [data-needs-you-count][data-session-cards-shown]` (W6-B11, the IA-4
     marked slot; **W7-B1 renamed from `active-sessions`** — the goal pack's
-    named-strip contract, with a visible `h2` "Sessions needing you") — the
+    named-strip contract, with a visible `h2` **"Active sessions"**
+    (**W8-F4**: the heading was "Sessions needing you", which claimed a
+    filter `buildHomeSessionsStrip` does not apply — it slices every live
+    session, needs-you first, and the needs-you subset is the adjacent
+    chip. The `data-section` TOKEN is deliberately unchanged: it is the
+    stable selector journeys key on, not a claim made to the operator) — the
     aggregate in-flight-sessions strip. **W7-B1 (home-sessions-31): rendered
     in EVERY state** — the section owns Home's only link to `/sessions`
     (navigation, not data), so at zero sessions it keeps the header + the
@@ -669,6 +674,18 @@ inventory rather than one shared page-level contract:
   sections present, `monitor-runs`' empty/failed state), and
   `monitor-counts-agree` (the headline totals reconcile with the rail and
   the ledger under them, and Home reads the same numbers back) beats.
+  **⚑ W8-F4:** the journey's fixture seeds ALL THREE run kinds and
+  `monitor-one-surface` asserts their **identities**, not section presence —
+  a seeded `_queue/in-flight` FLOW run on the rail, a seeded `_logs/_agent-…`
+  STANDALONE run as a `[data-ledger-row][data-run-id=<the seeded dir name>]`
+  carrying `data-ledger-kind="agent"` / `data-ledger-link-kind="standalone"`,
+  and a seeded non-terminal `projects/<scratch>/_onboarding/<sid>/status.json`
+  SESSION as `[data-session-card][data-session-id=<the seeded sid>]`. It
+  previously seeded flow runs only, so two of the three kinds were asserted
+  by `sections.includes('sessions-needing-you')` alone — which passes at zero
+  state, because `HomeSessionsStrip` renders its `<section>` unconditionally.
+  `monitor-counts-agree` now also pins `sessionsLive >= 1` and `runsLive >= 2`
+  so `live = runsLive + sessionsLive` is exercised with both addends non-zero.
 - **Sessions `/sessions`** (W6-B11) — the aggregate in-flight sessions index.
   Deliberately NOT a `StudioNav` pillar (operator decision — the
   seven-pillar nav stays closed); reached from Home's active-sessions strip header (above)
@@ -1869,12 +1886,39 @@ inventory rather than one shared page-level contract:
   (`app/agents/[id]/page.tsx`) — ahead of `YamlPreview` and
   `ReadinessPanel`, which used to sit above it — and is sticky
   (`RUN_PANEL_STYLE`: `position: 'sticky', top: 0`), height-bounded to
-  `calc(100vh - 96px)` with its own internal scroll (`overflowY: 'auto'`)
-  so it cannot grow tall enough (project picker, ceiling, materials,
-  standing triggers, a live run's log) to push its own primary button off
-  the bottom of the viewport. No new attribute — this is a layout/position
-  fact, not a `data-*` this doc otherwise pins; `UsedInFlows` and the
-  history ledger (below) are unaffected and keep their existing order.
+  `calc(100vh - 96px)`. **⚑ W8-F4 amends the inside of that box.** The panel
+  used to carry `overflowY: 'auto'` on its ROOT, which put the dispatch
+  button *inside* the scroll region, behind the project picker, the inputs
+  field, the ceiling block and the materials section — reachable only BY
+  scrolling, which is the negation of the claim the panel existed to make.
+  The root is now a non-scrolling bounded flex column (`overflow: 'hidden'`,
+  `display: 'flex'`, `flexDirection: 'column'`, no padding of its own) with
+  exactly two children: `[data-run-panel-body]` (`overflowY: 'auto'`,
+  `flex: '1 1 auto'`, `minHeight: 0`) holding everything that grows — the
+  picker, `[data-run-inputs]`, `[data-component="cost-ceiling"]`,
+  `[data-section="materials-attach"]`, the standing triggers and a live
+  run's log — and `[data-run-panel-actions]` (`flex: '0 0 auto'`), a
+  non-scrolling footer holding `[data-action="run-agent"]`,
+  `[data-action="cancel-run"]` and the paragraphs that explain a disabled
+  Run. Content growth therefore cannot move the dispatch control at all. The
+  **interactive** branch (`data-run-dispatchable="false"`, below) carries the
+  SAME two-child split, with `[data-action="go-to-session"]` in its actions
+  row — gating one of two branches is how this class comes back.
+  Two gates enforce it, and each is mutation-proven (see
+  `_wave8/lanes/F4-ledger.md`): `forge-ui/lib/agent-run-reachable.test.ts`
+  renders the real component — BOTH branches — and walks each control's
+  ancestor chain (no scrolling ancestor; no shrinkable container; a closed
+  ALLOW-list of the CSS properties a chain element may declare at all, every
+  vertical magnitude bounded at 64px; and a closed PAIR of panel children, so
+  nothing can be inserted between the control and the panel), and
+  `scripts/journeys/agents.mjs`'s `agents-builder`
+  beat measures **`[data-action="run-agent"]`'s OWN
+  `getBoundingClientRect()`** — `top >= 0 && bottom <= innerHeight` plus an
+  `elementFromPoint` hit test at its centre and an assertion that neither
+  the window nor `#col-right` has scrolled. It previously measured the
+  PANEL's rect, a predicate that is true for a panel straddling the fold
+  with its button 4000px below it. `UsedInFlows` and the history ledger
+  (below) are unaffected and keep their existing order.
   A saved **non-interactive** agent gets a run
   surface (R2-01-F3 generic run host): `[data-section="agent-run"]
   [data-run-dispatchable="true"]` with a `[data-action="run-agent"]` button, a
@@ -2834,6 +2878,29 @@ inventory rather than one shared page-level contract:
   (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
   the transcript pane AND the artifact pane together; a shell refetch keeps
   the operator's choice.
+  **⚑ W8-F6 (bead forge-6gv.27) — a linked session must be readable:**
+  `[data-session-legacy]` (always present, `"true"`/`"false"`) says whether this
+  session's only surviving record is the runner's central log dir
+  (`_logs/_<kind>-<sessionId>/events.jsonl`) — its project-side working dir, and
+  with it `status.json`, the transcript sources and the artifact files, is gone.
+  236 of 249 central session log dirs on the reference host have that shape,
+  because the log dir is never pruned while the managed project tree it belonged
+  to is gitignored and routinely recreated; wave 8 started LINKING to them from
+  the flow-run page, so the walkthrough crawl reported seven first-party 404s.
+  Such a session now reads 200, read-only: `data-session-legacy="true"`, an
+  honest `div[data-component="session-legacy-notice"]` naming what survived, the
+  generic session panel for EVERY kind (the bespoke architect/project-brain
+  panels are driven by the same `status.json` a legacy session no longer has),
+  zero affordances, and the ActivityLog drawer re-opened despite
+  `terminal: true` — the event log is the only thing left to show. Its
+  `[data-transcript-omitted]` is a THIRD value, `"working-files-gone"`: an
+  empty `transcriptSources` looks identical to `"nothing-recorded"` on the
+  wire, but "the writer never ran" and "a lot happened and the files are gone"
+  are opposite claims, and this attribute is what an automated gate reads.
+  Like every other `data-session-*` attribute this shell emits,
+  `data-session-legacy` is written by `readyDataAttrs` and is therefore
+  present only while `[data-session-status="ready"]` — a gate must check that
+  first rather than read the attribute's ABSENCE as "not legacy".
   **⚑ W8-B3 (operator note ON-5) — the pane set is PER SESSION, derived:**
   `[data-session-panes]` names the panes actually rendered, in order
   (`"transcript,artifact"` or `"artifact"`), and `[data-transcript-omitted]`

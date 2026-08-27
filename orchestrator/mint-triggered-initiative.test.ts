@@ -236,3 +236,34 @@ test('mintTriggeredInitiative: a hostile payload never leaks into the initiative
     assert.match(result.initiativeId!, /^INIT-\d{4}-\d{2}-\d{2}-webhook-tick-\d{6}$/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// W8-F5 (bead forge-6gv.23) — the same trigger ref reaches
+// `join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml')` here, and from
+// there flows into projectRepoPath / artDir. The drain guards this value with
+// FLOW_ID_RE; the mint path did not.
+// ---------------------------------------------------------------------------
+
+test('W8-F5: mintTriggeredInitiative REFUSES a target ref that is not a flow-id slug (it is a path segment, not a label)', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    for (const ref of ['../../etc', 'tick/../../escape', 'Tick', 'tick;rm']) {
+      const req: FlowRunRequest = {
+        target: { kind: 'flow', ref },
+        origin: 'cron',
+        triggeredBy: 'cron:evil',
+        createdAt: new Date().toISOString(),
+      };
+      const result = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+      assert.equal(result.status, 'error', `ref "${ref}" must fail closed, got ${JSON.stringify(result)}`);
+      assert.match(result.detail ?? '', /flow id slug|target ref/i, `ref "${ref}" must say why`);
+    }
+    // The happy path is untouched.
+    assert.equal(
+      mintTriggeredInitiative(
+        { target: { kind: 'flow', ref: 'tick' }, origin: 'cron', triggeredBy: 'cron:ok', createdAt: new Date().toISOString() },
+        { forgeRoot, queueRoot, logsRoot },
+      ).status,
+      'minted',
+    );
+  });
+});

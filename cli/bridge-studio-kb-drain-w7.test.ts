@@ -24,6 +24,7 @@ import {
 } from './bridge-studio-kb-drain.ts';
 import { collectKbFindings } from './kb-lint-summary.ts';
 import { deriveKbActiveJob } from './kb-job-state.ts';
+import { noKbEdits } from './kb-drain-edit-soundness.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
 import { startBridge } from './ui-bridge.ts';
 
@@ -146,7 +147,7 @@ test('runKbDrain — persists per transition: round visible at round start, perF
   const opts: KbDrainOpts = {
     lint: scriptedLint([[a, b], []]),
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [a, b] }),
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.05 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.05, editAudit: noKbEdits() }),
     persistStatus: (_root, _runId, s) => { snapshots.push(structuredClone(s)); },
   };
   const status = await runKbDrain(root, 'perturn-kb', 'perturn-kb-drain-t1', opts);
@@ -194,7 +195,7 @@ test('runKbDrain — perFinding accumulates across rounds with a round tag (know
       void o;
       return EMPTY_AUTO_RESULT;
     },
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.01 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() }),
   };
   // applyAutoFixes must hand back the right residual per round: script it.
   let round = 0;
@@ -224,7 +225,7 @@ test('runKbDrain — emits progress events onto its own cycle log (knowledge-01)
   const status = await runKbDrain(root, 'events-kb', 'events-kb-drain-t1', {
     lint: scriptedLint([[a], []]),
     applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [a] }),
-    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.02 }),
+    runFixTurn: async (input) => ({ runId: input.runId, cleared: true, costUsd: 0.02, editAudit: noKbEdits() }),
   });
   assert.equal(status.state, 'green');
   const raw = readFileSync(join(root, '_logs', '_kb-drain-events-kb-drain-t1', 'events.jsonl'), 'utf8');
@@ -258,7 +259,7 @@ test('runKbDrain — a cancel request lands as a "cancelled" terminal between tu
       turns += 1;
       // The operator cancels while the FIRST turn is in flight.
       requestKbDrainCancel(root, runId);
-      return { runId: input.runId, cleared: false, costUsd: 0.01 };
+      return { runId: input.runId, cleared: false, costUsd: 0.01, editAudit: noKbEdits() };
     },
   });
   assert.equal(status.state, 'cancelled', JSON.stringify(status));
@@ -454,7 +455,7 @@ test('POST /api/studio/kbs/:id/drain/cancel — forced branch stakes the cancel 
       },
       runFixTurn: async (input) => {
         turns += 1;
-        return { runId: input.runId, cleared: false, costUsd: 0.01 };
+        return { runId: input.runId, cleared: false, costUsd: 0.01, editAudit: noKbEdits() };
       },
     });
     assert.equal(status.state, 'cancelled', JSON.stringify(status));
