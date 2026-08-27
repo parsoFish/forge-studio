@@ -556,6 +556,51 @@ export function makeWriteRootCanUseTool(writeRoots: readonly string[], bashFence
 }
 
 /**
+ * The COMPLETE option triple a write-root-fenced turn must run with.
+ *
+ * W7-A2 (sessions-kinds-V01, beads forge-w08/forge-eip) paid for the fact that
+ * a fence is three settings, not one. `canUseTool` is the SDK's
+ * PERMISSION-PROMPT handler: it runs only for a tool call the CLI would
+ * otherwise prompt on. Two settings in the same options bag short-circuit that
+ * prompt for exactly the tools the fence gates:
+ *
+ *   - `permissionMode: 'acceptEdits'` auto-accepts Write/Edit/MultiEdit/
+ *     NotebookEdit at the SDK level;
+ *   - `allowedTools` pre-approves every listed name.
+ *
+ * Live evidence: a turn ran with a non-empty `writeRoots` and still wrote
+ * three files outside every declared root. So a fenced turn runs in `default`
+ * mode with the fence-gated names STRIPPED from `allowedTools` — they stay
+ * callable (never pushed into `disallowedTools`), the SDK just routes each
+ * call through `canUseTool`. Every read-only grant survives verbatim.
+ *
+ * W8-F1: extracted from `runAgentTurn`'s body so the SECOND fenced spawn path
+ * — `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), which drives its own
+ * raw SDK stream loop and therefore never went through `runAgentTurn` — cannot
+ * get two of the three right and ship a fence the SDK never consults. One
+ * enumeration of what "fenced" means, not one per caller.
+ */
+export function writeRootFenceOptions(args: {
+  /** TRUSTED, already-existing absolute directory paths. Never request text. */
+  writeRoots: readonly string[];
+  /** The turn's declared grants; fence-gated names are stripped from the result. */
+  allowedTools: readonly string[];
+  /** The turn's cwd — relative Bash paths resolve against it. */
+  cwd: string;
+  /** Absent/`deny` denies every Bash call; `inspect` statically inspects each. */
+  bashFence?: BashFenceMode;
+}): { permissionMode: 'default'; allowedTools: string[]; canUseTool: WriteRootCanUseTool } {
+  return {
+    permissionMode: 'default',
+    allowedTools: args.allowedTools.filter((t) => !FENCE_STRIPPED_TOOLS.has(t)),
+    canUseTool: makeWriteRootCanUseTool(
+      args.writeRoots,
+      args.bashFence === 'inspect' ? { bash: 'inspect', cwd: args.cwd } : { bash: 'deny' },
+    ),
+  };
+}
+
+/**
  * Run one NON-structured agent turn with write tools — the brain-fix / demo-builder
  * shape (the agent edits files via its tool stream, there is no structured result).
  * Streams tool_use to `onToolUse`, throttles `onHeartbeat`, forwards reasoning text
@@ -630,19 +675,23 @@ export async function runAgentTurn(args: {
   const options: Record<string, unknown> = {
     cwd: args.cwd,
     model: args.model,
-    permissionMode: fenced ? 'default' : 'acceptEdits',
-    allowedTools: fenced ? args.allowedTools.filter((t) => !FENCE_STRIPPED_TOOLS.has(t)) : args.allowedTools,
+    permissionMode: 'acceptEdits',
+    allowedTools: args.allowedTools,
     disallowedTools: args.disallowedTools ?? [],
     maxTurns: args.maxTurns ?? 16,
     abortController,
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
+    // The three fenced settings arrive TOGETHER, from one builder, or not at
+    // all — an unfenced turn keeps the exact prior shape.
+    ...(fenced
+      ? writeRootFenceOptions({
+          writeRoots: args.writeRoots!,
+          allowedTools: args.allowedTools,
+          cwd: args.cwd,
+          ...(args.bashFence !== undefined ? { bashFence: args.bashFence } : {}),
+        })
+      : {}),
   };
-  if (fenced) {
-    options.canUseTool = makeWriteRootCanUseTool(
-      args.writeRoots!,
-      args.bashFence === 'inspect' ? { bash: 'inspect', cwd: args.cwd } : { bash: 'deny' },
-    );
-  }
 
   let costUsd = 0;
   let toolSeq = 0;
