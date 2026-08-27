@@ -117,22 +117,53 @@ test('a budget-stopped run counts as failed, not as quietly finished', () => {
 // ── sessions are counted from the session index, never from ledger rows ──
 
 test('session rows in the ledger are NOT counted as runs (no double count, no phase mis-read)', () => {
-  // Kills counting a session row's raw runner phase against the run
-  // vocabulary — 'drafting' is not 'active', and the same session would then
-  // be counted twice once `sessions` is also summed.
+  // W8-F4: this test previously used a session row with phase 'drafting' —
+  // the ONE status value at which the guarded and unguarded derivations
+  // agree, so DELETING the `linkKind !== 'session'` filter left it green.
+  // The C4 refuter measured it: `m_no_session_filter` -> 15/15 passed. A gate
+  // that cannot fail is not a gate.
+  //
+  // The fixture now uses the phase a REAL in-flight session carries: the
+  // onboarding kind's in-flight phase is literally `running`
+  // (studio/session-kinds.yaml), carried verbatim onto `LedgerRow.status` by
+  // agent-ledger.ts's `deriveSessionRow`. 'running' IS in
+  // MONITOR_LIVE_ROW_STATUSES, so guarded and unguarded now diverge (1 vs 2
+  // runsLive, 2 vs 3 live) and removing the filter turns this RED.
   const rows = [
-    row({ id: 's1', status: 'drafting', linkKind: 'session' }),
+    row({ id: 's1', status: 'running', linkKind: 'session' }),
     row({ id: 'r1', status: 'running' }),
   ];
   const summary = buildMonitorSummary({
     ledgerRows: rows,
     runs: [],
-    sessions: [session({ sessionId: 's1' })],
+    sessions: [session({ sessionId: 's1', phase: 'running' })],
     attentionCount: 0,
   });
-  expect(summary.runsLive).toBe(1);
+  expect(summary.runsLive).toBe(1);   // the flow run only — NOT the session row
   expect(summary.sessionsLive).toBe(1);
-  expect(summary.live).toBe(2);
+  expect(summary.live).toBe(2);       // 3 without the guard: the session counted twice
+  expect(summary.total).toBe(2);      // both rows are still ON the surface
+});
+
+test('a session row that failed is not counted in the FAILED headline either', () => {
+  // Same guard, the other headline. `m_failed_all_rows` (failed computed over
+  // input.ledgerRows instead of runRows) survived the shipped suite because no
+  // fixture ever carried a session row with a failed-vocabulary status —
+  // yet `failed` is a REAL terminal phase of the onboarding session kind, so
+  // the shape is not hypothetical.
+  const rows = [
+    row({ id: 's1', status: 'failed', linkKind: 'session' }),
+    row({ id: 'r1', status: 'failed' }),
+    row({ id: 'r2', status: 'budget-exceeded' }),
+  ];
+  const summary = buildMonitorSummary({
+    ledgerRows: rows,
+    runs: [],
+    sessions: [session({ sessionId: 's1', phase: 'failed', terminal: true })],
+    attentionCount: 0,
+  });
+  expect(summary.failed).toBe(2);   // 3 without the guard
+  expect(summary.total).toBe(3);
 });
 
 test('session liveness uses the bridge\'s own terminal verdict, never a re-derived one', () => {
@@ -203,8 +234,37 @@ test('every tile renders at zero — an absent row is indistinguishable from a b
 test('summary.total always equals the row count the surface renders', () => {
   // Kills a summary computed over a DIFFERENT (capped, filtered, stale) list
   // than the one on screen — the shape the original defect took.
-  const rows = Array.from({ length: 37 }, (_, i) => row({ id: `r${i}`, status: i % 3 === 0 ? 'running' : 'complete' }));
+  //
+  // W8-F4: the fixture now INCLUDES a session row. Without one, `total:
+  // input.ledgerRows.length` and `total: runRows.length` are the same
+  // expression, and the C4 verifier's mutant m4 (`total <- runRows.length`)
+  // passed the whole suite. `total` is the denominator the surface renders
+  // (`data-monitor-total`, and the journey's MONITOR.3 total-vs-ledger
+  // identity), so it must count EVERY row on screen, session rows included —
+  // the run-vocabulary filter applies to `runsLive`/`failed`, never to the
+  // denominator.
+  const rows = [
+    ...Array.from({ length: 37 }, (_, i) => row({ id: `r${i}`, status: i % 3 === 0 ? 'running' : 'complete' })),
+    row({ id: 's1', status: 'running', linkKind: 'session' }),
+  ];
   const summary = buildMonitorSummary({ ledgerRows: rows, runs: [], sessions: [], attentionCount: 0 });
-  expect(summary.total).toBe(rows.length);
-  expect(summary.runsLive).toBe(rows.filter((r) => r.status === 'running').length);
+  expect(summary.total).toBe(rows.length);          // 38 — 37 without the session row
+  expect(summary.runsLive).toBe(rows.filter((r) => r.status === 'running' && r.linkKind !== 'session').length);
 });
+
+/**
+ * EXPIRY CONDITION for the three assertions above (immutable-gates: a pin
+ * whose input is not reachable today must say so).
+ *
+ * `useEverythingLedger` — the ONLY producer of the row list Home and Monitor
+ * hand to `buildMonitorSummary` — merges flow rows with
+ * `fetchRecentAgentRunsWithMeta(agents, undefined, 'standalone')`, so a
+ * `linkKind: 'session'` row does not reach this derivation from those two
+ * surfaces today. It IS produced elsewhere in the codebase (`agent-ledger.ts`
+ * `deriveSessionRow`, behind `GET /api/agents/:slug/history`, which
+ * `/agents/[id]` renders), and `buildMonitorSummary`'s input type is the
+ * shared `LedgerRow[]`, so the filter at monitor-view.ts is the contract that
+ * makes merging that list in SAFE rather than a double count. These pins exist
+ * so the guard cannot be deleted as "dead"; delete them only together with the
+ * filter, and only once no producer of a session-kind LedgerRow remains.
+ */
