@@ -48,7 +48,7 @@
  * MON_ACTIVE_PROJECT_DIR, so the project sweep takes it too; the standalone
  * run dir is swept explicitly.
  */
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { FORGE_ROOT, caption, ACT, READ } from '../lib/journey-fixtures.mjs';
@@ -182,6 +182,26 @@ function cleanMonitorFixture() {
   for (const path of [MON_ACTIVE_MANIFEST, MON_FAILED_MANIFEST]) {
     try { rmSync(path, { force: true }); } catch { /* best-effort */ }
   }
+}
+
+/**
+ * Keep the seeded standalone run LIVE across the beats that assert it is live.
+ *
+ * `readStandaloneLivenessFacts` (cli/ui-bridge.ts) derives `idleMs` from the
+ * newest mtime among the run dir's `events.jsonl` / `stderr.log` / `turn.pid`,
+ * and `applyStandaloneStaleness` flips `running` -> `stalled` past
+ * `DEFAULT_STALL_CEILING_MS` (180 s). A real in-flight run's log is being
+ * appended the whole time, which is exactly why that ceiling is a fair
+ * liveness signal; a file written once at the top of MONITOR.1 is not, so past
+ * 180 s of walkthrough the fixture would stop representing the thing it
+ * claims to be and the beats below would fail for a reason that has nothing
+ * to do with the Monitor pillar. Touching the mtime is the fixture keeping its
+ * own claim true — NOT a nudge to make a check pass: the run's derived state,
+ * its row, its id and its kind all still come from the real read path.
+ */
+function keepMonitorAgentRunLive() {
+  const now = new Date();
+  try { utimesSync(join(MON_AGENT_RUN_DIR, 'events.jsonl'), now, now); } catch { /* swept already */ }
 }
 
 /** goto `/` and wait for Home's real readiness signal — never a fixed sleep. */
@@ -337,6 +357,13 @@ export const journey = defineJourney({
         const { page, watch, check, frame } = ctx;
         console.log('\n[MONITOR.2] /monitor — every promised section');
 
+        // The `_queue/` manifests this journey seeds live in the SHARED queue
+        // dir, and the harness's daemon guard REFUSES to run with a stray
+        // manifest present — so a throw that leaks one does not merely pollute
+        // a later beat, it blocks the NEXT RUN outright. MONITOR.1 already
+        // carries this catch and MONITOR.3 a finally; this beat had neither.
+        try {
+        keepMonitorAgentRunLive();
         await page.goto(watch.uiUrl + '/monitor', { waitUntil: 'domcontentloaded' });
         await waitMonitorReady(page);
         await caption(page, 'Flow runs, agent runs, sessions, the queue, and everything waiting on you — one surface.');
@@ -468,6 +495,10 @@ export const journey = defineJourney({
         check(ledger.ledgerCount !== null, 'MONITOR.2: the shared HistoryLedger is what renders the rows — not a second, Monitor-only list');
 
         await frame(page, 'monitor-2-one-surface', '/monitor — flow runs, sessions, the queue and the merged ledger on one page', { key: true });
+        } catch (err) {
+          cleanMonitorFixture();
+          throw err;
+        }
       },
     },
     {
@@ -479,6 +510,7 @@ export const journey = defineJourney({
         console.log('\n[MONITOR.3] the summary and the list agree');
 
         try {
+        keepMonitorAgentRunLive();
         await page.goto(watch.uiUrl + '/monitor', { waitUntil: 'domcontentloaded' });
         await waitMonitorReady(page);
         const monitorSummary = await readSummary(page);
@@ -523,7 +555,10 @@ export const journey = defineJourney({
         await frame(page, 'monitor-3-counts-agree', '/monitor — the headline totals reconcile with the rail and the ledger under them', { key: true });
 
         // Cross-surface: Home and Monitor are reading ONE derivation, so the
-        // same visit must produce the same numbers on both.
+        // same visit must produce the same numbers on both. The seeded run is
+        // kept live across the hop too, so the two reads cannot disagree just
+        // because the staleness ceiling fell between them.
+        keepMonitorAgentRunLive();
         await gotoHomeReady(page, watch);
         const homeSummary = await readSummary(page);
         check(homeSummary !== null, 'MONITOR.3: Home still renders its strip after the round trip');
