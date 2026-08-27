@@ -882,9 +882,12 @@ test('decideAutoRetry: W8-F3 end-to-end — the REAL classifier verdict grants Z
 // ---------------------------------------------------------------------------
 
 test('classifyCycleFailure: W8-F3 — a real archived golangci-lint gate failure is NOT a rate limit ("…:1529:36" is a line number)', () => {
-  // Provenance: _logs/2026-06-01T13-18-09_INIT-2026-06-01-ci-green,
-  // events EV_mpv8y2zq_kew0uozj (gate.fail, iteration 4) and
-  // EV_mpv902r2_hy3c9rbc (the orchestrator's total-failure error).
+  // Provenance: _logs/2026-06-01T13-18-09_INIT-2026-06-01-ci-green — the
+  // decisive pair of that cycle's five error events, EV_mpv8y2zq_kew0uozj
+  // (gate.fail, iteration 4, the one carrying the :1529: line) and
+  // EV_mpv902r2_hy3c9rbc (the orchestrator's total-failure error). The three
+  // earlier gate.fail events are omitted; they carry the same shape and do
+  // not change the verdict.
   // Replayed through c0093918 this whole cycle classifies
   // `transient / environment:true / "agent rate-limited"`. The
   // classification actually recorded on disk in June 2026 was
@@ -906,7 +909,10 @@ test('classifyCycleFailure: W8-F3 — a real archived golangci-lint gate failure
         gate_stdout_tail:
           'azuredevops/internal/service/release/resource_release_definition.go:1529:36: ' +
           'SA1019: opts.EnableAccessToken is deprecated: Use DeploymentInput.EnableAccessToken instead. (staticcheck)',
-        gate_stderr_tail: 'level=info msg="golangci-lint has version 1.64.8 built with go1.24.1"',
+        // First line verbatim; golangci-lint's remaining ~19 `level=info` lines
+        // are elided (none carries a signature the classifier keys on).
+        gate_stderr_tail:
+          'level=info msg="golangci-lint has version 1.64.8 built with go1.24.1 from 8b37f141 on 2025-03-17T20:41:53Z"',
         iteration: 4,
       },
     }),
@@ -939,7 +945,10 @@ test('classifyCycleFailure: W8-F3 — a real archived golangci-lint gate failure
 // coupling.
 // ---------------------------------------------------------------------------
 
-test('classifyCycleFailure: W8-F3 — partial-usable does NOT shield a hidden-coupling violation', () => {
+// Two cases, because two different rules produce the verdict and an assertion
+// that accepts either cannot tell them apart. Both are RED at c0093918, where
+// `pmPartialUsable` returned transient before either could be reached.
+test('classifyCycleFailure: W8-F3 — a CAPPED partial-usable run with hidden coupling is "never converged" terminal', () => {
   const c = classifyCycleFailure([
     ev({ event_type: 'start', phase: 'project-manager', skill: 'project-manager' }),
     ev({
@@ -964,6 +973,41 @@ test('classifyCycleFailure: W8-F3 — partial-usable does NOT shield a hidden-co
   assert.equal(c.kind, 'terminal', 'the overlap is between WIs the PM wrote — a fresh pass re-derives it');
   assert.equal(c.recoverable, false);
   assert.doesNotMatch(c.reason, /partial/i);
+  // The `pm.partial-decomposition` event itself sets `pmCapped`, so the
+  // capped+degenerate rule is what fires here. Naming it keeps this test
+  // honest about which branch it proves.
+  assert.match(c.reason, /never converged/i);
+});
+
+test('classifyCycleFailure: W8-F3 — an UNCAPPED partial-usable run with hidden coupling returns via the hidden-coupling rule', () => {
+  // No `result_subtype` anywhere ⇒ `pmCapped` is false ⇒ the capped+degenerate
+  // rule cannot fire, so this reaches the `pmHiddenCoupling` rule and pins it
+  // specifically. Deleting that rule turns this test RED and the one above
+  // green — which is exactly the discrimination the pair exists to provide.
+  const c = classifyCycleFailure([
+    ev({ event_type: 'start', phase: 'project-manager', skill: 'project-manager' }),
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'pm.partial-decomposition',
+      metadata: { work_item_count: 4, valid_count: 3, planned_count: 6, usable: true },
+    }),
+    ev({
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'error',
+      message: 'project-manager phase failed: 5 hidden-coupling pair(s)',
+      metadata: {
+        hidden_coupling_violations: [{ a: 'WI-4a', b: 'WI-4b', sharedFiles: ['docs/gap-registry.md'] }],
+      },
+    }),
+  ]);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.doesNotMatch(c.reason, /partial/i);
+  assert.match(c.reason, /hidden coupling/i);
+  assert.doesNotMatch(c.reason, /never converged/i);
 });
 
 // ---------------------------------------------------------------------------
@@ -1048,4 +1092,144 @@ test('classifyCycleFailure: W8-F3 — replay of the REAL cost-ceiling cycle tail
   assert.doesNotMatch(c.reason, /could not be classified/i);
   assert.match(c.reason, /80\.83/);
   assert.deepEqual(c.evidence_event_ids, ['EV_mt4qg6tm_52d98gro'], 'the operator must be pointed at the real event');
+});
+
+// ---------------------------------------------------------------------------
+// W8-F3 — the DETECTOR half, pinned on its own.
+//
+// An adversarial review of the first cut found the digit-adjacency guard in
+// `HTTP_PRESSURE_STATUS_RE` unpinned: reverting it to a bare /429|529/ left
+// every test green, because the PM fixtures above are all shielded by the
+// PRECEDENCE half (they set `pmHiddenCoupling`, so the deterministic block
+// returns before the environment chain is consulted) and the only other
+// fixture carried its token in metadata, which the narrowed detector never
+// reads. These tests exercise `errorOwnFieldsSignalRateLimit` directly,
+// through an error event's OWN message and typed fields, with no deterministic
+// rule in play — so a mutation of the detector has nowhere to hide.
+//
+// Both directions matter. Losing a GENUINE rate-limit detection is the
+// mirror-image defect: a cycle that stops auto-retrying through real API
+// pressure and lands in failed/ with its dependents collapsed behind it.
+// ---------------------------------------------------------------------------
+
+/** A lone dev-loop error event — no other signal, so the verdict is decided
+ *  by the rate-limit detector and nothing else. */
+function loneError(message: string, metadata: Record<string, unknown> = {}): EventLogEntry[] {
+  return [
+    ev({ event_type: 'start', phase: 'developer-loop' }),
+    ev({ phase: 'developer-loop', skill: 'developer-ralph', event_type: 'error', message, metadata }),
+  ];
+}
+
+for (const [label, message] of [
+  ['a source line number', 'panic in internal/provider/client.go:429:12 — nil map write'],
+  ['a git SHA fragment', 'push rejected: commit 0529de0abc is not a fast-forward'],
+  ['a byte/item count', 'agent step failed: processed batch 4290 items before aborting'],
+  ['a semver-ish build id', 'toolchain mismatch: expected 1.529.0, found 1.530.2'],
+  // Found by adversarial review of the first cut, which guarded only digit,
+  // dot and colon adjacency — a letter is none of those.
+  // NB: no `agent_threw` token in these fixtures — that branch's own reason
+  // string is "agent threw a non-rate-limit error", which the assertion below
+  // would read as a rate-limit mention.
+  ['a PR reference', 'failed to rebase onto main after PR429 merged out from under it'],
+  ['an issue id', 'reopened issue429 — the fixture still asserts the old shape'],
+  ['a work-item id', 'ralph.end: WI-429 exhausted its iteration budget'],
+  ['a lint problem count', 'golangci-lint reported 429 problems (400 errors, 29 warnings)'],
+] as const) {
+  test(`classifyCycleFailure: W8-F3 — ${label} in an error's own message is NOT API pressure`, () => {
+    const c = classifyCycleFailure(loneError(message));
+    assert.notEqual(c.kind, 'transient', `"${message}" must not read as a rate limit`);
+    assert.equal(c.environment, false, 'environment:true routes this to requeue-resume as a stalled cycle');
+    assert.doesNotMatch(c.reason, /rate.?limit/i);
+  });
+}
+
+for (const [label, message] of [
+  ['a bare HTTP status', 'agent step failed: HTTP 429 Too Many Requests'],
+  ['a compact statusCode', 'request failed, statusCode:429'],
+  ['a sentence-terminal status', 'upstream returned error 429.'],
+  ['a trailing status', 'anthropic api error, status: 429'],
+  ['the typed API error name', 'agent_threw: rate_limit_error from the SDK'],
+] as const) {
+  test(`classifyCycleFailure: W8-F3 — ${label} IS still detected as API pressure`, () => {
+    const c = classifyCycleFailure(loneError(message));
+    assert.equal(c.kind, 'transient', `"${message}" is a genuine rate limit and must still auto-retry`);
+    assert.equal(c.environment, true);
+    assert.match(c.reason, /rate.?limit/i);
+  });
+}
+
+test("classifyCycleFailure: W8-F3 — the SDK's typed error kind is read from the error's own metadata", () => {
+  const c = classifyCycleFailure(loneError('agent step failed', { type: 'rate_limit_error' }));
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.environment, true);
+});
+
+test('classifyCycleFailure: W8-F3 — an HTTP status field is compared as a NUMBER, not a substring', () => {
+  const hit = classifyCycleFailure(loneError('agent step failed', { http_status: 429 }));
+  assert.equal(hit.kind, 'transient', 'a real 429 status must still be detected');
+  // `status` carries a lifecycle word on most forge events; it must not throw
+  // and must not match.
+  const miss = classifyCycleFailure(loneError('agent step failed', { status: 'failed' }));
+  assert.notEqual(miss.kind, 'transient');
+  // A numeric field that is not an HTTP status.
+  const notAStatus = classifyCycleFailure(loneError('agent step failed', { status: 4290 }));
+  assert.notEqual(notAStatus.kind, 'transient');
+});
+
+test('classifyCycleFailure: W8-F3 — project payload in metadata is never read as API pressure', () => {
+  // The original defect, isolated from the PM rules entirely: the token is in
+  // project-supplied metadata and nowhere else, and no deterministic rule is
+  // in play to mask the result.
+  const c = classifyCycleFailure(
+    loneError('gate.fail', {
+      gate_stdout_tail: 'internal/provider/rate_limit.go:42:1: undefined: Foo',
+      changed_files: ['internal/provider/rate_limit.go', 'docs/adr/429-quota.md'],
+    }),
+  );
+  assert.notEqual(c.kind, 'transient');
+  assert.doesNotMatch(c.reason, /rate.?limit/i);
+});
+
+test('classifyCycleFailure: W8-F3 — a project test that QUOTES the lint-contention string is not contention', () => {
+  // Same class as the rate-limit defect, on the sibling rule: `tails` is
+  // captured tool output, i.e. project-controlled. A project whose own test
+  // asserts on this string bought its deterministic test failure two
+  // auto-retries. Found by adversarial review; RED before the signature was
+  // anchored to golangci-lint's own error line.
+  const c = classifyCycleFailure([
+    ev({ event_type: 'start', phase: 'developer-loop' }),
+    ev({
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'error',
+      message: 'gate.fail',
+      metadata: {
+        gate_stdout_tail:
+          'FAIL lint_wrapper_test.go:12: expected the wrapper to surface exit 1 when ' +
+          '"parallel golangci-lint is running" is seen on stderr, got exit 0',
+      },
+    }),
+  ]);
+  assert.notEqual(c.kind, 'transient', 'a deterministic test failure must not buy auto-retries');
+  assert.equal(c.environment, false);
+  assert.doesNotMatch(c.reason, /contention/i);
+});
+
+test('classifyCycleFailure: W8-F3 — all three real contention forms are still detected', () => {
+  // Two are verbatim from the archived logs
+  // (_logs/2026-07-01T08-39-27_INIT-2026-07-01-*), the third is the `ERRO`
+  // form a pre-existing pin carries. Guards the mirror-image regression:
+  // losing a genuine detection stops a cycle that should have self-healed.
+  for (const tail of [
+    'Error: parallel golangci-lint is running',
+    'The command is terminated due to an error: parallel golangci-lint is running',
+    'ERRO parallel golangci-lint is running',
+  ]) {
+    const c = classifyCycleFailure([
+      ev({ event_type: 'error', message: 'gate.fail', metadata: { gate_stderr_tail: tail } }),
+    ]);
+    assert.equal(c.kind, 'transient', `"${tail}" is real host contention and must still auto-retry`);
+    assert.equal(c.environment, true);
+  }
 });

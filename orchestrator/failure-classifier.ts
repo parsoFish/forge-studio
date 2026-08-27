@@ -108,8 +108,21 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
  * the new invocation exits non-zero with this exact text instead of waiting.
  * That is host contention — an environment failure that self-resolves in
  * minutes — NOT a lint failure in the code.
+ *
+ * W8-F3: anchored, because a bare `.includes` over `gate_stdout_tail` is the
+ * SAME defect class this change closes for the rate-limit rule — captured tool
+ * output is project-controlled, so a project whose own test asserts on this
+ * string ("expected the wrapper to surface exit 1 when \"parallel golangci-lint
+ * is running\" is seen") bought its own deterministic test failure two
+ * auto-retries. golangci-lint emits the signature as its OWN error line. All
+ * three known real forms carry an error marker — the two in the archived logs
+ * ("Error: parallel golangci-lint is running", "…command is terminated due to
+ * an error: parallel golangci-lint is running") and the `ERRO`-prefixed form a
+ * pinned test carries — so requiring line-start or an `err`/`erro`/`error`
+ * prefix keeps every real shape and drops the quoted-in-a-sentence one.
  */
-const PARALLEL_LINT_CONTENTION_SIGNATURE = 'parallel golangci-lint is running';
+const PARALLEL_LINT_CONTENTION_SIGNATURE =
+  /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
 /**
  * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
@@ -158,13 +171,24 @@ const RATE_LIMIT_MESSAGE_SIGNATURES = [
 ] as const;
 
 /**
- * `429` / `529` as a STANDALONE token. Bare-substring matching is what made
- * the old scan useless: `:1529:36` is a source line, `0529de0a` is a SHA
- * fragment, `4290` is a byte count — none is an HTTP status. Digit-, dot- and
- * colon-adjacency guards keep "HTTP 429" and "status: 529" while dropping all
- * three shapes above.
+ * `429` / `529` preceded by an explicit STATUS MARKER.
+ *
+ * Bare-substring matching is what made the old scan useless: `:1529:36` is a
+ * source line, `0529de0a` is a SHA fragment, `4290` is a byte count. A first
+ * cut guarded only digit/dot/colon adjacency, and an adversarial review broke
+ * it in BOTH directions: `PR429`, `WI-429`, `issue429` and
+ * "golangci-lint reported 429 problems" still matched (a letter is not a
+ * digit), while "error 429." and "statusCode:429" no longer did — and losing a
+ * genuine detection is the mirror-image defect, a cycle that stops
+ * auto-retrying through real API pressure.
+ *
+ * Requiring a marker (`http…`, `status`/`statusCode`/`status_code`, `error`)
+ * immediately before the number keeps every real shape — "HTTP 429",
+ * "HTTP/1.1 429", "status: 529", "statusCode:429", "error 429." — and drops
+ * every identifier-, count- and line-number shape, because none of those has a
+ * status word in front of it.
  */
-const HTTP_PRESSURE_STATUS_RE = /(?<![\d.:])(?:429|529)(?![\d.:])/;
+const HTTP_PRESSURE_STATUS_RE = /(?:\bhttps?[\w/.]*|\bstatus(?:_?code)?|\berror)[\s:=/-]*\b(?:429|529)\b/i;
 
 /** Typed API error kinds. Compared as exact values, never as substrings. */
 const RATE_LIMIT_ERROR_TYPES = ['rate_limit_error', 'overloaded_error'] as const;
@@ -295,7 +319,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
         String(md.gate_stdout_tail ?? '') + ' ' +
         String(md.output_tail ?? '')
       ).toLowerCase();
-      if (tails.includes(PARALLEL_LINT_CONTENTION_SIGNATURE)) { transientLint = true; ev(e); }
+      if (PARALLEL_LINT_CONTENTION_SIGNATURE.test(tails)) { transientLint = true; ev(e); }
     }
     // re-review #1/#5: a gate that could not RUN (missing binary / EACCES /
     // killed) is a BROKEN GATE, not a test or code failure. Distinct terminal
