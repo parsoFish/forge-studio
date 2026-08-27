@@ -715,7 +715,11 @@ function snapshotHookPackage(forgeRoot: string, id: string): HookPackageSnapshot
       `hook "${id}" declares script "${def.script}" but no such file exists in its package — refusing to scan or hash an absent entry`,
     );
   }
-  const filesForPackageHash = files.map((f) => (f.path === 'hook.yaml' ? { ...f, body: canonicalHookYamlBody(def) } : f));
+  // hook.yaml's body is canonicalized (key order + the two grant lists sorted)
+  // before it enters the fingerprint, so a cosmetic reorder is not mistaken for
+  // a real edit. Canonicalization runs on the file's OWN raw bytes, never on a
+  // projection of the parsed definition — see canonicalHookYamlBody's own note.
+  const filesForPackageHash = files.map((f) => (f.path === 'hook.yaml' ? { ...f, body: canonicalHookYamlBody(f.body) } : f));
   return {
     report: scanHookFiles(files, def.permissions, def.script),
     ledgerCandidate: {

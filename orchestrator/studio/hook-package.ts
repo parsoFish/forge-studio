@@ -69,9 +69,10 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync, type Dirent } from 'node:fs';
 import { basename, extname, join } from 'node:path';
+import yaml from 'js-yaml';
 
 import { hookDir, hooksDir } from './hook-library.ts';
-import type { HookDefinition, HookPermissionManifest } from './hook-library.ts';
+import type { HookPermissionManifest } from './hook-library.ts';
 import { guardedFile } from '../../cli/studio-path-guard.ts';
 import { EXECUTABLE_EXTENSIONS, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
 
@@ -165,16 +166,25 @@ export function readHookPackage(forgeRoot: string, id: string): HookPackageFile[
     throw new Error(`readHookPackage: hook "${id}" has ${rawEntries.length} files, exceeding the ${MAX_PACKAGE_FILES}-file cap`);
   }
 
+  // STAT BEFORE READ (2026-08-28 adversarial review, reproduced): the byte cap
+  // used to be accumulated from `Buffer.byteLength(body)` AFTER `readFileSync`
+  // had already pulled the whole file into memory — a single 200 MiB script in
+  // a 5 MiB-capped package cost 207 MiB of RSS to reject, and
+  // `POST /api/studio/hooks` writes a client-supplied `scriptBody` with no size
+  // check of its own, so that file is wire-reachable. `st.size` is the on-disk
+  // byte length, i.e. exactly what the cap is denominated in, so checking it
+  // first refuses the same packages without ever allocating their bytes. The
+  // stat was already being taken for the mode bit; this only moves it ahead of
+  // the read.
   const files: HookPackageFile[] = [];
   let totalBytes = 0;
   for (const { relPath, realPath } of rawEntries) {
-    const body = readFileSync(realPath, 'utf8');
-    totalBytes += Buffer.byteLength(body, 'utf8');
+    const st = statSync(realPath);
+    totalBytes += st.size;
     if (totalBytes > MAX_PACKAGE_BYTES) {
       throw new Error(`readHookPackage: hook "${id}" exceeds the ${MAX_PACKAGE_BYTES}-byte cap`);
     }
-    const st = statSync(realPath);
-    files.push({ path: relPath, body, executable: (st.mode & 0o111) !== 0 });
+    files.push({ path: relPath, body: readFileSync(realPath, 'utf8'), executable: (st.mode & 0o111) !== 0 });
   }
 
   files.sort((a, b) => {
@@ -239,6 +249,19 @@ export function hashHookPackage(files: readonly HookPackageFile[]): string {
   return `sha256:${hash.digest('hex')}`;
 }
 
+/** Recursively sort every object's keys so a canonical form depends on VALUES,
+ *  never on the order a YAML author happened to write the keys in. Arrays keep
+ *  their order (element order is meaningful almost everywhere; the two grant
+ *  lists that legitimately are not are sorted explicitly by the caller below). */
+function sortObjectKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortObjectKeysDeep);
+  if (value !== null && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(o).sort().map((k) => [k, sortObjectKeysDeep(o[k])]));
+  }
+  return value;
+}
+
 /**
  * `hook.yaml`'s body for HASHING purposes only, canonicalized the same way
  * `hashHookPermissions`/`hashHookTrigger` already canonicalize their own
@@ -246,25 +269,44 @@ export function hashHookPackage(files: readonly HookPackageFile[]): string {
  * permissions list does not, by itself, change `hashHookPackage`'s output and
  * spuriously force re-review. This does NOT contradict difference #2 above
  * (`hashHookPackage` itself still excludes nothing and canonicalizes
- * nothing — it stays a dumb byte-hasher): this is a helper for a CALLER that
- * already has the parsed `HookDefinition` (hook-scan.ts's
- * `snapshotHookPackage`) and needs canonical bytes for the one file whose
- * trust surface is already independently, canonically pinned by the other
- * three named hashes.
+ * nothing — it stays a dumb byte-hasher): this is a helper for the ONE caller
+ * (hook-scan.ts's `snapshotHookPackage`) that needs canonical bytes for the one
+ * file whose trust surface is already independently, canonically pinned by the
+ * other three named hashes.
+ *
+ * DERIVED FROM THE RAW BYTES, NOT FROM `HookDefinition` (2026-08-28 adversarial
+ * review, flagged as a latent drift trap): the first cut built this projection
+ * out of the parsed definition's six known fields, so ANY other key in
+ * `hook.yaml` — including one added to `HookDefinition` later and consumed at
+ * runtime but forgotten here — sat outside the package fingerprint. That is the
+ * `declared-data-fails-open` shape one level down, and the cure is the same as
+ * everywhere else: derive from the source of truth. Parsing the real document
+ * and canonicalizing only what is genuinely cosmetic (key order, and the two
+ * grant lists whose order carries no meaning) covers every key, known or not,
+ * and cannot drift as the definition grows. Comments and whitespace are dropped
+ * by the parse, which is correct: neither changes what the hook does.
  */
-export function canonicalHookYamlBody(def: HookDefinition): string {
-  return JSON.stringify({
-    name: def.name,
-    description: def.description,
-    on: def.on,
-    matcher: def.matcher ?? null,
-    script: def.script,
-    permissions: {
-      env: [...def.permissions.env].sort((a, b) => a.localeCompare(b)),
-      read: [...def.permissions.read].sort((a, b) => a.localeCompare(b)),
-      network: def.permissions.network,
-    },
-  });
+export function canonicalHookYamlBody(rawBody: string): string {
+  const parsed: unknown = yaml.load(rawBody);
+  // Not a mapping — `loadHookDefinition` rejects that shape upstream, so this is
+  // unreachable through any real caller. Fall back to the RAW bytes rather than
+  // canonicalizing nothing: a fingerprint that quietly ignored a file it could
+  // not parse would be the fail-open shape this whole module exists to close.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return rawBody;
+
+  const doc: Record<string, unknown> = { ...(parsed as Record<string, unknown>) };
+  const permissions = doc['permissions'];
+  if (permissions !== null && typeof permissions === 'object' && !Array.isArray(permissions)) {
+    const p: Record<string, unknown> = { ...(permissions as Record<string, unknown>) };
+    for (const key of ['env', 'read']) {
+      const list = p[key];
+      if (Array.isArray(list) && list.every((x) => typeof x === 'string')) {
+        p[key] = [...(list as string[])].sort((a, b) => a.localeCompare(b));
+      }
+    }
+    doc['permissions'] = p;
+  }
+  return JSON.stringify(sortObjectKeysDeep(doc));
 }
 
 // ---------------------------------------------------------------------------
@@ -334,16 +376,61 @@ export function selectScannableHookFiles(
     }
   }
 
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const selectedBodies = [...selected.values()].map((f) => f.body);
-    for (const f of files) {
-      if (selected.has(f.path)) continue;
-      const base = basename(f.path);
-      if (selectedBodies.some((body) => body.includes(base))) {
-        selected.set(f.path, f);
-        changed = true;
+  // WORKLIST, NOT A RE-SCANNING FIXPOINT (2026-08-28 adversarial review,
+  // reproduced): the first cut re-scanned EVERY selected body against EVERY
+  // unselected basename on EVERY round. A package of 482 chained files — 4.3 MB,
+  // comfortably inside both MAX_PACKAGE_FILES and MAX_PACKAGE_BYTES, so it
+  // installs cleanly through the gated community pipeline — took 1,885 ms of
+  // synchronous CPU. `hookRunState` re-derives from scratch on every call and is
+  // called once per hook inside the hooks-list route's `.map()`, so ONE such
+  // package added ~1.9 s of event-loop block to every `GET /api/studio/hooks`.
+  //
+  // Each body is now tokenized exactly ONCE and looked up in a basename index,
+  // making the whole closure linear in the package's total bytes (the same
+  // 482-file package now costs single-digit milliseconds). The token class below
+  // deliberately excludes `/`, quotes, whitespace, `$`, `(` and `)` — every
+  // separator a `source`/`.` directive spells its target with — so
+  // `. "$(dirname "$0")/lib.sh"` still yields the token `lib.sh`.
+  //
+  // This is also strictly MORE precise than the old `body.includes(base)`: a
+  // basename embedded inside a longer token (`lib.sh` inside `mylib.sh`) no
+  // longer selects, which was a false positive rather than a real `source`. The
+  // trust decision does not depend on this predicate either way —
+  // `hashHookPackage` fingerprints every file `readHookPackage` returns,
+  // unfiltered by this selection — so a selector miss costs a scan finding, never
+  // a stale approval.
+  const isSpellableToken = (s: string): boolean => /^[A-Za-z0-9._+-]+$/.test(s);
+  const byBasename = new Map<string, HookPackageFile[]>();
+  const oddNamed: HookPackageFile[] = [];
+  for (const f of files) {
+    const base = basename(f.path);
+    if (isSpellableToken(base)) {
+      const bucket = byBasename.get(base);
+      if (bucket) bucket.push(f);
+      else byBasename.set(base, [f]);
+    } else {
+      // A basename carrying a character the token class cannot spell (a space,
+      // say). Rare, but it must not silently drop out of the closure, so those
+      // few files keep the original substring test.
+      oddNamed.push(f);
+    }
+  }
+
+  const queue = [...selected.values()];
+  while (queue.length > 0) {
+    const from = queue.shift()!;
+    for (const token of from.body.match(/[A-Za-z0-9._+-]+/g) ?? []) {
+      for (const candidate of byBasename.get(token) ?? []) {
+        if (selected.has(candidate.path)) continue;
+        selected.set(candidate.path, candidate);
+        queue.push(candidate);
+      }
+    }
+    for (const candidate of oddNamed) {
+      if (selected.has(candidate.path)) continue;
+      if (from.body.includes(basename(candidate.path))) {
+        selected.set(candidate.path, candidate);
+        queue.push(candidate);
       }
     }
   }

@@ -236,7 +236,26 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
   // explicitly overridden). `hookRunState`'s own `runnable` computation
   // already encodes exactly that; consult it directly rather than
   // re-deriving a narrower rule here.
-  const state = hookRunState(forgeRoot, id);
+  //
+  // W8-F2 (2026-08-28 adversarial review, reproduced): `hookRunState` can now
+  // THROW rather than return — `readHookPackage` fails closed on a package
+  // holding a non-regular entry (a planted symlink) or breaching the size caps.
+  // The hook correctly did not fire in that case, but the raw error propagated
+  // uncaught, so `describeHookRunFailure` (hook-dispatch.ts) — which switches on
+  // `instanceof HookRunError` — reported "failed for an unrecognised reason"
+  // instead of "was refused by the approval gate". Same refusal, same
+  // deny-by-default outcome; this only gives it its typed reason back, so an
+  // operator reading the dispatch log sees a gate decision rather than a
+  // mystery. The underlying message is preserved as the cause.
+  let state;
+  try {
+    state = hookRunState(forgeRoot, id);
+  } catch (err) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}" could not be evaluated for runnability — refusing to spawn: ${(err as Error).message}`,
+    );
+  }
   if (!state.runnable) {
     throw new HookRunError(
       'not-runnable',
