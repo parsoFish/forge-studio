@@ -322,6 +322,28 @@ test('the control\'s own container cannot be squeezed out of the bounded panel',
   expect(style['flex-shrink'] === '0' || /^0\s+0(\s|$)/.test(flex)).toBe(true);
 });
 
+test('NEITHER container in the chain is shrinkable — including the panel root itself', () => {
+  // Found by the agents journey's own hit test, in the browser, against the
+  // first version of this fix. `.col-right` (app/globals.css) is a COLUMN FLEX
+  // container with overflow-y:auto, so its children default to
+  // `flex-shrink: 1`: a tall YAML preview compressed this panel toward its
+  // min-content height — the body collapses to 0 (minHeight:0), leaving just
+  // the actions row — and because the root clips (`overflow: hidden`), the
+  // button ended up rendered OUTSIDE its own clip box. Its rect was still
+  // inside the viewport, so a rect check alone said "reachable"; the hit test
+  // said otherwise, and the real Playwright click returned no runId.
+  //
+  // Every element on the chain must therefore be unshrinkable, not just the
+  // one nearest the button.
+  const chain = chainInsidePanel(dispatchControlOf(panelOf()));
+  const shrinkable = chain.filter((el) => {
+    const style = styleOf(el);
+    const flex = style['flex'] ?? '';
+    return !(style['flex-shrink'] === '0' || /^0\s+0(\s|$)/.test(flex));
+  });
+  expect(shrinkable.map((el) => `<${el.tag} ${el.attrs['data-section'] ?? el.attrs['data-run-panel-actions'] !== undefined ? 'actions' : ''}>`)).toEqual([]);
+});
+
 test('content growth does not change the control\'s ancestry — the worst panel and the barest one agree', () => {
   // The outcome claim in structural form: whatever the panel is asked to
   // render, the dispatch control hangs off the same non-scrolling container.

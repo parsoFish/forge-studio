@@ -204,6 +204,34 @@ function keepMonitorAgentRunLive() {
   try { utimesSync(join(MON_AGENT_RUN_DIR, 'events.jsonl'), now, now); } catch { /* swept already */ }
 }
 
+/**
+ * Wait for the merged everything-ledger's AGENT half to land.
+ *
+ * W8-F4, found by this journey's own first green-field run: `data-page-ready`
+ * on `/monitor` (and Home) comes from `useStudioHomeData().ready` — the
+ * flows/agents/runs/sessions reads — but `useEverythingLedger` fetches the
+ * standalone-agent half in a SECOND, independent effect and renders flow rows
+ * alone until it resolves (`agentRowsReady`). So the page declares itself
+ * ready while its own ledger, and the headline counts derived from that
+ * ledger, are still missing every standalone run. MONITOR.3 read the summary
+ * immediately after `waitMonitorReady` and saw total 2 / runsLive 1 for the
+ * same tree where MONITOR.2 — which happens to read the ledger many checks
+ * later — saw total 3 / runsLive 2.
+ *
+ * The wait below is a REAL readiness signal (the seeded row's own identity
+ * appearing), never a fixed sleep, and it is deliberately non-throwing: if
+ * the row never lands, the checks that follow report it as the failure it is
+ * rather than the beat dying on a timeout. The underlying gap — a
+ * `data-page-ready` that does not cover one of the two reads its own headline
+ * is computed from — is filed separately; it is not this lane's exit row.
+ */
+async function waitForSeededAgentRow(page) {
+  await page.waitForFunction(
+    (id) => document.querySelector(`[data-ledger-row][data-run-id="${id}"]`) !== null,
+    MON_AGENT_RUN_ID, { timeout: 15000 },
+  ).catch(() => { /* the checks below report the absence */ });
+}
+
 /** goto `/` and wait for Home's real readiness signal — never a fixed sleep. */
 async function gotoHomeReady(page, watch) {
   await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
@@ -268,6 +296,7 @@ export const journey = defineJourney({
         // before the error propagates, on top of the leading sweep above.
         try {
         await gotoHomeReady(page, watch);
+        await waitForSeededAgentRow(page);
         await caption(page, 'Home leads with "What is running" — counts derived from the very ledger printed below them.');
         await sleep(READ);
 
@@ -366,6 +395,7 @@ export const journey = defineJourney({
         keepMonitorAgentRunLive();
         await page.goto(watch.uiUrl + '/monitor', { waitUntil: 'domcontentloaded' });
         await waitMonitorReady(page);
+        await waitForSeededAgentRow(page);
         await caption(page, 'Flow runs, agent runs, sessions, the queue, and everything waiting on you — one surface.');
         await sleep(READ);
 
@@ -513,6 +543,7 @@ export const journey = defineJourney({
         keepMonitorAgentRunLive();
         await page.goto(watch.uiUrl + '/monitor', { waitUntil: 'domcontentloaded' });
         await waitMonitorReady(page);
+        await waitForSeededAgentRow(page);
         const monitorSummary = await readSummary(page);
         check(monitorSummary !== null, 'MONITOR.3: the summary strip renders on Monitor too');
         check(monitorSummary?.variant === 'monitor', `MONITOR.3: Monitor renders the non-linking variant — a self-link is a dead control (got "${monitorSummary?.variant}")`);
@@ -560,6 +591,7 @@ export const journey = defineJourney({
         // because the staleness ceiling fell between them.
         keepMonitorAgentRunLive();
         await gotoHomeReady(page, watch);
+        await waitForSeededAgentRow(page);
         const homeSummary = await readSummary(page);
         check(homeSummary !== null, 'MONITOR.3: Home still renders its strip after the round trip');
         check(

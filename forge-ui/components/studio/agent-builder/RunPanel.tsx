@@ -104,6 +104,18 @@ const RUN_PANEL_STYLE: CSSProperties = {
   overflow: 'hidden',
   display: 'flex',
   flexDirection: 'column',
+  // `.col-right` (app/globals.css) is itself a COLUMN FLEX container with
+  // `overflow-y: auto`, so every child is `flex-shrink: 1` by default and a
+  // tall sibling (the YAML preview) compresses this panel toward its
+  // min-content height — which, with the body free to collapse to 0, is just
+  // the actions row. Measured in the browser by the agents journey before this
+  // line existed: the panel was crushed to ~57px, the actions row overflowed
+  // its own clip box, and `elementFromPoint` at the button's centre landed on
+  // something else — the button was CLIPPED, and Playwright's click on it did
+  // nothing. `flexShrink: 0` makes the column scroll (which is what its
+  // `overflow-y: auto` is for) instead of crushing the one control this page
+  // exists for. Pinned by lib/agent-run-reachable.test.ts.
+  flexShrink: 0,
 };
 
 /** The panel's ONE scroll region — every block that can grow (the form, the
