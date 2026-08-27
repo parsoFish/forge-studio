@@ -437,8 +437,11 @@ export function sweepModules(root = FORGE_ROOT) {
   return allSourceModules(root).filter((m) => !declared.has(m));
 }
 
-/** The taint model used in the sweep: HTTP members only. */
-const SWEEP_MODEL = { bareTaint: new Set(), dirParams: new Set() };
+/** The taint model used in the sweep: HTTP members only. EXPORTED so the test
+ *  that pins the sweep's calibration drives THIS object rather than a private
+ *  copy of it — a pin that rebuilds the model it is testing cannot notice the
+ *  model changing under it. */
+export const SWEEP_MODEL = { bareTaint: new Set(), dirParams: new Set() };
 
 const BACKSCAN_LIMIT = 400;
 

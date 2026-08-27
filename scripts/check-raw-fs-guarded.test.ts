@@ -972,7 +972,10 @@ test('G8 (RED at the W8-F5 cure, found by hostile self-review): a DESTRUCTURED r
     'nested destructure': 'export function h(body) {\n  const { target: { ref } } = body;\n  return readFileSync(join(LOGS, ref, "e.jsonl"), "utf8");\n}',
     'array destructure': 'export function h(req) {\n  const [, id] = req.url.split(SEP);\n  return readFileSync(join(LOGS, id), "utf8");\n}',
   };
-  const sweepModel = { bareTaint: new Set<string>(), dirParams: new Set<string>() };
+  // The PRODUCTION model object, not a copy — a pin that rebuilds the thing it
+  // tests cannot see that thing change.
+  const sweepModel = (lint as { SWEEP_MODEL?: unknown }).SWEEP_MODEL;
+  assert.ok(sweepModel, 'the sweep model must be exported so this pin drives the real one');
   for (const [name, text] of Object.entries(shapes)) {
     assert.equal(analyzeModule(text, 'cli/ui-bridge.ts').length, 1, `${name}: the declared surface must fire`);
     assert.equal(analyzeModule(text, 'orchestrator/x.ts', sweepModel).length, 1, `${name}: the SWEEP must fire (member taint, no bare-id fallback)`);
