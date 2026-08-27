@@ -16,8 +16,11 @@
  * name TRIPS the lint through the real pipeline (charter's deliberate RED).
  * Group C — the CI-enforced gate: the REAL repo passes clean, proven live.
  */
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   analyzeModule,
@@ -788,4 +791,169 @@ test('F11: argAt survives the shapes real code actually uses — multi-line call
   const na = analyzeModule(nestedArgs, 'cli/ui-bridge.ts');
   assert.equal(na.length, 1, `commas nested inside a call argument do not shift the split, got ${JSON.stringify(na)}`);
   assert.equal(na[0].sink, 'cpSync');
+});
+
+// =============================================================================
+// Group G — W8-F5: SCOPE. "A gate that cannot see a new module is decoration."
+//
+// The C4 hostile re-verification refuted this lint's coverage claim with a
+// runnable counter-repro: `targetModules()` scoped the scan by FILENAME (a
+// hand-maintained list plus a `cli/bridge-studio*.ts` glob), so TWO
+// BYTE-IDENTICAL tainted files differed only in basename and only the
+// `bridge-studio` one was a finding — while the invisible one was proven
+// genuinely reachable from a bridge route by a 184-module reachability walk.
+// The same pass filed the verifier's own repro (a new `cli/studio-costs-routes.ts`
+// with two blatant unguarded request-derived sinks → 0 findings, gate PASS).
+//
+// These pins are the contract for the cure: scope is DERIVED (bridge entries +
+// reachability + the HTTP-plumbing signal for the full model; an unambiguous
+// HTTP-member sweep over cli/** + orchestrator/** for everything else), never
+// keyed on what a file is called.
+// =============================================================================
+
+const scratchRoots: string[] = [];
+after(() => {
+  for (const dir of scratchRoots) rmSync(dir, { recursive: true, force: true });
+});
+
+/** A throwaway repo-shaped root holding exactly the given repo-relative files.
+ *  Fixtures never touch the real tree (the C4 refuter's discipline). */
+function scratchRoot(files: Record<string, string>): string {
+  const root = mkdtempSync(join(tmpdir(), 'rawfs-scope-'));
+  scratchRoots.push(root);
+  for (const [rel, text] of Object.entries(files)) {
+    const abs = join(root, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, text);
+  }
+  return root;
+}
+
+/** The C4 refuter's taint shape, verbatim: a request member (`body.runId`)
+ *  bound to a local and raw-joined into a readFileSync. */
+const TAINTED_MODULE = [
+  'import { readFileSync } from "node:fs";',
+  'import { join } from "node:path";',
+  'const LOGS_ROOT = "/x";',
+  'export function handleGet(body: any) { const runId = body.runId; return readFileSync(join(LOGS_ROOT, runId, "e.jsonl"), "utf8"); }',
+  '',
+].join('\n');
+
+test('G1 (RED — the C4 counter-repro): two BYTE-IDENTICAL tainted modules are both scanned; the basename decides nothing', () => {
+  // Kills: `targetModules()` scoped by a `cli/bridge-studio*.ts` glob — the
+  // refuted implementation, where `cmp` says the files are identical and only
+  // one of them is a finding.
+  const root = scratchRoot({
+    'cli/bridge-runs-v2.ts': TAINTED_MODULE,
+    'cli/bridge-studio-zz.ts': TAINTED_MODULE,
+  });
+  const r = runLint({ root, allowlist: [] });
+  const files = r.findings.map((f) => f.file).sort();
+  assert.deepEqual(
+    [...new Set(files)],
+    ['cli/bridge-runs-v2.ts', 'cli/bridge-studio-zz.ts'],
+    `both byte-identical modules must be findings; got ${JSON.stringify(r.findings)}`,
+  );
+});
+
+test('G2 (RED — the C4 verifier repro): a NEW request-handling module whose name matches no glob is scanned', () => {
+  // Kills: any scope rule that still keys on the filename. `studio-costs-routes.ts`
+  // is in no list, matches no glob, and is imported by nothing in this fixture.
+  const root = scratchRoot({
+    'cli/studio-costs-routes.ts': [
+      'import { readFileSync, writeFileSync } from "node:fs";',
+      'import { join } from "node:path";',
+      'export function handleCostsRead(body: { runId: string }, logsRoot: string) {',
+      '  const runId = body.runId;',
+      '  return readFileSync(join(logsRoot, runId, "costs.json"), "utf8");',
+      '}',
+      'export function handleCostsWrite(params: { sessionId: string }, root: string, payload: string) {',
+      '  const sessionId = params.sessionId;',
+      '  writeFileSync(join(root, sessionId, "costs.json"), payload);',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const r = runLint({ root, allowlist: [] });
+  const sinks = r.findings.filter((f) => f.file === 'cli/studio-costs-routes.ts').map((f) => f.sink).sort();
+  assert.deepEqual(sinks, ['readFileSync', 'writeFileSync'], `both unguarded sinks must fire; got ${JSON.stringify(r.findings)}`);
+});
+
+test('G3 (RED): a new route helper under orchestrator/studio/ is scanned too (the third escape the refuter named)', () => {
+  const root = scratchRoot({ 'orchestrator/studio/costs-routes.ts': TAINTED_MODULE });
+  const r = runLint({ root, allowlist: [] });
+  assert.equal(r.findings.length, 1, `the orchestrator/studio route helper must be scanned; got ${JSON.stringify(r.findings)}`);
+  assert.equal(r.findings[0].file, 'orchestrator/studio/costs-routes.ts');
+});
+
+test('G4 (CALIBRATION): outside the declared request-handling surface only the UNAMBIGUOUS HTTP-member shape fires — the curated bare-name and dir-param rules stay off', () => {
+  // Kills: "widen the scope to every reachable module with the full taint
+  // model" — measured at c0093918 that is 108 findings in engine modules where
+  // `runId`/`repoPath`/`dir` are SERVER-built, i.e. ~108 allowlist rows added
+  // to get green, which is the anti-pattern this lint's own header names.
+  // A bare curated id + a dir-param leaf-append in a deep engine module is NOT
+  // a finding; the same file gets the full model the moment it handles requests.
+  const engine = [
+    'import { writeFileSync } from "node:fs";',
+    'import { join } from "node:path";',
+    'export function persist(runId: string, dir: string, payload: string) {',
+    '  writeFileSync(join(dir, runId + ".json"), payload);',
+    '}',
+    '',
+  ].join('\n');
+  const engineRoot = scratchRoot({ 'orchestrator/run-state.ts': engine });
+  const quiet = runLint({ root: engineRoot, allowlist: [] });
+  assert.deepEqual(quiet.findings, [], 'a server-built id in an engine module does not fire');
+  // …and it is quiet because the sweep is CALIBRATED, not because the sweep
+  // skipped the file: the module must actually be in the swept set.
+  const swept = (lint as { sweepModules?: (root?: string) => string[] }).sweepModules?.(engineRoot) ?? [];
+  assert.ok(swept.includes('orchestrator/run-state.ts'), `the engine module must be swept (and silent), got ${JSON.stringify(swept)}`);
+
+  // The SAME bytes in a module that speaks HTTP (an IncomingMessage handler)
+  // are inside the declared surface, where the full model applies.
+  const handler = engine.replace(
+    'export function persist',
+    'import type { IncomingMessage, ServerResponse } from "node:http";\nexport function route(req: IncomingMessage, res: ServerResponse) { return [req, res]; }\nexport function persist',
+  );
+  const loud = runLint({ root: scratchRoot({ 'cli/ui-bridge.ts': handler }), allowlist: [] });
+  assert.equal(loud.findings.length, 1, `the declared surface keeps the full model; got ${JSON.stringify(loud.findings)}`);
+  assert.equal(loud.findings[0].kind, 'tainted', 'inside the declared surface the curated bare-id rule still fires');
+});
+
+test('G5: the derived scope is a SUPERSET of the charter list and of every cli/bridge-studio*.ts (a derivation must never silently drop coverage)', () => {
+  // Kills: replacing the hand list with a walk that happens to miss a module —
+  // coverage loss reads as "no findings", the same green a clean tree gives.
+  const mods = targetModules();
+  for (const m of [
+    'cli/ui-bridge.ts', 'cli/metrics.ts', 'cli/contract-stages.ts', 'cli/agent-run.ts', 'cli/architect-plan.ts',
+    'orchestrator/interactive-session.ts', 'orchestrator/interactive-finalizers.ts', 'orchestrator/interactive-runner.ts',
+    'orchestrator/architect-runner.ts', 'orchestrator/instructions-runner.ts',
+    'orchestrator/project-brain-builder-runner.ts', 'orchestrator/demo-builder-runner.ts',
+    'orchestrator/project-config.ts', 'orchestrator/studio/skill-library.ts',
+    'orchestrator/studio/community-install.ts', 'orchestrator/studio/community-index.ts',
+  ]) {
+    assert.ok(mods.includes(m), `pre-W8-F5 scope module ${m} must still be in scope`);
+  }
+  assert.ok(mods.filter((m) => m.startsWith('cli/bridge-studio')).length >= 10, 'every bridge-studio route module stays in scope');
+  assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
+});
+
+test('G6 (RED): cli/bridge-recovery.ts — a REAL bridge route module with renameSync/rmSync on :id-derived paths — is in scope', () => {
+  // The lint shipped for two waves with an entire live bridge route file
+  // outside it, because its basename is `bridge-recovery`, not `bridge-studio`.
+  const mods = targetModules();
+  assert.ok(mods.includes('cli/bridge-recovery.ts'), 'the recovery routes must be dataflow-linted');
+  assert.ok(mods.includes('cli/bridge-hooks.ts'), 'the hooks routes must be dataflow-linted');
+});
+
+test('G7: the sweep is LIVE and disjoint from the declared surface (false-negative discipline, C2 for the second tier)', () => {
+  // Kills: a sweep that silently degenerates to an empty module list — which
+  // would leave G1/G2 green only because the declared surface caught them.
+  const declared = targetModules();
+  const swept = (lint as { sweepModules?: (root?: string) => string[] }).sweepModules?.() ?? [];
+  assert.ok(swept.length > 100, `the sweep must cover the cli/ + orchestrator/ tree, got ${swept.length}`);
+  assert.equal(swept.filter((m) => declared.includes(m)).length, 0, 'the sweep never re-scans a declared-surface module (no double reporting)');
+  assert.ok(!swept.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in the sweep');
+  const r = runLint({});
+  assert.ok((r as { swept?: number }).swept! > 100, 'runLint reports what the sweep actually covered');
 });
