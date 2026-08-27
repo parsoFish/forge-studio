@@ -494,7 +494,11 @@ export const journey = defineJourney({
           // W7-B1 (home-sessions-01/32): the strip is NAMED on screen and its
           // card count is an attribute, so header-vs-cards arithmetic is
           // machine-checkable.
-          check((stripAttrs?.heading ?? '').includes('Sessions needing you'), `HOME.1 (W7-B1): the strip carries its visible h2 name (got "${stripAttrs?.heading}")`);
+          // W8-F4: the heading is "Active sessions", not "Sessions needing
+          // you" — the strip lists EVERY live session (needs-you first) and
+          // carries the needs-you subset as a separate chip, so the old name
+          // claimed a filter the derivation does not apply.
+          check((stripAttrs?.heading ?? '').includes('Active sessions'), `HOME.1 (W7-B1/W8-F4): the strip carries its visible h2 name, and it names what it lists (got "${stripAttrs?.heading}")`);
           check(parseInt(stripAttrs?.shown ?? '-1', 10) >= 1, `HOME.1 (W7-B1): data-session-cards-shown reflects the rendered slice (got "${stripAttrs?.shown}")`);
           // W7-A2 made the card a DIV (`[data-session-card][data-session-id]`)
           // wrapping the open link + the cancel control (a button inside an

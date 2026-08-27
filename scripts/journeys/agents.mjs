@@ -793,7 +793,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/guard/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract GUARD — renamed from "hook" by the R3-03 amendment to ADR-027, so the word "hook" is free for user-authorable agent-lifecycle customisations — a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. Because it is unattended, the agent also carries a generic run surface (R2-01-F3): it dispatches standalone straight from the agent page — no flow required — the runnable primitive reaching the UI. The same surface makes the develop flow\'s two successor agents runnable in isolation (R4-10-F3): demo-agent and adversarial-review dispatch standalone through their FLOW pipeline (not a bare spawn), yielding the identical artifacts — the ship-both principle, valuable alone as well as in a flow. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/guard/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract GUARD — renamed from "hook" by the R3-03 amendment to ADR-027, so the word "hook" is free for user-authorable agent-lifecycle customisations — a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. The Run panel is pinned first in the right column with its dispatch button in a fixed action bar OUTSIDE the panel\'s own scrolling form, and this beat measures THAT BUTTON\'s rect — the previous version measured the panel\'s box, which stays "in the viewport" while the control inside it is below the fold. Because it is unattended, the agent also carries a generic run surface (R2-01-F3): it dispatches standalone straight from the agent page — no flow required — the runnable primitive reaching the UI. The same surface makes the develop flow\'s two successor agents runnable in isolation (R4-10-F3): demo-agent and adversarial-review dispatch standalone through their FLOW pipeline (not a bare spawn), yielding the identical artifacts — the ship-both principle, valuable alone as well as in a flow. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
@@ -869,37 +869,95 @@ export const journey = defineJourney({
                     document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
                   check(runDispatchable === 'true',
                     `agent-builder (R2-01-F3): the saved unattended agent shows a dispatchable run surface (got "${runDispatchable}")`);
-                  // W8-B1 (ON-8): the run surface is REACHABLE, not merely
-                  // present. It used to render third in the right column,
-                  // below the whole YAML preview and the readiness list, so
-                  // on a real agent the one control this page exists for sat
-                  // off-screen. It now renders FIRST and is pinned there —
-                  // asserted two ways, because either alone can silently
-                  // regress: DOM order, and the panel's real position inside
-                  // the viewport on arrival (no scrolling).
+                  // W8-B1 (ON-8) / W8-F4: the run surface is REACHABLE, not
+                  // merely present. It used to render third in the right
+                  // column, below the whole YAML preview and the readiness
+                  // list, so on a real agent the one control this page exists
+                  // for sat off-screen. It now renders FIRST, is pinned there,
+                  // and the dispatch control lives OUTSIDE the panel's own
+                  // scroll region.
+                  //
+                  // W8-F4 — WHY THIS MEASURES THE BUTTON AND NOT THE PANEL:
+                  // this beat used to read getBoundingClientRect() of
+                  // [data-section="agent-run"] and assert `box.top <
+                  // innerHeight && box.bottom > 0`. The C4 refuter proved that
+                  // predicate is TRUE for a panel straddling the fold while
+                  // [data-action="run-agent"] inside it sits at 4200px on an
+                  // 800px viewport — "BOTH GATES GREEN, CONTROL OFF SCREEN".
+                  // The only honest browser assertion is over the CONTROL's
+                  // own rect, plus a hit test (a rect inside the viewport that
+                  // something else covers, or that an ancestor clips, is still
+                  // not reachable) and the scroll offsets (the whole claim is
+                  // "on arrival, WITHOUT scrolling").
                   const runReach = await page.evaluate(() => {
                     const run = document.querySelector('[data-section="agent-run"]');
+                    const control = document.querySelector('[data-section="agent-run"] [data-action="run-agent"]');
                     const yaml = document.querySelector('[data-component="yaml-preview"]');
                     const readiness = document.querySelector('[data-component="readiness-panel"]');
                     if (!run) return null;
                     const before = (a, b) => !!a && !!b
                       && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-                    const box = run.getBoundingClientRect();
+                    // Sub-pixel layout: a control whose bottom lands 0.5px past
+                    // the fold is on screen, not off it.
+                    const EDGE_TOLERANCE_PX = 1;
+                    const column = document.querySelector('#col-right');
+                    const box = control === null ? null : control.getBoundingClientRect();
+                    let hitIsControl = false;
+                    if (control !== null && box !== null && box.width > 0 && box.height > 0) {
+                      const cx = Math.round(box.left + box.width / 2);
+                      const cy = Math.round(box.top + box.height / 2);
+                      if (cx >= 0 && cy >= 0 && cx < window.innerWidth && cy < window.innerHeight) {
+                        const hit = document.elementFromPoint(cx, cy);
+                        hitIsControl = hit !== null && (hit === control || control.contains(hit));
+                      }
+                    }
                     return {
                       beforeYaml: before(run, yaml),
                       beforeReadiness: before(run, readiness),
-                      top: Math.round(box.top),
-                      withinViewport: box.top < window.innerHeight && box.bottom > 0,
+                      controlPresent: control !== null,
+                      panelTop: Math.round(run.getBoundingClientRect().top),
+                      top: box === null ? null : Math.round(box.top),
+                      bottom: box === null ? null : Math.round(box.bottom),
+                      viewportHeight: window.innerHeight,
+                      controlWithinViewport: box !== null
+                        && box.width > 0 && box.height > 0
+                        && box.top >= -EDGE_TOLERANCE_PX
+                        && box.bottom <= window.innerHeight + EDGE_TOLERANCE_PX,
+                      hitIsControl,
+                      // "without scrolling" is only a claim if nothing scrolled.
+                      pageScrollY: Math.round(window.scrollY),
+                      columnScrollTop: column === null ? null : Math.round(column.scrollTop),
+                      // The control must not sit inside a scroll region of its own
+                      // (reachable-BY-scrolling is the opposite of the claim).
+                      scrollingAncestors: (() => {
+                        const names = [];
+                        for (let el = control?.parentElement ?? null; el !== null; el = el.parentElement) {
+                          const overflowY = getComputedStyle(el).overflowY;
+                          if (overflowY === 'auto' || overflowY === 'scroll') {
+                            names.push(el.getAttribute('data-section') ?? el.getAttribute('id') ?? el.tagName.toLowerCase());
+                          }
+                          if (el === run) break;
+                        }
+                        return names;
+                      })(),
                       sticky: getComputedStyle(run).position,
                     };
                   });
                   check(runReach !== null, 'agent-builder (W8-B1): the run surface is mounted on the agent page');
                   check(runReach?.beforeYaml === true && runReach?.beforeReadiness === true,
                     `agent-builder (W8-B1): Run renders BEFORE the YAML preview and the readiness panel (yaml ${runReach?.beforeYaml}, readiness ${runReach?.beforeReadiness})`);
-                  check(runReach?.withinViewport === true,
-                    `agent-builder (W8-B1): the run surface is inside the viewport on arrival — reachable without scrolling (top ${runReach?.top}px)`);
+                  check(runReach?.controlPresent === true,
+                    'agent-builder (W8-F4): the dispatch control [data-action="run-agent"] itself is in the DOM — the thing the next checks measure');
+                  check(runReach?.pageScrollY === 0 && (runReach?.columnScrollTop ?? 0) === 0,
+                    `agent-builder (W8-F4): nothing has scrolled — the claim is about ARRIVAL (window ${runReach?.pageScrollY}px, right column ${runReach?.columnScrollTop}px)`);
+                  check(runReach?.controlWithinViewport === true,
+                    `agent-builder (W8-F4): the RUN BUTTON's own rect is fully inside the viewport on arrival — not the panel's box, the control's (top ${runReach?.top}px, bottom ${runReach?.bottom}px, viewport ${runReach?.viewportHeight}px)`);
+                  check(runReach?.hitIsControl === true,
+                    'agent-builder (W8-F4): and a hit test at its centre lands ON the button — a rect inside the viewport that something covers or an ancestor clips is still not reachable');
+                  check((runReach?.scrollingAncestors ?? ['?']).length === 0,
+                    `agent-builder (W8-F4): the button is NOT inside the panel's own scroll region — reachable-BY-scrolling is the opposite of the claim (scrolling ancestors: ${JSON.stringify(runReach?.scrollingAncestors)})`);
                   check(runReach?.sticky === 'sticky',
-                    `agent-builder (W8-B1): and it is PINNED to its scrolling column, so it stays reachable (computed position "${runReach?.sticky}")`);
+                    `agent-builder (W8-B1): and the panel is PINNED to its scrolling column, so it stays reachable (computed position "${runReach?.sticky}")`);
                   // R4-02-F1: the generic key:value inputs surface (the onboarding
                   // agent's repo/northStar ride through it). Assert it's present +
                   // type a line so the inputs surface is inside the regression gate.

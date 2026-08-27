@@ -30,6 +30,8 @@ import {
   DELIBERATELY_UNSWEPT_SLUGS,
   UNTOKENED_SWEPT_SLUGS,
   QUEUE_STATES,
+  JOURNEY_AGENT_RUN_SUFFIX,
+  JOURNEY_AGENT_RUN_IDS,
 } from './lib/journey-residue.mjs';
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -108,6 +110,66 @@ describe('the sweep list cannot rot', () => {
     assert.ok(inspected >= 10, `fixture precondition: the runtime scan must actually find exported ids (found ${inspected})`);
     assert.deepEqual(uncovered, [],
       `these ids are EXPORTED by journey-fixtures.mjs but are neither swept nor explicitly excluded — a killed run leaves them behind forever:\n  ${uncovered.join('\n  ')}`);
+  });
+
+  test('RATCHET: every `_agent-…` log-dir literal in the journey sources is swept — the INIT-shaped scans above cannot see this shape at all', () => {
+    // W8-F4, found by adversarial review. A journey fixture can seed a
+    // STANDALONE AGENT RUN, whose log dir is `_agent-<slug>-<stamp>` — the
+    // shape `collectRecentAgentRuns` reads. Neither ratchet above matches it
+    // (one scans `INIT-${X}-slug` template literals, the other inspects
+    // journey-fixtures.mjs's exported `INIT-`-bearing values), so the very
+    // first such fixture leaked one `_logs/` dir per killed run, and 16/16
+    // stayed green. Same class as the `AUTO_CYCLE_ID` concatenation bug this
+    // suite already learned from: a new SHAPE, not a new slug.
+    const journeysDir = join(SCRIPTS_DIR, 'journeys');
+    const sources = [
+      ...readdirSync(journeysDir).filter((f) => f.endsWith('.mjs')).map((f) => join(journeysDir, f)),
+      join(SCRIPTS_DIR, 'lib', 'journey-fixtures.mjs'),
+      join(SCRIPTS_DIR, 'e2e-journey.mjs'),
+    ];
+    const missing: string[] = [];
+    let found = 0;
+    for (const file of sources) {
+      const src = readFileSync(file, 'utf8');
+      // Both quoting styles, template placeholders resolved to a stand-in so a
+      // runtime-built id is judged on its SHAPE (prefix + suffix), which is
+      // exactly what ownership is declared by.
+      for (const m of src.matchAll(/[`'](_agent-[^`'\n]*)[`']/g)) {
+        const literal = m[1];
+        // Not fixture IDS: the bare glob in prose, and the `startsWith` PREFIX
+        // agents.mjs uses to sweep its own kickoff runs (it ends in `-`, so it
+        // is by construction not a complete directory name).
+        if (literal === '_agent-' || literal.includes('*') || literal.endsWith('-')) continue;
+        found++;
+        const resolved = literal
+          // the ownership token itself resolves to its real value; everything
+          // else becomes a stand-in, so the id is judged on SHAPE
+          .replaceAll('${JOURNEY_AGENT_RUN_SUFFIX}', JOURNEY_AGENT_RUN_SUFFIX)
+          .replace(/\$\{[^}]*\}/g, 'x');
+        if (!isJourneyOwnedLogDir(resolved)) {
+          missing.push(`${file.replace(SCRIPTS_DIR, 'scripts')}: ${literal}`);
+        }
+      }
+    }
+    assert.ok(found >= 4, `fixture precondition: the scan must actually find _agent- fixture ids (found ${found}) — a regex that matches nothing would make this ratchet vacuously green`);
+    assert.deepEqual(missing, [],
+      `these journey-seeded standalone agent-run log dirs are not swept, so a killed run leaves them in _logs/ forever — end the id with JOURNEY_AGENT_RUN_SUFFIX, or add the exact id to JOURNEY_AGENT_RUN_IDS, in scripts/lib/journey-residue.mjs:\n  ${missing.join('\n  ')}`);
+  });
+
+  test('a REAL standalone agent run is never swept — the suffix, not the `_agent-` prefix, is what declares ownership', () => {
+    // The containment half. `_agent-<slug>-<ISO stamp>` is what a real
+    // `forge agent dispatch` writes; sweeping one would delete an operator's
+    // own run log at the top of every journey run.
+    for (const real of [
+      '_agent-architect-2026-08-27T10-00-00-000',
+      '_agent-onboarding-agent-2026-08-01T00-00-00-000',
+      '_agent-developer-ralph-2026-08-28T09-15-00-000',
+    ]) {
+      assert.equal(isJourneyOwnedLogDir(real), false, `${real} is a REAL run dir and must never be swept`);
+    }
+    for (const owned of [`_agent-developer-ralph-2026-08-28T01-09-17Z${JOURNEY_AGENT_RUN_SUFFIX}`, ...JOURNEY_AGENT_RUN_IDS]) {
+      assert.equal(isJourneyOwnedLogDir(owned), true, `${owned} is harness residue and must be swept`);
+    }
   });
 
   test('every DELIBERATELY_UNSWEPT_SLUGS entry carries a real written reason — an exclusion list with blank reasons is just a hole', () => {

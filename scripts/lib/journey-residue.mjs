@@ -170,6 +170,37 @@ export const JOURNEY_UNDATED_INITS = [
   'INIT-r6-06-agent-ledger-flow-node',
 ];
 
+/**
+ * The suffix EVERY journey-seeded STANDALONE AGENT-RUN log dir must carry.
+ *
+ * W8-F4 (found by adversarial review): a journey fixture can also create a
+ * `_logs/_agent-<slug>-<stamp>` directory — the shape `collectRecentAgentRuns`
+ * (cli/ui-bridge.ts) enumerates to build the standalone half of the
+ * everything-ledger. That shape is NOT `INIT-…`, so neither this module nor
+ * either ratchet in `scripts/journey-residue-sweep.test.ts` could see it, and a
+ * SIGKILL mid-run leaked one per crash, forever. The `_agent-` PREFIX is forced
+ * by the route (a fixture cannot opt out of it), so ownership is declared by a
+ * suffix instead — a real run's id is a timestamp and can never end in this.
+ */
+export const JOURNEY_AGENT_RUN_SUFFIX = '-journey-fixture';
+
+/**
+ * Journey-seeded standalone agent-run dirs that predate
+ * `JOURNEY_AGENT_RUN_SUFFIX` and are pinned by exact id.
+ *
+ * Enumerated rather than pattern-matched because these are FIXED literals with
+ * fixed fake timestamps (2026-01-01 / 2026-08-10) — an exact-id list cannot
+ * collide with an operator's real run, and the ratchet below fails if a new
+ * `_agent-…` literal appears that is covered by neither mechanism. Sweeping
+ * them closes a pre-existing leak of the same class as the one W8-F4 found in
+ * its own new fixture.
+ */
+export const JOURNEY_AGENT_RUN_IDS = [
+  '_agent-architect-2026-01-01T00-10-00-000-r606',
+  '_agent-developer-ralph-2026-08-10T00-00-00-000-e2e',
+  '_agent-adversarial-review-2026-08-10T00-05-00-000-e2e',
+];
+
 const DATE_STAMP = '\\d{4}-\\d{2}-\\d{2}';
 
 /** `INIT-<date>-<slug>` for a KNOWN slug, allowing the two sidecar filename
@@ -190,7 +221,7 @@ export function isJourneyOwnedQueueFile(filename) {
 
 /** True iff a `_logs/<dir>` entry is one THIS HARNESS created.
  *
- *  Three shapes, all unambiguous:
+ *  Four shapes, all unambiguous:
  *    - `<stamp>_INIT-<date>-<known-slug>`  — an emulated cycle's log dir
  *    - `INIT-<date>-<known-slug>`          — the same, unstamped
  *    - anything embedding `journey-scratch-kb` — the harness's own scratch KB
@@ -204,6 +235,11 @@ export function isJourneyOwnedLogDir(dirname) {
   // `journey-scratch-kb-ingest-activity` (the ingest fixture cycle) and
   // `_brainfix-journey-scratch-kb-{cleanup,maintain}-consolidate-<runId>`.
   if (dirname.startsWith('journey-scratch-kb') || dirname.startsWith('_brainfix-journey-scratch-kb')) return true;
+  // W8-F4: a journey-seeded STANDALONE AGENT RUN. The `_agent-` prefix is the
+  // route's, not ours; the suffix (or the exact-id list, for the three that
+  // predate it) is what makes it ours.
+  if (dirname.startsWith('_agent-') && dirname.endsWith(JOURNEY_AGENT_RUN_SUFFIX)) return true;
+  if (JOURNEY_AGENT_RUN_IDS.includes(dirname)) return true;
   const initPart = dirname.includes('_INIT-') ? dirname.slice(dirname.indexOf('_INIT-') + 1) : dirname;
   const slugs = JOURNEY_INIT_SLUGS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   if (new RegExp(`^INIT-${DATE_STAMP}-(?:${slugs})$`).test(initPart)) return true;
