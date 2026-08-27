@@ -1238,3 +1238,47 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-F1 / knowledge-42 (bead forge-6gv.6.2 — a named row of a CLOSED bead that
+// still reproduces end to end, re-confirmed twice in the C4 regate).
+//
+// `writeConsolidateTerminalEvent` hardcodes
+//   `const cleared = outcome.total === 0 || outcome.clearedCount === outcome.total;`
+// so a consolidate that found NOTHING writes `cleared: true`, and the KB
+// action-result pill reads "consolidate: cleared ✓" — the identical wording a
+// run that really fixed something produces. `readBrainFixState` then drops
+// `total`/`clearedCount` entirely, so no consumer can tell the two apart.
+//
+// The cure is to DERIVE rather than assert: a run has cleared something only
+// when it cleared something, and the counters the event already carries are
+// threaded to the surface so "nothing to clear" can be said out loud.
+// ---------------------------------------------------------------------------
+
+test('W8-F1 (knowledge-42): a consolidate over ZERO findings does not report "cleared" — and its counters reach the wire', async () => {
+  // No themes ⇒ no findings at all ⇒ the run has nothing to clear.
+  seedProjectBrain(forgeRoot, 'w8f1-noop-kb', []);
+  const dispatch = await post('/api/studio/kbs/w8f1-noop-kb/maintenance', { op: 'consolidate' });
+  assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
+  const runId = dispatch.json['runId'] as string;
+
+  let body: Record<string, unknown> = {};
+  for (let i = 0; i < 40; i++) {
+    const res = await fetch(`${bridgeUrl}/api/studio/kbs/w8f1-noop-kb/fix-agent/${runId}`);
+    body = (await res.json()) as Record<string, unknown>;
+    if (body['state'] && body['state'] !== 'running') break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  assert.notEqual(body['state'], 'running', 'the zero-findings consolidate never reached a terminal state');
+  assert.equal(
+    body['cleared'],
+    false,
+    `a run that fixed nothing must not report cleared — got ${JSON.stringify(body)}`,
+  );
+  // The counters the event already carries must reach the surface, so the pill
+  // can say "nothing to clear" instead of either lie ("cleared ✓" / "some
+  // findings remain"). A field the wire drops is a field no UI can be honest
+  // about — the declared-data-fails-open shape, in reverse.
+  assert.equal(body['total'], 0, `the run's own finding count must be on the wire — got ${JSON.stringify(body)}`);
+  assert.equal(body['clearedCount'], 0, `and its cleared count — got ${JSON.stringify(body)}`);
+});

@@ -34,7 +34,7 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { enqueueFlowRun } from './enqueue-flow-run.ts';
+import { enqueueFlowRun, FLOW_ID_RE } from './enqueue-flow-run.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
 import { parseManifest } from './manifest.ts';
@@ -126,6 +126,19 @@ export function stageFlowRunRequest(
   req: Omit<FlowRunRequest, 'createdAt'> & { createdAt?: string },
   opts: FlowRunQueueOpts = {},
 ): string {
+  // W8-F5 (bead forge-6gv.23): `target.ref` is a PATH SEGMENT here — it is
+  // folded into the staged filename below. `enqueueFlowRun` already refuses a
+  // ref that is not a flow-id slug ("a path-traversal guard on the flow ref"),
+  // so a rejected ref could never have dispatched anyway; refusing it HERE
+  // means it never reaches the filesystem either. Measured unguarded at
+  // c0093918: `ref: '../../../../pwned'` wrote `<tmpdir>/pwned-<ts>.json`,
+  // outside the queue root entirely. Fails closed by throwing — the same
+  // convention `writeManifest` uses for a rejected manifest; every stage call
+  // site (cron `makeFireFn`, the webhook receiver, flow-trigger, flow-runner)
+  // reports through its own catch rather than writing an unreachable request.
+  if (!FLOW_ID_RE.test(req.target?.ref ?? '')) {
+    throw new Error(`refusing to stage a flow-run request: target ref ${JSON.stringify(req.target?.ref ?? '')} is not a valid flow id slug`);
+  }
   const dir = flowRunsDir(opts.queueRoot);
   mkdirSync(dir, { recursive: true });
   const createdAt = req.createdAt ?? new Date().toISOString();

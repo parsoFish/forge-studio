@@ -332,7 +332,9 @@ export function toBaseline(report, meta = {}) {
       + 'Lanes must SHRINK this file (delete the entries their PR fixes) and NEVER grow it — '
       + 'a new failing route/request/error fails `npm run ui:walkthrough -- --assert`, and '
       + 'scripts/ui-walkthrough/check-baseline-shrinks.mjs fails CI if a PR adds an entry '
-      + '(growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, expectedRoutes recorded). '
+      + '(growth is accepted only through a stamped `main@<sha>` regeneration: new sha, newer generatedAt, '
+      + 'expectedRoutes recorded, AND the sha verified for real — resolves to a commit and is an ancestor '
+      + 'of the comparison base; an unresolvable or non-ancestor sha is refused, growth and all). '
       + 'expectedRoutes[ci|host] is the coverage floor: a full crawl in that environment must visit >= 90% of it. '
       + 'Regenerate only from main with `--write-baseline` (ids are normalized to <id>).',
     generatedAt: meta.generatedAt ?? new Date().toISOString(),
@@ -358,16 +360,30 @@ export function baselineGrowth(prev, next) {
 
 const SOURCE_STAMP_RE = /^main@([0-9a-f]{7,40})\b/;
 /**
- * W7-A0-4 — the ONE way a baseline may grow: a stamped regeneration from main
- * (`source: "main@<sha> …"` with a NEW sha, a NEWER generatedAt, and a
- * non-empty expectedRoutes recorded — i.e. it came out of `--write-baseline`,
- * not a hand edit). This is a deliberate-and-visible protocol, not a cryptographic one:
- * the stamp is in the PR diff, and the host wave gate re-verifies (an entry
- * that should not be there reads as stale; one that was wrongly dropped reads
- * as NEW). Ancestry of the sha is deliberately not checked — CI checkouts are
- * shallow, so `merge-base --is-ancestor` cannot answer there.
+ * W7-A0-4 / W8-F5 — the ONE way a baseline may grow: a stamped regeneration
+ * from main (`source: "main@<sha> …"` with a NEW sha, a NEWER generatedAt,
+ * and a non-empty expectedRoutes recorded — i.e. it came out of
+ * `--write-baseline`, not a hand edit).
+ *
+ * This function alone answers the SHAPE question only: does `next.source`
+ * look like a well-formed regeneration stamp, is its sha new versus `prev`,
+ * is `generatedAt` newer, is `expectedRoutes` recorded? A sha-shaped string
+ * that never resolves to any git object satisfies all of that (W8-F5 —
+ * confirmed exploitable: a two-field hand edit forged growth at exit 0).
+ *
+ * The THIRD argument is where real verification is injected: pass
+ * `{ verifyStamp(sha) => boolean }` and it is consulted (with the extracted
+ * sha) after every shape check passes — a `false` return makes the whole
+ * call return `false`, exactly as if the stamp shape had failed. With no
+ * `verifyStamp`, this function still only answers the shape question — it is
+ * the CALLER's job to supply a verifier that actually resolves the sha as a
+ * git object and confirms it is an ancestor of the comparison base.
+ * `check-baseline-shrinks.mjs` is that caller: it resolves the sha
+ * (`git cat-file -e <sha>^{commit}`) and checks ancestry
+ * (`git merge-base --is-ancestor <sha> <base>`) for real, and refuses
+ * (fail-closed) a stamp that does not verify.
  */
-export function isRegeneration(prev, next) {
+export function isRegeneration(prev, next, opts = {}) {
   if (!prev || !next) return false;
   const stamp = SOURCE_STAMP_RE.exec(String(next.source ?? ''));
   if (!stamp) return false;
@@ -377,7 +393,9 @@ export function isRegeneration(prev, next) {
   const nextAt = Date.parse(next.generatedAt ?? '');
   if (Number.isNaN(nextAt)) return false;
   const prevAt = Date.parse(prev.generatedAt ?? '');
-  return Number.isNaN(prevAt) || nextAt > prevAt;
+  if (!(Number.isNaN(prevAt) || nextAt > prevAt)) return false;
+  if (typeof opts.verifyStamp === 'function' && !opts.verifyStamp(stamp[1])) return false;
+  return true;
 }
 
 /** W7-A0-4 — removed baseline entries whose (normalized) route the crawl never

@@ -1633,6 +1633,12 @@ export type AgentFixStatus = {
   ok: boolean;
   state: 'running' | 'cleared' | 'not-cleared' | 'failed' | 'unknown';
   cleared: boolean;
+  /** Present only for a `consolidate` run's terminal status — the bridge's
+   *  `readBrainFixState` threads them through from the terminal event's own
+   *  metadata (W8-F1 / knowledge-42). A per-finding `fix-agent` run never
+   *  writes these, so they stay genuinely absent for it — never fabricated. */
+  total?: number;
+  clearedCount?: number;
   /** Present only on a failed read (`ok:false`). */
   error?: string;
   /** On a failed read: the HTTP status iff the bridge ANSWERED (a 404 "no
@@ -1640,19 +1646,21 @@ export type AgentFixStatus = {
   status?: number;
 };
 
-function parseAgentFixStatus(r: BridgeReadResult<{ state?: string; cleared?: boolean }>): AgentFixStatus {
+function parseAgentFixStatus(r: BridgeReadResult<{ state?: string; cleared?: boolean; total?: number; clearedCount?: number }>): AgentFixStatus {
   if (!r.ok) return { ok: false, state: 'unknown', cleared: false, error: r.error, ...(r.status !== undefined ? { status: r.status } : {}) };
   return {
     ok: true,
     state: (r.data.state as AgentFixStatus['state']) ?? 'unknown',
     cleared: r.data.cleared === true,
+    ...(typeof r.data.total === 'number' ? { total: r.data.total } : {}),
+    ...(typeof r.data.clearedCount === 'number' ? { clearedCount: r.data.clearedCount } : {}),
   };
 }
 
 /** Poll a dispatched agent-fix run's state (status-shaped: never throws;
  *  a failed read is `{ok:false, state:'unknown', error}`). */
 export async function getAgentFixStatus(id: string, runId: string): Promise<AgentFixStatus> {
-  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean }>(
+  return parseAgentFixStatus(await studioGet<{ state?: string; cleared?: boolean; total?: number; clearedCount?: number }>(
     `/api/studio/kbs/${encodeURIComponent(id)}/fix-agent/${encodeURIComponent(runId)}`,
   ));
 }
