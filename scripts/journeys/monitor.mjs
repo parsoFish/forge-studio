@@ -12,9 +12,9 @@
  * trigger this journey proves — never opening /monitor cold.
  *
  * FIXTURE (self-contained, disjoint from every other journey's ids — never
- * mdtoc's own queue, never home.mjs's HOME_* scratch projects). Two throwaway
- * scratch projects with REAL `_queue/` manifests, mirroring the shape
- * home.mjs's own HOME_ACTIVE fixture already uses:
+ * mdtoc's own queue, never home.mjs's HOME_* scratch projects). ALL THREE run
+ * kinds this pillar claims to unify, on disk, in the shapes the real writers
+ * produce:
  *   - MONITOR_ACTIVE_PROJECT — a real `_queue/in-flight/<id>.md` naming the
  *     always-shipped `forge-develop` flow, plus a seeded
  *     `_logs/<cycleId>/events.jsonl` carrying one OPEN developer-loop start
@@ -22,15 +22,31 @@
  *     `active`, so this is a genuinely in-flight run, not a poked count.
  *   - MONITOR_FAILED_PROJECT — a real `_queue/failed/<id>.md`, which the same
  *     table maps to run status `failed`.
- * The fixture exists for ONE reason: the relational assertions below (the
- * summary equals the list it summarises; Home and Monitor agree) are TRUE but
- * VACUOUS on an empty install — 0 === 0 passes against a completely broken
- * derivation. A check that cannot fail is not a check. With one active and
- * one failed run on disk, every identity below has to survive real numbers.
+ *   - MON_AGENT_RUN_ID (W8-F4) — a STANDALONE agent run: `_logs/_agent-…/
+ *     events.jsonl` with a dispatch marker and no `end` event, which is
+ *     exactly what `collectRecentAgentRuns` (cli/ui-bridge.ts) reads to emit a
+ *     `linkKind:'standalone'` row -> `data-ledger-kind="agent"`.
+ *   - MON_SESSION_SID (W8-F4) — a NON-TERMINAL interactive session:
+ *     `projects/<scratch>/_onboarding/<sid>/status.json` with `phase: running`
+ *     (the onboarding kind's real in-flight phase, studio/session-kinds.yaml;
+ *     the same object `POST /api/studio/onboarding/start` writes).
+ *
+ * WHY ALL FOUR (W8-F4, ON-8): the relational assertions below (the summary
+ * equals the list it summarises; Home and Monitor agree) are TRUE but VACUOUS
+ * on an empty install — 0 === 0 passes against a completely broken derivation.
+ * A check that cannot fail is not a check. The wave-8 exit gate found this
+ * beat still two-thirds vacuous: the fixture seeded only FLOW runs, so the
+ * "standalone agent run" and "interactive session" thirds of ON-8 were
+ * asserted as SECTION PRESENCE alone — and `HomeSessionsStrip` renders its
+ * <section> unconditionally, so an empty sessions list satisfied it. The beats
+ * below now assert IDENTITY: the seeded ids themselves must appear as an
+ * `data-ledger-kind="agent"` ledger row and as a `[data-session-card]`.
  *
  * Seed/cleanup discipline (home.mjs's own shape): `monitor-pillar-entry`
  * seeds behind a crash-safe leading sweep; `monitor-counts-agree` — the last
- * beat that needs it — sweeps in a try/finally.
+ * beat that needs it — sweeps in a try/finally. The session dir lives INSIDE
+ * MON_ACTIVE_PROJECT_DIR, so the project sweep takes it too; the standalone
+ * run dir is swept explicitly.
  */
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,6 +65,26 @@ const MON_ACTIVE_INIT = `INIT-${MON_DATE}-monitor-fixture-active`;
 const MON_ACTIVE_CYCLE_ID = `${MON_STAMP}_${MON_ACTIVE_INIT}`;
 const MON_ACTIVE_MANIFEST = join(FORGE_ROOT, '_queue', 'in-flight', `${MON_ACTIVE_INIT}.md`);
 const MON_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', MON_ACTIVE_CYCLE_ID);
+
+// W8-F4 — the STANDALONE agent run. `collectRecentAgentRuns` enumerates
+// `_logs/_agent-*` dirs and uses the DIRECTORY NAME verbatim as the row id, so
+// this constant IS the identity the beats assert on. The slug is resolved from
+// `metadata.agent_slug`; an unattributable run is dropped rather than
+// fabricated, so the marker below carries it explicitly.
+const MON_AGENT_SLUG = 'developer-ralph';
+const MON_AGENT_RUN_ID = `_agent-${MON_AGENT_SLUG}-${MON_STAMP}-monitor-fixture`;
+const MON_AGENT_RUN_DIR = join(FORGE_ROOT, '_logs', MON_AGENT_RUN_ID);
+
+// W8-F4 — the INTERACTIVE session. `onboarding` is a registry-generic kind, so
+// the session index finds it by scanning `projects/*/_onboarding/<sid>/
+// status.json` (cli/ui-bridge.ts) — no central log dir needed. `running` is its
+// real in-flight phase (studio/session-kinds.yaml): NON-terminal, and
+// deliberately NOT a needs-you phase, which is the point of the heading
+// assertion in MONITOR.2 — this section lists every live session, not only the
+// ones waiting on the operator.
+const MON_SESSION_KIND = 'onboarding';
+const MON_SESSION_PHASE = 'running';
+const MON_SESSION_SID = `monitor-fixture-session-${MON_STAMP}`;
 
 const MON_FAILED_PROJECT = 'monitor-fixture-failed-project';
 const MON_FAILED_PROJECT_DIR = join(FORGE_ROOT, 'projects', MON_FAILED_PROJECT);
@@ -111,10 +147,36 @@ function seedMonitorFixture() {
     'A journey-seeded scratch project proving a failed run reads as failed on Monitor.');
   writeFileSync(MON_FAILED_MANIFEST, manifestBody(
     MON_FAILED_INIT, MON_FAILED_PROJECT, MON_FAILED_PROJECT_DIR, 'failed', MON_FAILED_CYCLE_ID, 'failed build'));
+
+  // W8-F4 — kind 2 of 3: a standalone agent run, mirroring the t0 marker the
+  // real dispatch route writes into the run's OWN events.jsonl
+  // (`agent-run.dispatched`, W7-B5/W8-A2). No `end` event, so
+  // `deriveStandaloneStateFromEvents` reads it as genuinely `running`.
+  mkdirSync(MON_AGENT_RUN_DIR, { recursive: true });
+  writeFileSync(join(MON_AGENT_RUN_DIR, 'events.jsonl'), JSON.stringify({
+    event_id: 'EV_monitor_agent_1', cycle_id: MON_AGENT_RUN_ID, initiative_id: MON_AGENT_RUN_ID,
+    started_at: new Date().toISOString(), phase: 'orchestrator', skill: MON_AGENT_SLUG,
+    event_type: 'start', input_refs: [], output_refs: [],
+    message: 'agent-run.dispatched',
+    metadata: { agent_phase: 'standalone', agent_slug: MON_AGENT_SLUG },
+  }) + '\n');
+
+  // W8-F4 — kind 3 of 3: a non-terminal interactive session, in the shape
+  // `POST /api/studio/onboarding/start` writes (`{ phase: 'running', … }`).
+  // Lives inside the active scratch project so the project sweep removes it.
+  const sessionDir = join(MON_ACTIVE_PROJECT_DIR, `_${MON_SESSION_KIND}`, MON_SESSION_SID);
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({
+    session_id: MON_SESSION_SID,
+    project: MON_ACTIVE_PROJECT,
+    project_repo_path: MON_ACTIVE_PROJECT_DIR,
+    phase: MON_SESSION_PHASE,
+    updated_at: new Date().toISOString(),
+  }, null, 2));
 }
 
 function cleanMonitorFixture() {
-  for (const path of [MON_ACTIVE_PROJECT_DIR, MON_FAILED_PROJECT_DIR, MON_ACTIVE_LOG_DIR]) {
+  for (const path of [MON_ACTIVE_PROJECT_DIR, MON_FAILED_PROJECT_DIR, MON_ACTIVE_LOG_DIR, MON_AGENT_RUN_DIR]) {
     try { rmSync(path, { recursive: true, force: true }); } catch { /* best-effort */ }
   }
   for (const path of [MON_ACTIVE_MANIFEST, MON_FAILED_MANIFEST]) {
@@ -270,7 +332,7 @@ export const journey = defineJourney({
     {
       id: 'monitor-one-surface',
       title: 'Everything running, in one place',
-      narration: 'Monitor is assembled entirely from parts that already existed: the shared cross-object reads, the run rail with its real FAILED group, the sessions strip, the scheduler card and the merged activity ledger. No new bridge route was added for it — both endpoints it needs were already exposed. What is new is that they are on one page, so "is anything stuck?" is one look instead of four.',
+      narration: 'Monitor is assembled entirely from parts that already existed: the shared cross-object reads, the run rail with its real FAILED group, the sessions strip, the scheduler card and the merged activity ledger. No new bridge route was added for it — both endpoints it needs were already exposed. What is new is that they are on one page, so "is anything stuck?" is one look instead of four. All three run kinds are on screen at once and named by their own seeded ids: a flow run on the rail, a standalone agent run carrying an AGENT chip in the ledger, and a live interactive session card. The sessions section is headed "Active sessions" — it lists every live session, and the count of the ones actually waiting on you rides beside it as a chip, because a heading that claims the whole list needs you is a claim about the operator\'s attention that the list does not support.',
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[MONITOR.2] /monitor — every promised section');
@@ -285,6 +347,72 @@ export const journey = defineJourney({
         for (const named of ['monitor-summary', 'scheduler', 'monitor-attention', 'sessions-needing-you', 'monitor-runs', 'activity']) {
           check(sections.includes(named), `MONITOR.2: [data-section="${named}"] renders on Monitor (got ${JSON.stringify(sections)})`);
         }
+
+        // ── W8-F4: all three run kinds, by IDENTITY ──
+        // Section presence is not evidence: HomeSessionsStrip renders its
+        // <section> unconditionally, so the checks above pass with an empty
+        // sessions list — "all three kinds in one place" was being asserted at
+        // zero state for two of the three kinds. These read the SEEDED IDS
+        // back off the page, so a broken producer cannot satisfy them with a
+        // count, an empty list, or somebody else's row.
+        const seeded = await page.evaluate((ids) => {
+          const agentRow = document.querySelector(`[data-ledger-row][data-run-id="${ids.agentRunId}"]`);
+          const sessionCard = document.querySelector(
+            `[data-section="sessions-needing-you"] [data-session-card][data-session-id="${ids.sessionId}"]`);
+          const strip = document.querySelector('[data-section="sessions-needing-you"]');
+          // The flow third: the rail's own card for the seeded in-flight
+          // initiative. Matched on the initiative token rather than on a
+          // reconstructed run id, because the run id is derived server-side
+          // from the queue manifest and this beat is not the place to re-derive it.
+          const flowCard = [...document.querySelectorAll('[data-section="monitor-runs"] [data-run-id]')]
+            .find((el) => (el.getAttribute('data-run-id') ?? '').includes(ids.flowToken)) ?? null;
+          return {
+            agent: agentRow === null ? null : {
+              kind: agentRow.getAttribute('data-ledger-kind'),
+              linkKind: agentRow.getAttribute('data-ledger-link-kind'),
+              status: agentRow.getAttribute('data-run-status'),
+              href: agentRow.getAttribute('href'),
+            },
+            session: sessionCard === null ? null : {
+              kind: sessionCard.getAttribute('data-session-kind'),
+              phase: sessionCard.getAttribute('data-session-phase'),
+              needsYou: sessionCard.getAttribute('data-needs-you'),
+              state: sessionCard.getAttribute('data-session-state'),
+            },
+            flowRunId: flowCard === null ? null : flowCard.getAttribute('data-run-id'),
+            stripHeading: strip === null ? null : (strip.querySelector('h2')?.textContent ?? '').trim(),
+            stripAriaLabel: strip === null ? null : strip.getAttribute('aria-label'),
+            stripActive: strip === null ? null : strip.getAttribute('data-active-session-count'),
+            stripNeedsYou: strip === null ? null : strip.getAttribute('data-needs-you-count'),
+          };
+        }, { agentRunId: MON_AGENT_RUN_ID, sessionId: MON_SESSION_SID, flowToken: MON_ACTIVE_INIT });
+
+        check(seeded.flowRunId !== null,
+          `MONITOR.2 (1/3 flow): the seeded in-flight FLOW run is on the rail by identity — a card whose data-run-id carries "${MON_ACTIVE_INIT}" (got ${JSON.stringify(seeded.flowRunId)})`);
+        check(seeded.agent !== null,
+          `MONITOR.2 (2/3 agent): the seeded STANDALONE agent run is in the merged ledger by identity — [data-run-id="${MON_AGENT_RUN_ID}"] (got ${JSON.stringify(seeded.agent)})`);
+        check(seeded.agent?.kind === 'agent' && seeded.agent?.linkKind === 'standalone',
+          `MONITOR.2 (2/3 agent): and it reads as an AGENT row, not a flow row — data-ledger-kind="agent", data-ledger-link-kind="standalone" (got kind "${seeded.agent?.kind}", linkKind "${seeded.agent?.linkKind}")`);
+        check(seeded.agent?.status === 'running',
+          `MONITOR.2 (2/3 agent): a run with no end event reads as running, derived from its own events.jsonl (got "${seeded.agent?.status}")`);
+        check(seeded.session !== null,
+          `MONITOR.2 (3/3 session): the seeded INTERACTIVE session renders as its own card by identity — [data-session-id="${MON_SESSION_SID}"] (got ${JSON.stringify(seeded.session)})`);
+        check(seeded.session?.kind === MON_SESSION_KIND && seeded.session?.phase === MON_SESSION_PHASE,
+          `MONITOR.2 (3/3 session): carrying its real kind and its real non-terminal phase (got kind "${seeded.session?.kind}", phase "${seeded.session?.phase}")`);
+
+        // The heading honesty check (W8-F4 S3): this card is a live session
+        // that does NOT need the operator, and it is listed anyway —
+        // buildHomeSessionsStrip does not filter, it slices. A heading that
+        // says "Sessions needing you" over that list is a false claim about
+        // what the operator is looking at; the needs-you subset is the CHIP.
+        check(seeded.session?.needsYou === 'false',
+          `MONITOR.2: the seeded session does NOT need the operator (data-needs-you="${seeded.session?.needsYou}") — so the section is provably listing more than the needs-you subset`);
+        check(seeded.stripHeading === 'Active sessions',
+          `MONITOR.2: and the section says so — its visible heading names what it lists, with "N need you" as a separate chip (got "${seeded.stripHeading}")`);
+        check(seeded.stripAriaLabel === 'Active sessions',
+          `MONITOR.2: the accessible name matches the visible one (got "${seeded.stripAriaLabel}")`);
+        check(Number.parseInt(seeded.stripActive ?? '', 10) >= 1,
+          `MONITOR.2: the strip's own declared active-session count is non-zero, so nothing above is a zero-state pass (got "${seeded.stripActive}")`);
 
         // The scheduler card is the SAME component Home mounts — it reports
         // the daemon honestly (the harness runs with it stopped).
@@ -377,6 +505,14 @@ export const journey = defineJourney({
         );
         check((monitorSummary?.total ?? 0) >= 2,
           `MONITOR.3: the identity above is checked against a NON-EMPTY ledger (total ${monitorSummary?.total})`);
+        // W8-F4: this identity used to be checkable at 0 === 0 + 0. With a
+        // seeded non-terminal session AND a seeded standalone agent run, BOTH
+        // addends are real, so `live = runsLive + sessionsLive` is exercised
+        // against numbers a broken derivation cannot fake.
+        check((monitorSummary?.sessionsLive ?? 0) >= 1,
+          `MONITOR.3: the seeded interactive session is COUNTED as a live session — the sessions addend is not zero (got ${monitorSummary?.sessionsLive})`);
+        check((monitorSummary?.runsLive ?? 0) >= 2,
+          `MONITOR.3: the seeded flow run AND the seeded standalone agent run are both counted as live runs (got ${monitorSummary?.runsLive})`);
         check(
           (monitorSummary?.live ?? -1) === (monitorSummary?.runsLive ?? 0) + (monitorSummary?.sessionsLive ?? 0),
           `MONITOR.3: live is exactly runs-in-flight plus live sessions — no double count, no third source (${monitorSummary?.live} vs ${monitorSummary?.runsLive}+${monitorSummary?.sessionsLive})`,
