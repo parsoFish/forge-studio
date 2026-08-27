@@ -1354,14 +1354,17 @@ inventory rather than one shared page-level contract:
   SAME launcher renders on `/skills/new` (below) — one component, two
   mount points.
   `/hooks/[id]` is
-  `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable]`
-  — the last four are ABSENT while loading, on a fetch error and for an unknown
+  `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable][data-package-hash]`
+  — the last five are ABSENT while loading, on a fetch error and for an unknown
   id; no verdict is ever fabricated. It reuses the shared
   `[data-component="file-package"]` renderer R3-01 built, and adds the
   **SECURITY SCAN** panel
   `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
   with per-finding
-  `[data-finding-category][data-finding-severity][data-finding-declared]`.
+  `[data-finding-category][data-finding-severity][data-finding-declared]`, plus
+  `[data-finding-path]` when the server threaded it (PIN E below — present only
+  when more than one file was scanned, so a single-script hook's findings carry
+  no path at all rather than a fabricated one naming the entry script).
   `data-finding-declared` matters: a behaviour the manifest DECLARES is
   downgraded but still rendered and still counted — never hidden — because the
   gate exists so a human can decide whether to run this code with their
@@ -1372,6 +1375,29 @@ inventory rather than one shared page-level contract:
   the verdict is not blocked and trust is `needs-review`;
   `[data-action="override-hook-block"]` + `[data-field="override-reason"]` only
   when it IS blocked — approval can never launder a blocked verdict.
+  **PIN E (2026-08-28 hostile review) — the file package is now the WHOLE
+  package, not a hardcoded pair.** `GET /api/studio/hooks/:id`
+  (`cli/bridge-studio-hooks.ts`) used to hand-build `files` from exactly two
+  reads — `hook.yaml` and the declared entry script — so a sibling file the
+  entry script sources (e.g. `scripts/lib.sh`) was on disk, covered by the
+  approval ledger's `packageHash` pin, and completely invisible to the
+  approving operator: they were approving bytes they were never shown. The
+  route now returns `readHookPackage`'s real, whole-package file list
+  (`orchestrator/studio/hook-package.ts`) — the SAME primitive the ledger's
+  `packageHash` is computed from — each file carrying a `sha256:<hex>`
+  content hash, plus a top-level `packageHash` covering the whole set. The
+  page renders this as `[data-section="package-files"][data-package-file-count]`
+  below the file package, one row per file:
+  `[data-package-file="<path>"][data-file-hash="<hash>"]`, with the whole-
+  package fingerprint (`data-package-hash` on the page root, above) displayed
+  once alongside it. This is DISPLAY-ONLY provenance — the operator reads it
+  to see exactly what they are about to approve, but the approve/override
+  routes still gate on the real ledger pins server-side; nothing on this page
+  re-derives or checks trust from a hash it re-displays. A package containing
+  a planted symlink/socket/etc. leaf makes `readHookPackage` throw rather than
+  silently omit it from a listing that claims to be complete — surfaced as a
+  plain 500 by the route's existing catch-all, never a fabricated 200 with a
+  partial file list.
   **W7-B4 (library-08/09) — hooks carry the edit/delete/revoke half of
   CRUD.** The detail page mounts the shared action bar
   (`[data-component="library-item-actions"][data-kind="hook"]`,

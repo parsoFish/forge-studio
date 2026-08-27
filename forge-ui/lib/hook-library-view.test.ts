@@ -307,9 +307,13 @@ test('buildHookScanPanel: verdict "blocked" survives into the view model even wh
 function detailFixture(overrides: Partial<HookDetail> = {}): HookDetail {
   return {
     ...okEntry({ id: 'demo-hook', name: 'demo-hook', carriedBy: ['developer-ralph'] }),
+    // W8-F2: `hash`/`packageHash` are required on the detail wire — see
+    // hook-client.ts's HookPackageFile. Display-only provenance; the view
+    // model passes them through and gates nothing on them.
+    packageHash: 'sha256:' + 'a'.repeat(64),
     files: [
-      { path: 'hook.yaml', body: 'id: demo-hook\n' },
-      { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n' },
+      { path: 'hook.yaml', body: 'id: demo-hook\n', hash: 'sha256:' + 'b'.repeat(64) },
+      { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n', hash: 'sha256:' + 'c'.repeat(64) },
     ],
     scan: { verdict: 'clean', findings: [] },
     ...overrides,

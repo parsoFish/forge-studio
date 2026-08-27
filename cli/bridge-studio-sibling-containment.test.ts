@@ -471,12 +471,26 @@ test('(RED) [Finding 3]: GET /api/studio/hooks/:id 404s a valid hook whose scrip
     200,
     `expected the detail route to load this ALREADY-VALID hook (ok:true + scanVerdict clean in the list route, proven by the sibling test above) — got ${status}: ${text}. entry.script.split('/') on "scripts//run.sh" produces an EMPTY middle segment that fails isSafeSegment (length===0), so resolveGuardedPath rejects a path that was never actually unsafe — the empty segment normalizes away harmlessly under plain path.resolve()/path.join(), exactly how resolveHookScriptPath (hook-library.ts) and hookRunState's own script read already tolerate it.`,
   );
+  // W8-F2 amendment (claim unchanged, spelling updated). This assertion used
+  // to look for a files[] entry whose path was the DECLARED string
+  // "scripts//run.sh", because the route hand-built its file list as
+  // `{path: entry.script}` — it echoed the manifest. The route now serves
+  // `readHookPackage`, i.e. what is actually ON DISK, so the entry is spelled
+  // "scripts/run.sh". That is the improvement, not a regression: files[] is
+  // what the operator approves, and echoing a doubled slash as though it were
+  // a real filename would be describing a file that does not exist. The
+  // load-bearing claims of this test — 200 not 404, and the REAL script body
+  // is returned — are asserted exactly as before.
   const detail = JSON.parse(text) as { files?: Array<{ path: string; body: string }> };
-  const scriptFile = detail.files?.find((f) => f.path === 'scripts//run.sh');
-  assert.ok(scriptFile, `expected a files[] entry for the declared script path "scripts//run.sh" — got ${text}`);
+  const scriptFile = detail.files?.find((f) => f.path === 'scripts/run.sh');
+  assert.ok(scriptFile, `expected a files[] entry for the on-disk script path "scripts/run.sh" (the route reports DISK, not the manifest's "scripts//run.sh" spelling) — got ${text}`);
   assert.ok(
     scriptFile!.body.includes('DBLSLASH-HOOK-DETAIL-MARKER-71cd0'),
     `expected the detail route to return the real script body — got ${text}`,
+  );
+  assert.ok(
+    !detail.files?.some((f) => f.path === 'scripts//run.sh'),
+    `files[] must describe the package as it exists on disk, never echo the manifest's declared spelling — got ${text}`,
   );
 });
 

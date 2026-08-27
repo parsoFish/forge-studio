@@ -1275,3 +1275,122 @@ test('handleStudioAuthoringRoutes returns false for a non-matching URL (passthro
   const handled = await handleStudioAuthoringRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-authoring URL must return false');
 });
+
+// ===========================================================================
+// PIN F / PIN G (2026-08-28 hostile review) — counter-repro C: an
+// agent-authored MULTI-FILE hook package is silently truncated by
+// `finalizeHookFromLanded` (cli/bridge-studio-authoring.ts), which hardcodes
+// reading only `hook.yaml` and `scripts/run.sh` off the landed
+// `_interactive-library/<id>/` tree and writes back exactly those two files
+// — any other staged file (a README, a sourced `scripts/lib.sh`, ...) is
+// dropped on the floor while the route still answers 200 {ok:true}. A hook
+// whose entry script SOURCES a sibling that never got installed dies at
+// spawn with exit 127 the first time it actually runs.
+// ===========================================================================
+
+test('PIN F — finalize preserves every staged file, or refuses naming the file(s) it could not handle (counter-repro C)', async () => {
+  const README_BODY = '# Authored hook\n\nThis package ships a helper library.\n';
+  const LIB_BODY = 'helper_main() { echo "from lib.sh"; }\n';
+  const RUN_BODY = '#!/usr/bin/env bash\n. "$(dirname "$0")/lib.sh"\nhelper_main\n';
+  const draftedYaml = hookYamlDraft({
+    name: 'Multi-file authored hook',
+    description: 'ships README.md + scripts/lib.sh alongside hook.yaml + scripts/run.sh',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+  });
+  const id = 'pin-f-multifile-hook';
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: {
+      'README.md': README_BODY,
+      'hook.yaml': draftedYaml,
+      'scripts/run.sh': RUN_BODY,
+      'scripts/lib.sh': LIB_BODY,
+    },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id });
+  const text = await res.text();
+  const installedDir = join(forgeRoot, 'studio', 'hooks', id);
+
+  if (res.status === 200) {
+    // hook.yaml is legitimately normalized/rewritten by the route (fixed
+    // field order, an injected `script: 'scripts/run.sh'`, etc. — see
+    // finalizeHookFromLanded's own `outDoc` construction) — EXCLUDED from
+    // the byte-equality check on purpose. Every OTHER staged file must
+    // survive untouched.
+    const libPath = join(installedDir, 'scripts', 'lib.sh');
+    const readmePath = join(installedDir, 'README.md');
+    const runPath = join(installedDir, 'scripts', 'run.sh');
+
+    assert.equal(
+      existsSync(readmePath),
+      true,
+      `PIN F: finalize answered 200 (${text}) but dropped the staged README.md — a multi-file hook package was silently truncated`,
+    );
+    assert.equal(
+      existsSync(libPath),
+      true,
+      `PIN F: finalize answered 200 (${text}) but dropped the staged scripts/lib.sh — the installed hook's own entry script sources a file that was never installed, so it will fail at spawn`,
+    );
+    assert.equal(existsSync(runPath), true, 'sanity: the entry script itself must exist');
+
+    if (existsSync(readmePath)) {
+      assert.equal(readFileSync(readmePath, 'utf8'), README_BODY, 'PIN F: the installed README.md must be byte-identical to what was staged');
+    }
+    if (existsSync(libPath)) {
+      assert.equal(readFileSync(libPath, 'utf8'), LIB_BODY, 'PIN F: the installed scripts/lib.sh must be byte-identical to what was staged');
+    }
+  } else {
+    assert.ok(res.status >= 400 && res.status < 500, `PIN F: a refusal must be a 4xx, got ${res.status}: ${text}`);
+    const body = JSON.parse(text) as { error?: string };
+    assert.match(
+      body.error ?? '',
+      /README\.md|lib\.sh/,
+      `PIN F: a refusal must NAME the staged file(s) it could not handle, got: ${JSON.stringify(body.error)}`,
+    );
+    assert.equal(existsSync(installedDir), false, 'PIN F: a refused finalize must not leave a partial hook package on disk');
+  }
+});
+
+test('PIN G — a staged entry that is not a regular file (a symlink) is refused, and nothing is written', async () => {
+  const RUN_BODY = '#!/usr/bin/env bash\necho ok\n';
+  const draftedYaml = hookYamlDraft({
+    name: 'Symlink-poisoned hook',
+    description: 'stages a symlink pointing outside the staging dir',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+  });
+  const id = 'pin-g-symlink-hook';
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': RUN_BODY },
+  });
+
+  // An absolute-path target OUTSIDE the staging dir — a file the operator's
+  // authoring session never wrote.
+  const outsideTarget = join(tmpdir(), `pin-g-outside-target-${Date.now()}.txt`);
+  writeFileSync(outsideTarget, 'not part of the staged package\n', 'utf8');
+  const evilLinkPath = join(sessionDir, 'staging', 'scripts', 'evil.sh');
+  symlinkSync(outsideTarget, evilLinkPath);
+
+  try {
+    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id });
+    const text = await res.text();
+
+    assert.ok(res.status >= 400 && res.status < 500, `PIN G: a staged symlink must be refused with a 4xx, got ${res.status}: ${text}`);
+    const body = JSON.parse(text) as { error?: string };
+    assert.match(
+      body.error ?? '',
+      /evil\.sh/,
+      `PIN G: the refusal must NAME the offending staged entry, got: ${JSON.stringify(body.error)}`,
+    );
+    assert.equal(
+      existsSync(join(forgeRoot, 'studio', 'hooks', id)),
+      false,
+      'PIN G: a refused finalize must not leave any part of the hook package on disk',
+    );
+  } finally {
+    rmSync(outsideTarget, { force: true });
+  }
+});
