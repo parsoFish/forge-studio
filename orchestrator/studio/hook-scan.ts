@@ -45,6 +45,12 @@
  * that module: this is NOT tamper-proof, it only closes the single-file
  * blind spot.
  *
+ * AMENDED 2026-08-28 (hostile review — PIN A/B/C below, PIN D in
+ * hook-runtime.test.ts): "single-file" undersold it — a hook is a PACKAGE
+ * DIRECTORY, and a declared entry script can legitimately `source` a sibling
+ * (hook-package.ts's header). Ledger and scan used to look at only that ONE
+ * file; both now cover the WHOLE package (`packageHash`, see below).
+ *
  * HONEST LIMIT (stated, not overclaimed): this is a modest static
  * regex/substring scanner over the raw script body — it does not parse or
  * execute the script. A sufficiently fragmented/obfuscated command that never
@@ -73,15 +79,26 @@
  * not runtime-enforced" on purpose, not by oversight.
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
 import { assertSkillSlug } from '../skill-path.ts';
 import { reqString, optString } from './yaml-fields.ts';
-import { hooksDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
-import { resolveGuardedPath } from '../../cli/studio-path-guard.ts';
+import { loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import {
+  readHookPackage,
+  hashHookPackage,
+  selectScannableHookFiles,
+  normalizeHookEntryPath,
+  canonicalHookYamlBody,
+  hashHookScript,
+  hashHookPermissions,
+  hashHookTrigger,
+  type HookPackageFile,
+} from './hook-package.ts';
+
+export { hashHookScript, hashHookPermissions, hashHookTrigger } from './hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +113,10 @@ export interface HookScanFinding {
   message: string;
   match: string;
   declared: boolean;
+  /** Additive-optional: which PACKAGE FILE this finding came from, when
+   *  supplied. Omitted entirely (never "") when unset, so every existing
+   *  single-body caller stays unaffected. */
+  path?: string;
 }
 
 export type HookScanVerdict = 'blocked' | 'findings' | 'clean';
@@ -124,12 +145,24 @@ export interface HookScanReport {
  * materially changing EXPOSURE, and `needsReview` stayed false. THIRD named
  * hash, `triggerHash` — same "which half changed" legibility argument as
  * `scriptHash`/`permissionsHash`, not folded into either.
+ *
+ * AMENDED 2026-08-28 (hostile review — PIN A/B/C, hook-scan.test.ts; PIN D,
+ * hook-runtime.test.ts): the reasoning above never contemplated CODE FILES
+ * beside the entry script — together the three hashes only look at ONE file,
+ * so a sourced sibling could be edited post-approval with all three
+ * identical. FOURTH pin added: `packageHash` (`hashHookPackage`) — a
+ * whole-package fingerprint, strictly subsuming the other three (kept for
+ * "which half changed" legibility). OPTIONAL on the type (a legacy entry has
+ * no such key), but `hookRunState` treats its absence as needing review,
+ * never trusted (PIN C, load-bearing).
  */
 export interface HookApprovalLedgerEntry {
   id: string;
   scriptHash: string;
   permissionsHash: string;
   triggerHash: string;
+  /** Whole-package fingerprint (amendment above). Absent-on-legacy ⇒ needsReview (PIN C), never trusted. */
+  packageHash?: string;
   overridden: boolean;
   reason?: string;
   approvedAt: string;
@@ -430,98 +463,80 @@ function computeVerdict(findings: readonly HookScanFinding[]): HookScanVerdict {
 }
 
 // ---------------------------------------------------------------------------
-// scanHookScript (pure) / scanHookPackage (disk-reading wrapper)
+// scanHookScript (pure, single-body, unchanged shape) / scanHookFiles (pure,
+// whole-package) / scanHookPackage (disk-reading wrapper). `path` threads
+// onto every finding so a multi-file caller can tell which file it came
+// from; omitted (never "") when unset.
 // ---------------------------------------------------------------------------
 
-export function scanHookScript(input: { body: string; permissions: HookPermissionManifest }): HookScanReport {
-  const { body, permissions } = input;
+export function scanHookScript(input: { body: string; permissions: HookPermissionManifest; path?: string }): HookScanReport {
+  const { body, permissions, path } = input;
   const findings: HookScanFinding[] = [
     ...scanNetworkEgress(body, permissions),
     ...scanEnvReads(body, permissions),
     ...scanFileReads(body, permissions),
     ...scanObfuscation(body),
-  ];
+  ].map((f) => (path !== undefined ? { ...f, path } : f));
   return { verdict: computeVerdict(findings), findings };
 }
 
 /**
- * Read a hook's script body through the shared containment guard.
+ * Scan an already-read hook package's SELECTED files
+ * (`selectScannableHookFiles`, hook-package.ts) and compute ONE verdict over
+ * their union — the single "scan these files, dedupe env-read, compute the
+ * verdict" primitive both `scanHookPackage` (post-install) and
+ * `cli/bridge-studio-community.ts`'s pre-install preview use, so a package
+ * that scans `blocked` after install can never have previewed `clean` (PIN B).
+ * Deny-by-default on a missing entry: throws naming `entryPath` if absent
+ * from `files`, rather than reporting a verdict over nothing scanned.
  *
- * `loadHookDefinition` already rejects a `script:` that escapes the hook
- * directory (`resolveHookScriptPath` — lexical + percent-decoded + a realpath
- * check CONDITIONAL on the entry existing). Two gaps remain, which is why the
- * read is guarded here rather than trusting that upstream validation:
- *   - that realpath check is skipped entirely for a DANGLING symlink, and it
- *     has no `nlink` check, so a hardlinked script leaf is invisible to it;
- *   - it is a `startsWith(boundary)` containment test, not a per-segment
- *     IDENTITY test, so a script resolving to a DIFFERENT real object inside
- *     the same hook directory passes.
- * `hooksDir` is the fixed containment root and `id` is its own segment; the
- * script's own relative components follow as further segments, so each is
- * identity-checked rather than joined blind (./studio-path-guard.ts, CONTRACT).
+ * DEDUPES `env-read` findings by `match` (the var name), first occurrence
+ * wins: `scanEnvReads` also scans `permissions.env` (the MANIFEST, identical
+ * per file), so without this a multi-file package reports the same grant
+ * once PER FILE. The other three categories are body-derived, so a real
+ * `curl` in two files is two real findings and must NOT be deduped. `files`
+ * scans entry-first, so a deduped finding attributes to the entry script.
  *
- * Empty and `.` components are dropped — `path.resolve` tolerates them
- * everywhere else, so rejecting a legitimate `scripts//run.sh` here would make
- * a valid hook unreadable. A `..` is deliberately NOT dropped: it must reach
- * `isSafeSegment` and be rejected.
+ * `path` is threaded onto each finding only when >1 file was selected — a
+ * single-script package stays byte-identical to a bare `scanHookScript` call,
+ * preserving `scanHookPackage`'s pre-existing single-file contract.
  */
-function readHookScriptBody(forgeRoot: string, id: string): string {
-  const def = loadHookDefinition(id, forgeRoot);
-  const segments = def.script.split('/').filter((seg) => seg !== '' && seg !== '.');
-  const guarded = resolveGuardedPath(hooksDir(forgeRoot), [id, ...segments]);
-  if (!guarded.ok || !guarded.exists) {
-    throw new Error(`hook "${id}" script is not readable within its own package`);
+export function scanHookFiles(
+  files: readonly HookPackageFile[],
+  permissions: HookPermissionManifest,
+  entryPath: string,
+): HookScanReport {
+  const selected = selectScannableHookFiles(files, entryPath);
+  const normalizedEntry = normalizeHookEntryPath(entryPath);
+  if (!selected.some((f) => normalizeHookEntryPath(f.path) === normalizedEntry)) {
+    throw new Error(
+      `scanHookFiles: declared entry script "${entryPath}" is not among this package's files — refusing to scan nothing and report a false "clean"`,
+    );
   }
-  return readFileSync(guarded.realPath, 'utf8');
+  const threadPath = selected.length > 1;
+
+  const seenEnvNames = new Set<string>();
+  const findings: HookScanFinding[] = [];
+  for (const file of selected) {
+    const report = scanHookScript({ body: file.body, permissions, ...(threadPath ? { path: file.path } : {}) });
+    for (const finding of report.findings) {
+      if (finding.category === 'env-read') {
+        if (seenEnvNames.has(finding.match)) continue;
+        seenEnvNames.add(finding.match);
+      }
+      findings.push(finding);
+    }
+  }
+  return { verdict: computeVerdict(findings), findings };
 }
 
 export function scanHookPackage(forgeRoot: string, id: string): HookScanReport {
   const def = loadHookDefinition(id, forgeRoot);
-  return scanHookScript({ body: readHookScriptBody(forgeRoot, id), permissions: def.permissions });
+  const files = readHookPackage(forgeRoot, id);
+  return scanHookFiles(files, def.permissions, def.script);
 }
 
-// ---------------------------------------------------------------------------
-// hashHookScript / hashHookPermissions / hashHookTrigger — deterministic
-// content pins for the approval ledger, deliberately SEPARATE (see
-// HookApprovalLedgerEntry's own doc comment / JOB B, D-M): a mismatch on one
-// must never be mistaken for another.
-// ---------------------------------------------------------------------------
-
-export function hashHookScript(body: string): string {
-  return `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`;
-}
-
-/**
- * Pure, content-addressed hash over a hook's PERMISSION MANIFEST — the
- * approval ledger's second pin (JOB B). Canonicalized before hashing:
- * `env`/`read` are SORTED so a pure reordering of an already-granted list
- * (no actual change to the grant set) does not spuriously demand
- * re-approval, while any REAL change — a var added/removed, `network`
- * flipped either direction, tightening as much as widening — produces a
- * different hash and correctly forces review.
- */
-export function hashHookPermissions(permissions: HookPermissionManifest): string {
-  const canonical = {
-    env: [...permissions.env].sort((a, b) => a.localeCompare(b)),
-    read: [...permissions.read].sort((a, b) => a.localeCompare(b)),
-    network: permissions.network,
-  };
-  return `sha256:${createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex')}`;
-}
-
-/**
- * Pure, content-addressed hash over a hook's TRIGGER CONDITION (`on` +
- * `matcher`) — the approval ledger's third pin (D-M). A hook moved from
- * `SessionEnd` to `PreToolUse` grants no new capability but fires far more
- * often; an operator's approval was for a specific exposure, not just a
- * specific script+grant, so a trigger-condition edit must re-enter review
- * exactly like a script or permissions edit does.
- */
-export function hashHookTrigger(on: string, matcher: string | undefined): string {
-  const canonical = { on, matcher: matcher ?? null };
-  return `sha256:${createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex')}`;
-}
-
+// hashHookScript/hashHookPermissions/hashHookTrigger MOVED to hook-package.ts (see re-export above).
 // ---------------------------------------------------------------------------
 // The approval ledger (studio/hook-approvals.yaml) — a SECOND, git-tracked
 // source of truth, mirroring skill-install-ledger.ts exactly. HONESTY
@@ -561,6 +576,10 @@ function parseHookApprovalLedgerEntries(raw: unknown, file: string): HookApprova
       scriptHash: reqString(e, 'scriptHash', file),
       permissionsHash: reqString(e, 'permissionsHash', file),
       triggerHash: reqString(e, 'triggerHash', file),
+      // optString, not reqString: a legacy entry predating this field has no
+      // "packageHash" key. hookRunState treats its absence as needing review
+      // (PIN C), never as trusted — see HookApprovalLedgerEntry's doc comment.
+      packageHash: optString(e, 'packageHash'),
       overridden: e['overridden'] === true,
       reason: optString(e, 'reason'),
       approvedAt: reqString(e, 'approvedAt', file),
@@ -679,28 +698,54 @@ export function revokeHookApprovalIfPresent(input: { forgeRoot: string; id: stri
   }
 }
 
-// ---------------------------------------------------------------------------
-// Trust state — hookRunState re-scans CURRENT bytes every call (never trusts
-// a cached verdict), and cross-checks ALL THREE of the ledger's pinned
-// hashes (script, permissions — JOB B — AND trigger — D-M) against
-// freshly-recomputed ones so an edit to ANY of the script, the manifest, or
-// the trigger condition after approval falls back to needing review (mirrors
-// R3-01's changed-hash-forces-re-review rule, now covering the triple rather
-// than the script alone).
-// ---------------------------------------------------------------------------
+// snapshotHookPackage — ONE disk read + ONE set of hashes shared by hookRunState/approveHook/overrideHookBlock.
+
+interface HookPackageSnapshot {
+  report: HookScanReport;
+  ledgerCandidate: Pick<HookApprovalLedgerEntry, 'scriptHash' | 'permissionsHash' | 'triggerHash' | 'packageHash'>;
+}
+
+function snapshotHookPackage(forgeRoot: string, id: string): HookPackageSnapshot {
+  const def = loadHookDefinition(id, forgeRoot);
+  const files = readHookPackage(forgeRoot, id);
+  const normalizedEntry = normalizeHookEntryPath(def.script);
+  const entryFile = files.find((f) => normalizeHookEntryPath(f.path) === normalizedEntry);
+  if (!entryFile) {
+    throw new Error(
+      `hook "${id}" declares script "${def.script}" but no such file exists in its package — refusing to scan or hash an absent entry`,
+    );
+  }
+  const filesForPackageHash = files.map((f) => (f.path === 'hook.yaml' ? { ...f, body: canonicalHookYamlBody(def) } : f));
+  return {
+    report: scanHookFiles(files, def.permissions, def.script),
+    ledgerCandidate: {
+      scriptHash: hashHookScript(entryFile.body),
+      permissionsHash: hashHookPermissions(def.permissions),
+      triggerHash: hashHookTrigger(def.on, def.matcher),
+      packageHash: hashHookPackage(filesForPackageHash),
+    },
+  };
+}
+
+// Trust state — hookRunState re-scans CURRENT bytes every call and
+// cross-checks ALL FOUR pinned hashes (script, permissions — JOB B —
+// trigger — D-M — and the whole-package fingerprint — PIN A/B/C), so an
+// edit to the script, the manifest, the trigger, OR ANY OTHER FILE in the
+// package falls back to needing review. The "no packageHash ⇒ needsReview"
+// clause is LOAD-BEARING (PIN C): a legacy entry has nothing to compare
+// against, and treating a missing pin as "trust it" is the fail-open shape
+// this fix exists to close.
 
 export function hookRunState(forgeRoot: string, id: string): HookRunState {
-  const report = scanHookPackage(forgeRoot, id);
-  const def = loadHookDefinition(id, forgeRoot);
-  const currentScriptHash = hashHookScript(readHookScriptBody(forgeRoot, id));
-  const currentPermissionsHash = hashHookPermissions(def.permissions);
-  const currentTriggerHash = hashHookTrigger(def.on, def.matcher);
+  const { report, ledgerCandidate } = snapshotHookPackage(forgeRoot, id);
   const ledgerEntry = readHookApprovalLedger(forgeRoot).get(id);
   const needsReview =
     !ledgerEntry ||
-    ledgerEntry.scriptHash !== currentScriptHash ||
-    ledgerEntry.permissionsHash !== currentPermissionsHash ||
-    ledgerEntry.triggerHash !== currentTriggerHash;
+    !ledgerEntry.packageHash ||
+    ledgerEntry.packageHash !== ledgerCandidate.packageHash ||
+    ledgerEntry.scriptHash !== ledgerCandidate.scriptHash ||
+    ledgerEntry.permissionsHash !== ledgerCandidate.permissionsHash ||
+    ledgerEntry.triggerHash !== ledgerCandidate.triggerHash;
   const runnable = !needsReview && (report.verdict !== 'blocked' || Boolean(ledgerEntry?.overridden));
   return { verdict: report.verdict, runnable, needsReview };
 }
@@ -721,18 +766,15 @@ export function isHookRunnable(forgeRoot: string, id: string): boolean {
  *  verdict `blocked` (an override never launders the verdict into "clean"). */
 export function approveHook(input: { forgeRoot: string; id: string }): void {
   const { forgeRoot, id } = input;
-  const report = scanHookPackage(forgeRoot, id);
+  const { report, ledgerCandidate } = snapshotHookPackage(forgeRoot, id);
   if (report.verdict === 'blocked') {
     throw new Error(
       `approveHook: hook "${id}" scan verdict is "blocked" — approveHook refuses a blocked hook; use overrideHookBlock to explicitly accept the risk`,
     );
   }
-  const def = loadHookDefinition(id, forgeRoot);
   writeHookApprovalLedgerEntry(forgeRoot, {
     id,
-    scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
-    permissionsHash: hashHookPermissions(def.permissions),
-    triggerHash: hashHookTrigger(def.on, def.matcher),
+    ...ledgerCandidate,
     overridden: false,
     approvedAt: new Date().toISOString(),
   });
@@ -746,12 +788,10 @@ export function overrideHookBlock(input: { forgeRoot: string; id: string; reason
   if (!reason || !reason.trim()) {
     throw new Error('overrideHookBlock: a non-empty reason is required — the override must be explainable, not silent');
   }
-  const def = loadHookDefinition(id, forgeRoot);
+  const { ledgerCandidate } = snapshotHookPackage(forgeRoot, id);
   writeHookApprovalLedgerEntry(forgeRoot, {
     id,
-    scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
-    permissionsHash: hashHookPermissions(def.permissions),
-    triggerHash: hashHookTrigger(def.on, def.matcher),
+    ...ledgerCandidate,
     overridden: true,
     reason,
     approvedAt: new Date().toISOString(),

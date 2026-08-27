@@ -80,7 +80,8 @@ import {
 } from '../orchestrator/studio/community-index.ts';
 import { routeCommunityInstall, installCommunityHookPackage } from '../orchestrator/studio/community-install.ts';
 import { installSkillPackage, type PackageFile } from '../orchestrator/studio/skill-library.ts';
-import { scanHookScript, type HookScanReport } from '../orchestrator/studio/hook-scan.ts';
+import { scanHookFiles, type HookScanReport } from '../orchestrator/studio/hook-scan.ts';
+import type { HookPackageFile } from '../orchestrator/studio/hook-package.ts';
 import {
   HOOK_LIFECYCLE_EVENTS,
   hookTriggerError,
@@ -332,12 +333,25 @@ function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
 }
 
 // ---------------------------------------------------------------------------
-// Pre-install hook scan (D7) — scanHookScript is pure; run it on the VENDORED
-// bytes, never the installed ones (there may be no installed copy yet at
-// all). Parses hook.yaml with the SAME shared low-level field helpers
-// hook-library.ts's own loadHookDefinition uses (reqString/stringArray/
-// optBool/loadYaml) — a narrow, generic YAML read, not a re-implementation of
-// hook-library.ts's own (install-path-scoped) loader.
+// Pre-install hook scan (D7) — run it on the VENDORED bytes, never the
+// installed ones. Parses hook.yaml with the SAME shared low-level field
+// helpers hook-library.ts's own loadHookDefinition uses (reqString/
+// stringArray/optBool/loadYaml) — a narrow, generic YAML read, not a
+// re-implementation of that (install-path-scoped) loader.
+//
+// 2026-08-28 (hostile review, PIN A/B/C's enumeration duty): this used to
+// scan ONLY the one declared entry script — the same sibling-file blind spot
+// hook-scan.ts's scanHookPackage fixed post-install. Left unfixed here, this
+// PRE-INSTALL preview would report `clean` for a package the POST-install
+// scan reports `blocked` — an operator approving on the preview would be
+// approving on a lie. Now delegates to `scanHookFiles`, the SAME primitive
+// `scanHookPackage` uses — one predicate, one meaning.
+//
+// A vendored `PackageFile` carries no executable bit (readVendoredPackage
+// never stats the leaf) — every file below gets `executable: false`, making
+// this preview a LOWER BOUND: a file selected only via a real `+x` bit is
+// invisible here and caught only post-install. Every other selection route
+// (entry path, extension, sourced-basename fixpoint) is unaffected.
 // ---------------------------------------------------------------------------
 
 function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): HookScanReport {
@@ -360,10 +374,12 @@ function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): Hoo
     network: optBool(permsObj, 'network') ?? false,
   };
 
-  const scriptFile = files.find((f) => f.path === scriptRel);
-  if (!scriptFile) throw new Error(`${label}: declares script "${scriptRel}" but no such file exists in the vendored package`);
+  if (!files.some((f) => f.path === scriptRel)) {
+    throw new Error(`${label}: declares script "${scriptRel}" but no such file exists in the vendored package`);
+  }
 
-  return scanHookScript({ body: scriptFile.body, permissions });
+  const hookFiles: HookPackageFile[] = files.map((f) => ({ path: f.path, body: f.body, executable: false }));
+  return scanHookFiles(hookFiles, permissions, scriptRel);
 }
 
 
