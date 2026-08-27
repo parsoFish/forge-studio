@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioRoutes } from './bridge-studio.ts';
-import type { StudioContext } from './bridge-studio.ts';
+import type { StudioRunsContext } from './bridge-studio.ts';
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
 
 let forgeRoot: string;
@@ -89,7 +89,16 @@ test('R4-17 AT-3 (RAW-request, wire-level rule): a LITERAL ".." path segment —
     setHeader() { /* no-op */ },
   };
   const mockReq = { headers: {} } as import('node:http').IncomingMessage;
-  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  // W8-F6 (bead forge-6gv.27) — `handleStudioRoutes` now REQUIRES an injected
+  // session-readability probe (it gates the runs routes' `architectSessionId`).
+  // AT-3 never reaches a runs payload, so the probe THROWS rather than
+  // answering: a future change that starts consulting it here fails loudly
+  // instead of silently taking a stub's permissive answer.
+  const ctx: StudioRunsContext = {
+    forgeRoot,
+    logsRoot: join(forgeRoot, '_logs'),
+    sessionIsReadable: () => { throw new Error('sessionIsReadable must not be consulted by this route'); },
+  };
 
   const handled = await handleStudioRoutes(mockReq, mockRes as unknown as import('node:http').ServerResponse, ctx, '/api/studio/projects/../contract-stages', 'GET');
   assert.equal(handled, true, 'the route must claim this URL (matching [^/]+ literally on the raw ".." segment) rather than falling through unmatched');

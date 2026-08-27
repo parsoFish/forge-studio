@@ -84,6 +84,28 @@ export type StudioContext = {
   logsRoot: string;
 };
 
+/**
+ * W8-F6 (bead forge-6gv.27) — "can this bridge actually serve
+ * `/sessions/<kind>/<sessionId>`?", INJECTED rather than imported.
+ *
+ * The one implementation is `sessionIsReadable`
+ * (cli/bridge-studio-sessions.ts), which needs this module's own `SAFE_ID_RE`
+ * and cli/bridge-studio-kbs.ts's `KB_SEEDING_ANCHOR_PREFIX` — importing it
+ * here would make this module the first `bridge-studio.ts` →
+ * `bridge-studio-*.ts` edge and close a cycle. `cli/ui-bridge.ts` already
+ * imports both modules, so it wires the two together in exactly the way it
+ * already wires `ensureSessionTail`.
+ *
+ * REQUIRED, never optional: an optional probe with a permissive default is the
+ * `declared-data-fails-open` shape this campaign keeps paying for — a call site
+ * that forgot to wire it would silently stop gating. Required makes that a
+ * compile error instead.
+ */
+export type SessionReadabilityProbe = (args: { kind: string; sessionId: string }) => boolean;
+
+/** `StudioContext` plus the one injected dependency the runs routes need. */
+export type StudioRunsContext = StudioContext & { sessionIsReadable: SessionReadabilityProbe };
+
 // Safe-ID guard: blocks path traversal in run/gate IDs
 export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
@@ -348,6 +370,44 @@ function classifyEvent(e: EventLogEntry): LogLine {
 function findRun(forgeRoot: string, id: string): Run | null {
   const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? runs.find((r) => r.initiativeId === id) ?? null;
+}
+
+/**
+ * W8-F6 (bead forge-6gv.27) — strip `architectSessionId` from any run whose
+ * pointed-at session this bridge cannot serve.
+ *
+ * `architect_session_id` is a STORED pointer on a queue manifest, minted when
+ * the architect finished and never re-checked afterwards. Wave 8 started
+ * rendering it as a link (`a[data-action="open-architect-session"]`,
+ * forge-ui/components/studio/FlowRunDetail.tsx), which is how seven dead
+ * `/sessions/architect/<ts>` addresses became first-party 404s in the
+ * walkthrough crawl. The route fix makes almost all of them readable again;
+ * this closes the remainder — a pointer at a session that exists NOWHERE is
+ * not surfaced at all, so no link is minted for it.
+ *
+ * Derived, never stored: the check runs on every read, so restoring a deleted
+ * session dir brings the link back with no write anywhere. Immutable: a
+ * stripped run is a NEW object; the cached `Run` (cli/run-list-cache.ts) is
+ * never mutated. Memoized per request because many manifests of one roadmap
+ * share one architect session — 44 manifests, 13 distinct session ids on the
+ * reference host, so the memo is the difference between 44 and 13 guarded
+ * stats on a polled route. Runs with no pointer (the overwhelming majority)
+ * cost nothing at all.
+ */
+function withReadableSessionPointers(runs: readonly Run[], probe: SessionReadabilityProbe): Run[] {
+  const memo = new Map<string, boolean>();
+  return runs.map((run) => {
+    const sessionId = run.architectSessionId;
+    if (sessionId === undefined) return run;
+    let readable = memo.get(sessionId);
+    if (readable === undefined) {
+      readable = probe({ kind: 'architect', sessionId });
+      memo.set(sessionId, readable);
+    }
+    if (readable) return run;
+    const { architectSessionId: _unreadable, ...rest } = run;
+    return rest;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -718,7 +778,7 @@ function readPreflightFixState(
 export async function handleStudioRoutes(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: StudioContext,
+  ctx: StudioRunsContext,
   rawUrl: string,
   method: string,
 ): Promise<boolean> {
@@ -742,7 +802,7 @@ export async function handleStudioRoutes(
         // cycle-list-changed tick — selection appeared to snap to the top run.
         runs = runs.filter((r) => r.flowId === flowFilter || (r.flowLineage ?? []).includes(flowFilter));
       }
-      sendJson(res, 200, { runs }, origin);
+      sendJson(res, 200, { runs: withReadableSessionPointers(runs, ctx.sessionIsReadable) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -923,7 +983,7 @@ export async function handleStudioRoutes(
         sendJson(res, 404, { error: 'run not found', onDisk: logDir.ok && logDir.exists }, origin);
         return true;
       }
-      sendJson(res, 200, { run }, origin);
+      sendJson(res, 200, { run: withReadableSessionPointers([run], ctx.sessionIsReadable)[0] }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -232,7 +232,7 @@ export type SessionPaneSet = {
    * value (`data-transcript-omitted`), so a journey asserts the decision
    * rather than scraping the copy.
    *
-   * The two values are genuinely different situations, not a wording nicety:
+   * The three values are genuinely different situations, not a wording nicety:
    *   - `nothing-recorded` — the session dir holds none of the transcript
    *     sources at all. Nothing has happened here yet.
    *   - `sources-derived-no-turns` — a source file IS on disk and produced no
@@ -240,8 +240,17 @@ export type SessionPaneSet = {
    *     `body.brief ?? ''`), which used to render as an empty operator bubble.
    *     Worth telling apart, because the second says the writer ran and the
    *     first says it did not.
+   *   - `working-files-gone` (W8-F6, bead forge-6gv.27) — the session is
+   *     LEGACY: its sources were written and then DELETED with the project
+   *     tree, and only the central event log survives. Distinct from
+   *     `nothing-recorded` on purpose: an empty `transcriptSources` array
+   *     looks identical in both cases, but "the writer never ran" and "a lot
+   *     happened and the files are gone" are opposite claims, and this
+   *     attribute is exactly what an automated gate reads. Deciding it from
+   *     `transcriptSources.length === 0` alone would put the wrong one in
+   *     the DOM for every legacy session.
    */
-  readonly transcriptOmittedReason: 'nothing-recorded' | 'sources-derived-no-turns' | null;
+  readonly transcriptOmittedReason: 'nothing-recorded' | 'sources-derived-no-turns' | 'working-files-gone' | null;
   /** The ordered pane ids actually rendered, for `data-session-panes`. */
   readonly ids: readonly string[];
 };
@@ -256,6 +265,11 @@ export function deriveSessionPanes(input: {
    *  ONLY to say WHY the pane is absent — never to decide whether it renders,
    *  which stays a question about real turns. */
   readonly transcriptSources: readonly string[];
+  /** W8-F6 — the payload's own `legacy`. Read ONLY to say WHY the pane is
+   *  absent (see `transcriptOmittedReason`), never to decide whether it
+   *  renders: a legacy session with real turns is impossible today, but if it
+   *  ever had them they would still be shown. */
+  readonly legacy: boolean;
 }): SessionPaneSet {
   // A derivation that REFUSED must still show its refusal — dropping the pane
   // would hide the one place the operator can read why the transcript is
@@ -266,6 +280,7 @@ export function deriveSessionPanes(input: {
     transcript,
     transcriptOmittedReason: transcript
       ? null
+      : input.legacy ? 'working-files-gone'
       : input.transcriptSources.length > 0 ? 'sources-derived-no-turns' : 'nothing-recorded',
     ids: transcript ? ['transcript', 'artifact'] : ['artifact'],
   };
@@ -314,6 +329,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     affordances: payload.affordances,
     transcriptError: payload.transcriptError,
     transcriptSources: payload.transcriptSources,
+    legacy: payload.legacy,
   });
   return {
     status: 'ready',

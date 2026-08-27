@@ -452,6 +452,12 @@ test('terminal:false renders the ActivityLog drawer', () => {
     terminal: false,
   });
   expect(html).toContain('data-component="activity-drawer"');
+  // W8-F6 adversarial-review finding 4: without this, a regression to a
+  // hardcoded `phaseActive={false}` would leave every test in this file green
+  // while killing the live "agent is working" indicator app-wide — the F6
+  // legacy test asserts "false", which is the SAME value the wrong
+  // implementation produces.
+  expect(html).toContain('data-phase-active="true"');
 });
 
 test('terminal:true hides the ActivityLog drawer — a settled session is not "working"', () => {

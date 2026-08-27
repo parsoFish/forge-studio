@@ -671,6 +671,41 @@ test('F6: sessionShellState: the ready state exposes "legacy" verbatim from the 
   expect(sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: true } as SessionShellPayload).legacy).toBe(true);
 });
 
+// W8-F6 adversarial-review finding 3 — `data-transcript-omitted` is a
+// MACHINE-READABLE claim about WHY the transcript pane is absent, and for a
+// legacy session (turns [], affordances [], transcriptSources []) the old
+// derivation emitted `nothing-recorded`, whose own documented meaning is
+// "nothing has happened here yet". That is the opposite of the truth for a
+// session whose files were written and then deleted — and it is exactly the
+// ambiguity this whole lane exists to remove.
+// KILLS: deriving the reason from `transcriptSources.length === 0` alone.
+test('F6: a LEGACY session with no turns reports "working-files-gone", never "nothing-recorded" — the files were written and deleted, not never written', () => {
+  const legacyPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    legacy: true,
+    turns: [],
+    affordances: [],
+    transcriptSources: [],
+    transcriptError: null,
+  } as SessionShellPayload;
+  const state = sessionShellState(legacyPayload);
+  expect(state.panes.transcript).toBe(false);
+  expect(state.panes.transcriptOmittedReason).toBe('working-files-gone');
+  expect(state.dataAttrs['data-transcript-omitted']).toBe('working-files-gone');
+});
+
+test('F6: a NON-legacy session with the same empty shape still reports "nothing-recorded" — the new reason is scoped, not a blanket rename', () => {
+  const freshPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    legacy: false,
+    turns: [],
+    affordances: [],
+    transcriptSources: [],
+    transcriptError: null,
+  } as SessionShellPayload;
+  expect(sessionShellState(freshPayload).panes.transcriptOmittedReason).toBe('nothing-recorded');
+});
+
 test('F6: sessionShellState: the ready state\'s dataAttrs carry "data-session-legacy" as the string "true"/"false", mirroring how every other data-session-* fact is exposed', () => {
   const legacyTrue = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: true } as SessionShellPayload);
   expect(legacyTrue.dataAttrs['data-session-legacy']).toBe('true');
