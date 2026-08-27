@@ -28,7 +28,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, writeFileSync, existsSync, rmSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -52,7 +52,18 @@ import {
 } from './assert.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const FORGE_ROOT = resolve(HERE, '..', '..');
 const FIXTURE = join(HERE, 'fixtures', 'crawl.sample.json');
+// W8-F5 — a real, resolvable commit sha that is an ancestor of HEAD in this
+// repository, fetched live (never hardcoded, so it never ages out): drives
+// check-baseline-shrinks.mjs's real sha verification tests below. The oldest
+// of the last 5 commits, well clear of HEAD itself.
+const REAL_ANCESTOR_SHA = (() => {
+  const log = spawnSync('git', ['log', '--format=%H', '-5'], { cwd: FORGE_ROOT, encoding: 'utf8' });
+  const shas = (log.stdout || '').trim().split('\n').filter(Boolean);
+  if (shas.length === 0) throw new Error(`could not read git log in ${FORGE_ROOT}: ${log.stderr}`);
+  return shas[shas.length - 1];
+})();
 const loadFixture = () => JSON.parse(readFileSync(FIXTURE, 'utf8'));
 
 // A minimal crawl.json result row; every field the assertion reads.
@@ -733,7 +744,10 @@ test('review R7: a regeneration that LOSES an environment key the previous basel
   try {
     const p = join(tmp, 'prev.json'), n = join(tmp, 'next.json');
     writeFileSync(p, JSON.stringify(prev));
-    writeFileSync(n, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 924 }, entries: [] }));
+    // W8-F5: the CLI now verifies the stamped sha for real, so this must be a
+    // real commit that is an ancestor of HEAD (the default comparison base)
+    // for the dropped-expectedRoutes.ci failure to be the one that fires.
+    writeFileSync(n, JSON.stringify({ source: `main@${REAL_ANCESTOR_SHA}`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 924 }, entries: [] }));
     const r = runNode([SHRINK, '--prev', p, '--next', n], HERE);
     assert.equal(r.status, 1, `a regeneration that drops expectedRoutes.ci must fail\n${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout + r.stderr, /expectedRoutes\.ci/);
@@ -797,8 +811,10 @@ test('W7-A0-4 (CLI): check-baseline-shrinks --crawled flags removals whose route
     const missing = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', join(tmp, 'nope.json')], HERE);
     assert.equal(missing.status, 2);
     // Growth via a stamped regeneration from main is accepted (and says so); the same growth unstamped is not.
+    // W8-F5: the CLI now verifies the stamp for real, so the "accepted" case
+    // needs a real commit that is an ancestor of HEAD (the default comparison base).
     const C = { kind: 'first-party-4xx', route: '/artifact?cycle=<id>', detail: '404 [bridge]/api/artifact/<id>/plan.json' };
-    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb — regenerated', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B, C] }));
+    writeFileSync(next, JSON.stringify({ source: `main@${REAL_ANCESTOR_SHA} — regenerated`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B, C] }));
     const regen = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
     assert.equal(regen.status, 0, `stamped regeneration may grow\n${regen.stdout}\n${regen.stderr}`);
     assert.match(regen.stdout + regen.stderr, /REGENERAT/i);
@@ -807,10 +823,97 @@ test('W7-A0-4 (CLI): check-baseline-shrinks --crawled flags removals whose route
     assert.equal(grow.status, 1, 'unstamped growth still fails');
     // A regeneration whose expectedRoutes DROPPED for a key vs prev is called out loudly (coverage regressions must be justified).
     writeFileSync(prev, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { host: 900 }, entries: [A, B] }));
-    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B] }));
+    writeFileSync(next, JSON.stringify({ source: `main@${REAL_ANCESTOR_SHA}`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B] }));
     const dropped = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
     assert.equal(dropped.status, 0);
     assert.match(dropped.stdout + dropped.stderr, /expectedRoutes\.host.*900.*700/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ── group 13b: W8-F5 — the sha in a `main@<sha>` stamp is VERIFIED FOR REAL ──
+//
+// Confirmed defect: isRegeneration accepted a `main@<sha>` stamp on shape
+// alone — a sha that never resolved to any git object still authorised
+// growth. check-baseline-shrinks.mjs must now resolve the sha (`git cat-file
+// -e <sha>^{commit}`) and confirm it is an ancestor of the comparison base
+// (`git merge-base --is-ancestor <sha> <base>`) before accepting growth
+// through it — fail-closed, no bypass.
+
+test('W8-F5: a stamped main@<sha> whose sha does NOT resolve to a git object does not authorise growth — exact repro (a hand-edited source + bumped generatedAt cannot forge growth)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-noresolve-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    writeFileSync(prev, JSON.stringify({
+      source: 'main@d1a52609 + the W7-D gate fix round', generatedAt: '2026-08-21T13:35:06.073Z',
+      expectedRoutes: { ci: 136, host: 715 }, entries: [],
+    }));
+    writeFileSync(next, JSON.stringify({
+      // The verbatim forged stamp from the repro: a sha-shaped string that
+      // does not resolve to anything, plus a bumped generatedAt.
+      source: 'main@deadbee + totally hand-edited, never ran --write-baseline',
+      generatedAt: '2026-08-21T13:35:07.073Z',
+      expectedRoutes: { ci: 136, host: 715 },
+      entries: [
+        { kind: 'console-error', route: '/monitor', detail: 'TypeError: cannot read x of undefined', message: 'boom' },
+        { kind: 'http-500', route: '/api/studio/runs', detail: '500' },
+      ],
+    }));
+    const r = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    assert.equal(r.status, 1, `an unresolvable sha must refuse the growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /does not resolve to a commit object/);
+    assert.match(r.stdout + r.stderr, /deadbee/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5: a stamped main@<sha> that RESOLVES but is NOT an ancestor of the comparison base does not authorise growth', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-notancestor-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    // OLD_BASE is an ancestor of HEAD; HEAD is therefore NOT an ancestor of
+    // OLD_BASE — a real, resolvable sha that fails the ancestry check when
+    // OLD_BASE is the comparison base (--against).
+    const headSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: FORGE_ROOT, encoding: 'utf8' }).stdout.trim();
+    const oldBase = REAL_ANCESTOR_SHA;
+    assert.notEqual(headSha, oldBase, 'fixture precondition: HEAD must differ from the older ancestor sha');
+    writeFileSync(prev, JSON.stringify({ source: `main@${oldBase}`, generatedAt: '2026-08-21T00:00:00.000Z', expectedRoutes: { ci: 136, host: 715 }, entries: [] }));
+    writeFileSync(next, JSON.stringify({
+      source: `main@${headSha}`, generatedAt: '2026-08-21T01:00:00.000Z', expectedRoutes: { ci: 136, host: 715 },
+      entries: [{ kind: 'http-500', route: '/api/studio/runs', detail: '500' }],
+    }));
+    const r = runNode([SHRINK, '--prev', prev, '--next', next, '--against', oldBase], HERE);
+    assert.equal(r.status, 1, `a sha that resolves but is not an ancestor of the comparison base must refuse the growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /not an ancestor/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5 CONTROL: a stamped main@<sha> naming a REAL commit that IS an ancestor of the comparison base DOES authorise growth — the gate still works for its real purpose', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-control-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    writeFileSync(prev, JSON.stringify({
+      source: 'main@d1a52609 + the W7-D gate fix round', generatedAt: '2026-08-21T13:35:06.073Z',
+      expectedRoutes: { ci: 136, host: 715 }, entries: [],
+    }));
+    writeFileSync(next, JSON.stringify({
+      source: `main@${REAL_ANCESTOR_SHA} — control regeneration`, generatedAt: '2026-08-21T13:35:07.073Z',
+      expectedRoutes: { ci: 136, host: 715 },
+      entries: [
+        { kind: 'console-error', route: '/monitor', detail: 'TypeError: cannot read x of undefined', message: 'boom' },
+        { kind: 'http-500', route: '/api/studio/runs', detail: '500' },
+      ],
+    }));
+    const r = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    assert.equal(r.status, 0, `a real, ancestor sha must authorise growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /REGENERAT/i);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

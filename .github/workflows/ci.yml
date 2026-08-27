@@ -85,8 +85,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # W8-F5: full history (fetch-depth: 0), this job only. The "Baseline may
+      # only shrink" step below accepts growth ONLY through a stamped
+      # `main@<sha>` regeneration whose sha check-baseline-shrinks.mjs now
+      # verifies for REAL — it must resolve to a commit AND be an ancestor of
+      # origin/$BASE_REF. A shallow (depth-1) checkout cannot answer that
+      # ancestry question, so it would refuse even a legitimate regeneration;
+      # full history makes the question answerable without a warn-and-continue.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
