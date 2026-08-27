@@ -17,10 +17,17 @@
  * what the first suite below enforces, in the style of
  * `orchestrator/pinned-sdk-query.enforce.test.ts`: because that test already
  * forbids importing the SDK's `query` anywhere except `pinned-sdk-query.ts`,
- * every real spawn site must import `pinnedSdkQuery`/`pinnedStreamQuery` as a
- * VALUE. So "imports the pinned query as a value" is a sound over-approximation
- * of "can spawn", and every such file must either wire hook dispatch or carry a
- * named, reasoned exemption.
+ * every real spawn site either imports `pinnedSdkQuery`/`pinnedStreamQuery` as
+ * a VALUE, or reaches the SDK indirectly through the adapter registry
+ * (`getAdapter(id).query(...)` / `getAdapter(id).createAgent(...)` —
+ * `loops/_adapters/registry.ts`, ADR 029's seam). So "imports the pinned query
+ * as a value, OR calls getAdapter(" is a sound over-approximation of "can
+ * spawn" (W8-C4 widened this from the pinned-import-only shape, which was
+ * blind to adapter-registry-only spawn sites), and every such file must either
+ * wire hook dispatch — in REAL code, evaluated with comments and string
+ * literals stripped, not merely a comment naming the same symbols (this
+ * codebase's convention is dense cross-referencing prose that does exactly
+ * that) — or carry a named, reasoned exemption.
  *
  * ## What this file does NOT prove
  *
@@ -28,11 +35,19 @@
  * `orchestrator/studio/hook-dispatch.test.ts`, by a real `bash` spawn writing a
  * side-effect file. Stated explicitly so plumbing coverage is never mistaken
  * for execution coverage.
+ *
+ * Also: `stripComments` (below), which the ratchet uses to evaluate `WIRED`
+ * and `ADAPTER_CALL` against real code, is a lexer for `//`/`/* … *\/`
+ * comments and quoted/template strings only — not a full TS tokenizer. It
+ * does not special-case regex literals; a `/pattern/` containing a
+ * comment-shaped run of characters could be mis-split. No spawn-capable file
+ * in this codebase currently has that shape on a line naming
+ * `sdkHooksForAgent`, `SdkHooksOption`, or `getAdapter`.
  */
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -68,6 +83,68 @@ const WIRED = /sdkHooksForAgent|SdkHooksOption/;
 /** A VALUE import of the pinned query (a `type`-only import cannot spawn). */
 const VALUE_IMPORT = /import\s*\{[^}]*\bpinned(?:SdkQuery|StreamQuery)\b[^}]*\}\s*from/;
 
+/**
+ * A value CALL of the adapter registry's `getAdapter(` — not its `function
+ * getAdapter(` definition in `loops/_adapters/registry.ts`. Deliberately
+ * evaluated against COMMENT-STRIPPED source (see `stripComments`) so a
+ * docstring mention — e.g. registry.ts's own "reaching `getAdapter()`" prose,
+ * or a call site merely described in a comment — is never mistaken for a real
+ * spawn site (W8-C4, the same failure mode `WIRED` had). This deliberately
+ * does NOT require `getAdapter(id)` and `.query`/`.createAgent` to be chained
+ * in one expression — real call sites commonly split them across two
+ * statements (`const a = getAdapter(id); a.query(...)` /
+ * `getAdapter(id).createAgent(...)`) — since every registered adapter's only
+ * public exit to the SDK is through `.query`/`.createAgent`, so any real
+ * invocation of `getAdapter(` is a sound enough signal on its own.
+ */
+const ADAPTER_CALL = /(?<!function\s)\bgetAdapter\s*\(/;
+
+/**
+ * Strips `//` line comments and `/* … *\/` block comments from TS source,
+ * respecting single/double/template string boundaries (including escaped
+ * quotes) so a comment-shaped sequence inside a string literal is never
+ * treated as a comment start. See the file header for what this deliberately
+ * does not cover (regex literals).
+ */
+function stripComments(src: string): string {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    if (src.slice(i, i + 2) === '//') {
+      while (i < n && src.charAt(i) !== '\n') i++;
+      continue;
+    }
+    if (src.slice(i, i + 2) === '/*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end === -1 ? n : end + 2;
+      continue;
+    }
+    const ch = src.charAt(i);
+    if (ch === '"' || ch === "'" || ch === '`') {
+      out += ch;
+      i++;
+      while (i < n && src.charAt(i) !== ch) {
+        if (src.charAt(i) === '\\' && i + 1 < n) {
+          out += src.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        out += src.charAt(i);
+        i++;
+      }
+      if (i < n) {
+        out += src.charAt(i);
+        i++;
+      }
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
 function listTsFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
@@ -78,34 +155,58 @@ function listTsFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-function spawnCapableFiles(): string[] {
+/**
+ * Enumerates spawn-capable files under `root` (default the real forge
+ * install). Parameterised by root so the W8-C4 pins below can drive it over a
+ * scratch tree (a mkdtemp fixture) instead of ever writing inside the repo.
+ * A scratch fixture may populate only one of `SCAN_ROOTS` — missing roots are
+ * skipped rather than treated as an error.
+ */
+function spawnCapableFiles(root: string = FORGE_ROOT): string[] {
   const found: string[] = [];
-  for (const root of SCAN_ROOTS) {
-    for (const file of listTsFiles(join(FORGE_ROOT, root))) {
-      const rel = relative(FORGE_ROOT, file);
+  for (const scanRoot of SCAN_ROOTS) {
+    const dir = join(root, scanRoot);
+    if (!existsSync(dir)) continue;
+    for (const file of listTsFiles(dir)) {
+      const rel = relative(root, file);
       const src = readFileSync(file, 'utf8');
       // Strip the `type`-only variant so `import type { StreamQueryFn }` and
       // `import { pinnedSdkQuery … }` are not conflated.
-      if (/import\s+type\s*\{[^}]*\bpinned/.test(src) && !VALUE_IMPORT.test(src)) continue;
-      if (VALUE_IMPORT.test(src)) found.push(rel);
+      const typeOnlyPinnedImport = /import\s+type\s*\{[^}]*\bpinned/.test(src) && !VALUE_IMPORT.test(src);
+      if (VALUE_IMPORT.test(src) && !typeOnlyPinnedImport) {
+        found.push(rel);
+        continue;
+      }
+      if (ADAPTER_CALL.test(stripComments(src))) found.push(rel);
     }
   }
   return found.sort();
 }
 
+/**
+ * The hook-blind offenders in `root`: spawn-capable files that carry no
+ * named exemption and whose comment-stripped source never mentions the
+ * wiring symbols in real code.
+ */
+function offendersIn(root: string): string[] {
+  const offenders: string[] = [];
+  for (const rel of spawnCapableFiles(root)) {
+    if (rel in HOOK_DISPATCH_EXEMPT) continue;
+    if (WIRED.test(stripComments(readFileSync(join(root, rel), 'utf8')))) continue;
+    offenders.push(rel);
+  }
+  return offenders;
+}
+
 describe('hook dispatch covers every spawn site (the enumeration ratchet)', () => {
   it('every file that can spawn either wires hook dispatch or carries a named exemption (kills: adding an eighth spawn site hook-blind — the exact shape forge-vvp prescribed)', () => {
-    const offenders: string[] = [];
-    for (const rel of spawnCapableFiles()) {
-      if (rel in HOOK_DISPATCH_EXEMPT) continue;
-      if (WIRED.test(readFileSync(join(FORGE_ROOT, rel), 'utf8'))) continue;
-      offenders.push(rel);
-    }
+    const offenders = offendersIn(FORGE_ROOT);
     assert.deepEqual(
       offenders,
       [],
-      `these files import the pinned SDK query as a value (so they can spawn) but never reach ` +
-        `orchestrator/studio/hook-dispatch.ts. Wire sdkHooksForAgent into the options bag, or add a ` +
+      `these files import the pinned SDK query as a value, or call the adapter registry's getAdapter( ` +
+        `(so they can spawn) but never reach orchestrator/studio/hook-dispatch.ts in real code (a comment ` +
+        `naming the wiring symbols does not count). Wire sdkHooksForAgent into the options bag, or add a ` +
         `reasoned row to HOOK_DISPATCH_EXEMPT:\n  ${offenders.join('\n  ')}`,
     );
   });
@@ -165,6 +266,129 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
     const src = readFileSync(join(FORGE_ROOT, 'orchestrator/interactive-session.ts'), 'utf8');
     const forwards = src.match(/\.\.\.\(args\.hooks !== undefined \? \{ hooks: args\.hooks \} : \{\}\)/g) ?? [];
     assert.equal(forwards.length, 2, 'runStructuredTurn AND runAgentTurn must each spread the hooks bag into their options');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b — W8-C4: the ratchet must also see adapter-registry spawn sites, and
+// must not be fooled by comment-only wiring. Driven over scratch roots
+// (mkdtemp fixtures, cleaned up by the `after()` hook in section 2 below) so
+// no fixture is ever written inside the repo.
+// ---------------------------------------------------------------------------
+
+describe('the ratchet widens to adapter-registry spawn sites and ignores comment-only wiring (W8-C4)', () => {
+  it('a file that spawns only through getAdapter(id).query(...), with no hook wiring, IS an offender (kills: spawnCapableFiles blind to the adapter-registry seam — an eighth site could add itself hook-blind through getAdapter)', () => {
+    const root = tmp('w8c4-adapter-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'adapter-spawn-site.ts'),
+      [
+        "import { getAdapter } from '../loops/_adapters/registry.ts';",
+        '',
+        'export async function spawnViaAdapter(p: string) {',
+        "  const a = getAdapter('claude');",
+        '  return a.query({ prompt: p, options: {} } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(
+      offendersIn(root),
+      ['orchestrator/adapter-spawn-site.ts'],
+      'a getAdapter(...).query(...) spawn site with no sdkHooksForAgent/SdkHooksOption anywhere must be flagged',
+    );
+  });
+
+  it('the same adapter-registry spawn site, WITH sdkHooksForAgent actually placed in the options bag, is NOT an offender (the swap-the-fix twin of the previous pin)', () => {
+    const root = tmp('w8c4-adapter-wired-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'adapter-spawn-site.ts'),
+      [
+        "import { getAdapter } from '../loops/_adapters/registry.ts';",
+        "import { sdkHooksForAgent } from '../orchestrator/studio/hook-dispatch.ts';",
+        '',
+        'export async function spawnViaAdapter(p: string) {',
+        "  const a = getAdapter('claude');",
+        "  const hooks = sdkHooksForAgent({ skill: 'x' } as never);",
+        '  return a.query({ prompt: p, options: { hooks } } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(offendersIn(root), [], 'wiring sdkHooksForAgent into the bag must clear the offender flag');
+  });
+
+  it('a pinned-query spawn site whose ONLY mention of sdkHooksForAgent/SdkHooksOption is inside comments IS an offender (kills: WIRED matching raw comment text instead of wired code)', () => {
+    const root = tmp('w8c4-comment-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'comment-only-wiring.ts'),
+      [
+        "import { pinnedSdkQuery } from '../pinned-sdk-query.ts';",
+        '',
+        '// TODO: wire sdkHooksForAgent into the options bag below.',
+        '/* SdkHooksOption belongs here once this lands. */',
+        'export function spawnDirect(p: string) {',
+        '  return pinnedSdkQuery({ prompt: p, options: {} } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(
+      offendersIn(root),
+      ['orchestrator/comment-only-wiring.ts'],
+      'a comment-only mention of the wiring symbols must not count as wired',
+    );
+  });
+
+  it('the same file with the wiring symbol actually in code (not a comment) is NOT an offender', () => {
+    const root = tmp('w8c4-real-wiring-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'real-wiring.ts'),
+      [
+        "import { pinnedSdkQuery } from '../pinned-sdk-query.ts';",
+        "import { sdkHooksForAgent } from '../orchestrator/studio/hook-dispatch.ts';",
+        '',
+        'export function spawnDirect(p: string) {',
+        "  const hooks = sdkHooksForAgent({ skill: 'x' } as never);",
+        '  return pinnedSdkQuery({ prompt: p, options: { hooks } } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(offendersIn(root), [], 'real code wiring must clear the offender flag');
+  });
+
+  it('a type-only import of the adapter registry types (plus a comment naming getAdapter) does NOT make a file spawn-capable (no over-fire)', () => {
+    const root = tmp('w8c4-type-only-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'type-only.ts'),
+      [
+        '/**',
+        ' * Real callers reach the SDK via `getAdapter(id).createAgent(...)`; this',
+        ' * file only names the TYPE and holds no spawn site.',
+        ' */',
+        "import type { RuntimeAdapter } from '../loops/_adapters/types.ts';",
+        '',
+        'export function describeAdapter(a: RuntimeAdapter): string {',
+        "  return a.available ? 'available' : 'unavailable';",
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(
+      spawnCapableFiles(root),
+      [],
+      'a type-only import (and a comment mentioning getAdapter) must not be enumerated as spawn-capable',
+    );
   });
 });
 
