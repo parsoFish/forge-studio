@@ -11,8 +11,8 @@ cli/brain-index.ts readdirSync 3
 cli/brain-index.ts readFileSync 3
 cli/brain-index.ts statSync 2
 cli/brain-index.ts writeFileSync 1
-cli/brain-lint.ts existsSync 21
-cli/brain-lint.ts readdirSync 10
+cli/brain-lint.ts existsSync 22
+cli/brain-lint.ts readdirSync 11
 cli/brain-lint.ts readFileSync 4
 cli/brain-lint.ts statSync 1
 cli/bridge-recovery.ts execFileSync 4
@@ -44,7 +44,7 @@ cli/bridge-studio-kbs.ts existsSync 5
 cli/bridge-studio-kbs.ts mkdirSync 9
 cli/bridge-studio-kbs.ts openSync 1
 cli/bridge-studio-kbs.ts readdirSync 5
-cli/bridge-studio-kbs.ts readFileSync 3
+cli/bridge-studio-kbs.ts readFileSync 4
 cli/bridge-studio-kbs.ts rmSync 2
 cli/bridge-studio-kbs.ts spawn 1
 cli/bridge-studio-kbs.ts writeFileSync 3
@@ -126,7 +126,7 @@ cli/forge-watch.ts statSync 1
 cli/forge-watch.ts writeFileSync 2
 cli/kb-drain-edit-soundness.ts mkdirSync 1
 cli/kb-drain-edit-soundness.ts realpathSync 1
-cli/kb-drain-edit-soundness.ts rmSync 2
+cli/kb-drain-edit-soundness.ts rmSync 1
 cli/kb-drain-edit-soundness.ts writeFileSync 1
 cli/kb-drain-structural.ts readdirSync 1
 cli/kb-drain-structural.ts readFileSync 1
