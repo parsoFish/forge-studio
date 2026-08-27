@@ -157,5 +157,17 @@ export function buildMonitorSummaryTiles(summary: MonitorSummary): MonitorSummar
   ];
 }
 
-/** Monitor's own section list — the five things the pillar promises. */
-export const MONITOR_SECTIONS = ['monitor-summary', 'scheduler', 'monitor-attention', 'monitor-sessions', 'monitor-runs', 'activity'] as const;
+// W8-F4 (ON-8 S3): `MONITOR_SECTIONS` used to be exported here — a frozen list
+// of "the five things the pillar promises" over a SIX-element array, naming a
+// `monitor-sessions` section the page has never rendered (`/monitor` mounts
+// `HomeSessionsStrip`, whose section is `sessions-needing-you`). It had zero
+// consumers anywhere in the repo, so gutting it to `[]` changed nothing and
+// nothing noticed it had already drifted: the declared-data-fails-open shape
+// this module's own header rails against, inside the module that rails.
+//
+// It is GONE rather than corrected, because the cure for declared data nothing
+// enforces is to derive it, not to restate it. The section list IS enforced —
+// by `scripts/journeys/monitor.mjs`'s MONITOR.2 beat, which reads the live
+// `[data-section]` tokens off the rendered page and, since W8-F4, also asserts
+// the seeded run/session IDENTITIES inside them. A list checked against a real
+// browser beats a list checked against nothing.

@@ -73,8 +73,13 @@ test('a non-empty strip renders section[data-section="sessions-needing-you"] car
   expect(html).toContain('data-active-session-count="2"');
   expect(html).toContain('data-needs-you-count="1"');
   // W7-B1 (home-sessions-01/02): the strip is NAMED on screen, not just in
-  // the DOM contract.
-  expect(html).toContain('Sessions needing you');
+  // the DOM contract. W8-F4: the name is "Active sessions" — this fixture is
+  // exactly why. Two sessions are listed and only ONE needs the operator, so
+  // a heading reading "Sessions needing you" would describe the chip, not the
+  // list. The needs-you subset stays visible as its own count.
+  expect(html).toContain('Active sessions');
+  expect(html).not.toContain('Sessions needing you');
+  expect(html).toContain('1 need you');
 });
 
 test('needsYouCount counts ALL needs-you sessions, not just the ones inside the 4-card budget', () => {
