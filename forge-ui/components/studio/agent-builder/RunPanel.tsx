@@ -330,9 +330,20 @@ export function RunPanel({
 
   if (interactive) {
     return (
+      // W8-F4 review round 1: this branch gets the SAME split as the
+      // dispatchable one. It previously put its own primary control — the
+      // "Go to session" link, this branch's entire reason to exist — inside
+      // the scroll region along with the standing-triggers list. Nothing was
+      // broken today (the link happens to render first), and that is exactly
+      // the state the dispatchable branch was in before the block of content
+      // above it grew. Gating one of two branches is this wave's most
+      // repeated defect shape; both are gated now, by the same pin.
       <section data-component="run-panel" data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
         <div data-run-panel-body style={RUN_PANEL_BODY_STYLE}>
           <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
+          {standingTriggersList}
+        </div>
+        <div data-run-panel-actions style={RUN_PANEL_ACTIONS_STYLE}>
           {sessionEntryHref ? (
             <Link data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
               Go to session
@@ -342,7 +353,6 @@ export function RunPanel({
               Interactive agent — no reachable session entry point yet.
             </p>
           )}
-          {standingTriggersList}
         </div>
       </section>
     );

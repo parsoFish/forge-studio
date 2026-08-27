@@ -188,24 +188,58 @@ function verticalShorthand(value: string | undefined): number[] {
 const VERTICAL_PROPS = ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom', 'top', 'height', 'min-height'] as const;
 
 /**
+ * The CLOSED set of CSS properties an element on a control's chain may
+ * declare at all.
+ *
+ * Review round 1 broke the previous deny-list version of this check with four
+ * one-line mutations it had never heard of — `gap: 4000` and `rowGap: 4000` on
+ * the flex column, and `paddingBlockStart: 4000` (a CSS *logical* property) on
+ * the actions row — each of which inserts exactly the vertical space the
+ * deny-list existed to forbid. That is the wave's own lesson landing on this
+ * file: a deny-list of displacement mechanisms is an OPEN enumeration, and CSS
+ * will always have one more (`inset-block-start`, `translate`, `padding-block`,
+ * `aspect-ratio`, whatever ships next).
+ *
+ * So the enumeration is inverted. The chain is two elements with a small,
+ * deliberate, load-bearing style each; anything outside this set is an offence
+ * on sight, whatever it does. Adding a property here is a DELIBERATE act that
+ * must come with a re-check of the journey's rect measurement in the same PR —
+ * which is the maintenance contract this pin is supposed to impose.
+ */
+const ALLOWED_CHAIN_PROPS: ReadonlySet<string> = new Set([
+  // paint + identity: cannot move anything
+  'background', 'border', 'border-radius', 'border-top', 'color', 'z-index',
+  // the panel's own bounded-sticky-column contract
+  'position', 'top', 'max-height', 'overflow', 'display', 'flex-direction',
+  // flex participation (magnitudes checked below where they can displace)
+  'flex', 'flex-shrink', 'min-height',
+  // box spacing (magnitudes checked below)
+  'margin-top', 'padding',
+]);
+
+/**
  * Every way an element on the chain could displace what it contains — as
  * offences, not as numbers, so the check can also refuse what it cannot judge.
  *
- * CLOSING THE ENUMERATION (the wave's most repeated defect shape is "you
- * gated one of N paths"): a px budget alone is trivially evaded by changing
- * the UNIT (`paddingTop: '50vh'`) or the MECHANISM (`transform:
- * 'translateY(4000px)'`, `position: 'absolute'` + a `top` in any unit). So a
- * vertical property whose value this pin cannot evaluate is an OFFENCE in
- * itself — express it in px, or extend this function deliberately — and a
- * `transform` or an out-of-flow `position` anywhere on the chain is an
- * offence outright. The panel needs none of them; the one position it does
- * need, `sticky` on the root, is named explicitly below.
+ * Three layers, each closing a hole the previous version shipped:
+ *   1. an undeclared-in-`ALLOWED_CHAIN_PROPS` property is an offence outright
+ *      (kills `gap`, `row-gap`, `transform`, logical properties, and whatever
+ *      CSS invents next);
+ *   2. a vertical value this pin cannot evaluate is an offence (kills the unit
+ *      evasion `paddingTop: '50vh'`);
+ *   3. a vertical value over `MAX_ANCESTOR_VERTICAL_OFFSET_PX` is an offence
+ *      (kills the refuter's original `paddingTop: 4000`, wherever it lands).
  */
 function displacementOffencesOf(element: Element, isRoot: boolean): string[] {
   const style = styleOf(element);
   const offences: string[] = [];
   const label = `<${element.tag}>`;
 
+  for (const prop of Object.keys(style)) {
+    if (!ALLOWED_CHAIN_PROPS.has(prop)) {
+      offences.push(`${label} ${prop}: ${style[prop]} — a property this pin does not know how to bound`);
+    }
+  }
   for (const prop of VERTICAL_PROPS) {
     const raw = style[prop];
     if (raw === undefined) continue;
@@ -222,14 +256,16 @@ function displacementOffencesOf(element: Element, isRoot: boolean): string[] {
       if (Math.abs(value) > MAX_ANCESTOR_VERTICAL_OFFSET_PX) offences.push(`${label} ${prop}: ${value}px`);
     }
   }
-  if (style['transform'] !== undefined) {
-    offences.push(`${label} transform: ${style['transform']} — displacement this pin cannot evaluate`);
-  }
   const position = style['position'];
   if (position !== undefined && position !== 'static' && !(isRoot && position === 'sticky')) {
     offences.push(`${label} position: ${position} — out of flow`);
   }
   return offences;
+}
+
+/** The element children of `parent`, in document order. */
+function childrenOf(elements: Element[], parent: Element): Element[] {
+  return elements.filter((el) => el.ancestors[el.ancestors.length - 1] === parent);
 }
 
 function scrolls(element: Element): boolean {
@@ -285,17 +321,125 @@ function chainInsidePanel(control: Element): Element[] {
   return control.ancestors.slice(rootIndex);
 }
 
-// ── 1. the control is not inside a scroll region (the SHIPPED-TREE defect) ──
+/**
+ * BOTH branches of the panel, each with its own primary control.
+ *
+ * Review round 1: the first version of this fix (and every assertion in this
+ * file) covered only `interactive: false`. The interactive branch put its own
+ * primary control — the "Go to session" link, the entire reason that branch
+ * exists — inside the scroll region, exactly the state the dispatchable branch
+ * was in before the content above its button grew. "You gated one of N call
+ * paths" is this wave's most repeated defect shape; N is 2 here, and both are
+ * gated now, by the same assertions.
+ */
+const CONTROL_CASES: { name: string; marker: string; overrides: Partial<Props> }[] = [
+  {
+    name: 'the dispatch control on a saved unattended agent',
+    marker: 'data-action="run-agent"',
+    overrides: { interactive: false },
+  },
+  {
+    name: 'the session-entry control on an interactive agent',
+    marker: 'data-action="go-to-session"',
+    overrides: { interactive: true, sessionEntryHref: '/sessions/instructions/sess-1' } as Partial<Props>,
+  },
+];
 
-test('no ancestor of the Run control, up to the panel root, is a scroll container', () => {
-  // Kills the shipped tree: RUN_PANEL_STYLE carried `overflowY: 'auto'` on the
-  // root itself, so the control sat inside the panel's own scroll region after
-  // four form blocks. "Bounded, it scrolls internally and the button stays
-  // reachable" is reachable-BY-scrolling — the claim's own negation.
-  const chain = chainInsidePanel(dispatchControlOf(panelOf()));
-  const scrolling = chain.filter(scrolls).map((el) => `${el.tag}[${el.attrs['style']}]`);
-  expect(scrolling).toEqual([]);
-});
+for (const branch of CONTROL_CASES) {
+  const controlOf = (elements: Element[]): Element => {
+    const found = elements.filter((el) => hasAttr(el, branch.marker));
+    expect(found).toHaveLength(1);
+    return found[0];
+  };
+
+  // ── 1. the control is not inside a scroll region (the SHIPPED-TREE defect) ──
+
+  test(`${branch.name}: no ancestor of it, up to the panel root, is a scroll container`, () => {
+    // Kills the shipped tree: RUN_PANEL_STYLE carried `overflowY: 'auto'` on
+    // the root itself, so the control sat inside the panel's own scroll region
+    // after four form blocks. "Bounded, it scrolls internally and the button
+    // stays reachable" is reachable-BY-scrolling — the claim's own negation.
+    const chain = chainInsidePanel(controlOf(panelOf(branch.overrides)));
+    const scrolling = chain.filter(scrolls).map((el) => `${el.tag}[${el.attrs['style']}]`);
+    expect(scrolling).toEqual([]);
+  });
+
+  test(`${branch.name}: the panel root is still height-bounded and still pinned to its scrolling column`, () => {
+    // Kills a silent revert to plain flow positioning: `.col-right` is itself
+    // an overflow-y:auto column, so without the sticky pin the whole panel
+    // scrolls away and the control goes with it.
+    const root = panelOf(branch.overrides).find((el) => hasAttr(el, PANEL_ROOT));
+    expect(root).toBeDefined();
+    const style = styleOf(root as Element);
+    expect(style['position']).toBe('sticky');
+    expect(px(style['top'])).toBe(0);
+    expect(style['max-height']).toMatch(/^calc\(100vh/);
+  });
+
+  // ── 2. nothing on the chain can displace it (the SHIPPED-TEST defect) ──
+
+  test(`${branch.name}: nothing on its chain declares anything that could push it out of the panel`, () => {
+    // Kills the refuter's MUT-F verbatim (`paddingTop: 4000` in
+    // RUN_PANEL_STYLE left the previous version of this file 5/5 green), the
+    // unit and mechanism evasions that replaced it, and — since review round 1
+    // — every property outside the allow-list, because a deny-list of ways to
+    // move a box is an enumeration CSS will always beat.
+    const chain = chainInsidePanel(controlOf(panelOf(branch.overrides)));
+    const offenders = chain.flatMap((element, i) => displacementOffencesOf(element, i === 0));
+    expect(offenders).toEqual([]);
+  });
+
+  test(`${branch.name}: NEITHER container on its chain is shrinkable`, () => {
+    // Found by the agents journey's own hit test, in the browser, against the
+    // first version of this fix. `.col-right` (app/globals.css) is a COLUMN
+    // FLEX container with overflow-y:auto, so its children default to
+    // `flex-shrink: 1`: a tall YAML preview compressed this panel toward its
+    // min-content height — the body collapses to 0 (minHeight:0), leaving just
+    // the actions row — and because the root CLIPS (`overflow: hidden`), the
+    // button ended up rendered OUTSIDE its own clip box. Its rect was still
+    // inside the viewport, so a rect check alone said "reachable"; the hit test
+    // said otherwise, and the real Playwright click returned no runId.
+    const chain = chainInsidePanel(controlOf(panelOf(branch.overrides)));
+    const shrinkable = chain.filter((el) => {
+      const style = styleOf(el);
+      const flex = style['flex'] ?? '';
+      return !(style['flex-shrink'] === '0' || /^0\s+0(\s|$)/.test(flex));
+    });
+    expect(shrinkable.map((el) => `<${el.tag}> flex-shrink not 0`)).toEqual([]);
+  });
+
+  // ── 3. nothing can be INSERTED between it and the panel ──
+
+  test(`${branch.name}: the panel root holds exactly the scroll body and the actions row, in that order`, () => {
+    // Review round 1 broke the chain-only walk with a SIBLING: a
+    // `<div style={{flexShrink: 0, height: 4000}}/>` inserted between the body
+    // and the actions row is not an ANCESTOR of the control, so nothing above
+    // inspects it — and because the root clips, it pushes the actions row
+    // clean outside the panel's box. The cure is not another property check:
+    // it is that the panel's children are a CLOSED, named pair.
+    const elements = panelOf(branch.overrides);
+    const root = elements.find((el) => hasAttr(el, PANEL_ROOT)) as Element;
+    const children = childrenOf(elements, root);
+    expect(children.map((el) => (hasAttr(el, 'data-run-panel-body') ? 'body'
+      : hasAttr(el, 'data-run-panel-actions') ? 'actions'
+        : `UNEXPECTED <${el.tag} ${el.attrs['style'] ?? ''}>`)))
+      .toEqual(['body', 'actions']);
+  });
+
+  test(`${branch.name}: it is the FIRST element child of the actions row`, () => {
+    // Same class one level down: whatever else the actions row carries (the
+    // cancel button, the blocked-run explanations, the save hint), the control
+    // is laid out first, so a row that outgrows the panel's clip box loses its
+    // tail — never the control the panel exists for.
+    const elements = panelOf(branch.overrides);
+    const control = controlOf(elements);
+    const actions = control.ancestors[control.ancestors.length - 1];
+    expect(hasAttr(actions, 'data-run-panel-actions')).toBe(true);
+    expect(childrenOf(elements, actions)[0]).toBe(control);
+  });
+}
+
+// ── 4. the scroll region is real, and content growth cannot move the control ──
 
 test('the panel DOES have a scroll region — the form scrolls, in a container the control is not in', () => {
   // Kills the lazy "fix" of deleting the scroll bound altogether: an unbounded
@@ -313,63 +457,6 @@ test('the panel DOES have a scroll region — the form scrolls, in a container t
   const insideScroll = panelElements.filter((el) => el.ancestors.includes(scrollRegions[0]));
   expect(insideScroll.some((el) => hasAttr(el, 'data-run-inputs'))).toBe(true);
   expect(insideScroll.some((el) => hasAttr(el, 'data-run-project'))).toBe(true);
-});
-
-test('the panel root is still height-bounded and still pinned to its scrolling column', () => {
-  // Kills a silent revert to plain flow positioning: `.col-right` is itself an
-  // overflow-y:auto column, so without the sticky pin the whole panel scrolls
-  // away and the control goes with it.
-  const root = panelOf().find((el) => hasAttr(el, PANEL_ROOT));
-  expect(root).toBeDefined();
-  const style = styleOf(root as Element);
-  expect(style['position']).toBe('sticky');
-  expect(px(style['top'])).toBe(0);
-  expect(style['max-height']).toMatch(/^calc\(100vh/);
-});
-
-// ── 2. no ancestor can displace it (the SHIPPED-TEST defect: MUT-F) ──
-
-test('no ancestor of the Run control declares a vertical offset that could push it out of the panel', () => {
-  // Kills the refuter's MUT-F verbatim (`paddingTop: 4000` in RUN_PANEL_STYLE
-  // left the previous version of this file 5/5 green) — and every relative of
-  // it, because the assertion is over the RENDERED chain, so it does not care
-  // WHICH element the space is declared on or what the property is called.
-  const chain = chainInsidePanel(dispatchControlOf(panelOf()));
-  const offenders = chain.flatMap((element, i) => displacementOffencesOf(element, i === 0));
-  expect(offenders).toEqual([]);
-});
-
-test('the control\'s own container cannot be squeezed out of the bounded panel', () => {
-  // Kills the flex-layout inverse of the same defect: an actions row with a
-  // shrinkable basis inside a max-height column collapses to nothing when the
-  // form is tall, which is "off screen" by another route.
-  const chain = chainInsidePanel(dispatchControlOf(panelOf()));
-  const actions = chain[chain.length - 1];
-  const style = styleOf(actions);
-  const flex = style['flex'] ?? '';
-  expect(style['flex-shrink'] === '0' || /^0\s+0(\s|$)/.test(flex)).toBe(true);
-});
-
-test('NEITHER container in the chain is shrinkable — including the panel root itself', () => {
-  // Found by the agents journey's own hit test, in the browser, against the
-  // first version of this fix. `.col-right` (app/globals.css) is a COLUMN FLEX
-  // container with overflow-y:auto, so its children default to
-  // `flex-shrink: 1`: a tall YAML preview compressed this panel toward its
-  // min-content height — the body collapses to 0 (minHeight:0), leaving just
-  // the actions row — and because the root clips (`overflow: hidden`), the
-  // button ended up rendered OUTSIDE its own clip box. Its rect was still
-  // inside the viewport, so a rect check alone said "reachable"; the hit test
-  // said otherwise, and the real Playwright click returned no runId.
-  //
-  // Every element on the chain must therefore be unshrinkable, not just the
-  // one nearest the button.
-  const chain = chainInsidePanel(dispatchControlOf(panelOf()));
-  const shrinkable = chain.filter((el) => {
-    const style = styleOf(el);
-    const flex = style['flex'] ?? '';
-    return !(style['flex-shrink'] === '0' || /^0\s+0(\s|$)/.test(flex));
-  });
-  expect(shrinkable.map((el) => `<${el.tag} ${el.attrs['data-section'] ?? el.attrs['data-run-panel-actions'] !== undefined ? 'actions' : ''}>`)).toEqual([]);
 });
 
 test('content growth does not change the control\'s ancestry — the worst panel and the barest one agree', () => {
