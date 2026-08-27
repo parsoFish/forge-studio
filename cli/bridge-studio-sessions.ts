@@ -455,7 +455,15 @@ export function resolveReadableSession(args: {
     const derived = legacy.projectFromLog !== '' && invalidProjectReason(legacy.projectFromLog) === null
       ? legacy.projectFromLog
       : '';
-    return { ok: true, source: 'legacy', project: project ?? derived, logDir: legacy.logDir, phase: legacy.phase };
+    // The LOG wins over the caller's `?project=` here, and only here. For the
+    // status arm the caller's value names a directory that demonstrably exists,
+    // so it IS evidence; for a legacy session that directory is gone, so
+    // `?project=` is a hint about nothing and the session's own log is the only
+    // evidence there is. Echoing the hint instead would let
+    // `?project=<anything>` put a dead "Back to project" link on the page (and
+    // the whole point of this route is to stop minting links to nowhere). The
+    // caller's value is still the fallback for a log that names no project.
+    return { ok: true, source: 'legacy', project: derived !== '' ? derived : (project ?? ''), logDir: legacy.logDir, phase: legacy.phase };
   }
 
   return { ok: false, reason: statusFailure ?? 'not-found', project };

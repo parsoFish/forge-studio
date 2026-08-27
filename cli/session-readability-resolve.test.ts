@@ -265,3 +265,33 @@ test('AT-F6-RR-13: sessionIsReadable agrees with resolveReadableSession(...).ok 
     assert.equal(sessionIsReadable(args), resolved.ok, `sessionIsReadable must agree with resolveReadableSession(...).ok for scenario "${label}"`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// W8-F6, T2 self-attack — `?project=` is EVIDENCE for the status arm (it names
+// a directory that demonstrably exists) and a HINT ABOUT NOTHING for the legacy
+// arm (that directory is gone). Echoing the hint back let
+// `?project=<anything>` put a dead "Back to project" link on a page whose whole
+// purpose is to stop minting links to nowhere.
+// KILLS: `project: project ?? derived` — the caller's value taking precedence
+// over the session's own log on the legacy arm.
+// ---------------------------------------------------------------------------
+
+test('AT-F6-RR-14: legacy arm — a bogus explicit ?project= never reaches the wire; the log-derived project wins', () => {
+  const r = resolveReadableSession({
+    projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_A, project: 'no-such-project-anywhere',
+  });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  if (!r.ok) throw new Error('unreachable');
+  assert.equal(r.source, 'legacy');
+  assert.equal(r.project, 'shapea-derived-project', 'the session log is the only evidence about a legacy session project');
+});
+
+test('AT-F6-RR-15: legacy arm — when the log names NO project, the callers explicit ?project= is still the fallback (honest-absent, not discarded)', () => {
+  const r = resolveReadableSession({
+    projectsRoot, logsRoot, kind: KIND, sessionId: SID_SHAPE_B, project: PROJ_SHAPE_B,
+  });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  if (!r.ok) throw new Error('unreachable');
+  assert.equal(r.source, 'legacy');
+  assert.equal(r.project, PROJ_SHAPE_B);
+});
