@@ -337,7 +337,12 @@ function resolveImportTarget(fromRelFile, spec) {
   return target;
 }
 
-function listEntryModules(root) {
+/** The bridge's HTTP ENTRY modules — `cli/ui-bridge.ts` plus every non-test
+ *  `cli/bridge-*.ts`. Exported so the SIBLING dataflow lint
+ *  (check-raw-fs-guarded.mjs) seeds its declared request-handling surface from
+ *  the SAME derivation this walk starts from, instead of maintaining a second
+ *  (and, until W8-F5, narrower) name list of its own. */
+export function listEntryModules(root) {
   const cliDir = join(root, 'cli');
   const out = [];
   for (const f of readdirSync(cliDir)) {
