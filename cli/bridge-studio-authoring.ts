@@ -57,9 +57,21 @@
  *          (400, nothing written) on a `FORBIDDEN_HOOK_BINDING_KEYS` key, an
  *          `on` outside `HOOK_LIFECYCLE_EVENTS`, or a hook.yaml that is
  *          missing/unparseable/not a mapping — fail loud, never fabricate a
- *          default. Otherwise write the existing 2-file shape (`hook.yaml` +
- *          the fixed relative `scripts/run.sh`) through the SAME guarded
- *          choke points `POST /api/studio/hooks` already uses.
+ *          default. The landed package is otherwise enumerated WHOLE
+ *          (`enumerateLandedHookFiles` — every file, recursively, under
+ *          `_interactive-library/<id>/`, through the guard): `hook.yaml` is
+ *          REWRITTEN from the validated fields (fixed field order, the fixed
+ *          relative `script: 'scripts/run.sh'`), and every OTHER staged file
+ *          — `scripts/run.sh` included, plus anything else the drafting
+ *          agent added (a README, a sourced `scripts/lib.sh`, ...) — is
+ *          copied byte-for-byte, through the SAME guarded choke points
+ *          `POST /api/studio/hooks` already uses (2026-08-28 hostile-review
+ *          fix, counter-repro C / S2: the prior code read exactly the two
+ *          hardcoded paths `hook.yaml` and `scripts/run.sh` off the landed
+ *          tree and silently dropped every other staged file while still
+ *          answering `200 {ok:true}` — an installed hook whose entry script
+ *          sourced a dropped sibling died at spawn with exit 127 the first
+ *          time it actually ran).
  *        - `kind:'template'` (W8-B4/WI-3) → the SAME posture as `kind:'hook'`:
  *          the landed `template.md`'s frontmatter is read server-side, never
  *          from body fields. Its `category` field is a DRAFT-ONLY routing
@@ -76,6 +88,24 @@
  *          uses, and written through the SAME `WRITABLE_CATEGORY_DIRS` +
  *          guarded-path choke point.
  *   7. `{ ok: true, kind, id }`.
+ *
+ *  REFUSE, NEVER DROP (2026-08-28 hostile-review fix, counter-repro C / S2):
+ *  a staged file this route cannot handle — one that fails the landed-package
+ *  enumeration's containment/shape checks, or blows the shared
+ *  `MAX_PACKAGE_FILES`/`MAX_PACKAGE_BYTES` caps — is a refusal (400, naming
+ *  the offending entry), never a silently-dropped subset of the package. The
+ *  old two-hardcoded-path `kind:'hook'` shape answered `200 {ok:true}` while
+ *  quietly discarding every staged file it didn't happen to read by name;
+ *  that shape is gone from every kind this route installs.
+ *
+ *  CONTAINMENT REFUSALS ARE 4xx, NOT 500 (S3): a NAMED containment refusal
+ *  from the copy layer — `InteractiveFinalizerError`, e.g.
+ *  `copyStagingToLibrary` refusing a staged symlink/hardlink at step 5 — is
+ *  mapped in `runFinalize`'s catch to a clean 400 carrying the finalizer's
+ *  own (package-relative, never sanitizeError-mangled) reason, the same way
+ *  `SkillIdOccupiedError` is mapped to 409 in `finalizeSkillFromLanded`
+ *  above: a caught, expected refusal gets an honest 4xx shape, never the
+ *  generic `500 sanitizeError(err)` an unexpected throw still gets.
  *
  *  Design call: a hook-specific validation failure at step 6 does NOT roll
  *  back step 5's already-successful generic copy — nothing in D5 describes a
@@ -123,7 +153,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
@@ -136,8 +166,8 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
-import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
-import { installSkillPackage, SkillIdOccupiedError } from '../orchestrator/studio/skill-library.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
+import { installSkillPackage, SkillIdOccupiedError, MAX_PACKAGE_FILES, MAX_PACKAGE_BYTES } from '../orchestrator/studio/skill-library.ts';
 import {
   hookDir,
   hooksDir,
@@ -159,6 +189,12 @@ import {
   invalidTemplateIdReason,
   invalidTemplateContentReason,
 } from './bridge-studio-templates.ts';
+// Static import — `interactive-finalizers.ts` imports only `node:fs`,
+// `node:path` and the path guard (no Claude Agent SDK), so pulling its named
+// error class in here does NOT regress the deliberate dynamic-import-of-the-
+// RUNNER decision a few lines below (that import stays dynamic because
+// `interactive-runner.ts`, not this module, is what drags the SDK in).
+import { InteractiveFinalizerError } from '../orchestrator/interactive-finalizers.ts';
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
 // DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
@@ -267,11 +303,97 @@ async function finalizeSkillFromLanded(
 // parsed server-side, never from parallel request-body fields.
 // ---------------------------------------------------------------------------
 
+/** One file discovered under the landed package, relative to
+ *  `_interactive-library/<id>/` (segments, never a raw joined string — every
+ *  destination re-derived from `relParts` rides through the guard as its own
+ *  `segments[]` elements, matching this whole module's containment
+ *  convention). */
+type LandedHookFile = { relParts: string[]; body: string };
+
+/**
+ * Enumerate EVERY regular file under `<forgeRoot>/_interactive-library/<id>/`,
+ * recursively, through the guard — the fix for counter-repro C / S2: the
+ * former code read exactly `hook.yaml` and `scripts/run.sh` off this tree by
+ * hardcoded path and silently dropped every other staged file (a README, a
+ * sourced `scripts/lib.sh`, ...) while the route still answered
+ * `200 {ok:true}`. Every directory is opened via
+ * `guardedFile(..., 'readdir')` (which itself requires the entry to be a REAL
+ * directory — never a symlink masquerading as one, mirrors
+ * `readVendoredPackage`'s own walk-and-guard-every-leaf pattern in
+ * `orchestrator/studio/community-index.ts`); every leaf's bytes are read via
+ * `guardedReadFile`. Throws a plain `Error` NAMING the first offending entry
+ * — never a silent drop — when: an entry is neither a regular file nor a
+ * directory (symlink/socket/fifo); a leaf fails the guarded read; the file
+ * count exceeds `MAX_PACKAGE_FILES`; or the total bytes exceed
+ * `MAX_PACKAGE_BYTES` (the SAME caps `installSkillPackage` /
+ * `installCommunityHookPackage` enforce — reused, never retyped). The caller
+ * maps this to a 400.
+ */
+function enumerateLandedHookFiles(forgeRoot: string, id: string): LandedHookFile[] {
+  const out: LandedHookFile[] = [];
+
+  function walk(relParts: string[]): void {
+    const dirPath = guardedFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, ...relParts], 'readdir');
+    if (dirPath === null) {
+      throw new Error(
+        `landed hook package "${id}": directory "${relParts.join('/') || '.'}" could not be read (missing or fails containment)`,
+      );
+    }
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+      const nextRelParts = [...relParts, entry.name];
+      const label = nextRelParts.join('/');
+      if (entry.isDirectory()) {
+        walk(nextRelParts);
+        continue;
+      }
+      if (!entry.isFile()) {
+        // A symlink, socket, FIFO, device node, etc. — never silently skip it.
+        throw new Error(`landed hook package "${id}": staged entry "${label}" is neither a regular file nor a directory — refusing`);
+      }
+      const body = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, ...nextRelParts]);
+      if (body === null) {
+        throw new Error(`landed hook package "${id}": staged entry "${label}" could not be read (fails containment)`);
+      }
+      out.push({ relParts: nextRelParts, body });
+    }
+  }
+
+  walk([]);
+
+  if (out.length > MAX_PACKAGE_FILES) {
+    throw new Error(`landed hook package "${id}" has ${out.length} files, exceeding the ${MAX_PACKAGE_FILES}-file cap`);
+  }
+  const totalBytes = out.reduce((sum, f) => sum + Buffer.byteLength(f.body, 'utf8'), 0);
+  if (totalBytes > MAX_PACKAGE_BYTES) {
+    throw new Error(`landed hook package "${id}" exceeds the ${MAX_PACKAGE_BYTES}-byte cap`);
+  }
+
+  return out;
+}
+
 function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
-  const yamlRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'hook.yaml']);
-  if (yamlRaw === null) {
+  // Step 1 fix (counter-repro C / S2) — enumerate the WHOLE landed package
+  // FIRST, before any hook.yaml-shape validation below: `landedFiles` is the
+  // full, honest manifest this function now works from, never a hand-picked
+  // pair of paths. Message built directly from `err.message`, NEVER
+  // `sanitizeError`: `enumerateLandedHookFiles` only ever names
+  // package-relative paths ("scripts/lib.sh"), never a host absolute path —
+  // there is nothing for `sanitizeError`'s `/\/[^\s:,'"]+/g` redaction regex
+  // to legitimately catch here, and running it anyway is exactly what turns
+  // "scripts/evil.sh" into the unreadable "scripts[path]" (the S3 defect this
+  // same review round fixed at the `runFinalize` catch — see below).
+  let landedFiles: LandedHookFile[];
+  try {
+    landedFiles = enumerateLandedHookFiles(forgeRoot, id);
+  } catch (err) {
+    return { ok: false, status: 400, error: (err as Error).message };
+  }
+
+  const hookYamlFile = landedFiles.find((f) => f.relParts.join('/') === 'hook.yaml');
+  if (!hookYamlFile) {
     return { ok: false, status: 400, error: `drafted hook.yaml is missing from the landed package "${id}"` };
   }
+  const yamlRaw = hookYamlFile.body;
 
   let parsed: unknown;
   try {
@@ -326,8 +448,11 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
     return { ok: false, status: 400, error: permissions.error };
   }
 
-  const scriptRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'scripts', 'run.sh']);
-  if (scriptRaw === null) {
+  // "scripts/run.sh must still be present" — kept as its own named check:
+  // `enumerateLandedHookFiles` already proved it was READABLE if present,
+  // this proves it was staged at all.
+  const hasRunScript = landedFiles.some((f) => f.relParts.join('/') === 'scripts/run.sh');
+  if (!hasRunScript) {
     return { ok: false, status: 400, error: `drafted scripts/run.sh is missing from the landed package "${id}"` };
   }
 
@@ -338,8 +463,10 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
     return { ok: false, status: 400, error: sanitizeError(err) };
   }
 
-  // Layer 2 — CONTAINMENT: the SAME guarded choke point
-  // POST /api/studio/hooks uses — never a fresh lexical startsWith.
+  // Layer 2 — CONTAINMENT / COLLISION: the SAME guarded choke point
+  // POST /api/studio/hooks uses — never a fresh lexical startsWith. Checked
+  // BEFORE any write (including the Phase-1 blessing pass below) so a
+  // colliding id leaves the pre-existing installed hook byte-unchanged.
   const yamlGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'hook.yaml']);
   if (!yamlGuard.ok) {
     return { ok: false, status: 400, error: 'path traversal detected' };
@@ -347,9 +474,30 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
   if (yamlGuard.exists) {
     return { ok: false, status: 409, error: `hook "${id}" already exists` };
   }
-  const scriptGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'scripts', 'run.sh']);
-  if (!scriptGuard.ok) {
-    return { ok: false, status: 400, error: 'path traversal detected' };
+
+  // Step 1 fix, cont'd — `hook.yaml` is REWRITTEN below from the validated
+  // fields (fixed field order, the fixed `script: 'scripts/run.sh'`), never
+  // copied verbatim; every OTHER landed file — `scripts/run.sh` included,
+  // plus anything else the drafting agent staged — is copied byte-for-byte.
+  //
+  // PHASE 1 — bless EVERY destination through the SAME `guardedFile(...,
+  // 'write')` choke point `installCommunityHookPackage` uses
+  // (`orchestrator/studio/community-install.ts`), mirroring that function's
+  // own "bless everything, THEN write" two-phase discipline: a failure here
+  // must never leave a partial hook package on disk.
+  const otherFiles = landedFiles.filter((f) => f.relParts.join('/') !== 'hook.yaml');
+  const blessed: { realPath: string; body: string }[] = [];
+  for (const file of otherFiles) {
+    const label = file.relParts.join('/');
+    const realPath = guardedFile(hooksDir(forgeRoot), [id, ...file.relParts], 'write');
+    if (realPath === null) {
+      return {
+        ok: false,
+        status: 400,
+        error: `landed hook package "${id}": destination for "${label}" is not contained under studio/hooks/${id}/ (traversal or symlink) — refusing to write`,
+      };
+    }
+    blessed.push({ realPath, body: file.body });
   }
 
   const outDoc: Record<string, unknown> = {
@@ -363,8 +511,12 @@ function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
     permissions,
   };
 
-  mkdirSync(dirname(scriptGuard.realPath), { recursive: true });
-  writeFileSync(scriptGuard.realPath, scriptRaw, 'utf8');
+  // PHASE 2 — every destination is blessed; materialise the bytes.
+  for (const { realPath, body } of blessed) {
+    mkdirSync(dirname(realPath), { recursive: true });
+    writeFileSync(realPath, body, 'utf8');
+  }
+  mkdirSync(dirname(yamlGuard.realPath), { recursive: true });
   writeFileSync(yamlGuard.realPath, yaml.dump(outDoc), 'utf8');
 
   return { ok: true };
@@ -472,6 +624,27 @@ function finalizeTemplateFromLanded(forgeRoot: string, id: string): InstallOutco
 
   writeFileSync(targetGuard.realPath, content, 'utf8');
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// S3 fix — which InteractiveFinalizerError shapes are an honest, NAMED
+// refusal (map to 400 in runFinalize's catch) vs a structural precondition
+// failure (stays 500 — see the call site's own comment for why P5-2 pins
+// this). `copyStagingToLibrary` (`orchestrator/interactive-finalizers.ts`)
+// throws this SAME class for BOTH: every entry-scoped message it emits
+// begins with either `staged entry "<path>"` (source-side: containment,
+// vanished mid-walk, wrong type, TOCTOU-swap-at-read) or `destination for
+// "<path>"` (dest-side: containment, TOCTOU-swap-at-write) — always naming
+// the offending package-relative path. The two structural messages
+// (`session staging directory is missing or unreadable`, `packageId failed
+// containment`) name no single staged entry — there is nothing for the
+// operator to fix by editing one file, unlike a symlink/hardlink refusal.
+// ---------------------------------------------------------------------------
+
+const ENTRY_SCOPED_FINALIZER_REFUSAL_RE = /^copyStagingToLibrary: (staged entry|destination for) "/;
+
+function isEntryScopedFinalizerRefusal(err: InteractiveFinalizerError): boolean {
+  return ENTRY_SCOPED_FINALIZER_REFUSAL_RE.test(err.message);
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +844,35 @@ export async function runFinalize(
       sendJson(res, 200, { ok: true, kind, id }, origin);
     } catch (err) {
       revert();
+      // Step 2 fix (S3) — a NAMED containment refusal from the copy layer
+      // (`copyStagingToLibrary` refusing a staged symlink/hardlink/other
+      // source-or-destination containment failure at step 5) is an honest,
+      // expected refusal, not an unexpected crash — map it to a clean 400
+      // exactly the way `SkillIdOccupiedError` is mapped to 409 in
+      // `finalizeSkillFromLanded` above, rather than falling through to the
+      // generic `500 sanitizeError(err)` below. Built directly from
+      // `err.message`, NEVER `sanitizeError`: `InteractiveFinalizerError`
+      // messages name only package-relative staged-entry paths
+      // ("scripts/evil.sh"), never a host absolute path — there is nothing
+      // for `sanitizeError`'s redaction regex to legitimately catch, and
+      // running it anyway is exactly what turned "scripts/evil.sh" into the
+      // unreadable "scripts[path]".
+      //
+      // NARROWED to entry-scoped refusals on purpose (`isEntryScopedFinalizerRefusal`
+      // below) — `InteractiveFinalizerError` ALSO carries genuinely structural
+      // preconditions (a session whose `staging/` dir does not exist at all
+      // because the drafting turn crashed before writing anything; an invalid
+      // `packageId`, unreachable here in practice because `runFinalizeStep`'s
+      // own `SLUG_RE` check throws first) that P5-2 (this same suite) pins as
+      // 500 — those are environment/precondition failures the operator
+      // recovers from by re-running the drafting turn, not a "here is the one
+      // bad file" refusal. Widening the 400 mapping to catch those too would
+      // regress that pinned contract for no operator benefit: there is no
+      // single offending entry to name.
+      if (err instanceof InteractiveFinalizerError && isEntryScopedFinalizerRefusal(err)) {
+        sendJson(res, 400, { error: `staged package could not be copied: ${err.message}` }, origin);
+        return;
+      }
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     } finally {
       // library-37 fix — see the file header's LANDED-PACKAGE CLEANUP note:
