@@ -465,6 +465,30 @@ test('terminal:true hides the ActivityLog drawer — a settled session is not "w
   expect(html).not.toContain('data-component="activity-drawer"');
 });
 
+// ---------------------------------------------------------------------------
+// F6 (wave-8, "a linked session must be readable") — a LEGACY session (its
+// only surviving record is the central log dir, no project-side status.json)
+// is always `terminal: true` (there is no session dir left for a runner to
+// advance), but the event log IS the only surviving record of what happened,
+// so the drawer must still render — with `phaseActive={false}`, since
+// nothing is actually running. Today the drawer is gated on `!terminal`
+// alone (see the two tests immediately above), so this is RED until the
+// component learns to read a `legacy` prop.
+// ---------------------------------------------------------------------------
+
+test('F6: terminal:true AND legacy:true still renders the ActivityLog drawer (with phaseActive false) — the event log is the ONLY surviving record for a legacy session', () => {
+  const html = render({
+    kind: 'architect',
+    phase: 'awaiting-verdict',
+    affordances: [],
+    events: [FIXTURE_EVENT],
+    terminal: true,
+    legacy: true,
+  } as never);
+  expect(html).toContain('data-component="activity-drawer"');
+  expect(html).toContain('data-phase-active="false"');
+});
+
 // ===========================================================================
 // W7-C2 — revise verdict + rationale + per-question form + requires hint +
 // finalized link (sessions-kinds-09/17/23/29/36, library-22/24, beads

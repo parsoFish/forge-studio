@@ -87,6 +87,9 @@ const BASE_PAYLOAD = {
   // W7-C2 — REQUIRED on every wire payload (null = produced nothing).
   finalized: null,
   transcriptError: null,
+  // F6 (wave-8) — REQUIRED like "terminal": this fixture's session has a
+  // real project-side status.json, so its honest value is false.
+  legacy: false,
 };
 
 test('parseSessionShellPayload: a payload WITHOUT lifecycle throws naming the field (never defaulted to working)', () => {
