@@ -108,8 +108,21 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
  * the new invocation exits non-zero with this exact text instead of waiting.
  * That is host contention — an environment failure that self-resolves in
  * minutes — NOT a lint failure in the code.
+ *
+ * W8-F3: anchored, because a bare `.includes` over `gate_stdout_tail` is the
+ * SAME defect class this change closes for the rate-limit rule — captured tool
+ * output is project-controlled, so a project whose own test asserts on this
+ * string ("expected the wrapper to surface exit 1 when \"parallel golangci-lint
+ * is running\" is seen") bought its own deterministic test failure two
+ * auto-retries. golangci-lint emits the signature as its OWN error line. All
+ * three known real forms carry an error marker — the two in the archived logs
+ * ("Error: parallel golangci-lint is running", "…command is terminated due to
+ * an error: parallel golangci-lint is running") and the `ERRO`-prefixed form a
+ * pinned test carries — so requiring line-start or an `err`/`erro`/`error`
+ * prefix keeps every real shape and drops the quoted-in-a-sentence one.
  */
-const PARALLEL_LINT_CONTENTION_SIGNATURE = 'parallel golangci-lint is running';
+const PARALLEL_LINT_CONTENTION_SIGNATURE =
+  /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
 /**
  * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
@@ -134,6 +147,73 @@ const RATE_LIMIT_TEXT_SIGNATURES = [
 export function matchesRateLimitSignature(text: string): boolean {
   const t = text.toLowerCase();
   return RATE_LIMIT_TEXT_SIGNATURES.some((s) => t.includes(s));
+}
+
+/**
+ * W8-F3 (ON-7 residue): the broad rate-limit vocabulary, scanned over an error
+ * event's OWN message only — never over its metadata.
+ *
+ * The rule this replaces scanned `message + JSON.stringify(metadata)`. An
+ * event's metadata is dominated by PROJECT-CONTROLLED payload: the PM error's
+ * `hidden_coupling_violations[].sharedFiles` (real repo file paths),
+ * `parse_errors` / `set_errors` free text, `gate_stdout_tail` (compiler and
+ * linter output), `error` strings carrying git SHAs. Surveying all 354
+ * archived cycle logs under `_logs/`, that scan's precision was ZERO: no error
+ * event has ever carried a rate-limit token in its own message, and every one
+ * of the five metadata hits was a false positive — a `529` inside the source
+ * line number `resource_release_definition.go:1529:36`, a `529` inside the git
+ * SHA `0529de0a`. One of those cycles still replays to
+ * "agent rate-limited" today although its recorded 2026-06 classification was
+ * the correct "dev-loop completed 0/N work items".
+ */
+const RATE_LIMIT_MESSAGE_SIGNATURES = [
+  'rate_limit', 'rate-limit', 'usage limit', 'overloaded', 'stream-deadline',
+] as const;
+
+/**
+ * `429` / `529` preceded by an explicit STATUS MARKER.
+ *
+ * Bare-substring matching is what made the old scan useless: `:1529:36` is a
+ * source line, `0529de0a` is a SHA fragment, `4290` is a byte count. A first
+ * cut guarded only digit/dot/colon adjacency, and an adversarial review broke
+ * it in BOTH directions: `PR429`, `WI-429`, `issue429` and
+ * "golangci-lint reported 429 problems" still matched (a letter is not a
+ * digit), while "error 429." and "statusCode:429" no longer did — and losing a
+ * genuine detection is the mirror-image defect, a cycle that stops
+ * auto-retrying through real API pressure.
+ *
+ * Requiring a marker (`http…`, `status`/`statusCode`/`status_code`, `error`)
+ * immediately before the number keeps every real shape — "HTTP 429",
+ * "HTTP/1.1 429", "status: 529", "statusCode:429", "error 429." — and drops
+ * every identifier-, count- and line-number shape, because none of those has a
+ * status word in front of it.
+ */
+const HTTP_PRESSURE_STATUS_RE = /(?:\bhttps?[\w/.]*|\bstatus(?:_?code)?|\berror)[\s:=/-]*\b(?:429|529)\b/i;
+
+/** Typed API error kinds. Compared as exact values, never as substrings. */
+const RATE_LIMIT_ERROR_TYPES = ['rate_limit_error', 'overloaded_error'] as const;
+
+/**
+ * True iff the error's OWN fields signal API pressure: its message, the SDK's
+ * typed error kind, or an HTTP status compared as a NUMBER. Project-supplied
+ * payload fields are deliberately not read — a repo that happens to contain
+ * `internal/provider/rate_limit.go` or `docs/adr/429-quota.md` must not be
+ * able to re-label its own deterministic defects as environment failures.
+ */
+function errorOwnFieldsSignalRateLimit(msg: string, md: Record<string, unknown>): boolean {
+  const m = msg.toLowerCase();
+  if (RATE_LIMIT_MESSAGE_SIGNATURES.some((s) => m.includes(s))) return true;
+  if (HTTP_PRESSURE_STATUS_RE.test(msg)) return true;
+  for (const key of ['error_type', 'type', 'api_error_type']) {
+    const v = md[key];
+    if (typeof v === 'string' && (RATE_LIMIT_ERROR_TYPES as readonly string[]).includes(v.toLowerCase())) return true;
+  }
+  for (const key of ['status', 'http_status', 'statusCode', 'status_code']) {
+    const v = md[key];
+    const n = typeof v === 'number' ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : null;
+    if (n === 429 || n === 529) return true;
+  }
+  return false;
 }
 
 /**
@@ -193,10 +273,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     const msg = e.message ?? '';
     const pmErr = e.phase === 'project-manager' && e.event_type === 'error';
 
-    // Checked ahead of the generic error-blob scan below: CostCeilingError's
-    // message (flow-budgets.ts) always starts with this literal prefix, and
-    // matching it here means the branch never depends on the blob-based
-    // rate-limit/agent_threw checks happening to miss it.
+    // CostCeilingError's message (flow-budgets.ts) always starts with this
+    // literal prefix. W8-F3: capturing the signal early was never enough —
+    // this comment used to claim the branch "never depends on the blob-based
+    // rate-limit/agent_threw checks happening to miss it", which was false,
+    // because the RETURN below sat under `rateLimited`. The precedence, not
+    // the capture, is what decides. It is now in the deterministic block.
     if (e.event_type === 'error' && msg.startsWith('cost-ceiling:')) { costCeilingHit = true; costCeilingMessage = msg; ev(e); }
     if (msg === 'ralph.end' && md.status === 'failed' && (md.iterations === 0 || md.iterations === undefined) && md.stop_reason === 'quality-gates-pass') { trivialPass = true; ev(e); }
     if (e.event_type === 'error' && (msg.includes('brain-skipped') || msg.includes('brain-first mandate'))) { brainSkipped = true; ev(e); }
@@ -237,7 +319,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
         String(md.gate_stdout_tail ?? '') + ' ' +
         String(md.output_tail ?? '')
       ).toLowerCase();
-      if (tails.includes(PARALLEL_LINT_CONTENTION_SIGNATURE)) { transientLint = true; ev(e); }
+      if (PARALLEL_LINT_CONTENTION_SIGNATURE.test(tails)) { transientLint = true; ev(e); }
     }
     // re-review #1/#5: a gate that could not RUN (missing binary / EACCES /
     // killed) is a BROKEN GATE, not a test or code failure. Distinct terminal
@@ -259,19 +341,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // crashes again — terminal, operator-visible.
     if (msg === 'dev-loop.crash-deterministic' || msg === 'unifier.crash-deterministic') { crashDeterministic = true; ev(e); }
     if (e.event_type === 'error') {
-      const blob = (msg + ' ' + JSON.stringify(md)).toLowerCase();
       // Transient API-pressure signatures: rate limits, usage limits, overload,
       // and the idle-deadline abort (a usage-limit / network stall that would
       // otherwise have hung the stream forever — known-gaps 2026-06-01).
-      if (
-        blob.includes('rate_limit') ||
-        blob.includes('rate-limit') ||
-        blob.includes('429') ||
-        blob.includes('529') ||
-        blob.includes('usage limit') ||
-        blob.includes('overloaded') ||
-        blob.includes('stream-deadline')
-      ) { rateLimited = true; ev(e); }
+      // W8-F3: read the error's OWN fields only — see
+      // `errorOwnFieldsSignalRateLimit`.
+      if (errorOwnFieldsSignalRateLimit(msg, md)) { rateLimited = true; ev(e); }
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
     }
     // N9: the CLI's limit death surfaces in reasoning/log events while the
@@ -299,6 +374,82 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       }
     }
   }
+
+  // ---------------------------------------------------------------------
+  // W8-F3 (ON-7 residue): DETERMINISTIC verdicts are decided FIRST.
+  //
+  // The environment-first chain below rests on a sound premise — a rate limit
+  // or a gate timeout is the CAUSE of the terminal-looking signals that follow
+  // it, so those must not win. But that premise does not hold for failures an
+  // identical retry provably cannot fix no matter how good the conditions are:
+  // a cost ceiling that has ALREADY been crossed is still crossed on the
+  // retry; a crash the crash-classifier proved deterministic re-crashes at the
+  // same point; a decomposition defect is re-derived from the same initiative
+  // body. For these, "the environment caused it" is not an available
+  // explanation, so environment-first buys nothing and costs a full
+  // MAX_AUTO_RETRIES of byte-identical failures.
+  //
+  // This ordering is load-bearing on its own, independent of the narrowed
+  // rate-limit detector above: the PM's own thrown message names the file the
+  // coupled WIs overlap on ("…share internal/provider/rate_limit.go"), so the
+  // token reaches the error's own message legitimately. Narrowing alone would
+  // not close it; precedence does.
+  //
+  // Everything NOT in this block stays where it was. agent_threw, dev-loop
+  // total failure, the unifier/review gates and the broken-gate rules can all
+  // genuinely be *caused* by API pressure, and their environment-first
+  // treatment is correct and pinned.
+  // ---------------------------------------------------------------------
+  const deterministic = ((): FailureClassification | null => {
+    // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget
+    // guard firing at a clean phase boundary (flow-budgets.ts CostTracker.
+    // checkCeiling) — never a defect in the work, and the class's own doc
+    // comment even calls it "resumable — the operator decides whether to
+    // continue or abandon." That "resumable" is about a HUMAN being able to
+    // raise the ceiling and re-queue past this exact point; it is NOT license
+    // to auto-retry. `recoverable` (kind==='transient') is what
+    // `decideAutoRetry` reads to grant an unattended retry, and an unattended
+    // retry here would immediately re-spend against a ceiling it already
+    // crossed — zero new work, guaranteed repeat, at cost. So this stays
+    // `kind: 'terminal'` (recoverable: false) even though it is, in the
+    // "an operator could resume this" sense, the least "terminal" terminal
+    // failure in this file. Do not "fix" this to transient.
+    if (costCeilingHit) return T('terminal', `cost ceiling reached — ${costCeilingMessage} An auto-retry would immediately re-spend against the same already-crossed ceiling with zero new work; continuing is an OPERATOR decision (raise the ceiling and resume from this phase boundary, or abandon), never an unattended scheduler retry.`, evidence);
+    // G3 (plan 2.3): `classifyCrash` checks the API-pressure signatures FIRST
+    // and returns `transient` for them, so a crash that reaches
+    // `deterministic` is by construction NOT rate-limit death — it is context
+    // overflow or the identical crash repeated at the same point.
+    if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
+    // Plan 2.11 carve-out, narrowed by W8-F3: a capped incremental-write run
+    // legitimately leaves a TRUNCATED TAIL work item (per-item errors)
+    // alongside usable ones, and a cap is stochastic — a fresh pass is a
+    // legitimate retry, pinned by "partial-usable beats the capped+degenerate
+    // terminal rule" with 2026-07-10 evidence. Hidden coupling is a different
+    // animal: it is an overlap between work items the PM actually WROTE,
+    // computed deterministically from them. A cap cannot produce it and a
+    // fresh pass cannot be expected to avoid it. So partial-usable keeps
+    // shielding per-item errors and stops shielding coupling; when it shields,
+    // defer to the ordinary chain so the environment-first rules still get
+    // their say and the transient reason stays accurate.
+    if (pmPartialUsable && !pmHiddenCoupling) return null;
+    if (pmEmptyDecomposition) return T('terminal', 'PM emitted zero work items — the initiative body may have no decomposable ACs or the PM ignored them entirely; amend the initiative body and re-queue', evidence);
+    if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
+    if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
+    // W8-A1 (ON-7): a PM decomposition defect is DETERMINISTIC, not transient.
+    // The same initiative body, re-decomposed, produces the same overlap and
+    // the same schema violation — an auto-retry re-runs the identical failure
+    // at the identical cost. INIT-2026-08-14-betterado-gap-registry proved it:
+    // three byte-identical runs at ~$2.40 and ~14m each, all three reporting
+    // "4 per-item validation errors; 5 hidden-coupling pair(s)", because
+    // `transient` bought it the full MAX_AUTO_RETRIES. Terminal ⇒
+    // `recoverable: false` ⇒ `decideAutoRetry` grants ZERO retries and the
+    // manifest lands in failed/ on the first failure, where an operator can
+    // see it.
+    if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
+    if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see the per-item errors on the project-manager error event) and re-dispatch', evidence);
+    return null;
+  })();
+  if (deterministic) return deterministic;
 
   // Environment failures — checked BEFORE the terminal chain: the environment
   // signal is the CAUSE of any downstream terminal-looking signal
@@ -329,22 +480,18 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // `kind: 'terminal'` (recoverable: false) even though it is, in the
   // "an operator could resume this" sense, the least "terminal" terminal
   // failure in this file. Do not "fix" this to transient.
-  if (costCeilingHit) return T('terminal', `cost ceiling reached — ${costCeilingMessage} An auto-retry would immediately re-spend against the same already-crossed ceiling with zero new work; continuing is an OPERATOR decision (raise the ceiling and resume from this phase boundary, or abandon), never an unattended scheduler retry.`, evidence);
-  if (crashDeterministic) return T('terminal', 'agent process crashed DETERMINISTICALLY (context-length overflow, or the identical crash repeated at the same point) — an identical re-spawn cannot succeed. Preserved work stays on the branch (ADR 012); amend the WI spec / shrink the context / fix the environment, then re-queue for a fresh (non-identical) attempt.', evidence);
   if (gateErrored) return T('terminal', 'a quality gate could NOT RUN (missing binary / permission denied / killed by signal) — this is a BROKEN GATE, not a test or code failure. Fix the quality_gate_cmd (is the runner installed? is the binary/path correct? did it OOM?), then re-run. The agent cannot make a non-runnable command pass, so this never "fails because the code was wrong".', evidence);
   if (gateMissingScript) return T('terminal', 'gate referenced a missing npm script', evidence);
   if (worktreeNoDeps) return T('terminal', 'gate failed at module resolution — worktree missing deps', evidence);
   if (baselineRed) return T('terminal', 'project baseline already red at HEAD — the full gate failed before any WI work (pre-existing failure / missing deps / flaky test); fix the baseline, then re-run', evidence);
   if (resumeNeedsRebase) return T('terminal', 'resume blocked — the preserved branch conflicts with current main (another cycle merged during the stall); rebase the initiative branch onto main by hand, then re-resume', evidence);
-  // Plan 2.11: partial-but-usable BEATS both the empty-decomposition and the
+  // Plan 2.11: partial-but-usable BEATS the empty-decomposition and
   // capped+degenerate terminal rules — an incremental-write run capped
   // mid-flight legitimately leaves a truncated tail WI (per-item errors)
   // alongside usable ones, and the 2026-07-10 evidence shows a re-queue
-  // (fresh PM pass with injected context) succeeds.
+  // (fresh PM pass with injected context) succeeds. Reached only when the
+  // deterministic block above deferred, i.e. when there is no hidden coupling.
   if (pmPartialUsable) return T('transient', 'PM hit its turn/budget cap mid-decomposition but left a partial, USABLE work-item graph (incremental-write discipline held) — the decomposition is viable; auto-retry runs a fresh PM pass. If this recurs, split the initiative or raise its cost budget', evidence);
-  if (pmEmptyDecomposition) return T('terminal', 'PM emitted zero work items — the initiative body may have no decomposable ACs or the PM ignored them entirely; amend the initiative body and re-queue', evidence);
-  if (pmCapped && (pmHiddenCoupling || pmInvalidWorkItems)) return T('terminal', 'PM hit cap AND produced degenerate WIs — never converged', evidence);
-  if (pmBudgetExhausted) return T('terminal', 'PM exhausted its budget cap', evidence);
   if (agentThrew) return T('terminal', 'agent threw a non-rate-limit error', evidence);
   if (devLoopTotalFailure) return T('terminal', 'dev-loop completed 0/N work items', evidence);
   // G4: checked AFTER the N10 timeout-transient rule above — a cap exhausted
@@ -361,18 +508,6 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (demoPipelineFailed) return T('terminal', 'the demo pipeline failed (author-invalid / capture tooling / scope violation / budget) — the branch is not review-ready and no PR opened; triage the demo-agent failure (see the demo.* error events), then re-run', evidence);
   if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / budget) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then re-run', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
-
-  // W8-A1 (ON-7): a PM decomposition defect is DETERMINISTIC, not transient.
-  // The same initiative body, re-decomposed, produces the same overlap and the
-  // same schema violation — an auto-retry re-runs the identical failure at the
-  // identical cost. INIT-2026-08-14-betterado-gap-registry proved it: three
-  // byte-identical runs at ~$2.40 and ~14m each, all three reporting "4 per-item
-  // validation errors; 5 hidden-coupling pair(s)", because `transient` here
-  // bought it the full MAX_AUTO_RETRIES. Terminal ⇒ `recoverable: false` ⇒
-  // `decideAutoRetry` grants ZERO retries and the manifest lands in failed/ on
-  // the first failure, where an operator can see it.
-  if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
-  if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see the per-item errors on the project-manager error event) and re-dispatch', evidence);
 
   // Transient — auto-retry within MAX_AUTO_RETRIES.
   if (brainSkipped) return T('transient', 'agent skipped brain reads', evidence);
