@@ -20,10 +20,15 @@
  * every real spawn site either imports `pinnedSdkQuery`/`pinnedStreamQuery` as
  * a VALUE, or reaches the SDK indirectly through the adapter registry
  * (`getAdapter(id).query(...)` / `getAdapter(id).createAgent(...)` —
- * `loops/_adapters/registry.ts`, ADR 029's seam). So "imports the pinned query
- * as a value, OR calls getAdapter(" is a sound over-approximation of "can
- * spawn" (W8-C4 widened this from the pinned-import-only shape, which was
- * blind to adapter-registry-only spawn sites), and every such file must either
+ * `loops/_adapters/registry.ts`, ADR 029's seam), or imports one of the adapter
+ * OBJECTS directly (`claudeAdapter.query` IS `pinnedSdkQuery` re-exported —
+ * `loops/_adapters/claude/index.ts:20,28`). So "imports the pinned query as a
+ * value, OR calls getAdapter(, OR value-imports a `<runtime>Adapter` object" is
+ * a sound over-approximation of "can spawn" (W8-C4 widened this from the
+ * pinned-import-only shape, which was blind to adapter-registry spawn sites;
+ * W8-F5's adversarial review added the third route, which slips past the
+ * sibling `pinned-sdk-query.enforce.test.ts` too because it never names the SDK
+ * module specifier), and every such file must either
  * wire hook dispatch — in REAL code, evaluated with comments and string
  * literals stripped, not merely a comment naming the same symbols (this
  * codebase's convention is dense cross-referencing prose that does exactly
@@ -36,13 +41,16 @@
  * side-effect file. Stated explicitly so plumbing coverage is never mistaken
  * for execution coverage.
  *
- * Also: `stripComments` (below), which the ratchet uses to evaluate `WIRED`
- * and `ADAPTER_CALL` against real code, is a lexer for `//`/`/* … *\/`
- * comments and quoted/template strings only — not a full TS tokenizer. It
- * does not special-case regex literals; a `/pattern/` containing a
- * comment-shaped run of characters could be mis-split. No spawn-capable file
- * in this codebase currently has that shape on a line naming
- * `sdkHooksForAgent`, `SdkHooksOption`, or `getAdapter`.
+ * Also: `stripComments` (below), which the ratchet uses to evaluate `WIRED`,
+ * `ADAPTER_CALL` and `ADAPTER_VALUE_IMPORT` against real code, is a lexer for
+ * `//`/`/* … *\/` comments, quoted strings and template literals (including
+ * comments inside a `${…}` substitution, which IS a code context — W8-F5
+ * review) — not a full TS tokenizer. It does not special-case regex literals;
+ * a `/pattern/` containing a comment-shaped run of characters could be
+ * mis-split, which can only ERASE real code on that line (a false OFFENDER —
+ * fail-closed noise), never fabricate wiring. No spawn-capable file in this
+ * codebase currently has that shape on a line naming `sdkHooksForAgent`,
+ * `SdkHooksOption`, or `getAdapter`.
  */
 
 import { describe, it, after } from 'node:test';
@@ -75,6 +83,8 @@ const HOOK_DISPATCH_EXEMPT: Record<string, string> = {
     'imports pinnedStreamQuery only to DEFAULT options.queryFn; its actual spawn goes through runAgent(def, …) (:248), which builds the bag from the same derived spec.',
   'loops/_adapters/claude/index.ts':
     'the adapter registry shim. `query` is the raw stream boundary a direct-stream phase injects (that phase wires its own bag), and `createAgent` delegates to createClaudeAgent, which forwards opts.hooks.',
+  'loops/_adapters/registry.ts':
+    'the registry TABLE itself: it value-imports the four adapter objects only to key them by sdk id (`getAdapter`/`resolveSdkId`) and never builds, holds or passes an options bag — every caller that obtains an adapter here is itself enumerated by ADAPTER_CALL and must wire its own. Newly enumerated by W8-F5\'s ADAPTER_VALUE_IMPORT rule, which exists to catch a CONSUMER importing an adapter object directly.',
 };
 
 /** Any of these means the file participates in hook dispatch. */
@@ -100,6 +110,23 @@ const VALUE_IMPORT = /import\s*\{[^}]*\bpinned(?:SdkQuery|StreamQuery)\b[^}]*\}\
 const ADAPTER_CALL = /(?<!function\s)\bgetAdapter\s*\(/;
 
 /**
+ * A VALUE import of a runtime ADAPTER OBJECT (`claudeAdapter`, `geminiAdapter`,
+ * `aiderAdapter`, `exampleAdapter`). W8-F5 adversarial review: this is a THIRD
+ * spawn route that matches neither of the two above — `claudeAdapter.query` IS
+ * `pinnedSdkQuery` re-exported under another name
+ * (`loops/_adapters/claude/index.ts:20,28`), so
+ * `import { claudeAdapter } … ; claudeAdapter.query(…)` spawns with no
+ * `pinned…` import and no literal `getAdapter(` anywhere. It also slips past
+ * `pinned-sdk-query.enforce.test.ts`, which keys on the SDK module specifier.
+ *
+ * Keys on this repo's naming convention: adapter VALUES are camelCase
+ * `<runtime>Adapter`; the TYPE is PascalCase `RuntimeAdapter` (so a
+ * `import type { RuntimeAdapter }` does not make a file spawn-capable). If that
+ * convention ever changes, this rule must change with it.
+ */
+const ADAPTER_VALUE_IMPORT = /import\s*(?!type\b)\{[^}]*\b[a-z][A-Za-z0-9_$]*Adapter\b[^}]*\}\s*from/;
+
+/**
  * Strips `//` line comments and `/* … *\/` block comments from TS source,
  * respecting single/double/template string boundaries (including escaped
  * quotes) so a comment-shaped sequence inside a string literal is never
@@ -110,33 +137,84 @@ function stripComments(src: string): string {
   let out = '';
   let i = 0;
   const n = src.length;
+  // Mode stack. A backtick pushes `tpl`; a `${` INSIDE a template pushes `code`
+  // back on (with its own brace depth) because a substitution is a real code
+  // context — W8-F5 adversarial review found that treating a template literal
+  // as opaque let `\`x: ${/* sdkHooksForAgent TODO */ p}\`` survive stripping
+  // and read as WIRING: the exact fail-open this ratchet exists to close,
+  // relocated one syntax level down.
+  const stack: Array<'code' | 'tpl'> = ['code'];
+  const braceDepth: number[] = [0];
   while (i < n) {
-    if (src.slice(i, i + 2) === '//') {
-      while (i < n && src.charAt(i) !== '\n') i++;
-      continue;
-    }
-    if (src.slice(i, i + 2) === '/*') {
-      const end = src.indexOf('*/', i + 2);
-      i = end === -1 ? n : end + 2;
-      continue;
-    }
-    const ch = src.charAt(i);
-    if (ch === '"' || ch === "'" || ch === '`') {
-      out += ch;
-      i++;
-      while (i < n && src.charAt(i) !== ch) {
-        if (src.charAt(i) === '\\' && i + 1 < n) {
-          out += src.slice(i, i + 2);
-          i += 2;
+    if (stack[stack.length - 1] === 'code') {
+      if (src.slice(i, i + 2) === '//') {
+        while (i < n && src.charAt(i) !== '\n') i++;
+        continue;
+      }
+      if (src.slice(i, i + 2) === '/*') {
+        const end = src.indexOf('*/', i + 2);
+        i = end === -1 ? n : end + 2;
+        continue;
+      }
+      const ch = src.charAt(i);
+      if (ch === '`') {
+        out += ch;
+        i++;
+        stack.push('tpl');
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        out += ch;
+        i++;
+        while (i < n && src.charAt(i) !== ch) {
+          if (src.charAt(i) === '\\' && i + 1 < n) {
+            out += src.slice(i, i + 2);
+            i += 2;
+            continue;
+          }
+          out += src.charAt(i);
+          i++;
+        }
+        if (i < n) {
+          out += src.charAt(i);
+          i++;
+        }
+        continue;
+      }
+      if (ch === '{') braceDepth[braceDepth.length - 1]! += 1;
+      if (ch === '}') {
+        if (braceDepth[braceDepth.length - 1] === 0 && stack.length > 1 && stack[stack.length - 2] === 'tpl') {
+          // closing a `${…}` hole — hand control back to the template literal
+          out += ch;
+          i++;
+          stack.pop();
+          braceDepth.pop();
           continue;
         }
-        out += src.charAt(i);
-        i++;
+        if (braceDepth[braceDepth.length - 1]! > 0) braceDepth[braceDepth.length - 1]! -= 1;
       }
-      if (i < n) {
-        out += src.charAt(i);
-        i++;
-      }
+      out += ch;
+      i++;
+      continue;
+    }
+    // template-literal mode: copy through, but a `${` opens a code context
+    const ch = src.charAt(i);
+    if (ch === '\\' && i + 1 < n) {
+      out += src.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === '`') {
+      out += ch;
+      i++;
+      stack.pop();
+      continue;
+    }
+    if (src.slice(i, i + 2) === '${') {
+      out += '${';
+      i += 2;
+      stack.push('code');
+      braceDepth.push(0);
       continue;
     }
     out += ch;
@@ -177,7 +255,8 @@ function spawnCapableFiles(root: string = FORGE_ROOT): string[] {
         found.push(rel);
         continue;
       }
-      if (ADAPTER_CALL.test(stripComments(src))) found.push(rel);
+      const code = stripComments(src);
+      if (ADAPTER_CALL.test(code) || ADAPTER_VALUE_IMPORT.test(code)) found.push(rel);
     }
   }
   return found.sort();
@@ -204,8 +283,9 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
     assert.deepEqual(
       offenders,
       [],
-      `these files import the pinned SDK query as a value, or call the adapter registry's getAdapter( ` +
-        `(so they can spawn) but never reach orchestrator/studio/hook-dispatch.ts in real code (a comment ` +
+      `these files import the pinned SDK query as a value, call the adapter registry's getAdapter(, or ` +
+        `import a runtime adapter OBJECT directly (so they can spawn) but never reach ` +
+        `orchestrator/studio/hook-dispatch.ts in real code (a comment ` +
         `naming the wiring symbols does not count). Wire sdkHooksForAgent into the options bag, or add a ` +
         `reasoned row to HOOK_DISPATCH_EXEMPT:\n  ${offenders.join('\n  ')}`,
     );
@@ -390,6 +470,89 @@ describe('the ratchet widens to adapter-registry spawn sites and ignores comment
       'a type-only import (and a comment mentioning getAdapter) must not be enumerated as spawn-capable',
     );
   });
+  it('a file that imports a runtime ADAPTER OBJECT directly and calls .query(...) on it IS an offender (kills: an enumeration that only knows the pinned-query import and the literal getAdapter( text — claudeAdapter.query IS pinnedSdkQuery re-exported, so this is a THIRD spawn route, found by adversarial review)', () => {
+    const root = tmp('w8f5-adapter-const-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'direct-adapter-site.ts'),
+      [
+        "import { claudeAdapter } from '../loops/_adapters/claude/index.ts';",
+        '',
+        'export async function spawnDirect(p: string) {',
+        '  return claudeAdapter.query({ prompt: p, options: {} } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(
+      offendersIn(root),
+      ['orchestrator/direct-adapter-site.ts'],
+      'importing the adapter VALUE bypasses both getAdapter( and the pinned-query import — it must still be enumerated',
+    );
+  });
+
+  it('the same direct-adapter site, WITH the hooks bag wired, is NOT an offender (swap-the-fix twin)', () => {
+    const root = tmp('w8f5-adapter-const-wired-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'direct-adapter-site.ts'),
+      [
+        "import { claudeAdapter } from '../loops/_adapters/claude/index.ts';",
+        "import { sdkHooksForAgent } from './studio/hook-dispatch.ts';",
+        '',
+        'export async function spawnDirect(p: string, def: unknown) {',
+        '  const hooks = sdkHooksForAgent(def as never);',
+        '  return claudeAdapter.query({ prompt: p, options: { ...(hooks ? { hooks } : {}) } } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(offendersIn(root), [], 'a wired direct-adapter site is not an offender');
+  });
+
+  it('the adapter TYPE (PascalCase RuntimeAdapter) does not make a file spawn-capable — only a camelCase adapter VALUE does (no over-fire)', () => {
+    const root = tmp('w8f5-adapter-type-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'type-only-adapter.ts'),
+      [
+        "import type { RuntimeAdapter } from '../loops/_adapters/types.ts';",
+        '',
+        'export function describeAdapter(a: RuntimeAdapter): string {',
+        '  return String(a);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(offendersIn(root), [], 'a type-only adapter import cannot spawn');
+  });
+
+  it('a comment nested inside a template-literal ${} hole does NOT count as wiring (kills: a comment stripper that treats a template literal as opaque — the fail-open shape this ratchet exists to close, relocated into a substitution, found by adversarial review)', () => {
+    const root = tmp('w8f5-tpl-hole-');
+    mkdirSync(join(root, 'orchestrator'), { recursive: true });
+    writeFileSync(
+      join(root, 'orchestrator', 'tpl-hole-site.ts'),
+      [
+        "import { pinnedStreamQuery } from './pinned-sdk-query.ts';",
+        '',
+        'export async function spawn(p: string) {',
+        '  const label = `run: ${/* sdkHooksForAgent still TODO, not wired */ p}`;',
+        '  return pinnedStreamQuery({ prompt: label, options: {} } as never);',
+        '}',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    assert.deepEqual(
+      offendersIn(root),
+      ['orchestrator/tpl-hole-site.ts'],
+      'a ${} hole is a CODE context — a comment inside it is still a comment, not wiring',
+    );
+  });
+
 });
 
 // ---------------------------------------------------------------------------
