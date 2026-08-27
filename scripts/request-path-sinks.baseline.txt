@@ -21,7 +21,8 @@ cli/bridge-recovery.ts mkdirSync 1
 cli/bridge-recovery.ts readFileSync 3
 cli/bridge-recovery.ts renameSync 1
 cli/bridge-recovery.ts rmSync 1
-cli/bridge-studio-authoring.ts mkdirSync 1
+cli/bridge-studio-authoring.ts mkdirSync 2
+cli/bridge-studio-authoring.ts readdirSync 1
 cli/bridge-studio-authoring.ts rmSync 1
 cli/bridge-studio-authoring.ts writeFileSync 3
 cli/bridge-studio-community.ts execFileSync 1
@@ -29,7 +30,6 @@ cli/bridge-studio-community.ts existsSync 3
 cli/bridge-studio-community.ts spawnSync 1
 cli/bridge-studio-connections.ts spawnSync 1
 cli/bridge-studio-hooks.ts mkdirSync 1
-cli/bridge-studio-hooks.ts readFileSync 2
 cli/bridge-studio-hooks.ts rmSync 1
 cli/bridge-studio-hooks.ts writeFileSync 4
 cli/bridge-studio-kb-drain.ts existsSync 7
@@ -451,11 +451,14 @@ orchestrator/studio/connection-probe.ts statSync 2
 orchestrator/studio/hook-library.ts existsSync 2
 orchestrator/studio/hook-library.ts readdirSync 1
 orchestrator/studio/hook-library.ts realpathSync 1
+orchestrator/studio/hook-package.ts readdirSync 1
+orchestrator/studio/hook-package.ts readFileSync 1
+orchestrator/studio/hook-package.ts statSync 1
 orchestrator/studio/hook-runtime.ts readFileSync 1
 orchestrator/studio/hook-runtime.ts spawnSync 1
 orchestrator/studio/hook-scan.ts existsSync 2
 orchestrator/studio/hook-scan.ts mkdirSync 1
-orchestrator/studio/hook-scan.ts readFileSync 3
+orchestrator/studio/hook-scan.ts readFileSync 2
 orchestrator/studio/hook-scan.ts writeFileSync 1
 orchestrator/studio/registry.ts existsSync 2
 orchestrator/studio/registry.ts readdirSync 5

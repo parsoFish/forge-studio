@@ -67,7 +67,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { readFileSync, readdirSync, statSync, type Dirent } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import yaml from 'js-yaml';
 
@@ -113,11 +113,24 @@ export function normalizeHookEntryPath(path: string): string {
 }
 
 export function readHookPackage(forgeRoot: string, id: string): HookPackageFile[] {
-  const dir = hookDir(id, forgeRoot); // slug-asserts before any path is built
-  if (!existsSync(join(dir, 'hook.yaml'))) {
-    throw new Error(`readHookPackage: no hook.yaml found for hook "${id}" under "${dir}"`);
-  }
+  hookDir(id, forgeRoot); // slug-asserts before any path is built
   const base = hooksDir(forgeRoot);
+
+  // GUARDED ROOT, NOT A LEXICAL ONE (W8-F5's widened check-raw-fs-guarded /
+  // check-request-path-sinks scope, 2026-08-28). The first cut probed
+  // `existsSync(join(hookDir(id), 'hook.yaml'))` and then walked from that
+  // lexical path — slug-asserted, but a slug guard has no opinion on what a
+  // directory of that name RESOLVES to: a `studio/hooks/<id>` that is itself a
+  // symlink out of the tree would have been walked and read straight through.
+  // This is the same escape `installCommunityHookPackage` already closes for
+  // its own dedup probe, and it is closed the same way — the realpath
+  // containment guard, per segment, `<id>` riding as its own segment and never
+  // folded into the root. A symlinked package root now yields `null` and the
+  // package reads as absent rather than surfacing outside bytes.
+  const pkgRoot = guardedFile(base, [id], 'readdir');
+  if (pkgRoot === null || guardedFile(base, [id, 'hook.yaml'], 'read') === null) {
+    throw new Error(`readHookPackage: no hook.yaml found for hook "${id}" under "${join(base, id)}" (or it fails realpath containment)`);
+  }
 
   type RawEntry = { relPath: string; realPath: string };
   const rawEntries: RawEntry[] = [];
@@ -160,7 +173,8 @@ export function readHookPackage(forgeRoot: string, id: string): HookPackageFile[
       rawEntries.push({ relPath, realPath });
     }
   };
-  walk(dir, '');
+  // Walk from the GUARD-BLESSED real root, never the lexical `hookDir` path.
+  walk(pkgRoot, '');
 
   if (rawEntries.length > MAX_PACKAGE_FILES) {
     throw new Error(`readHookPackage: hook "${id}" has ${rawEntries.length} files, exceeding the ${MAX_PACKAGE_FILES}-file cap`);
