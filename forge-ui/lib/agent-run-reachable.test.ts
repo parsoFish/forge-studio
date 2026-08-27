@@ -77,14 +77,16 @@ const pageSrc = readFileSync(AGENT_PAGE, 'utf8');
  * control may declare.
  *
  * MEASURED, not guessed (immutable-gates: bisect the real limit rather than
- * picking a number that sounds large). After the fix the chain's largest
- * vertical value is the actions row's own padding; the panel root declares
- * `top: 0`. 64 px leaves several times that as headroom for an honest spacing
- * change, while staying an order of magnitude below anything that could
- * displace the control inside the panel's `calc(100vh - 96px)` box on the
- * 1000 px-tall viewport the journey drives. A change that legitimately needs
- * more than this must move this constant DELIBERATELY and re-check the
- * journey's rect measurement in the same PR.
+ * picking a number that sounds large). The chain after the fix is exactly two
+ * elements, and every vertical value on it is enumerable from the rendered
+ * markup: the panel root declares `margin-top: 12px` and `top: 0`, and the
+ * actions row declares `padding: 12px 14px` -> 12px vertical. **The real
+ * maximum is 12 px.** 64 is a bit over 5x that — headroom for an honest
+ * spacing change — while staying far below anything that could displace the
+ * control inside the panel's `calc(100vh - 96px)` box on the viewport the
+ * journey drives. A change that legitimately needs more than this must move
+ * this constant DELIBERATELY and re-check the journey's rect measurement in
+ * the same PR.
  */
 const MAX_ANCESTOR_VERTICAL_OFFSET_PX = 64;
 
