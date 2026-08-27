@@ -79,8 +79,13 @@ describe('W8-F1 (knowledge-42): a consolidate over zero findings', () => {
     expect(real).toBe('consolidate: cleared ✓');
   });
 
-  it('still says "some findings remain" when there really were findings left', () => {
+  it('names how many of how many were cleared when findings really did remain', () => {
     expect(consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 3, clearedCount: 1 }))
+      .toBe('consolidate: cleared 1/3 — some findings remain');
+  });
+
+  it('falls back to the bare wording when a run carries no counters (a per-finding fix-agent run)', () => {
+    expect(consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false }))
       .toBe('consolidate: some findings remain');
   });
 });

@@ -640,6 +640,26 @@ function autoAppliedEntry(
   };
 }
 
+/**
+ * W8-F1 review round 2 — the auto tier's mutations that no `applied` item
+ * claims, on one honest row rather than silently discarded. Its `outcome` is
+ * derived like every other row's (`finalizeRoundRows`): the key is not in the
+ * post-fix lint's set, so it reads `cleared` — which is true, these writes did
+ * land. What the row adds is that they are VISIBLE.
+ */
+function autoUnattributedEntry(proposals: readonly KbDrainProposedChange[], round: number): KbDrainRoundRow {
+  return {
+    key: `auto.unattributed::round-${round}`,
+    check: 'auto.unattributed',
+    kind: 'auto.unattributed',
+    file: proposals[0].file,
+    message: `the auto-fix pass also rewrote ${proposals.length} file(s) no single finding accounts for`,
+    tier: 'auto',
+    round,
+    proposedChanges: [...proposals],
+  };
+}
+
 /** Every file the deterministic auto-tier fixers changed, rendered as
  *  operator-inspectable proposals. Disposition is always `applied`: these
  *  fixers are not agent proposals, they are deterministic repairs that have
@@ -918,8 +938,10 @@ function mintKbCleanupDraftSession(
       'Every change below was audited for graph soundness before it was parked',
       '(W8-F1): a prose edit that also deletes a resolvable related_themes edge,',
       'drops a live link or repoints one at a target that does not exist is',
-      'REFUSED outright and never reaches this page. What is left to judge is the',
-      'prose itself.',
+      'REFUSED outright and never reaches this page. The SAME audit runs again',
+      'when you approve, against the file as it stands then — so if anything',
+      'edits this theme while the session waits, the apply refuses rather than',
+      'writing this draft over it. What is left for you to judge is the prose.',
       '',
       'Approving this session applies the draft content below verbatim.',
       '',
@@ -1126,8 +1148,20 @@ export async function runKbDrain(
       const autoSnapshot = snapshotBrainTree(forgeRoot);
       const autoResult = applyAutoFixes(forgeRoot, { filter: inKb, extraFindings: ownLens });
       const autoProposals = buildAutoProposedChanges(forgeRoot, brainRoot, diffKbSnapshot(brainRoot, autoSnapshot));
+      const autoRows = autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals));
+      // W8-F1 review round 2 — a mutation NO row claims is a mutation the
+      // operator never sees. `autoAppliedEntry` attributes by path, which is
+      // as precise as the fixers' flat `applied` list allows, but it is not
+      // total: `category.mis-routed` reports `{file: <source>, detail: 'moved
+      // to …'}`, so neither the CREATED file's diff nor the index rewrite that
+      // follows it matches either clause. Those diffs used to be dropped on
+      // the floor. They are collected here instead, on their own row, rather
+      // than attributed to a finding that did not cause them.
+      const claimed = new Set(autoRows.flatMap((r) => (r.proposedChanges ?? []).map((p) => p.file)));
+      const unclaimed = autoProposals.filter((p) => !claimed.has(p.file));
       const roundRows: KbDrainRoundRow[] = [
-        ...autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals)),
+        ...autoRows,
+        ...(unclaimed.length > 0 ? [autoUnattributedEntry(unclaimed, round)] : []),
         ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
       ];
       emitProgress(`kb-drain.auto (applied ${autoResult.applied.length}, skipped ${autoResult.skipped.length})`, {
@@ -1224,8 +1258,20 @@ export async function runKbDrain(
         // carries the agent's `after`; parking that as a draft would hand the
         // operator a one-click button for exactly the destruction just
         // refused. Approving a draft writes `after` back byte-for-byte.
-        const refusedPathSet = new Set(gate.refused.map((c) => c.relPath));
-        const proseChanges = changes.filter((c) => c.klass === 'prose' && !refusedPathSet.has(c.relPath));
+        // W8-F1 review round 2 — REPAIRED paths are excluded for the same
+        // reason refused ones are, and this one bit: removing the class filter
+        // means the gate can now REPAIR a `prose` change (write a verified
+        // repoint to disk). The change record still carries the agent's
+        // original unsound `after`, so leaving it in `proseChanges` made
+        // `revertProseChanges` write `before` back over the repair the gate
+        // had just written — destroying it — while `buildProposedChanges`
+        // still rendered the row `repaired` with a diff of bytes that were no
+        // longer on disk. The fix shipping its own defect, third instance.
+        const disposedPathSet = new Set([
+          ...gate.refused.map((c) => c.relPath),
+          ...gate.repaired.map((c) => c.relPath),
+        ]);
+        const proseChanges = changes.filter((c) => c.klass === 'prose' && !disposedPathSet.has(c.relPath));
         if (gate.unsound.length > 0) {
           for (const u of gate.unsound) {
             emitProgress(`kb-drain.refused (${basename(f.file)} · ${u.kind} · ${u.message})`, {

@@ -39,7 +39,16 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
       // (there are none) — derived from the run's OWN counters, never a new
       // state value, so the poll's state vocabulary stays unchanged.
       if (status.total === 0) return 'consolidate: nothing to clear';
-      return 'consolidate: some findings remain';
+      // W8-F1 review round 2: `clearedCount` was threaded all the way from the
+      // terminal event to this module and then read by NOTHING — a field
+      // parsed, typed and surfaced but enforced nowhere is the exact
+      // declared-data-fails-open shape this lane exists to close, and the fix
+      // had shipped one. "1 of 3 cleared" is also the answer the operator
+      // actually wants, and the Recent-Runs ledger on the same tab already
+      // says it, so the two surfaces now agree instead of one being vaguer.
+      return typeof status.clearedCount === 'number' && typeof status.total === 'number'
+        ? `consolidate: cleared ${status.clearedCount}/${status.total} — some findings remain`
+        : 'consolidate: some findings remain';
     case 'failed':
       return 'consolidate: failed';
     case 'timed-out':

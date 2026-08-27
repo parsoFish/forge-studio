@@ -46,6 +46,7 @@ import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
+import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
 import {
   findingUnderDir,
   scopeFindingsToKb,
@@ -714,6 +715,37 @@ export async function approveKbCleanup(
     let writeError: string | null = null;
     await enqueueConsolidate(kbId, async () => {
       try {
+        // W8-F1 (review round 2, S1) — RE-AUDIT AT APPLY, against the bytes on
+        // disk RIGHT NOW.
+        //
+        // The drain audits a proposal when it MINTS the draft
+        // (`mintKbCleanupDraftSession`), against the file as it stood then.
+        // This write puts the agent's `after` back byte-for-byte over whatever
+        // the file holds at APPROVE time, which can be minutes or days later —
+        // so every edge added to that theme in between died silently, with
+        // `ok:true` and the session stamped `applied`. That is forge-d8l with
+        // one extra click, and the plan page's own promise ("audited for graph
+        // soundness before it was parked") is a claim about the mint instant
+        // that this apply has to make true again.
+        //
+        // Reachable without any external actor: a later round of the SAME
+        // drain run can land a sound structural edit on the same file, and
+        // `runBrainConsolidateNow`, `forge brain fix` or the reflector can all
+        // touch it while the session waits.
+        const ctx = buildKbEditSoundnessCtx(forgeRoot, brainRootDir(forgeRoot));
+        const stale: string[] = [];
+        for (const w of writes) {
+          const current = readFileSync(w.target, 'utf8');
+          if (current === w.content) continue; // nothing to destroy
+          const relFromBrain = relative(brainRootDir(forgeRoot), w.target).split(sep).join('/');
+          for (const u of auditKbEdit({ relPath: relFromBrain, before: current, after: w.content, klass: 'prose' }, ctx)) {
+            stale.push(u.message);
+          }
+        }
+        if (stale.length > 0) {
+          writeError = `the parked draft is no longer sound against the file as it stands now — ${stale.join('; ')}`;
+          return;
+        }
         for (const w of writes) {
           mkdirSync(dirname(w.target), { recursive: true });
           writeFileSync(w.target, w.content, 'utf8');

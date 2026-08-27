@@ -590,9 +590,8 @@ test('W8-F1: an unknown kbId refuses every brain write — the audit is always p
       check: 'checkFrontmatter', kind: 'frontmatter.missing-field',
       message: 'x', forgeRoot, queryFn: writing,
     });
-    assert.equal(readFileSync(themePath, 'utf8'), before, 'an unresolvable KB must not be a licence to write');
-    assert.equal(result.editAudit.refused.length, 1, JSON.stringify(result.editAudit));
-    assert.equal(result.cleared, false, 'a turn whose writes were all refused can never report cleared');
+    assert.ok(result.editAudit.unsound.length > 0, `an unresolvable KB must not be a licence to write — got ${JSON.stringify(result.editAudit)}`);
+    assert.equal(result.cleared, false, 'a turn whose writes could not be attributed can never report cleared');
   } finally {
     cleanup(forgeRoot);
   }
@@ -660,17 +659,20 @@ test('W8-F1 S1-b: a turn that edits a theme OUTSIDE the drained KB has that edit
       check: 'checkLengthSoftCap', kind: 'length.soft-cap',
       message: 'theme over soft cap', forgeRoot, queryFn: straying,
     });
-    assert.equal(
-      readFileSync(victimPath, 'utf8'),
-      victimBefore,
-      'a REAL edge one directory outside the drained KB was destroyed — forge-d8l, fourth instance',
-    );
-    assert.ok(result.editAudit.refused.length > 0, `the escape must be REFUSED — got ${JSON.stringify(result.editAudit)}`);
+    // The gate SEES it. Before W8-F1 the snapshot was scoped to the drained
+    // KB, so this returned `{unsound:0, refused:0, changes:0}` — an
+    // affirmative all-clear with a real edge destroyed.
     assert.ok(
       result.editAudit.unsound.some((u) => u.kind === 'out-of-scope-edit'),
-      `and NAMED — got ${JSON.stringify(result.editAudit.unsound)}`,
+      `the out-of-KB change must be SEEN and NAMED — got ${JSON.stringify(result.editAudit)}`,
     );
-    assert.equal(result.cleared, false, 'a turn that had a write refused may not report cleared');
+    assert.ok(result.editAudit.errors.length > 0, `and the turn must declare it left the bytes — got ${JSON.stringify(result.editAudit.errors)}`);
+    assert.equal(result.cleared, false, 'a turn with an unattributable brain write may not report cleared');
+    // The bytes are NOT restored here, on purpose: this gate cannot tell a
+    // fence bypass from the daemon's reflector writing the brain concurrently,
+    // and reverting on that evidence destroys the reflector's work (bead
+    // forge-ler4). The write is prevented at the SPAWN SEAM instead — pinned
+    // by the fence test below, which asserts this very path is DENIED.
   } finally {
     cleanup(forgeRoot);
   }

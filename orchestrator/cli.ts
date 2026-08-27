@@ -288,6 +288,13 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
     forgeRoot: FORGE_ROOT,
   });
   console.log(`brain-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${kind} ${file}`);
+  // W8-F1 — say WHY, not just that it did not clear. This command reads
+  // `r.cleared` and used to print nothing else, so an edit the gate refused
+  // (or a disposal it could not carry out) was invisible on the one path an
+  // operator drives by hand. `editAudit` is populated on every turn now;
+  // a field produced and read by nobody is the shape this lane exists to close.
+  for (const u of r.editAudit.unsound) console.log(`  ${u.relPath}: ${u.message}`);
+  for (const e of r.editAudit.errors) console.error(`  ${e}`);
 }
 
 function cmdBrainIndex(rest: string[]): void {

@@ -448,12 +448,23 @@ test('W8-F1 S1-b: a real drain of one KB cannot destroy an edge in ANOTHER brain
         writeFileSync(victimPath, victimBefore.replace('related_themes: [2026-05-01-partner]', 'related_themes: []'));
       }),
     });
-    assert.equal(
-      readFileSync(victimPath, 'utf8'),
-      victimBefore,
-      'a real drain of "gitpulse" destroyed a resolvable edge in brain/cycles — forge-d8l, fourth instance',
+    // The drain SEES the out-of-KB write now (its snapshot is the whole brain)
+    // and refuses to call the run clean. It does not revert it — see
+    // guardAgentKbEdits' own doc and bead forge-ler4: the reflector writes the
+    // brain from the daemon with no lock between them, so a revert here would
+    // destroy another process's work. The WRITE is stopped at the spawn seam.
+    assert.equal(status.state, 'needs-you', `an unattributable brain write puts the run on the operator — got ${JSON.stringify(status.state)}`);
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    assert.ok(row, JSON.stringify(status.perFinding));
+    // The escape is ON THE ROW, named, with the file it touched — the whole
+    // point of ON-3. Its disposition is honestly `applied` (the bytes ARE on
+    // disk); what makes it legible is the reason next to it.
+    const escape = (row.proposedChanges ?? []).find((c) => c.file.includes('2026-05-01-victim'));
+    assert.ok(escape, `the out-of-KB write must be shown — got ${JSON.stringify((row.proposedChanges ?? []).map((c) => c.file))}`);
+    assert.ok(
+      escape.reasons.some((r) => r.includes('outside the drained KB')),
+      `and NAMED as out of scope — got ${JSON.stringify(escape.reasons)}`,
     );
-    assert.notEqual(status.state, 'green', `an escaped write can never end green — got ${JSON.stringify(status.state)}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -527,6 +538,53 @@ test('W8-F1 (ON-3, S2): an AUTO-tier row carries its diff — the tier that muta
     const indexProposal = proposals.find((p) => p.file.endsWith('antipatterns.md'));
     assert.ok(indexProposal, `the curated index it rewrote must be in the diff — got ${JSON.stringify(proposals.map((p) => p.file))}`);
     assert.match(indexProposal.diff, new RegExp(ORPHAN), 'the diff must show what the auto-fixer wrote');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// W8-F1, ADVERSARIAL REVIEW ROUND 2 — three defects the FIX itself shipped,
+// each found with a runnable repro by a hostile reviewer whose brief was
+// "this class has been re-shipped four times; find the fifth before it
+// merges". Pinned here so the fifth cannot come back either.
+// ===========================================================================
+
+test('W8-F1 r2: a REPAIRED prose change is not reverted-and-destroyed — the row shows what is actually on disk', async () => {
+  // Removing the class filter means the gate can now REPAIR a `prose` change.
+  // The drain then reverted it as prose, destroying the repair the gate had
+  // just written, while still rendering the row `repaired` with a diff of
+  // bytes no longer on disk.
+  const { root, brainDir } = makeTrafficGameRoot();
+  const target = join(brainDir, 'themes', `${GRADING_SLUG}.md`);
+  try {
+    const finding = agentFinding(target, 'checkSourceLinks', 'links.broken', 'broken link');
+    // A dead->dead link repoint (repairable to the REAL target) PLUS a prose
+    // reword, so `classifyKbEdit` returns 'prose' for the whole file.
+    const proposed = gradingTheme(TG_DEAD_NEW).replace('principle.', 'principle, condensed.');
+    const status = await runKbDrain(root, TG_KB, `${TG_KB}-drain-r2repair`, {
+      lint: () => ({ findings: [finding] }),
+      applyAutoFixes: () => ({ applied: [], skipped: [], rounds: 0, remaining: [finding] }),
+      runFixTurn: async (input) => {
+        writeFileSync(target, proposed);
+        return { runId: input.runId, cleared: true, costUsd: 0.01, editAudit: noKbEdits() };
+      },
+    });
+    const onDisk = readFileSync(target, 'utf8');
+    const row = status.perFinding.find((f) => f.tier === 'agent');
+    assert.ok(row, JSON.stringify(status.perFinding));
+    const proposals = row.proposedChanges ?? [];
+    assert.equal(proposals.length, 1, JSON.stringify(proposals));
+    // THE PIN: whatever the row claims, the bytes must match it. A row that
+    // says "repaired" while the repair is not on disk is worse than no row.
+    if (proposals[0].disposition === 'repaired') {
+      assert.ok(
+        onDisk.includes(TG_REAL),
+        `the row says "repaired" but the repaired target is not on disk:\n${onDisk}`,
+      );
+    } else {
+      assert.equal(onDisk, gradingTheme(TG_DEAD_OLD), 'not repaired ⇒ the pre-turn bytes must stand');
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

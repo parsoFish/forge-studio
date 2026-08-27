@@ -701,16 +701,25 @@ test('W8-F1 S1-b: an edit OUTSIDE the drained KB\'s brain dir is refused and aud
   writeFileSync(victimAbs, victimBefore.replace('related_themes: [2026-05-01-partner]', 'related_themes: []'), 'utf8');
 
   const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
-  assert.equal(
-    readFileSync(victimAbs, 'utf8'),
-    victimBefore,
-    'a real edge one directory outside the drained KB was destroyed — this is forge-d8l, fourth instance',
-  );
-  assert.equal(gate.refused.length, 1, `the out-of-KB edit must be REFUSED — got ${JSON.stringify(gate.refused.map((c) => c.relPath))}`);
+  // The gate SEES it — that is the S1-b fix. The snapshot used to be scoped to
+  // the drained KB, so this change was invisible and the audit came back
+  // `{unsound:0, refused:0, changes:0}`: an affirmative all-clear with a real
+  // edge destroyed.
   assert.ok(
     gate.unsound.some((u) => u.kind === 'out-of-scope-edit'),
-    `the audit must NAME the reason as out-of-scope, not merely revert it — got ${JSON.stringify(gate.unsound)}`,
+    `the audit must SEE and NAME the out-of-KB change — got ${JSON.stringify(gate.unsound)}`,
   );
+  assert.ok(
+    gate.errors.some((e) => e.includes(victimRel)),
+    `and DECLARE that it left the bytes alone, naming the file — got ${JSON.stringify(gate.errors)}`,
+  );
+  // Deliberately NOT reverted: this gate cannot tell a fence bypass from the
+  // reflector writing the brain from the daemon at the same time, and
+  // reverting on that evidence would destroy the reflector's work. The WRITE
+  // is prevented at the spawn seam — see the canUseTool fence pin in
+  // orchestrator/brain-fix-runner.test.ts, which asserts an out-of-KB Edit is
+  // DENIED before any byte is written. Detection here, enforcement there.
+  assert.equal(gate.refused.length, 0, 'an out-of-scope change is reported, never disposed of');
 });
 
 test('W8-F1 S1-b: an out-of-scope edit is refused even when it destroys NOTHING — the drained KB is the only place a turn may write', () => {
@@ -727,8 +736,11 @@ test('W8-F1 S1-b: an out-of-scope edit is refused even when it destroys NOTHING 
   writeFileSync(strayAbs, `${strayBefore}\nRewritten by a turn that was pointed at another KB.\n`, 'utf8');
 
   const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
-  assert.equal(readFileSync(strayAbs, 'utf8'), strayBefore, 'an out-of-KB prose rewrite must be reverted too');
-  assert.equal(gate.refused.length, 1, JSON.stringify(gate.refused.map((c) => c.relPath)));
+  assert.ok(
+    gate.unsound.some((u) => u.kind === 'out-of-scope-edit'),
+    `an out-of-KB PROSE rewrite is out of bounds on scope alone, with nothing to audit — got ${JSON.stringify(gate.unsound)}`,
+  );
+  assert.equal(gate.refused.length, 0, 'reported, not disposed of — see the sibling test for why');
 });
 
 test('W8-F1: an unresolvable kbId refuses EVERY brain edit — "no KB to guard" must never mean "nothing to guard"', () => {
@@ -740,8 +752,12 @@ test('W8-F1: an unresolvable kbId refuses EVERY brain edit — "no KB to guard" 
   const snapshot = snapshotBrainTree(forgeRoot);
   writeFileSync(target, REAL_EDIT_1_AFTER, 'utf8');
   const gate = guardAgentKbEdits(forgeRoot, 'no-such-kb', snapshot);
-  assert.equal(readFileSync(target, 'utf8'), REAL_EDIT_1_BEFORE, 'an unresolvable KB must fail CLOSED');
-  assert.equal(gate.refused.length, 1, JSON.stringify(gate.refused.map((c) => c.relPath)));
+  // Nothing is in scope when the KB does not resolve, so EVERY brain change is
+  // reported and the turn cannot report success. The write itself is prevented
+  // at the spawn seam: an unresolvable kbId yields an EMPTY writeRoots list,
+  // and a write matching no root is denied by the fence.
+  assert.ok(gate.unsound.length > 0, `an unresolvable KB must fail CLOSED — got ${JSON.stringify(gate)}`);
+  assert.ok(gate.errors.length > 0, JSON.stringify(gate.errors));
 });
 
 test('W8-F1: `guardAgentKbEdits` is TOTAL — a change it cannot dispose of is recorded in `errors`, never thrown past the caller', () => {
@@ -794,4 +810,57 @@ test('W8-F1 CONTROL: a sound PROSE edit inside the KB is left on disk by the gat
   assert.equal(readFileSync(target, 'utf8'), prose);
   assert.equal(gate.changes.length, 1, 'the change is still REPORTED, so the drain can park it as a draft');
   assert.equal(gate.changes[0].klass, 'prose');
+});
+
+test('W8-F1 r2: `guardAgentKbEdits` really is TOTAL — an unreadable brain returns an audit, it does not throw', () => {
+  // Adversarial review round 2: `buildKbEditSoundnessCtx` and
+  // `resolveKbBrainDir` sat OUTSIDE the gate's try while its doc claimed the
+  // function never throws. `collectThemeSlugTargets` does `readdirSync` after
+  // `existsSync`, so a `themes` path that is a FILE raises ENOTDIR — and the
+  // drain calls this gate BARE, on the strength of that "total" claim.
+  const { forgeRoot } = plantRealEdit1();
+  plantKbDescriptor(forgeRoot, 'gitpulse');
+  const snapshot = snapshotBrainTree(forgeRoot);
+  // A sibling sub-wiki whose `themes` is a FILE, not a directory.
+  mkdirSync(join(forgeRoot, 'brain', 'cycles'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'brain', 'cycles', 'themes'), 'not a directory\n', 'utf8');
+  const gate = guardAgentKbEdits(forgeRoot, 'gitpulse', snapshot);
+  assert.ok(gate.errors.length > 0, `the failure must be DECLARED, not thrown — got ${JSON.stringify(gate)}`);
+  assert.ok(
+    gate.errors.some((e) => e.includes('NOTHING was audited')),
+    `and must not read as a clean audit — got ${JSON.stringify(gate.errors)}`,
+  );
+});
+
+test('W8-F1 r2: an edge deletion inside an OPERATOR-CREATED KB (brain/<id>) is refused, exactly like a project-bound one', () => {
+  // Found by the adversarial review's own follow-up. `POST /api/studio/kbs`
+  // scaffolds a new KB at `brain/<id>/themes/` — neither `cycles`,
+  // `forge-dev`, nor under `projects/` — and `collectThemeSlugTargets` walked
+  // only those three shapes. Its themes were therefore absent from the audit's
+  // slug universe, so `repairsFor()` returned [] and a deletion of a REAL edge
+  // read as "a genuinely dangling entry may go".
+  //
+  // The two halves of this test are the SAME fixture in the two layouts. That
+  // is the whole point: the KB an operator creates in Studio was the unsafe
+  // one.
+  for (const kbRel of ['opkb', 'projects/opkb']) {
+    const forgeRoot = newRoot();
+    const kbDir = join(forgeRoot, 'brain', ...kbRel.split('/'));
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    writeFileSync(join(kbDir, 'kb.yaml'), 'id: opkb\nname: opkb\nbinding: { kind: unique }\ndesc: W8-F1 fixture.\n', 'utf8');
+    writeFileSync(join(kbDir, 'themes', 'partner.md'), themeStub('partner'), 'utf8');
+    const victim = join(kbDir, 'themes', 'x.md');
+    const before = themeStub('x').replace('category: pattern', 'category: pattern\nrelated_themes: [partner]');
+    writeFileSync(victim, before, 'utf8');
+
+    const snapshot = snapshotBrainTree(forgeRoot);
+    writeFileSync(victim, before.replace('related_themes: [partner]', 'related_themes: []'), 'utf8');
+    const gate = guardAgentKbEdits(forgeRoot, 'opkb', snapshot);
+
+    assert.ok(
+      gate.unsound.some((u) => u.kind === 'edge-deleted'),
+      `[brain/${kbRel}] a resolvable edge deletion must be refused — got ${JSON.stringify(gate.unsound)}`,
+    );
+    assert.equal(readFileSync(victim, 'utf8'), before, `[brain/${kbRel}] the edge must survive on disk`);
+  }
 });
