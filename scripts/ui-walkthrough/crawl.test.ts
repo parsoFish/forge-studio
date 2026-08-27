@@ -27,8 +27,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, existsSync, rmSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, mkdtempSync, mkdirSync, copyFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -52,6 +52,7 @@ import {
 } from './assert.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const FORGE_ROOT = resolve(HERE, '..', '..');
 const FIXTURE = join(HERE, 'fixtures', 'crawl.sample.json');
 const loadFixture = () => JSON.parse(readFileSync(FIXTURE, 'utf8'));
 
@@ -309,6 +310,55 @@ test('baselineGrowth: a baseline may only shrink — new keys are growth; a miss
 
 const CRAWL = join(HERE, 'crawl.mjs');
 const SHRINK = join(HERE, 'check-baseline-shrinks.mjs');
+
+/**
+ * W8-F5 round 3 — a HERMETIC git repository for every pin that exercises
+ * `check-baseline-shrinks.mjs`'s stamp verification.
+ *
+ * WHY IT EXISTS (a real CI failure, not a precaution). The first version of
+ * these pins read their "older ancestor" out of whatever checkout the tests ran
+ * in (`git log -5` against FORGE_ROOT). Every full-history worktree — mine,
+ * T1's — was green; CI's `build-and-test` job is a DEPTH-1 clone, so that log
+ * returned exactly one sha, the "older ancestor" WAS `HEAD`, and the fixture
+ * precondition tripped: `6203/6204, one red`. A gate pin whose verdict depends
+ * on the host's git history is environment-shaped, which is the same
+ * CI-versus-local class the gate itself is meant to catch.
+ *
+ * So the fixture builds its own repo: three real commits, plus a copy of the
+ * two scripts under test at their REAL relative path (`scripts/ui-walkthrough/`)
+ * so the CLI's own `FORGE_ROOT = resolve(HERE, '..', '..')` resolves INTO this
+ * repo and every git command it runs reads THIS history. The bytes under test
+ * are the tree's own files, copied at test time.
+ */
+const GIT_FIXTURE = (() => {
+  const dir = mkdtempSync(join(tmpdir(), 'w8f5-gitfix-'));
+  const git = (...args: string[]): string => {
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${dir}: ${r.stderr}`);
+    return (r.stdout ?? '').trim();
+  };
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'w8f5@forge.test');
+  git('config', 'user.name', 'W8-F5 fixture');
+  git('config', 'commit.gpgsign', 'false');
+  const commit = (name: string): string => {
+    writeFileSync(join(dir, name), `${name}\n`);
+    git('add', name);
+    git('commit', '-q', '-m', name);
+    return git('rev-parse', 'HEAD');
+  };
+  const older = commit('one.txt');
+  commit('two.txt');
+  const head = commit('three.txt');
+  const scriptDir = join(dir, 'scripts', 'ui-walkthrough');
+  mkdirSync(scriptDir, { recursive: true });
+  for (const f of ['check-baseline-shrinks.mjs', 'assert.mjs']) copyFileSync(join(HERE, f), join(scriptDir, f));
+  return { dir, older, head, shrink: join(scriptDir, 'check-baseline-shrinks.mjs') };
+})();
+process.on('exit', () => {
+  try { rmSync(GIT_FIXTURE.dir, { recursive: true, force: true }); } catch { /* best effort */ }
+});
+
 const runNode = (args: string[], cwd: string) => spawnSync(process.execPath, args, { cwd, encoding: 'utf8', timeout: 60_000 });
 
 test('crawl.mjs --from <crawl.json> --assert: exits 1 on new failures, writes assert.json; exits 0 when a baseline covers them; --only narrows', () => {
@@ -733,8 +783,11 @@ test('review R7: a regeneration that LOSES an environment key the previous basel
   try {
     const p = join(tmp, 'prev.json'), n = join(tmp, 'next.json');
     writeFileSync(p, JSON.stringify(prev));
-    writeFileSync(n, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 924 }, entries: [] }));
-    const r = runNode([SHRINK, '--prev', p, '--next', n], HERE);
+    // W8-F5: the CLI now verifies the stamped sha for real, so this must be a
+    // real commit that is an ancestor of HEAD (the default comparison base)
+    // for the dropped-expectedRoutes.ci failure to be the one that fires.
+    writeFileSync(n, JSON.stringify({ source: `main@${GIT_FIXTURE.older}`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 924 }, entries: [] }));
+    const r = runNode([GIT_FIXTURE.shrink, '--prev', p, '--next', n, '--against', GIT_FIXTURE.head], GIT_FIXTURE.dir);
     assert.equal(r.status, 1, `a regeneration that drops expectedRoutes.ci must fail\n${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout + r.stderr, /expectedRoutes\.ci/);
   } finally {
@@ -797,9 +850,11 @@ test('W7-A0-4 (CLI): check-baseline-shrinks --crawled flags removals whose route
     const missing = runNode([SHRINK, '--prev', prev, '--next', next, '--crawled', join(tmp, 'nope.json')], HERE);
     assert.equal(missing.status, 2);
     // Growth via a stamped regeneration from main is accepted (and says so); the same growth unstamped is not.
+    // W8-F5: the CLI now verifies the stamp for real, so the "accepted" case
+    // needs a real commit that is an ancestor of HEAD (the default comparison base).
     const C = { kind: 'first-party-4xx', route: '/artifact?cycle=<id>', detail: '404 [bridge]/api/artifact/<id>/plan.json' };
-    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb — regenerated', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B, C] }));
-    const regen = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    writeFileSync(next, JSON.stringify({ source: `main@${GIT_FIXTURE.older} — regenerated`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B, C] }));
+    const regen = runNode([GIT_FIXTURE.shrink, '--prev', prev, '--next', next, '--against', GIT_FIXTURE.head], GIT_FIXTURE.dir);
     assert.equal(regen.status, 0, `stamped regeneration may grow\n${regen.stdout}\n${regen.stderr}`);
     assert.match(regen.stdout + regen.stderr, /REGENERAT/i);
     writeFileSync(next, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', entries: [A, B, C] }));
@@ -807,13 +862,161 @@ test('W7-A0-4 (CLI): check-baseline-shrinks --crawled flags removals whose route
     assert.equal(grow.status, 1, 'unstamped growth still fails');
     // A regeneration whose expectedRoutes DROPPED for a key vs prev is called out loudly (coverage regressions must be justified).
     writeFileSync(prev, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { host: 900 }, entries: [A, B] }));
-    writeFileSync(next, JSON.stringify({ source: 'main@bbbbbbb', generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B] }));
-    const dropped = runNode([SHRINK, '--prev', prev, '--next', next], HERE);
+    writeFileSync(next, JSON.stringify({ source: `main@${GIT_FIXTURE.older}`, generatedAt: '2026-08-19T00:00:00.000Z', expectedRoutes: { host: 700 }, entries: [A, B] }));
+    const dropped = runNode([GIT_FIXTURE.shrink, '--prev', prev, '--next', next, '--against', GIT_FIXTURE.head], GIT_FIXTURE.dir);
     assert.equal(dropped.status, 0);
     assert.match(dropped.stdout + dropped.stderr, /expectedRoutes\.host.*900.*700/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// ── group 13b: W8-F5 — the sha in a `main@<sha>` stamp is VERIFIED FOR REAL ──
+//
+// Confirmed defect: isRegeneration accepted a `main@<sha>` stamp on shape
+// alone — a sha that never resolved to any git object still authorised
+// growth. check-baseline-shrinks.mjs must now resolve the sha (`git cat-file
+// -e <sha>^{commit}`) and confirm it is an ancestor of the comparison base
+// (`git merge-base --is-ancestor <sha> <base>`) before accepting growth
+// through it — fail-closed, no bypass.
+
+test('W8-F5: a stamped main@<sha> whose sha does NOT resolve to a git object does not authorise growth — exact repro (a hand-edited source + bumped generatedAt cannot forge growth)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-noresolve-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    writeFileSync(prev, JSON.stringify({
+      source: 'main@d1a52609 + the W7-D gate fix round', generatedAt: '2026-08-21T13:35:06.073Z',
+      expectedRoutes: { ci: 136, host: 715 }, entries: [],
+    }));
+    writeFileSync(next, JSON.stringify({
+      // The verbatim forged stamp from the repro: a sha-shaped string that
+      // does not resolve to anything, plus a bumped generatedAt.
+      source: 'main@deadbee + totally hand-edited, never ran --write-baseline',
+      generatedAt: '2026-08-21T13:35:07.073Z',
+      expectedRoutes: { ci: 136, host: 715 },
+      entries: [
+        { kind: 'console-error', route: '/monitor', detail: 'TypeError: cannot read x of undefined', message: 'boom' },
+        { kind: 'http-500', route: '/api/studio/runs', detail: '500' },
+      ],
+    }));
+    const r = runNode([GIT_FIXTURE.shrink, '--prev', prev, '--next', next, '--against', GIT_FIXTURE.head], GIT_FIXTURE.dir);
+    assert.equal(r.status, 1, `an unresolvable sha must refuse the growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /does not resolve to a commit object/);
+    assert.match(r.stdout + r.stderr, /deadbee/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5: a stamped main@<sha> that RESOLVES but is NOT an ancestor of the comparison base does not authorise growth', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-notancestor-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    // In the HERMETIC repo `older` is an ancestor of `head`; `head` is
+    // therefore NOT an ancestor of `older` — a real, resolvable sha that fails
+    // the ancestry check when `older` is the comparison base (--against).
+    // Both shas come from the fixture's own three commits, so this holds in a
+    // depth-1 CI clone exactly as it does on a full-history worktree (round 3:
+    // the previous version read the CHECKOUT's history and went red in CI).
+    const headSha = GIT_FIXTURE.head;
+    const oldBase = GIT_FIXTURE.older;
+    assert.notEqual(headSha, oldBase, 'fixture precondition: the fixture repo has distinct head/older commits');
+    writeFileSync(prev, JSON.stringify({ source: `main@${oldBase}`, generatedAt: '2026-08-21T00:00:00.000Z', expectedRoutes: { ci: 136, host: 715 }, entries: [] }));
+    writeFileSync(next, JSON.stringify({
+      source: `main@${headSha}`, generatedAt: '2026-08-21T01:00:00.000Z', expectedRoutes: { ci: 136, host: 715 },
+      entries: [{ kind: 'http-500', route: '/api/studio/runs', detail: '500' }],
+    }));
+    const r = runNode([GIT_FIXTURE.shrink, '--prev', prev, '--next', next, '--against', oldBase], GIT_FIXTURE.dir);
+    assert.equal(r.status, 1, `a sha that resolves but is not an ancestor of the comparison base must refuse the growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /not an ancestor/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5 CONTROL: a stamped main@<sha> naming a REAL commit that IS an ancestor of the comparison base DOES authorise growth — the gate still works for its real purpose', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'w8f5-control-'));
+  try {
+    const prev = join(tmp, 'prev.json');
+    const next = join(tmp, 'next.json');
+    writeFileSync(prev, JSON.stringify({
+      source: 'main@d1a52609 + the W7-D gate fix round', generatedAt: '2026-08-21T13:35:06.073Z',
+      expectedRoutes: { ci: 136, host: 715 }, entries: [],
+    }));
+    writeFileSync(next, JSON.stringify({
+      source: `main@${GIT_FIXTURE.older} — control regeneration`, generatedAt: '2026-08-21T13:35:07.073Z',
+      expectedRoutes: { ci: 136, host: 715 },
+      entries: [
+        { kind: 'console-error', route: '/monitor', detail: 'TypeError: cannot read x of undefined', message: 'boom' },
+        { kind: 'http-500', route: '/api/studio/runs', detail: '500' },
+      ],
+    }));
+    const r = runNode([GIT_FIXTURE.shrink, '--prev', prev, '--next', next, '--against', GIT_FIXTURE.head], GIT_FIXTURE.dir);
+    assert.equal(r.status, 0, `a real, ancestor sha must authorise growth\n${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout + r.stderr, /REGENERAT/i);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5 round 3: in a SHALLOW checkout the ancestry half fails CLOSED and names the real cause (measured: the bounded fetch makes the object resolve while the grafted history still cannot answer ancestry)', () => {
+  // This is the CI-shaped question T1 asked: does a shallow checkout break the
+  // CLI itself, not just a test fixture? Measured answer: YES for the ancestry
+  // half — and the pre-round-3 wording blamed the OPERATOR ("not a real
+  // ancestor commit") for what is actually an unanswerable question in this
+  // checkout. The refusal is correct (fail-closed); the diagnosis had to be.
+  const work = mkdtempSync(join(tmpdir(), 'w8f5-shallow-'));
+  try {
+    const shallow = join(work, 'clone');
+    const clone = spawnSync('git', ['clone', '--depth', '1', `file://${GIT_FIXTURE.dir}`, shallow], { encoding: 'utf8' });
+    assert.equal(clone.status, 0, `git clone --depth 1 failed: ${clone.stderr}`);
+    assert.equal(
+      spawnSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: shallow, encoding: 'utf8' }).stdout.trim(),
+      'true',
+      'fixture precondition: the clone really is shallow',
+    );
+    const scriptDir = join(shallow, 'scripts', 'ui-walkthrough');
+    mkdirSync(scriptDir, { recursive: true });
+    for (const f of ['check-baseline-shrinks.mjs', 'assert.mjs']) copyFileSync(join(HERE, f), join(scriptDir, f));
+
+    const prev = join(work, 'prev.json');
+    const next = join(work, 'next.json');
+    writeFileSync(prev, JSON.stringify({ source: 'main@aaaaaaa', generatedAt: '2026-08-18T00:00:00.000Z', expectedRoutes: { ci: 10, host: 20 }, entries: [] }));
+    // A LEGITIMATE stamp: `older` is genuinely an ancestor of the clone's HEAD
+    // in the source repository — it is simply outside the shallow graft.
+    writeFileSync(next, JSON.stringify({
+      source: `main@${GIT_FIXTURE.older} — legitimate regeneration`, generatedAt: '2026-08-19T00:00:00.000Z',
+      expectedRoutes: { ci: 10, host: 20 }, entries: [{ kind: 'http-500', route: '/x', detail: '500' }],
+    }));
+    const r = runNode([join(scriptDir, 'check-baseline-shrinks.mjs'), '--prev', prev, '--next', next, '--against', GIT_FIXTURE.head], shallow);
+    assert.equal(r.status, 1, `a shallow checkout must refuse rather than guess\n${r.stdout}\n${r.stderr}`);
+    const out = r.stdout + r.stderr;
+    assert.match(out, /SHALLOW/, 'the refusal must name the shallow checkout as the cause, not blame the stamp');
+    assert.match(out, /fetch-depth: 0/, 'and it must name the remedy');
+    assert.doesNotMatch(out, /is not an ancestor of/, 'it must NOT report the misleading "not an ancestor" diagnosis here');
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('W8-F5 round 3: the CI job that runs this gate does not RE-SHALLOW its full checkout (a `git fetch --depth=<n>` after fetch-depth: 0 grafts the history back)', () => {
+  // Measured: `git fetch --no-tags --depth=1 origin <ref>` on a FULL clone
+  // creates .git/shallow and flips `git rev-parse --is-shallow-repository` to
+  // true — which would have silently undone the fetch-depth: 0 this gate needs,
+  // in the one job that runs it. Pinned as text because that is where the
+  // damage lives.
+  const yml = readFileSync(join(HERE, '..', '..', '.github', 'workflows', 'ci.yml'), 'utf8');
+  const job = yml.slice(yml.indexOf('  ui-walkthrough:'));
+  const step = job
+    .slice(job.indexOf('Baseline may only shrink'), job.indexOf('check-baseline-shrinks.mjs --against'))
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#')) // the prose ABOUT --depth is not a --depth flag
+    .join('\n');
+  assert.match(step, /git fetch --no-tags origin "\$BASE_REF"/, 'the gate job fetches the base ref');
+  assert.doesNotMatch(step, /--depth/, 'and must not re-shallow the checkout while doing it');
+  assert.match(job.slice(0, job.indexOf('Set up Node')), /fetch-depth:\s*0/, 'the gate job checks out full history');
 });
 
 // ── group 14: the committed files carry the new contract ─────────────────────
