@@ -1874,12 +1874,18 @@ inventory rather than one shared page-level contract:
   run's log — and `[data-run-panel-actions]` (`flex: '0 0 auto'`), a
   non-scrolling footer holding `[data-action="run-agent"]`,
   `[data-action="cancel-run"]` and the paragraphs that explain a disabled
-  Run. Content growth therefore cannot move the dispatch control at all.
+  Run. Content growth therefore cannot move the dispatch control at all. The
+  **interactive** branch (`data-run-dispatchable="false"`, below) carries the
+  SAME two-child split, with `[data-action="go-to-session"]` in its actions
+  row — gating one of two branches is how this class comes back.
   Two gates enforce it, and each is mutation-proven (see
   `_wave8/lanes/F4-ledger.md`): `forge-ui/lib/agent-run-reachable.test.ts`
-  renders the real component and walks the control's ancestor chain (no
-  scrolling ancestor; no ancestor declaring >64px of vertical
-  padding/margin/top), and `scripts/journeys/agents.mjs`'s `agents-builder`
+  renders the real component — BOTH branches — and walks each control's
+  ancestor chain (no scrolling ancestor; no shrinkable container; a closed
+  ALLOW-list of the CSS properties a chain element may declare at all, every
+  vertical magnitude bounded at 64px; and a closed PAIR of panel children, so
+  nothing can be inserted between the control and the panel), and
+  `scripts/journeys/agents.mjs`'s `agents-builder`
   beat measures **`[data-action="run-agent"]`'s OWN
   `getBoundingClientRect()`** — `top >= 0 && bottom <= innerHeight` plus an
   `elementFromPoint` hit test at its centre and an assertion that neither
