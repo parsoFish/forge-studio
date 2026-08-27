@@ -807,6 +807,22 @@ export type SessionShellPayload = {
    */
   terminal: boolean;
   /**
+   * W8-F6 (bead forge-6gv.27) — TRUE iff this session's only surviving record
+   * is the runner's central log dir (`_logs/_<kind>-<sessionId>/events.jsonl`):
+   * its project-side working dir, and with it `status.json`, the transcript
+   * sources and the artifact files, is gone. 236 of 249 central session log
+   * dirs on the reference host have this shape, because the log dir is never
+   * pruned while the managed project tree it belonged to is gitignored and
+   * routinely recreated.
+   *
+   * A legacy session is served READ-ONLY and is always `terminal: true` — there
+   * is no session dir left for a runner to advance or for an affordance to
+   * write into — so the shell must render it honestly (no live controls, no
+   * fabricated "running") and lean on the event log, which IS still there.
+   * REQUIRED and hard-parsed like `terminal`; never omitted, never defaulted.
+   */
+  legacy: boolean;
+  /**
    * W8-B3 (ON-5) — which of `deriveSessionTranscript`'s candidate sources
    * (idea.md / prompt.md / answers.json / questions.json / feedback.md /
    * verdicts.json) ACTUALLY EXIST in this session dir, in scan order.
@@ -919,6 +935,17 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const terminal = terminalRaw;
 
+  // W8-F6 (bead forge-6gv.27) — REQUIRED, hard-parsed exactly like "terminal"
+  // immediately above: a missing or non-boolean "legacy" throws by name and is
+  // NEVER defaulted to false. Defaulting would be the worst possible failure
+  // mode for this particular field — a bridge that forgot to send it would
+  // silently render a session whose working files are gone as a live one.
+  const legacyRaw = raw['legacy'];
+  if (typeof legacyRaw !== 'boolean') {
+    throw new Error(`missing or invalid "legacy": expected a boolean, got ${JSON.stringify(legacyRaw)}`);
+  }
+  const legacy = legacyRaw;
+
   // W8-B3 (ON-5) — REQUIRED like "terminal": a missing or non-array
   // "transcriptSources" throws, and every element must be a string. Never
   // defaulted to [] — an empty array is the honest "nothing has been written
@@ -970,6 +997,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     affordances,
     modelTier,
     terminal,
+    legacy,
     transcriptSources,
     lifecycle,
     finalized,

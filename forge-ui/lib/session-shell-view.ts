@@ -115,6 +115,12 @@ export type SessionShellReadyState = {
    *  client.ts), carried through UNCHANGED across a `selectStage` switch — a
    *  session-level fact (like `phase`), never a per-stage one. */
   terminal: boolean;
+  /** W8-F6 (bead forge-6gv.27) — the payload's own `legacy` (server-derived,
+   *  see session-client.ts), carried through UNCHANGED across a `selectStage`
+   *  switch — a session-level fact, like `terminal`. True means this session's
+   *  working files are gone and only its central event log survives; the shell
+   *  says so out loud instead of rendering an empty live session. */
+  legacy: boolean;
   /** W8-B3 (ON-5) — the payload's `transcriptSources`: which candidate
    *  transcript sources actually exist on disk for this session. Session-
    *  level, carried through UNCHANGED across a `selectStage` switch. Used
@@ -273,6 +279,7 @@ function readyDataAttrs(input: {
   turnCount: number;
   artifactKind: string;
   panes: SessionPaneSet;
+  legacy: boolean;
 }): SessionShellDataAttrs {
   return {
     'data-session-status': 'ready',
@@ -282,6 +289,13 @@ function readyDataAttrs(input: {
     'data-session-selector-visible': input.selectorVisible,
     'data-session-turn-count': input.turnCount,
     'data-session-artifact-kind': input.artifactKind,
+    // W8-F6 (bead forge-6gv.27) — in the DOM so the walkthrough/journey gate
+    // asserts the DECISION ("this session is read-only, its working files are
+    // gone") instead of scraping the banner copy. Emitted as the string
+    // 'true'/'false' — the same shape `data-transcript-omitted` uses — and
+    // never omitted when false, so an absent attribute can never be mistaken
+    // for "not legacy".
+    'data-session-legacy': input.legacy ? 'true' : 'false',
     // W8-B3 (ON-5) — the derived pane set, in the DOM so a journey asserts
     // WHICH panes a kind renders instead of scraping the copy inside them.
     'data-session-panes': input.panes.ids.join(','),
@@ -321,6 +335,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
     affordances: payload.affordances,
     modelTier: payload.modelTier,
     terminal: payload.terminal,
+    legacy: payload.legacy,
     transcriptSources: [...payload.transcriptSources],
     panes,
     lifecycle: payload.lifecycle,
@@ -334,6 +349,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
       turnCount: turns.length,
       artifactKind,
       panes,
+      legacy: payload.legacy,
     }),
   };
 }
@@ -381,6 +397,9 @@ export function selectStage(state: SessionShellReadyState, stage: string): Selec
         // A stage switch never changes the pane SET — it is a session-level
         // fact (the session's whole transcript), like `terminal`.
         panes: state.panes,
+        // W8-F6 — likewise session-level: a stage switch cannot resurrect a
+        // session's deleted working dir.
+        legacy: state.legacy,
       }),
     },
   };
@@ -488,6 +507,13 @@ export function backToProjectLink(project: string | null): PseudoProjectDestinat
   // the operator most needs a way out of a session they are actively
   // working on (W7A2-07: the dead `_terminal` parameter is gone).
   if (project === null) return null;
+  // W8-F6 (bead forge-6gv.27) — the EMPTY string is `null`'s twin here, not a
+  // project id. It is what the session route sends for a legacy session whose
+  // anchor project could not be derived from its own event log, and `''` used
+  // to fall straight through to the final `return` below and mint
+  // `/projects/` — a real-looking link to nowhere. Honest-absent in, nothing
+  // rendered out, exactly as for an unrecognised dot-anchor.
+  if (project === '') return null;
   if (isPseudoProjectAnchor(project)) return pseudoProjectAnchorDestination(project);
   return { label: 'project', href: `/projects/${encodeURIComponent(project)}` };
 }

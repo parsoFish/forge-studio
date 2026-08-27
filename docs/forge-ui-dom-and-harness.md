@@ -2808,6 +2808,21 @@ inventory rather than one shared page-level contract:
   (`lib/session-shell-view.ts`) — switching updates `data-session-stage`,
   the transcript pane AND the artifact pane together; a shell refetch keeps
   the operator's choice.
+  **⚑ W8-F6 (bead forge-6gv.27) — a linked session must be readable:**
+  `[data-session-legacy]` (always present, `"true"`/`"false"`) says whether this
+  session's only surviving record is the runner's central log dir
+  (`_logs/_<kind>-<sessionId>/events.jsonl`) — its project-side working dir, and
+  with it `status.json`, the transcript sources and the artifact files, is gone.
+  236 of 249 central session log dirs on the reference host have that shape,
+  because the log dir is never pruned while the managed project tree it belonged
+  to is gitignored and routinely recreated; wave 8 started LINKING to them from
+  the flow-run page, so the walkthrough crawl reported seven first-party 404s.
+  Such a session now reads 200, read-only: `data-session-legacy="true"`, an
+  honest `div[data-component="session-legacy-notice"]` naming what survived, the
+  generic session panel for EVERY kind (the bespoke architect/project-brain
+  panels are driven by the same `status.json` a legacy session no longer has),
+  zero affordances, and the ActivityLog drawer re-opened despite
+  `terminal: true` — the event log is the only thing left to show.
   **⚑ W8-B3 (operator note ON-5) — the pane set is PER SESSION, derived:**
   `[data-session-panes]` names the panes actually rendered, in order
   (`"transcript,artifact"` or `"artifact"`), and `[data-transcript-omitted]`
