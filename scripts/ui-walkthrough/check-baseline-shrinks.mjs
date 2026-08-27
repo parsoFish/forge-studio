@@ -105,7 +105,11 @@ function verifyRegenerationSha(sha, base) {
   if (!commitExists(sha)) {
     if (isShallowRepo()) {
       try {
-        execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', sha], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+        // W8-F5 review: BOUNDED means bounded in wall-clock too — execFileSync
+        // enforces no time limit unless `timeout` is passed, and a stalled remote
+        // (auth prompt, dead proxy, DNS hang) would otherwise block the gate
+        // indefinitely. 15 s is far more than a single-object fetch needs.
+        execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', sha], { cwd: FORGE_ROOT, stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000 });
       } catch {
         // The re-check below reports the failure either way.
       }
@@ -143,10 +147,20 @@ if (!prev) {
   process.exit(0);
 }
 console.log(`[baseline-shrinks] vs ${label}: ${prev.entries?.length ?? 0} → ${next.entries?.length ?? 0} entries (${shrank.length} removed, ${grew.length} added)`);
+// The commit the stamped sha must be an ancestor OF. `--against <ref>` names it
+// explicitly (how every real gate invocation runs — CI passes
+// `--against origin/$BASE_REF`, the wave gate passes `--against parsoFish/main`).
+// A `--prev/--next` file comparison has no named base, so ancestry falls back to
+// local `HEAD` — which on a PR checkout is the PR branch itself, a WEAKER
+// question than "is this really on main". W8-F5 review: say so out loud rather
+// than let a future caller mistake the weaker check for the strong one.
 const compareBase = against ?? 'HEAD';
 let stampRefusal = null;
 const regenerated = isRegeneration(prev, next, {
   verifyStamp: (sha) => {
+    if (!against) {
+      console.warn(`[baseline-shrinks] NOTE — no --against ref given, so the regeneration stamp's ancestry is checked against local HEAD (${compareBase}), not a named base. A gate invocation should pass --against <ref>.`);
+    }
     const v = verifyRegenerationSha(sha, compareBase);
     if (!v.ok) stampRefusal = v.reason;
     return v.ok;
