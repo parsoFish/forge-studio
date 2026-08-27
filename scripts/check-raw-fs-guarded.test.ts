@@ -986,3 +986,51 @@ test('G8 (RED at the W8-F5 cure, found by hostile self-review): a DESTRUCTURED r
   assert.deepEqual(analyzeModule(trusted, 'cli/ui-bridge.ts'), []);
   assert.deepEqual(analyzeModule(trusted, 'orchestrator/x.ts', sweepModel), []);
 });
+
+test('G9 (RED at the first W8-F5 cure, found by adversarial review): a reachable DELEGATE HELPER that takes a request id by plain parameter is scanned', () => {
+  // Kills: a sweep tier restricted to HTTP MEMBERS only. A route that extracts
+  // `sessionId` itself and hands it to a helper by parameter reproduces the C4
+  // defect one abstraction level down — the helper's own file text contains no
+  // `body.`/`params.` member at all, so a member-only sweep sees nothing while
+  // the sink reads `join(LOGS_ROOT, sessionId, 'e.jsonl')` unguarded.
+  const root = scratchRoot({
+    'cli/ui-bridge.ts': [
+      "import { handleSessionRead } from './session-file-routes.ts';",
+      'export function router() { return handleSessionRead; }',
+      '',
+    ].join('\n'),
+    'cli/session-file-routes.ts': [
+      'import { readFileSync } from "node:fs";',
+      'import { join } from "node:path";',
+      'const LOGS_ROOT = "/x";',
+      'export function handleSessionRead(sessionId: string) {',
+      '  return readFileSync(join(LOGS_ROOT, sessionId, "e.jsonl"), "utf8");',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const r = runLint({ root, allowlist: [] });
+  assert.deepEqual(
+    r.findings.map((f) => `${f.file}:${f.sink}`),
+    ['cli/session-file-routes.ts:readFileSync'],
+    `the delegate helper's unguarded sink must fire; got ${JSON.stringify(r.findings)}`,
+  );
+});
+
+test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured six — the four expensive names stay tier-1-only and are named in the header', () => {
+  // Kills: a future widening that quietly turns the sweep into the full model
+  // (measured: +24 cycleId, +17 initiativeId, +4 repoPath, +3 runId findings,
+  // all server-built ids in engine modules) or that quietly narrows it back to
+  // members-only (which is what G9 caught).
+  const model = (lint as { SWEEP_MODEL?: { bareTaint: Set<string> } }).SWEEP_MODEL;
+  assert.ok(model, 'SWEEP_MODEL must be exported');
+  assert.deepEqual(
+    [...model.bareTaint].sort(),
+    ['projectId', 'project_repo_path', 'rawUrl', 'sessionId', 'slug', 'url'],
+    'the sweep bare-id set is a measured calibration, not an accident — change it only with fresh numbers in the header',
+  );
+  for (const excluded of ['cycleId', 'initiativeId', 'repoPath', 'runId']) {
+    assert.ok(REQUEST_TAINT_BARE.has(excluded), `${excluded} must still be a tier-1 taint source`);
+    assert.ok(!model.bareTaint.has(excluded), `${excluded} is deliberately tier-1-only (see the header's disclosed limits)`);
+  }
+});

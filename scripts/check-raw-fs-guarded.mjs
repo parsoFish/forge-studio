@@ -53,8 +53,12 @@
  * the sibling ratchet's header and the immutable-gates skill warn against. The
  * INTERPROCEDURAL case a taint trigger cannot see in-function — a helper
  * `f(dir){ existsSync(dir) }` whose caller built `dir` from a request id — is
- * ALREADY covered by the sibling ratchet's caller-count dimension
- * (DESIGNATED_UNGUARDED_FUNCTIONS). The two scripts are complementary: the
+ * covered by the sibling ratchet's caller-count dimension ONLY for the
+ * functions someone has NAMED in DESIGNATED_UNGUARDED_FUNCTIONS — a
+ * hand-maintained list, so a brand-new helper of the same shape is not caught
+ * there automatically either (W8-F5 review: the original wording read as "this
+ * class is closed"; it is closed only for the functions already enumerated).
+ * The two scripts are complementary: the
  * ratchet counts callers of designated dir-builders; THIS lint proves the
  * in-function def-use from a request source to a raw leaf.
  *
@@ -100,16 +104,30 @@
  *     TIER 1 (`targetModules`, full model): bridge ENTRY modules + every
  *     bridge-REACHABLE module carrying the HTTP-plumbing signal + the explicit
  *     spawn-boundary list. TIER 2 (`sweepModules`): every OTHER non-test module
- *     under `cli/` and `orchestrator/`, scanned for the UNAMBIGUOUS shape only —
- *     a value read off an HTTP request MEMBER (`body.*`/`params.*`/`query.*`/
- *     `req.*`/`request.*`), or a raw leaf below a guard producer's output. So in
- *     tier 2 a request value laundered through a curated BARE id (`runId`,
- *     `repoPath`, `initiativeId`) or an unresolved dir-param leaf-append is NOT
- *     reported: those rules are calibrated for request handlers, and over the
- *     whole tree they report 108 findings at `c0093918` — nearly all
- *     server-built ids, i.e. an allowlist that would train blind regeneration.
- *     A module OUTSIDE `cli/` and `orchestrator/` (`loops/`, `forge-ui/`,
- *     `scripts/`) is not scanned by EITHER tier.
+ *     under `cli/` and `orchestrator/`, scanned for the UNAMBIGUOUS shapes only
+ *     — a value read off an HTTP request MEMBER (`body.*`/`params.*`/`query.*`/
+ *     `req.*`/`request.*`), a raw leaf below a guard producer's output, or one
+ *     of the six bare ids in `SWEEP_MODEL.bareTaint` (the names that are never
+ *     server-enumerated outside the declared surface). So in tier 2 a request
+ *     value laundered through one of the FOUR EXCLUDED bare ids (`cycleId`,
+ *     `initiativeId`, `repoPath`, `runId`) or through an unresolved dir-param
+ *     leaf-append is NOT reported — those rules are calibrated for request
+ *     handlers, and over the whole tree the full model reports 108 findings at
+ *     `c0093918`, nearly all server-built ids, i.e. an allowlist that would
+ *     train blind regeneration. CONCRETELY, the shape this does NOT catch: a
+ *     brand-new DELEGATE HELPER outside the declared surface whose route caller
+ *     hands it a request id under one of those four names, by plain parameter.
+ *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
+ *     for) or give it the HTTP-plumbing signal. A module OUTSIDE `cli/` and
+ *     `orchestrator/` (`loops/`, `forge-ui/`, `scripts/`) is not scanned by
+ *     EITHER tier.
+ *   - TIER 1's ENTRY half is still name-shaped one level up: `listEntryModules`
+ *     treats `cli/ui-bridge.ts` + `cli/bridge-*.ts` as the HTTP entry points, so
+ *     a brand-new top-level dispatcher under a different name, imported by
+ *     nothing that already exists, reaches tier 2 only, not the full model.
+ *     Adding a whole new dispatcher is a far larger architectural event than
+ *     adding a route module (the shape this lint's scope defect was actually
+ *     about), but the seam is named here rather than left implied.
  *   - TIER 1's reachability half inherits the sibling walker's limits: only
  *     RELATIVE imports inside `cli/`+`orchestrator/` are followed, so a module
  *     reached across a process-spawn boundary (the interactive runners) or
@@ -437,11 +455,31 @@ export function sweepModules(root = FORGE_ROOT) {
   return allSourceModules(root).filter((m) => !declared.has(m));
 }
 
-/** The taint model used in the sweep: HTTP members only. EXPORTED so the test
- *  that pins the sweep's calibration drives THIS object rather than a private
- *  copy of it — a pin that rebuilds the model it is testing cannot notice the
- *  model changing under it. */
-export const SWEEP_MODEL = { bareTaint: new Set(), dirParams: new Set() };
+/**
+ * The taint model used in the sweep. HTTP members are always on; the BARE id
+ * list is restricted to the names that are never server-enumerated outside the
+ * declared surface, and the dir-param leaf rule stays off.
+ *
+ * WHY A RESTRICTED BARE LIST RATHER THAN NONE (W8-F5 adversarial review). With
+ * NO bare names, a delegate helper that a route calls by plain PARAMETER —
+ * `export function handleSessionRead(sessionId) { readFileSync(join(LOGS_ROOT,
+ * sessionId, 'e.jsonl')) }` — is invisible, which is the C4 defect one
+ * abstraction level down from where it was fixed. WHY NOT THE FULL LIST:
+ * measured over the 164 swept modules at this tree, each name's MARGINAL cost
+ * (all of them engine sites where the id is SERVER-built) is `cycleId` +24,
+ * `initiativeId` +17, `repoPath` +4, `runId` +3 — versus `sessionId` +0,
+ * `project_repo_path` +0, `url` +0, `rawUrl` +0, `slug` +1, `projectId` +2.
+ * The four expensive names stay TIER-1-only; that residue is disclosed in the
+ * limits section above and tracked as a bead, never hidden.
+ *
+ * EXPORTED so the test that pins the sweep's calibration drives THIS object
+ * rather than a private copy — a pin that rebuilds the model it is testing
+ * cannot notice the model changing under it.
+ */
+export const SWEEP_MODEL = {
+  bareTaint: new Set(['sessionId', 'slug', 'projectId', 'project_repo_path', 'url', 'rawUrl']),
+  dirParams: new Set(),
+};
 
 const BACKSCAN_LIMIT = 400;
 
@@ -1125,6 +1163,18 @@ export const ALLOWLIST = [
   { file: 'orchestrator/mint-triggered-initiative.ts', line: 227, sink: 'writeFileSync',
     reason: 'SERVER-MINTED ID + LITERAL LEAF: `join(artDir, "trigger-payload.json")` — the literal artifact leaf under the same server-minted artDir audited on the line above. The PAYLOAD is untrusted webhook data, but it is written as DATA (JSON.stringify of the typed payload, read-as-data downstream); it never contributes a path segment.' },
 
+  // ---- W8-F5 round 2: the sweep's restricted BARE id list (review response) ----
+  // Widening SWEEP_MODEL.bareTaint to the six never-server-enumerated names
+  // closed the delegate-helper shape an adversarial review demonstrated (a route
+  // passing `sessionId` to a helper by plain parameter). It surfaced exactly
+  // three more sinks tree-wide; both files were read and audited here.
+  { file: 'cli/brain-lint.ts', line: 225, sink: 'existsSync',
+    reason: 'BOOL-PROBE + REPO-CONTENT id: findThemeBySlug builds `join(brainRoot, sub, "themes", `${slug}.md`)` over the two literal THEME_SUBDIRS under the trusted brainRoot. `slug` is a WIKILINK parsed out of a brain markdown file (cli/brain-lint.ts:520 `for (const slug of wikilinks)`) — repo content at the operator/agent trust boundary, never an HTTP value; this module is a CLI lint (`node cli/brain-lint.ts`) and holds no route. The sink is boolean-only (the result decides a lint finding; no bytes are read through the path), so the residual is a link like `[[../../x]]` learning whether a path exists — disclosed, not hidden, and bounded by the fact that whoever authored the wikilink already had repo write access.' },
+  { file: 'orchestrator/project-brain-seed.ts', line: 240, sink: 'mkdirSync',
+    reason: 'TRUSTED-AT-CONSTRUCTION (the module says so at the sink): checkProjectBrainSeedContainment materialises `brainProjectsRoot`, a forgeRoot-derived directory with NO request-derived segment — the in-file comment directly above states it, and `resolveGuardedPath` (used two lines below for every real target) requires its root to exist. The taint the scan sees is `projectId` reaching brainSeedTargets(), whose per-target segments ARE guarded on the very next lines; the root itself carries none of it.' },
+  { file: 'orchestrator/project-brain-seed.ts', line: 243, sink: 'existsSync',
+    reason: 'BOOL-PROBE IMMEDIATELY BEFORE THE GUARD: `if (existsSync(target.absPath)) continue` is the idempotent skip in the SAME loop whose next statement is `resolveGuardedPath(brainProjectsRoot, target.segments)` with a hard throw on failure — this is the containment checker itself. The probe reads no bytes and creates nothing; every path that proceeds past it is guard-verified per segment.' },
+
 ];
 
 function keyOf(f) {
@@ -1603,7 +1653,12 @@ export function runLint({ root = FORGE_ROOT, modules = null, sweep = null, allow
   }
   // TIER 2 — the name-blind sweep. Explicit `modules` still selects the tier-1
   // set only (unit tests drive a hand-picked list); `sweep` overrides the
-  // derived sweep set the same way.
+  // derived sweep set the same way. FOOTGUN, named (W8-F5 review): passing
+  // `modules` WITHOUT `sweep` yields zero tier-2 coverage — deliberate, so a
+  // unit test can isolate tier 1, and visible in the result (`swept: 0`). The
+  // production entry point is `main()`'s `runLint({})`, which derives both and
+  // is pinned live by the test suite; a new caller wanting the whole gate must
+  // call it the same way.
   const sweptMods = sweep ?? (modules ? [] : sweepModules(root));
   for (const rel of sweptMods) {
     const abs = join(root, rel);
@@ -1692,7 +1747,7 @@ function main() {
     console.error('  2. Or added to the ALLOWLIST in scripts/check-raw-fs-guarded.mjs (file+line+reason) if it is an audited-trusted residual.');
     return 1;
   }
-  console.log(`check-raw-fs-guarded: PASS — ${r.scanned} request-handling module(s) scanned (full model) + ${r.swept} swept for the unambiguous HTTP-member shape, ${r.suppressed.length} allowlisted residual(s), 0 unguarded request-derived raw fs sinks`);
+  console.log(`check-raw-fs-guarded: PASS — ${r.scanned} request-handling module(s) scanned (full model) + ${r.swept} swept for the unambiguous request shapes, ${r.suppressed.length} allowlisted residual(s), 0 unguarded request-derived raw fs sinks`);
   return 0;
 }
 
