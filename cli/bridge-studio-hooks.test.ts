@@ -775,3 +775,47 @@ test('PUT /api/studio/hooks/:id: dropping the matcher while moving to a tool-les
     removeHookFixture(id);
   }
 });
+
+// ---------------------------------------------------------------------------
+// PIN E (2026-08-28 hostile review) — the detail route's `files` array is
+// hand-built from exactly two hardcoded reads (`hook.yaml` and the declared
+// entry script) with no per-file or package-level hash. A real, multi-file
+// hook package (entry script sourcing a sibling `scripts/lib.sh`) has a
+// third file on disk the route never mentions, so an operator reviewing the
+// detail page cannot even SEE it, let alone tell whether it changed.
+// ---------------------------------------------------------------------------
+
+test('PIN E — GET /api/studio/hooks/<id> lists EVERY file in a multi-file hook package, each with a content hash, plus a package hash', async () => {
+  const id = 'pin-e-multifile-hook';
+  writeHookFixture(id, { scriptBody: BENIGN_SCRIPT, permissions: DENY_ALL });
+  const LIB_BODY = 'helper_main() { echo lib; }\n';
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', id, 'scripts', 'lib.sh'), LIB_BODY, 'utf8');
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/hooks/${id}`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { files: Array<{ path: string; body: string; hash?: string }>; packageHash?: string };
+
+    const actualPaths = body.files.map((f) => f.path).sort();
+    assert.deepEqual(
+      actualPaths,
+      ['hook.yaml', 'scripts/lib.sh', 'scripts/run.sh'].sort(),
+      'PIN E: the detail route must list EVERY real file in the package, not a hardcoded hook.yaml+entry-script pair — scripts/lib.sh is a real file on disk the route never mentions',
+    );
+
+    for (const f of body.files) {
+      assert.equal(
+        typeof f.hash === 'string' && /^sha256:[0-9a-f]{64}$/.test(f.hash),
+        true,
+        `PIN E: file entry "${f.path}" must carry a sha256:<hex> content hash so an operator can see whether it changed`,
+      );
+    }
+
+    assert.equal(
+      typeof body.packageHash === 'string' && /^sha256:[0-9a-f]{64}$/.test(body.packageHash),
+      true,
+      'PIN E: the detail response must carry a package-level hash covering the whole file set',
+    );
+  } finally {
+    removeHookFixture(id);
+  }
+});

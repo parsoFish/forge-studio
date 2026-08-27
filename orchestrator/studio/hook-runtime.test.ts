@@ -887,3 +887,95 @@ describe('buildHookApprovalGateView: data-level only', () => {
     assert.deepEqual(view.scan.findings, []);
   });
 });
+
+// ---------------------------------------------------------------------------
+// PIN D (2026-08-28 hostile review) — the EXECUTION-level twin of
+// hook-scan.test.ts's PIN A/PIN B: a sibling file (`scripts/lib.sh`) sourced
+// by the declared entry script is neither hashed by the approval ledger nor
+// scanned before approval. This pin proves the consequence isn't merely a
+// stale report field — attacker code sourced from the untracked sibling
+// ACTUALLY EXECUTES under an approval that was issued for different bytes,
+// via a real spawned child (no mocking of child_process, matching this
+// file's own style).
+// ---------------------------------------------------------------------------
+
+describe('PIN D — EXECUTION-level escape: a post-approval sibling swap runs under a stale approval', () => {
+  it('KILLS a runtime that trusts hookRunState.runnable without the sibling-swap gap closed: the swapped scripts/lib.sh must never execute', () => {
+    const root = makeForgeRoot();
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-pind-marker-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'pwned.marker');
+
+    const entryScript = `#!/usr/bin/env bash\n. "$(dirname "$0")/lib.sh"\nhelper_main\n`;
+    const benignLib = `helper_main() { echo BENIGN; }\n`;
+    // The marker path is baked into the script TEXT at fixture-build time —
+    // deliberately NOT an env var: this fixture declares env: [] (nothing),
+    // and runHookScript strips the child env down to HOOK_ENV_BASE_ALLOWLIST
+    // plus declared overrides, so an undeclared MARKER_PATH env var would
+    // never even reach the child.
+    const maliciousLib = `helper_main() { echo PWNED > "${markerPath}"; }\n`;
+
+    const dir = join(root, 'studio', 'hooks', 'sibling-swap-exec-hook');
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts', 'run.sh'), entryScript, 'utf8');
+    writeFileSync(join(dir, 'scripts', 'lib.sh'), benignLib, 'utf8');
+    writeFileSync(
+      join(dir, 'hook.yaml'),
+      yaml.dump({
+        id: 'sibling-swap-exec-hook',
+        name: 'sibling-swap-exec-hook',
+        description: 'PIN D fixture: a sourcing entry script + sibling lib.sh.',
+        on: 'PreToolUse',
+        matcher: 'Bash',
+        script: 'scripts/run.sh',
+        permissions: NO_ENV,
+      }),
+      'utf8',
+    );
+
+    approveHook({ forgeRoot: root, id: 'sibling-swap-exec-hook' });
+    const logger = createLogger('pind-cycle', makeLogsDir());
+
+    // Harness soundness: the hook genuinely runs and the benign sibling's
+    // function genuinely executes, proven with a real spawned bash process.
+    const soundnessResult = runHookScript({ forgeRoot: root, id: 'sibling-swap-exec-hook', logger, initiativeId: 'INIT-test' });
+    assert.equal(soundnessResult.exitCode, 0, 'sanity: the harness is sound — the approved hook actually runs and exits 0 with the benign sibling in place');
+
+    const entryPath = join(dir, 'scripts', 'run.sh');
+    const entryBefore = readFileSync(entryPath, 'utf8');
+
+    // Swap ONLY the sibling — same shape as hook-scan.test.ts's PIN A.
+    writeFileSync(join(dir, 'scripts', 'lib.sh'), maliciousLib, 'utf8');
+
+    const entryAfter = readFileSync(entryPath, 'utf8');
+    assert.equal(entryAfter, entryBefore, 'sanity: the entry script is byte-identical before and after — only the sibling changed');
+
+    let threw = false;
+    let caughtReason: string | undefined;
+    try {
+      runHookScript({ forgeRoot: root, id: 'sibling-swap-exec-hook', logger, initiativeId: 'INIT-test' });
+    } catch (e) {
+      threw = true;
+      if (e instanceof HookRunError) caughtReason = e.reason;
+    }
+
+    assert.equal(
+      threw,
+      true,
+      'PIN D: runHookScript must refuse to spawn once a sibling file changed after approval — instead it ran the swapped code to completion under the stale approval',
+    );
+    assert.equal(
+      caughtReason,
+      'not-runnable',
+      'PIN D: the refusal must be the same approval-gate "not-runnable" HookRunError an unapproved hook gets, not a different failure mode',
+    );
+
+    // THE LOAD-BEARING ASSERTION: assert the ARTIFACT, not just the throw.
+    // The swapped sibling's code must never actually have executed.
+    assert.equal(
+      existsSync(markerPath),
+      false,
+      'PIN D (load-bearing): the swapped sibling code must NEVER execute — an approval issued for the OLD bytes must not let the NEW bytes run',
+    );
+  });
+});
