@@ -28,3 +28,4 @@ Each entry on this index is one line:
 ```markdown
 - [`<theme-slug>`](./themes/<theme-slug>.md) — one-line hook from the theme page's `description` frontmatter.
 ```
+- [`2026-08-28-a-park-is-not-real-until-it-has-a-bead`](./themes/2026-08-28-a-park-is-not-real-until-it-has-a-bead.md) — two wave-8 parks lived only in lane prose and survived only because a parent bead happened to stay open; 46 exit-gate S3s would have lived in a gitignored JSON forever. The lane that parks mints the bead (repro, file:line, co-owner) before it returns; re-derive a bead's STATE, not just its producer's existence.

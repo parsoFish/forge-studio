@@ -913,6 +913,146 @@ derive `running` forever).
 
 ---
 
+### Wave 8 — Coherence (opened 2026-08-22; closed 2026-08-28)
+
+**North star:** *make what forge is doing legible to its operator, and make what
+the operator does to forge durable.* Wave 7 made every loop finishable in
+Studio; the operator's next hands-on session produced eight notes (ON-1…ON-8)
+that were not cosmetic — three were corroborated by agent output sitting
+uncommitted in the working tree with no Studio surface admitting it was
+pending, and one (a forge architect that failed three identical times) was
+fully root-caused before the wave opened. Scope, operator-locked: the eight
+notes plus **every open P1 and P2 bead (42)**; P3/P4 a tail backlog.
+
+**How the backlog was found.** Wave 7's exit gate left 80 open beads and ~130
+unresolved register rows never converted into beads. Wave 0 (blocking) re-derived
+all 42 P1/P2 beads against HEAD with two independent workers plus a hostile
+re-check of every FIXED verdict — **LIVE 22 · FIXED 16 · PARTIAL 3 ·
+UNVERIFIABLE 1** — and mined the wave-7 regate residue: **192 open rows**, not
+~130, because five clusters left the verdict key *absent* on rows discovered
+during the regate rather than stamping `NEW` (a naive extractor lost 42%,
+including the highest-severity row). Two of the "fixed" wave-7 beads were the
+wave's own P1 session-surface work, already done; one deny-list ruling had
+already been carried out — the plan's instruction to redo it was stale.
+
+**Operator-locked decisions (2026-08-22):** ON-2 is a design spike only (ADR,
+roadmap, beads — no code) · community refresh retires the agent and pulls from
+the sources' own APIs with a PAT read from env, failing loudly when absent ·
+`WORK_ITEM_ID_PATTERN` widens to accept a split suffix (`WI-4a`) · Monitor is a
+seventh nav pillar · the dirty tree is committed-5-revert-the-bad-edge (a
+drain-to-green run had deleted a valid brain edge — the third live instance of
+`forge-d8l`, and the first outside a wave gate).
+
+**Execution:** `tiered-orchestration`, one T2 per lane in its own worktree
+(a T1 ruling after two editors shared one tree and a branch switch stranded a
+lane's work), gates run by the T2, adversarial review per WI with the class
+heuristics up front, T1 the only relay. Land order `A1 → A3 → C2a → A2 → B2 →
+B3 → B5 → B4 → B1 → C3 → C2b`, plus three lanes the campaign minted on evidence:
+**B6** (library hooks actually dispatch — the head's worst defect), **B5b** (the
+community-refresh kind's retirement as a *migration*), and two chores the gate
+itself forced (**HOQ** tool-fence round-trip, **PXEF** the journey host lock).
+A WSL host kill at ~08:15 on 2026-08-24 took four live lanes with it; all four
+were landed from their committed branches with every gate re-run by T1 —
+nothing lost, one zero-byte file restored.
+
+#### Landed (PRs #202–#220, then wave F #221–#226)
+
+| Lane | PR | What shipped |
+|---|---|---|
+| W8-0 | #202 | campaign open; the reviewed drain output (5 themes committed, the destroyed edge restored) |
+| A1 | #203 | split work-item ids (`WI-4a`) accepted and chained across six formerly-duplicated regexes; a deterministic PM failure retries zero times; the real initiative reached the developer loop 6/6 |
+| C2a | #204 | fs-sink scanner covers the families that delete; four residual containment sites guarded; the spawn tool grant is a real fence |
+| C1 | #205 | ADR 045 — operator workspace (`_local/`) and promotion into forge core (ON-2) |
+| A3 | #206 | Start Run can no longer silently repoint a queued initiative; a run gets its real controls |
+| — | #207 | the OOTB starter agents are fenced against subagent spawn, and the source is linted |
+| A2 | #208 | failure and staleness visible everywhere — the last fail-open Studio read closed (ON-7 UI half) |
+| HOQ | #209 | the tool fence survives the Agent Builder round trip |
+| B2 | #210 | the drain shows what it proposes (before/after diff per finding, node deep-link, Home attention row) and refuses edits that destroy the brain (ON-3/ON-4) |
+| B3 | #211 | the session surface fits every kind — panes derived per session from real turns and live affordances (ON-5) |
+| PXEF | #212, #217 | the journey host lock identifies a checkout's Studio and never half-releases |
+| B4 | #213 | library authoring: templates get an authoring loop; trust stops outliving the object (ON-6) |
+| B5 | #214 | community pulls real data — a deterministic API refresh, a repo-scoped registry, eight `/community` defects (ON-1) |
+| B6 | #215 | a bound, approved hook can finally fire — at all seven spawn sites, with a credential fence and an enumeration ratchet |
+| B1 | #216 | the Monitor pillar and a reachable Run button (ON-8) |
+| C3 | #218 | the projects index tells broken from healthy, from the source of truth |
+| B5b | #219 | the refresh affordance migrates to the deterministic route; the `community-refresh` session kind is retired |
+| C2b | #220 | `ui:journey` is crash-idempotent — one root cause (no signal handlers; ~19 of 25 cleanup steps unreachable) behind two "flaky" beats |
+| F3 | #221 | a deterministic failure is never classified transient — rate-limit detection reads the error's own fields (the old blob scan had zero real-world precision across 354 cycle logs), terminal verdicts outrank the environment chain, the cost-ceiling stop keeps its verdict |
+| F5 | #222 | the raw-fs dataflow lint's scope is derived (entry modules ∪ bridge-reachable HTTP plumbing ∪ the spawn-boundary list) instead of a filename list — which put four live `bridge-recovery` routes under the lint for the first time and found an unguarded `TriggerTarget.ref` path escape; the hook-dispatch ratchet sees adapter-registry spawn sites; a forged `main@sha` baseline stamp is refused — and the CI job that verifies it no longer re-shallows itself with a `--depth=1` fetch (which would have refused every legitimate regeneration) |
+| F2 | #226 | a hook approval pins the whole package it authorises — a fingerprint over every file, `needsReview` derived from a mismatch or an absent fingerprint, the scanner over every executable file, the detail page listing every file with its hash, and `finalize` copying the whole staged package or refusing by name; the fingerprint and the scanner fail independently |
+| F1 | #223 | the drain's edge-soundness audit covers every edit the agent can make — no class filter, a scope derived from the KB rather than supplied, one write-root fence shared by both spawn paths, a gate that cannot represent an unaudited turn; `approveKbCleanup` audits parked drafts; operator-created KBs are inside the slug universe; a deleted brain file is an audited edit; every drain row carries its diff; a zero-findings consolidate no longer reads "cleared" |
+| F4 | #224 | the monitor and Run-CTA gates can fail — the agents journey hit-tests the Run control's own rect (which exposed that the panel was being crushed by the YAML preview, invisible while Playwright auto-scrolled), the monitor journey seeds an agent run and a session and asserts their identities, the guard pins go red under the refuter's mutations, and the `_agent-*` journey-fixture leak is closed as a class |
+| F6 | #225 | a linked session must be readable — legacy-shape sessions (pre-`status.json`, 236 of 249 on the host) read `200 legacy` with a phase derived from their event log instead of 404ing behind a wave-8 link; every `/sessions/<kind>/<sid>` link producer enumerated (30) and the stored-pointer ones gated at the source |
+
+#### T1 rulings (each recorded in the campaign ledger before it took effect)
+
+1. **B6 exists** — T1 had denied it on a table it never cross-checked against `bd`; corrected on the evidence.
+2. `forge-6gv.19`: **fix the producer** — the Agent Builder's blank state is born fenced, not born failing lint (the lane's design memo measured every option; the ruling chose the one whose blast radius was measured smallest).
+3. B5's retirement of `community-refresh` **proceeds, but not in B5** — moved to B5b after a real orphan question was answered by running the unmodified loader against a scratch registry.
+4. The journey host lock is sequenced by T1, one holder at a time.
+5. B6's ADR-027 amendment **granted** and landed by T1: `composition.hooks` dispatches, and a hook's exit 2 is a real veto.
+6. B5b is a **migration, not a deletion** — every citation in the ruling was re-derived against the base SHA before it reached the lane, and two had drifted (one would have inverted a valid assertion).
+7. B1 and C3's shared journey-registry edits were bounded to additive rows; no lane merges another's work.
+
+#### Exit criteria — measured, not attributed ({{EXIT_TABLE_NOTE}})
+
+{{EXIT_TABLE}}
+
+#### Close-out — what the gate found, and what wave F closed
+
+The exit gate ran twice: once by the predecessor session (which died on a usage
+limit mid fan-out — **22 of its 23 verifier verdicts were recovered from the
+Workflow journal**, the fourth time this campaign's file-durable substrate turned
+a context death into a pause), and once as this close-out. Eleven claims, each
+verified then adversarially refuted with a runnable-repro rule; **refute rate
+3/11** (wave 7's un-hostile pass was 1/146). Raw: **4 S1 · 12 S2 · 46 S3**, plus a
+completeness critic that found the wave's own flagship real-cycle vehicle back in
+`_queue/failed/` with its real `cost-ceiling:` stop classified "could not be
+classified".
+
+Two S1 classes, both refuted at execution level: the drain's edge-soundness
+audit was scoped by edit *class* and by *one* brain directory, so
+`forge-d8l` recurred a fourth time through the instrument built to catch it;
+and a hook approval pinned only the declared entry script, so a swapped sibling
+file **ran** under an approval issued for different bytes. The browser gates
+were clean — `ui:journey` 1520/1520 · `ui:deadpaths` 34 routes · walkthrough
+733 routes, 0 console errors — except **one new first-party 4xx**: a wave-8
+surface linked to a session whose only trace was a pre-`status.json` directory
+(236 of 249 session dirs on the host share that shape) and the read route said
+"not found" for a session with a real transcript.
+
+Wave F fixed the confirmed set red-first in six file-disjoint lanes:
+- **F3 (#221)** — rate-limit detection reads the error's own fields; terminal verdicts outrank the environment chain. Surveying all 354 archived cycle logs, the old blob scan's precision was **zero** (every hit a false positive, one a live regression on an already-diagnosed June run). Six review defects, three S1, caught in the lane's own fix.
+- **F5 (#222)** — the raw-fs dataflow lint's scope is derived from bridge reachability, not a filename list; that put four live `bridge-recovery` routes under the lint for the first time and found an **unguarded `TriggerTarget.ref` path escape** (`../../../../pwned` wrote outside the queue root). A forged or non-ancestor `main@sha` baseline stamp is refused — and asking "does shallow break the CLI too?" found the CI job re-shallowing itself with a `--depth=1` fetch. Fourteen review defects across three rounds.
+- **F1 (#223)** — one edit-soundness audit with no class filter, scope derived from the KB, one write-root fence for both spawn paths, an unaudited turn unrepresentable. Red-first pins found a fifth escape; review found nine more (`approveKbCleanup` applied parked drafts with **no** audit; operator-created KBs sat outside the slug universe). The lane caught itself shipping a new S1 — a brain-wide revert racing the daemon's reflector — and made out-of-scope writes detect-only (`forge-ler4`).
+- **F4 (#224)** — the agents journey hit-tests the Run control's own rect, which exposed that the panel was being **crushed** by the YAML preview while Playwright's auto-scroll hid it; monitor seeds an agent run and a session and asserts their identities; sixteen mutants killed; the `_agent-*` fixture leak closed as a class.
+- **F6 (#225)** — legacy-shape sessions read `200 legacy` with a phase derived from their event log; all seven crawl 404s re-measured readable on the real corpus; thirty link producers enumerated, the stored-pointer ones gated at the source.
+- **F2 (#226)** — a hook approval pins the whole package; the fingerprint and the scanner fail independently. Review found an O(N³) file selection costing **1.9 s of synchronous CPU per hook** on the hooks-list route — a bridge-wide stall inside a security fix, now 10 ms — and F5's widened lint found a symlink-root read in the new module after the merge.
+
+Every lane's gates were re-run by T1 in the lane's own tree before merge; every merge required CI green for the exact head under strict branch protection; merged main was re-verified after each merge (the merge commit is never CI'd). {{FINAL_GATE_SENTENCE}}
+
+**Still open, by decision and named:** the wave-8 scope row "every open P1 and P2 bead" is **NOT MET** and is recorded that way. Twenty-six beads are re-homed under a wave-9 head epic (`forge-59ca`): the wave-7 regate residue clusters the lanes partially closed (`forge-6gv.2.1`, `.3.1`, `.5.1`, `.5.2`, `.6.1`, `.7.2`, `.8.1`, `.8.2`, `.9.1`, `.9.2`, `.13.1` — all P1, each annotated per row with what landed), the two P1s the ON-7 real-cycle vehicle surfaced (`.16` cost ceiling enforced only at phase boundaries, `.17` a deliverable in a gitignored path), the F-wave follow-ups (`.20`, `.28`, `forge-ler4`, `forge-u8y2`, `forge-3mxa`, `forge-38dl`, `forge-rofi`, `forge-9694`, `forge-92r7`), the three ADR-045 build beads (`.10.1–.3`), and `forge-hqkm` (the uncapped `_logs/` scan, plus its two unfiled siblings now filed as `forge-omk0`). Behind them: 25 `[W8-C4]` P3 beads minted from the exit gate's S3 findings. R3-02 (skill-generator flow), named wave-9 head by the wave-8 plan, is sequenced against this residue by the operator.
+
+#### Lessons
+
+1. **A park is not real until it has a bead.** Two parks lived only in lane prose (C3's five index rows, B1's three child bug clusters); both survived only because their parent bead happened to stay open.
+2. **Re-derive a bead's STATE, not just its producer's existence.** A pack cited two already-closed beads because the exit-criteria rule proved the producer existed and never asked whether the bead was still open.
+3. **A gate command that cannot run is not a gate.** A pack said `--against origin/main`; the only remote is `parsoFish`. Run verbatim it throws rather than reports.
+4. **Every editor gets its own worktree at spawn** — a file-exclusion list cannot protect a lane when the branch under it moves.
+5. **Never an unscoped `git add`/`commit`.** Paid for three times; the third swept a prohibited `git rm` into the wrong commit, unfixable under concurrent writers.
+6. **The lane corrects the pack, and is often right** — a stale `npm test` baseline carried from an earlier lane's log; a name surface of 107 files not 88 because grep is hyphen- and case-literal. Trust numbers only after re-measuring them.
+7. **A coverage floor is environment-shaped.** The walkthrough refused a clean worktree (147 routes vs a 715-route host baseline) — correctly: the host's `_logs/` mints most of the route space. Run the walkthrough where its baseline lives.
+8. **A beat-identical gallery regeneration is churn, not evidence** — timestamps and clip bytes changed, 19/164 did not; the regen was not recommitted, with the diff as the waiver's proof.
+9. **The editor's LSP straddles pruned worktrees** — errors that look like a lane's breakage can be a stale index spanning two trees. Both gates green + one grep per tree settles it.
+10. **A recovered journal is a resume recipe.** Twenty-two verdicts and the exact verifier brief survived a session death because the Workflow persisted them; the successor needed no chat history.
+11. **"CANNOT RECUR" is a claim about scope filters, not about the audit.** The audit logic held under every shape tried; each of two filters wrapped around it was alone enough to re-ship the class. Verify the wrapper, not the core.
+12. **A verifier that hand-writes the agent's output has not verified the agent.** ON-6's "end to end" script staged `template.md` by hand and reported end-to-end; only a real spawn proves the agent half.
+13. **A pin that reads the checkout's git history is environment-shaped.** F5's ancestry pin was green on every full-history worktree and red on CI's depth-1 clone; the hermetic form builds its own scratch repo. The same question ("does shallow break the CLI too?") found two real gate defects the pin alone would never have shown.
+14. **Review economics, measured again.** Six fix lanes, 14 review rounds, **55 defects found in the fixes themselves before merge** (F5 14 · F6 15 · F1 9 · F3 6 · F4 6+2 by its own new gates · F2 5), three of them S1 and one a bridge-wide 1.9 s stall shipped inside a security fix. Rounds are cheap; the fix that ships its own defect is the cost centre, and the reviewer brief that names the class up front is what finds it.
+15. **A T1 gate run that finishes in 71 s with no `# pass` line is not a run.** Re-running `npm test` alone found 6227/6228; the red was a known flake, but the first pass would have merged on a number nobody read.
+16. **Under strict branch protection every lane after the first is BEHIND**; the protocol is `update-branch → CI on the new head → merge`, and each lane merges main before its own final gate so its gates cover the combined tree — which is how F5's widened lint found a defect in F2's new module.
+17. **Subagent scratchpads are shared across lanes** (one lane's PR body briefly became another's PR); host disk hit 0 GB free once during the fix wave. Prune worktrees on merge; assume collisions.
+
 ## 5. Maintenance contract (living-roadmap mechanics)
 
 These five files are **living documents**. The rules:
