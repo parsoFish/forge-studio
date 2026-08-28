@@ -2,7 +2,7 @@
 
 > **Canonical vision for the shipped OOTB suite (Scope 2)** (re-scoped 2026-07-17,
 > [ADR 038](../decisions/038-north-star-platform-and-ootb.md)). This document defines the
-> **ideas machine** — forge's shipped, out-of-the-box agents and flows — as **one user
+> **example develop factory** — forge's shipped, out-of-the-box agents and flows — as **one user
 > journey**. It is the timeless grounding every **Scope-2 (OOTB)** component is judged
 > against. It does not describe Scope 1 (the modular platform/engine/seams that runs
 > this journey, or any other agentic flow) — see [docs/repo-map.md](../repo-map.md).
@@ -41,7 +41,7 @@ After approval, the **project manager** takes the initiatives and breaks them in
 
 ## 3. Review phase — demo agent + adversarial review (re-scoped 2026-07-17, Q3-B)
 
-> **Amendment (2026-07-17):** the unifier concept is retired
+> **Amendment (2026-07-17):** the original single combined review/assembly phase is retired
 > ([roadmap README §8, decision Q3-B](../roadmaps/README.md#8-session-decisions-record-2026-07-17)).
 > Post-develop, two initiative-context agents replace it — a demo agent and an
 > adversarial review agent, below.
@@ -57,12 +57,6 @@ A **demo agent**:
 An **adversarial review agent** ensures **passing CI, build, and lint** and stress-tests the
 work against the initiative's assessed intent before it reaches the human.
 
-> ⚑ **Operator review flagged (Q3-B).** The former unifier's dual-boundary full-suite gate
-> — a known-gaps "strength worth preserving" — relocates to **orchestrator-owned gate
-> execution** (the ADR-036 pattern: agents judge, orchestrator executes), not to either
-> agent above. This relocation is flagged for operator review wherever it appears; its
-> final shape is not yet settled.
-
 The user **accepts** or **provides feedback**. When feedback is given, a **work item to complete that work
 is established and sent back** into the develop flow. This loop continues until the user accepts — at which point the
 change is **closed out, merged to main**, and the cycle moves toward release.
@@ -76,7 +70,7 @@ approval, **release-finalize** runs, **forge merges the release**, and **CI tags
 published artifact — the operator confirms the human-readable release notes before anything ships.
 
 > **Amendment (2026-07-17):** this section originally assigned changelog drafting to the
-> unifier, which is retired per Q3-B
+> single combined review/assembly phase, which is retired per Q3-B
 > ([roadmap README §8](../roadmaps/README.md#8-session-decisions-record-2026-07-17)).
 > Changelog drafting has **no decided successor yet** — it is reassigned as part of the
 > R4 successor-suite design ([docs/roadmaps/R4-ootb-suite.md](../roadmaps/R4-ootb-suite.md)).
@@ -124,8 +118,8 @@ Capabilities the journey **promotes to load-bearing** (regardless of prior class
 - **Rich HTML demo** with assessed-intent + evaluated-output + **human-watchable visual demonstration**
   (incl. CLI-behaviour video) for any component shape.
 - **Review feedback → work item → send-back into the develop flow**, looping until accept
-  (ADR-026 built the unifier-era mechanism; post-Q3-B the send-back re-enters the demo agent +
-  adversarial review agent stage, with the merge-boundary gate orchestrator-owned ⚑ — see §3,
+  (ADR-026 built the original single-phase mechanism; post-Q3-B the send-back re-enters the demo agent +
+  adversarial review agent stage, with the merge-boundary gate orchestrator-owned — see §3,
   amended 2026-07-17).
 - **Release final-loop**: draft changelog → operator approves the release → release-finalize → forge merges → CI tags/publishes (contract C10).
 - **Reflect interview → user feedback → brain tuning** at the relevant level.

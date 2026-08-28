@@ -4,7 +4,7 @@ Hand-authored initiative ideas fed to the real-capability harness
 (`scripts/verify-cycle.mjs`, [ADR 022](../decisions/022-real-capability-harness.md))
 via its `--idea-file <path>` flag. Each is a small, self-contained feature for a
 creds-free reference project, used to drive a **real** end-to-end cycle
-(architect → PM → dev-loop → unifier → review → merge) against a managed project
+(architect → PM → dev-loop → integrate → review → merge) against a managed project
 without needing live credentials.
 
 The current set targets **gitpulse** (`github.com/parsoFish/gitpulse`) — forge's

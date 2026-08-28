@@ -101,16 +101,38 @@ function scannedFiles() {
   return files.filter((f) => !isExcluded(rel(f)));
 }
 
+/**
+ * Blank out the TARGET of a markdown link that points into an excluded tree,
+ * leaving the link text and the surrounding prose fully scanned.
+ *
+ * Two real ADRs carry a retired token in their filename
+ * (019-cycle-resume-from-unifier.md, 026-review-unifier-wi-list.md), and ADR
+ * filenames are append-only history. Without this, citing one is a lint hit,
+ * and the cheapest way to go green is to DE-LINK the citation — the guard
+ * degrading the docs it exists to protect. Masking is target-only, so
+ * retired vocabulary in the prose beside the link is still caught.
+ */
+function maskExcludedLinkTargets(text, fileAbs) {
+  return text.replace(/\]\(([^)\s]+)/g, (whole, target) => {
+    if (/^[a-z]+:/i.test(target)) return whole; // external URL — not a repo path
+    const clean = target.split(/[#?]/)[0];
+    if (!clean) return whole;
+    const resolved = rel(resolve(dirname(fileAbs), clean));
+    return isExcluded(resolved) ? `](${'\u0000'.repeat(target.length)}` : whole;
+  });
+}
+
 function scan() {
   const hits = [];
   const files = scannedFiles();
   for (const abs of files) {
     const lines = readFileSync(abs, 'utf8').split('\n');
-    lines.forEach((text, i) => {
+    lines.forEach((raw, i) => {
+      const text = maskExcludedLinkTargets(raw, abs);
       TOKEN_RE.lastIndex = 0;
       let m;
       while ((m = TOKEN_RE.exec(text)) !== null) {
-        hits.push({ file: rel(abs), line: i + 1, token: m[1].toLowerCase(), text: text.trim() });
+        hits.push({ file: rel(abs), line: i + 1, token: m[1].toLowerCase(), text: raw.trim() });
       }
     });
   }

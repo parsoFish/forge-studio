@@ -141,6 +141,29 @@ test('untracked/ignored trees are not scanned (node_modules, .next, projects, _w
   );
 });
 
+test('a markdown link TARGET into an excluded tree is not a hit — ADR filenames are history', () => {
+  // Two real ADRs carry a retired token in their filename (019-cycle-resume-from-unifier.md,
+  // 026-review-unifier-wi-list.md). ADR filenames are append-only history. A lint that fires on
+  // the LINK PATH pushes authors to de-link the citation to stay green — the guard degrading the
+  // docs it exists to protect. Prose on the same line is still a hit.
+  withFixture(
+    {
+      'docs/known-gaps.md':
+        'See [ADR 026](./decisions/026-review-unifier-wi-list.md) and [ADR 019](../docs/decisions/019-cycle-resume-from-unifier.md).\n',
+    },
+    (r) => {
+      assert.equal(r.code, 0, `an ADR link target must not be a hit:\n${r.out}`);
+    },
+  );
+  withFixture(
+    { 'docs/known-gaps.md': 'The unifier ran here — see [ADR 026](./decisions/026-review-unifier-wi-list.md).\n' },
+    (r) => {
+      assert.equal(r.code, 1, `prose beside an ADR link must still be a hit:\n${r.out}`);
+      assert.match(r.out, /1 hit\(s\)/, r.out);
+    },
+  );
+});
+
 test('THE RATCHET: the real repo scans clean — zero hits, zero tolerance', () => {
   const r = run(ROOT);
   assert.match(r.out, /scanned \d+ file/, `expected a real scan, got: ${r.out}`);

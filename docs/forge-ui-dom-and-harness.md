@@ -2632,8 +2632,8 @@ inventory rather than one shared page-level contract:
   REAL scheduler status (`lib/scheduler-view.ts`'s `describeEnqueueOutcome` —
   "Enqueued — the scheduler is stopped, so nothing will run until you start
   it." with a `strip` SchedulerCard + `[data-action="scheduler-start"]` when
-  the daemon is down; the develop copy names the develop flow, never the
-  retired unifier), and `open-plan-run` / `[data-action="open-develop-run"]`
+  the daemon is down; the develop copy names the develop flow), and
+  `open-plan-run` / `[data-action="open-develop-run"]`
   link the RUN the enqueue returned (`/flows/<flowId>/run/<initiativeId>` — the
   initiative id is the STABLE run handle: a planned run's own id IS its
   initiative id, and the bridge's `findRun` matches `initiativeId` second so
