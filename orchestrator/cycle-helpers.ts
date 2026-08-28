@@ -503,7 +503,8 @@ function clearMergeGateFeedback(worktreePath: string): void {
 
 export type MergeGateResult =
   | { ok: true }
-  | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string };
+  | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string }
+  | { ok: false; failedGate: 'config'; reason: string };
 
 /**
  * Run the LOCAL full-suite gate with LOCAL-gate timeout semantics
@@ -568,20 +569,23 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
     ciGateUnsetEnv = cfg?.ci_gate_unset_env && cfg.ci_gate_unset_env.length > 0 ? cfg.ci_gate_unset_env : [];
     ciDeclaredTimeoutMs = cfg?.testProcess.ci?.timeoutMs;
   } catch (err) {
-    // A malformed project.json is fail-closed where it's loaded for real (the
-    // dev-loop); here we log-and-skip so a config-read hiccup can't wedge the
-    // gate — the branch's own CI still backstops the merge.
+    // A malformed project.json is fail-closed everywhere it's loaded for real
+    // (the dev-loop) — and it must be fail-closed HERE too. A cycle whose
+    // project config cannot be read has no basis for a green gate; nothing
+    // backstops it (a project may declare no `testProcess.ci` at all, per
+    // C1b's own preflight WARN), so this reports RED, not `{ ok: true }`.
+    const reason = err instanceof Error ? err.message : String(err);
     logger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',
       skill: 'cycle',
-      event_type: 'log',
+      event_type: 'error',
       input_refs: [input.projectRepoPath],
       output_refs: [],
-      message: 'cycle.merge-gate-skipped',
-      metadata: { reason: err instanceof Error ? err.message : String(err) },
+      message: 'cycle.merge-gate-config-error',
+      metadata: { reason },
     });
-    return { ok: true };
+    return { ok: false, failedGate: 'config', reason };
   }
 
   // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.

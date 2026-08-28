@@ -71,6 +71,46 @@ export function writeReviewCapExhaustedMarker(worktreePath: string, detail: stri
 }
 
 /**
+ * `.forge/MERGE-GATE-CONFIG-ERROR.md` — the greppable park marker for a merge
+ * gate that could not even read the project's `.forge/project.json`
+ * (`runMergeBoundaryGate`'s `failedGate: 'config'` result, M0-A task 2).
+ * Present ⇒ the merge-boundary gate cannot be evaluated for this initiative and
+ * it is parked needs-operator; no gate-fix work item is ever compiled for this
+ * case — a dev agent cannot fix the operator's own project config, so
+ * queuing one would just burn iterations on a criterion that can never pass.
+ */
+export const MERGE_GATE_CONFIG_ERROR_FILENAME = 'MERGE-GATE-CONFIG-ERROR.md';
+
+export function mergeGateConfigErrorPath(worktreePath: string): string {
+  return join(worktreePath, '.forge', MERGE_GATE_CONFIG_ERROR_FILENAME);
+}
+
+export function hasMergeGateConfigErrorMarker(worktreePath: string): boolean {
+  return existsSync(mergeGateConfigErrorPath(worktreePath));
+}
+
+export function writeMergeGateConfigErrorMarker(worktreePath: string, reason: string): void {
+  const forgeDir = join(worktreePath, '.forge');
+  if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
+  writeFileSync(
+    mergeGateConfigErrorPath(worktreePath),
+    [
+      '# Merge-boundary gate could not read the project config',
+      '',
+      reason.trim(),
+      '',
+      'The merge-boundary gate cannot be evaluated while the project config fails to',
+      'load, so the cycle is parked needs-operator instead of reporting a green gate.',
+      'No gate-fix work item was compiled — a dev agent cannot fix the operator\'s own',
+      '`.forge/project.json`.',
+      'Fix `.forge/project.json` on the project repo (see the reason above), then',
+      're-submit the initiative.',
+      'Delete this file after taking action — the fix-loop drain skips while it exists.',
+    ].join('\n'),
+  );
+}
+
+/**
  * Default iteration budget stamped on a compiled fix WI when the caller names
  * none (the review-fix path passes the unifier cap; the demo-fix path uses
  * this). A code-fix is a scoped remediation, not a fresh initiative — a handful

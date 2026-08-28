@@ -37,6 +37,7 @@ import { resolveReviewLoopCaps } from './config.ts';
 import {
   fixWorkItemCount,
   hasFailedFixWorkItem,
+  hasMergeGateConfigErrorMarker,
   hasReviewCapExhaustedMarker,
   pendingFixWorkItems,
 } from './fix-work-items.ts';
@@ -123,8 +124,9 @@ export async function drainPendingFixWorkItems(
       // adversarial-review) against these two values, plus `spawnSync('git',
       // …, {cwd: worktreePath})`. The check must precede the `existsSync`
       // probe below, because every later use — `hasReviewCapExhaustedMarker`,
-      // `hasFailedFixWorkItem`, `pendingFixWorkItems`, `confirmMerge`,
-      // `fixWorkItemCount`, `worktreeHeadSha` — takes the raw value.
+      // `hasMergeGateConfigErrorMarker`, `hasFailedFixWorkItem`,
+      // `pendingFixWorkItems`, `confirmMerge`, `fixWorkItemCount`,
+      // `worktreeHeadSha` — takes the raw value.
       // Absent (`''`) stays absent: the `no-worktree` branch owns that case.
       // Throwing lands in this loop's own per-manifest try/catch, so ONE
       // poisoned manifest degrades to `status:'error'` without aborting the
@@ -169,6 +171,10 @@ export async function drainPendingFixWorkItems(
       // so its presence means no fresh fix WI was enqueued behind it.
       if (hasReviewCapExhaustedMarker(worktreePath)) {
         out.push({ initiativeId, status: 'needs-operator', detail: 'review-cap-exhausted marker present' });
+        continue;
+      }
+      if (hasMergeGateConfigErrorMarker(worktreePath)) {
+        out.push({ initiativeId, status: 'needs-operator', detail: 'merge-gate-config-error marker present' });
         continue;
       }
       if (hasFailedFixWorkItem(worktreePath)) {

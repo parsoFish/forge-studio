@@ -82,6 +82,7 @@ import {
   type MergeGateResult,
 } from './cycle-helpers.ts';
 import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
+import { writeMergeGateConfigErrorMarker } from './fix-work-items.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS, normalizeProjectId } from './studio/registry.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
 import { runPreflight } from '../cli/preflight.ts';
@@ -831,6 +832,43 @@ const execDemo: NodeExecutor = async (ctx) => {
   // the send-back, then terminate the walk to ready-for-review so the drain
   // re-enters resume_from:'develop' and the develop agent turns the suite green.
   const gate = deps.runMergeBoundaryGate(input, nodeLogger);
+  if (!gate.ok && gate.failedGate === 'config') {
+    // The gate could not even READ the project config — there is no fix a dev
+    // agent can compile (the operator's own `.forge/project.json` is not part
+    // of the initiative's diff, and a red `testProcess` declaration can never
+    // be turned green by editing the initiative's branch). Park needs-operator
+    // with the reason and terminate BEFORE enqueueGateFixWorkItems ever runs —
+    // no gate-fix work item is compiled. Not wrapped in a try/catch: if the
+    // marker itself cannot be written, that must surface as a hard failure,
+    // not vanish behind another swallowed error (the defect this task fixes).
+    writeMergeGateConfigErrorMarker(input.worktreePath, gate.reason);
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'merge-gate.config-error',
+      metadata: { reason: gate.reason, origin: 'gate-fix' },
+    });
+    state.terminateEarly = true;
+    // `status: 'failed'` so the demo hex renders as a failed/blocked state, not
+    // the green 'complete' a real demo earns — the demo never ran here; the
+    // merge-boundary gate could not even read the project config
+    // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: 'demo-agent',
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [],
+      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', demo_status: 'gate-config-error' },
+    });
+    return;
+  }
   if (!gate.ok) {
     const enqueue = enqueueGateFixWorkItems({
       worktreePath: input.worktreePath,
