@@ -2,6 +2,10 @@
 
 > A modular platform for building the ideas machine — or any other agentic flow — that ships the ideas machine itself out of the box. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
 
+## Active campaign (read first)
+
+The single roadmap for all forge work is [`docs/roadmaps/1.0.md`](./docs/roadmaps/1.0.md) (design record: [`docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md`](./docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md)). A fresh session follows its §1 before anything else. Campaign state lives in `_1.0/` (gitignored, created at kickoff). Identity: **forge-studio — a software factory construction platform**; the OOTB develop flow is its one example factory.
+
 ## North star
 
 Forge's mission is **two-level** ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), 2026-07-17):

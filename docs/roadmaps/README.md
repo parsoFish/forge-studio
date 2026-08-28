@@ -1,5 +1,9 @@
 # Forge-dev roadmaps — index & maintenance contract
 
+> **Active plan (2026-08-28 →): [`1.0.md`](./1.0.md) is the single roadmap for all forge work until the 1.0 tag.**
+> R1–R8 and the wave sections below are the record of what was built; they are archived in M6 of that plan.
+> Design record: [`docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md`](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md).
+
 > Entry point for the forge-dev roadmap set. Five living roadmaps, one index (this
 > file). Planned direction only — nothing in this set is an implementation record
 > except the explicitly-marked as-built baseline sections inside each roadmap.
