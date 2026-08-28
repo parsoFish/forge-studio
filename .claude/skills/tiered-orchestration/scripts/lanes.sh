@@ -142,7 +142,7 @@ cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable even
     n1="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
     [ "$n1" -lt "$n0" ] && n0=0
     if [ "$n1" -gt "$n0" ]; then
-      sed -n "$((n0 + 1)),${n1}p" "$ledger" | grep -E --line-buffered 'OUTCOME|PARK|NOT MET|STOP|\bH[1-9]\b|contract-ready|merged|MERGED' | cut -c1-300 | sed 's/^/LEDGER: /'
+      sed -n "$((n0 + 1)),${n1}p" "$ledger" | { grep -E --line-buffered 'OUTCOME|PARK|NOT MET|STOP|\bH[1-9]\b|contract-ready|merged|MERGED' || true; } | cut -c1-300 | sed 's/^/LEDGER: /'
       n0="$n1"
     fi
     for f in "$camp"/heartbeat/STALL-*; do
@@ -155,7 +155,7 @@ cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable even
         case " $seen_gone " in *" $lane "*) ;; *) echo "LANE_ENDED: forge-$lane session gone (still in ACTIVE)"; seen_gone="$seen_gone $lane" ;; esac
         continue
       fi
-      last="$(tmux capture-pane -p -t "forge-$lane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 || true)"
+      last="$(tmux capture-pane -p -t "forge-$lane" 2>/dev/null | { grep -v '^[[:space:]]*$' || true; } | tail -1)"
       if printf '%s' "$last" | grep -qE '^[^ ]+@[^ ]+:.*\$ ?$'; then
         case " $seen_shell " in *" $lane "*) ;; *) echo "LANE_SHELL: forge-$lane claude exited — pane is at a shell prompt"; seen_shell="$seen_shell $lane" ;; esac
       fi
