@@ -35,7 +35,7 @@ Two forge gaps combined:
 
 ## Fix
 
-- Add `forge demo capture <init-id>` (run from the worktree root) as a mandatory step in `skills/developer-unifier/SKILL.md` before `forge demo render`.
+- Add `forge demo capture <init-id>` (run from the worktree root) as a mandatory step before `forge demo render`. The skill that carried this step was retired in 2026-08; demo capture is owned by `skills/demo-agent/SKILL.md` today.
 - Fix `captureCheckpoints` to run CLI-output capture regardless of `npm run build` exit code — use the committed `dist/` when the build fails.
 - For flags that are NEW on HEAD (like `--compare`), the "before" run legitimately errors — that error IS the honest before evidence; do not suppress it.
 
