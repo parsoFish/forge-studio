@@ -75,7 +75,12 @@ import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
-import { DEFAULT_PROJECT, buildOutcomeChecks } from './lib/verify-outcomes.mjs';
+import {
+  DEFAULT_PROJECT,
+  buildOutcomeChecks,
+  classifyReflectorProgress,
+  sumAuthoritativeCostFromLines,
+} from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -230,15 +235,15 @@ function resetRepo(repoPath) {
   return true;
 }
 
-/** Sum cost_usd across the cycle's event log. */
+/** Sum authoritative cost_usd across the cycle's event log (M0-A round-2
+ *  defect C — a naive per-line sum double-counts developer-loop/unifier
+ *  phases, which restate their `iteration` cost on per-work-item and
+ *  phase-level `end` events; delegates to the one restatement rule via
+ *  `sumAuthoritativeCostFromLines`, not a second copy of it). */
 function sumCycleCost(cycleId) {
   try {
-    let total = 0;
-    for (const line of readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n')) {
-      if (!line) continue;
-      try { const e = JSON.parse(line); if (typeof e.cost_usd === 'number') total += e.cost_usd; } catch { /* */ }
-    }
-    return total;
+    const lines = readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n');
+    return sumAuthoritativeCostFromLines(lines);
   } catch { return 0; }
 }
 
@@ -899,21 +904,41 @@ async function runServeStage(page, label) {
   log(`serve --once (${label}) exited`);
 }
 
-/** Wait for the reflector to FINISH (reflector.end in the cycle log). The bridge
- *  fires finalize→reflect detached after the verdict approve; the old harness tore
- *  the bridge down ~3s later, killing reflect mid-start. Bounded; returns true on
- *  reflector.end seen. */
+/** Wait for the reflector to FINISH or DIE (reflector.end / cycle.reflection-lost
+ *  in the cycle log). The bridge fires finalize→reflect detached after the
+ *  verdict approve; the old harness tore the bridge down ~3s later, killing
+ *  reflect mid-start. Bounded; returns true only when reflection genuinely
+ *  completed (`ended`).
+ *
+ *  M0-A round-2 defect B: the old version scanned only for `reflector.end`,
+ *  so a reflector that died loudly (`cycle.reflection-lost` is terminal —
+ *  never followed by an end event) burned the FULL deadline and then logged
+ *  the neutral "not seen before deadline", which reads as slow rather than
+ *  dead (cost 12 of run 1's 47 minutes). `classifyReflectorProgress` lets
+ *  this return the moment the outcome is known — `ended` or `lost` — and a
+ *  `lost` is always reported by name and cause, never folded into the
+ *  deadline-timeout message. */
 async function waitForReflectorEnd(cycleId, deadlineMs) {
   const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
-  let sawStart = false;
+  let loggedStart = false;
   while (Date.now() < deadlineMs) {
+    let lines = [];
     try {
-      for (const line of readFileSync(logFile, 'utf8').split('\n')) {
-        if (!line.includes('"skill":"reflector"')) continue;
-        if (!sawStart && line.includes('"event_type":"start"')) { sawStart = true; log('reflector.start seen — waiting for reflector.end…'); }
-        if (line.includes('"event_type":"end"')) { log('reflector.end seen — reflection complete'); return true; }
-      }
+      lines = readFileSync(logFile, 'utf8').split('\n');
     } catch { /* log not yet present */ }
+    const progress = classifyReflectorProgress(lines);
+    if (progress.state === 'started' && !loggedStart) {
+      loggedStart = true;
+      log('reflector.start seen — waiting for reflector.end…');
+    }
+    if (progress.state === 'ended') {
+      log('reflector.end seen — reflection complete');
+      return true;
+    }
+    if (progress.state === 'lost') {
+      log(`reflection LOST (not merely slow) — ${progress.detail}`);
+      return false;
+    }
     await sleep(3000);
   }
   log('reflector.end not seen before deadline');

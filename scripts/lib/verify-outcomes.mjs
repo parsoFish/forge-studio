@@ -29,7 +29,20 @@
  * suite, checking `_queue/done/`, probing the merged `demo.json`, reading
  * `.forge/project.json`) stays in `verify-cycle.mjs`'s `assessOutcomes`,
  * which hands this module the resulting values.
+ *
+ * `classifyReflectorProgress` (M0-A round-2 defect B) and
+ * `sumAuthoritativeCostFromLines` (M0-A round-2 defect C) are the one
+ * declared exception to "no imports besides node builtins": the latter
+ * delegates to `orchestrator/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
+ * single source of truth for cost summation also used by `cli/metrics.ts`,
+ * `orchestrator/run-model.ts` and `orchestrator/run-model-derive.ts` — rather
+ * than re-implementing the restatement rule a second time. That module's own
+ * import of `EventLogEntry` is `import type`, erased at load, so pulling it
+ * in from plain `.mjs` stays side-effect-free; Node v22's native TS type
+ * stripping loads the `.ts` file directly, no build step needed.
  */
+
+import { sumAuthoritativeCostUsd } from '../../orchestrator/event-cost.ts';
 
 /** The harness's default verify ground — an independent repo, never `mdtoc`
  *  (which is committed inside forge's own repo). */
@@ -112,4 +125,96 @@ export function buildOutcomeChecks({
     checks.push({ name: 'release finalised (changelog + release.json)', pass: releaseEvidence.present, detail: releaseEvidence.reason });
   }
   return checks;
+}
+
+/**
+ * @typedef {{ state: 'none' | 'started' | 'ended' | 'lost', detail: string }} ReflectorProgress
+ */
+
+/** The literal `cycle.reflection-lost` terminal-loss event message
+ *  (`orchestrator/cycle-context.ts`'s `REFLECTION_LOST_EVENT`) — not
+ *  imported, since that module is not the declared cost-rule exception and
+ *  this file stays pure otherwise; the value is stable (it is itself a
+ *  cross-module contract other callers match on). */
+const REFLECTION_LOST_MESSAGE = 'cycle.reflection-lost';
+
+/**
+ * Classify a cycle's reflection progress from its raw event-log lines
+ * (M0-A round-2 defect B).
+ *
+ * `waitForReflectorEnd` in `verify-cycle.mjs` used to scan only for
+ * `reflector.end`, so a reflector that died loudly (`cycle.reflection-lost`
+ * — terminal, never followed by an end event) burned the full wait deadline
+ * and then logged the neutral "not seen before deadline", which reads as
+ * slow rather than dead. This lets the caller distinguish the two and stop
+ * waiting the instant the outcome is known, not just when the clock runs
+ * out.
+ *
+ * @param {readonly string[]} logLines raw JSONL lines (one JSON object each;
+ *   malformed lines are skipped, matching every other line-scanner in this
+ *   file / `verify-cycle.mjs`)
+ * @returns {ReflectorProgress}
+ *   - `'none'`   — no reflector activity observed at all
+ *   - `'started'` — `reflector.start` seen, no end and no loss yet (reads as
+ *     slow, not dead — the exact ambiguity this classification resolves for
+ *     the caller once combined with the deadline)
+ *   - `'ended'`  — `reflector.end` observed — reflection completed
+ *   - `'lost'`   — `cycle.reflection-lost` observed — reflection died;
+ *     `detail` names the real cause/detail carried on that event, never a
+ *     generic string
+ */
+export function classifyReflectorProgress(logLines) {
+  let sawStart = false;
+  let sawEnd = false;
+  let lostDetail = null;
+
+  for (const line of logLines) {
+    if (!line) continue;
+    let e;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (e.skill === 'reflector' && e.event_type === 'start') sawStart = true;
+    if (e.skill === 'reflector' && e.event_type === 'end') sawEnd = true;
+    if (e.message === REFLECTION_LOST_MESSAGE) {
+      const cause = e.metadata?.cause ?? 'unknown';
+      const causeDetail = e.metadata?.detail ?? 'no detail recorded';
+      lostDetail = `${REFLECTION_LOST_MESSAGE}: ${cause} — ${causeDetail}`;
+    }
+  }
+
+  if (sawEnd) return { state: 'ended', detail: 'reflector.end observed — reflection completed' };
+  if (lostDetail !== null) return { state: 'lost', detail: lostDetail };
+  if (sawStart) return { state: 'started', detail: 'reflector.start observed, no end or loss yet' };
+  return { state: 'none', detail: 'no reflector activity observed' };
+}
+
+/**
+ * Sum authoritative cost across raw event-log lines (M0-A round-2 defect C).
+ *
+ * Delegates to `orchestrator/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
+ * ONE restatement rule, applied once per event (spec §5.7) — rather than
+ * naively summing every `cost_usd` field, which double/triple-counts phases
+ * that emit `iteration` events (developer-loop, unifier) because those
+ * phases restate the same dollars on their per-work-item and phase-level
+ * `end` events. `verify-cycle.mjs`'s old `sumCycleCost` did the naive sum and
+ * overstated a run's cost by roughly 2x.
+ *
+ * @param {readonly string[]} lines raw JSONL lines; malformed lines are
+ *   skipped
+ * @returns {number} authoritative total cost in USD
+ */
+export function sumAuthoritativeCostFromLines(lines) {
+  const events = [];
+  for (const line of lines) {
+    if (!line) continue;
+    try {
+      events.push(JSON.parse(line));
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  return sumAuthoritativeCostUsd(events);
 }
