@@ -9,7 +9,7 @@
 # their own T3 subagents (in-process subagents cannot nest) and keep their own
 # context, model tier and /session-report.
 #
-# Usage:
+# Usage (help = run with no args):
 #   lanes.sh render <kickoffs.md> <heading-regex> <out-file> [PARAM=VALUE ...]
 #       Extract the first ```text block under the heading matching <heading-regex>
 #       into <out-file>; fill each PARAM (its "PARAMETER — set before pasting" line
@@ -26,6 +26,9 @@
 #   lanes.sh open <lane> [DIR]       Windows Terminal tab attached to the session.
 #   lanes.sh list [campaign-dir]     forge-* sessions, ACTIVE set, STALL flags.
 #   lanes.sh kill <campaign-dir> <lane>   End the session; drop <lane> from ACTIVE.
+#   lanes.sh events <campaign-dir> [ledger]  Forever: one line per actionable event — new ledger
+#                                    OUTCOME/park/NOT MET lines, STALL flags, a lane session gone,
+#                                    a lane whose claude exited to the shell. Feed it to a Monitor.
 #
 # Env overrides: LANES_MODEL (opus), LANES_PERMISSION_MODE (auto),
 #                LANES_CWD (/home/parso/forge), LANES_CLAUDE_BIN (resolved `claude`).
@@ -132,6 +135,35 @@ cmd_kill() {
   echo "ACTIVE = $(cat "$camp/heartbeat/ACTIVE")"
 }
 
+cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable event, forever (Monitor input)
+  local camp="$1" ledger="${2:-$1/ledger.md}" n0 n1 lane b f last seen_stall="" seen_gone="" seen_shell=""
+  n0="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
+  while true; do
+    n1="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
+    [ "$n1" -lt "$n0" ] && n0=0
+    if [ "$n1" -gt "$n0" ]; then
+      sed -n "$((n0 + 1)),${n1}p" "$ledger" | grep -E --line-buffered 'OUTCOME|PARK|NOT MET|STOP|\bH[1-9]\b|contract-ready|merged|MERGED' | cut -c1-300 | sed 's/^/LEDGER: /'
+      n0="$n1"
+    fi
+    for f in "$camp"/heartbeat/STALL-*; do
+      [ -f "$f" ] || continue; b="$(basename "$f")"
+      case " $seen_stall " in *" $b "*) ;; *) echo "STALL: $(head -1 "$f")"; seen_stall="$seen_stall $b" ;; esac
+    done
+    for lane in $(tr ',' ' ' < "$camp/heartbeat/ACTIVE" 2>/dev/null); do
+      [ "$lane" = NONE ] && continue
+      if ! tmux has-session -t "forge-$lane" 2>/dev/null; then
+        case " $seen_gone " in *" $lane "*) ;; *) echo "LANE_ENDED: forge-$lane session gone (still in ACTIVE)"; seen_gone="$seen_gone $lane" ;; esac
+        continue
+      fi
+      last="$(tmux capture-pane -p -t "forge-$lane" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -1 || true)"
+      if printf '%s' "$last" | grep -qE '^[^ ]+@[^ ]+:.*\$ ?$'; then
+        case " $seen_shell " in *" $lane "*) ;; *) echo "LANE_SHELL: forge-$lane claude exited — pane is at a shell prompt"; seen_shell="$seen_shell $lane" ;; esac
+      fi
+    done
+    sleep 30
+  done
+}
+
 case "${1:-}" in
   render) shift; cmd_render "$@" ;;
   launch) shift; cmd_launch "$@" ;;
@@ -140,5 +172,6 @@ case "${1:-}" in
   open)   shift; cmd_open "$@" ;;
   list)   shift; cmd_list "$@" ;;
   kill)   shift; cmd_kill "$@" ;;
-  *) sed -n '2,32p' "$0"; exit 1 ;;
+  events) shift; cmd_events "$@" ;;
+  *) sed -n '2,35p' "$0"; exit 1 ;;
 esac
