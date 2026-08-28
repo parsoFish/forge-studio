@@ -66,6 +66,122 @@ test('a flat-key project.json makes the merge gate RED with failedGate "config" 
 });
 
 // ---------------------------------------------------------------------------
+// M0-A fix round 1 (T3 brief) — the contract test 1 above does NOT pin:
+// `{ ok: true }` is reachable only when a gate actually ran and passed.
+// Test 1 kills a project.json that THROWS on load. `loadProjectConfig` does
+// NOT throw when the file is absent, unreadable, or symlink-rejected — it
+// returns `null` (see project-config.ts's own doc comment: "the only
+// non-throwing outcome on parse failure is 'file does not exist'"). With
+// `cfg === null`, `localCmd` and `ciGate` in `runMergeBoundaryGate` both
+// resolve to `null`, neither gate block runs, and the function falls through
+// to `return { ok: true }` with ZERO events emitted — reproduced verbatim
+// against the real function on a temp dir with no `.forge/project.json`
+// (`RESULT: {"ok":true}`, `EVENTS: 0 []`). A third trigger reaches the same
+// fallthrough even when `loadProjectConfig` returns a config cleanly: a
+// declared-but-empty `testProcess.local.cmd` passes `validateProjectConfig`
+// (an empty array is not `undefined`/`null`, so the loader's own
+// `if (!localCmd) throw` never fires — `![]` is `false` in JS), then
+// `runMergeBoundaryGate`'s `cfg.quality_gate_cmd.length > 0` check drives
+// `localCmd` to `null` all the same. Case 3 is the positive control: a valid
+// config whose local gate genuinely runs and passes must still return
+// `{ ok: true }`, so an implementation that special-cases `cfg === null` (or
+// returns config-red unconditionally) cannot pass all three at once.
+// ---------------------------------------------------------------------------
+
+/** Case 1 fixture: an empty project root — no `.forge/` directory at all. */
+function seedAbsentProject(): string {
+  return mkdtempSync(join(tmpdir(), 'merge-gate-config-absent-'));
+}
+
+test('Case 1 — no .forge/project.json at all makes the merge gate RED with failedGate "config" — never ok:true, never zero events', () => {
+  const repo = seedAbsentProject();
+  const emitted: any[] = [];
+  const logger: any = { cycleId: 'c', emit(p: any) { emitted.push(p); return { ...p, event_id: 'e1' }; } };
+  const result = runMergeBoundaryGate(
+    { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
+    logger,
+  );
+  assert.equal(result.ok, false, 'an absent project config must never report a green gate — nothing ran');
+  assert.equal((result as any).failedGate, 'config');
+  assert.match(
+    (result as any).reason,
+    /not found|absent|missing|could not be read|does not exist/i,
+    'the reason must say the config could not be read — distinct from "declares no gate" (case 2)',
+  );
+  assert.notEqual(emitted.length, 0, 'the silent-green zero-events shape is exactly what this case kills');
+  const ev = emitted.find((e) => e.event_type === 'error');
+  assert.ok(ev, 'an absent config is an error event, not silence');
+});
+
+/**
+ * Case 2 fixture: valid JSON, loads WITHOUT throwing (`testProcess.local.cmd`
+ * is a present-but-empty array — `optionalArgv` accepts it and
+ * `parseTestProcess`'s `if (!localCmd) throw` does not fire on `[]`), yet
+ * declares no actual local gate command to run.
+ */
+const EMPTY_LOCAL_CMD_CONFIG = JSON.stringify({ testProcess: { local: { cmd: [] } } }, null, 2);
+
+function seedEmptyLocalCmdProject(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-gate-config-empty-cmd-'));
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), EMPTY_LOCAL_CMD_CONFIG);
+  return dir;
+}
+
+test('Case 2 — a project.json that loads cleanly but declares no local gate command makes the merge gate RED with failedGate "config" — never ok:true', () => {
+  const repo = seedEmptyLocalCmdProject();
+  const emitted: any[] = [];
+  const logger: any = { cycleId: 'c', emit(p: any) { emitted.push(p); return { ...p, event_id: 'e1' }; } };
+  const result = runMergeBoundaryGate(
+    { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
+    logger,
+  );
+  assert.equal(result.ok, false, 'a config declaring no local gate command must never report a green gate — nothing ran');
+  assert.equal((result as any).failedGate, 'config');
+  assert.match(
+    (result as any).reason,
+    /no local gate|local\.cmd|testProcess\.local\.cmd|empty/i,
+    'the reason must say the config declares no gate — distinct from "could not be read" (case 1)',
+  );
+  assert.notEqual(emitted.length, 0, 'the silent-green zero-events shape is exactly what this case kills');
+  const ev = emitted.find((e) => e.event_type === 'error');
+  assert.ok(ev, 'a config with no declared gate is an error event, not silence');
+});
+
+/**
+ * Case 3 fixture: a valid config whose local gate is a trivially-true
+ * command, so `runLocalSuiteGate` actually executes and passes — no project
+ * suite is invoked.
+ */
+const TRIVIAL_TRUE_CONFIG = JSON.stringify({ testProcess: { local: { cmd: ['true'] } } }, null, 2);
+
+function seedTrivialGreenProject(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-gate-config-green-'));
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), TRIVIAL_TRUE_CONFIG);
+  return dir;
+}
+
+test('Case 3 (positive control) — a green local gate that actually ran still returns ok:true, and the run is visible in the event log', () => {
+  const repo = seedTrivialGreenProject();
+  const emitted: any[] = [];
+  const logger: any = { cycleId: 'c', emit(p: any) { emitted.push(p); return { ...p, event_id: 'e1' }; } };
+  const result = runMergeBoundaryGate(
+    { initiativeId: 'INIT-x', projectRepoPath: repo, worktreePath: repo, dryRun: false } as any,
+    logger,
+  );
+  assert.equal(result.ok, true, 'a config whose declared local gate genuinely passes must report green');
+  // Without this control, an implementation that returns config-red
+  // unconditionally (over-correcting cases 1/2) would also pass them —
+  // proving `ok: true` stays reachable requires proving a gate actually ran.
+  const gateEvent = emitted.find(
+    (e) => e.message === 'cycle.merge-gate' && e.metadata?.gate === 'local',
+  );
+  assert.ok(gateEvent, 'the local gate must actually have run (and been logged) for ok:true to be earned');
+  assert.equal(gateEvent.metadata.ok, true, 'the logged local-gate run must itself be green');
+});
+
+// ---------------------------------------------------------------------------
 // Test 2 — flow-runner harness. Helpers below mirror flow-runner.test.ts's
 // makeInput/makeLogger/makeCallTracker/makeMockDeps (style only).
 // ---------------------------------------------------------------------------
