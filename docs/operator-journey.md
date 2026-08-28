@@ -68,8 +68,9 @@ the develop flow — the roadmap-first entry into the same RUN path).
    rich plan, sends back for revision, then approves (human decision #1).
 8. **Autonomous build on the develop flow (`/flows/forge-develop`)** — the PM
    decomposes the ACs into dependency-ordered work items, the dev-loop runs TDD
-   (red → grind → gate.pass) per WI fanned off the dev hex, then the **unifier**
-   (its own hex) reviews the branch and authors the demo.
+   (red → grind → gate.pass) per WI fanned off the dev hex, then the **demo
+   band** and **review band** (their own hexes) author the demo and review the
+   branch.
 9. **Verdict gate** (`/artifact?…type=verdict&mode=gate`) — the operator reviews
    the per-AC evaluated demo (for live projects: real REST evidence), authors a
    new acceptance criterion on send-back, the dev-loop reruns, and on re-review
@@ -111,7 +112,6 @@ backlog already tracks, now framed against the Studio surface:
 |---|---|---|
 | A2 — build a flow from scratch | The flow builder authors flows as data; `forge studio lint` validates; the engine runs the authored def. | Make the builder's drag-author → save → run loop a fully first-class no-code path (headless DnD is still finicky; the harness authors the def + proves lint/parity/render). |
 | 6 — architect explores edge cases | **Closed 2026-07-24 (R4-04-F4):** an explicit `exploring` stage sits between the interview and the draft — one structured turn enumerating edge cases (each with a `covered`/`needs-initiative`/`deferred` disposition) + brain-sourced constraints, persisted to `edge-cases.json`, fed into the draft prompt, and rendered as the PLAN's "Edge cases & constraints" section. | — |
-| 8 — unifier clean-up loop + demo skill | The unifier sub-phase iterates against the gates and authors `demo.json`. | Surface the clean-up loop distinctly from the per-WI dev-loop, and make the demo-skill a first-class wrap-up (always produce the page; capture live evidence when the project stands up real resources). |
 | 9 — review↔dev loop until approve | The verdict gate writes a send-back the dev-loop reacts to. | Make send-back visibly spawn a dev-loop, re-demo, and re-present as a continuous loop gated only by operator approval. |
 | 12 — adapter seam | claude is live and the gemini / aider adapters are wired in (SDK threaded through to the runtime); the registry disables only the still-unprovisioned SDKs (codex). | Exercise a second adapter on a full real cycle end-to-end (the seam is wired; the remaining gap is a live cross-adapter cycle run, not the plumbing). |
 

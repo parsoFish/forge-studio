@@ -182,9 +182,6 @@ The runner owns all mechanics — renders questions, builds manifests, writes PL
 
 ## Constraints
 
-- **Initiatives are coherent and releasable.** Query `brain/projects/<project>/themes/` and `brain/cycles/themes/` for the shape of past successful initiatives.
-- **ACs are concrete.** Reject your own draft if you can't write a GWT (or EARS equivalent) for it. Each initiative body MUST contain ≥1 AC block.
-- **Dependencies are explicit.** Set `depends_on` on each initiative for scheduler ordering. No intra-initiative feature dependency layer — the PM orders WIs directly.
 - **Aggregate footprint is informational** (C19). PLAN.md surfaces total iteration budget + per-initiative estimated cost as a single line; forge does NOT enforce a budget gate or auto-escalate. The operator decides.
 
 <!-- turn: interview -->
