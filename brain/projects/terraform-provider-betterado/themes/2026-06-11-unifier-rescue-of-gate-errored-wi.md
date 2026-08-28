@@ -6,6 +6,7 @@ keywords: [unifier, gate-errored, tf-acc, missing-implementation, acceptance-tes
 related_themes: [cycle-recovery-index]
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
+status: historical
 ---
 
 # Unifier rescue of gate-errored WI

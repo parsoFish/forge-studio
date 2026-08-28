@@ -4,6 +4,7 @@ description: Terminal re-prep commit updated only a diffStat line; demo.json ret
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
 ---
 
 # Unifier must validate demo.json liveEvidence ID matches .forge/live-evidence/ before re-prep commit

@@ -6,6 +6,7 @@ keywords: [demo.json, phantom-citations, invented-test-names, unifier-gate, go-b
 related_themes: [live-evidence-demo-index]
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
+status: historical
 ---
 
 ## What happened

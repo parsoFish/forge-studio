@@ -4,6 +4,7 @@ description: The unifier's `forge demo render <id>` call fails silently when cwd
 category: antipattern
 created_at: 2026-06-06T00:00:00Z
 updated_at: 2026-06-06T00:00:00Z
+status: historical
 ---
 
 # forge demo render requires --dir flag when invoked outside worktree root

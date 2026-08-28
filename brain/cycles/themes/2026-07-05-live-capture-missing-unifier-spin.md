@@ -4,6 +4,7 @@ description: When a review gate requires live evidence a dev-loop WI never captu
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 # Review gate blocked on absent live evidence causes unifier infinite-retry spin

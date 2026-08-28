@@ -4,6 +4,7 @@ description: Unifier restarted 16× for a single UWI pair over ~80 min with no g
 category: antipattern
 created_at: 2026-07-04
 updated_at: 2026-07-04
+status: historical
 ---
 
 # Unifier UWI restart loop — no gate-failure event between restarts

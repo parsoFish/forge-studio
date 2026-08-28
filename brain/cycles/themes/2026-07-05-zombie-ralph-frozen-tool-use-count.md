@@ -4,6 +4,7 @@ description: A stale WI-3 ralph session persisted after the WI completed, heartb
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 ## Pattern

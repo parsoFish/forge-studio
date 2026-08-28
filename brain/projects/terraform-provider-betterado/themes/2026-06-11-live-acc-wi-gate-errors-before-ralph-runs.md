@@ -6,6 +6,7 @@ keywords: [tf_acc, secrets.env, gate-errored, live-env-missing, ralph-zero-itera
 related_themes: [gate-mechanics-index, cycle-recovery-index]
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
+status: historical
 ---
 
 # Live-acc WI gate-errors before ralph runs when TF_ACC absent

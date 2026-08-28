@@ -4,6 +4,7 @@ description: On a large 65-commit initiative the unifier fired 16 resume-branch-
 category: antipattern
 created_at: 2026-07-04T00:00:00.000Z
 updated_at: 2026-07-04T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

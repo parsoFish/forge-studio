@@ -11,6 +11,7 @@ keywords: [unused-func, golangci-lint, ci-gate, dead-code, publisher-helpers, se
 related_themes: [build-tooling-index, provider-registration-dedup-index]
 created_at: 2026-07-01T00:00:00.000Z
 updated_at: 2026-07-01T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

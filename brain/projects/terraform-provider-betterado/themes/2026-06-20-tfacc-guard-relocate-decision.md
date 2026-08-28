@@ -6,6 +6,7 @@ keywords: [tf_acc, safety-interlock, requires_env, two-gate-model, ci-gate, unif
 related_themes: [gate-mechanics-index, fixture-discipline-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # TF_ACC guard — RELOCATE decision (DEC-7)

@@ -4,6 +4,7 @@ description: .forge/last-gate-failure.md is gitignored and persists across unifi
 category: antipattern
 created_at: 2026-07-04T01:02:34.000Z
 updated_at: 2026-07-04T01:02:34.000Z
+status: historical
 ---
 
 ## Observed pattern

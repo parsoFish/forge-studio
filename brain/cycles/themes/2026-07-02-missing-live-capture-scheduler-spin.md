@@ -4,6 +4,7 @@ description: When a review gate requires a live evidence capture that dev-loop n
 category: antipattern
 created_at: 2026-07-05T04:00:00.000Z
 updated_at: 2026-07-05T04:00:00.000Z
+status: historical
 ---
 
 ## What happened
