@@ -31,18 +31,36 @@ function run(root: string): { code: number; out: string } {
   }
 }
 
-function fixture(files: Record<string, string>): string {
+/**
+ * A fixture is a real git repo, because the checker enumerates TRACKED files.
+ * Every file in `files` is written; those named in `untracked` are left out of
+ * the index (that is how an ignored local note is modelled).
+ */
+function fixture(files: Record<string, string>, untracked: string[] = []): string {
   const root = mkdtempSync(join(tmpdir(), 'identity-'));
   for (const [rel, body] of Object.entries(files)) {
     const abs = join(root, rel);
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, body, 'utf8');
   }
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: 'pipe' });
+  };
+  git('init', '-q');
+  const tracked = Object.keys(files).filter((f) => !untracked.includes(f));
+  if (tracked.length > 0) {
+    git('add', '--', ...tracked);
+    git('-c', 'user.email=fixture@forge.test', '-c', 'user.name=fixture', 'commit', '-q', '-m', 'fixture');
+  }
   return root;
 }
 
-function withFixture(files: Record<string, string>, fn: (r: ReturnType<typeof run>) => void): void {
-  const root = fixture(files);
+function withFixture(
+  files: Record<string, string>,
+  fn: (r: ReturnType<typeof run>) => void,
+  untracked: string[] = [],
+): void {
+  const root = fixture(files, untracked);
   try {
     fn(run(root));
   } finally {
@@ -129,15 +147,21 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
   );
 });
 
-test('untracked/ignored trees are not scanned (node_modules, .next, projects, _worktrees)', () => {
+test('an ignored TREE is not scanned — git ignore rules, not a hand-kept skip list', () => {
+  // The regression lock for deleting SKIP_DIRS: a dependency tree ignored by the
+  // repo's own .gitignore is untracked, so enumeration never reaches it and the
+  // checker needs no per-directory skip list of its own.
   withFixture(
     {
+      '.gitignore': 'node_modules/\n',
       'docs/node_modules/pkg/readme.md': 'the unifier\n',
       'docs/ok.md': 'clean\n',
     },
     (r) => {
       assert.equal(r.code, 0, r.out);
+      assert.match(r.out, /0 hit\(s\)/, r.out);
     },
+    ['docs/node_modules/pkg/readme.md'],
   );
 });
 
@@ -159,6 +183,38 @@ test('a markdown link TARGET into an excluded tree is not a hit — ADR filename
     { 'docs/known-gaps.md': 'The unifier ran here — see [ADR 026](./decisions/026-review-unifier-wi-list.md).\n' },
     (r) => {
       assert.equal(r.code, 1, `prose beside an ADR link must still be a hit:\n${r.out}`);
+      assert.match(r.out, /1 hit\(s\)/, r.out);
+    },
+  );
+});
+
+test('a gitignored, untracked doc is NOT a hit — the gate scans the repo, not the working tree', () => {
+  // The operator's checkout carries local notes under a gitignored path
+  // (.gitignore: docs/investigations/*). Walking the working tree made the gate
+  // red locally and green on CI — the habit that teaches operators to ignore it.
+  withFixture(
+    {
+      '.gitignore': 'docs/investigations/\n',
+      'docs/ok.md': 'The develop flow writes DEMO.md.\n',
+      'docs/investigations/local-note.md': 'The unifier ran here.\n',
+    },
+    (r) => {
+      assert.equal(r.code, 0, `a gitignored local note must not be a hit:\n${r.out}`);
+      assert.match(r.out, /0 hit\(s\)/, r.out);
+    },
+    ['docs/investigations/local-note.md'],
+  );
+});
+
+test('a TRACKED doc under the same ignored-sibling tree is still a hit — the fix silences nothing', () => {
+  withFixture(
+    {
+      '.gitignore': 'docs/investigations/\n',
+      'docs/known-gaps.md': 'The unifier ran here.\n',
+    },
+    (r) => {
+      assert.equal(r.code, 1, `a tracked doc must still be a hit:\n${r.out}`);
+      assert.match(r.out, /docs\/known-gaps\.md:1/, r.out);
       assert.match(r.out, /1 hit\(s\)/, r.out);
     },
   );
