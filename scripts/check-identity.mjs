@@ -9,7 +9,11 @@
  * when a CURRENT-STATE doc, skill or README still narrates one of them.
  *
  * Scanned: CLAUDE.md, README.md, ARCHITECTURE.md, docs/**\/*.{md,json},
- * skills/**\/SKILL.md.
+ * skills/**\/SKILL.md — enumerated with `git ls-files`, so only TRACKED files
+ * count. A checker must scan the REPO, not the working directory: walking the
+ * tree made this gate red on the operator's checkout (gitignored local notes
+ * under docs/investigations/) and green on CI, which teaches operators to
+ * ignore it.
  *
  * NOT scanned — record-type files. Each of these documents the decision to
  * retire these things and must keep saying so; the exclusion is by explicit
@@ -19,7 +23,8 @@
  * Usage: node scripts/check-identity.mjs [rootDir]   (default: repo root)
  * Exit 0 = zero hits. Exit 1 = one or more hits, listed path:line.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,8 +49,12 @@ const EXCLUDED_FILES = new Map([
   ['docs/roadmaps/wave-7-walkthrough-findings.md', 'a closed wave’s findings record'],
 ]);
 
-/** Directory names never worth walking, wherever they appear. */
-const SKIP_DIRS = new Set(['node_modules', '.next', '.git', '_worktrees', 'projects', 'dist', 'coverage']);
+/** The scanned roots: a git pathspec, and which of its tracked files count. */
+const SCANNED = [
+  { pathspec: ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md'], keep: () => true },
+  { pathspec: ['docs'], keep: (p) => p.endsWith('.md') || p.endsWith('.json') },
+  { pathspec: ['skills'], keep: (p) => p.endsWith('SKILL.md') },
+];
 
 const rootArg = process.argv[2];
 const ROOT = rootArg
@@ -59,46 +68,32 @@ function isExcluded(relPath) {
   return EXCLUDED_TREES.some((t) => relPath === t || relPath.startsWith(`${t}/`));
 }
 
-function walk(absDir, out) {
-  let entries;
-  try {
-    entries = readdirSync(absDir, { withFileTypes: true });
-  } catch {
-    return; // a scanned root that does not exist in this tree is simply empty
+/**
+ * Tracked files under `pathspec`, repo-relative. A pathspec matching nothing
+ * yields empty output at exit 0 (measured), so a root without a docs/ or
+ * skills/ tree is simply empty; anything else — ROOT is not a git work tree,
+ * git is missing — is a hard error, because a silent empty scan is a gate that
+ * passes by scanning nothing.
+ */
+function trackedFiles(pathspec) {
+  const r = spawnSync('git', ['ls-files', '-z', '--', ...pathspec], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (r.error) throw new Error(`check-identity: cannot run git in ${ROOT}: ${r.error.message}`);
+  if (r.status !== 0) {
+    throw new Error(`check-identity: git ls-files failed in ${ROOT} (exit ${r.status}): ${r.stderr.trim()}`);
   }
-  for (const e of entries) {
-    if (e.name.startsWith('.') && e.name !== '.github') continue;
-    const abs = join(absDir, e.name);
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name)) continue;
-      walk(abs, out);
-    } else if (e.isFile()) {
-      out.push(abs);
-    }
-  }
+  return r.stdout.split('\0').filter(Boolean);
 }
 
 function scannedFiles() {
   const files = [];
-
-  for (const name of ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md']) {
-    const abs = join(ROOT, name);
-    try {
-      if (statSync(abs).isFile()) files.push(abs);
-    } catch {
-      /* absent in this tree */
-    }
+  for (const { pathspec, keep } of SCANNED) {
+    files.push(...trackedFiles(pathspec).filter(keep));
   }
-
-  const docs = [];
-  walk(join(ROOT, 'docs'), docs);
-  files.push(...docs.filter((f) => f.endsWith('.md') || f.endsWith('.json')));
-
-  const skills = [];
-  walk(join(ROOT, 'skills'), skills);
-  files.push(...skills.filter((f) => f.endsWith('SKILL.md')));
-
-  return files.filter((f) => !isExcluded(rel(f)));
+  return files.filter((p) => !isExcluded(p)).map((p) => join(ROOT, p));
 }
 
 /**

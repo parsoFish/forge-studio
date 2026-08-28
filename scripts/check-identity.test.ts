@@ -147,15 +147,21 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
   );
 });
 
-test('untracked/ignored trees are not scanned (node_modules, .next, projects, _worktrees)', () => {
+test('an ignored TREE is not scanned — git ignore rules, not a hand-kept skip list', () => {
+  // The regression lock for deleting SKIP_DIRS: a dependency tree ignored by the
+  // repo's own .gitignore is untracked, so enumeration never reaches it and the
+  // checker needs no per-directory skip list of its own.
   withFixture(
     {
+      '.gitignore': 'node_modules/\n',
       'docs/node_modules/pkg/readme.md': 'the unifier\n',
       'docs/ok.md': 'clean\n',
     },
     (r) => {
       assert.equal(r.code, 0, r.out);
+      assert.match(r.out, /0 hit\(s\)/, r.out);
     },
+    ['docs/node_modules/pkg/readme.md'],
   );
 });
 
