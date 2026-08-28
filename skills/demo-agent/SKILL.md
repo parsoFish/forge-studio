@@ -25,19 +25,16 @@ budgets: {maxTurns: 60, maxBudgetUsd: 2.0, maxBudgetUsdShare: 0.15}
 # demo-agent skill
 
 > Runs once per initiative, after the develop phase's work-items are all
-> complete. One of the two Q3-B successors to the monolithic unifier
-> (initiative-context) — the other being the adversarial review agent
-> (R4-08). You do not build, you do not gate; you compose the evidence the
-> operator judges at the verdict.
+> complete. The adversarial review agent (R4-08) handles review — you do
+> not build, you do not gate; you compose the evidence the operator judges
+> at the verdict.
 
 ## Mission
 
 Compose ONE behavioural-delta demo for the initiative, grounded in its
 acceptance criteria, from the develop phase's finished output. The demo IS
 the evidence surface the operator judges at the verdict gate (ADR 021) — not
-a summary of it. A sloppy `essence` or an `acEvaluations` entry marked `met`
-on a hunch is exactly what misleads a merge decision, so treat authoring the
-demo as the load-bearing act it is, not paperwork after the real work.
+a summary of it.
 
 ## What you receive
 
@@ -85,8 +82,7 @@ body at `.forge/pr-description.md`. Write nothing else (no project code):
    as a JSON ARRAY of `{ name, result: "pass"|"fail"|"skip", delta? }`; never
    an object map (the schema only tolerates a map as a legacy back-compat
    coercion — always author the array form).
-2. **`.forge/pr-description.md`** — the pull-request body (relocated from the
-   retired unifier). Treat the whole initiative branch as ONE self-contained
+2. **`.forge/pr-description.md`** — the pull-request body. Treat the whole initiative branch as ONE self-contained
    PR and author exactly three sections, in order: `## Why` (the intent — what
    problem this solves), `## What` (the behavioural change delivered), `## How`
    (how the diff achieves it). Anchor What/How ONLY on the injected changed-file
@@ -114,13 +110,10 @@ body at `.forge/pr-description.md`. Write nothing else (no project code):
 - **Never fabricate a visual or a piece of evidence.** If it wasn't produced
   by the develop phase's work and isn't independently verifiable from what
   you were given, don't write it.
-- **Never mark an AC `met` without pointing at real evidence** — a named
-  test and its result, a captured API response, a measured value. "Tests
-  pass" without naming the test is not evidence.
-- **Baseline is never "broken."** Every checkpoint frames prior → new
-  behaviour. If the capability didn't exist before this initiative, the
-  baseline legitimately shows the *prior* state — describe it as such, never
-  as an error condition being fixed.
+- **Never mark an AC `met` without pointing at real evidence** (skills/demo's
+  Evidence discipline).
+- **Baseline is never "broken."** Same discipline as skills/demo — every
+  checkpoint frames prior → new, never error → fixed.
 - **Never run `forge demo render` or `forge demo capture`.** Deriving
   `DEMO.md` from `demo.json` and capturing real before/after evidence are
   orchestrator-owned (ADR 036) — the pipeline runs both after you finish.
@@ -130,20 +123,15 @@ body at `.forge/pr-description.md`. Write nothing else (no project code):
 - **Write only the demo directory and `.forge/pr-description.md`.** `demo.json`,
   the PR body, and (conditionally) `fix-proposals.json` are the only files you
   touch — anything else on the branch is project-code editing and hard-fails.
-- **A checkpoint that needs before/after output declares a `command` and
-  LEAVES `beforeOutput`/`afterOutput` absent.** The orchestrated capture run
-  fills them; anything you hand-write there is overwritten anyway.
+- **A checkpoint needing before/after output declares a `command` and leaves
+  `beforeOutput`/`afterOutput` absent** (skills/demo's capture discipline —
+  hand-written values are overwritten).
 
 ## Judging ACs
 
-Every initiative acceptance criterion gets exactly one verdict, and the
-verdict is what decides what you write next:
-
-| Verdict | Meaning |
-|---|---|
-| `met` | Fully proved — a named test and its result, a captured API response, a measured value. |
-| `partial` | Partially demonstrable — some but not all of the criterion is proved; say exactly what's missing in `evidence`. |
-| `missed` | Not reached at all — no evidence for it exists anywhere in the develop output. |
+Every initiative acceptance criterion gets exactly one verdict (`met` /
+`partial` / `missed` — skills/demo's Verdict vocabulary), and the verdict is
+what decides what you write next.
 
 A `partial` or `missed` verdict is a **judgment**, not a failure state — it
 produces `fix-proposals.json` entries; it does not mean you did something

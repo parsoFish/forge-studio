@@ -22,8 +22,8 @@ and publishing it are CI's job off merge-to-main — never run `git tag`,
 
 ## Inputs
 
-- The draft changelog `## [Unreleased]` section (bullets the unifier wrote in
-  cycle), OR the cycle's acceptance-criteria list when no draft exists.
+- The draft changelog `## [Unreleased]` section (bullets the develop loop
+  wrote in cycle), OR the cycle's acceptance-criteria list when no draft exists.
 - The current version — from the project's declared `versionFile` if present,
   else the most recent `## [X.Y.Z]` heading in the changelog. Absent both ⇒
   treat current as `0.0.0` (the first release is `0.1.0` for a feature).

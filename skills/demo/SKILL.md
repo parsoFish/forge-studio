@@ -23,13 +23,10 @@ so they can make the merge decision; the demo is that artefact. This skill owns:
 
 The project-side demo machinery is **generated** by `skills/demo-design` when
 the operator configures `demoProcess` in Studio. The generated skill (at
-`<artifactRoot>/skills/<slug>/SKILL.md` in the project repo) tells the unifier
-what evidence to produce. This skill defines the contract that evidence satisfies.
-
-It supersedes the split that used to exist across `skills/demo` (a Playwright-spec
-author), `skills/demo-capture` (media back-fill), the inline unifier prompt, and
-[ADR 016](../../docs/decisions/016-demo-recording-tooling.md). The structured
-artefact is the contract from [ADR 021](../../docs/decisions/021-local-review-and-unified-demo.md).
+`<artifactRoot>/skills/<slug>/SKILL.md` in the project repo) tells the demo
+agent (`skills/demo-agent`) what evidence to produce. This skill defines the
+contract that evidence satisfies — the structured artefact from
+[ADR 021](../../docs/decisions/021-local-review-and-unified-demo.md).
 
 ## Required first action
 
@@ -182,9 +179,7 @@ collapses them gracefully when absent, but their absence means a less useful dem
 
 ## How forge runs a demo
 
-1. **Read the project's generated demo skill** (from `<artifactRoot>/skills/<slug>/SKILL.md`
-   in the project repo). Follow its evidence instructions — it names what commands
-   to run, what to capture, and what the evidence floor is.
+1. **Read the project's generated demo skill** — per "Required first action" above.
 2. **Author the demo.json** at the dir named in PROMPT.md to the contract above.
    Populate ALL applicable rich sections — `summary`, `apiDiff`, `testEvidence`,
    `filesChanged` — so the rendered DEMO.md is genuinely informative.
@@ -197,29 +192,18 @@ collapses them gracefully when absent, but their absence means a less useful dem
    with a `command`, it captures the REAL stdout on `main` vs the branch HEAD
    into `beforeOutput`/`afterOutput`; for browser checkpoints, screenshots. It
    re-renders DEMO.md and commits the result. **The agent must NOT run
-   `forge demo capture` and must never hand-write `beforeOutput`/`afterOutput`**
-   — the orchestrator's run overwrites them. Environment failures (timeout /
-   non-zero exit) stay best-effort (recorded as a `unifier.demo-capture` event,
-   gate proceeds), with two N2 hardenings (plan item 2.6):
-   - **Producibility:** every checkpoint `command` must be EXECUTABLE in the
-     project (binary on PATH / worktree path / defined npm script) — checked
-     by the orchestrator BEFORE the capture spawn. An unrunnable command
-     fails the `pr_self_contained` gate with the exact problem; fix the
-     command, don't paper over it with prose.
-   - **Nonce binding:** the orchestrator injects a per-run nonce
-     (`FORGE_CAPTURE_NONCE`) into the capture child's environment — the agent
-     never sees it. A capture run that completes stamps it into demo.json as
-     `capture: { nonce, capturedAt }`, and the gate verifies the stamp:
-     evidence without this run's nonce (stale, replayed, or hand-written) is
-     rejected. Never author the `capture` field by hand — it cannot carry the
-     right nonce.
+   `forge demo capture` and must never hand-write `beforeOutput`/`afterOutput`
+   or the `capture` field** — the orchestrator's run overwrites them, and the
+   `pr_self_contained` gate rejects a command it cannot run or a `capture`
+   stamp without this run's nonce (enforced in
+   `orchestrator/phases/orchestrated-capture.ts`, N2).
 5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
    shadow).
 
 ## Effort tiers — scale the demo to the change (load-bearing)
 
 A trivial change must not trigger a heavyweight demo. This is a real cost sink
-(observed: ~$11 / 15 unifier iterations packaging a one-file test change). Match
+(observed: ~$11 / 15 demo-agent iterations packaging a one-file test change). Match
 the effort to the diff:
 
 | Diff shape | Demo effort |
@@ -263,33 +247,22 @@ these evidence forms based on what the project's code actually exposes:
   block ("what changed and why it's correct"). Use `summary` bullets for the
   rationale. `apiDiff` to show any changed API/config surface.
 
-## Media capture (the optional, best-effort step — orchestrator-run)
+## Media capture (the optional, best-effort step — orchestrator-run, ADR 036)
 
-For projects with a renderable UI, after `demo.json` checkpoints are authored,
-the **orchestrator** runs (ADR 036 — never the agent):
+For projects with a renderable UI, `forge demo capture <initiative-id>`
+(orchestrator-run, never the agent) materialises two git worktrees (baseline
+`main` vs changed `HEAD`), builds + serves each, takes ONE screenshot per
+checkpoint label, then merges the captured images into `demo.json`
+checkpoints as inline `data:` URIs (`validateDemoModel` rejects scheme-bearing
+refs; video refs are relative sibling paths only) and re-renders `DEMO.md`.
+It fills only `beforeImage`/`afterImage` — never captions, notes, metrics, or
+the diffstat.
 
-```
-forge demo capture <initiative-id>
-```
-
-It materialises two git worktrees (baseline `main` vs changed `HEAD`), builds +
-serves each, takes ONE screenshot per checkpoint label →
-`before/<label>.png` + `after/<label>.png` (the capture engine calls
-`playwright screenshot` per label — no agent-authored spec, no full test run),
-then merges the captured images into `demo.json` checkpoints as inline `data:`
-URIs (size-capped to 1.5 MB each) and re-renders `DEMO.md`.
-
-Discipline:
 - **Best-effort, never fatal.** No buildable app / missing Playwright / capture
   error → logs and exits 0; the demo stays notes-only. Never blocks the gate.
-- **No remote media.** Only inline `data:` URIs are merged (`validateDemoModel`
-  rejects scheme-bearing refs). Video refs are relative sibling paths only.
-- **Does not re-author content.** It fills only `beforeImage`/`afterImage` —
-  never captions, notes, metrics, or the diffstat.
 - **Serve the built tree, not a stray dev server.** A reused dev server latches
   onto the *main* repo's build and captures stale screenshots (trafficGame
   lesson). The capture engine builds + serves each worktree on its own port.
-- Events: `demo-capture.start`, `demo-capture.merged`, `demo-capture.skipped`.
 
 ## How the demo maps to the forge UI page (the presentation half)
 

@@ -147,7 +147,16 @@ const files = new Set(hits.map((h) => h.file)).size;
 console.log(`check-identity: ${hits.length} hit(s) in ${files} file(s) (scanned ${scanned} files)`);
 if (hits.length > 0) {
   console.log(
-    'Retired vocabulary (spec §2): use the integrate band / the review agent / the example develop factory / forge-studio / the KbBackend seam.',
+    'Retired vocabulary (spec §2). Current-state docs name what exists TODAY:',
+  );
+  console.log(
+    '  orchestrator/phases/demo-agent.ts (demo/capture) · orchestrator/phases/adversarial-review.ts (findings/verdict)',
+  );
+  console.log(
+    "  · \"the develop flow's successor band\" when the passage covers both · the example develop factory · forge-studio · the KbBackend seam (ADR 018).",
+  );
+  console.log(
+    '  Do NOT write \"the integrate band\": spec §5 lists it as 1.0-TARGET work, so naming it in a current-state doc invents a claim.',
   );
   process.exit(1);
 }
