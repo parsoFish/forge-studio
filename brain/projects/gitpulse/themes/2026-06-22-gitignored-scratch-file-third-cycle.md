@@ -16,6 +16,7 @@ keywords:
 related_themes: [2026-06-21-gitignored-scratch-files-recurrence, 2026-07-11-gitignored-scratch-fourth-cycle]
 created_at: 2026-06-22T00:00:00.000Z
 updated_at: 2026-06-22T00:00:00.000Z
+status: historical
 ---
 
 # Gitignored scratch-file retry — third consecutive cycle

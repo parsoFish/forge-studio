@@ -50,8 +50,8 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 > Source of truth: [`docs/forge-project-contract.md`](../forge-project-contract.md) + [ADR 017](../decisions/017-forge-project-contract.md).
 > Schema: [`docs/schemas/project-config.schema.json`](../schemas/project-config.schema.json).
 
-Each managed project declares how forge should drive its dev-loop unifier
-sub-phase via `<project-root>/.forge/project.json`. The file is **required**
+Each managed project declares how forge should drive its dev-loop
+via `<project-root>/.forge/project.json`. The file is **required**
 to schedule any initiative against that project (fail-closed per council 04
 F8); the scheduler refuses to dispatch an initiative whose project config is
 missing or malformed, and surfaces the error in the operator queue.
@@ -62,7 +62,7 @@ missing or malformed, and surfaces the error in the operator queue.
    block (with a valid `shape`) and a `quality_gate_cmd` argv. See worked
    examples below per `demo.shape`.
 2. **Verify `quality_gate_cmd` exits 0 on `main`** before any forge work
-   begins. If it doesn't, the unifier's `initiative_gate` can never pass.
+   begins. If it doesn't, the merge-boundary gate's `initiative_gate` can never pass.
 3. **For `shape: "browser"`:** add `preview_command`. Confirm Playwright
    (or your e2e runner) is installable locally. Forge picks a free port
    and passes it via env to the preview server.
@@ -92,52 +92,7 @@ templates back a live managed project:
 `preview_command` in its `.forge/project.json` — see the `shape: "browser"`
 checklist item above.)
 
-### Failure-mode table (unifier sub-phase)
-
-| Failure class | Trigger | Operator response |
-|---|---|---|
-| `dev-loop-unifier-gate-failed` | `initiative_gate` fails on branch tip | Inspect WIs that touched the failing area; consider PM re-plan |
-| `dev-loop-unifier-demo-failed` | `demo_runs_clean` fails OR `pr_self_contained` fails | Check `.forge/project.json` `demo.command`; verify `preview_command` for `shape: "browser"` |
-| `dev-loop-unifier-branch-divergence` | `assertLocalRemoteSynced` throws at unifier close | Resolve manually; remote moved during the cycle |
-
-### Unifier node (independently-dispatchable, M8-0)
-
-The unifier is now a **real, independently-dispatchable flow node** — not a
-tail inside `runDeveloperLoop` (ADR-028 M8-0 amendment). `runDeveloperLoop`
-is per-WI only; the unifier tail was extracted into `runUnifierPhase`
-(`orchestrator/phases/developer-loop.ts`) and is executed by
-`flow-runner.ts:execUnifier`. The unifier node has its own wedge detector,
-its own `unifier-phase.start` boundary event (which lights the unifier hex in
-the UI), and is the resume target for `resumeFrom: 'unifier'` (the per-WI dev
-node self-no-ops when resuming from unifier, but still emits its
-phase-boundary events so the dev hex is not stuck `active`).
-
-The unifier Ralph is invoked with a distinct brief:
-
-> Treat the initiative as one PR. Prove every AC against branch tip.
-> Author the demo. Author the PR body. Refactor incidentally if it unifies
-> the change. Do NOT add scope.
-
-The unifier owns:
-
-- `<worktree>/demo/<initiative-id>/` (tracked, born committed; no
-  `.forge/demos/` shadow).
-- `<worktree>/demo/<initiative-id>/DEMO.md` (relative-link images for
-  visibility-agnostic rendering).
-- `<worktree>/.forge/pr-description.md` (PR body, ≥ 300 chars with a
-  `## Demo` section).
-- A closing commit `feat(<initiative-id>): unify and demo` if any changes.
-
 The demo contract — what `demo.json` must contain, effort tiers scaled to the
 diff, per-shape rules, media capture, and the review-UI mapping — is owned by
 [`skills/demo/SKILL.md`](../../skills/demo/SKILL.md) (the canonical demo
-capability the unifier agent composes, ADR 024).
-
-Iteration cap: **diff-scaled** — trivial (≤2 files changed) → 4; small (≤10 files) → 8; larger → 15. No $ cap. Composed gates that
-must all pass for the unifier to exit clean: `initiative_gate`,
-`demo_runs_clean`, `pr_self_contained`, `branches_in_sync`.
-
-In send-back mode (after a `/forge-review` nudge that produced
-`pr-feedback.md`), the unifier accepts `--feedback-ref <path>` per
-CONTRACTS.md C3b — it reads the C3a-shape feedback file and addresses each
-comment by file/line without expanding scope.
+capability the demo-agent composes, ADR 024).

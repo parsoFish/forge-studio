@@ -4,6 +4,7 @@ description: Second unifier invocation (UWI-2) stalled with tool_use_count froze
 category: antipattern
 created_at: 2026-06-11T12:30:00Z
 updated_at: 2026-06-11T12:30:00Z
+status: historical
 ---
 
 # Unifier wedge — tool_use frozen 33 hours before crash

@@ -4,6 +4,7 @@ description: When unifier runs with cwd at forge root rather than the worktree, 
 category: antipattern
 created_at: 2026-06-19T00:00:00.000Z
 updated_at: 2026-06-19T00:00:00.000Z
+status: historical
 ---
 
 ## Antipattern

@@ -49,7 +49,7 @@ before forge merges). Everything between runs unattended.
 - [Architecture overview](./architecture/overview.md) — the diagram convention + the structural source of truth.
 
 **Phases** (purpose + success signals)
-- [architect](./phases/architect.md) · [brain](./phases/brain.md) · [project-manager](./phases/project-manager.md) · [developer-loop](./phases/developer-loop.md) · [review-loop](./phases/review-loop.md) · [reflection](./phases/reflection.md)
+- [architect](./phases/architect.md) · [brain](./phases/brain.md) · [project-manager](./phases/project-manager.md) · [developer-loop](./phases/developer-loop.md) · [reflection](./phases/reflection.md)
 
 **Seams & extension**
 - [Extending forge](./extending-forge.md) — add a runtime adapter, flow, or skill.

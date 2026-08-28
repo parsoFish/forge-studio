@@ -4,6 +4,7 @@ description: When another initiative merges to main during the dev-loop run, the
 category: antipattern
 created_at: 2026-07-10T10:30:00.000Z
 updated_at: 2026-07-10T10:30:00.000Z
+status: historical
 ---
 
 ## What happens

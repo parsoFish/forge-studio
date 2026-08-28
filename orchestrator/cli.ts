@@ -84,8 +84,9 @@ process.chdir(FORGE_ROOT);
     //   agent        — `agent run <agent-id> <sid> [--project <name>]`, R2-01-F3a's generic path over
     //                  the 4 verb-specific cases above (they now delegate through it)
     //   brain        — `brain lint`/`brain index` brain-integrity gate (mirrors studio lint)
-    //   demo      — `demo render`, run by the developer-unifier agent every cycle
-    //   preflight — the C1–C9 contract check, run by the forge-onboard-project skill
+    //   demo      — `demo render`, run by the develop flow's successor band every cycle
+    // `preflight` is NOT in this hidden list: it is an operator command and IS
+    // advertised in `forge --help` (the operator runs it against a managed project).
     case 'serve':
       return await cmdServe(args.slice(1));
     case 'architect':
@@ -159,6 +160,7 @@ Usage:
                                           Serves a production build by default (\`next build\` once, then
                                           \`next start\`); pass --dev to keep the \`next dev\` dev-server path.
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
+  forge preflight <project-name | path>    Check a managed project against the forge<->project contract; exit non-zero on an unmet hard clause
 
 S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
 recovery (cycle / enqueue / metrics / review / report / log / requeue) now live in the
@@ -729,10 +731,12 @@ async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
   return cmdAgentRun(['demo-builder', ...rest], FORGE_ROOT);
 }
 
-// ── demo + preflight: agent/dev tools, hidden from operator help (S9/DEC-6).
-// The developer-unifier agent runs `forge demo render` every cycle to derive
-// DEMO.md from demo.json; the forge-onboard-project skill runs `forge preflight`.
-// They are NOT operator cycle-management, so they stay dispatchable.
+// ── demo + preflight. `demo render` is an agent/dev tool, hidden from operator
+// help (S9/DEC-6): the develop flow's successor band runs it every cycle to derive
+// DEMO.md from demo.json. `preflight` is an OPERATOR command and is advertised in
+// help — DEC-6 retires cycle management from the CLI, not the contract check, and
+// the operator runs `forge preflight <project>` directly. The forge-onboard-project
+// skill runs it too. Neither is operator cycle-management, so both stay dispatchable.
 function flagValue(rest: string[], flag: string): string | undefined {
   const i = rest.indexOf(flag);
   if (i < 0) return undefined;

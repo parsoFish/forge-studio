@@ -6,6 +6,7 @@ keywords: [forge-demo-render, demo.json, demo.md, worktree-cwd, pm-invocation-bu
 related_themes: [live-evidence-demo-index]
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # forge demo render — worktree vs. root path conflict

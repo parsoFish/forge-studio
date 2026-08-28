@@ -2,11 +2,11 @@
 
 > The steerable composition layer for autonomous software delivery — for one operator running a portfolio of projects.
 
-Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served. Under the hood it's two levels: **a modular platform for building the ideas machine or any other agentic flow** (SWE-focused for now by explicit choice), which ships **the ideas machine itself** as its out-of-the-box content (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)).
+Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served. Under the hood it's two levels: **a modular platform for building agentic software factories** (SWE-focused for now by explicit choice), which ships **one worked example factory — the develop flow** — out of the box (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)).
 
 Three things make it one product rather than three:
 
-- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → unifier → review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
+- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → demo + adversarial-review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
 - **Code-enforced gates.** The three human moments (architect, review, reflect) are structural, not advisory. There is **no auto-approve code path anywhere** — forge cannot accidentally skip you, because the gate lives in the code, not in a prompt. These are gates you can *read*, not just trust.
 - **A compounding engineering brain.** Every cycle's reflection is distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planners query *before* designing the next initiative. Memory tools cache for runtime recall; the brain compounds — it tunes *how the next plan is designed*, across every project.
 
@@ -14,7 +14,7 @@ Full competitive analysis and the strategic frame: [`docs/forge-studio-market-an
 
 ## See it run
 
-The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → unifier → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
+The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → the demo + review band → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
 
 ## The moat
 

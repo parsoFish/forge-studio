@@ -26,14 +26,14 @@ This skill is invoked **first** by every other skill, per [ADR 010](../../docs/d
 | `project` | `brain/projects/<name>/themes/` + `profile.md` (forge repo, ADR 035) |
 | `all` | union of all three (emit a scope-missing warning) |
 
-**Role defaults** (the calling skill or orchestrator should supply these):
+**Role defaults** (the calling skill or orchestrator should supply these; who reads which brain is CLAUDE.md's brain-read policy, ADR 010):
 
 | Role | Default scope |
 |---|---|
-| architect / PM | `cycles,project` (Brain 2 + the cycle's Brain 3) |
-| reflector | `all` (loose read access; reflector is operator-coupled) |
-| dev-loop / reviewer | `project` (Brain 3 of the cycle's project ONLY) |
-| forge-dev session (no cycle) | `forge-dev,cycles` (Brain 1 + Brain 2) |
+| architect / PM | `cycles,project` |
+| reflector | `all` |
+| dev-loop / reviewer | `project` |
+| forge-dev session (no cycle) | `forge-dev,cycles` |
 
 ## Inputs
 

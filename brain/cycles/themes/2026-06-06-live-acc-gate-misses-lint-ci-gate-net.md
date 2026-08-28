@@ -31,6 +31,7 @@ keywords:
   - resume-dont-discard
   - operator-journey-validated
   - per-wi-gate
+status: historical
 ---
 
 # Live-acc per-WI gate misses the linter; the CI delivery gate catches it

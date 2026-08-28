@@ -39,7 +39,7 @@ The single most important honest finding: **the commodity primitives are not wea
                          \   (all three + the seam)      /
                           \                             /
                     COMPOUNDING KNOWLEDGE / MEMORY LAYERS
-                       (Mem0, Zep, Letta, Cognee)
+                       (Mem0, Graphiti, Letta, Cognee)
 ```
 
 - **Positioning line:** *"n8n for autonomous software delivery — with a memory that compounds and gates that can't be skipped."*
@@ -47,8 +47,8 @@ The single most important honest finding: **the commodity primitives are not wea
 
 > **Amendment (2026-07-17, [ADR 038](./decisions/038-north-star-platform-and-ootb.md)):**
 > Internally, forge's engineering north star is now **two-level** — Scope 1 is a modular
-> platform for building the ideas machine or **any other agentic flow** (SWE-focused for
-> now by explicit choice); Scope 2 OOTB is the ideas machine positioned above. This
+> platform for building the example develop factory or **any other agentic flow** (SWE-focused for
+> now by explicit choice); Scope 2 OOTB is the example develop factory positioned above. This
 > reframe is the **internal** north star only. **External positioning is unchanged**: the
 > four qualifiers in §3.4 stay in every external claim until non-SWE connectors actually
 > exist to market — market the proven wedge, not the aspirational platform.
@@ -73,7 +73,7 @@ Each subsumption point is an existing socket, not a hypothetical:
 |---|---|---|
 | **Agent runtime / model** | Claude SDK, Codex, Gemini, local | `RuntimeAdapter` interface + conformance suite (ADR-029); per-agent model routing |
 | **Dev-loop engine** | Ralph (live), OpenHands, Aider, Hermes | `loops/_adapters/` placeholder seam (ARCHITECTURE.md §Developer Loop) |
-| **Memory / knowledge** | Mem0, Zep/Graphiti, Cognee, Letta | KB = a `kb.yaml` *descriptor over an existing brain* (ADR-027) — the backend is swappable |
+| **Memory / knowledge** | Mem0, Graphiti, Cognee, Letta | KB = a `kb.yaml` *descriptor over an existing brain* (ADR-027) — the backend is swappable |
 | **Tools / integrations** | MCP servers (ado-mcp, browser-mcp, …) | catalog of MCPs/tools/hooks; agents compose them (ADR-024) |
 | **Flow composition** | hardcoded pipelines elsewhere | generic flow engine; "forge is just one flow" (ADR-028) |
 
@@ -91,7 +91,7 @@ The thesis is strong but carries real risk; market the *specific* version, not t
 
 - **"Modular composition layer" is itself a crowded pitch.** OpenAI AgentKit, LangGraph, n8n, and Dify all sell composition **[V/S]**. *Generic* modularity is not a differentiator. The defensible version is narrow: *subsumption of best-in-class **software-engineering** components under a **steerable, gated, knowledge-compounding** autonomous pipeline for a **portfolio** operator.* Keep all four qualifiers.
 - **Aggregator / platform-dependency risk.** Subsuming a component means depending on it. A subsumed player can close its API, change pricing, or integrate *downward* into Forge's territory; the base SDK (Claude Agent SDK) can shift under you. Integrators get squeezed when components grow upward. Mitigant: the adapter/conformance-suite discipline + no-lock-in defs-as-data keep switching cost low — but this must stay true in practice.
-- **Realization gap.** Subsumption is currently an *architecture-validated strategy, not a shipped reality*: only the Claude runtime adapter is live, the KB is forge's own brain (not yet a pluggable Mem0/Zep), and the dev-loop is Ralph with placeholder adapters. **Credibility depends on shipping one real second adapter** — e.g. swap the brain backend to Zep, or run an OpenHands dev-loop node — to *prove the seam*. Until then the thesis is a promise.
+- **Realization gap.** Subsumption is currently an *architecture-validated strategy, not a shipped reality*: only the Claude runtime adapter is live, the KB is forge's own brain (not yet a pluggable Mem0/Graphiti), and the dev-loop is Ralph with placeholder adapters. **Credibility depends on shipping one real second adapter** — e.g. swap the brain backend to Graphiti, or run an OpenHands dev-loop node — to *prove the seam*. Until then the thesis is a promise.
 - **The meta-layer abstraction is on-trend, therefore not itself a moat.** The industry is already moving from "pair with one AI" to "manage an agent team" (verified: multi-agent orchestration is *maturing*, claim #12 **[P]**; automations shifting to graphs, claim #18 **[P]**). Raising the abstraction is validated by the market — which also means *the abstraction won't be the moat*. The moat stays the execution: the gates, the brain shape, the journey, and the quality of the seams.
 
 ### 3.5 Net
@@ -106,7 +106,7 @@ Modularity-as-subsumption is the **"why this wins over time"**; the §1 intersec
 |---|---|---|---|
 | 1 | **Defs-as-data** (git YAML/md, no DB, agent = SKILL.md) | **Commodity primitive → re-cast as a *socket*** | CrewAI uses YAML `agents.yaml`/`tasks.yaml` **[V]**; Claude *Code* supports file-defined subagents in `.claude/agents/` (the SDK itself recommends programmatic defs) **[P]**; Dagu is a no-DB YAML DAG engine **[V]**. Building blocks are commodity. Forge-specific value = unifying **all four** object types into one no-DB git store with a single serializer, *and* (per §3) this is the enabler of clean, swappable seams. Don't claim the primitive; claim the unification + the modularity it unlocks. |
 | 2 | **Pipeline-as-an-editable-flow** ("forge is just one flow") | **Contested — the *visual* layer is the edge** | Bernstein (OSS, Apache-2.0) already authors SWE pipelines as declarative YAML and ships a stock `idea-to-pr` flow **[P, important correction]**. "Editable SWE pipeline-as-data" is *not* unique. What no SWE competitor has: a **visual** drag-DAG builder for that pipeline (Lindy = visual but business-automation, not SWE; Bernstein = SWE-as-data but no visual builder; AgentKit = visual but generic). Lead with **visual authoring of an autonomous-SWE pipeline**. |
-| 3 | **Compounding "brain"** queried by planners, ingesting reflections | **Crowded category — differentiate on *shape*** | Knowledge-graph memory is busy: Zep/Graphiti (bi-temporal graph) **[V]**, Mem0 (vector + optional graph; AWS Strands provider; 35M→186M API calls 2025; $24M Series A) **[V]**, Cognee, Letta. Factory's HyperCode = a *per-repo* retrieval graph **[S]**. The market did **not** converge on flat files for memory **[P, correction]**. Forge's brain is differentiated *not by being a graph* but by being a *cross-cycle, cross-project, human-navigable **engineering** wiki, curated via a human pin-loop, wired into **planning** under an asymmetric read policy* — it tunes *how work is designed*, not just runtime recall. Always qualify "knowledge graph"; unqualified it's table stakes. |
+| 3 | **Compounding "brain"** queried by planners, ingesting reflections | **Crowded category — differentiate on *shape*** | Knowledge-graph memory is busy: Graphiti (bi-temporal graph) **[V]**, Mem0 (vector + optional graph; AWS Strands provider; 35M→186M API calls 2025; $24M Series A) **[V]**, Cognee, Letta. Factory's HyperCode = a *per-repo* retrieval graph **[S]**. The market did **not** converge on flat files for memory **[P, correction]**. Forge's brain is differentiated *not by being a graph* but by being a *cross-cycle, cross-project, human-navigable **engineering** wiki, curated via a human pin-loop, wired into **planning** under an asymmetric read policy* — it tunes *how work is designed*, not just runtime recall. Always qualify "knowledge graph"; unqualified it's table stakes. |
 | 4 | **Cost-aware multi-tier routing** + per-flow USD ceilings | **Commodity** | The Claude Agent SDK has a per-agent `model` field (opus/sonnet/haiku/fable) **[V]** and Anthropic documents the exact "opus for strict reviews, sonnet otherwise" pattern **[V]**. Factory and Lindy are model-agnostic too. Per-flow USD ceiling is mildly differentiated, not a headline. **Do not market as novel.** |
 | 5 | **Runtime-agnostic adapter framework** (Claude live, Codex/Gemini pluggable) | **Not a *current* feature-moat → it is the *subsumption seam*** | Model/runtime-agnosticism is table stakes (Factory spans Claude/GPT-5/Gemini/open-weight; LiteLLM/LangChain ubiquitous) and only Claude is live in Forge. As a *sold feature* today: drop it. As the *mechanism* of the §3 flywheel: it is central — but it only earns the claim once a real second adapter ships. |
 | 6 | **Safety invariants in code, not prompts** (no auto-approve path, wedge-kill, never-self-modify) | **GENUINELY NOVEL — strongest single atom** | Across **every** competitor surveyed, gates are *soft*: Cursor = manual per-diff review **[V]**, Jules = informal plan/PR review **[V]**, Factory = "adjustable autonomy" soft controls **[S]**, Copilot = PR-review request only **[V]**, Lindy = optional approval *nodes* **[V]**. **None enforces gates structurally in code such that the pipeline cannot proceed.** Forge's "no auto-approve code path exists anywhere" + wedge-kill timer + never-self-modify-while-running is unmatched, and is the precondition for *trustworthy* unattended operation. |
@@ -140,7 +140,7 @@ Legend: Autonomy = none / assist / supervised-async / high-unattended.
 | **Lindy** | Builder | supervised | ✅ drag-drop directed graph | ❌ vector memory, per-agent | ⚠️ optional approval *nodes* | workspace, no project abstraction | proprietary; biz-automation, not SWE **[V]** |
 | **n8n / Flowise / Langflow / Dify** | Builder | n/a | ✅ | ❌ | ❌ | n/a | OSS/mixed; generic LLM chains **[S]** |
 | **CrewAI** | Framework | n/a | ❌ (code: `@start/@listen`) | ❌ | ❌ | n/a | **MIT + CrewAI AMP enterprise** **[V]** |
-| **Mem0 / Zep / Letta / Cognee** | Memory | n/a | ❌ | ✅ (runtime memory, not eng-wiki) | ❌ | varies | mixed; **strong 2025 traction** **[V]** |
+| **Mem0 / Graphiti / Letta / Cognee** | Memory | n/a | ❌ | ✅ (runtime memory, not eng-wiki) | ❌ | varies | mixed; **strong 2025 traction** **[V]** |
 | **➡️ FORGE STUDIO** | **Hybrid** | **high-unattended** | **✅ SWE-native** | **✅ cross-cycle eng wiki → planning** | **✅ structural** | **✅ portfolio (latent post-M7)** | AGPL-3.0 |
 
 **No row except Forge has ✅ across visual-builder + compounding-knowledge + code-enforced-gates simultaneously** — and none has the subsumption seam (§3) as an explicit strategy.
@@ -149,7 +149,7 @@ Legend: Autonomy = none / assist / supervised-async / high-unattended.
 
 - **Autonomous SWE agents (A):** the most direct rivals on the runtime. Devin/OpenHands/Cursor/Factory/Jules/Copilot all do idea-or-issue → PR; the market converged on *parallel isolated-worktree agents supervised from a Kanban/dashboard*, **none with a drag-drop visual flow builder** and **none with compounding knowledge-graph memory** **[V, claims #16/#17]**. Bernstein is the closest *architectural* twin (Goal→Planner→Task-Graph→parallel-Agents→verify→merge, YAML-authored) but has thin docs, no visual builder, no brain **[P]**.
 - **Visual builders (B):** OpenAI AgentKit (Oct 2025) commoditises the *canvas* with distribution **[V]**; n8n/Flowise/Langflow/Dify are generic LLM-app builders **[S]**; Lindy has a polished visual graph + human-approval nodes but targets *business automation*, not SWE **[V]**. Forge cannot claim the canvas as novel — only *what it authors* (an autonomous-SWE pipeline) and *how it gates it*.
-- **Memory layers (C):** a crowded, well-funded category (Mem0/Zep/Letta/Cognee) **[V]**. These are runtime recall layers; Forge's brain is a *human-navigable engineering wiki wired into planning*, a different shape — and, per §3, these are *candidates to subsume as KB backends*, not just rivals.
+- **Memory layers (C):** a crowded, well-funded category (Mem0/Graphiti/Letta/Cognee) **[V]**. These are runtime recall layers; Forge's brain is a *human-navigable engineering wiki wired into planning*, a different shape — and, per §3, these are *candidates to subsume as KB backends*, not just rivals.
 
 ---
 
@@ -196,7 +196,7 @@ Legend: Autonomy = none / assist / supervised-async / high-unattended.
 - **Distribution gap.** Every serious rival has scale (Cursor $1B+ ARR, Copilot 90% F100, Factory $1.5B). Forge has none. The wedge (solo-portfolio operator) is a defensible *niche*, not a mass market — frame TAM accordingly (personal-leverage / indie-polymath, not enterprise platform).
 - **No independent benchmark for Forge itself.** Quality is self-asserted via the internal real-cycle harness; rivals publish numbers (even if synthetic).
 - **The flywheel is unproven** until a real second adapter ships (§3.4 realization gap). The strongest single counter to the whole thesis is "you have *one* live runtime and *one* brain."
-- **On-trend abstractions don't moat.** Visual building (AgentKit), graph memory (Zep/Mem0), and "manage an agent team" (multi-agent) are all converging industry-wide — execution on gates/brain/journey/seams is the only durable edge.
+- **On-trend abstractions don't moat.** Visual building (AgentKit), graph memory (Graphiti/Mem0), and "manage an agent team" (multi-agent) are all converging industry-wide — execution on gates/brain/journey/seams is the only durable edge.
 - **Latent capability.** E3 (portfolio orchestration) is currently retired; the open ground only counts if it's re-shipped.
 
 ---

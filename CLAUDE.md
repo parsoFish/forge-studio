@@ -1,168 +1,42 @@
 # Forge Studio — Project Instructions for Claude Code
 
-> A modular platform for building the ideas machine — or any other agentic flow — that ships the ideas machine itself out of the box. Six phases backed by a brain. Hand-rolling forbidden; battle-tested tools required.
+## Identity
 
-## Active campaign (read first)
+**forge-studio** is a construction platform for agentic software factories: a small set of composable primitives — agents, skills, flows, knowledge, gates — that let one operator assemble a purpose-built delivery pipeline for any codebase. It ships **one working example, the develop flow**, to prove the primitives out of the box: evidence the kit works, not the product itself. Licence AGPL-3.0-or-later. Install form: a Node source checkout. Supported platform: WSL2 / Linux. The operator is **one human running many side projects**.
 
-The single roadmap for all forge work is [`docs/roadmaps/1.0.md`](./docs/roadmaps/1.0.md) (design record: [`docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md`](./docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md)). A fresh session follows its §1 before anything else. Campaign state lives in `_1.0/` (gitignored, created at kickoff). Identity: **forge-studio — a software factory construction platform**; the OOTB develop flow is its one example factory.
+**Vocabulary — use these words in docs, UI and code.** *Factory* (one assembled, running pipeline) · *Flow* (ordered path of stations; `FlowDef`, [ADR 028](./docs/decisions/028-flow-engine.md)) · *Station* (a step where an agent or gate acts) · *Gate* (human or automated approval between stations) · *Agent* (worker executing a station; `PhaseAgentSpec`, [ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md); session kinds, [ADR 043](./docs/decisions/043-generic-interactive-surface.md)) · *Skill* (reusable instruction/tool unit) · *Brain* in-product, *Knowledge* outward (`KbBackend`, [ADR 018](./docs/decisions/018-three-brain-model.md)). Four terms are retired; this file cannot name them without failing its own gate — `node scripts/check-identity.mjs` lists them and fails CI on any current-state doc, skill or README that still uses one.
 
-## North star
+Forge runs **primarily unattended** between three human interaction points (architect, review, reflection). Judge every change against three questions: does it preserve unattended operation · does a battle-tested tool already do this · is it the simplest thing that could work. There is **one operating model**: the daemon (`forge serve`); operator-directed step-through falls out of isolated phase functions, not a forked runtime.
 
-Forge's mission is **two-level** ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), 2026-07-17):
+Narrative architecture [`ARCHITECTURE.md`](./ARCHITECTURE.md) · principles [`PRINCIPLES.md`](./PRINCIPLES.md) · repo layout [`docs/repo-map.md`](./docs/repo-map.md) · commands and quickstart [`README.md`](./README.md) · per-phase docs [`docs/phases/`](./docs/phases/) · UI `data-*` contract + journey harness [`docs/forge-ui-dom-and-harness.md`](./docs/forge-ui-dom-and-harness.md) (a change to load-bearing forge-ui state updates the attribute, that doc and the affected journey in the **same PR** — invoke the `journey-sync` skill) · decisions [`docs/decisions/`](./docs/decisions/).
 
-- **Scope 1 — the platform.** `orchestrator/`, `cli/`, `loops/`, `forge-ui/`, and every seam (runtime adapter, KB backend, the `PhaseAgentSpec` harness-overlay injection point) are a **modular platform for building the ideas machine — or any other agentic flow**. SWE-focused for now by explicit operator choice; connectors to non-SWE systems are deliberately future work, not built in advance.
-- **Scope 2 OOTB — the ideas machine.** The six-phase cycle (architect → plan/decompose → developer loop → demo/review → reflect) and the brain-tuning loop are the concrete, opinionated agentic flow forge ships out of the box — see [`docs/product/minimum-viable-user-story.md`](./docs/product/minimum-viable-user-story.md) (MVUS) for its canonical vision.
+## The active plan — read this before anything else
 
-Both levels serve the same operator: **one human running many side projects** — a single technical operator driving a portfolio through forge.
+[`docs/roadmaps/1.0.md`](./docs/roadmaps/1.0.md) is the single roadmap for all forge work. Its **§1 is the fresh-session read order** — follow it before designing or implementing anything. It supersedes R1–R8 for new work. Design record: [`docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md`](./docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). Campaign state lives in `_1.0/` (gitignored); a permanent artifact — an ADR, a roadmap, anything in `docs/` — never cites a path inside it.
 
-Forge is **designed to run primarily unattended between human interaction points** (architect, review, reflection). Every decision is judged against three things:
+## Studio session
 
-1. Does it preserve unattended operation?
-2. Does it use a battle-tested community tool, or are we re-inventing one?
-3. Is it the simplest thing that could work?
-
-If the answer to (1) is no, the change must justify why. If (2) reveals a re-invention, find the existing tool. If (3) reveals complexity, cut.
-
-There is **one operating model**: the daemon (`forge serve`). Operator-directed step-through falls out of isolated phase functions, not a forked runtime. The harness-overlay injection seam (`PhaseAgentSpec.allowedTools`) is kept clean, and [ADR 024](./docs/decisions/024-phases-as-subagents-invoking-skills.md)'s **spec migration is done** — all five LLM phases (architect, project-manager, developer-loop, unifier, reflector) source their intent from `SKILL.md` via `PhaseAgentSpec`, landed 2026-06-13. What ADR 024's incremental-migration decision leaves open is the **artifact migration** — moving the phases off hand-written `orchestrator/*-invocation.ts` prose onto registry-driven OOTB artifacts on the generic runnable primitive — tracked as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not an ADR-024 gap.
-
-## Studio session workflow
-
-`forge studio` is the operator surface (ADR-031: the UI/bridge is the sole interaction point). It runs on **fixed ports** — bridge `4123`, UI `4124` — so one browser tab stays pinned and auto-reconnects across re-runs.
-
-- **`forge studio` serves a production Next build by default** (build once, then start; ~20s first run, since wave-6 P3); `--dev` keeps the next-dev workflow for forge-ui iteration.
-- **The agent runs `forge studio` once at session start and keeps it up all session.** Restart it **only** to apply changes to Studio's own code (bridge/UI). It is the live window onto every cycle — don't tear it down between tasks.
-- **A second `forge studio` attaches read-only by default** (F1). It probes `GET /api/health` for the bridge identity `{service:'forge-bridge',pid,startedAt}`: a healthy forge bridge is **reused** (the running session — and any in-flight cycle — is left untouched); only a free, stale, or foreign port is taken over. Human viewers should open a second window with `forge studio --attach` (errors if nothing healthy is there) and **never `--force-takeover` a running agent session** — that SIGKILLs the bridge and hard-resets in-flight cycles. `--force-takeover` is the deliberate escape hatch to replace a healthy bridge on purpose.
+`forge studio` is the sole operator surface ([ADR 031](./docs/decisions/031-studio-consolidation.md)), on fixed ports: bridge **4123**, UI **4124**, so one browser tab stays pinned across re-runs. Run it once at session start and keep it up all session — it is the live window onto every cycle. Restart it **only** to apply changes to Studio's own code. It serves a production Next build by default; `--dev` keeps the next-dev path for forge-ui iteration. A second `forge studio` attaches read-only: it probes `GET /api/health` for `{service:'forge-bridge',pid,startedAt}` and **reuses** a healthy forge bridge, taking over only a free, stale or foreign port. Human viewers open a second window with `--attach`. **Never `--force-takeover` a running agent session** — it SIGKILLs the bridge and hard-resets in-flight cycles.
 
 ## The brain is the first source of knowledge
 
-**Before** answering a question about how forge works, before designing, before implementing — **query the brain**. Since the three-brain restructure ([ADR 018](./docs/decisions/018-three-brain-model.md)) the brain is three scoped graphs: **Brain 1** `brain/forge-dev/` (forge engineering), **Brain 2** `brain/cycles/` (cross-cycle patterns + archives), and **Brain 3** `brain/projects/<name>/themes/` (per-project, lives in the forge repo — [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)). Query via the `brain-query` skill with `--scope`. If the brain doesn't know, research further AND log the gap so the next ingest pass can fill it.
+Three scoped graphs ([ADR 018](./docs/decisions/018-three-brain-model.md)): **Brain 1** `brain/forge-dev/` (forge engineering) · **Brain 2** `brain/cycles/` (cross-cycle patterns + archives in `brain/cycles/_raw/`) · **Brain 3** `brain/projects/<name>/themes/` (per-project, in this repo — [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)).
 
-Who reads what (see [ADR 010](./docs/decisions/010-brain-first.md) as amended + [`brain/forge-dev/themes/brain-read-policy.md`](./brain/forge-dev/themes/brain-read-policy.md)):
+Who reads what ([ADR 010](./docs/decisions/010-brain-first.md) as amended + [`brain/forge-dev/themes/brain-read-policy.md`](./brain/forge-dev/themes/brain-read-policy.md)): **planners (architect / project-manager) and the reflector** query Brain 2 + the cycle's Brain 3 (reflector: all three) — **mandatory**, and a planner or reflector skill that does not read the brain must not ship. **Dev-loop and reviewer do NOT** read Brains 1+2: the planner already encoded every relevant convention and antipattern into the work items, their single source of intent. They *may* read the cycle's Brain 3 for supplemental project context (advisory); the reviewer additionally gets an advisory read of any `{kind: flow, band: review-band}` KB granted to it. If the brain does not know, research further **and** log the gap.
 
-- **Planners (architect / project-manager) + reflector** — query Brain 2 + the cycle's Brain 3 (reflector: all three). Mandatory for planners.
-- **Dev-loop + reviewer** — do **NOT** read the forge brain (Brains 1+2); the planner already encoded every relevant convention/antipattern into the work items, their single source of *intent*. They **may** consult the cycle's Brain 3 at `brain/projects/<name>/themes/` in the forge repo (per [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)) for supplemental project context — advisory, not mandatory (amended 2026-05-26, ADR 010). The reviewer additionally gains a per-KB advisory read of any `{kind: flow, band: review-band}` KB it is granted (amended 2026-08-09, ADR 010 / ADR 027 R1-06); the OOTB Brains 1+2 stay off-limits.
+**Campaign override:** the 1.0 plan's §1.1 read order does not include the brain, and `brain-query` is a *product* skill under `skills/` that forge's own agents invoke — a session working the 1.0 plan edits it, it does not run it.
 
-## Architecture, principles, decisions
+## Merge protocol
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — narrative architecture
-- [`PRINCIPLES.md`](./PRINCIPLES.md) — the five non-negotiable principles
-- [`docs/decisions/`](./docs/decisions/) — ADRs for every load-bearing choice
-- [`docs/phases/`](./docs/phases/) — one doc per phase: purpose, success signals (bench-hook references here are historical — the bench harnesses were removed 2026-05-25)
+Strict branch protection → `gh pr update-branch` → CI green **on the exact head SHA** → merge → re-verify merged main with build, typecheck and the full `npm test`. Never merge on absence of red: a gate that reports no checks is not a green gate. Never `--admin`. Never `git add -A`. `git checkout` never shares a command line and never takes `.`. Conventional commits (`feat|fix|refactor|test|docs|chore|perf|ci`), no AI attribution lines, one concern per PR, git worktrees for parallel work units.
 
-If a change conflicts with an ADR, **update the ADR first** (with rationale) before changing the code.
+## Never do — and what parks instead of proceeding
 
-## Always do
+- Re-invent a job queue, worker pool, resource controller or process isolator (ADRs 011–013).
+- Spawn agents as Claude CLI subprocesses — use Claude Code skills via the SDK.
+- Add a feature flag, fallback or backwards-compatibility path. There are no legacy users.
+- Squash-merge stacked PRs.
+- Ship a planner or reflector skill that does not read the brain first.
+- Emit an artifact that is not greppable markdown, or a skill invocation that logs no structured event to the JSONL event log.
 
-- Emit structured events to the JSONL event log on every skill invocation.
-- Use markdown artifacts to flow data between phases — every artifact must be greppable.
-- Use git worktrees for parallel work units.
-- Use conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
-- One concern per PR.
-
-(Brain-querying is mandatory for **planners only** — architect / PM /
-reflector. See the brain-first section above + the Never-do bullet
-below. The dev-loop and reviewer correctly do NOT read the brain.)
-
-## Ask first
-
-- Major architectural changes (touch an ADR? ask).
-- New external dependencies (every dep is a maintenance liability — justify it).
-- Cross-project breaking changes.
-- Anything that increases the surface area of `orchestrator/` (we explicitly cap this). The cap governs `orchestrator/` only — see [ADR 042](./docs/decisions/042-surface-cap-scope-and-testability.md) for the three ratified boundaries (`cli/` routes are not capped; additive-optional fields on exported types are disclose-not-park; a pure function with an explicit error contract may be exported for direct tests).
-
-## Never do
-
-- Re-invent a job queue, worker pool, resource controller, or process isolator. (See ADRs 011-013 for the line we hold.)
-- Spawn agents as Claude CLI subprocesses. Use Claude Code skills via the SDK.
-- Ship a **planner or reflector** skill that doesn't read the brain first. (The dev-loop and reviewer skills correctly do NOT — see the brain-read policy.)
-- Add a feature flag, fallback, or "for backwards compatibility" path. There are no legacy users to support.
-- Squash-merge stacked PRs (the lesson lives in the brain after Pass B).
-
-## Build & test
-
-```bash
-npm install              # install Claude Agent SDK + minimal deps
-npm run build            # compile TypeScript
-npm test                 # run scaffold smoke tests
-forge --help             # CLI surface
-forge brain lint         # structural integrity checks on brain/ (12 checks; exit non-zero on errors)
-forge brain index --write  # regenerate brain/INDEX.md from filesystem (counts + sub-wiki listing)
-forge studio lint        # validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
-```
-
-## Architecture (post-scaffold)
-
-```
-forge/
-├── ARCHITECTURE.md     # narrative version of the diagram
-├── PRINCIPLES.md       # five user-stated principles
-├── docs/               # decisions (ADRs), phase docs, seeding plan
-├── brain/              # the wiki (Karpathy three-layer)
-├── skills/             # Claude Code skills (the agent surface)
-├── loops/              # agentic loop runtimes (default: Ralph)
-├── orchestrator/       # scheduler, cycle runner, flow engine, KB backend seam, logging (hot path)
-├── cli/                # operator utilities + forge subcommand handlers (post-2026-05-24 Move 1)
-├── forge-ui/           # Next.js operator UI; launched by `forge studio` (see CWC DOM convention below)
-├── _queue/             # initiative queue (gitignored)
-├── _logs/              # JSONL event logs (gitignored)
-└── projects/           # managed projects (gitignored)
-```
-
-## Status of the scaffold
-
-All six phases (brain, architect, project-manager, developer-loop,
-review-loop, reflection) are closed and production-running. End-to-end
-cycles ship merged PRs against managed projects. The detail of when
-each phase closed and the historical iteration arcs live in
-[`brain/forge-dev/log.md`](./brain/forge-dev/log.md).
-
-**Note (2026-05-25):** the per-phase + e2e bench harnesses under
-`benchmarks/` were removed in this commit. They had grown into a set
-of synthetic rubrics and thresholds that were starting to *teach* the
-phases toward the bench shape rather than measure real-cycle outcomes
-— the opposite of the intent. Phase quality going forward is judged
-on real merged cycles (brain themes accumulate the evidence). Benches
-will be rebuilt later, anchored on actual past successful cycle
-artifacts rather than hand-curated fixtures.
-
-**Amended 2026-05-30 ([ADR 022](./docs/decisions/022-real-capability-harness.md));
-ground re-stated 2026-07-17 (R5-07-F4, ADR 022 ground-swap amendment):**
-the *synthetic per-phase* benches stay dead, but a *real-cycle* harness now
-fills the gap — `verify-cycle.mjs` is forge's standing real-capability regression
-harness (`scripts/verify-cycle.mjs`), asserting real-cycle **outcomes** (reached
-PR/merge, dev-loop N/N, project tests green post-merge, cost under ceiling), not
-synthetic rubrics. The routine, creds-free ground is **gitpulse**
-(`github.com/parsoFish/gitpulse` — an independent repo; the harness's
-`--project` flag literally defaults to `mdtoc`, but `mdtoc` is uniquely
-committed inside forge's own repo (`projects/mdtoc/`) and must **never**
-actually be the harness ground — always pass `--project gitpulse`);
-**betterado** is the live-ADO tier. Tiered (frozen-SHA routine /
-full-greenfield release), run as a manual gate before pointing forge at a
-real project.
-
-Where to look for as-built detail:
-
-- Code structure: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`PRINCIPLES.md`](./PRINCIPLES.md), [ADRs](./docs/decisions/).
-- Per-phase invocation contracts: `orchestrator/phases/{pm,dev,reflector}-binding.ts` + the develop flow's successor band agents `demo-agent`/`adversarial-review` (R4-01-F4 retired the last legacy phase, the unifier).
-- Cycle archives: [`brain/_raw/cycles/`](./brain/_raw/cycles/).
-- Forge-level patterns: [`brain/cycles/themes/`](./brain/cycles/themes/).
-- Per-project patterns: [`brain/projects/<project>/themes/`](./brain/projects/).
-- Operator UI: [`forge-ui/`](./forge-ui/) (launched by `forge studio`).
-
-## forge-ui DOM-as-metrics + journeys-as-data (reference)
-
-Every load-bearing UI state in `forge-ui/` is mirrored to `data-*` attributes so
-automation drives pages by structured DOM state, not scraped text (the CWC
-`how-we-claude-code` pattern). The full **per-route `data-*` contract**, the
-shared status vocabularies, the **journeys-as-data** harness
-(`scripts/e2e-journey.mjs` + `scripts/journeys/`; `ui:journey` / `ui:deadpaths`),
-and the **real-capability harness** (`scripts/verify-cycle.mjs` — the gitpulse /
-betterado grounds) live in
-[`docs/forge-ui-dom-and-harness.md`](./docs/forge-ui-dom-and-harness.md), kept
-out of this file so the always-injected instructions stay lean.
-
-When a change touches forge-ui load-bearing state, **update the `data-*`
-attribute, that reference doc, and the affected journey in the same PR** — invoke
-the `journey-sync` skill for the maintenance contract. The journeys are both the
-demo and the UI regression gate: a UI change without its journey update either
-breaks the gate or silently rots the demo.
+**Park — produce the artifact, say so, and stop** rather than proceeding: a change that conflicts with an ADR (**update the ADR first, with rationale**) · a new external dependency (every dep is a maintenance liability) · a cross-project breaking change · anything that grows the surface area of `orchestrator/`, which is explicitly capped — the cap governs `orchestrator/` only, and [ADR 042](./docs/decisions/042-surface-cap-scope-and-testability.md) records its three ratified boundaries.

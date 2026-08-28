@@ -21,6 +21,7 @@ Usage:
                                           Serves a production build by default (`next build` once, then
                                           `next start`); pass --dev to keep the `next dev` dev-server path.
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
+  forge preflight <project-name | path>    Check a managed project against the forge<->project contract; exit non-zero on an unmet hard clause
 
 S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
 recovery (cycle / enqueue / metrics / review / report / log / requeue) now live in the

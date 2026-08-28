@@ -4,6 +4,7 @@ description: The unifier's canOpenPr check lets a cycle open a PR even when a li
 category: antipattern
 created_at: 2026-06-07
 updated_at: 2026-06-07
+status: historical
 ---
 
 # canOpenPr does not gate on per-WI status

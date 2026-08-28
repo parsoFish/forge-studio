@@ -4,6 +4,7 @@ description: When a WI with downstream dependents exhausts its iteration budget,
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 # WI iteration-budget exhaustion cascades downstream skips and forces unifier into first-time implementation

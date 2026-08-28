@@ -19,9 +19,8 @@
 > — architect runs natively in Studio; review/reflect render
 > on the unified `/artifact` viewer); (e) **the swappable seams are real and
 > used in production** ([ADR 032](./docs/decisions/032-subsumption-proof.md)):
-> runtime adapter registry, the KbBackend seam (filesystem-only today), and the
-> unifier as an independently-dispatchable flow node — the **runtime adapter**
-> seam carries a second implementation shipped.
+> runtime adapter registry and the KbBackend seam (filesystem-only today) — the
+> **runtime adapter** seam carries a second implementation shipped.
 >
 > **Note (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)):**
 > the phases below are the shipped OOTB suite (Scope 2) riding Scope 1's
@@ -67,7 +66,7 @@ flowchart TB
         direction LR
         PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (ADR 039)"]
         DV["3 · developer-loop<br/>node kind: agent · loopStrategy:'ralph' · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
-        UN["4 · unifier<br/>node kind: unifier · real executor · LAST declared phase-executor slug (R4-01-F4 retires it)<br/>runUnifierPhase in developer-loop.ts"]
+        UN["4 · demo + adversarial-review<br/>node kind: agent · demo-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, orchestrator/phases/adversarial-review.ts"]
         RFL["reflector<br/>node kind: agent · reflection-close band hook (ADR 039)"]
     end
 
@@ -129,7 +128,7 @@ reflector and written by the reflector.
 operator ─(Studio only)─► ① architect ─INIT-*.md─► [orchestrator: load flow.yaml → runFlow]
          │                                                │
          │                                                ▼
-         │                       ② PM ─► ③ dev-loop ─► ④ unifier ──► ⑤ review/reflect
+         │                       ② PM ─► ③ dev-loop ─► ④ demo/adversarial-review ─► ⑤ review/reflect
          │                        └──── node-executor registry · runtime adapter seam ──┘
          └──────────────────────────────  brain (3 scopes) · KbBackend seam ◄── write ──┘
 ```
@@ -220,7 +219,6 @@ loop:
 
 Key properties:
 - **Runtime adapter seam (ADR 029)** — agents are created via `getAdapter(sdkId).createAgent`, not `createClaudeAgent` directly. The registry (`loops/_adapters/registry.ts`) holds `claudeAdapter` (live), `geminiAdapter`, and `aiderAdapter` (both DEP+CREDS-GATED; `available:false` until provisioned). A second adapter is a one-file drop-in that passes the conformance suite.
-- **Unifier is its own DAG node** — `runUnifierPhase` (`orchestrator/phases/developer-loop.ts`) is extracted from the dev-loop tail and registered as `node kind: unifier` in `DEFAULT_NODE_EXECUTORS`. The flow's `resumeFrom: 'unifier'` path targets this node directly; the per-WI dev node self-no-ops (emitting start/end{resumed:true} so the hex resolves complete).
 - **Parallel work** = N git worktrees × N Ralph instances, coordinated by the orchestrator's scheduler.
 - **The developer loop is *complete* for an initiative** when all work items have landed in the initiative branch with all checks passing.
 - **Merge conflict handling** is part of the loop, not the orchestrator.
@@ -231,15 +229,15 @@ Responsibility: closeout of an initiative back to main.
 
 **Unified Ralph runner** (post-pass-1 design — earlier drafts had this split into two phases; the implementation collapsed them after the e2e bench surfaced redundant state shuffling). One Ralph loop on the initiative branch, parameterised by a reviewer system prompt + a verdict-aware quality gate. Iteration 1 prepares the demo + PR draft from scratch; iterations 2+ react to send-back feedback the verdict gate appends to `fix_plan.md`.
 
-The verdict gate (the developer-loop unifier sub-phase's quality gate in [`orchestrator/unifier-invocation.ts`](./orchestrator/unifier-invocation.ts) + verdict provider in [`orchestrator/file-verdict.ts`](./orchestrator/file-verdict.ts)) runs between iterations and:
+The verdict gate (the develop flow's successor band's quality gate) runs between iterations and:
 
 1. **Re-runs the project quality gate** (orchestrator-verified — never trusts the agent's claim).
 2. **Asks the verdict provider** — production: the operator reviews via the **`/artifact/<cycleId>`** Studio screen ([ADR 031](./docs/decisions/031-studio-consolidation.md)). The file-based `verdict-response.md` handoff is written by the Studio bridge.
 3. **On approve** → closure merges the PR and fires reflection. **On send-back** → feedback is appended to `fix_plan.md` as Given/When/Then ACs; loop continues.
 
-> **Note (refocus pass):** `runReviewer` has been folded into `cycle.ts` — the reviewer phase was removed as a separate phase; the unifier sub-phase owns review-prep and the PR opens inline after the delivery gate passes.
+> **Note (refocus pass):** `runReviewer` has been folded into `cycle.ts` — the reviewer phase was removed as a separate phase; the develop flow's successor band owns review-prep and the PR opens inline after the delivery gate passes.
 
-**Self-contained PR.** The **unifier** writes + commits the git-tracked `demo/<initiative-id>/` bundle during its loop (so the demo lands on the branch before review). `pr.ts:embedDemoInPr` is then a **pure PR-body composer** — it appends a `## Demo` block to the PR description with branch-absolute `blob/<branch>/demo/<id>/DEMO.md` links (inlining raw images for **public** repos; GitHub's image proxy can't fetch private raw URLs), and de-duplicates any `## Demo` the unifier already wrote into the body. The operator reviews entirely from the PR; iterating via PR comments is a supported lightweight loop (pattern: `brain/cycles/themes/pr-as-sole-review-window.md`).
+**Self-contained PR.** **`demo-agent`** writes + commits the git-tracked `demo/<initiative-id>/` bundle during its run (so the demo lands on the branch before review). `pr.ts:embedDemoInPr` is then a **pure PR-body composer** — it appends a `## Demo` block to the PR description with branch-absolute `blob/<branch>/demo/<id>/DEMO.md` links (inlining raw images for **public** repos; GitHub's image proxy can't fetch private raw URLs), and de-duplicates any `## Demo` `demo-agent` already wrote into the body. The operator reviews entirely from the PR; iterating via PR comments is a supported lightweight loop (pattern: `brain/cycles/themes/pr-as-sole-review-window.md`).
 
 **No auto-merge.** The GitHub PR is the operator's merge + feedback surface. The operator merges it in GitHub (via the `/artifact/<cycleId>` Studio screen or directly on GitHub); a later `runClosure` confirms the merge (`gh pr view --json state` == `MERGED`), then `alignLocalToRemote` brings the **project's working tree** forward to the merged `main` (a guarded `merge --ff-only`, **stashing/restoring any uncommitted operator state** — never a bare ref move that strands the working tree) and prunes the branch, moves the manifest `in-flight/ → done/` (so **`done/` ⇒ MERGED**), and only then does reflection fire. `closure.ts` is the **single terminal-move authority**; the reviewer moves no manifest. Until the operator merges, the unattended cycle terminates at `pr-open` (not a failure).
 
@@ -302,11 +300,10 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 `orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `orchestrator/studio/registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind and calls `executors[kind]`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
 
-**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'unifier' | 'reflect'`) is retired down to one row — `PHASE_EXECUTOR_KINDS = ['unifier']`. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `orchestrator/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). `unifier` is the last declared phase-executor row, held until R4-01-F4.
+**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `orchestrator/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
 
-The five built-in node-kind executors:
+The four built-in node-kind executors:
 - `execArchitect` — silent DAG marker (the PLAN gate was satisfied before queue pickup).
-- `execUnifier` — runs `runUnifierPhase` then the close-contract gates (commit boundary, close invariant, delivery gate, non-empty guard, final CI). **This is a real executor, not a marker.**
 - `execReview` — `openPrInline` then `runClosure`.
 - `execAgent` — the generic F1 `runAgent` path (R2-01-F2); resolves a declared band hook or `loopStrategy:'ralph'` first (PM/dev/reflector all land here — see the amendment above), else runs a bare one-shot `runAgent` spawn for a library agent.
 - `execUnknown` — defensive fallback (no agent def, or an invalid declared `executor`); loud error log, not a silent skip.

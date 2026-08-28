@@ -4,6 +4,7 @@ description: The unifier spent 4 Bash probes (seqs 23–37) discovering that `fo
 category: antipattern
 created_at: '2026-06-06T09:41:00Z'
 updated_at: '2026-07-10T09:46:00Z'
+status: historical
 ---
 
 ## Antipattern

@@ -6,6 +6,7 @@ keywords: [demo-json, liveevidence, subscription-id, evidence-mismatch, unifier-
 related_themes: [live-evidence-demo-index]
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
 ---
 
 # demo.json liveEvidence ID must match .forge/live-evidence/ at PR time

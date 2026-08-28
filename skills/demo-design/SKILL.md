@@ -11,15 +11,16 @@ model: claude-sonnet-4-6
 
 ## What this skill is
 
-This skill generates the **project-side demo machinery** that the unifier phase
-later executes to produce `demo.json` + `DEMO.md`. It is the F5 generator —
-forge-owned, run once per project when the operator configures `demoProcess`,
-producing committed files the project's own toolchain can execute.
+This skill generates the **project-side demo machinery** that the demo agent
+(`skills/demo-agent`) later executes to produce `demo.json` + `DEMO.md`. It is
+the F5 generator — forge-owned, run once per project when the operator
+configures `demoProcess`, producing committed files the project's own
+toolchain can execute.
 
 **Boundary:**
 - **This skill PRODUCES** — it writes generated files into the project repo.
 - **The project's toolchain EXECUTES** — the generated skill/step/test is
-  committed to the project repo and invoked by the unifier.
+  committed to the project repo and invoked by the demo agent.
 - **Operators customize** by editing the generated files (they are ordinary
   committed repo files) or by editing this generator skill (a normal forge skill).
 
@@ -114,11 +115,11 @@ machinery was generated. (Do NOT use a descriptive slug or write under
 ### What to generate (one or more of)
 
 #### A. A project skill (`.forge/skills/demo-design/SKILL.md`)
-A Claude Code skill the unifier agent loads to produce `demo.json`. It must:
+A Claude Code skill the demo agent loads to produce `demo.json`. It must:
 - State the evidence form and why (from Step 2 reasoning).
-- Give the concrete commands the unifier runs (e.g. `go test -run TestAcc -v ./...`).
+- Give the concrete commands the demo agent runs (e.g. `go test -run TestAcc -v ./...`).
 - State what to capture (before/after values, specific JSON fields, screenshot labels).
-- Include the `demoProcess` steps verbatim so the unifier can tick them off.
+- Include the `demoProcess` steps verbatim so the demo agent can tick them off.
 - Reference `skills/demo/SKILL.md` for the demo.json contract (the forge half).
 - For **live-external** evidence: include the exhaustive-config discipline (every
   configurable option exercised with a non-default value), the round-trip proof
@@ -173,7 +174,7 @@ Commit all generated files into the project repo (not forge's repo).
 ## Step 4 — Update the project config
 
 After generating the skill, add `demo-design` to `skills` in
-`.forge/project.json` so the unifier agent composes it automatically:
+`.forge/project.json` so the demo agent composes it automatically:
 
 ```json
 {
@@ -195,17 +196,15 @@ Report to the operator:
 - What files were generated (paths).
 - Whether any CI step or test hook was generated.
 - The preflight DEMO clause result.
-- The next step: "Run a cycle — the unifier will load the generated skill and
+- The next step: "Run a cycle — the demo agent will load the generated skill and
   produce demo.json evidence."
 
 ## The betterado ado-demo skill is a generated example
 
 `projects/terraform-provider-betterado/forge/skills/ado-demo/SKILL.md` is the
 canonical example of what this generator produces for a **live-external** project.
-It was authored by hand for the betterado capstone; future runs of this generator
-against betterado would produce equivalent machinery. Study it for the exhaustive
-live-test discipline (apply → GET round-trip → idempotent re-plan → portal
-screenshot → clean destroy).
+Study it for the exhaustive live-test discipline (apply → GET round-trip →
+idempotent re-plan → portal screenshot → clean destroy).
 
 ## Done when
 

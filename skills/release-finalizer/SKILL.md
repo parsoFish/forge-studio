@@ -42,7 +42,7 @@ workflow but never runs tag/publish) — do not attempt them.
 ## Inputs (paths are pre-resolved in the user prompt; do NOT change them)
 
 - The PR branch is already checked out in the worktree you run in.
-- `changelogPath` — the changelog file the unifier seeded with a draft
+- `changelogPath` — the changelog file the develop loop seeded with a draft
   `## [Unreleased]` entry.
 - `versionFile` (optional) — a file holding the project version to bump.
 - `docsDir` (optional) — the project's docs directory.
@@ -54,15 +54,13 @@ workflow but never runs tag/publish) — do not attempt them.
    heading already names one (e.g. `## 2.0.1 (Unreleased)` — the cycle's
    acceptance criteria staged it), that IS the release version — do not
    recompute, and NEVER override it upward. Only when no version is staged,
-   compose `changelog-semver`: read the draft entry's categories and map the
-   project's native taxonomy (Keep-a-Changelog `Added` ≈ provider-convention
-   `ENHANCEMENTS`/`FEATURES` → minor; `Changed`/`Fixed` ≈ `BUG FIXES` →
-   patch) against the current version (from `versionFile` or the latest
-   changelog heading). Major REQUIRES an explicit breaking-change marker
-   (`BREAKING CHANGES:` section or equivalent) — infrastructure details like a
-   protocol/manifest declaration are not breaking markers. (2026-07-11: the
-   finalizer guessed 3.0.0 over a staged 2.0.1 on additive ENHANCEMENTS and
-   left the heading unpromoted — the tag workflow cut a wrong major release.)
+   compose `changelog-semver`: it owns the bump rules — map the project's
+   native taxonomy to them (Keep-a-Changelog `Added` ≈ provider-convention
+   `ENHANCEMENTS`/`FEATURES`; `Changed`/`Fixed` ≈ `BUG FIXES`) against the
+   current version (from `versionFile` or the latest changelog heading).
+   (2026-07-11: the finalizer guessed 3.0.0 over a staged 2.0.1 on additive
+   ENHANCEMENTS and left the heading unpromoted — the tag workflow cut a
+   wrong major release.)
 2. **Finalise the changelog.** Rewrite the draft heading — whichever form it
    takes (`## [Unreleased]`, `## <version> (Unreleased)`) — to the project's
    dated convention (`## [<version>] - <YYYY-MM-DD>` or `## <version>

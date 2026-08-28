@@ -41,12 +41,6 @@ budgets: {}
 
 Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../../docs/decisions/002-ralph-loop-pattern.md)). Thin wrapper: prepare loop input artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`), invoke [`loops/ralph/runner.ts`](../../loops/ralph/runner.ts).
 
-## Brain-read policy
-
-**The dev-loop does NOT query the forge brain** (Brains 1+2; [ADR 010](../../docs/decisions/010-brain-first.md)). The planner already encoded every relevant pattern/antipattern/convention into the WI spec — the work item is the **single source of intent**; a forge-brain read here is wasted cost and a source-of-truth split.
-
-You **may** consult the project brain (Brain 3 — `brain/profile.md` + `brain/themes/` in the worktree) for supplemental project context when the WI is thin on a project convention. Advisory, not mandatory ([ADR 010 amendment 2026-05-26](../../docs/decisions/010-brain-first.md)).
-
 ## Inputs / Outputs
 
 **Inputs:**
@@ -110,5 +104,5 @@ Hard rules:
 - **`files_in_scope` is advisory orientation, NOT a fence.** It is the planner's best guess — a starting point. You are FREE to edit any file needed to make the gate pass, including sweeping changes (e.g. running a formatter over the whole tree) when the AC requires it. Don't rewrite unrelated features, but never let the scope list stop you from applying the actual fix.
 - **Read what the gate is telling you, then use the project's own fixers.** When the gate reports a failure, fix THAT, the cheap way. If a formatter/linter has an auto-fix target (`make fmt`, `gofmt -w`, `prettier --write`, `ruff --fix`), RUN IT over the whole tree in one command instead of hand-editing files.
 - **No shortcuts.** Don't skip tests, don't `--no-verify`, don't disable lint rules.
-- **No hallucinated test passes.** If you claim tests pass, prove it by running them via `Bash`. The orchestrator re-runs them and exits `failed` if your claim was wrong.
-- **`creates:` / `verification_artifact:` paths are MANDATORY outputs.** If the WI lists either, the orchestrator runs `git diff --name-only main...HEAD` and rejects the iteration if NONE of those paths are in the diff. Before you exit each iteration, ensure at least one of those paths exists (a compiling stub satisfies the path check). If the gate emits "[forge gate-tightening] REJECTED: …", the message lists the exact paths — create one in the next iteration.
+- **No hallucinated test passes.** If you claim tests pass, prove it by running them via `Bash`.
+- **`creates:` / `verification_artifact:` paths are MANDATORY outputs (ADR 037).** If the WI lists either, the orchestrator runs `git diff --name-only main...HEAD` and rejects the iteration if NONE of those paths are in the diff. Before you exit each iteration, ensure at least one of those paths exists (a compiling stub satisfies the path check). If the gate emits "[forge gate-tightening] REJECTED: …", the message lists the exact paths — create one in the next iteration.

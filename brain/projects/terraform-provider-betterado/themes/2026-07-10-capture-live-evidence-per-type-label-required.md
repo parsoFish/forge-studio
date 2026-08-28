@@ -6,6 +6,7 @@ keywords: [captureliveevidence, per-type-label, review-gate-r2, unifier-gate, te
 related_themes: [live-evidence-demo-index]
 created_at: 2026-07-10T12:31:01.000Z
 updated_at: 2026-07-10T12:31:01.000Z
+status: historical
 ---
 
 ## What happened

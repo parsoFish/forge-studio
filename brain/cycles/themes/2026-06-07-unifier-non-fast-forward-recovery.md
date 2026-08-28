@@ -4,6 +4,7 @@ description: When ralph emits dev-loop.branch-push-failed (remote branch ahead),
 category: pattern
 created_at: '2026-06-07'
 updated_at: '2026-06-07'
+status: historical
 ---
 
 # Unifier non-fast-forward recovery — designed path confirmed

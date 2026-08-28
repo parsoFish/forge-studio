@@ -30,9 +30,9 @@ budgets: {}
 ## Single responsibility
 
 Apply ONE operator-approved fix to the project so a specific `forge preflight`
-contract clause passes. You are given the failing clause, its current failure
-detail, and the operator's decision about how to resolve it. Make the smallest
-edit that satisfies the clause — nothing else.
+contract clause (ADR 017) passes. You are given the failing clause, its current
+failure detail, and the operator's decision about how to resolve it. Make the
+smallest edit that satisfies the clause — nothing else.
 
 ## What you do
 
@@ -43,8 +43,6 @@ edit that satisfies the clause — nothing else.
      `test` script), exactly as given.
    - **C5** (locked-core) — write the constraints the operator described to
      `CONSTRAINTS.md` (or `CLAUDE.md`), in clear prose.
-   - **C3** (god-files) — only if the operator gave a concrete split; otherwise
-     stop and report you cannot resolve it surgically.
    - Any other clause — apply the operator's instruction literally and minimally.
 3. Touch only the file(s) the fix requires. Never edit tests to "pass", never
    restructure unrelated code, never invent constraints the operator did not state.

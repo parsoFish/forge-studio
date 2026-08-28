@@ -366,9 +366,9 @@ omits the block is unaffected (the entire release flow is skipped).
 When declared, the clause has three parts, all enforced by forge's release flow:
 
 1. **In-cycle draft changelog.** Every work item in a release-bearing initiative
-   carries a standing AC to draft a changelog entry under `## [Unreleased]`. The
-   unifier authors the draft into `changelogPath`; the DRAFT is what ships in the
-   PR. (Source of intent: the `changelog`/`in-cycle` step.)
+   carries a standing AC to draft a changelog entry under `## [Unreleased]` into
+   `changelogPath`; the DRAFT is what ships in the PR. (Source of intent: the
+   `changelog`/`in-cycle` step.)
 2. **Post-approval pre-merge finalisation.** When the operator approves, forge's
    **release-finalizer** runs on the PR branch *before* merge: it computes the
    semver bump, promotes the draft to a versioned `## [X.Y.Z] - <date>` entry,
@@ -432,7 +432,7 @@ declaration**, not two competing fields:
   `verify` steps name the assertion that makes the evidence non-trivial (forge
   runs the step and encodes its concrete result), `present` steps say how it is
   surfaced. This is the primary declaration.
-**The unifier/demo skill derives the executed demo from `demoProcess`.** A
+**The demo skill derives the executed demo from `demoProcess`.** A
 `demoProcess` must include at least one `capture` step and one `verify` step —
 checked by preflight (advisory).
 
@@ -463,7 +463,7 @@ skill is what later cycles run per merged initiative.
 actually *realised*. DEC-4: a project that declares a `demoProcess` should carry a
 **generated demo-design skill at the fixed path `.forge/skills/demo-design/SKILL.md`**
 (produced by the `demo-design` skill from the project's `demoProcess` + code — it
-encodes the concrete capture commands the unifier runs each cycle). The fixed slug
+encodes the concrete capture commands the demo-agent runs each cycle). The fixed slug
 + path make this verifiable: `forge preflight` WARNs (`DEMO-SKILL`) when a project
 declares a demoProcess but lacks the generated skill, and onboarding (Step 10)
 generates it. Not applicable (passes) until a `demoProcess` is declared — `DEMO`
@@ -523,8 +523,8 @@ the forge repo, **not** the project repo (per
 The project-relative subdirectory `artifactRoot` (default `"."`) now scopes
 **only** the forge artifacts that remain committed in the *project* repo:
 
-- **`<artifactRoot>/history/<id>/demo/`** — the per-cycle in-PR demo the unifier
-  writes (committed to the PR for review).
+- **`<artifactRoot>/history/<id>/demo/`** — the per-cycle in-PR demo the
+  demo-agent writes (committed to the PR for review).
 - **`<artifactRoot>/skills/`** — project-action skills.
 
 Validated as a clean relative path (no leading `/`, no `..`). Existing projects
@@ -533,7 +533,7 @@ retain the default `"."` (no migration required).
 ### Runtime/session scratch — gitignored, never committed
 
 - `_architect/` — architect session state
-- `demo/<initiative-id>/` — demo output written during the unifier run
+- `demo/<initiative-id>/` — demo output written during the demo-agent run
 - `.forge/work-items/` — per-cycle PM output
 
 These are excluded by the project's `.gitignore` (C2 enforces this).
@@ -546,15 +546,15 @@ Every initiative leaves a **durable record** — plan, verdict, and an archived
 demo — that is **forge-owned**, written to `_logs/<cycleId>/artifacts/` in the
 forge repo (per [ADR-035](./decisions/035-forge-owned-central-artifacts.md)). The
 only history artifact that commits to the *project* repo is the per-cycle in-PR
-demo the unifier writes at `<artifactRoot>/history/<id>/demo/`:
+demo the demo-agent writes at `<artifactRoot>/history/<id>/demo/`:
 
 | Path | Content |
 |------|---------|
 | `_logs/<cycleId>/artifacts/plan.md` | The initiative brief + approach as written by the architect/PM (forge repo) |
-| `<artifactRoot>/history/<id>/demo/` | The demo evidence produced by the unifier (screenshots, API responses, CLI captures), committed to the PR |
+| `<artifactRoot>/history/<id>/demo/` | The demo evidence produced by the demo-agent (screenshots, API responses, CLI captures), committed to the PR |
 | `_logs/<cycleId>/artifacts/verdict.json` | The operator's approve/send-back verdict and timestamp (forge repo) |
 
-The unifier writes the in-PR demo into the worktree as part of the work so it
+The demo-agent writes the in-PR demo into the worktree as part of the work so it
 lands in the PR and is committed — "showcase the history of project development
 through plans and demos." The `demoProcess` field (Face A) declares which steps
 populate the demo. Forge provides the `artifactRoot` path so the in-repo demo is
@@ -574,20 +574,20 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 > and the DAG walk terminates to `ready-for-review` with NO PR opened — the
 > fix-loop drain re-enters `resume_from:'develop'` and only a green baseline ever
 > reaches `openPrInline`. `composedUnifierGate` still runs for the retained
-> forge-cycle-shaped fixtures (retired with the unifier at R4-01-F4); it is off
+> forge-cycle-shaped fixtures (retired at R4-01-F4); it is off
 > the live develop flow.
 
 **Preserved invariant.** The regression criterion this relocation must hold,
 verbatim: **no path to merge exists with a red full-suite baseline.** This is
 the known-gaps "dual-boundary gate works as designed" strength
-(`docs/known-gaps.md`, "Strengths worth preserving") — the unifier today
+(`docs/known-gaps.md`, "Strengths worth preserving") — the merge-boundary gate today
 catches a red full-suite baseline the scoped per-WI gates can't see, and
 nothing ships red as a result. This section relocates *where* that guarantee
 executes; it does not redesign the guarantee itself.
 
 **What relocates.** `composedUnifierGate`'s `initiative_gate` sub-check
-(part of its five-sub-check contract in `orchestrator/phases/developer-loop.ts`,
-wired into the unifier's Ralph loop) — today's project `quality_gate_cmd` run
+(part of its five-sub-check contract in `orchestrator/phases/developer-loop.ts`)
+— today's project `quality_gate_cmd` run
 against the post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
 orchestrator-executed band at the develop flow's merge boundary (not an agent
 node), per [ADR-036](./decisions/036-orchestrator-owned-gate-execution.md)'s rule
@@ -604,13 +604,12 @@ introduced in this same PR; `.forge/project.json`, loader in
   the same boundary the final CI delivery gate (`decideFinalCiGate`, in
   `orchestrator/cycle.ts`) enforces today.
 
-The relocation re-homes *where* these two runs execute (unifier band → flow-engine
-merge-boundary band); `testProcess.local`/`testProcess.ci` are the typed names
-for the fields the gate already reads.
+The relocation re-homes *where* these two runs execute; `testProcess.local`/
+`testProcess.ci` are the typed names for the fields the gate already reads.
 
 **Results flow TO agents, never from them.** The merge-boundary gate's verdict
-reaches the demo/review agents through the same seam the unifier and dev-loop
-already use: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
+reaches the demo/review agents through the same seam dev-loop already
+uses: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
 `orchestrator/phases/developer-loop.ts`; write/clear behaviour in
 `writeGateFeedback` and `writeUnifierGateFeedback`, same file). The
 file is deleted on every passing gate run and at session start, so its
@@ -619,8 +618,8 @@ live, not a fossil.
 
 **Unattended remediation.** A red merge-boundary baseline re-dispatches the
 develop agent with scoped fix work items compiled from
-`.forge/last-gate-failure.md` — the same capability ADR-026's unifier UWI
-mechanism provided, successor-specified as `R4-10-F2`
+`.forge/last-gate-failure.md` — the same capability ADR-026 already
+provided, successor-specified as `R4-10-F2`
 (`docs/roadmaps/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
 remediation cap (R4-10-F1's shared round/total-fix cap, config home per
 R4-08-F2(b), which R4-10-F2 inherits); cap exhaustion parks the initiative
@@ -643,7 +642,7 @@ gates structurally cannot see.
 runnable replacement, and per its own stated precondition, **must not start**
 before the operator verdict is recorded in the
 [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md).
-`R4-01-F4` (unifier retirement) depends in turn on `R4-10-F2` being live and
+`R4-01-F4` (the legacy-phase retirement) depends in turn on `R4-10-F2` being live and
 green — retiring `composedUnifierGate`'s call site is downstream of both, not
 part of this spec.
 

@@ -4,6 +4,7 @@ description: The automated chore:drop-forge-scratch commit stripped .forge/pr-de
 category: antipattern
 created_at: 2026-06-20
 updated_at: 2026-06-20
+status: historical
 ---
 
 # Unifier pr-description restore loop

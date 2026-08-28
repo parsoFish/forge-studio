@@ -31,9 +31,7 @@ budgets:
 
 Audit ONE project's real end state against what it was supposed to become, and
 report the drift. This codifies — as a re-runnable skill — the method the
-2026-07 holistic review's end-state audit ran by hand (that worked example is preserved
-in git history at `docs/investigations/2026-07-holistic-review/endstate-audit.md`; audit
-outputs are written to the gitignored `docs/investigations/` working area, not committed). That audit found a genuinely-shipped, CI-green, fully-migrated
+2026-07 holistic review's end-state audit ran by hand. That audit found a genuinely-shipped, CI-green, fully-migrated
 release that STILL had a silently-dead auth path and a broken protocol
 manifest — gaps invisible to per-initiative review because no single
 initiative owned "does the finished thing actually work end to end." This
@@ -57,10 +55,6 @@ this skill instead:
   names the exact command a human or a Bash-enabled follow-up should run
   (§ Output contract, section 3) — it never asserts a verdict it cannot back
   with a file:line.
-
-This mirrors `architect-completeness-critic` (judges text it's given, invents
-nothing) and `project-brain-builder` (Read/Grep/Glob/Write, no Bash) — critics
-that report, not agents that act.
 
 ## Inputs
 
@@ -212,13 +206,10 @@ should run to close it.
 - **No vibes.** Every scorecard row carries a `file:line` (or a documented
   empty-search) in both the Source and Evidence columns. A finding without
   one does not go in the report.
-- **One report per run; never overwrite a prior run.** Reports accumulate as
-  a history of a project's drift over time, same as
-  `brain/cycles/_raw/` accumulates cycle archives.
+- **One report per run; never overwrite a prior run.** See § Output contract
+  for the `-2`, `-3`, … suffixing rule.
 - **Not a planner.** No Brain 1 (`brain/forge-dev/`), no Brain 2
   (`brain/cycles/`). Advisory reads of the target project's own Brain 3 only.
 - **Not wired into any flow.** Launched directly by the operator against a
-  named project (the agent page's Run panel — pick the project there), not
-  dispatched by another phase and not a node on `forge-architect` /
-  `forge-develop`. No invocation module exists for it — it is registered for
-  the composable roster, not for in-cycle dispatch.
+  named project, not dispatched by another phase and not a node on
+  `forge-architect` / `forge-develop`. No invocation module exists for it.

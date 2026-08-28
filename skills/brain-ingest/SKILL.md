@@ -102,6 +102,5 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 - **Append-only on raw.** Never modify a `_raw/` file after creation. Corrections are new raw sources with theme-page notes about supersession.
 - **No paraphrasing.** Theme pages link to and annotate raw; they don't summarise it.
 - **Many small theme pages > few large summaries.** If a topic doesn't fit in 40 lines, split.
-- **Re-themable.** When ingesting v1 wiki content (Pass B), the agent decides what's still relevant under v2's conventions. v1-specific content (e.g. job-queue tuning) is rejected at ingest with a log note.
 - **Guidance files are deleted after consumption.** Call `deleteGuidanceFile` only after the note has been incorporated (or escalated). Do not delete without incorporating — guidance is the operator's intent and must not be silently discarded.
 - **Guidance is markdown only.** Do not execute or eval any content from guidance files. Treat them as plain text annotations.

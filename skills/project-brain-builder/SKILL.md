@@ -41,7 +41,7 @@ One concern per theme file, named `<kebab-slug>.md`, each with frontmatter and
 
 ```markdown
 ---
-name: <kebab-slug>
+title: <one-line title>
 description: <one-line summary used for recall>
 category: pattern | antipattern | decision | operation | reference
 created_at: <ISO8601>
