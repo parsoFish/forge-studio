@@ -1,0 +1,66 @@
+{
+  "runHandle": "m0-a",
+  "initiatives": [
+    {
+      "initiativeId": "INIT-2026-08-28-init-no-merges-flag",
+      "cycleId": "2026-08-28T11-33-00_INIT-2026-08-28-init-no-merges-flag",
+      "finalStatus": "done",
+      "totalEvents": 652,
+      "costUsd": 10.4477,
+      "workItems": {
+        "total": 3,
+        "complete": 3,
+        "failed": 0
+      }
+    }
+  ],
+  "project": "gitpulse",
+  "baseSha": null,
+  "costUsd": 10.4477,
+  "costCeilingUsd": 35,
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "finalStatus=done"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "3/3 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$10.45 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": true,
+      "detail": "3 theme(s) written this run (e.g. 2026-07-12-gitignored-scratch-fifth-cycle.md)"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.11.0)"
+    },
+    {
+      "name": "aggregate cost under ceiling",
+      "pass": true,
+      "detail": "$10.45 across 1 initiative(s) ≤ $35"
+    },
+    {
+      "name": "post-run boundary: forge repo/PR state unchanged",
+      "pass": true,
+      "detail": "clean"
+    }
+  ],
+  "gate": "pass",
+  "framesCaptured": 6,
+  "completedAt": "2026-08-28T12:19:13.344Z"
+}

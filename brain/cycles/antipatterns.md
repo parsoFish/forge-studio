@@ -41,6 +41,8 @@ Each entry on this index is one line:
 
 - [`2026-07-12-pm-adr037-set-error-cycle-restart`](./themes/2026-07-12-pm-adr037-set-error-cycle-restart.md) — When PM emits a WI without `creates` or `verification_artifact` (ADR 037), the orchestrator classifies it terminal/non-recoverable and restarts the full cycle — costing a wasted PM run instead of an in-place correction.
 
+- [`2026-08-28-pm-pure-modification-wi-missing-verification-artifact`](./themes/2026-08-28-pm-pure-modification-wi-missing-verification-artifact.md) — PM emits pure-modification WI without `verification_artifact`; spec-lint passes but ADR-037 set-validator fires at graph-emit time, classifying cycle terminal/non-recoverable and forcing a restart (~$0.79, ~3 min wasted).
+
 - [`2026-07-11-last-gate-failure-untracked-merge-conflict`](./themes/2026-07-11-last-gate-failure-untracked-merge-conflict.md) — The untracked .forge/last-gate-failure.md file in the worktree blocks the WI fan-in merge, triggering dev-loop.merge-conflict-requeue and discarding the WI's work — a variant of the stale-last-gate-failure antipattern.
 
 - [`2026-07-11-last-gate-failure-blocks-fanin-merge`](./themes/2026-07-11-last-gate-failure-blocks-fanin-merge.md) — After a per-WI gate run, .forge/last-gate-failure.md lands on disk but is gitignored (untracked). When the dev-loop fan-in rebases the WI branch onto accumulated prior-WI commits, git refuses with "untracked working tree files would be overwritten by merge", triggering dev-loop.merge-conflict-requeue and forcing a full WI re-implementation.

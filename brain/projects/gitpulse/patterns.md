@@ -15,6 +15,7 @@
 - [`2026-07-11-tags-command-delivery`](./themes/2026-07-11-tags-command-delivery.md) — gitpulse tags subcommand (release-cadence table with JSON/CSV/filter support) delivered via 4-WI TDD chain; WI-1+WI-2 in 1 iter each, WI-3+WI-4 absorbed by unifier in 1 iter.
 - [`2026-07-12-sort-flag-delivery`](./themes/2026-07-12-sort-flag-delivery.md) — >-
 - [`git-truth-and-pure-aggregation`](./themes/git-truth-and-pure-aggregation.md) — >-
+- [`2026-08-28-no-merges-flag-delivery`](./themes/2026-08-28-no-merges-flag-delivery.md) — Global --no-merges flag added via parentCount at the git-truth seam; filterMergeCommits() applied once in cli.ts before any aggregation; 3-WI TDD chain, all 1-iter, all 20 test fixture files updated for required Commit field.
 
 ## Format
 

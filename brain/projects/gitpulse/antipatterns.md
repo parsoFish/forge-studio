@@ -15,6 +15,7 @@
 - [`2026-06-22-model-rendering-wi-split-overgranular`](./themes/2026-06-22-model-rendering-wi-split-overgranular.md) — >-
 - [`2026-07-11-gitignored-scratch-fourth-cycle`](./themes/2026-07-11-gitignored-scratch-fourth-cycle.md) — ralph writes fix_plan.md and AGENT.md after every WI commit in the tags-command cycle — the 4th gitpulse cycle in a row with this pattern; SKILL.md and AGENT.md still not updated.
 - [`2026-07-12-gitignored-scratch-fifth-cycle`](./themes/2026-07-12-gitignored-scratch-fifth-cycle.md) — >-
+- [`2026-08-28-gitignored-scratch-sixth-cycle`](./themes/2026-08-28-gitignored-scratch-sixth-cycle.md) — ralph writes fix_plan.md and AGENT.md after WI-1 and WI-2 in the no-merges-flag cycle — 6th consecutive gitpulse cycle; AGENT.md worktree template still not updated.
 
 ## Format
 
