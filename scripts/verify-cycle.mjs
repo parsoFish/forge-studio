@@ -46,9 +46,9 @@
  * --idea-file, else the body of the corpus manifest at _queue/done/<run-handle>.md.
  *
  * Options:
- *   --project <name>        managed project to run against (default mdtoc; NEVER
- *                           run against mdtoc when it is committed inside forge —
- *                           use gitpulse, an independent repo). betterado is the
+ *   --project <name>        managed project to run against (default gitpulse, an
+ *                           independent repo; NEVER run against mdtoc — it is
+ *                           committed inside forge itself). betterado is the
  *                           live-ADO tier.
  *   --idea-file <path>      the initiative idea fed to the architect (forge-root
  *                           relative). Falls back to the corpus manifest body.
@@ -75,6 +75,7 @@ import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
+import { DEFAULT_PROJECT, buildOutcomeChecks } from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -93,7 +94,7 @@ function flag(name, def) {
 }
 const BASE_SHA = flag('base-sha', null);
 const SEND_BACK = argv.includes('--send-back');
-const PROJECT = flag('project', 'mdtoc');
+const PROJECT = flag('project', DEFAULT_PROJECT);
 const IDEA_FILE = flag('idea-file', null);
 // Live-resource projects (e.g. the betterado terraform provider stands up real
 // Azure DevOps resources) run longer + cost more than the creds-free default
@@ -410,39 +411,34 @@ function reflectWroteBrainTheme(project, runStartMs) {
   return { present: false, reason: `no theme in ${dir} written/updated since run start` };
 }
 
-/** The ADR 022 + S9 gate: outcome-only assertions (merge / dev-loop / tests / cost
- *  / reflect-writes-brain), plus a live-evidence check for live-resource projects
- *  and a release-evidence check when the project declares `releaseProcess`. */
+/** The ADR 022 + S9 gate: gathers the impure inputs (event log, project test
+ *  suite, `_queue/done/` existence, merged demo.json, project config) and
+ *  hands them to `buildOutcomeChecks` (scripts/lib/verify-outcomes.mjs), which
+ *  assembles the outcome-only assertions (merge / dev-loop / tests / cost /
+ *  reflect-writes-brain), plus a live-evidence check for live-resource
+ *  projects and a release-evidence check when the project declares
+ *  `releaseProcess`. */
 function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project, runStartMs }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
-  const checks = [
-    // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
-    // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
-    // returned null even on cleanly-merged cycles). Accept either signal.
-    { name: 'cycle reached merge (done)', pass: finalStatus === 'done' || existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)), detail: finalStatus === 'done' ? 'finalStatus=done' : (existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)) ? 'manifest in _queue/done/ (merged; bridge status unread post-merge)' : `finalStatus=${finalStatus}, manifest not in done/`) },
-    { name: 'dev-loop completed N/N work items', pass: wi.total > 0 && wi.complete === wi.total && wi.failed === 0, detail: `${wi.complete}/${wi.total} complete, ${wi.failed} failed` },
-    { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? `${tests.label} passed` : `${tests.label} FAILED`) : 'no test command — skipped' },
-    { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
-  ];
-  // S9: the reflect stage (3rd spine flow) must write the central project brain.
-  const rb = reflectWroteBrainTheme(project, runStartMs);
-  checks.push({ name: 'reflect wrote central project brain', pass: rb.present, detail: rb.reason });
+  // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
+  // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
+  // returned null even on cleanly-merged cycles). buildOutcomeChecks accepts either signal.
+  const manifestInDone = existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`));
+  const reflectTheme = reflectWroteBrainTheme(project, runStartMs);
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
-  if (REQUIRE_LIVE_EVIDENCE) {
-    const le = liveEvidenceFromDemo(repoPath, initiativeId, cycleId);
-    checks.push({ name: 'live demo evidence present (REST GET)', pass: le.present, detail: le.reason });
-  }
+  const liveEvidence = REQUIRE_LIVE_EVIDENCE ? liveEvidenceFromDemo(repoPath, initiativeId, cycleId) : undefined;
   // WS-A: release-bearing projects must prove the full release loop fired
   // (draft → finalised changelog committed → release.json record). Gated on
   // the project actually declaring `releaseProcess` — a non-release project is
   // unaffected (the check is not added).
   const releaseProcess = releaseProcessFromConfig(repoPath);
-  if (releaseProcess) {
-    const re = releaseEvidence(repoPath, cycleId, releaseProcess);
-    checks.push({ name: 'release finalised (changelog + release.json)', pass: re.present, detail: re.reason });
-  }
+  const releaseEv = releaseProcess ? releaseEvidence(repoPath, cycleId, releaseProcess) : undefined;
+  const checks = buildOutcomeChecks({
+    finalStatus, manifestInDone, wi, tests, cost, costCeiling: COST_CEILING,
+    reflectTheme, liveEvidence, releaseEvidence: releaseEv,
+  });
   return { checks, wi };
 }
 
