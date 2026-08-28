@@ -222,9 +222,26 @@ describe('flow-runner full run', () => {
     ]);
     assert.ok(!tracker.calls.includes('emitSyntheticArchitect'), 'architect node must NOT call emitSyntheticArchitect dep — it is runCycle\'s job');
 
-    // Every executor received the same CycleInput object
+    // Every executor received the same CycleInput object. Deep-equality to
+    // `input` never proved this (runFlow now threads one augmented object —
+    // `{...rawInput, shouldStopBeforeWorkItem}` — built once before any
+    // executor runs, so the received object is never `===` the caller's
+    // literal fixture). Assert the actual invariant instead:
+    assert.strictEqual(seenInputs.length, 5, 'all five executors must have been observed');
+
+    // 1. Reference identity across executors — that IS the "same object" guarantee.
     for (const seen of seenInputs) {
-      assert.strictEqual(seen, input, 'each executor must receive the same CycleInput object');
+      assert.strictEqual(seen, seenInputs[0], 'each executor must receive the same CycleInput object');
+    }
+
+    // 2. Every caller-supplied field survives unchanged onto the received object.
+    //    Iterate the caller's own keys so this does not rot when a field is added.
+    for (const key of Object.keys(input) as Array<keyof CycleInput>) {
+      assert.deepEqual(
+        seenInputs[0][key],
+        input[key],
+        `caller-supplied field "${String(key)}" must survive unchanged onto the CycleInput each executor received`,
+      );
     }
   });
 

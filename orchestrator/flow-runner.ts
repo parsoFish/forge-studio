@@ -512,17 +512,18 @@ export type FlowRunArgs = {
 // ---------------------------------------------------------------------------
 
 /**
- * Wrap the logger so every emitted event's cost_usd is fed to the CostTracker.
- * Returns a new EventLogger whose emit() intercepts cost and then delegates.
+ * Wrap the logger so every emitted event is fed to the CostTracker. Passes
+ * the WHOLE entry (not a bare cost_usd number) — M0-A Task 1: the tracker
+ * needs to see every event, cost-bearing or not, to apply the event-cost.ts
+ * restatement rule (a phase's first `iteration` event latches it, regardless
+ * of that particular event's own cost_usd).
  */
 function wrapLoggerForCost(logger: EventLogger, tracker: CostTracker): EventLogger {
   return {
     ...logger,
     emit(partial) {
       const entry = logger.emit(partial);
-      if (typeof entry.cost_usd === 'number' && entry.cost_usd > 0) {
-        tracker.addCost(entry.cost_usd);
-      }
+      tracker.noteEvent(entry);
       return entry;
     },
   };
@@ -1304,7 +1305,7 @@ const AGENT_BAND_EXECUTORS: Readonly<Record<BandGuardId, NodeExecutor>> = {
  */
 export async function runFlow({
   flow,
-  input,
+  input: rawInput,
   logger,
   deps: depOverrides,
   nodeBudgets,
@@ -1338,10 +1339,22 @@ export async function runFlow({
   // cost_ceiling_usd) wins over the flow's own ceiling when provided.
   const costTracker = new CostTracker({
     ceilingUsd: costCeilingUsd ?? flow.costCeilingUsd ?? 0,
-    initiativeId: input.initiativeId,
+    initiativeId: rawInput.initiativeId,
     logger,
   });
   const rateLimitGate = injectedGate ?? new RateLimitGate();
+
+  // M0-A Task 1: give the dev-loop node a way to consult the ceiling at a
+  // WORK-ITEM boundary — before a WI's worktree is created — instead of only
+  // at the next clean NODE boundary (costTracker.checkCeiling, below). Build
+  // this ONCE, here: CycleInput is threaded UNCHANGED to every executor (see
+  // the threading note above `runFlow`), so this shadows the destructured
+  // `rawInput` with a single augmented object rather than mutating it
+  // in place or rebuilding it per node.
+  const input: CycleInput = {
+    ...rawInput,
+    shouldStopBeforeWorkItem: () => costTracker.stopReasonBeforeNextWorkItem(),
+  };
 
   const order = topoSort(flow);
   const nodeById = new Map<string, FlowNode>(flow.nodes.map((n) => [n.id, n]));

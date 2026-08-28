@@ -15,10 +15,34 @@ import {
   CostCeilingError,
   WedgeKillError,
 } from './flow-budgets.ts';
+import type { EventLogEntry } from './logging.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Minimal cost-bearing EventLogEntry on a phase that never emits `iteration`
+ * (`orchestrator`) — under the event-cost.ts restatement rule, an unlatched
+ * phase has EVERY event counted, so feeding one of these per `addCost(N)`
+ * call keeps each case's arithmetic identical to the old API.
+ */
+let costEventSeq = 0;
+function costEvent(costUsd: number): EventLogEntry {
+  costEventSeq += 1;
+  return {
+    event_id: `cost-evt-${costEventSeq}`,
+    cycle_id: 'test-cycle',
+    initiative_id: 'x',
+    phase: 'orchestrator',
+    skill: 'flow-budgets.test',
+    event_type: 'end',
+    input_refs: [],
+    output_refs: [],
+    cost_usd: costUsd,
+    started_at: new Date(0).toISOString(),
+  };
+}
 
 /** Minimal EventLogger spy */
 function makeLogger() {
@@ -43,7 +67,7 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
 
-    tracker.addCost(5); // 50% — no event
+    tracker.noteEvent(costEvent(5)); // 50% — no event
     assert.strictEqual(logger.events.length, 0);
   });
 
@@ -51,13 +75,13 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
 
-    tracker.addCost(6); // 60% — no warn yet
+    tracker.noteEvent(costEvent(6)); // 60% — no warn yet
     assert.strictEqual(logger.events.filter(e => e.message === 'flow.cost-warn').length, 0);
 
-    tracker.addCost(1.5); // 75% — crosses 70% → ONE warn
+    tracker.noteEvent(costEvent(1.5)); // 75% — crosses 70% → ONE warn
     assert.strictEqual(logger.events.filter(e => e.message === 'flow.cost-warn').length, 1);
 
-    tracker.addCost(1); // 85% — still only one warn
+    tracker.noteEvent(costEvent(1)); // 85% — still only one warn
     assert.strictEqual(logger.events.filter(e => e.message === 'flow.cost-warn').length, 1);
   });
 
@@ -65,7 +89,7 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
 
-    tracker.addCost(7.5); // 75%
+    tracker.noteEvent(costEvent(7.5)); // 75%
 
     const warn = logger.events.find(e => e.message === 'flow.cost-warn');
     assert.ok(warn, 'warn event must be emitted');
@@ -78,7 +102,7 @@ describe('CostTracker', () => {
   it('checkCeiling() returns false when under ceiling', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
-    tracker.addCost(9); // 90%
+    tracker.noteEvent(costEvent(9)); // 90%
     assert.strictEqual(tracker.checkCeiling(), false);
   });
 
@@ -86,7 +110,7 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
 
-    tracker.addCost(10); // 100%
+    tracker.noteEvent(costEvent(10)); // 100%
 
     const stopped = tracker.checkCeiling();
     assert.strictEqual(stopped, true);
@@ -100,7 +124,7 @@ describe('CostTracker', () => {
   it('checkCeiling() after exceeding ceiling throws CostCeilingError', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 10, initiativeId: 'x', logger: logger as never });
-    tracker.addCost(11); // over ceiling
+    tracker.noteEvent(costEvent(11)); // over ceiling
 
     assert.throws(() => {
       tracker.checkCeiling({ throw: true });
@@ -111,7 +135,7 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 0, initiativeId: 'x', logger: logger as never });
 
-    tracker.addCost(1000);
+    tracker.noteEvent(costEvent(1000));
     const stopped = tracker.checkCeiling();
     assert.strictEqual(stopped, false);
     assert.strictEqual(logger.events.filter(e => e.message === 'flow.cost-warn').length, 0);
@@ -122,7 +146,7 @@ describe('CostTracker', () => {
     const logger = makeLogger();
     const tracker = new CostTracker({ ceilingUsd: 25, initiativeId: 'forge-cycle-init', logger: logger as never });
 
-    tracker.addCost(5); // $5 = 20% of $25 — no warn, no stop
+    tracker.noteEvent(costEvent(5)); // $5 = 20% of $25 — no warn, no stop
     assert.strictEqual(logger.events.length, 0);
     assert.strictEqual(tracker.checkCeiling(), false);
   });

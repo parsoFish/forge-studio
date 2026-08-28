@@ -13,7 +13,8 @@
  * Clocks are injectable for testability (RateLimitGate receives `now()`).
  */
 
-import type { EventLogger } from './logging.ts';
+import type { EventLogEntry, EventLogger } from './logging.ts';
+import { isAuthoritativeCostEvent } from './event-cost.ts';
 
 // ---------------------------------------------------------------------------
 // Custom errors
@@ -72,21 +73,38 @@ export type CostTrackerOptions = {
 };
 
 /**
- * Accumulates cost_usd from event entries.
+ * Accumulates AUTHORITATIVE cost_usd from event entries, under the
+ * `event-cost.ts` restatement rule (M0-A Task 1 — see that file's header for
+ * the rule and why it exists: iteration phases restate dollars on their
+ * per-WI and phase-rollup `end` events; naively summing every event
+ * double/triple-counts them).
  *
  * Usage:
- *   1. Call addCost(cost_usd) after each node completes.
- *   2. Call checkCeiling() at each clean phase boundary (after a node, before
+ *   1. Call noteEvent(entry) for EVERY emitted event (not just cost-bearing
+ *      ones — a phase's first `iteration` event must be seen to latch it,
+ *      regardless of that event's own cost_usd).
+ *   2. Call checkCeiling() at each clean NODE boundary (after a node, before
  *      spawning the next). Returns true if the ceiling was hit; pass
  *      `{ throw: true }` to throw CostCeilingError instead.
+ *   3. Call stopReasonBeforeNextWorkItem() at each WI boundary (before that
+ *      WI's worktree is created) — non-throwing, for a caller that must skip
+ *      rather than abort the whole node.
  *
  * Emits:
  *   - flow.cost-warn (once, at ≥70%) with { spentUsd, ceilingUsd, pct }
- *   - flow.cost-ceiling-stop (at ≥100%, on checkCeiling()) with { spentUsd, ceilingUsd, stoppedBeforeNode }
+ *   - flow.cost-ceiling-stop (at ≥100%, on checkCeiling() — every call while
+ *     over ceiling) with { spentUsd, ceilingUsd, stoppedBeforeNode }
+ *   - flow.cost-ceiling-stop (at ≥100%, on the FIRST
+ *     stopReasonBeforeNextWorkItem() call — never again, so a dispatch loop
+ *     that consults this once per remaining WI doesn't double-emit) with
+ *     { spentUsd, ceilingUsd, pct, stoppedBeforeWorkItem: true }
  */
 export class CostTracker {
   private spentUsd = 0;
   private warnEmitted = false;
+  private wiStopEmitted = false;
+  private readonly iterationPhases = new Set<string>();
+  private readonly spentByWorkItemMap = new Map<string, number>();
   private readonly ceilingUsd: number;
   private readonly initiativeId: string;
   private readonly logger: EventLogger;
@@ -102,10 +120,42 @@ export class CostTracker {
     return this.ceilingUsd > 0;
   }
 
-  /** Add cost from a completed node. May emit a cost-warn event. */
-  addCost(costUsd: number): void {
+  /**
+   * The single ingest point — replaces `addCost`. Applies the STREAMING form
+   * of the `event-cost.ts` restatement rule: a phase is latched into the
+   * iteration set the moment it emits its first `iteration` event; from then
+   * on only that phase's `iteration` events are authoritative spend — every
+   * other event on that phase (a per-WI `ralph.end`, the phase rollup `end`)
+   * restates dollars already counted and is skipped. A phase that never
+   * emits an `iteration` event (e.g. project-manager) stays unlatched and has
+   * every one of its cost-bearing events counted.
+   *
+   * This is equivalent to running `isAuthoritativeCostEvent` over the whole
+   * stream: every dev-loop `iteration` event for a WI is emitted before that
+   * WI's `ralph.end`, and the phase rollup `end` always comes last — by the
+   * time a restating event arrives its phase is already latched.
+   *
+   * Delegates the authoritative-event decision to `isAuthoritativeCostEvent`
+   * (`./event-cost.ts`) — the rule lives there once, not re-implemented here.
+   */
+  noteEvent(entry: EventLogEntry): void {
+    if (entry.event_type === 'iteration') {
+      this.iterationPhases.add(entry.phase);
+    }
+
     if (!this.enforcing) return;
+    if (!isAuthoritativeCostEvent(entry, this.iterationPhases)) return;
+
+    const costUsd = entry.cost_usd ?? 0;
     this.spentUsd += costUsd;
+
+    const workItemId = entry.metadata?.work_item_id;
+    if (typeof workItemId === 'string' && workItemId.length > 0) {
+      this.spentByWorkItemMap.set(
+        workItemId,
+        (this.spentByWorkItemMap.get(workItemId) ?? 0) + costUsd,
+      );
+    }
 
     const pct = (this.spentUsd / this.ceilingUsd) * 100;
 
@@ -126,6 +176,58 @@ export class CostTracker {
         },
       });
     }
+  }
+
+  /** ceilingUsd - spentUsd, under the same authoritative accounting as noteEvent. Infinity when not enforcing. */
+  get remainingUsd(): number {
+    return this.enforcing ? this.ceilingUsd - this.spentUsd : Infinity;
+  }
+
+  /**
+   * Authoritative spend keyed by `metadata.work_item_id`. Only events that
+   * pass `isAuthoritativeCostEvent` AND carry a non-empty `work_item_id`
+   * contribute — the phase rollup `end` (no work_item_id) never creates a
+   * bucket, and a restated per-WI `end` never double-credits its WI.
+   */
+  get spentByWorkItem(): ReadonlyMap<string, number> {
+    return this.spentByWorkItemMap;
+  }
+
+  /**
+   * Non-throwing ceiling check for a WORK-ITEM boundary — call before a WI's
+   * worktree is created so a dev-loop node can skip its remaining WIs one at
+   * a time instead of only being able to stop at the next NODE boundary
+   * (checkCeiling, below). Returns null while under the ceiling; at or over
+   * it, returns the `CostCeilingError` message text (the caller never
+   * throws — it skips the WI and keeps walking so later WIs also see the
+   * stop reason) and emits `flow.cost-ceiling-stop` exactly ONCE across
+   * however many times this is called after the breach.
+   */
+  stopReasonBeforeNextWorkItem(): string | null {
+    if (!this.enforcing) return null;
+    if (this.spentUsd < this.ceilingUsd) return null;
+
+    if (!this.wiStopEmitted) {
+      this.wiStopEmitted = true;
+      const pct = (this.spentUsd / this.ceilingUsd) * 100;
+      this.logger.emit({
+        initiative_id: this.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow.cost-ceiling-stop',
+        metadata: {
+          spentUsd: this.spentUsd,
+          ceilingUsd: this.ceilingUsd,
+          pct: Math.round(pct * 10) / 10,
+          stoppedBeforeWorkItem: true,
+        },
+      });
+    }
+
+    return new CostCeilingError(this.spentUsd, this.ceilingUsd).message;
   }
 
   /**
