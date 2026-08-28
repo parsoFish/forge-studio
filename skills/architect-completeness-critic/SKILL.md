@@ -38,11 +38,6 @@ left in the narrative instead of the drawers — before a human approves the
 plan a second time. Return ONLY the structured findings; never rewrite the
 plan yourself, and never invent a finding just to have something to say.
 
-This is the adversarial self-review the operator used to run by hand (a judge
-pass over a large multi-initiative migration roadmap that still shipped
-coverage gaps). It converts that class of defect into a gate BEFORE a plan is
-approved a second time, instead of an after-the-fact retrospective.
-
 ## Gap classes to hunt (in priority order)
 
 1. **Coverage closure.** If the idea/interview names an enumerated scope (a set
@@ -76,11 +71,7 @@ and contradictions, not preferences.
 
 ## Output contract
 
-Return ONLY the structured JSON the schema demands:
-
-```json
-{ "findings": [ { "severity": "high" | "medium" | "low", "initiativeId": "INIT-...", "gap": "one or two concrete, actionable sentences" } ] }
-```
+Return ONLY the structured findings JSON (shape enforced by `FINDINGS_SCHEMA` in `orchestrator/completeness-critic-runner.ts`).
 
 - `findings: []` means a clean pass — say so with an empty array, do not
   invent a finding to fill the slot.

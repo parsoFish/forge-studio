@@ -4,6 +4,7 @@ description: "forge demo render without --dir resolves demo.json relative to the
 category: antipattern
 created_at: '2026-06-07'
 updated_at: '2026-06-07'
+status: historical
 ---
 
 # `forge demo render` cwd trap — `--dir` required

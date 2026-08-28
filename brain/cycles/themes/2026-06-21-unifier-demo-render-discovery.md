@@ -13,6 +13,7 @@ keywords:
   - tooling-discoverability
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
+status: historical
 ---
 
 # Unifier wastes ~15 Bash probes discovering forge demo render conventions

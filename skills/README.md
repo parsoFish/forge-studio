@@ -40,7 +40,7 @@ system skills carry `library: false`.
 ### Demo authoring
 | Skill | Surface | Purpose |
 |---|---|---|
-| [`demo-agent`](./demo-agent/SKILL.md) | unattended | Author the structured demo.json + PR body; prove ACs (R4-07; the develop flow's successor to the retired unifier) |
+| [`demo-agent`](./demo-agent/SKILL.md) | unattended | Author the structured demo.json + PR body; prove ACs (R4-07) |
 | [`demo-builder`](./demo-builder/SKILL.md) | interactive | Author a project's reusable demo-generation skill |
 
 ### Review & audit

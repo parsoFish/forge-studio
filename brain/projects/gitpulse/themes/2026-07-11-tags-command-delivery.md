@@ -6,6 +6,7 @@ keywords: [tags, release-cadence, subcommand, readTags, computeTagSpans, git-sea
 related_themes: [2026-07-11-csv-output-flag-delivery, 2026-07-11-exclude-path-filter-single-seam]
 created_at: 2026-07-11
 updated_at: 2026-07-11
+status: historical
 ---
 
 ## Pattern

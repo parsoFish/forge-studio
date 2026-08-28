@@ -4,6 +4,7 @@ description: Unifier spent ~40 Bash calls finding the correct forge demo render 
 category: antipattern
 created_at: 2026-06-16T00:00:00.000Z
 updated_at: 2026-06-16T00:00:00.000Z
+status: historical
 ---
 
 ## Antipattern

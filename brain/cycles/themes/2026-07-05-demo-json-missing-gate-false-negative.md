@@ -4,6 +4,7 @@ description: The pr_self_contained sub-check emits "demo.json missing" across al
 category: antipattern
 created_at: 2026-07-09T22:03:49.533Z
 updated_at: 2026-07-09T22:03:49.533Z
+status: historical
 ---
 
 ## What happened

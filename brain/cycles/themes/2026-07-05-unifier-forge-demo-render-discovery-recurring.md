@@ -4,6 +4,7 @@ description: The unifier re-discovers the correct `forge demo render --project-d
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 ## Observation

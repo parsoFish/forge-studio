@@ -482,8 +482,8 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
 ### 12. R4-07 demo agent — as-built follow-ups (2026-07-24)
 
 - **Capture children inherit the full orchestrator env (accepted + recorded).** The orchestrated
-  capture spawn (`orchestrator/phases/orchestrated-capture.ts` → `forge demo capture`, used by both the
-  unifier gate and the new demo-agent pipeline) passes `{ ...process.env, FORGE_CAPTURE_NONCE }`, so
+  capture spawn (`orchestrator/phases/orchestrated-capture.ts` → `forge demo capture`, used by the
+  demo-agent pipeline) passes `{ ...process.env, FORGE_CAPTURE_NONCE }`, so
   agent-authored checkpoint `command`s execute with whatever credentials the serve process carries
   (gh token; ADO PATs on betterado runs). This is **partially by design** — live-evidence captures
   legitimately need project creds (the betterado live-REST tier) — and R5-02's `buildChildEnv`
@@ -505,20 +505,9 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
   (describe-don't-quote for secret material) — prompt-level only; structural redaction (a
   secret-pattern scrub at harvest) is a cheap future hardening if a real leak is ever observed.
 
-### 13. R4-08-F2 / R2-04 — as-built follow-ups (2026-07-25)
-
-- **Dead `code-fix` UWI dispatch (`runCodeFixUwi`) awaits R4-01-F4 removal.** ADR-040
-  deleted the only producer of `kind: code-fix` unifier work-items, so the
-  `kind === 'code-fix'` branch + `runCodeFixUwi` (~120 lines) in
-  `orchestrator/phases/developer-loop.ts` are unreachable in shipping content (the
-  unifier queue now holds only the static packaging `UWI-1`). Left in place rather
-  than surgically excised from the hot-path dev-loop file — the whole unifier node is
-  retired wholesale at R4-01-F4, which is the clean home for the deletion. Not a
-  runtime risk (no producer, no test exercises it). *Owner R4-01-F4.*
-
 ## Strengths worth preserving (don't regress these)
 
-- The **dual-boundary gate works as designed** — the unifier catches a red
+- The **dual-boundary gate works as designed** — the merge-boundary gate catches a red
   full-suite baseline the scoped per-WI gates can't see. Nothing ships red.
 - **Brain-path SSOT** holds up end-to-end through real reflections; `forge brain
   lint` stays at 0 errors.

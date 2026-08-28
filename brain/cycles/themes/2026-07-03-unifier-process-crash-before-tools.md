@@ -4,6 +4,7 @@ description: UWI-4 unifier crashed twice (exit code 1) with tool_use_count=0; bo
 category: antipattern
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

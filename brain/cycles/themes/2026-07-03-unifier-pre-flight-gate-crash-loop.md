@@ -4,6 +4,7 @@ description: "review-gate-r3.sh asserted live evidence before the unifier agent 
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
 ---
 
 # Unifier pre-flight gate crash loop

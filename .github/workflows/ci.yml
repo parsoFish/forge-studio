@@ -61,6 +61,9 @@ jobs:
       - name: Docs claims check
         run: node scripts/check-docs-claims.mjs
 
+      - name: Identity check (retired vocabulary)
+        run: node scripts/check-identity.mjs
+
       - name: Request-path sinks ratchet check
         run: node scripts/check-request-path-sinks.mjs
 

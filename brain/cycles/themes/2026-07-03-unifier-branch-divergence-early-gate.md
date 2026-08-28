@@ -4,6 +4,7 @@ description: Unifier ran 15 iterations ($12.7) before detecting branch-divergenc
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
 ---
 
 # Unifier branch-divergence detection should gate-check before iteration work

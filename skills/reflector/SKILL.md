@@ -38,7 +38,7 @@ The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders th
 
 ## Required first action
 
-Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `brain/projects/<project>/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
+Invoke `brain-query` BEFORE writing anything (ADR 010). First tool calls MUST be `Read`/`Grep`/`Glob` against `brain/...` or `brain/projects/<project>/...` paths — at minimum `brain/projects/<project>/profile.md` and any prior `brain/projects/<project>/themes/*.md` matching a pattern observed in the event log. The orchestrator records `tool_use.brainReads` and **fails the reflection if zero brain reads are recorded** (production gates on `brain_consulted`). Unconditional, not "when unsure".
 
 ## Inputs
 
@@ -51,7 +51,7 @@ Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`G
 ## Outputs
 
 - `_logs/<cycle-id>/retro.md` — three sections: `## Self-reflection`, `## User questions`, `## User feedback`.
-- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category` (`pattern` | `antipattern` | `decision` | `operation` | `reference`), `keywords` (flow-style list of 5–10 lowercase search terms — feeds brain-query slug/one-liner matching and the contradiction lint), `created_at`, `updated_at`, and `related_themes` (flow-style list of sibling theme slugs — see Stage 4 linking; `[]` only if genuinely standalone). Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`, and — when `related_themes` is non-empty — a `## See also` section mirroring it as `[[slug]] — why` bullets. This matches the canonical format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md).
+- Theme pages in `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md` — one file per significant pattern. Required frontmatter: `title`, `description`, `category`, `keywords` (flow-style list of 5–10 lowercase search terms — feeds brain-query slug/one-liner matching and the contradiction lint), `created_at`, `updated_at`, and `related_themes` (flow-style list of sibling theme slugs — see Stage 4 linking; `[]` only if genuinely standalone). `keywords` and `related_themes` are mandatory, not best-effort: a prior reflector run dropped both and never indexed its themes, costing a 132-theme brain all of its theme↔theme edges (ADR 018). Body must include `## Sources` listing ≥1 path resolving to `_logs/<cycle-id>/...` or `brain/cycles/_raw/<cycle-id>.md`, and — when `related_themes` is non-empty — a `## See also` section mirroring it as `[[slug]] — why` bullets. This matches the canonical format in [`brain/cycles/themes/README.md`](../../brain/cycles/themes/README.md).
 - `brain/cycles/_raw/<cycle-id>.md` (cycle log archived). Required frontmatter (write these placeholder values exactly — the orchestrator post-processes to compute `retention` and populate `cited_by`; do NOT compute these yourself):
   ```yaml
   ---
@@ -135,11 +135,9 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT). Two routing decisions apply, in order:
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT, per the three-brain model, ADR 018). Two routing decisions apply, in order:
 
-    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → its **project KB** `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
-
-    Q5-B framing: a lesson about **running the develop flow** (repeated actions, wedges, dev-loop/unifier behaviour that recurs across projects) lands in the **flow's KB** — `brain/cycles/`, the brain bound to the `forge-develop` flow — via a `pattern`/`antipattern`/`operation` category in (b). A lesson about **forge engineering itself** (a design decision, a durable reference) lands in **`brain/forge-dev/`** via `decision`/`reference`. Project lessons stay in the project KB regardless of category.
+    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → its **project KB** `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
 
     **(b) For forge-wide themes, category decides the sub-wiki — this is enforced by `checkCategoryScope` (`cli/brain-lint.ts`) and a mismatch is a lint error, not a style choice:**
     | `category` frontmatter | Brain dir |

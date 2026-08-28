@@ -113,6 +113,9 @@ test('help: advertises only init/studio/studio lint, not the retired verbs', () 
     assert.match(help, new RegExp(kept), `help should advertise '${kept}'`);
   }
   assert.match(help, /forge studio lint/, 'help should advertise the studio lint gate');
+  // DEC-6 retires cycle management from the CLI, not the contract check: the operator
+  // runs `forge preflight <project>` directly, so it must be discoverable.
+  assert.match(help, /forge preflight/, 'help should advertise the contract check');
 });
 
 /**

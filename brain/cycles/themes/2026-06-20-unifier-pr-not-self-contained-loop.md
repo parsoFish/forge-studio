@@ -4,6 +4,7 @@ description: "The unifier's pr-not-self-contained gate fired 23 times across two
 category: antipattern
 created_at: "2026-06-20"
 updated_at: "2026-06-20"
+status: historical
 ---
 
 ## What happened

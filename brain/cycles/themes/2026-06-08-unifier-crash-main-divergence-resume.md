@@ -4,6 +4,7 @@ description: When a sibling initiative merges to main between cycle start and un
 category: pattern
 created_at: 2026-06-08T00:00:00.000Z
 updated_at: 2026-07-10T10:08:05.000Z
+status: historical
 ---
 
 # Unifier crash on main-divergence invariant

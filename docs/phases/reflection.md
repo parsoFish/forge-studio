@@ -58,7 +58,7 @@ The reflector does NOT move the manifest to `_queue/done/`. The reviewer already
 ## Order relative to the release final-loop (C10)
 
 Reflection is the **last** stage of a cycle and fires **post-merge**. The
-release-finalizer (contract C10, review-loop doc) runs **earlier** — between
+release-finalizer (contract C10) runs **earlier** — between
 operator-approve and the merge — so by the time reflection runs the release is
 already finalised + merged. Reflection does not interact with the release flow;
 it only reads the merged tree + the event log.

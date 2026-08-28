@@ -48,13 +48,10 @@ standalone-dispatchable roster: `resolveDispatchableAgent`
 `demo-agent`/`adversarial-review` are. So `forge agent dispatch
 contract-check` or `POST /api/agents/contract-check/run` DOES reach
 `runAgent` and spawns this def as a bare one-shot agent — there is no
-`onboard-preflight` interception on that path. This is a pre-existing
-platform property, not a gap unique to this def: `project-manager` and
-`reflector` are standalone-dispatchable the same way. What limits the blast
+`onboard-preflight` interception on that path. What limits the blast
 radius is `budgets.maxBudgetUsd: 0` below — the SDK aborts the spawn as soon
 as any cost accrues (`result` subtype `error_max_budget_usd`), capping a
-standalone run to at most one turn's spend. That is not a literal
-zero-cost no-op, but it is a hard, fail-fast ceiling, not an uncapped run.
+standalone run to at most one turn's spend.
 
 This is deliberate on the flow path (ADR-036): the orchestrator runs gates;
 an agent never self-certifies its own contract-check there. Letting an LLM
@@ -73,10 +70,7 @@ becoming an uncapped unattended spawn). On the flow path they are inert:
 They are NOT inert overall — a standalone dispatch (see above) reads exactly
 these fields to build the one-shot spawn, which is why `budgets.maxBudgetUsd:
 0` matters in practice: it is the cap that keeps that spawn from running
-away. If a future revision of this gate ever DOES spawn an agent on the flow
-path too (e.g. to draft a human-readable remediation summary alongside the
-structural report), that would be a deliberate, separately-reviewed change —
-not something this file's presence implies is already happening.
+away.
 
 ## What actually produces the gate's outcome
 
@@ -87,5 +81,5 @@ ids in `runPreflight`'s own clause order, and emits them as
 (`report.ok === false`) terminates the flow walk early and routes the
 manifest to `ready-for-review`, exactly as the develop flow's merge-boundary
 gate does on a red full-suite baseline. `formatPreflightReport`
-(`cli/preflight.ts`) renders the same report as human-readable text, for a
-future surface that wants it — not consumed by this def.
+(`cli/preflight.ts`) renders the same report as human-readable text — not
+consumed by this def.

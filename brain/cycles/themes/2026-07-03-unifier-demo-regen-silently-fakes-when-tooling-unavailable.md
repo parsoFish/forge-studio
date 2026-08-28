@@ -4,6 +4,7 @@ description: When forge demo capture/render tooling is unavailable in the worktr
 category: antipattern
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

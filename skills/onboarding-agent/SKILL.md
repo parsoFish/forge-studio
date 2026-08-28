@@ -47,12 +47,12 @@ report green, not to claim it did.
    against `projects/<name>`.
 
 2. **Declare the quality gate (hard clause C1) FIRST.** Detect the project's
-   fast, deterministic test command (a single command, ~≤10s, no `&&`/`;`
-   chaining, no e2e/integration markers) from `package.json` `scripts.test`, a
-   `Makefile`, the language's convention, etc. Write it to
-   `.forge/project.json` `testProcess.local.cmd` (create the file if absent).
-   **This must precede any AGENTS.md authoring** — the instructions-coverage
-   check only engages once the gate command is declared.
+   fast, deterministic test command from `package.json` `scripts.test`, a
+   `Makefile`, or the language's convention (shape criteria the gate must meet:
+   `forge-onboard-project` Step 4 / `docs/schemas/project-config.schema.json`).
+   Write it to `.forge/project.json` `testProcess.local.cmd` (create the file
+   if absent). **This must precede any AGENTS.md authoring** — the
+   instructions-coverage check only engages once the gate command is declared.
 
 3. **Author AGENTS.md from the seed library (R4-02-F4).** After the gate is
    declared, run `forge instructions compose --project <name>`. When the project
@@ -102,8 +102,6 @@ report green, not to claim it did.
 ## Invariants
 
 - **Never claim contract-green without `forge preflight` exit 0** backing it.
-- **Gate before instructions:** C1's command must be declared before AGENTS.md
-  is authored, or the coverage check silently passes on presence alone.
 - **Bounded, not infinite:** `forge preflight converge` caps its own iterations;
   if it can't converge, report the `stopReason` — do not loop by hand forever.
 - **Idempotent edits only:** every fix must be safe to re-apply (the auto-fixers

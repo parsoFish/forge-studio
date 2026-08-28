@@ -234,12 +234,12 @@ nodes:
   - { id: ingest, agent: brain-ingest }
   - { id: review, gate: verdict }          # gate-only node (human moment; no agent)
   - { id: dev, agent: developer-ralph, fanOut: work-items }   # fan-out over artifact
-  - { id: unifier, agent: developer-unifier, resumable: true }
+  - { id: demo, agent: demo-agent, resumable: true }
 
 edges:
   - { from: ingest, to: review, artifact: report }
   - { from: review, to: dev,    artifact: work-items }
-  - { from: dev,    to: unifier, artifact: wi-branches }
+  - { from: dev,    to: demo, artifact: wi-branches }
 
 triggers: []
 ```
@@ -252,7 +252,7 @@ triggers: []
 | `agent` | if no `gate` | slug of an agent in `skills/` |
 | `gate` | if no `agent` | human gate id (`plan`, `verdict`) |
 | `fanOut` | no | upstream artifact name whose items drive multiplicity — the agent runs once per item (in its declared isolation). The target `agent` MUST be **fanout-capable** (its SKILL.md declares a `fanout:` block, R2-03-F2); `forge studio lint` errors otherwise. |
-| `resumable` | no | node can be re-entered after partial failure (unifier pattern) |
+| `resumable` | no | node can be re-entered after partial failure — e.g. the develop flow's `demo` node |
 
 **Edge `artifact`** names the markdown artifact written by the `from` node and read by the `to` node. Every artifact must be greppable (ADR-007).
 

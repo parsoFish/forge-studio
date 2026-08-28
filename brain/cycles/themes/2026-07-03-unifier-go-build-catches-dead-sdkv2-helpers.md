@@ -4,6 +4,7 @@ description: When framework-migration WIs leave shared SDKv2 helper functions wi
 category: antipattern
 created_at: 2026-07-03T22:00:00.000Z
 updated_at: 2026-07-03T22:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

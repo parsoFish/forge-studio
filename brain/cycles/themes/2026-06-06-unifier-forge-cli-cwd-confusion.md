@@ -4,6 +4,7 @@ description: The unifier runs inside the project worktree but forge CLI commands
 category: antipattern
 created_at: 2026-06-06T02:36:29Z
 updated_at: 2026-06-06T02:36:29Z
+status: historical
 ---
 
 # Unifier probes forge CLI from worktree cwd, not forge root

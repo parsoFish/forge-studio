@@ -4,6 +4,7 @@ description: First unifier wrote demo.json with version 1.2.1 and diffStat 84 fi
 category: antipattern
 created_at: 2026-07-03T00:00:00.000Z
 updated_at: 2026-07-03T00:00:00.000Z
+status: historical
 ---
 
 ## Pattern observed

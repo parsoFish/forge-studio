@@ -187,8 +187,8 @@ anything — fixes belong to the develop agent, via the send-back loop
 
 ## Constraints
 
-- Read-only over the project. Never edit code, never touch `_queue/`, never
-  write brain files. The only file this skill writes is
+- Read-only over the project (ADR-036). Never edit code, never touch
+  `_queue/`, never write brain files. The only file this skill writes is
   `.forge/review-findings.json`.
 - No vibes. Every finding carries a `file:line` and an excerpt; a finding
   without one does not go in the file.

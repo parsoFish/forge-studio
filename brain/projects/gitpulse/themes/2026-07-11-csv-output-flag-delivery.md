@@ -18,6 +18,7 @@ keywords:
 related_themes: [2026-06-21-json-output-flag-delivery, 2026-06-21-acceptance-gate-covers-only-headline-output, 2026-07-11-tags-command-delivery]
 created_at: 2026-07-11T00:00:00.000Z
 updated_at: 2026-07-11T00:00:00.000Z
+status: historical
 ---
 
 # `--csv` flag: delivery pattern

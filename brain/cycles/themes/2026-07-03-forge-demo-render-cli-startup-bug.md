@@ -4,6 +4,7 @@ description: A module-level import of pm-invocation.ts in the forge CLI resolves
 category: antipattern
 created_at: 2026-07-03
 updated_at: 2026-07-03
+status: historical
 ---
 
 ## Problem

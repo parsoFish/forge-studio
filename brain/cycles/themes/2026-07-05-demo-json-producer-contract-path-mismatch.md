@@ -4,6 +4,7 @@ description: The unifier writes demo.json to `forge/history/<id>/demo/demo.json`
 category: antipattern
 created_at: 2026-07-05
 updated_at: 2026-07-05
+status: historical
 ---
 
 ## What happened

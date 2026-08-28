@@ -6,6 +6,7 @@ keywords: [serviceendpoint, dead-helper-functions, go-build-failure, second-devl
 related_themes: [provider-registration-dedup-index, 2026-07-01-sdkv2-deregister-omission-duplicate-resource-type, 2026-07-03-sdkv2-dead-files-omission-4th-cycle, 2026-07-03-sdkv2-dead-files-5th-cycle-dashboard-extension, 2026-07-03-sdkv2-dead-files-wiki-migration-6th-cycle, 2026-07-03-sdkv2-dead-file-deletion-unenforced, 2026-07-03-build-package-sdkv2-dead-files-not-deleted]
 created_at: 2026-07-03T22:00:00.000Z
 updated_at: 2026-07-03T22:00:00.000Z
+status: historical
 ---
 
 ## What happened

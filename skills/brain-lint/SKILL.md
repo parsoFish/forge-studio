@@ -10,10 +10,9 @@ model: claude-haiku-4-5
 # Brain — Lint
 
 > The single source of truth for what brain-lint does is the executable
-> `orchestrator/brain-lint.ts` (CLI: `forge brain lint`). This skill is a
+> `brain-lint.ts` (CLI: `forge brain lint`). This skill is a
 > **thin invoker** — it runs the CLI, parses the output, and writes the
-> cycle-scoped report. The rules live in [`brain/LINT.md`](../../brain/LINT.md);
-> the implementation lives in `orchestrator/brain-lint.ts`.
+> cycle-scoped report. The rules live in [`brain/LINT.md`](../../brain/LINT.md).
 
 ## Single responsibility
 
@@ -51,28 +50,6 @@ single-file | cycle-touched-themes | cleanup-dry-run`. Default is `full`.
 - `brain-lint.error` — one event per rule violation that can't be auto-fixed.
 - `brain-lint.end` — summary counts + exit code.
 
-## Test coverage
-
-> Note (2026-05-25): the `benchmarks/` harnesses (formerly shared with `brain-ingest` and `brain-query` under `benchmarks/brain/`) were removed. The lint checks are now covered by unit tests; phase quality is judged on real merged cycles.
-
-The checks implemented in `cli/brain-lint.ts` each have unit
-tests in `cli/brain-lint.test.ts` (tests on every check +
-the contradictions stretch-goal + scope filtering).
-
-## The checks (defined in `cli/brain-lint.ts`)
-
-| Check | What it catches |
-|---|---|
-| `checkFrontmatter` | Missing required fields; category outside whitelist (`pattern\|antipattern\|decision\|operation\|reference`); `created_at > updated_at`. |
-| `checkIndexSync` | Theme with `category: X` not listed in `<X>s.md`, or listed multiple times. |
-| `checkSourceLinks` | Broken relative links + wikilinks in theme bodies. |
-| `checkStaleness` | Cited paths missing from the project repo (resolved via `projects/<n>/brain/profile.md` → `<forgeRoot>/projects/<n>/`). Per council 01 staleness-mechanism fix: NOT against the forge root. |
-| `checkOrphans` | Themes not reachable from `INDEX.md` → category index → theme. |
-| `checkLengthSoftCap` | > 60 lines warn; > 100 lines error (per `brain/LINT.md` rule 3). |
-| `checkCleanupCandidates` | Themes that are good candidates for cleanup (dry-run scope). |
-| `checkContradictions` (warn-only) | Stretch: pattern + antipattern with ≥3 keyword overlaps. Per plan 01 downgrade — staleness is the load-bearing contradiction defence. |
-| `checkReflectorLoss` (advisory `flag`) | `_queue/done/` initiatives with no matching cycle archive in `brain/cycles/_raw/` (reflector crash/skip going unnoticed). No-ops when `_queue/done/` doesn't exist. |
-
 ## Process
 
 1. **Invoke the CLI** with the appropriate `--scope`.
@@ -83,7 +60,7 @@ the contradictions stretch-goal + scope filtering).
 
 ## Constraints
 
-- **Single source of truth.** Do not reimplement any of the 7 checks. If a check needs improving, change `orchestrator/brain-lint.ts` (with a test added first per the test-first discipline used to build it).
+- **Single source of truth.** Do not reimplement any of the checks. If a check needs improving, change `brain-lint.ts` (with a test added first per the test-first discipline used to build it).
 - **Never delete content.** Lint may flag or auto-fix structurally (index sync). Deletion is `brain-ingest` territory.
 - **Conservative on auto-fix.** When in doubt, flag rather than fix. `--fix` mode is intentionally limited (Tier B remappings stay with the operator per the standing destructive-instruction rule).
 - **Idempotent.** Running lint twice in a row produces the same exit code and the same findings (modulo new lint events emitted by the run itself).
