@@ -21,14 +21,6 @@ ad-hoc delete commands. The skill is conservative: it produces a removal
 This is **not** a phase agent — it carries no `runtime` block and is not a
 flow node. It is an operator-invoked housekeeping skill.
 
-## Why rule-based, not a delete-list
-
-A hardcoded delete-list rots the moment a new kind of scratch file appears,
-and gives no way to reason about *why* a path is cruft. A rule set lets the
-operator read each rule, see what it matches today, and add/remove rules as
-the tree evolves. New cruft of a known shape is swept automatically; novel
-cruft surfaces as an unmatched-but-suspicious report, never a silent delete.
-
 ## Rule set (explicit, adjustable)
 
 Each rule is `id · match · rationale · action`. Match by **shape**, resolve

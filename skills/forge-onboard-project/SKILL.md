@@ -17,10 +17,8 @@ The contract now has **two faces that must both be green**:
   project builder, checked by `ContractReadiness`): `northStar`, `instructions`,
   `demoProcess`, `skills`, `kb`.
 - **Face B — the operational clauses** (`forge preflight`), grouped by the six
-  processes (test / demo / instructions / release / build / kb): C1/C1b/C7
-  (test), DEMO/DEMO-SKILL/DEMO-ALIGN (demo), C5/C8 incl. its coverage check
-  (instructions), C10 (release), BUILD/ARTIFACTS (build), plus the structural
-  invariants C2/C4/C6/C9 + BRAIN. See `docs/forge-project-contract.md`.
+  processes (test / demo / instructions / release / build / kb) — see the
+  process table in `docs/forge-project-contract.md` for the clause map.
 
 A project is **flow-ready** only when both are satisfied (the UI's
 `data-flow-ready` requires all five Studio-field checks AND zero failing hard
@@ -36,17 +34,10 @@ prove them with one read-only live call.
 
 ### Step 1 — Choose the committed-artifact home (`artifactRoot`)
 Decide where the project's COMMITTED forge artifacts live. `artifactRoot` now scopes
-**only** the in-repo demo + project-action skills. Default `"."` keeps the legacy
-layout (`demo/` + `skills/` at the project root). For a single visible home out of the
-source tree, set `"artifactRoot": "forge"` in `.forge/project.json` — then:
-- `forge/history/<initiative-id>/demo/` — the per-cycle in-PR demo (committed for review).
-- `forge/skills/` — the project-action skills.
-
-Brain 3 (`profile.md` + `themes/`) and the durable cycle record (plan + verdict) are
-**forge-owned and central** in the forge repo — `brain/projects/<name>/` and
-`_logs/<cycleId>/artifacts/` respectively (ADR 035) — NOT in the project repo.
-`artifactRoot` must be a clean relative path (no leading `/`, no `..`). Runtime
-scratch (`_architect/`, worktree `demo/<id>/`, `.forge/` runtime dir) stays
+**only** the in-repo demo + project-action skills — default, shape, path rules and
+the ADR 035 forge-owned/central split are the `artifactRoot` field's own contract
+(`docs/schemas/project-config.schema.json`, enforced by `validateProjectConfig`).
+Runtime scratch (`_architect/`, worktree `demo/<id>/`, `.forge/` runtime dir) stays
 gitignored regardless.
 
 ### Step 2 — Author the project as a Studio object (Face A)
@@ -62,7 +53,7 @@ Set in `.forge/project.json` (or via the UI project builder):
 ContractReadiness checks these five; all must pass for flow-ready.
 
 ### Step 3 — Assess the operational clauses (Face B)
-Run `forge preflight <project>` (C1–C9 + DEMO + BRAIN). Then **manually check the
+Run `forge preflight <project>`. Then **manually check the
 facets preflight does not enforce**:
 - C1 *discrimination*: run the gate on a clean tree — it must **fail** (no work
   yet). If it passes, it's hollow and is rejected at iter-0.
@@ -80,23 +71,19 @@ A gate that is fast, deterministic, green at HEAD, and **scoped to the unit of
 change** (empty ⇒ fail / real-work ⇒ pass). Map to the form (UI render test • API
 contract test • library/CLI unit test • monorepo package-scoped gate — never a
 repo-wide wildcard). Declare as ONE command in the `.forge/quality_gate_cmd`
-sidecar and/or `testProcess.local.cmd` in `.forge/project.json` — the sidecar
-single-sources `testProcess.local.cmd` when the JSON omits it; when both are
-present, the JSON wins. Verify fail-then-pass by hand. If one command cannot
+sidecar and/or `testProcess.local.cmd` in `.forge/project.json` (precedence rule:
+`docs/schemas/project-config.schema.json`). Verify fail-then-pass by hand. If one command cannot
 express the gate, commit a gate script authored from
 [`docs/gate-script-template.md`](../../docs/gate-script-template.md) — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
 gate).
 
 ### Step 5 — Hermetic change-capture (C2)
-`.gitignore` so `git add -A` captures only intended source: forge scratch
-(`.forge/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`), build artifacts + generated
-output (binaries, bundles, coverage), and force-track required config inside an
-ignored dir (`.forge/project.json`). Acceptance: clean build ⇒ `git status` shows
-nothing but intended source. **Note:** in the project repo only the in-PR demo
-(`<artifactRoot>/history/<id>/demo`) and project-action skills (`<artifactRoot>/skills/`)
-are committed; Brain 3 and the durable cycle record are **forge-owned and central**
-(ADR 035).
+`.gitignore` so `git add -A` captures only intended source: forge scratch (the
+exact path list is `forge preflight`'s C2 check, ADR 017), build artifacts +
+generated output (binaries, bundles, coverage), and force-track required config
+inside an ignored dir (`.forge/project.json`). Acceptance: clean build ⇒
+`git status` shows nothing but intended source.
 
 ### Step 6 — Project-action skills (under `<artifactRoot>/skills/`)
 Capture the project's recurring actions as skills forge agents read by path:
@@ -152,14 +139,10 @@ round-trip proof, idempotency gate, clean destroy). **Confirm `forge preflight
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)
 plus a confirmation layer (create→confirm→destroy, prefixed/randomized names,
 orphan sweep, creds out-of-band → env). Make the per-WI testing contract structural
-via three `.forge/project.json` seams:
-- **`testProcess.acceptance: { match, required, requiresEnv }`** — `match` identifies
-  the live-acc suite in a WI gate; `required: true` hard-fails the cycle if no live-acc
-  WI; `requiresEnv` errors fast (not false-pass) when creds are absent.
-- **`standing_work_item_acs: [...]`** — the live-proof AC (apply → API-read assert →
-  idempotency re-plan → clean destroy) + the CI-equivalent push AC, appended to every WI.
-- **`testProcess.ci.unsetEnv: [...]`** — env to strip so `testProcess.ci.cmd` mirrors
-  GitHub CI even though the serve env sets the live-test trigger.
+via three `.forge/project.json` fields — `testProcess.acceptance.{match,required,
+requiresEnv}`, `standing_work_item_acs`, `testProcess.ci.unsetEnv` — each field's
+exact contract is `docs/schemas/project-config.schema.json` (C7, ADR 017 amendment
+2026-05-31).
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
 test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
 teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a
@@ -169,11 +152,12 @@ read-back assertion on every written field.
 If the project ships versioned releases (a library, CLI, provider, or any package
 consumers depend on a version of), opt into the release flow by declaring
 **`releaseProcess`** in `.forge/project.json` (see
-`studio/starters/project.json.example`):
+`studio/starters/project.json.example`; each field's exact contract —
+including that tag/publish are CI's job, never a forge step kind — is
+`docs/schemas/project-config.schema.json`, C10):
 - **`changelogPath`** — the changelog file (default `CHANGELOG.md`). Seed it with a
   `## [Unreleased]` heading if absent.
-- **`steps`** — `{ kind: docs|changelog|version, phase: in-cycle|pre-merge, text,
-  command? }`. At minimum a `changelog`/`in-cycle` step (the DRAFT every WI writes)
+- **`steps`** — at minimum a `changelog`/`in-cycle` step (the DRAFT every WI writes)
   and the `pre-merge` steps the finaliser runs (doc regen, version bump). Map each
   to the project's real tool (the `command`).
 - **`versionFile` / `docsDir`** — where the version lives and where docs live.
@@ -181,8 +165,7 @@ consumers depend on a version of), opt into the release flow by declaring
 Then **install the release CI workflow**: copy
 `studio/starters/release-workflow.yml.example` to
 `<project>/.github/workflows/release.yml`, fill the two TODO knobs (how to read the
-committed version; optional publish). Forge SHIPS this workflow but NEVER runs
-tag/publish — CI owns that off merge-to-main. The forge release-finalizer commits
+committed version; optional publish). The forge release-finalizer commits
 the finalised changelog + version bump to the PR branch before merge; the workflow
 tags + releases on merge.
 

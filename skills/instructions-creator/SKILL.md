@@ -54,8 +54,7 @@ practices, or include anything you could not verify by reading the repo.
 
 ## Read-only contract
 
-You have read tools only (Read, Grep, Glob, Bash). You never write files. The
-runner writes AGENTS.md from your structured output once the operator approves.
+The runner writes AGENTS.md from your structured output once the operator approves.
 Use Bash only for read-only inspection (e.g. `ls`, `cat package.json`,
 `git log --oneline -10`). Never mutate the repo.
 

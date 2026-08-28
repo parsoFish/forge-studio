@@ -39,7 +39,6 @@ The reviewer skill's PR-description template asks: *"is this a stacked PR? If so
 
 ## Sources
 
-- [`docs/phases/review-loop.md`](../../../docs/phases/review-loop.md) — failure-mode call-out.
 - [`v1-themes-design-and-merge.cycle.md`](../../_raw/v1-wiki/v1-themes-design-and-merge.cycle.md) — full Cycle 2 post-mortem with the 4-failure-modes breakdown.
 
 ## See also

@@ -102,28 +102,25 @@ the format exactly.
 ## Per-kind guidance
 
 ### `edge.dangling`
-A `related_themes` entry names a theme slug that does not exist. Look for the
-correct existing slug first — often the same title under a date prefix (e.g.
-`foo` → `2026-05-17-foo`) — and propose repointing the entry at it, naming
-the survivor explicitly in the action sentence. Only propose dropping the
-entry outright when you cannot find a plausible existing target — say so
-plainly rather than guessing at a slug that might not be the real one.
+A `related_themes` entry names a theme slug that does not exist (see the
+finding's `fixHint`). Propose repointing it at the existing slug, naming the
+survivor explicitly in the action sentence; only propose dropping the entry
+when no plausible target exists — say so plainly rather than guessing.
 
 ### `theme.duplicate`
-Two theme files are near-duplicates (same normalized title, or ≥0.8 keyword
-overlap). Propose exactly ONE survivor — the richer file (more content, more
-inbound `related_themes`/wikilinks, more citations) — and name it explicitly.
-List which unique facts from the loser must be folded into the survivor
-before it is deleted, and call out that every `related_themes` entry,
-wikilink, and category-index line pointing at the loser must be repointed at
-the survivor first. Never propose a delete action without naming the
-survivor in the same line or the sentence immediately around it.
+Two theme files are near-duplicates (per the finding's `message`). Propose
+exactly ONE survivor — the richer file (more content, more inbound
+`related_themes`/wikilinks, more citations) — and name it explicitly. List
+which unique facts from the loser must fold into the survivor before
+deletion, and that every `related_themes` entry, wikilink, and
+category-index line pointing at the loser must repoint at the survivor
+first. Never propose a delete action without naming the survivor in the
+same line or the sentence immediately around it.
 
 ### `index.project`
-A theme is missing from its project brain's category index (`patterns` /
-`antipatterns` / `decisions` / `reference.md` under
-`brain/projects/<name>/`). Propose adding the theme's link to the correct
-category index file, naming which index file.
+A theme is missing from its project brain's category index (see the
+finding's `fixHint` for the target file). Propose adding the theme's link
+to the correct category index file, naming which index file.
 
 ## Never
 

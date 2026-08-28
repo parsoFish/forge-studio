@@ -6,13 +6,12 @@ library: true
 
 # Handoff
 
-> Forge-adapted from Matt Pocock's "Handoff" skill (superpowers ecosystem, ~228k★).
 > An Encoded-Preference skill: it shifts behaviour (durable state capture), not capability.
 
 ## When to use
 
 - Approaching a context-budget limit mid-work-item (before a strategic compaction).
-- Handing a partially-complete unit to the unifier, a resume, or the operator.
+- Handing a partially-complete unit to the develop flow's successor band, a resume, or the operator.
 - Any point where losing the in-flight reasoning would force expensive re-derivation.
 
 ## What it does
@@ -36,4 +35,4 @@ strings, and paths byte-faithfully.
 ## Sources
 
 Matt Pocock — "Handoff" / obra/superpowers. Adapted to forge's worktree + resume model
-(complements `superpowers:strategic-compact`).
+(ADR 019; complements `superpowers:strategic-compact`).

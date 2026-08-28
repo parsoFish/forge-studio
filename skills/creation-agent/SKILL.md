@@ -42,9 +42,7 @@ it is ready.
    body) at the package root, plus any supporting reference files the skill
    needs. This is a plain, composable skill (no `runtime:` block) — never a
    runnable agent. Do not add `runtime:`, `allowed-tools:`, or `library:` to
-   a drafted skill's frontmatter; those are quarantined on install regardless,
-   and drafting one only invites confusion about what the package will
-   actually be once saved.
+   a drafted skill's frontmatter; those are quarantined on install regardless.
 
 2. **A hook package** — a `hook.yaml` (name, description, `on`, optional
    `matcher`, `permissions`) plus a single `scripts/run.sh`. A library hook
