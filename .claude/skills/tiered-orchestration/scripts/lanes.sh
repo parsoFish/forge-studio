@@ -28,7 +28,8 @@
 #   lanes.sh kill <campaign-dir> <lane>   End the session; drop <lane> from ACTIVE.
 #   lanes.sh events <campaign-dir> [ledger]  Forever: one line per actionable event — new ledger
 #                                    OUTCOME/park/NOT MET lines, STALL flags, a lane session gone,
-#                                    a lane whose claude exited to the shell. Feed it to a Monitor.
+#                                    a lane whose claude exited to the shell, a lane idle at its prompt
+#                                    with a stale heartbeat (LANE_IDLE — the relay hole). Feed it to a Monitor.
 #
 # Env overrides: LANES_MODEL (opus), LANES_PERMISSION_MODE (auto),
 #                LANES_CWD (/home/parso/forge), LANES_CLAUDE_BIN (resolved `claude`).
@@ -136,7 +137,7 @@ cmd_kill() {
 }
 
 cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable event, forever (Monitor input)
-  local camp="$1" ledger="${2:-$1/ledger.md}" n0 n1 lane b f last seen_stall="" seen_gone="" seen_shell=""
+  local camp="$1" ledger="${2:-$1/ledger.md}" n0 n1 lane b f last pane hb age seen_stall="" seen_gone="" seen_shell="" seen_idle=""
   n0="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
   while true; do
     n1="$(wc -l < "$ledger" 2>/dev/null || echo 0)"
@@ -155,9 +156,20 @@ cmd_events() { # <campaign-dir> [ledger] — one stdout line per actionable even
         case " $seen_gone " in *" $lane "*) ;; *) echo "LANE_ENDED: forge-$lane session gone (still in ACTIVE)"; seen_gone="$seen_gone $lane" ;; esac
         continue
       fi
-      last="$(tmux capture-pane -p -t "forge-$lane" 2>/dev/null | { grep -v '^[[:space:]]*$' || true; } | tail -1)"
+      pane="$(tmux capture-pane -p -t "forge-$lane" -S -40 2>/dev/null | { grep -v '^[[:space:]]*$' || true; })"
+      last="$(printf '%s\n' "$pane" | tail -1)"
       if printf '%s' "$last" | grep -qE '^[^ ]+@[^ ]+:.*\$ ?$'; then
         case " $seen_shell " in *" $lane "*) ;; *) echo "LANE_SHELL: forge-$lane claude exited — pane is at a shell prompt"; seen_shell="$seen_shell $lane" ;; esac
+        continue
+      fi
+      # Idle = the TUI shows a finished turn ("· done H:MM AM/PM") and the lane's heartbeat is > 10 min old.
+      # This is the relay hole: a lane that launched a detached job and ended its turn never wakes by itself.
+      hb="$camp/heartbeat/$lane.log"; age=999999
+      [ -f "$hb" ] && age=$(( $(date +%s) - $(stat -c %Y "$hb") ))
+      if printf '%s\n' "$pane" | tail -8 | grep -qE '· done [0-9]{1,2}:[0-9]{2} ?[AP]M' && [ "$age" -gt 600 ]; then
+        case " $seen_idle " in *" $lane "*) ;; *) echo "LANE_IDLE: forge-$lane turn finished ($(printf '%s\n' "$pane" | grep -oE '· done [0-9:]+ ?[AP]M' | tail -1)), heartbeat $((age / 60)) min old — parked on a detached job? relay with lanes.sh send"; seen_idle="$seen_idle $lane" ;; esac
+      else
+        seen_idle="$(printf '%s' "$seen_idle" | sed "s/\b$lane\b//")"
       fi
     done
     sleep 30

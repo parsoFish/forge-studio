@@ -8,9 +8,12 @@
 # Contract (HB = the campaign's heartbeat dir, argument 1):
 #   HB/ACTIVE            space/comma-separated live lane ids, or NONE (lanes.sh maintains it)
 #   HB/<lane>.log        the lane's own heartbeat (real fail/timeout state, never a label)
-#   HB/<lane>.tmux.log   the lane's tmux pane output (lanes.sh pipe-pane) — a lane that
-#                        forgets to heartbeat is still judged live while its pane moves
-#   liveness = max(mtime of the two logs); ceiling 30 min from max(arm-time, liveness)
+#   HB/<lane>.liveness   optional: one path/glob per line the lane declares as proof of life
+#                        (e.g. its cycle's events.jsonl) — for a lane parked on a detached job
+#   liveness = max(mtime of <lane>.log and every declared path). The tmux pane log is NOT a
+#   liveness signal: an idle Claude TUI redraws its status bar, so the pane never goes quiet
+#   (measured 2026-08-28: a 2-hour idle lane never flagged).
+#   ceiling 30 min from max(arm-time, liveness)
 #   stall    → HB/STALL-<lane> written (T1 polls, relays, deletes); recovery removes it
 #   arm      → HB/.watcher-armed re-stamped whenever ACTIVE changes (grace for new lanes)
 set -euo pipefail
@@ -26,9 +29,13 @@ arm="$(cat "$ARM" 2>/dev/null || printf '%s' "$now")"
 for lane in $active; do
   [ "$lane" = "NONE" ] && continue
   last="$arm"
-  for f in "$HB/$lane.log" "$HB/$lane.tmux.log"; do
-    [ -f "$f" ] || continue
-    m="$(stat -c %Y "$f")"; [ "$m" -gt "$last" ] && last="$m"
+  paths="$HB/$lane.log"
+  [ -f "$HB/$lane.liveness" ] && paths="$paths $(tr '\n' ' ' < "$HB/$lane.liveness")"
+  for pat in $paths; do
+    for f in $pat; do
+      [ -f "$f" ] || continue
+      m="$(stat -c %Y "$f")"; [ "$m" -gt "$last" ] && last="$m"
+    done
   done
   ref="$last"; [ "$arm" -gt "$ref" ] && ref="$arm"
   gap=$((now - ref)); flag="$HB/STALL-$lane"
@@ -37,7 +44,6 @@ for lane in $active; do
       echo "STALL $lane gap=$((gap / 60))min ceiling=$((CEILING_S / 60))min"
       echo "now=$(date -u -d "@$now" +%FT%TZ) last_activity=$(date -u -d "@$last" +%FT%TZ)"
       [ -f "$HB/$lane.log" ] && echo "last_heartbeat: $(tail -1 "$HB/$lane.log")"
-      [ -f "$HB/$lane.tmux.log" ] && echo "last_pane: $(tail -c 300 "$HB/$lane.tmux.log" | tr -d '\r' | tail -1)"
     } > "$flag"
   else
     [ -f "$flag" ] && rm -f "$flag"
