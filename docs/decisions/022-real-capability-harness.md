@@ -5,8 +5,8 @@
 - **Date:** 2026-05-30
 - **Supersedes / amends:** amends the 2026-05-25 "benches removed" stance
   (recorded in Context below — it was culled from `CLAUDE.md` on 2026-08-28 as
-  duplication, and this ADR is now its home) and reframes [`phase-isolation-benchmarks`](../../brain/cycles/themes/phase-isolation-benchmarks.md)
-  + [`eval-driven-development`](../../brain/cycles/themes/eval-driven-development.md):
+  duplication, and this ADR is now its home) and reframes
+  [`eval-driven-development`](../../brain/cycles/themes/eval-driven-development.md):
   the *synthetic per-phase* benches stay retired; a *real-cycle* harness replaces
   them. Builds on [ADR 017](./017-forge-project-contract.md) (the project
   contract a harness run asserts against) and [ADR 019](./019-cycle-resume-from-unifier.md)

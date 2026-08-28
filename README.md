@@ -6,7 +6,7 @@ Forge Studio is a **visual, autonomous software-engineering pipeline you can see
 
 Three things make it one product rather than three:
 
-- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → integrate → review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
+- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → demo + adversarial-review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
 - **Code-enforced gates.** The three human moments (architect, review, reflect) are structural, not advisory. There is **no auto-approve code path anywhere** — forge cannot accidentally skip you, because the gate lives in the code, not in a prompt. These are gates you can *read*, not just trust.
 - **A compounding engineering brain.** Every cycle's reflection is distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planners query *before* designing the next initiative. Memory tools cache for runtime recall; the brain compounds — it tunes *how the next plan is designed*, across every project.
 
@@ -14,7 +14,7 @@ Full competitive analysis and the strategic frame: [`docs/forge-studio-market-an
 
 ## See it run
 
-The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → integrate → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
+The canonical walkthrough is the **end-to-end operator journey** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → the demo + review band → an *interactive* review demo → reflection — driven entirely through Forge Studio. It records a video + an annotated frame gallery and asserts the DOM-as-metrics invariants as it goes. Regenerate it any time with `npm run ui:journey` (output: [`demos/e2e/index.html`](./demos/e2e)).
 
 ## The moat
 

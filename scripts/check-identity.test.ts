@@ -168,6 +168,9 @@ test('THE RATCHET: the real repo scans clean — zero hits, zero tolerance', () 
   const r = run(ROOT);
   assert.match(r.out, /scanned \d+ file/, `expected a real scan, got: ${r.out}`);
   const scanned = Number(/scanned (\d+) file/.exec(r.out)?.[1] ?? 0);
-  assert.ok(scanned > 100, `expected > 100 files scanned, got ${scanned}`);
+  // The scanned set is CLAUDE/README/ARCHITECTURE + docs/**/*.{md,json} minus the
+  // record-type exclusions + skills/**/SKILL.md — 76 files today. The floor only
+  // has to prove a real scan happened, not pin the count.
+  assert.ok(scanned > 50, `expected a real scan (> 50 files), got ${scanned}`);
   assert.equal(r.code, 0, `retired vocabulary still present:\n${r.out}`);
 });
