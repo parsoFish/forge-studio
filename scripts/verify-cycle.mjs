@@ -46,9 +46,9 @@
  * --idea-file, else the body of the corpus manifest at _queue/done/<run-handle>.md.
  *
  * Options:
- *   --project <name>        managed project to run against (default mdtoc; NEVER
- *                           run against mdtoc when it is committed inside forge —
- *                           use gitpulse, an independent repo). betterado is the
+ *   --project <name>        managed project to run against (default gitpulse, an
+ *                           independent repo; NEVER run against mdtoc — it is
+ *                           committed inside forge itself). betterado is the
  *                           live-ADO tier.
  *   --idea-file <path>      the initiative idea fed to the architect (forge-root
  *                           relative). Falls back to the corpus manifest body.
@@ -75,6 +75,12 @@ import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
 import { captureBoundaryBaseline, compareBoundary, formatBoundaryReport } from './lib/post-run-boundary.mjs';
 import { spawnStudioReady } from './lib/boot-studio.mjs';
+import {
+  DEFAULT_PROJECT,
+  buildOutcomeChecks,
+  classifyReflectorProgress,
+  sumAuthoritativeCostFromLines,
+} from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -93,7 +99,7 @@ function flag(name, def) {
 }
 const BASE_SHA = flag('base-sha', null);
 const SEND_BACK = argv.includes('--send-back');
-const PROJECT = flag('project', 'mdtoc');
+const PROJECT = flag('project', DEFAULT_PROJECT);
 const IDEA_FILE = flag('idea-file', null);
 // Live-resource projects (e.g. the betterado terraform provider stands up real
 // Azure DevOps resources) run longer + cost more than the creds-free default
@@ -229,15 +235,15 @@ function resetRepo(repoPath) {
   return true;
 }
 
-/** Sum cost_usd across the cycle's event log. */
+/** Sum authoritative cost_usd across the cycle's event log (M0-A round-2
+ *  defect C — a naive per-line sum double-counts developer-loop/unifier
+ *  phases, which restate their `iteration` cost on per-work-item and
+ *  phase-level `end` events; delegates to the one restatement rule via
+ *  `sumAuthoritativeCostFromLines`, not a second copy of it). */
 function sumCycleCost(cycleId) {
   try {
-    let total = 0;
-    for (const line of readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n')) {
-      if (!line) continue;
-      try { const e = JSON.parse(line); if (typeof e.cost_usd === 'number') total += e.cost_usd; } catch { /* */ }
-    }
-    return total;
+    const lines = readFileSync(join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl'), 'utf8').split('\n');
+    return sumAuthoritativeCostFromLines(lines);
   } catch { return 0; }
 }
 
@@ -410,39 +416,34 @@ function reflectWroteBrainTheme(project, runStartMs) {
   return { present: false, reason: `no theme in ${dir} written/updated since run start` };
 }
 
-/** The ADR 022 + S9 gate: outcome-only assertions (merge / dev-loop / tests / cost
- *  / reflect-writes-brain), plus a live-evidence check for live-resource projects
- *  and a release-evidence check when the project declares `releaseProcess`. */
+/** The ADR 022 + S9 gate: gathers the impure inputs (event log, project test
+ *  suite, `_queue/done/` existence, merged demo.json, project config) and
+ *  hands them to `buildOutcomeChecks` (scripts/lib/verify-outcomes.mjs), which
+ *  assembles the outcome-only assertions (merge / dev-loop / tests / cost /
+ *  reflect-writes-brain), plus a live-evidence check for live-resource
+ *  projects and a release-evidence check when the project declares
+ *  `releaseProcess`. */
 function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project, runStartMs }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
-  const checks = [
-    // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
-    // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
-    // returned null even on cleanly-merged cycles). Accept either signal.
-    { name: 'cycle reached merge (done)', pass: finalStatus === 'done' || existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)), detail: finalStatus === 'done' ? 'finalStatus=done' : (existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`)) ? 'manifest in _queue/done/ (merged; bridge status unread post-merge)' : `finalStatus=${finalStatus}, manifest not in done/`) },
-    { name: 'dev-loop completed N/N work items', pass: wi.total > 0 && wi.complete === wi.total && wi.failed === 0, detail: `${wi.complete}/${wi.total} complete, ${wi.failed} failed` },
-    { name: 'project tests green post-merge', pass: tests.ok, detail: tests.ran ? (tests.ok ? `${tests.label} passed` : `${tests.label} FAILED`) : 'no test command — skipped' },
-    { name: `cost under ceiling ($${COST_CEILING})`, pass: cost <= COST_CEILING, detail: `$${cost.toFixed(2)} / $${COST_CEILING}` },
-  ];
-  // S9: the reflect stage (3rd spine flow) must write the central project brain.
-  const rb = reflectWroteBrainTheme(project, runStartMs);
-  checks.push({ name: 'reflect wrote central project brain', pass: rb.present, detail: rb.reason });
+  // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
+  // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
+  // returned null even on cleanly-merged cycles). buildOutcomeChecks accepts either signal.
+  const manifestInDone = existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`));
+  const reflectTheme = reflectWroteBrainTheme(project, runStartMs);
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
-  if (REQUIRE_LIVE_EVIDENCE) {
-    const le = liveEvidenceFromDemo(repoPath, initiativeId, cycleId);
-    checks.push({ name: 'live demo evidence present (REST GET)', pass: le.present, detail: le.reason });
-  }
+  const liveEvidence = REQUIRE_LIVE_EVIDENCE ? liveEvidenceFromDemo(repoPath, initiativeId, cycleId) : undefined;
   // WS-A: release-bearing projects must prove the full release loop fired
   // (draft → finalised changelog committed → release.json record). Gated on
   // the project actually declaring `releaseProcess` — a non-release project is
   // unaffected (the check is not added).
   const releaseProcess = releaseProcessFromConfig(repoPath);
-  if (releaseProcess) {
-    const re = releaseEvidence(repoPath, cycleId, releaseProcess);
-    checks.push({ name: 'release finalised (changelog + release.json)', pass: re.present, detail: re.reason });
-  }
+  const releaseEv = releaseProcess ? releaseEvidence(repoPath, cycleId, releaseProcess) : undefined;
+  const checks = buildOutcomeChecks({
+    finalStatus, manifestInDone, wi, tests, cost, costCeiling: COST_CEILING,
+    reflectTheme, liveEvidence, releaseEvidence: releaseEv,
+  });
   return { checks, wi };
 }
 
@@ -903,21 +904,41 @@ async function runServeStage(page, label) {
   log(`serve --once (${label}) exited`);
 }
 
-/** Wait for the reflector to FINISH (reflector.end in the cycle log). The bridge
- *  fires finalize→reflect detached after the verdict approve; the old harness tore
- *  the bridge down ~3s later, killing reflect mid-start. Bounded; returns true on
- *  reflector.end seen. */
+/** Wait for the reflector to FINISH or DIE (reflector.end / cycle.reflection-lost
+ *  in the cycle log). The bridge fires finalize→reflect detached after the
+ *  verdict approve; the old harness tore the bridge down ~3s later, killing
+ *  reflect mid-start. Bounded; returns true only when reflection genuinely
+ *  completed (`ended`).
+ *
+ *  M0-A round-2 defect B: the old version scanned only for `reflector.end`,
+ *  so a reflector that died loudly (`cycle.reflection-lost` is terminal —
+ *  never followed by an end event) burned the FULL deadline and then logged
+ *  the neutral "not seen before deadline", which reads as slow rather than
+ *  dead (cost 12 of run 1's 47 minutes). `classifyReflectorProgress` lets
+ *  this return the moment the outcome is known — `ended` or `lost` — and a
+ *  `lost` is always reported by name and cause, never folded into the
+ *  deadline-timeout message. */
 async function waitForReflectorEnd(cycleId, deadlineMs) {
   const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
-  let sawStart = false;
+  let loggedStart = false;
   while (Date.now() < deadlineMs) {
+    let lines = [];
     try {
-      for (const line of readFileSync(logFile, 'utf8').split('\n')) {
-        if (!line.includes('"skill":"reflector"')) continue;
-        if (!sawStart && line.includes('"event_type":"start"')) { sawStart = true; log('reflector.start seen — waiting for reflector.end…'); }
-        if (line.includes('"event_type":"end"')) { log('reflector.end seen — reflection complete'); return true; }
-      }
+      lines = readFileSync(logFile, 'utf8').split('\n');
     } catch { /* log not yet present */ }
+    const progress = classifyReflectorProgress(lines);
+    if (progress.state === 'started' && !loggedStart) {
+      loggedStart = true;
+      log('reflector.start seen — waiting for reflector.end…');
+    }
+    if (progress.state === 'ended') {
+      log('reflector.end seen — reflection complete');
+      return true;
+    }
+    if (progress.state === 'lost') {
+      log(`reflection LOST (not merely slow) — ${progress.detail}`);
+      return false;
+    }
     await sleep(3000);
   }
   log('reflector.end not seen before deadline');

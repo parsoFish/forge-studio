@@ -11,7 +11,7 @@ keywords:
   - gitignore
   - repeated-actions
   - scratch-files
-related_themes: [2026-07-11-gitignored-scratch-fourth-cycle]
+related_themes: [2026-07-11-gitignored-scratch-fourth-cycle, 2026-08-28-gitignored-scratch-sixth-cycle]
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
 status: historical
@@ -60,3 +60,4 @@ The pattern of documenting this in the brain without propagating the fix to the 
 ## See also
 
 - [[2026-07-11-gitignored-scratch-fourth-cycle]] — the prior (fourth) cycle of this recurrence
+- [[2026-08-28-gitignored-scratch-sixth-cycle]] — the next (sixth) cycle of this recurrence

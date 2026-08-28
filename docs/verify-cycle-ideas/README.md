@@ -13,8 +13,10 @@ independent verify ground (a git-analytics CLI):
 | File | Idea |
 |---|---|
 | [`gitpulse-compare-refs.md`](./gitpulse-compare-refs.md) | `--compare <ref>` analytics delta between two refs |
+| [`gitpulse-coupling.md`](./gitpulse-coupling.md) | `coupling` temporal change-coupling command |
 | [`gitpulse-exclude-paths.md`](./gitpulse-exclude-paths.md) | Repeatable `--exclude <glob>` path filtering |
 | [`gitpulse-json-output.md`](./gitpulse-json-output.md) | Global `--json` structured-output flag |
+| [`gitpulse-no-merges.md`](./gitpulse-no-merges.md) | Global `--no-merges` commit filter |
 | [`gitpulse-ownership-hotspots.md`](./gitpulse-ownership-hotspots.md) | Ownership & hotspot analysis |
 | [`gitpulse-sort-flag.md`](./gitpulse-sort-flag.md) | `--sort <column>[:asc\|:desc]` output ordering |
 | [`gitpulse-tags-cadence.md`](./gitpulse-tags-cadence.md) | `gitpulse tags` release-cadence command |
@@ -29,8 +31,9 @@ node scripts/verify-cycle.mjs <run-handle> --project gitpulse \
 `verify:cycle` is real-money (it runs a full agentic cycle); run it deliberately as
 a manual capability gate, not in routine CI.
 
-**Note (2026-07-17, R5-07-F4):** `scripts/verify-cycle.mjs`'s `--project` flag
-literally defaults to `mdtoc`, but `mdtoc` is uniquely committed inside
+**Note (2026-07-17, R5-07-F4; amended 2026-08-28):** `scripts/verify-cycle.mjs`'s
+`--project` flag now defaults to `gitpulse`. It previously defaulted to
+`mdtoc`, which is uniquely committed inside
 forge's own repo (`projects/mdtoc/`) and must **never** actually be the
 harness ground — the routine, creds-free ground is always `gitpulse`
 (`--project gitpulse`, this corpus), an independent repo; `betterado`

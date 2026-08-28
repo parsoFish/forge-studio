@@ -1140,6 +1140,36 @@ export async function runDeveloperLoop(
   // synchronous "mark everything remaining failed" (see `pushFailedRef`'s
   // declaration above).
   async function dispatchWi(wi: WorkItem): Promise<DispatchOutcome> {
+    // M0-A Task 1: consult the flow's cost ceiling BEFORE this WI's worktree
+    // is created — a per-WI boundary check, reusing the SAME "skip before
+    // any work starts" shape as the environment-failure skip above
+    // (leave the status file untouched — i.e. still `pending` — so the WI
+    // stays resumable; never mark it `failed`). Absent ⇒ today's behaviour
+    // exactly (no dev-loop caller wires this in yet outside flow-runner).
+    const costStopReason = input.shouldStopBeforeWorkItem?.() ?? null;
+    if (costStopReason) {
+      logger.emit({
+        initiative_id: input.initiativeId,
+        parent_event_id: start.event_id,
+        phase: 'developer-loop',
+        skill: 'developer-ralph',
+        event_type: 'log',
+        input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
+        output_refs: [],
+        message: 'ralph.skipped',
+        metadata: {
+          work_item_id: wi.work_item_id,
+          reason: costStopReason,
+          failure_kind: 'cost-ceiling',
+        },
+      });
+      // Mirrors the `environment-failure` skip (above, in
+      // runWiDispatchTask): status 'pending' + `environment: true` so
+      // dependents are blocked-not-failed and the whole wave stays
+      // resumable, never cascading a false `failed`.
+      settleWiOutcome(wiOutcomes, { id: wi.work_item_id, status: 'pending', result: null, environment: true });
+      return { requeue: false };
+    }
     if (pushFailedRef.current) {
       writeWorkItemStatus(resolve(workItemsDir, `${wi.work_item_id}.md`), 'failed');
       logger.emit({

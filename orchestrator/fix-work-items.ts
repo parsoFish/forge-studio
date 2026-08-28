@@ -15,9 +15,9 @@
  * sweeps arbitrate on, and the loud cap-exhausted park marker.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { guardedFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import {
   devWorkItemIdStem,
@@ -48,15 +48,35 @@ export function reviewCapExhaustedPath(worktreePath: string): string {
   return join(worktreePath, '.forge', REVIEW_CAP_EXHAUSTED_FILENAME);
 }
 
+/**
+ * `worktreePath` is the dev-loop agent's own checkout — a fixed root this
+ * function receives, never a caller-composed string that folds an untrusted
+ * value INTO the root. Routed through `guardedFile`'s `'read'` mode (the
+ * `guardedReadFile` sibling, minus the redundant content read this predicate
+ * doesn't need) so a `.forge` an agent planted as a symlink is refused the
+ * same way the writer below refuses it, rather than this existence probe
+ * following the symlink out of the worktree (finding 3, M0-A fix round 1).
+ */
 export function hasReviewCapExhaustedMarker(worktreePath: string): boolean {
-  return existsSync(reviewCapExhaustedPath(worktreePath));
+  return guardedFile(worktreePath, ['.forge', REVIEW_CAP_EXHAUSTED_FILENAME], 'read') !== null;
 }
 
+/**
+ * `.forge` is inside the dev-loop agent's own checkout — an agent that plants
+ * it as a symlink would otherwise redirect this write outside the worktree
+ * (an arbitrary-file-overwrite primitive). Routed through `guardedWriteFile`
+ * (`cli/studio-path-guard.ts`) with the FIXED filename as its own `segments[]`
+ * element — never folded into the `root` argument, which would bypass the
+ * guard's per-segment identity check entirely (see that module's own CONTRACT
+ * doc comment). `worktreePath` is the trusted root; `.forge` and the filename
+ * are fixed literals, never request-derived. A rejected write (root contains a
+ * symlinked `.forge`) fails closed — no marker is written, matching every
+ * other best-effort caller of this function (finding 3, M0-A fix round 1).
+ */
 export function writeReviewCapExhaustedMarker(worktreePath: string, detail: string): void {
-  const forgeDir = join(worktreePath, '.forge');
-  if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
-  writeFileSync(
-    reviewCapExhaustedPath(worktreePath),
+  guardedWriteFile(
+    worktreePath,
+    ['.forge', REVIEW_CAP_EXHAUSTED_FILENAME],
     [
       '# Review fix-loop cap exhausted (ADR 040)',
       '',
@@ -65,6 +85,57 @@ export function writeReviewCapExhaustedMarker(worktreePath: string, detail: stri
       'The send-back was REJECTED and the initiative is parked needs-operator.',
       'Take the worktree over manually, or raise the caps in `forge.config.json`',
       '(`review.maxSendBackRounds` / `review.maxTotalFixWorkItems`) and re-submit.',
+      'Delete this file after taking action — the fix-loop drain skips while it exists.',
+    ].join('\n'),
+  );
+}
+
+/**
+ * `.forge/MERGE-GATE-CONFIG-ERROR.md` — the greppable park marker for a merge
+ * gate that could not even read the project's `.forge/project.json`
+ * (`runMergeBoundaryGate`'s `failedGate: 'config'` result, M0-A task 2).
+ * Present ⇒ the merge-boundary gate cannot be evaluated for this initiative and
+ * it is parked needs-operator; no gate-fix work item is ever compiled for this
+ * case — a dev agent cannot fix the operator's own project config, so
+ * queuing one would just burn iterations on a criterion that can never pass.
+ */
+export const MERGE_GATE_CONFIG_ERROR_FILENAME = 'MERGE-GATE-CONFIG-ERROR.md';
+
+export function mergeGateConfigErrorPath(worktreePath: string): string {
+  return join(worktreePath, '.forge', MERGE_GATE_CONFIG_ERROR_FILENAME);
+}
+
+/**
+ * See `hasReviewCapExhaustedMarker`'s doc comment — same guard, same reason
+ * (finding 3, M0-A fix round 1): a plain `existsSync(join(...))` follows a
+ * symlinked `.forge` right out of the worktree.
+ */
+export function hasMergeGateConfigErrorMarker(worktreePath: string): boolean {
+  return guardedFile(worktreePath, ['.forge', MERGE_GATE_CONFIG_ERROR_FILENAME], 'read') !== null;
+}
+
+/**
+ * See `writeReviewCapExhaustedMarker`'s doc comment — same guard, same reason
+ * (finding 3, M0-A fix round 1): this writer copied the unguarded
+ * `mkdirSync`/`writeFileSync` pattern from that one, so it carried the same
+ * arbitrary-file-overwrite primitive (a symlinked `.forge` redirects the
+ * write outside the worktree) and gets the identical fix.
+ */
+export function writeMergeGateConfigErrorMarker(worktreePath: string, reason: string): void {
+  guardedWriteFile(
+    worktreePath,
+    ['.forge', MERGE_GATE_CONFIG_ERROR_FILENAME],
+    [
+      '# Merge-boundary gate could not read the project config',
+      '',
+      reason.trim(),
+      '',
+      'The merge-boundary gate cannot be evaluated while the project config fails to',
+      'load, so the cycle is parked needs-operator instead of reporting a green gate.',
+      'No gate-fix work item was compiled — a dev agent cannot fix the operator\'s own',
+      '`.forge/project.json`.',
+      'Fix `.forge/project.json` on the project repo (see the reason above), then',
+      're-submit the initiative.',
       'Delete this file after taking action — the fix-loop drain skips while it exists.',
     ].join('\n'),
   );

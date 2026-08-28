@@ -129,6 +129,15 @@ export type CycleInput = {
    * Threaded straight through to `createLogger`'s `tee`.
    */
   eventTee?: (entry: import('./logging.ts').EventLogEntry) => void;
+  /**
+   * M0-A Task 1: injected by `flow-runner.ts::runFlow` from its `CostTracker`
+   * (`stopReasonBeforeNextWorkItem`). Consulted by the dev-loop's dispatch
+   * wrapper BEFORE a work item's worktree is created, so a breached cost
+   * ceiling can skip remaining work items one at a time instead of only being
+   * reachable at the next clean NODE boundary. Returns null while under the
+   * ceiling. Absent ⇒ today's behaviour exactly (no per-WI stop check).
+   */
+  shouldStopBeforeWorkItem?: () => string | null;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

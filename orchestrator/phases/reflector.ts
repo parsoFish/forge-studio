@@ -61,6 +61,7 @@ import {
 import { writeCycleRecap } from '../../cli/cycle-recap.ts';
 import { cyclesThemesDir, projectThemesDir } from '../brain-paths.ts';
 import { runPostReflectionKbHealth } from '../kb-health.ts';
+import { getPaths, type QueuePaths } from '../queue.ts';
 
 // The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
 // ~$0.74, the cap gives 2x headroom) are DECLARED DATA now: `budgets.maxTurns`
@@ -782,24 +783,33 @@ function writeLintReport(
 }
 
 /**
- * Resolve the current location of an initiative's manifest. The reviewer
- * moves the manifest from `_queue/in-flight/` to `_queue/done/` (or
- * `_queue/ready-for-review/`) on completion. Reflection runs *after* the
- * move, so reading the original `input.manifestPath` ENOENTs every real
- * cycle. We look at the queue's terminal states first, then fall back to
- * the original path so bench harnesses (which pass a stable, non-queue path)
- * still work.
+ * Resolve the current location of an initiative's manifest.
+ *
+ * Reflection is dispatched with the `_queue/in-flight/` claim path, but by
+ * the time it runs the reviewer/finalize pipeline has typically already
+ * moved the manifest file elsewhere — most commonly `_queue/merged/`, since
+ * `finalize-merged.ts` promotes `merged/ → done/` *after* dispatching
+ * reflection (M0-A round-2 defect A: a hand-written candidate list that
+ * omitted `merged/` made every merged cycle ENOENT here). Rather than
+ * hand-listing a subset of queue states again, this derives its candidates
+ * from `getPaths()` (`orchestrator/queue.ts`'s own `QueuePaths`), covering
+ * every current state — `pending` included, even though reflection realistically
+ * never fires there — so a state added to the queue later can't silently slip
+ * through the same way `merged/` did.
+ *
+ * Returns `originalPath` unchanged when the manifest is genuinely not
+ * sitting in any queue state. This never fabricates a location: the caller's
+ * `reflector.manifest-unreadable` → `cycle.reflection-lost` path depends on
+ * a real loss staying loud, not going silent.
  */
-function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): string {
+export function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): string {
   if (existsSync(originalPath)) return originalPath;
   const filename = basename(originalPath);
-  const candidates = [
-    resolve(forgeRoot, '_queue', 'done', filename),
-    resolve(forgeRoot, '_queue', 'ready-for-review', filename),
-    resolve(forgeRoot, '_queue', 'failed', filename),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
+  const paths: QueuePaths = getPaths(resolve(forgeRoot, '_queue'));
+  const stateKeys = (Object.keys(paths) as Array<keyof QueuePaths>).filter((k) => k !== 'root');
+  for (const key of stateKeys) {
+    const candidate = resolve(paths[key], filename);
+    if (existsSync(candidate)) return candidate;
   }
   return originalPath;
 }

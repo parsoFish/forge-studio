@@ -1,0 +1,66 @@
+{
+  "runHandle": "m0-a",
+  "initiatives": [
+    {
+      "initiativeId": "INIT-2026-08-28-init-2026-08-28-coupling-command",
+      "cycleId": "2026-08-28T09-37-15_INIT-2026-08-28-init-2026-08-28-coupling-command",
+      "finalStatus": null,
+      "totalEvents": 467,
+      "costUsd": 12.2416,
+      "workItems": {
+        "total": 4,
+        "complete": 4,
+        "failed": 0
+      }
+    }
+  ],
+  "project": "gitpulse",
+  "baseSha": null,
+  "costUsd": 12.2416,
+  "costCeilingUsd": 35,
+  "checks": [
+    {
+      "name": "cycle reached merge (done)",
+      "pass": true,
+      "detail": "manifest in _queue/done/ (merged; bridge status unread post-merge)"
+    },
+    {
+      "name": "dev-loop completed N/N work items",
+      "pass": true,
+      "detail": "4/4 complete, 0 failed"
+    },
+    {
+      "name": "project tests green post-merge",
+      "pass": true,
+      "detail": "npm test passed"
+    },
+    {
+      "name": "cost under ceiling ($35)",
+      "pass": true,
+      "detail": "$12.24 / $35"
+    },
+    {
+      "name": "reflect wrote central project brain",
+      "pass": false,
+      "detail": "no theme in /home/parso/forge-m0-a/brain/projects/gitpulse/themes written/updated since run start"
+    },
+    {
+      "name": "release finalised (changelog + release.json)",
+      "pass": true,
+      "detail": "finalised changelog + release.json (version 0.10.0)"
+    },
+    {
+      "name": "aggregate cost under ceiling",
+      "pass": true,
+      "detail": "$12.24 across 1 initiative(s) ≤ $35"
+    },
+    {
+      "name": "post-run boundary: forge repo/PR state unchanged",
+      "pass": true,
+      "detail": "clean"
+    }
+  ],
+  "gate": "fail",
+  "framesCaptured": 4,
+  "completedAt": "2026-08-28T10:19:23.196Z"
+}

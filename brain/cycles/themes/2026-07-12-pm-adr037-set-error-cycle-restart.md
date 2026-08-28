@@ -12,6 +12,7 @@ keywords:
   - cycle-restart
   - creates
   - verification_artifact
+related_themes: [2026-08-28-pm-pure-modification-wi-missing-verification-artifact]
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
 ---
@@ -54,3 +55,7 @@ A full cycle restart means:
 
 - `_logs/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag/events.jsonl`
 - `/home/parso/forge/brain/cycles/_raw/2026-07-11T17-26-34_INIT-2026-07-11-cli-sort-flag.md`
+
+## See also
+
+- [[2026-08-28-pm-pure-modification-wi-missing-verification-artifact]] — recurrence in no-merges-flag cycle (6th gitpulse cycle, same spec-lint passes / set-validator fires pattern)

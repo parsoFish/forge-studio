@@ -82,6 +82,7 @@ import {
   type MergeGateResult,
 } from './cycle-helpers.ts';
 import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
+import { writeMergeGateConfigErrorMarker } from './fix-work-items.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS, normalizeProjectId } from './studio/registry.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
 import { runPreflight } from '../cli/preflight.ts';
@@ -512,17 +513,18 @@ export type FlowRunArgs = {
 // ---------------------------------------------------------------------------
 
 /**
- * Wrap the logger so every emitted event's cost_usd is fed to the CostTracker.
- * Returns a new EventLogger whose emit() intercepts cost and then delegates.
+ * Wrap the logger so every emitted event is fed to the CostTracker. Passes
+ * the WHOLE entry (not a bare cost_usd number) — M0-A Task 1: the tracker
+ * needs to see every event, cost-bearing or not, to apply the event-cost.ts
+ * restatement rule (a phase's first `iteration` event latches it, regardless
+ * of that particular event's own cost_usd).
  */
 function wrapLoggerForCost(logger: EventLogger, tracker: CostTracker): EventLogger {
   return {
     ...logger,
     emit(partial) {
       const entry = logger.emit(partial);
-      if (typeof entry.cost_usd === 'number' && entry.cost_usd > 0) {
-        tracker.addCost(entry.cost_usd);
-      }
+      tracker.noteEvent(entry);
       return entry;
     },
   };
@@ -830,6 +832,43 @@ const execDemo: NodeExecutor = async (ctx) => {
   // the send-back, then terminate the walk to ready-for-review so the drain
   // re-enters resume_from:'develop' and the develop agent turns the suite green.
   const gate = deps.runMergeBoundaryGate(input, nodeLogger);
+  if (!gate.ok && gate.failedGate === 'config') {
+    // The gate could not even READ the project config — there is no fix a dev
+    // agent can compile (the operator's own `.forge/project.json` is not part
+    // of the initiative's diff, and a red `testProcess` declaration can never
+    // be turned green by editing the initiative's branch). Park needs-operator
+    // with the reason and terminate BEFORE enqueueGateFixWorkItems ever runs —
+    // no gate-fix work item is compiled. Not wrapped in a try/catch: if the
+    // marker itself cannot be written, that must surface as a hard failure,
+    // not vanish behind another swallowed error (the defect this task fixes).
+    writeMergeGateConfigErrorMarker(input.worktreePath, gate.reason);
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'merge-gate.config-error',
+      metadata: { reason: gate.reason, origin: 'gate-fix' },
+    });
+    state.terminateEarly = true;
+    // `status: 'failed'` so the demo hex renders as a failed/blocked state, not
+    // the green 'complete' a real demo earns — the demo never ran here; the
+    // merge-boundary gate could not even read the project config
+    // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: 'demo-agent',
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [],
+      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', demo_status: 'gate-config-error' },
+    });
+    return;
+  }
   if (!gate.ok) {
     const enqueue = enqueueGateFixWorkItems({
       worktreePath: input.worktreePath,
@@ -1304,7 +1343,7 @@ const AGENT_BAND_EXECUTORS: Readonly<Record<BandGuardId, NodeExecutor>> = {
  */
 export async function runFlow({
   flow,
-  input,
+  input: rawInput,
   logger,
   deps: depOverrides,
   nodeBudgets,
@@ -1338,10 +1377,22 @@ export async function runFlow({
   // cost_ceiling_usd) wins over the flow's own ceiling when provided.
   const costTracker = new CostTracker({
     ceilingUsd: costCeilingUsd ?? flow.costCeilingUsd ?? 0,
-    initiativeId: input.initiativeId,
+    initiativeId: rawInput.initiativeId,
     logger,
   });
   const rateLimitGate = injectedGate ?? new RateLimitGate();
+
+  // M0-A Task 1: give the dev-loop node a way to consult the ceiling at a
+  // WORK-ITEM boundary — before a WI's worktree is created — instead of only
+  // at the next clean NODE boundary (costTracker.checkCeiling, below). Build
+  // this ONCE, here: CycleInput is threaded UNCHANGED to every executor (see
+  // the threading note above `runFlow`), so this shadows the destructured
+  // `rawInput` with a single augmented object rather than mutating it
+  // in place or rebuilding it per node.
+  const input: CycleInput = {
+    ...rawInput,
+    shouldStopBeforeWorkItem: () => costTracker.stopReasonBeforeNextWorkItem(),
+  };
 
   const order = topoSort(flow);
   const nodeById = new Map<string, FlowNode>(flow.nodes.map((n) => [n.id, n]));
