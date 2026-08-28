@@ -67,7 +67,9 @@ before forge merges). Everything between runs unattended.
 
 ## Plan — direction, decisions, design
 
-- [Roadmap set](./roadmaps/README.md) — the living forge-dev roadmaps (R1–R8) with the coverage map routing every architecture pillar to its owning roadmap. The planning SSOT; start any forge-dev work here.
+- [Forge 1.0 plan](./roadmaps/1.0.md) — the single roadmap for all forge work until the 1.0 tag: milestones M0–M7, the operator stories as the gate, fresh-session mechanics. Companions: [kickoff prompts](./roadmaps/1.0-kickoffs.md), [skills and tools to install](./roadmaps/1.0-skills.md), the [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md).
+- [User stories](./product/user-stories.md) — the complete, tiered catalogue of operator journeys Forge Studio supports (45 rows; the 1.0 gate is its G tier).
+- [Roadmap set](./roadmaps/README.md) — the forge-dev roadmaps R1–R8 (record of what was built; archived in M6 of the 1.0 plan) with the coverage map routing every architecture pillar to its owning roadmap.
 - [ADR index](./decisions/README.md) — every load-bearing decision plus the retirement ledger. The decision log — history is its job.
 - [Product vision (MVUS)](./product/minimum-viable-user-story.md) — the canonical vision for the shipped OOTB suite (Scope 2): idea → autonomous build → review → release → reflect.
 - [Architect + PM merger brief](./architect-pm-merger-brief.md) — the ratified R4-15-F2 decision record: why the merged `architect-planning` roster entry does not merge the runtimes, and the measurement that would settle R4-D1's deferred re-entry.

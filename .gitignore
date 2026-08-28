@@ -162,3 +162,6 @@ _wave8/
 # scripts/ui-walkthrough default output
 _walkthrough/
 .beads/
+
+# forge 1.0 campaign state (tiered-orchestration)
+_1.0
