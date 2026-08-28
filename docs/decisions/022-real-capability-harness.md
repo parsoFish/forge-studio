@@ -3,9 +3,9 @@
 - **Status:** accepted — amended 2026-07-17 (ground swap: see the dated
   amendment before Consequences; the routine ground is now gitpulse, not mdtoc)
 - **Date:** 2026-05-30
-- **Supersedes / amends:** amends the 2026-05-25 "benches removed" stance in
-  [`CLAUDE.md`](../../CLAUDE.md) (search "bench harnesses were removed") and
-  reframes [`phase-isolation-benchmarks`](../../brain/cycles/themes/phase-isolation-benchmarks.md)
+- **Supersedes / amends:** amends the 2026-05-25 "benches removed" stance
+  (recorded in Context below — it was culled from `CLAUDE.md` on 2026-08-28 as
+  duplication, and this ADR is now its home) and reframes [`phase-isolation-benchmarks`](../../brain/cycles/themes/phase-isolation-benchmarks.md)
   + [`eval-driven-development`](../../brain/cycles/themes/eval-driven-development.md):
   the *synthetic per-phase* benches stay retired; a *real-cycle* harness replaces
   them. Builds on [ADR 017](./017-forge-project-contract.md) (the project
@@ -15,7 +15,7 @@
 ## Context
 
 On 2026-05-25 forge removed the per-phase + e2e bench harnesses under
-`benchmarks/`. The stated reason (preserved in `CLAUDE.md`): they had grown into
+`benchmarks/`. The stated reason, preserved verbatim here: they had grown into
 "a set of synthetic rubrics and thresholds that were starting to *teach* the
 phases toward the bench shape rather than measure real-cycle outcomes — the
 opposite of the intent." The closing note promised benches would be "rebuilt
