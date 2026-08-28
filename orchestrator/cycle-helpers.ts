@@ -551,46 +551,79 @@ function runLocalSuiteGate(cmd: string[], worktreePath: string, declaredTimeoutM
  * Preserved invariant (verbatim, R1-03-F4): **no path to merge exists with a red
  * full-suite baseline** — the caller must not open a PR when this returns red.
  */
+/**
+ * Emit the SAME `cycle.merge-gate-config-error` error event both config-red
+ * triggers (a throwing load, and a cleanly-loaded config with nothing to run)
+ * report, then return the RED verdict. One choke point so a future trigger
+ * gets the identical event shape for free (M0-A fix round 1, finding 1).
+ */
+function failMergeGateConfig(input: CycleInput, logger: EventLogger, reason: string): MergeGateResult {
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: 'error',
+    input_refs: [input.projectRepoPath],
+    output_refs: [],
+    message: 'cycle.merge-gate-config-error',
+    metadata: { reason },
+  });
+  return { ok: false, failedGate: 'config', reason };
+}
+
 export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): MergeGateResult {
   if (input.dryRun) return { ok: true };
 
-  let localCmd: string[] | null = null;
-  let localTimeoutMs: number | undefined;
-  let ciGate: string[] | null = null;
-  let ciFixCmd: string[] | null = null;
-  let ciGateUnsetEnv: string[] = [];
-  let ciDeclaredTimeoutMs: number | undefined;
+  let cfg: ReturnType<typeof loadProjectConfig>;
   try {
-    const cfg = loadProjectConfig(input.projectRepoPath);
-    localCmd = cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0 ? cfg.quality_gate_cmd : null;
-    localTimeoutMs = cfg?.testProcess.local?.timeoutMs;
-    ciGate = cfg?.ci_gate && cfg.ci_gate.length > 0 ? cfg.ci_gate : null;
-    ciFixCmd = cfg?.ci_fix_cmd && cfg.ci_fix_cmd.length > 0 ? cfg.ci_fix_cmd : null;
-    ciGateUnsetEnv = cfg?.ci_gate_unset_env && cfg.ci_gate_unset_env.length > 0 ? cfg.ci_gate_unset_env : [];
-    ciDeclaredTimeoutMs = cfg?.testProcess.ci?.timeoutMs;
+    cfg = loadProjectConfig(input.projectRepoPath);
   } catch (err) {
     // A malformed project.json is fail-closed everywhere it's loaded for real
     // (the dev-loop) — and it must be fail-closed HERE too. A cycle whose
     // project config cannot be read has no basis for a green gate; nothing
     // backstops it (a project may declare no `testProcess.ci` at all, per
     // C1b's own preflight WARN), so this reports RED, not `{ ok: true }`.
-    const reason = err instanceof Error ? err.message : String(err);
-    logger.emit({
-      initiative_id: input.initiativeId,
-      phase: 'orchestrator',
-      skill: 'cycle',
-      event_type: 'error',
-      input_refs: [input.projectRepoPath],
-      output_refs: [],
-      message: 'cycle.merge-gate-config-error',
-      metadata: { reason },
-    });
-    return { ok: false, failedGate: 'config', reason };
+    return failMergeGateConfig(input, logger, err instanceof Error ? err.message : String(err));
   }
 
+  // `loadProjectConfig` does NOT throw on an absent/unreadable/symlink-rejected
+  // `.forge/project.json` — it returns `null` (its own doc comment: "the only
+  // non-throwing outcome on parse failure is 'file does not exist'"), and a
+  // cleanly-loaded config can still declare an EMPTY `testProcess.local.cmd`
+  // (an empty array passes `validateProjectConfig`'s `if (!localCmd) throw` —
+  // `![]` is `false`). Both collapse `localCmd` to `null` here — deliberately
+  // ONE check, not a `cfg === null` special case: special-casing only the
+  // throw/null path would leave the empty-cmd trigger still falling through to
+  // `{ ok: true }` below. Neither case has a gate to run, so neither can be
+  // green; the two reasons are worded distinctly so an operator can tell "I
+  // cannot read your config" from "your config declares no local gate" apart.
+  const localCmd = cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0 ? cfg.quality_gate_cmd : null;
+  if (!localCmd) {
+    const reason =
+      cfg === null
+        ? `project.json could not be read at ${join(input.projectRepoPath, '.forge', 'project.json')} (absent, unreadable, or rejected by the containment guard) — the merge gate has nothing to run and cannot report a green gate.`
+        : `project.json loaded but testProcess.local.cmd is empty — it declares no local gate command, so the merge gate has nothing to run and cannot report a green gate.`;
+    return failMergeGateConfig(input, logger, reason);
+  }
+  // `localCmd` is derived from `cfg?.quality_gate_cmd`, so it can only be
+  // non-null when `cfg` itself is non-null — TS can't see that implication
+  // through the optional-chain ternary above, hence the cast (not a fresh
+  // runtime assumption, just naming the one this guard already proved).
+  const loadedCfg = cfg as NonNullable<typeof cfg>;
+  const localTimeoutMs = loadedCfg.testProcess.local?.timeoutMs;
+  const ciGate = loadedCfg.ci_gate && loadedCfg.ci_gate.length > 0 ? loadedCfg.ci_gate : null;
+  const ciFixCmd = loadedCfg.ci_fix_cmd && loadedCfg.ci_fix_cmd.length > 0 ? loadedCfg.ci_fix_cmd : null;
+  const ciGateUnsetEnv =
+    loadedCfg.ci_gate_unset_env && loadedCfg.ci_gate_unset_env.length > 0 ? loadedCfg.ci_gate_unset_env : [];
+  const ciDeclaredTimeoutMs = loadedCfg.testProcess.ci?.timeoutMs;
+
   // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.
-  //     LOCAL-gate timeout semantics (the same command + knob the per-WI gate used).
-  if (localCmd) {
+  //     LOCAL-gate timeout semantics (the same command + knob the per-WI gate
+  //     used). This ALWAYS runs now (localCmd is guaranteed non-null above) —
+  //     that is the structural guard finding 1 asks for: `{ ok: true }` below
+  //     is reachable only past a local gate that actually executed, not by the
+  //     mere absence of a failure this function happens to check for today.
+  {
     const local = runLocalSuiteGate(localCmd, input.worktreePath, localTimeoutMs);
     logger.emit({
       initiative_id: input.initiativeId,

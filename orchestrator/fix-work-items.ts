@@ -15,9 +15,9 @@
  * sweeps arbitrate on, and the loud cap-exhausted park marker.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { guardedFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import { worktreeDemoJsonRelPath } from './demo-paths.ts';
 import {
   devWorkItemIdStem,
@@ -48,15 +48,35 @@ export function reviewCapExhaustedPath(worktreePath: string): string {
   return join(worktreePath, '.forge', REVIEW_CAP_EXHAUSTED_FILENAME);
 }
 
+/**
+ * `worktreePath` is the dev-loop agent's own checkout — a fixed root this
+ * function receives, never a caller-composed string that folds an untrusted
+ * value INTO the root. Routed through `guardedFile`'s `'read'` mode (the
+ * `guardedReadFile` sibling, minus the redundant content read this predicate
+ * doesn't need) so a `.forge` an agent planted as a symlink is refused the
+ * same way the writer below refuses it, rather than this existence probe
+ * following the symlink out of the worktree (finding 3, M0-A fix round 1).
+ */
 export function hasReviewCapExhaustedMarker(worktreePath: string): boolean {
-  return existsSync(reviewCapExhaustedPath(worktreePath));
+  return guardedFile(worktreePath, ['.forge', REVIEW_CAP_EXHAUSTED_FILENAME], 'read') !== null;
 }
 
+/**
+ * `.forge` is inside the dev-loop agent's own checkout — an agent that plants
+ * it as a symlink would otherwise redirect this write outside the worktree
+ * (an arbitrary-file-overwrite primitive). Routed through `guardedWriteFile`
+ * (`cli/studio-path-guard.ts`) with the FIXED filename as its own `segments[]`
+ * element — never folded into the `root` argument, which would bypass the
+ * guard's per-segment identity check entirely (see that module's own CONTRACT
+ * doc comment). `worktreePath` is the trusted root; `.forge` and the filename
+ * are fixed literals, never request-derived. A rejected write (root contains a
+ * symlinked `.forge`) fails closed — no marker is written, matching every
+ * other best-effort caller of this function (finding 3, M0-A fix round 1).
+ */
 export function writeReviewCapExhaustedMarker(worktreePath: string, detail: string): void {
-  const forgeDir = join(worktreePath, '.forge');
-  if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
-  writeFileSync(
-    reviewCapExhaustedPath(worktreePath),
+  guardedWriteFile(
+    worktreePath,
+    ['.forge', REVIEW_CAP_EXHAUSTED_FILENAME],
     [
       '# Review fix-loop cap exhausted (ADR 040)',
       '',
@@ -85,15 +105,26 @@ export function mergeGateConfigErrorPath(worktreePath: string): string {
   return join(worktreePath, '.forge', MERGE_GATE_CONFIG_ERROR_FILENAME);
 }
 
+/**
+ * See `hasReviewCapExhaustedMarker`'s doc comment — same guard, same reason
+ * (finding 3, M0-A fix round 1): a plain `existsSync(join(...))` follows a
+ * symlinked `.forge` right out of the worktree.
+ */
 export function hasMergeGateConfigErrorMarker(worktreePath: string): boolean {
-  return existsSync(mergeGateConfigErrorPath(worktreePath));
+  return guardedFile(worktreePath, ['.forge', MERGE_GATE_CONFIG_ERROR_FILENAME], 'read') !== null;
 }
 
+/**
+ * See `writeReviewCapExhaustedMarker`'s doc comment — same guard, same reason
+ * (finding 3, M0-A fix round 1): this writer copied the unguarded
+ * `mkdirSync`/`writeFileSync` pattern from that one, so it carried the same
+ * arbitrary-file-overwrite primitive (a symlinked `.forge` redirects the
+ * write outside the worktree) and gets the identical fix.
+ */
 export function writeMergeGateConfigErrorMarker(worktreePath: string, reason: string): void {
-  const forgeDir = join(worktreePath, '.forge');
-  if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
-  writeFileSync(
-    mergeGateConfigErrorPath(worktreePath),
+  guardedWriteFile(
+    worktreePath,
+    ['.forge', MERGE_GATE_CONFIG_ERROR_FILENAME],
     [
       '# Merge-boundary gate could not read the project config',
       '',

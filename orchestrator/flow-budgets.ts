@@ -146,7 +146,32 @@ export class CostTracker {
     if (!this.enforcing) return;
     if (!isAuthoritativeCostEvent(entry, this.iterationPhases)) return;
 
-    const costUsd = entry.cost_usd ?? 0;
+    // Runtime boundary guard (M0-A fix round 1, finding 2): `entry.cost_usd`
+    // is TYPED `number | undefined`, but this event may have come off the
+    // JSONL log (an untrusted producer's own serialization), where the type
+    // annotation is only a compile-time claim. `?? 0` alone only catches
+    // `null`/`undefined` — a NaN, an Infinity, or a string from a future
+    // untyped producer sails through and corrupts `spentUsd` via `+=`
+    // coercion instead of being rejected (the campaign's "widen the type,
+    // trust it, drop the check" pattern). A present-but-invalid value must
+    // never silently become 0 either — that would just move the swallow one
+    // line down — so it is both skipped from the authoritative sum AND
+    // surfaced as its own error event.
+    const rawCostUsd: unknown = entry.cost_usd;
+    const costUsdIsValid = typeof rawCostUsd === 'number' && Number.isFinite(rawCostUsd);
+    if (rawCostUsd !== undefined && rawCostUsd !== null && !costUsdIsValid) {
+      this.logger.emit({
+        initiative_id: this.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'error',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow.cost-invalid',
+        metadata: { event_id: entry.event_id, phase: entry.phase, message: entry.message, cost_usd: rawCostUsd },
+      });
+    }
+    const costUsd = costUsdIsValid ? rawCostUsd : 0;
     this.spentUsd += costUsd;
 
     const workItemId = entry.metadata?.work_item_id;
