@@ -27,7 +27,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 
-import { loadStory } from './story-file.mjs';
+import { loadStory, assertNonEmptySelection } from './story-file.mjs';
 import { spendGateVerdict } from './spend.mjs';
 import { memoryVerdict, readAvailableMb, acquireHostLock } from './preflight.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
@@ -76,6 +76,10 @@ async function main() {
   if (args.costlessOnly) {
     stories = stories.filter((s) => spendGateVerdict(s.ground, { approveSpend: false }).allowed);
   }
+
+  // A run that selected nothing must not exit 0. Checked after filtering and
+  // before --list, so `--list` on an empty set is loud too.
+  assertNonEmptySelection(stories, { costlessOnly: args.costlessOnly });
 
   if (args.list) {
     console.log(`[stories] ${stories.length} story/stories:`);

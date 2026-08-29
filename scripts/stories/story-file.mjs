@@ -100,3 +100,19 @@ export async function loadStory(absPath) {
   }
   return validateStory(mod.default);
 }
+
+/**
+ * Refuse a run that selected no story.
+ *
+ * A gate that executes nothing and exits 0 reports green having not looked —
+ * the class this harness exists to close. `--costless-only` is the realistic
+ * way to reach it: if every story declared a budget, CI would loop over an
+ * empty set and pass.
+ */
+export function assertNonEmptySelection(stories, { costlessOnly = false } = {}) {
+  if (stories.length > 0) return stories;
+  const why = costlessOnly
+    ? 'no story is costless — every one declares a real spawn or a budget, so --costless-only matched nothing'
+    : 'no story files were found in tests/stories/';
+  throw new Error(`refusing to report success: ${why}. A run that executes no story is not a passing run.`);
+}

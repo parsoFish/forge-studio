@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateStory } from './story-file.mjs';
+import { validateStory, assertNonEmptySelection } from './story-file.mjs';
 
 const ok = {
   id: 'smoke',
@@ -125,4 +125,24 @@ test('ordinary story ids still validate', () => {
   for (const good of ['smoke', 'S1', 'S10', 'my-story', 'a_b.c']) {
     assert.equal(validateStory({ ...ok, id: good }).id, good);
   }
+});
+
+test('a selection that matched NO story is an error — a gate must not pass having run nothing', () => {
+  // Found by reading the CI job's own log. `--costless-only` filters the set;
+  // if every story declared a budget, the runner would loop over nothing and
+  // exit 0 — CI green having executed no story at all. That is precisely the
+  // class this whole harness exists to close (M0's merge gate returning
+  // ok:true from a catch; M1-D's brain lint reporting 0 errors having skipped
+  // Brain 3). An empty run is not a passing run.
+  assert.throws(() => assertNonEmptySelection([], { costlessOnly: true }), /no story/i);
+  assert.throws(() => assertNonEmptySelection([], {}), /no story/i);
+});
+
+test('the empty-selection error says WHICH filter emptied the set', () => {
+  assert.throws(() => assertNonEmptySelection([], { costlessOnly: true }), /--costless-only/);
+});
+
+test('a non-empty selection passes through untouched', () => {
+  const set = [validateStory(ok)];
+  assert.equal(assertNonEmptySelection(set, {}), set);
 });
