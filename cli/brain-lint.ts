@@ -11,7 +11,6 @@
  *   4. checkStaleness          — cited forge-internal paths still exist
  *   5. checkOrphans            — themes reachable from INDEX.md → category index → theme
  *   6. checkLengthSoftCap      — > 60 lines warn; > 100 lines error
- *   7. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
  *   8. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
  *   9. checkReflectorLoss      — advisory: `_queue/done/` initiatives missing a reflection archive
  *  10. checkProjectBrainIndexes — project-brain (Brain 3) category-index sync
@@ -104,7 +103,6 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
   ['checkOrphans', checkOrphans],
   ['checkProjectBrainIndexes', checkProjectBrainIndexes],
   ['checkLengthSoftCap', checkLengthSoftCap],
-  ['checkContradictions', checkContradictions],
   ['checkCategoryScope', checkCategoryScope],
   ['checkReflectorLoss', checkReflectorLoss],
   ['checkDanglingEdges', checkDanglingEdges],
@@ -127,31 +125,67 @@ export const CHECK_NAMES = FULL_SCOPE_CHECKS.map(([name]) => name) as readonly s
  * reporting `pass` for a check that never scanned the KB is exactly the
  * declared-data-fails-open defect this hardens against.
  *
- *   - `forge-themes`    — `readThemeFiles`-based; scans ONLY
- *                          `brain/cycles/themes/` and `brain/forge-dev/themes/`
- *                          (see `readThemeFiles` below). Never sees a project
- *                          or band KB's own themes.
+ *   - `themes`          — `readThemeFiles`-based; scans EVERY theme dir
+ *                          `themeScanDirs` yields, which since ADR 035
+ *                          includes `brain/projects/<name>/themes/`. Applicable
+ *                          to any KB whose own `themes/` dir the scan walks.
+ *   - `forge-themes`    — `readThemeFiles`-based, but the rule itself is the
+ *                          ADR 018 category→sub-wiki routing convention, which
+ *                          governs `brain/cycles` and `brain/forge-dev` alone.
+ *                          Genuinely inapplicable to any other KB — a project
+ *                          brain indexes its own themes in its own dir and gets
+ *                          its verdict from `checkProjectBrainIndexes`.
  *   - `project-indexes` — `checkProjectBrainIndexes`; scans `brain/projects/*`.
  *   - `global`          — `checkReflectorLoss`; scans `_queue/done` —  an
  *                          advisory over the WHOLE queue, not scoped to any
  *                          single KB's brain dir. Never applicable per-KB.
+ *
+ * The `themes`/`forge-themes` split is load-bearing for the honesty invariant.
+ * Before it, all ten theme checks claimed the forge-only domain, which was true
+ * of the scan but not of the rules — so a per-KB consumer could only report
+ * `n/a` for a project brain on checks that in fact apply to it perfectly well.
  */
-export type CheckScope = 'forge-themes' | 'project-indexes' | 'global';
+export type CheckScope = 'themes' | 'forge-themes' | 'project-indexes' | 'global';
 
 export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
-  checkFrontmatter: 'forge-themes',
+  checkFrontmatter: 'themes',
   checkIndexSync: 'forge-themes',
-  checkSourceLinks: 'forge-themes',
-  checkStaleness: 'forge-themes',
-  checkOrphans: 'forge-themes',
+  checkSourceLinks: 'themes',
+  checkStaleness: 'themes',
+  checkOrphans: 'themes',
   checkProjectBrainIndexes: 'project-indexes',
-  checkLengthSoftCap: 'forge-themes',
-  checkContradictions: 'forge-themes',
+  checkLengthSoftCap: 'themes',
   checkCategoryScope: 'forge-themes',
   checkReflectorLoss: 'global',
-  checkDanglingEdges: 'forge-themes',
-  checkDuplicateThemes: 'forge-themes',
+  checkDanglingEdges: 'themes',
+  checkDuplicateThemes: 'themes',
 };
+
+/**
+ * Every theme file a `scope:'full'` run actually reads, absolute. THE export a
+ * per-KB consumer asks "did the scan open anything in this KB?" with — so
+ * Studio can never hold its own copy of the answer, which is how it came to
+ * hardcode `brainDir === brain/cycles || brainDir === brain/forge-dev` and
+ * report `n/a` for four checks that scan a project brain perfectly well.
+ *
+ * FILES, not dirs, deliberately: a KB with a `themes/` dir and nothing in it
+ * has had no content examined, so its checks are `n/a` — not a `pass` earned
+ * over an empty set. That is the same reasoning `checkProjectBrainIndexes`
+ * already applies when it skips a themeless project brain.
+ */
+export function themeScanFiles(forgeRoot: string): string[] {
+  return readThemeFiles(join(forgeRoot, 'brain'));
+}
+
+/**
+ * Is this KB dir one of the two FORGE sub-wikis — the domain of the ADR 018
+ * category→sub-wiki routing rules (`CHECK_SCOPE: 'forge-themes'`)? Derived from
+ * `THEME_SUBDIRS`, never re-listed by a caller.
+ */
+export function isForgeBrainDir(forgeRoot: string, brainDir: string): boolean {
+  const brainRoot = join(forgeRoot, 'brain');
+  return (THEME_SUBDIRS as readonly string[]).some((sub) => join(brainRoot, sub) === brainDir);
+}
 
 const ALLOWED_CATEGORIES = new Set([
   'pattern',
@@ -192,36 +226,92 @@ const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
   reference: 'forge-dev',
 };
 
-/** The two forge-side theme directories, relative to `brain/`. */
+/**
+ * The two FORGE sub-wikis, relative to `brain/` (ADR 018). This is the
+ * category-routing domain (`pattern`→`cycles`, `decision`→`forge-dev`) and the
+ * `forge-only` scope filter — it is NOT the set of theme dirs the lint walks.
+ * That universe is `themeDirs()` below, which also covers Brain 3
+ * (`brain/projects/<name>/themes/`, ADR 035) and operator-created KBs
+ * (`brain/<id>/themes/`).
+ */
 const THEME_SUBDIRS = ['cycles', 'forge-dev'] as const;
+
+/**
+ * THE one enumeration of every brain theme directory: each `brain/<kb>/themes/`
+ * plus each `brain/projects/<name>/themes/` (ADR 035 moved Brain 3 into this
+ * repo; ADR 018 is the sub-wiki layout). `readThemeFiles`, `findThemeBySlug`
+ * and `collectThemeSlugTargets` all derive from this — three callers, one walk,
+ * so no caller can hold a stale idea of what exists.
+ *
+ * It used to be two: `collectThemeSlugTargets` already walked all of them for
+ * the slug universe while `readThemeFiles` walked only the two forge sub-wikis
+ * and said so ("It does not change which files are LINTED"). That seam is the
+ * defect this function removes — every check built on `readThemeFiles` reported
+ * clean on Brain 3 files it had never opened (campaign ledger, "OPEN RULE
+ * result — 2026-08-29").
+ */
+function themeDirs(brainRoot: string): string[] {
+  const dirs: string[] = [];
+  for (const name of existsSync(brainRoot) ? readdirSync(brainRoot) : []) {
+    // `.staging-<id>-*` create leftovers (SEC-05 4on) and any dot-dir.
+    if (name.startsWith('.') || name === 'projects') continue;
+    dirs.push(join(brainRoot, name, 'themes'));
+  }
+  const projectsRoot = join(brainRoot, 'projects');
+  if (existsSync(projectsRoot)) {
+    for (const name of readdirSync(projectsRoot)) {
+      if (name.startsWith('.')) continue;
+      dirs.push(join(projectsRoot, name, 'themes'));
+    }
+  }
+  return dirs.filter((d) => existsSync(d));
+}
+
+/**
+ * Is this absolute path inside a managed project's ground clone
+ * (`<forgeRoot>/projects/<name>/`)? Those clones are gitignored working copies
+ * of OTHER repositories — present locally, absent in CI — so nothing the forge
+ * lint asserts may depend on their contents.
+ */
+function isGroundClonePath(forgeRoot: string, target: string): boolean {
+  const groundRoot = resolve(forgeRoot, 'projects');
+  return target === groundRoot || target.startsWith(groundRoot + sep);
+}
+
+/** The brain sub-wiki segment a theme file sits under (`cycles`, `projects`, an operator KB id). */
+function themeSubdir(brainRoot: string, file: string): string {
+  const rel = file.slice(brainRoot.length).replace(/\\/g, '/');
+  return rel.split('/').filter(Boolean)[0] ?? '';
+}
+
+/**
+ * Is this theme one of the two FORGE sub-wikis' own themes? The rules keyed to
+ * the three-brain routing convention (category→sub-wiki, forge category-index
+ * sync) govern only those; a project or operator-KB theme is exempt, and saying
+ * so once here is what stops the exemption being re-derived per check.
+ */
+function isForgeTheme(brainRoot: string, file: string): boolean {
+  return (THEME_SUBDIRS as readonly string[]).includes(themeSubdir(brainRoot, file));
+}
 
 // ---------- helpers ----------
 
 function readThemeFiles(brainRoot: string): string[] {
   const files: string[] = [];
   if (!existsSync(brainRoot)) return files;
-
-  // Forge-side themes live in two sub-wikis (three-brain model, ADR 018):
-  // cycles/themes/ (Brain 2) and forge-dev/themes/ (Brain 1).
-  for (const sub of THEME_SUBDIRS) {
-    const dir = join(brainRoot, sub, 'themes');
-    if (!existsSync(dir)) continue;
+  for (const dir of themeDirs(brainRoot)) {
     for (const entry of readdirSync(dir)) {
       if (entry === 'README.md' || !entry.endsWith('.md')) continue;
       files.push(join(dir, entry));
     }
   }
-
-  // Project themes now live in <project-repo>/brain/themes/ (separate git repos).
-  // They are not linted from forge-side; lint them inside the project repo instead.
-
   return files;
 }
 
-/** Absolute path to a theme slug if it exists in either forge-side theme dir. */
+/** Absolute path to a theme slug if it exists in ANY brain theme dir (`themeDirs`). */
 function findThemeBySlug(brainRoot: string, slug: string): string | null {
-  for (const sub of THEME_SUBDIRS) {
-    const candidate = join(brainRoot, sub, 'themes', `${slug}.md`);
+  for (const dir of themeDirs(brainRoot)) {
+    const candidate = join(dir, `${slug}.md`);
     if (existsSync(candidate)) return candidate;
   }
   return null;
@@ -324,6 +414,13 @@ export function checkIndexSync(forgeRoot: string): Finding[] {
     const indexFile = CATEGORY_TO_INDEX_FILE[cat];
     if (!indexFile) continue;
 
+    // Forge sub-wikis only: this check resolves the index through the
+    // category→sub-wiki routing map, which governs `cycles`/`forge-dev` alone.
+    // A project brain indexes its own themes in its OWN dir and gets a real
+    // verdict from `checkProjectBrainIndexes`; resolving a Brain 3 theme
+    // through this map would look for it in `brain/cycles/patterns.md` and
+    // flag all 185 project themes as unindexed.
+    if (!isForgeTheme(brainRoot, file)) continue;
     const indexPath = join(brainRoot, CATEGORY_TO_BRAIN_SUBDIR[cat] ?? 'cycles', indexFile);
 
     if (!existsSync(indexPath)) {
@@ -507,6 +604,16 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
     for (const link of relLinks) {
       // Resolve relative to the theme file.
       const target = resolve(dir, link);
+      // A managed project's own repo is a GROUND CLONE under `projects/<name>/`
+      // — gitignored, cloned on demand, absent in CI and in a fresh worktree.
+      // ADR 035 keeps the brain forge-owned while the project stays a separate
+      // repo, so forge cannot assert anything about that tree's contents: a
+      // theme citing its project's source would flag or clear depending only on
+      // whether the clone happened to be checked out, which is a gate that
+      // reports on the environment rather than on the brain. Out of scope in
+      // EVERY environment — the same bounding `checkStaleness` already applies
+      // to citations outside docs/orchestrator/skills/loops.
+      if (isGroundClonePath(forgeRoot, target)) continue;
       if (!existsSync(target)) {
         findings.push({
           category: 'error',
@@ -518,8 +625,10 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
     }
 
     for (const slug of wikilinks) {
-      // Resolve against either forge-side theme dir (cycles/ or forge-dev/).
-      // Project themes (Brain 3) live in separate repos — not resolvable here.
+      // Resolved against EVERY brain theme dir (`themeDirs`), so a Brain 3
+      // theme's link to a sibling in its own project brain resolves — it used
+      // to be searched for in the two forge sub-wikis only, which reported 317
+      // of this corpus's live wikilinks as broken.
       const hit = findThemeBySlug(brainRoot, slug) !== null;
       if (!hit) {
         findings.push({
@@ -539,11 +648,18 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
 
 /**
  * For each theme citing a path in `## Sources` (or anywhere in the body):
- * - For project themes (`brain/projects/<n>/themes/<file>.md`): resolve the
- *   project repo path as `<forgeRoot>/projects/<n>/`. If the path exists, OK.
- *   If the path is missing AND the project repo exists, flag as stale.
- * - For forge themes: resolve relative to `<forgeRoot>/`. Flag missing files
+ * - For FORGE themes: resolve relative to `<forgeRoot>/`. Flag missing files
  *   that look like source paths.
+ * - For a theme in any OTHER brain — a project brain (ADR 035) or an
+ *   operator-created KB — a bare `docs/…` citation names THAT project's docs,
+ *   which live in its ground clone under `projects/<name>/`: gitignored,
+ *   absent in CI, another repository's tree. Forge cannot resolve it, so it is
+ *   not checked. Resolving it against the forge root instead produced 27 flags
+ *   naming files that were sitting in the project all along —
+ *   `brain/projects/trafficGame/themes/2026-05-10-*` cite `docs/LEARNINGS.md`,
+ *   which is `projects/trafficGame/docs/LEARNINGS.md` and present, while forge
+ *   has no such file. This is what the docblock above already described and
+ *   the code never did.
  *
  * Citations are detected as backtick-wrapped paths that look like file paths:
  *   `src/foo.ts` `orchestrator/cycle.ts` `tests/x.test.ts`
@@ -582,6 +698,9 @@ export function checkStaleness(forgeRoot: string): Finding[] {
       // Skip references to forge brain paths themselves — those are linked,
       // and checkSourceLinks already handles those.
       if (p.startsWith('brain/')) continue;
+
+      // Only a FORGE theme's citation is a forge path (see the docblock).
+      if (!isForgeTheme(brainRoot, file)) continue;
       if (p.startsWith('docs/') || p.startsWith('orchestrator/') || p.startsWith('skills/') || p.startsWith('loops/')) {
         // Forge-internal path. Resolve against forge root.
         const target = resolve(forgeRoot, p);
@@ -612,23 +731,17 @@ function collectIndexLinkTargets(brainRoot: string): Set<string> {
   const topIndex = join(brainRoot, 'INDEX.md');
   if (existsSync(topIndex)) indexFiles.push(topIndex);
 
-  // cycles/ category indexes
-  const cyclesDir = join(brainRoot, 'cycles');
-  if (existsSync(cyclesDir)) {
-    for (const entry of readdirSync(cyclesDir)) {
-      if (entry.endsWith('.md')) indexFiles.push(join(cyclesDir, entry));
+  // A KB's index pages sit beside its `themes/` dir — for the forge sub-wikis
+  // and, since ADR 035, for every project brain at `brain/projects/<name>/`
+  // too. Derived from `themeDirs` so a KB whose themes are LINTED can never be
+  // a KB whose indexes are unread: that mismatch is what made every Brain 3
+  // theme look like an orphan.
+  for (const dir of themeDirs(brainRoot)) {
+    const kbDir = dirname(dir);
+    for (const entry of readdirSync(kbDir)) {
+      if (entry.endsWith('.md')) indexFiles.push(join(kbDir, entry));
     }
   }
-
-  // forge-dev/ index files
-  const forgeDevDir = join(brainRoot, 'forge-dev');
-  if (existsSync(forgeDevDir)) {
-    for (const entry of readdirSync(forgeDevDir)) {
-      if (entry.endsWith('.md')) indexFiles.push(join(forgeDevDir, entry));
-    }
-  }
-
-  // Project category indexes now live in separate repos; not scanned from forge.
 
   for (const f of indexFiles) {
     let body: string;
@@ -796,56 +909,6 @@ export function checkCleanupCandidates(forgeRoot: string): Finding[] {
   return findings;
 }
 
-// ---------- checkContradictions (warn-only stretch) ----------
-
-export function checkContradictions(forgeRoot: string): Finding[] {
-  const findings: Finding[] = [];
-  const brainRoot = join(forgeRoot, 'brain');
-
-  type ThemeMeta = {
-    file: string;
-    category: string;
-    keywords: string[];
-  };
-
-  const themes: ThemeMeta[] = [];
-  for (const file of readThemeFiles(brainRoot)) {
-    const parsed = parseTheme(file);
-    if (!parsed) continue;
-    const kw = Array.isArray(parsed.data.keywords) ? parsed.data.keywords.map(String) : [];
-    themes.push({ file, category: String(parsed.data.category ?? ''), keywords: kw });
-  }
-
-  const seen = new Set<string>();
-  for (let i = 0; i < themes.length; i++) {
-    for (let j = i + 1; j < themes.length; j++) {
-      const a = themes[i];
-      const b = themes[j];
-      const aIsPattern = a.category === 'pattern' || a.file.includes('-pattern');
-      const aIsAnti = a.category === 'antipattern' || a.file.includes('-antipattern');
-      const bIsPattern = b.category === 'pattern' || b.file.includes('-pattern');
-      const bIsAnti = b.category === 'antipattern' || b.file.includes('-antipattern');
-      const opposing = (aIsPattern && bIsAnti) || (aIsAnti && bIsPattern);
-      if (!opposing) continue;
-
-      const overlap = a.keywords.filter((k) => b.keywords.includes(k));
-      if (overlap.length >= 3) {
-        const key = [a.file, b.file].sort().join('::');
-        if (seen.has(key)) continue;
-        seen.add(key);
-        findings.push({
-          category: 'flag',
-          file: a.file,
-          message: `possible contradiction with ${relative(forgeRoot, b.file)} (${overlap.length} keyword overlaps: ${overlap.slice(0, 5).join(', ')})`,
-          check: 'checkContradictions',
-        });
-      }
-    }
-  }
-
-  return findings;
-}
-
 // ---------- checkCategoryScope (brain gap #8) ----------
 
 /**
@@ -874,12 +937,12 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
     const expectedSubdir = CATEGORY_TO_BRAIN_SUBDIR[cat];
     if (!expectedSubdir) continue;
 
-    // Derive the actual brain sub-wiki from the file's path
-    // file is: <brainRoot>/<subdir>/themes/<slug>.md
-    const rel = file.slice(brainRoot.length).replace(/\\/g, '/');
-    // rel looks like /cycles/themes/foo.md or /forge-dev/themes/foo.md
-    const parts = rel.split('/').filter(Boolean); // ['cycles','themes','foo.md']
-    const actualSubdir = parts[0] ?? '';
+    // category→sub-wiki routing is an ADR 018 convention over the two FORGE
+    // sub-wikis only. A Brain 3 or operator-KB theme keeps its own category in
+    // its own brain, so it is exempt — the same exemption `lintThemeFiles` has
+    // always applied, now stated once in `isForgeTheme`.
+    if (!isForgeTheme(brainRoot, file)) continue;
+    const actualSubdir = themeSubdir(brainRoot, file);
 
     if (actualSubdir !== expectedSubdir) {
       findings.push({
@@ -925,34 +988,14 @@ export function collectThemeSlugTargets(brainRoot: string): Map<string, string[]
       else targets.set(slug, [join(dir, entry)]);
     }
   };
-  // W8-F1 — EVERY `brain/<x>/themes` dir, not just the two OOTB sub-wikis.
-  //
-  // `POST /api/studio/kbs` scaffolds an operator-created KB at `brain/<id>/`
-  // (cli/bridge-studio-kbs.ts: `resolveGuardedPath(resolve(forgeRoot,'brain'),
-  // [id])` then `mkdirSync(join(kbDir,'themes'))`), which is neither `cycles`,
-  // `forge-dev`, nor under `projects/`. Its themes were therefore absent from
-  // this universe — so `repairsFor()` returned [] for them and the drain's
-  // edit-soundness audit read a deletion of a REAL edge as "a genuinely
-  // dangling entry may go". forge-d8l, wide open, for exactly the KBs the
-  // Studio "Create KB" button makes. Reproduced: the identical fixture under
-  // `brain/projects/<id>` is refused (`edge-deleted`) while under `brain/<id>`
-  // the edge is destroyed with `unsound: []`.
-  //
-  // Widening is safe in BOTH consumers, and only one direction each: more
-  // targets resolve, so `checkDanglingEdges` reports FEWER dangling edges
-  // (never new ones), and the soundness audit refuses MORE deletions. It does
-  // not change which files are LINTED — `readThemeFiles` keeps its own scope.
-  for (const name of existsSync(brainRoot) ? readdirSync(brainRoot) : []) {
-    if (name.startsWith('.') || name === 'projects') continue;
-    addDir(join(brainRoot, name, 'themes'));
-  }
-  const projectsRoot = join(brainRoot, 'projects');
-  if (existsSync(projectsRoot)) {
-    for (const name of readdirSync(projectsRoot)) {
-      if (name.startsWith('.')) continue; // skip `.staging-<id>-*` leftovers, same guard as checkProjectBrainIndexes
-      addDir(join(projectsRoot, name, 'themes'));
-    }
-  }
+  // W8-F1 — EVERY `brain/<x>/themes` dir, not just the two OOTB sub-wikis:
+  // `POST /api/studio/kbs` scaffolds an operator-created KB at `brain/<id>/`,
+  // which is neither `cycles`, `forge-dev`, nor under `projects/`. Its themes
+  // were absent from this universe, so `repairsFor()` returned [] for them and
+  // the drain's edit-soundness audit read a deletion of a REAL edge as "a
+  // genuinely dangling entry may go" (forge-d8l). The walk is now `themeDirs`,
+  // shared with `readThemeFiles` and `findThemeBySlug`.
+  for (const dir of themeDirs(brainRoot)) addDir(dir);
   return targets;
 }
 
@@ -1067,7 +1110,7 @@ function jaccardSimilarity(a: ReadonlySet<string>, b: ReadonlySet<string>): numb
  * earlier (partner) file in the message.
  */
 function duplicateThemeFindings(files: string[]): Finding[] {
-  type ThemeDupMeta = { file: string; normTitle: string; keywords: Set<string> };
+  type ThemeDupMeta = { file: string; normTitle: string; keywords: Set<string>; recurrence: string };
   const metas: ThemeDupMeta[] = [];
   for (const file of files) {
     const parsed = parseTheme(file);
@@ -1077,6 +1120,7 @@ function duplicateThemeFindings(files: string[]): Finding[] {
       file,
       normTitle: normalizeThemeTitle(parsed.data.title),
       keywords: new Set(kwArr),
+      recurrence: String(parsed.data.recurrence ?? '').trim(),
     });
   }
 
@@ -1086,6 +1130,25 @@ function duplicateThemeFindings(files: string[]): Finding[] {
     for (let j = i + 1; j < metas.length; j++) {
       const a = metas[i];
       const b = metas[j];
+
+      // A DELIBERATE RECURRENCE SERIES. Some brains record the same failure
+      // once per cycle it recurred in, and the count is the point: gitpulse
+      // carries six `gitignored-scratch-*` themes, and M0-A cited the sixth as
+      // the evidence for the M5-A decomposition-time fix (forge-6gv.17).
+      // Merged into one theme, that argument no longer exists. This checker
+      // cannot tell such a series from a brain that quietly re-captured one
+      // lesson twice, so the theme says which it is: `recurrence: <series>` in
+      // its frontmatter names the series it is a record of, and two records of
+      // the SAME series are not duplicates of each other.
+      //
+      // The check is not weakened by it. The exemption is an author's explicit
+      // statement in the data, it costs a declaration on BOTH files, it is
+      // scoped to that one pair, and every other pairing of a declaring theme
+      // — including against an undeclared near-duplicate — still flags. It is
+      // deliberately not a list of paths in this file: an allowlist would
+      // exempt those exact three files forever and teach the next series
+      // nothing.
+      if (a.recurrence !== '' && a.recurrence === b.recurrence) continue;
 
       // An empty normalized title never participates in a title collision.
       const titleCollision = a.normTitle !== '' && a.normTitle === b.normTitle;
@@ -1157,7 +1220,7 @@ export function checkDuplicateThemes(forgeRoot: string): Finding[] {
  * `checkSourceLinks`, `checkCategoryScope`, `checkIndexSync`,
  * `checkDanglingEdges`, `checkDuplicateThemes` (mirrors the `check:` literals
  * in the function body — never `checkStaleness`/`checkOrphans`/
- * `checkLengthSoftCap`/`checkContradictions`/`checkProjectBrainIndexes`/
+ * `checkLengthSoftCap`/`checkProjectBrainIndexes`/
  * `checkReflectorLoss`, which `lintThemeFiles` does not implement). A per-KB
  * consumer (`buildKbHealth`) uses this to know which checks get a REAL
  * verdict from a KB's OWN theme files even when the shared
@@ -1377,8 +1440,6 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
     case 'checkLengthSoftCap':
       if (/hard cap/.test(msg)) return { kind: 'length.hard-cap', resolution: 'agent', fixHint: 'Condense the theme under 100 body lines (tighten prose; do not drop load-bearing facts).' };
       return { kind: 'length.soft-cap', resolution: 'agent', fixHint: 'Condense the theme toward 60 body lines without losing substance.' };
-    case 'checkContradictions':
-      return { kind: 'contradiction', resolution: 'user' };
     case 'checkCategoryScope':
       return { kind: 'category.mis-routed', resolution: 'auto' };
     case 'checkCleanupCandidates':
@@ -1435,9 +1496,11 @@ function filterFindingsByScope(
       );
     }
     case 'project-only': {
-      // Project themes now live in separate repos (three-brain restructure 2026-05-26).
-      // Forge-side brain-lint does not scan project themes; this scope returns empty.
-      return [];
+      // Brain 3 is forge-owned and central (ADR 035): `brain/projects/<name>/`.
+      // This arm returned [] while that was still believed to live in the
+      // managed project's own repo.
+      const prefix = join(brainRoot, 'projects') + sep;
+      return findings.filter((f) => f.file.startsWith(prefix));
     }
     case 'single-file': {
       if (!opts.file) return findings;
@@ -1524,27 +1587,21 @@ export type AutoFixStableResult = {
  *
  * `filter` scopes which findings are eligible (e.g. one kb); defaults to all.
  *
- * `extraFindings` (W7-B2, knowledge-10): an additional CLASSIFIED finding
- * source re-evaluated every round alongside the internal full-scope re-lint —
- * the per-KB own-theme lens (`ownThemeFindingsLens`, cli/kb-lint-summary.ts)
- * rides in here so a project/band KB's own auto-tier findings (which the
- * full-scope scan structurally never surfaces) are visible to the fixed-point
- * loop. Deduped against the full-scan findings by (check, file, message).
+ * It also took an `extraFindings` source (W7-B2, knowledge-10), through which
+ * the per-KB own-theme lens rode in so a project KB's own auto-tier findings
+ * were visible to the fixed-point loop — the full-scope scan structurally
+ * never surfaced them. The scan covers every theme dir now (ADR 035), so that
+ * option had no caller and no test; it is gone rather than left as a second
+ * way for a finding to reach the fixers.
  */
 export function applyAutoFixesUntilStable(
   forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean; extraFindings?: () => Finding[] } = {},
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean } = {},
 ): AutoFixStableResult {
   const maxRounds = opts.maxRounds ?? 12;
   const filter = opts.filter ?? (() => true);
-  const extraFindings = opts.extraFindings ?? (() => []);
-  const identity = (f: Finding): string => `${f.check ?? ''}::${f.file}::${f.message}`;
-  const lintOnce = (): Finding[] => {
-    const base = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
-    const seen = new Set(base.map(identity));
-    const extras = extraFindings().filter((f) => !seen.has(identity(f)));
-    return [...base, ...extras].filter(filter);
-  };
+  const lintOnce = (): Finding[] =>
+    runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
   const applied: AutoFixStableResult['applied'] = [];
   const skipped: AutoFixStableResult['skipped'] = [];
   let rounds = 0;

@@ -28,7 +28,8 @@ related_themes: []
 
 > **Historical (C19 superseded).** The per-iteration $/turn budget guard
 > documented here was removed on 2026-05-18 and ratified by
-> [CONTRACTS.md C19](../../../../docs/planning/2026-05-20-refinement/CONTRACTS.md)
+> `CONTRACTS.md` C19 (the ratifying document; `docs/planning/2026-05-20-refinement/`
+> is no longer in the repo, so this provenance is recorded as a name, not a link)
 > on 2026-05-23. All $-budgets are gone; the iteration cap is the sole
 > bound. This theme is retained as the evidence that motivated C19, not
 > as current guidance.

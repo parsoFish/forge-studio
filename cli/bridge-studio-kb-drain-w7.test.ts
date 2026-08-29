@@ -25,6 +25,7 @@ import {
 import { collectKbFindings } from './kb-lint-summary.ts';
 import { deriveKbActiveJob } from './kb-job-state.ts';
 import { noKbEdits } from './kb-drain-edit-soundness.ts';
+import { runBrainLint } from './brain-lint.ts';
 import type { Finding, AutoFixStableResult } from './brain-lint.ts';
 import { startBridge } from './ui-bridge.ts';
 
@@ -95,16 +96,23 @@ function makeProjectKbRoot(): { root: string; brainDir: string; themeFile: strin
   return { root, brainDir, themeFile };
 }
 
-test('collectKbFindings — unions the full-scan scope with the KB\'s OWN theme-file lens (knowledge-10)', () => {
+test('collectKbFindings — a project KB\'s own theme findings come from the ONE full scan (knowledge-10)', () => {
   const { root, themeFile } = makeProjectKbRoot();
   try {
-    // The full scan contributed nothing (readThemeFiles never walks
-    // brain/projects/<id>/themes) — the own-theme lens must still see it.
-    const findings = collectKbFindings(root, 'pkb', []);
+    // The guarantee is unchanged: the drain must SEE a project-bound KB's own
+    // theme findings, never scope a blind scan and declare a false instant
+    // green. What changed is where they come from. This used to be asserted by
+    // passing NO full-scan findings at all (`collectKbFindings(root,'pkb',[])`)
+    // and relying on a second lens over the KB's own theme files, because
+    // readThemeFiles never walked brain/projects/<id>/themes. It does now
+    // (ADR 035), so the finding must be in the scan itself — one lens, and no
+    // way for the drain's view and `forge brain lint` to disagree.
+    const scan = runBrainLint({ cwd: root, scope: 'full' }).findings;
+    const findings = collectKbFindings(root, 'pkb', scan);
     const missingDate = findings.find((f) => f.file === themeFile && /updated_at/.test(f.message));
-    assert.ok(missingDate, `expected the own-theme missing-updated_at finding, got ${JSON.stringify(findings)}`);
+    assert.ok(missingDate, `expected the missing-updated_at finding for this project KB's own theme, got ${JSON.stringify(findings)}`);
     // classify() must have stamped a resolution so the drain can tier it.
-    assert.ok(missingDate?.resolution, 'own-lens findings must be classified (resolution stamped)');
+    assert.ok(missingDate?.resolution, 'findings must be classified (resolution stamped)');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

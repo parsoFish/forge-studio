@@ -6,6 +6,7 @@ keywords: [fix_plan, AGENT.md, gitignore, chore-commit, repeated-actions, scratc
 related_themes: [2026-06-22-gitignored-scratch-file-third-cycle, 2026-07-12-gitignored-scratch-fifth-cycle]
 created_at: 2026-07-11
 updated_at: 2026-07-11
+recurrence: gitignored-scratch-files
 ---
 
 ## Antipattern

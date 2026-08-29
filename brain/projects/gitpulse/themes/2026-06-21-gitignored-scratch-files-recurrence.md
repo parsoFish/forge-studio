@@ -15,6 +15,7 @@ keywords:
 related_themes: [2026-06-21-gitignored-scratch-files-double-commit, 2026-06-22-gitignored-scratch-file-third-cycle]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
+recurrence: gitignored-scratch-files
 ---
 
 # Gitignored scratch-file double-commit: recurrence

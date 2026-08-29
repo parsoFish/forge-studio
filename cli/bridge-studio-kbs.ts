@@ -41,7 +41,7 @@ import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestr
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
+import { resolutionCounts, applyAutoFixesUntilStable, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -49,11 +49,7 @@ import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx, brainRootDir } from './kb-drain-edit-soundness.ts';
 import {
   findingUnderDir,
-  scopeFindingsToKb,
   collectKbFindings,
-  ownThemeFindingsLens,
-  listOwnThemeFiles,
-  unionFindings,
   computeKbLintChecks,
   attachKbLintSummaries,
   runBrainLintFullMemoized,
@@ -808,11 +804,10 @@ export async function approveKbCleanup(
 // KB health computation
 // ---------------------------------------------------------------------------
 
-// `CheckHealthStatus`/`CheckHealthEntry` types, `KB_OWN_THEME_INDEX_FILES`,
-// `listOwnThemeFiles`, `findingIdentity`, and `unionFindings` moved to
-// cli/kb-lint-summary.ts (forge-2am) — `CheckHealthEntry` re-imported above
-// for the `KbHealth` type below; the rest are internal to
-// `computeKbLintChecks` now and no longer needed here.
+// `CheckHealthStatus`/`CheckHealthEntry` moved to cli/kb-lint-summary.ts
+// (forge-2am); `CheckHealthEntry` is re-imported above for the `KbHealth` type
+// below. The per-KB own-theme lens that used to live here with them is gone —
+// the full-scope scan covers every theme dir (ADR 035), so there is one lens.
 
 type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
@@ -890,27 +885,20 @@ function buildKbHealth(
     }
   }
 
-  // Run brain-lint and combine it with the KB's OWN theme files (R6-08 4on —
-  // fix for 3 adversarial-review-confirmed declared-data-fails-open MAJORs):
-  //
-  //   scopedFull  — findings from the shared, readThemeFiles-based full-scope
-  //                 scan, filtered to this KB's dir (MAJOR 1 fix: scope through
-  //                 the SAME exact-dir helper consolidate/lint use,
-  //                 resolveKbBrainDir/scopeFindingsToKb, so a project brain at
-  //                 brain/projects/<id> is counted).
-  //   ownFindings — findings from lintThemeFiles run over the KB's OWN theme
-  //                 files (listOwnThemeFiles), covering LINT_THEME_FILE_CHECKS
-  //                 for ANY kb kind — including project/band KBs whose themes
-  //                 the shared scan never sees at all (F1 fix: those KBs used
-  //                 to report 8 of 10 checks 'pass' despite never being
-  //                 scanned; F2 fix: checkReflectorLoss is a GLOBAL advisory
-  //                 over _queue/done, never scoped to any one KB, so it must
-  //                 never claim to have verified one — see CHECK_SCOPE).
+  // Run brain-lint and scope it to this KB (R6-08 4on — fix for 3
+  // adversarial-review-confirmed declared-data-fails-open MAJORs). Findings
+  // come from the shared full-scope scan, filtered to this KB's dir through
+  // the SAME exact-dir helper consolidate/lint use
+  // (resolveKbBrainDir/scopeFindingsToKb), so a project brain at
+  // brain/projects/<id> is counted (MAJOR 1). The scan itself now walks every
+  // theme dir, so the second lens that used to compensate for its blindness is
+  // gone — one scan, one set of numbers, and no way for this route and
+  // `forge brain lint` to disagree.
   //
   // THE HONESTY INVARIANT: a check reports 'pass' ONLY if it actually
-  // inspected THIS KB and found nothing. A check neither in this KB's scan
-  // domain (CHECK_SCOPE) NOR covered by its own theme files
-  // (LINT_THEME_FILE_CHECKS) reports 'n/a' — NEVER 'pass'.
+  // inspected THIS KB and found nothing. A check whose CHECK_SCOPE domain does
+  // not cover this KB — or whose themes the scan read none of — reports 'n/a',
+  // NEVER 'pass'.
   //
   // RULING 3 (unchanged): if the lint run itself throws (e.g. a category
   // index that is a directory — readIndexEntries' readFileSync throws EISDIR
@@ -922,9 +910,8 @@ function buildKbHealth(
   let checks: CheckHealthEntry[];
   let healthError: string | undefined;
   try {
-    // The per-check itemization (scopedFull ∪ ownFindings, CHECK_SCOPE
-    // applicability, LINT_THEME_FILE_CHECKS own-file coverage, the F3
-    // aggregate roll-up) lives in `computeKbLintChecks` (cli/kb-lint-summary.ts)
+    // The per-check itemization (CHECK_SCOPE applicability, the F3 aggregate
+    // roll-up) lives in `computeKbLintChecks` (cli/kb-lint-summary.ts)
     // now — the ONE derivation both this per-KB detail route and the list
     // route's `attachKbLintSummaries` share, so the two can never drift.
     const { findings } = runBrainLintFullMemoized(forgeRoot);
@@ -959,16 +946,9 @@ function buildKbHealth(
  * (`GET /api/studio/sessions/kb-cleanup/:id`, cli/bridge-studio-sessions.ts)
  * share ONE implementation of this union rather than each duplicating it.
  *
- * Reuses `buildKbHealth`'s own honest per-KB scoping (R6-08 4on) — the union
- * of `scopeFindingsToKb(runBrainLint(scope:'full').findings)` (the shared,
- * `readThemeFiles`-based scan, scoped to this KB's own resolved brain dir)
- * and `lintThemeFiles(listOwnThemeFiles(brainDir))` (this KB's OWN theme
- * files, covering `LINT_THEME_FILE_CHECKS` for ANY kb kind — including
- * project/band KBs the shared scan never walks at all). This is the ONLY
- * mechanism that gives a real verdict for BOTH forge brains
- * (`brain/cycles`, `brain/forge-dev`) and project/band brains — the
- * full-scope checks alone only ever walk `brain/cycles/themes` +
- * `brain/forge-dev/themes`.
+ * Routed through `collectKbFindings` — the ONE per-KB lens, shared with the
+ * health read path and the drain's fix path, so a cleanup plan is drafted over
+ * exactly the findings `forge brain lint` reports for this KB and no others.
  *
  * Filtered to `resolution === 'agent'` — the tier brain-maintenance's
  * SKILL.md is scoped to drafting a plan for: 'auto' findings are handled by
@@ -991,10 +971,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
     throw new Error(`computeAgentCleanupFindings: kb id "${kbId}" does not resolve to any real brain directory`);
   }
   const { findings } = runBrainLintFullMemoized(forgeRoot);
-  const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
-  const ownThemeFiles = listOwnThemeFiles(brainDir);
-  const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
-  return unionFindings(scopedFull, ownFindings)
+  return collectKbFindings(forgeRoot, kbId, findings)
     .map((f) => classify(f))
     // `.kind` is narrowed to `string` here (classify's own signature keeps
     // it optional — it stamps the SAME field it declares, so TS cannot see
@@ -1989,8 +1966,7 @@ export async function handleStudioKbRoutes(
         // "not listed in project category index" findings.
         const kbResult = applyAutoFixesUntilStable(ctx.forgeRoot, {
           filter: idxInKb,
-          extraFindings: ownThemeFindingsLens(ctx.forgeRoot, kbId),
-        });
+          });
         const { findings: idxFindings } = runBrainLintFullFresh(ctx.forgeRoot);
         const idxDeterministic = collectKbFindings(ctx.forgeRoot, kbId, idxFindings).filter(
           (f): f is AgentFinding =>

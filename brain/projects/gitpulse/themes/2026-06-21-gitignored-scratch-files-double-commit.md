@@ -14,6 +14,7 @@ keywords:
 related_themes: [2026-06-21-gitignored-scratch-files-recurrence]
 created_at: 2026-06-21T00:00:00.000Z
 updated_at: 2026-06-21T00:00:00.000Z
+recurrence: gitignored-scratch-files
 ---
 
 # Gitignored scratch files cause double-commit waste per WI

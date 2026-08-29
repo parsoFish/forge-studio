@@ -17,6 +17,7 @@ keywords:
 related_themes: [2026-07-12-gitignored-scratch-fifth-cycle]
 created_at: 2026-08-28T12:30:00.000Z
 updated_at: 2026-08-28T12:30:00.000Z
+recurrence: gitignored-scratch-files
 ---
 
 # Gitignored scratch files — sixth consecutive cycle
