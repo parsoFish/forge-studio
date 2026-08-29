@@ -22,7 +22,7 @@
  * fresh context per beat re-navigating with `page.goto`, which is exactly the
  * teleporting this runner exists to stop.
  */
-import { readdirSync, mkdirSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -193,6 +193,8 @@ async function runStory(story, uiUrl) {
   if (recorded.length > 0) {
     renameSync(join(clipTmp, recorded[0]), join(outDir, 'story.webm'));
   }
+  // The recording scratch dir is ours and must not survive into the gallery.
+  rmSync(clipTmp, { recursive: true, force: true });
 
   const result = { story, beats };
   writeStoryJson(result, ROOT);

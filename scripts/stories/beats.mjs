@@ -86,7 +86,22 @@ export async function driveBeat(page, beat, index, baseUrl) {
         data: observed.data,
       });
     }
-    await clickable.click();
+    // Wait for the NEW route, not merely for "a ready page". The page we
+    // clicked FROM is already `data-page-ready="true"`, so waiting on that
+    // selector alone returns instantly against the old DOM. Measured on the
+    // smoke story's first real run: beat 2 reported route "/" and
+    // `data-page: "home"` because the assertion won the race with the
+    // navigation — a false RED, and in the mirror case it would be a false
+    // GREEN for any beat whose expectations the previous page happens to
+    // satisfy.
+    await Promise.all([
+      page
+        .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
+        .catch(() => {
+          /* did not navigate — the verdict below reports that honestly */
+        }),
+      clickable.click(),
+    ]);
   }
 
   await page

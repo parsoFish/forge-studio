@@ -1,0 +1,62 @@
+{
+  "story": {
+    "id": "smoke",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": false,
+      "budget_usd": 0
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Find a project from Home"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on Home",
+        "say": "Studio opens on Home — the operator pulse across every project, flow, agent and KB.",
+        "expect": {
+          "route": "/",
+          "data": {
+            "page": "home",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Click through to the Projects pillar",
+        "say": "The Projects pillar lists every project forge manages, with its health and activity.",
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on Home",
+      "say": "Studio opens on Home — the operator pulse across every project, flow, agent and KB.",
+      "status": "green",
+      "failures": [],
+      "data": {
+        "page": "home",
+        "page-ready": "true"
+      },
+      "frame": "frames/01-open-studio-on-home.png"
+    },
+    {
+      "act": "Click through to the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages, with its health and activity.",
+      "status": "green",
+      "failures": [],
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true"
+      },
+      "frame": "frames/02-click-through-to-the-projects-pillar.png"
+    }
+  ]
+}

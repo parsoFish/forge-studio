@@ -98,3 +98,17 @@ test('a red beat is rendered as red, never quietly presented as working usage', 
   assert.match(md, /project-count/);
   assert.match(md, /\bred\b|\bFAILED\b|\bnot verified\b/i);
 });
+
+test('the fragment is markdownlint-clean in the two ways generated docs break it', () => {
+  // Both measured against `npm run lint` (which CI runs) on the smoke story's
+  // first generated page:
+  //   MD025 — a front-matter `title:` counts as the document h1, so carrying
+  //           it AND the `#` heading is two top-level headings.
+  //   MD022 — the first `## 1.` heading needs a blank line above it.
+  // Every story generates one of these pages, so a regression here turns CI
+  // red for every story at once.
+  const md = renderDocFragment(result);
+  const fm = md.slice(0, md.indexOf('---', 3));
+  assert.ok(!/^title:/m.test(fm), 'front matter must not carry a title: it collides with the h1 (MD025)');
+  assert.match(md, /\n\n## 1\./, 'the first step heading needs a blank line above it (MD022)');
+});

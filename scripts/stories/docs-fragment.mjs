@@ -63,9 +63,12 @@ export function renderDocFragment(result) {
   const { story, beats } = result;
   const anyRed = beats.some((b) => b.status === 'red');
 
+  // NOTE: no `title:` in the front matter. markdownlint's MD025 counts a
+  // front-matter title as the document's h1, so carrying both it and the `#`
+  // heading below makes every generated page fail `npm run lint` — which CI
+  // runs. The `#` heading is the title; the front matter is metadata.
   const head = [
     '---',
-    `title: ${story.docs.title}`,
     `kind: ${story.docs.kind}`,
     `story: ${story.id}`,
     `generated_from: tests/stories/${story.id}.story.mjs`,
@@ -86,5 +89,5 @@ export function renderDocFragment(result) {
     );
   }
 
-  return `${head.join('\n')}${beats.map(renderBeat).join('\n')}`;
+  return `${head.join('\n')}\n${beats.map(renderBeat).join('\n')}`;
 }
