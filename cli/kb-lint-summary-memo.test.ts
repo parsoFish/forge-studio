@@ -282,10 +282,10 @@ describe('statWalkFingerprint — pure stat-walk fingerprint (unit)', () => {
       writeFileSync(join(forgeRoot, 'forge-ui', '.next', 'server', 'chunk.js'), '//');
       const after = statWalkFingerprint(forgeRoot);
       assert.deepEqual(after, before, 'harness/campaign/build dirs must never be walked — no check reads them and they dwarf the repo');
-      // and the git-tracked demos/ + mockups/ dirs STAY walked (a theme may cite them)
-      mkdirSync(join(forgeRoot, 'mockups', 'x'), { recursive: true });
-      writeFileSync(join(forgeRoot, 'mockups', 'x', 'a.html'), '<p>');
-      assert.notDeepEqual(statWalkFingerprint(forgeRoot), before, 'mockups/ is citeable and must stay in the fingerprint');
+      // and the git-tracked demos/ dir STAYS walked (a theme may cite it)
+      mkdirSync(join(forgeRoot, 'demos', 'x'), { recursive: true });
+      writeFileSync(join(forgeRoot, 'demos', 'x', 'a.html'), '<p>');
+      assert.notDeepEqual(statWalkFingerprint(forgeRoot), before, 'demos/ is citeable and must stay in the fingerprint');
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
     }

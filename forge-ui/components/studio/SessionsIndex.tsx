@@ -24,7 +24,8 @@ import {
 // ---------------------------------------------------------------------------
 // SessionsIndexBody — the /sessions in-flight index (W6-B11; W7-B1 IA pass).
 //
-// Mirrors mockups/session-surface-v1/sessions-index.html's table: kind,
+// Mirrors the retired session-surface-v1/sessions-index.html mockup's table
+// (docs/reference/studio-copy.md): kind,
 // project, phase (with a needs-you chip), model tier, updated, resume
 // link. `sessions` arrives ALREADY sorted needs-you-first-then-updated-desc
 // off the bridge (`GET /api/studio/sessions?active=1` ->

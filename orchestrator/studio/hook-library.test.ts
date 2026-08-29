@@ -558,8 +558,8 @@ describe('carriedBy: derived, self-naming (R3-06 D3 precedent)', () => {
 // two independent reasons: hook-library.ts does not exist, AND (once it
 // does) studio/hooks/pre-pr-security-review and studio/hooks/post-merge-
 // brain-ingest do not exist either — the roadmap's re-scope explicitly says
-// these two OOTB seeds ship WITH F1 (mockups/studio-endstate-v2/data.jsx's
-// HOOKS_LOCAL, provenance: OOTB).
+// these two OOTB seeds ship WITH F1 (the retired studio-endstate-v2 mockup's
+// HOOKS_LOCAL, provenance: OOTB — see docs/reference/studio-copy.md).
 // ---------------------------------------------------------------------------
 
 describe('OOTB seed hooks (mockup data.jsx HOOKS_LOCAL, provenance: OOTB)', () => {
