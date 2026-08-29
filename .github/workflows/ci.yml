@@ -183,6 +183,45 @@ jobs:
   # `ui:journey` deliberately stays OUT: 17 journeys, host-global ports and a
   # full rewrite of demos/e2e/ make it a wave/manual gate, not a per-PR one
   # (recorded in docs/forge-ui-dom-and-harness.md).
+  # Costless operator stories (1.0.md §3.1). A story is simultaneously the
+  # end-to-end test, the demo clip and the usage doc, so this job is the gate
+  # that keeps all three honest at once.
+  #
+  # `--costless-only` is the whole selection rule: a story declaring a real
+  # spawn or a budget refuses to start without `--approve-spend` (H2), so it
+  # can never run here. FORGE_ARCHITECT_NO_SPAWN is deliberately NOT set —
+  # §3.1 forbids it for stories; the spend gate is the control, not an env
+  # var that would quietly neuter a story that is supposed to spawn.
+  stories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Run the costless stories
+        run: npm run stories -- --costless-only
+
+      - name: Upload story artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stories
+          path: demos/stories
+          if-no-files-found: warn
+
   deadpaths:
     runs-on: ubuntu-latest
     timeout-minutes: 30
