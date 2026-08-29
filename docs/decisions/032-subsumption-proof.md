@@ -5,7 +5,8 @@
 **Relates to:** ADR-027 (studio object model / KB), ADR-028 (flow engine /
 node-executor registry), ADR-029 (runtime adapters), ADR-031 (Studio is the
 product). Realises the market thesis in
-`docs/forge-studio-market-and-differentiation.md` §3.
+`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`
+("The thesis" and "The seams"; the market memo this theme replaced carried it as §3).
 
 > **Reframed to as-built state.** This ADR originally claimed a "second
 > implementation behind *every* seam," closed by a standing

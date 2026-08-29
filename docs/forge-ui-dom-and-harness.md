@@ -4798,7 +4798,7 @@ regression harness for forge's actual capabilities (ADR 022): it asserts
 real-cycle *outcomes* (reached merge, dev-loop N/N, the project's own quality
 gate green post-merge, cost under ceiling), as a manual gate. Two grounds:
 **gitpulse** (`--project gitpulse` — the creds-free, independent reference
-project; see `docs/verify-cycle-ideas/README.md` for the corpus of idea
+project; see the verify-cycle idea corpus (retired M1-A) for the corpus of idea
 files) and the **betterado terraform provider**
 (`--project terraform-provider-betterado` — the live-ADO tier, higher
 ceiling, plus a 5th gate asserting the demo carries **live REST
@@ -4812,7 +4812,7 @@ proves the *scripted* paths still work, the walkthrough drives Studio the way
 an operator does — every reachable route, every control, real sessions where
 a path can only be validated by running it — and files verified defects as
 JSONL. It produced the wave-7 backlog
-([`docs/roadmaps/wave-7-walkthrough-findings.md`](./docs/roadmaps/wave-7-walkthrough-findings.md))
+(the wave-7 walkthrough findings record, retired 2026-08-29 in M1-A)
 and is a standing wave gate from wave 7 on. **W7-A0 (2026-08-19) added the
 crawl's assertion mode**: `npm run ui:walkthrough:gate` (`crawl.mjs --assert
 --baseline scripts/ui-walkthrough/baseline.json`) fails on any *new*

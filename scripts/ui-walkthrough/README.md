@@ -1,7 +1,7 @@
 # UI walkthrough — drive Studio like an operator and collect defects
 
 > Landed with the wave-7 plan (2026-08-19). It is the instrument that produced
-> [`docs/roadmaps/wave-7-walkthrough-findings.md`](../../docs/roadmaps/wave-7-walkthrough-findings.md)
+> the wave-7 walkthrough findings record (retired 2026-08-29 in M1-A; in git history)
 > — 336 verified findings from one afternoon. `ui:journey` proves the paths we
 > *scripted* still work; this proves the paths an operator can *reach* behave.
 

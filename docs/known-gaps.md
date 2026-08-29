@@ -107,9 +107,17 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
    also removes the onboarding-seeded `brain/projects/<slug>/` Brain-3 KB (the demo
    overhaul's onboard beats seed it via `seedProjectBrain`). (Any leftover raw
    cycle archive would come from a real cycle, not the emulated journey — see item 10.)
-8. **Untracked `demos/verify/<handle>/` gate artifacts**
-   (summaries + videos) — decide keep/commit/clean (currently absent; tree was
-   clean at close).
+8. **Untracked `demos/verify/<handle>/` gate artifacts** — *resolved 2026-08-29
+   (M1-A).* The decision is **clean, keeping the oracle**: 14 bulk run
+   directories (2.41 GB of summaries, frames and screen recordings) were
+   deleted, and `demos/verify/` now holds only `m0-a/` and `m0-a-run1/` — the
+   M0 oracle that M3 re-runs, whose `summary.json` is also preserved beside the
+   campaign traces. The two `cycle.webm` recordings, which existed nowhere
+   else, were copied out before their worktree was removed. Going forward a
+   verify-cycle run's artifacts are scratch: the nine operator stories
+   ([`roadmaps/1.0.md`](./roadmaps/1.0.md) §3) are the gate, and each produces
+   its own committed clip and doc fragment, so there is nothing left for this
+   item to decide.
 9. **e2e-journey demo overhaul — deferred tails (2026-07-14) — *resolved 2026-07-16:***
    - The **demo-builder** flow (`/demo/[sessionId]`, per-element regeneration) is
      now in the journey set: `scripts/journeys/demo-builder.mjs` covers brief →

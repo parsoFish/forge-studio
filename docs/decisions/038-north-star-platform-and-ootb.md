@@ -71,10 +71,10 @@ the split. This ADR is the sole origin of the two-scope mission.
   §3's unifier text replaced with the Q3-B successors (demo agent + adversarial review
   agent + orchestrator-owned merge-boundary gate) — the merge-boundary-gate relocation
   carries the operator's ⚑ review marker, per decision 4's Q3-B record.
-- `docs/forge-studio-market-and-differentiation.md` — dated amendment at §2: the
-  reframe is forge's *internal* engineering north star; *external* positioning is
-  unchanged — the §3.4 four qualifiers stay until non-SWE connectors actually exist to
-  market.
+- `brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md` — "The four
+  qualifiers": the reframe is forge's *internal* engineering north star; *external*
+  positioning is unchanged — the four qualifiers stay until non-SWE connectors actually
+  exist to market. (The retired market memo carried these as its §2 amendment and §3.4.)
 - `docs/repo-map.md` — the Scope 1 line names its target as "any agentic flow," not just
   forge's own cycle.
 - `docs/roadmaps/README.md` — §1 and §8 updated to cite this ADR as where the reframe

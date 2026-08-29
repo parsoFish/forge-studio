@@ -34,7 +34,7 @@ the binary you can download.
   drive), section 13 kicks in: you must make your modified source available to
   those users.
 - This is the clause that **protects the "gates you can read" claim**
-  (see `docs/forge-studio-market-and-differentiation.md`): Forge's differentiation
+  (see `brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`): Forge's differentiation
   is code-enforced quality gates an operator can inspect and trust. The AGPL
   guarantees that a hosted derivative cannot quietly fork those gates, weaken them,
   and ship the result as a black box — the source of the gates a network user is

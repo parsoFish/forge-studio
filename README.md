@@ -10,7 +10,7 @@ Three things make it one product rather than three:
 - **Code-enforced gates.** The three human moments (architect, review, reflect) are structural, not advisory. There is **no auto-approve code path anywhere** — forge cannot accidentally skip you, because the gate lives in the code, not in a prompt. These are gates you can *read*, not just trust.
 - **A compounding engineering brain.** Every cycle's reflection is distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planners query *before* designing the next initiative. Memory tools cache for runtime recall; the brain compounds — it tunes *how the next plan is designed*, across every project.
 
-Full competitive analysis and the strategic frame: [`docs/forge-studio-market-and-differentiation.md`](./docs/forge-studio-market-and-differentiation.md).
+Full competitive analysis and the strategic frame: [`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`](./brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md).
 
 ## See it run
 

@@ -227,7 +227,7 @@ Six escape shapes (directory symlink, leaf file symlink, hardlinked leaf ×
 standalone and session paths) are pinned in
 `cli/ui-bridge-agent-history-containment.test.ts`; `nlink === 1` is what
 closes the hardlinks, since `realpath` is structurally blind to them. Audit
-rows added to `docs/security-request-path-audit.md` including a **retraction**
+rows added to `docs/reference/request-path-sinks.md` including a **retraction**
 of the row that had described the old guard as containment. The sinks
 baseline moved **422 → 421** — the fix removed `cli/ui-bridge.ts`'s last
 `statSync` sink outright. The sweep of other call sites is **SEC-04**

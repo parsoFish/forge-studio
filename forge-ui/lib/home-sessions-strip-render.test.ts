@@ -137,7 +137,7 @@ test('the card budget caps at 4 even when more sessions are in flight', () => {
 });
 
 // ===========================================================================
-// W7-B1 — Home strip IA (docs/roadmaps/wave-7-walkthrough-findings.md)
+// W7-B1 — Home strip IA (the wave-7 walkthrough findings record (retired M1-A))
 // ===========================================================================
 
 test('W7-B1 (home-sessions-32): a truncated strip SAYS so — "showing 4 of 7" + a "+3 more" overflow link, so the header count and the visible cards reconcile on screen', () => {

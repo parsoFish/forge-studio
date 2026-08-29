@@ -300,7 +300,7 @@ export type KbDrainOpts = {
  *  strictly before this is ever called), or read back via `isSafeRunId` +
  *  an explicit `${kbId}-drain-` PREFIX check at the two GET routes below
  *  (never trusted on charset alone). Documented in
- *  docs/security-request-path-audit.md's "Extended in W6-B12" section;
+ *  docs/reference/request-path-sinks.md's "Extended in W6-B12" section;
  *  allowlisted in scripts/check-raw-fs-guarded.mjs. */
 function kbDrainLogDir(forgeRoot: string, runId: string): string {
   return join(forgeRoot, '_logs', `_kb-drain-${runId}`);

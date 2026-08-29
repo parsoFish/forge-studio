@@ -8,8 +8,9 @@
  * continues right of an amber now-line, banded by dependency-feasibility
  * (in-flight → ready → after-prerequisites → unplanned) under NO invented
  * dates. Pan/zoom is a hand-rolled CSS transform (translate+scale) — see the
- * "why not reactflow" note below. mockups/roadmap-uplift/b-prime.html is the
- * operator-locked visual/semantic reference this ports; layout math lives in
+ * "why not reactflow" note below. The retired roadmap-uplift/b-prime mockup
+ * (docs/reference/studio-copy.md) is the operator-locked visual/semantic
+ * reference this ports; layout math lives in
  * `forge-ui/lib/roadmap-time-layout.ts` as pure, unit-tested functions —
  * this component only turns that layout into DOM.
  *

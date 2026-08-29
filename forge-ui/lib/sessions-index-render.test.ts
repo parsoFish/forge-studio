@@ -170,7 +170,7 @@ test('W7-A1: error AFTER a successful read (rows already known) keeps the last-k
 });
 
 // ===========================================================================
-// W7-B1 — Home + /sessions IA (docs/roadmaps/wave-7-walkthrough-findings.md)
+// W7-B1 — Home + /sessions IA (the wave-7 walkthrough findings record (retired M1-A))
 // ===========================================================================
 
 // ---- crosscut-13: the kickoff CTAs render with rows PRESENT too — the ----

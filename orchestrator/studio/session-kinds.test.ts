@@ -679,7 +679,7 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(
       onboarding.artifact,
       { kind: 'contract-buildout', label: 'Contract build-out' },
-      'the label is verbatim from the mockup (mockups/studio-endstate-v2/data.jsx SESSIONS[\'project-onboarding\'].artifactLabel) — pinned exactly, not paraphrased',
+      'the label is verbatim from the retired studio-endstate-v2 mockup (data.jsx SESSIONS[\'project-onboarding\'].artifactLabel; docs/reference/studio-copy.md) — pinned exactly, not paraphrased',
     );
 
     // R4-21: the new "authoring" session kind (creation-agent, file-package —

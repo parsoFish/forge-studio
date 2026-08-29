@@ -39,7 +39,7 @@ gate quartet (`npm run build`, `npm test` — 1987 tests, `forge studio lint`,
 dev-loop N/N, project quality gate green post-merge, cost ceiling), tiered
 frozen-SHA routine / greenfield release, manual gate never CI. Grounds:
 mdtoc (creds-free), gitpulse (independent ground + idea corpus in
-`docs/verify-cycle-ideas/`), betterado (live-ADO tier + live-REST demo
+the verify-cycle idea corpus (retired M1-A)), betterado (live-ADO tier + live-REST demo
 gate). Ground-identity statement is inconsistent across docs — R5-07-F4's
 strike item. Deliberate non-goal recorded: the routine tier does not reset
 the remote, so it proves up-to-merge only (brain theme
@@ -160,7 +160,7 @@ gallery green".
 - **Features:**
   - **R7-03-F1 Ground registry.** One documented registry of verify grounds
     (project, tier, creds posture, idea-corpus location, freshness) in
-    `docs/verify-cycle-ideas/README.md`, consistent with the R5-07-F4
+    the verify-cycle idea corpus (retired M1-A), consistent with the R5-07-F4
     canonical statement. ACs: registry exists; CLAUDE.md + ideas README
     agree.
   - **R7-03-F2 Idea-file lifecycle.** Pre-flight grep (feature absence)

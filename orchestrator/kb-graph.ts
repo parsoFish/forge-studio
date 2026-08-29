@@ -377,7 +377,7 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   // reports `isDirectory()` AND `isFile()` false for a symlinked entry, so a
   // symlink can never enter the result set). Residual, stated rather than
   // implied: a HARDLINKED `.md` deep inside a real `_raw/` tree is a genuine
-  // regular file and passes that filter — see `docs/security-request-path-audit.md`.
+  // regular file and passes that filter — see `docs/explanation/security-model.md`.
   const rawDir = guardedKbPath(kbDir, '_raw');
   const rawFiles = rawDir ? walkMdFiles(rawDir) : [];
 

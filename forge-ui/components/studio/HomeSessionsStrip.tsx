@@ -15,7 +15,7 @@ import { NeedsYouChip } from '@/components/studio/session/NeedsYouChip';
 // contract). Extracted out of app/page.tsx so its data-* contract gets a
 // `renderToStaticMarkup` pin (`lib/home-sessions-strip-render.test.ts`).
 //
-// W7-B1 changes (docs/roadmaps/wave-7-walkthrough-findings.md):
+// W7-B1 changes (the wave-7 walkthrough findings record (retired M1-A)):
 //   - home-sessions-01/02: the strip is NAMED on screen ("Sessions needing
 //     you") — one of Home's two named, visually distinct strips (the other
 //     is `kbs-needing-attention`, app/page.tsx).

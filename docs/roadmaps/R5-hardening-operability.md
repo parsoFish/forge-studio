@@ -69,7 +69,7 @@ is stale (R5-07 strikes it).
 ADR 038 (`docs/decisions/038-north-star-platform-and-ootb.md`) records the
 two-level north star; strike-list amendments landed in CLAUDE.md, README.md,
 ARCHITECTURE.md, MVUS (`docs/product/minimum-viable-user-story.md`),
-`docs/forge-studio-market-and-differentiation.md`, `docs/repo-map.md`, and
+`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`, `docs/repo-map.md`, and
 the roadmap index. F1–F7 reconciliation: known-gaps §1/§4.3(c) struck with
 provenance, ADR-024 completion statement single-sourced, journey count
 canonicalized to 10 (swap-runtime folded into `agents`), verify-cycle ground
@@ -383,7 +383,7 @@ was needed.
   - **R5-07-F4 Verify-ground identity.** One canonical sentence for the
     verify-cycle grounds (CLAUDE.md says default=mdtoc; verify-cycle-ideas
     README says the corpus targets gitpulse; betterado = live tier). ACs:
-    CLAUDE.md + docs/verify-cycle-ideas/README.md agree.
+    CLAUDE.md + the verify-cycle idea corpus (retired M1-A) agree.
   - **R5-07-F5 Path + naming fixes.** CLAUDE.md `brain/log.md` → the real
     `brain/forge-dev/log.md`; `studio/README.md` contents list (`kb/` doesn't
     exist; `artifact-templates/`, `demo-elements/`, `demo/` omitted). ACs:
@@ -415,7 +415,7 @@ was needed.
     for the shipped OOTB suite (Scope 2)", keep/cull rule bounded to Scope-2
     content, §3's unifier text replaced with the Q3-B successors (demo agent
     + adversarial review + orchestrator merge-boundary gate ⚑);
-    `docs/forge-studio-market-and-differentiation.md` dated amendment at §2
+    `brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md` dated amendment at §2
     (the reframe is the internal engineering north star; external positioning
     keeps the four §3.4 qualifiers until non-SWE connectors exist);
     `docs/repo-map.md` Scope-1 line names the target as "any agentic flow";

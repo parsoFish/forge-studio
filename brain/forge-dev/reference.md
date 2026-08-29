@@ -36,3 +36,5 @@ Each entry on this index is one line:
 - [`m7-studio-consolidation-arc`](./themes/m7-studio-consolidation-arc.md) — How the M7 consolidation (Studio becomes the one product — delete /dashboard, fold the moment-screens, collapse the CLI, harden the launcher) was executed as per-WI multi-agent workflows, and the durable lessons: migrate-the-harness-before- you-delete, ui:journey as the integration oracle, adversarial review earns its cost.
 
 - [`cost-event-phase-aware-aggregation-rule`](./themes/cost-event-phase-aware-aggregation-rule.md) — Iteration-loop phases emit overlapping cost-bearing events; naive summation double/triple-counts. New cost tooling must reuse the phase-aware rule (sum only iteration events when a phase loops, else all), not re-derive it.
+
+- [`studio-differentiation-and-subsumption-moat`](./themes/studio-differentiation-and-subsumption-moat.md) — Forge competes by integrating, not out-building: every point solution plugs into an existing seam. Generic "modular composition layer" is a crowded pitch — only the four-qualifier version is defensible, and the thesis stays a promise until one real second adapter ships.

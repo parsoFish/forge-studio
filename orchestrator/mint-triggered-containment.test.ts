@@ -46,7 +46,7 @@
  * TODAY, gated only by the attacker/operator being able to make SOME
  * directory exist at the traversed location (the same "local checkout
  * access" precondition class as every other `[exec]` row in
- * docs/security-request-path-audit.md). Both tiers below are pinned RED:
+ * docs/reference/request-path-sinks.md). Both tiers below are pinned RED:
  * a DIRECT unit-level AT on `mintTriggeredInitiative` itself, and an
  * end-to-end AT driving the real PUT route + the real
  * `stageFlowRunRequest`/`drainFlowRunRequests` dispatch path (unmocked

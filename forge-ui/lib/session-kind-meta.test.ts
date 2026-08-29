@@ -2,7 +2,7 @@
  * Pinned tests — W7-B1: the ONE client-side session-kind meta module
  * (`lib/session-kind-meta.ts`).
  *
- * Findings this encodes (docs/roadmaps/wave-7-walkthrough-findings.md, W7-B1):
+ * Findings this encodes (the wave-7 walkthrough findings record (retired M1-A), W7-B1):
  *   - home-sessions-19 / crosscut-13 — two independently hand-kept kickoff
  *     lists (SessionsIndex.tsx's KICKOFF_LINKS vs the kickoff page's
  *     KICKOFF_KINDS) drifted in BOTH directions (one had architect but no

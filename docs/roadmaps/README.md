@@ -549,7 +549,7 @@ it (sessions of every kickoff kind, standalone agent runs, two live
 drain-to-green runs, one live community refresh); each explorer followed by an
 adversarial verifier. Result: **336 findings (S1 78 · S2 157 · S3 101), 276
 S1/S2 verdicts confirmed**, every one assigned to exactly one initiative below —
-[`wave-7-walkthrough-findings.md`](./wave-7-walkthrough-findings.md). The
+the wave-7 walkthrough findings record (retired 2026-08-29 in M1-A; in git history). The
 operator's own ten notes were all reproduced with root causes — including the
 one that looked like "does nothing" (note 5: the refresh agent writes its draft
 outside its session dir, exhausts its 16-turn budget, then crashes; the UI has

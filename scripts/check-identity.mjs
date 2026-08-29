@@ -46,7 +46,6 @@ const EXCLUDED_FILES = new Map([
   ['docs/roadmaps/R2-runnable-componentry.md', 'R1–R8 record; archived in M6'],
   ['docs/roadmaps/R4-ootb-suite.md', 'R1–R8 record; archived in M6'],
   ['docs/roadmaps/R5-hardening-operability.md', 'R1–R8 record; archived in M6'],
-  ['docs/roadmaps/wave-7-walkthrough-findings.md', 'a closed wave’s findings record'],
 ]);
 
 /** The scanned roots: a git pathspec, and which of its tracked files count. */

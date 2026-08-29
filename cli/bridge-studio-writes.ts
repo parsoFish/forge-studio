@@ -123,7 +123,7 @@ type ContractArtifactTarget = {
  * three-way git probe (a side-effecting decision this pure path-set function
  * must not absorb), so check/write parity for it is kept by both sites
  * calling the SAME `needsGitInit` predicate instead. Anyone enumerating the
- * route's full write set (docs/security-request-path-audit.md defers to
+ * route's full write set (docs/reference/request-path-sinks.md defers to
  * these comments): `.forge/project.json` + the two targets below + the
  * conditional `.gitignore`.
  */

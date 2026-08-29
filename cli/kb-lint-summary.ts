@@ -275,7 +275,7 @@ const FINGERPRINT_SKIP_TOPLEVEL = new Set([
   // 2026-08-15 wave-6 bridge measured 64k files / 290ms per fingerprint on a
   // tree carrying 27 `.claude/worktrees/*` clones (22 GB) — the key cost
   // exceeded the lint it memoized. Anything matching /^_wave\d+$/ is also
-  // skipped below. Git-tracked dirs (demos/, mockups/) stay WALKED — a theme
+  // skipped below. Git-tracked dirs (demos/) stay WALKED — a theme
   // may cite them (checkSourceLinks' domain is unbounded).
   '.claude', '_dry-bridge',
 ]);

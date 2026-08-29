@@ -8,7 +8,8 @@ import { fetchArchitectSessions, type ArchitectPhase, type ArchitectSessionSumma
 
 /**
  * R4-15 — the project page's entry into an architect planning session
- * (mockups/studio-endstate-v2/views-projects.jsx:121, run-agent-architect
+ * (the retired studio-endstate-v2 views-projects.jsx:121 —
+ * docs/reference/studio-copy.md; run-agent-architect
  * journey step 2 "Trigger: manual, from a project page"). The real page had
  * none: the empty-roadmap state was a dead-end sentence and the populated
  * state had no "plan more" affordance at all.

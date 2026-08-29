@@ -213,7 +213,7 @@ One consequence restated for the panel axis: the wedge disclosed in the 2026-08-
 
 ## Amendment — 2026-08-19 (wave-7 A2): session lifecycle is DERIVED, `cancelled` is one universal reserved terminal phase, and the write-root fence is made reachable
 
-Three decisions from the wave-7 walkthrough's session-lifecycle initiative (W7-A2 — `docs/roadmaps/wave-7-walkthrough-findings.md`, findings home-sessions-04/05/08/09/21, sessions-kinds-10/11/15/33/V01, community-02/15/20, knowledge-16/17). Two of them touch this ADR's contract; the third is the security park-point the wave pre-authorised.
+Three decisions from the wave-7 walkthrough's session-lifecycle initiative (W7-A2 — the wave-7 walkthrough findings record (retired M1-A), findings home-sessions-04/05/08/09/21, sessions-kinds-10/11/15/33/V01, community-02/15/20, knowledge-16/17). Two of them touch this ADR's contract; the third is the security park-point the wave pre-authorised.
 
 ### 1. `cancelled` — ONE universal reserved terminal phase, outside every per-kind table
 
