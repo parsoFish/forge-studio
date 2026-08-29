@@ -14,7 +14,7 @@
  *   on-disk TARGET: a symlinked `<root>/<id>` is lexically inside the allowed
  *   root even when it POINTS somewhere else entirely — the "guard that
  *   cannot fail" shape this whole campaign
- *   (docs/security-request-path-audit.md) exists to close. Reproduced live
+ *   (docs/explanation/security-model.md) exists to close. Reproduced live
  *   below via a real `startBridge()` HTTP round-trip for every escape shape
  *   that DOES defeat this check at this call site: leaf dir symlink,
  *   one-level-nested dir symlink, a cross-object symlink alias (a DIFFERENT

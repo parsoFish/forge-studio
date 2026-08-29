@@ -2,7 +2,7 @@
 /**
  * check-request-path-sinks.mjs — no-new-unguarded-sinks RATCHET.
  *
- * Why this exists: docs/security-request-path-audit.md enumerates every
+ * Why this exists: docs/reference/request-path-sinks.md enumerates every
  * request-derived filesystem path in cli/ and orchestrator/ as of one point
  * in time. The same defect shape (a request-derived path reaching an fs/git
  * call with no real containment) was found TWELVE times across seven
@@ -473,7 +473,7 @@ function printFailureGuidance(failures) {
     console.error('  1. Route the path through a guard:');
     console.error("       - resolveGuardedPath(root, segments) from cli/studio-path-guard.ts — FIXED root, every untrusted id its own segments[] element (never folded into root).");
     console.error('       - or isContainedProjectRepoPath / isContainedWorktreePath / isSafeCycleId from cli/manifest-path-guard.ts.');
-    console.error('  2. Add a row to docs/security-request-path-audit.md classifying the new site guarded / unguarded / accidentally-safe, per that doc\'s own rules.');
+    console.error('  2. Add a row to docs/reference/request-path-sinks.md classifying the new site guarded / unguarded / accidentally-safe, per that doc\'s own rules.');
     console.error('  3. Re-run with --write to accept the new baseline:');
     console.error('       node scripts/check-request-path-sinks.mjs --write');
     console.error('');
@@ -485,7 +485,7 @@ function printFailureGuidance(failures) {
     console.error('  1. Route the request-derived project + sessionId through the guard, do NOT bare-join them:');
     console.error('       - resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId) from cli/bridge-studio-sessions.ts (delegates to resolveGuardedPath — per-segment identity + charset + symlink containment; returns null on ANY escape).');
     console.error('       - Hand the GUARDED dir to readSessionStatus / writeSessionStatus; never a raw join(root, project, sessionId).');
-    console.error('  2. Add a row to docs/security-request-path-audit.md classifying the new caller guarded / unguarded / accidentally-safe.');
+    console.error('  2. Add a row to docs/reference/request-path-sinks.md classifying the new caller guarded / unguarded / accidentally-safe.');
     console.error('  3. Re-run with --write to accept the new baseline:');
     console.error('       node scripts/check-request-path-sinks.mjs --write');
     console.error('');
