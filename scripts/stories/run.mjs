@@ -105,7 +105,7 @@ async function main() {
   console.log(`[stories] memory ok — ${mem.reason}`);
 
   // 3. Host lock — 4123/4124 are host-global.
-  const release = await acquireHostLock(ROOT);
+  const release = await acquireHostLock();
 
   let bridgeProc = null;
   let exitCode = 0;

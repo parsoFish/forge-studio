@@ -17,7 +17,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { memoryVerdict, MIN_AVAILABLE_MB } from './preflight.mjs';
+import { memoryVerdict, MIN_AVAILABLE_MB, hostLockPath } from './preflight.mjs';
 
 test('ample memory passes', () => {
   const v = memoryVerdict(8000);
@@ -51,4 +51,15 @@ test('an unreadable memory figure REFUSES rather than assuming plenty', () => {
 test('the floor is a stated constant, not a literal buried in a branch', () => {
   assert.equal(typeof MIN_AVAILABLE_MB, 'number');
   assert.ok(MIN_AVAILABLE_MB > 0);
+});
+
+test('the host lock lives OUTSIDE the worktree, so two worktrees contend for one lock', () => {
+  // The bug this kills: a lock at `<root>/_local/stories.lock` gives every
+  // worktree its OWN lock file, so two lanes each acquire "the" lock and both
+  // run — while the thing being guarded, ports 4123/4124, is host-global.
+  // A per-repo lock on a host-global resource is not a lock at all.
+  const a = hostLockPath('/home/parso/forge');
+  const b = hostLockPath('/home/parso/forge-m1-b');
+  assert.equal(a, b, 'every tree on this host must resolve the SAME lock path');
+  assert.ok(!a.startsWith('/home/parso/forge'), 'the lock must not live inside any worktree');
 });

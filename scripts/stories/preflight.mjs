@@ -9,13 +9,17 @@
  * "we could not tell" is not "there is plenty".
  *
  * HOST LOCK. 4123/4124 are host-global, so exactly one story run may hold the
- * host at a time. Implemented with `proper-lockfile`, already a dependency of
- * this repo — no new one, and it handles staleness and compromise for us
- * rather than us hand-rolling a PID file (and a holder PID is not a liveness
- * check anyway).
+ * host at a time. The lock therefore lives in the OS temp dir, NOT in the
+ * worktree: a lock inside the repo gives every worktree its own lock file, so
+ * two lanes would each acquire "the" lock and both run — a per-repo lock on a
+ * host-global resource is not a lock at all. Implemented with
+ * `proper-lockfile`, already a dependency here — no new one, and it handles
+ * staleness for us rather than us hand-rolling a PID file (and a holder PID is
+ * not a liveness check anyway).
  */
-import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import lockfile from 'proper-lockfile';
 
 /**
@@ -64,10 +68,13 @@ export function readAvailableMb(meminfoPath = '/proc/meminfo') {
  * The lock file lives under the gitignored operator root so it is never
  * committed and never collides with a tracked path.
  */
-export async function acquireHostLock(root) {
-  const lockPath = join(root, '_local', 'stories.lock');
-  mkdirSync(dirname(lockPath), { recursive: true });
-  if (!existsSync(lockPath)) writeFileSync(lockPath, 'story runner host lock\n');
+export function hostLockPath() {
+  return join(tmpdir(), 'forge-stories-host.lock');
+}
+
+export async function acquireHostLock() {
+  const lockPath = hostLockPath();
+  if (!existsSync(lockPath)) writeFileSync(lockPath, 'forge story runner host lock\n');
   try {
     return await lockfile.lock(lockPath, { stale: 30 * 60 * 1000, retries: 0 });
   } catch (e) {
