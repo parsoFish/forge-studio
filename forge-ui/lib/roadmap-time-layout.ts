@@ -1,6 +1,6 @@
 /**
  * W6-RV-2 — pure layout math for the roadmap "B-prime" completion-time
- * canvas (mockups/roadmap-uplift/b-prime.html is the operator-locked visual
+ * canvas (recorded in docs/reference/studio-copy.md as the operator-locked visual
  * reference; this module ports its `layout()` function to real
  * `RoadmapInitiative[]` data, dropping the mock's replay/today toggle — the
  * product only ever shows real status).

@@ -12,8 +12,8 @@
  * WHY THREE KINDS, NOT ELEVEN: `orchestrator/logging.ts`'s `EventType`
  * union has 11 members (start / end / log / error / tool_use / iteration /
  * file_change / test_run / phase_transition / agent_heartbeat /
- * brain-query). `mockups/studio-endstate-v2/data.jsx`'s `NODE_LOGS` /
- * `AGENT_RUN.log` fixtures establish the DISPLAY vocabulary as exactly
+ * brain-query). The mockup's `NODE_LOGS` / `AGENT_RUN.log` fixtures
+ * (recorded in docs/reference/studio-copy.md) established the DISPLAY vocabulary as exactly
  * three kinds — think / tool / out — so `RunLogLine.kind` is a mapping FROM
  * the 11 real types ONTO those 3 display buckets, never a new event-type
  * vocabulary of its own (task brief, explicit: "Do NOT invent new event
