@@ -24,7 +24,10 @@ set -euo pipefail
 HB="${1:-}"
 # A watcher that cannot see its campaign must say so. Exiting 0 here would be the
 # same fail-open it exists to catch; cron captures stderr to .watcher-cron.log.
-[ -n "$HB" ] && [ -d "$HB" ] || { echo "watch-heartbeats.sh: not a heartbeat dir: ${1:-<no argument>}" >&2; exit 2; }
+if [ -z "$HB" ] || [ ! -d "$HB" ]; then
+  echo "watch-heartbeats.sh: not a heartbeat dir: ${1:-<no argument>}" >&2
+  exit 2
+fi
 CEILING_S=$((30 * 60))
 now="$(date -u +%s)"
 active="$(tr ',' ' ' < "$HB/ACTIVE" 2>/dev/null || echo NONE)"
