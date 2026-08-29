@@ -1477,3 +1477,40 @@ test('classifyFinding: checkDanglingEdges/checkDuplicateThemes classify as agent
   ]);
   assert.deepEqual(counts, { auto: 0, agent: 2, user: 0 });
 });
+
+// ---------- Brain 3 coverage (ADR 035) ----------
+//
+// The incident these cases close is recorded in the campaign ledger under
+// "OPEN RULE result — 2026-08-29": `forge brain lint` reported
+// `0 error(s), 0 flag(s)` on a tree where two themes under
+// brain/projects/trafficGame/themes/ each cited a file that was not there,
+// because `readThemeFiles` walked only brain/cycles + brain/forge-dev — the
+// pre-ADR-035 layout. Every check built on it reported clean on files it had
+// never opened, and `forge brain lint` is a blocking clause in the exit gate
+// of every milestone in the 1.0 plan.
+
+test('runBrainLint(full): a broken source link in a project brain (Brain 3) is REPORTED — ADR 035', () => {
+  const root = buildBrainFixture({
+    themes: [
+      {
+        path: 'projects/demo/themes/2026-01-01-cites-a-missing-file.md',
+        fm: { category: 'antipattern' },
+        body: '# t\n\n- [`gone.md`](../../../../docs/gone.md) — cycle archive that is not there.\n',
+      },
+    ],
+    extra: [
+      { path: 'projects/demo/antipatterns.md', content: '# demo — Antipatterns\n\n- [`2026-01-01-cites-a-missing-file`](./themes/2026-01-01-cites-a-missing-file.md) — d\n' },
+    ],
+  });
+  try {
+    const { findings } = runBrainLint({ cwd: root, scope: 'full' });
+    const broken = findings.filter(
+      (f) => f.check === 'checkSourceLinks' && f.file.includes('projects/demo/themes/'),
+    );
+    assert.equal(broken.length, 1, `expected the project theme's dead link to be reported, got ${JSON.stringify(findings, null, 2)}`);
+    assert.equal(broken[0].category, 'error');
+    assert.match(broken[0].message, /broken link: \.\.\/\.\.\/\.\.\/\.\.\/docs\/gone\.md/);
+  } finally {
+    cleanup(root);
+  }
+});
