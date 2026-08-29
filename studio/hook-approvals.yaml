@@ -1,0 +1,8 @@
+approved:
+  - id: post-merge-brain-ingest
+    scriptHash: sha256:0ba9dd06081e588637f45132b7ca2bbe8e01ae94caa104617ff97f2b6a7a6a6d
+    permissionsHash: sha256:6837f4fa28ed41a7394d5a354eb623ada0fdf1facba6e4836d0898b4cf9f6058
+    triggerHash: sha256:9694b2c29f41285c478c00c177273187cd12c2f97ae6f79efca9bc965f1ac529
+    packageHash: sha256:4ed264e3170af84d5a8762881bca0a861903f0ee4af18ebd40a132e614585803
+    overridden: false
+    approvedAt: '2026-08-29T00:25:07.470Z'
