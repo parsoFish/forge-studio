@@ -62,6 +62,16 @@ function lanes(args: string[], env: Record<string, string> = {}) {
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
+/** Poll the pane until it shows `needle`, so a test never races the consumer's render. */
+function awaitPane(session: string, needle: string, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const pane = spawnSync('tmux', ['capture-pane', '-p', '-t', session], { encoding: 'utf8' }).stdout ?? '';
+    if (pane.includes(needle)) return true;
+    spawnSync('sleep', ['0.2']);
+  }
+  return false;
+}
 function writeExec(name: string, body: string) {
   const p = join(dir, name);
   writeFileSync(p, name.endsWith('.cjs') ? body : body);
@@ -141,6 +151,33 @@ describe('lanes.sh send — the relay is confirmed by its effect', () => {
     assert.equal(got.length, 25, `consumer processed ${got.length} of 25 lines — the terminator was not delivered as a submit`);
     assert.equal(got[24], 'RULING line 25 of a long multi-part relay');
     assert.match(r.stdout, /confirmed/i, 'send must report the submission it CONFIRMED, not merely that it wrote the payload');
+  });
+
+  test('a lane whose input line already holds an unsent draft is refused, not merged into', () => {
+    // The second measured instance: an operator's own draft was sitting unsubmitted
+    // in m1-d's pane when T1 arrived to relay a ruling. Pasting onto it and hitting
+    // Enter would submit two people's text as one message, and the drain would look
+    // exactly like success. lanes.sh cannot stop a draft being typed; it must refuse
+    // to silently absorb one.
+    const marker = join(dir, 'draft-processed.txt');
+    const consumer = writeExec('draft-consumer.cjs', CONSUMER({ deaf: false, fromArgv: false, marker }));
+    const lane = 'send-draft';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    tmux('new-session', '-d', '-s', s, '-x', '200', '-y', '50', `node ${consumer}`);
+    // Wait for the consumer's own input line before typing: until it is in raw mode
+    // the tty echoes, and matching that echo would be exactly the presence-check this
+    // lane exists to end.
+    assert.ok(awaitPane(s, '\u276f'), 'precondition: the lane must be showing an input line');
+    tmux('send-keys', '-t', s, '-l', 'an operator draft nobody submitted');
+    assert.ok(awaitPane(s, '\u276f an operator draft'), 'precondition: the draft must be ON the input line');
+
+    const r = lanes(['send', lane, 'a ruling that must not be merged into that draft']);
+
+    assert.notEqual(r.status, 0, `send must refuse a lane whose input line is already occupied; stdout=${r.stdout}`);
+    assert.doesNotMatch(r.stdout, /^sent to/im, 'send must not report success');
+    assert.match(`${r.stdout}${r.stderr}`, /draft|already/i, 'the failure must say why');
+    assert.ok(!existsSync(marker), 'nothing may be submitted — not the ruling, and not the draft');
   });
 
   test('a lane that never drains its input line makes send FAIL LOUDLY, never print success', () => {

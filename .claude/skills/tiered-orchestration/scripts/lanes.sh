@@ -53,10 +53,13 @@ CONFIRM_TIMEOUT_S="${LANES_CONFIRM_TIMEOUT_S:-45}"   # how long an effect may ta
 SETTLE_S="${LANES_SETTLE_S:-8}"                      # how long the payload may take to reach the input line
 GLYPH=$'\xe2\x9d\xaf'                                 # the lane TUI's input-line marker
 
+input_line() { # <session> — the last input line the pane is showing, if any
+  tmux capture-pane -p -t "$1" 2>/dev/null | { grep "^[[:space:]]*$GLYPH" || true; } | tail -1
+}
 # 0 = the input line is holding something, 1 = present and empty, 2 = no input line
 input_state() { # <session>
   local l
-  l="$(tmux capture-pane -p -t "$1" 2>/dev/null | { grep "^[[:space:]]*$GLYPH" || true; } | tail -1)"
+  l="$(input_line "$1")"
   [ -n "$l" ] || return 2
   l="${l#*"$GLYPH"}"
   [ -n "$(printf '%s' "$l" | tr -d '[:space:]')" ]
@@ -163,6 +166,13 @@ cmd_peek() { tmux capture-pane -p -t "$(sess "$1")" -S "-${2:-40}"; }
 cmd_send() {
   local lane="$1" s; s="$(sess "$1")"; shift
   tmux has-session -t "$s" 2>/dev/null || die "no session $s"
+  # Refuse a pane whose input line is already occupied. Measured 2026-08-29: an
+  # operator's own draft sat unsubmitted in m1-d's pane when T1 arrived to relay a
+  # ruling. Pasting onto it would submit two people's text as one message, and the
+  # drain would look exactly like success.
+  if input_state "$s"; then
+    die "refusing to relay to $lane: $s's input line already holds an unsent draft ($(input_line "$s")). Attach with 'tmux attach -t $s' and submit or clear it (C-u) first."
+  fi
   # An explicit bracketed paste declares where the payload ends, so the consumer
   # does not have to guess from timing; the terminator is a separate write.
   printf '%s' "$*" | tmux load-buffer -b lanes-relay -
