@@ -10,6 +10,7 @@
 - [`2026-05-10-traffic-physics-and-flow`](./themes/2026-05-10-traffic-physics-and-flow.md) — >-
 - [`2026-05-10-ui-canvas-overlay-pattern`](./themes/2026-05-10-ui-canvas-overlay-pattern.md) — >-
 - [`2026-05-17-file-isolation-constraint-enables-single-iteration`](./themes/2026-05-17-file-isolation-constraint-enables-single-iteration.md) — >-
+- [`2026-05-23-grading-frontier-baselines-and-screenshots`](./themes/2026-05-23-grading-frontier-baselines-and-screenshots.md) — the locked headline numbers every commit on the collision arc was checked against, and why a rising score still needs its screenshot.
 - [`2026-05-23-grading-frontier-infrastructure`](./themes/2026-05-23-grading-frontier-infrastructure.md) — >-
 - [`canvas-bpr-flow-tests`](./themes/canvas-bpr-flow-tests.md) — >-
 

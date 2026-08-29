@@ -9,6 +9,7 @@ description: >-
   transition segments, lifted early at next-waypoint and ramp-CP boundaries.
   Collision, overlap, and IDM leader-finding all read the same value.
   Future-segment elevations evaluated at TARGET, not source-to-target span.
+  The three models this replaced are recorded separately.
 category: decision
 keywords:
   - elevation
@@ -23,7 +24,7 @@ keywords:
   - target-elevation
 created_at: 2026-05-23T00:00:00.000Z
 updated_at: 2026-05-23T00:00:00.000Z
-related_themes: [2026-05-10-traffic-physics-and-flow, 2026-05-23-grading-frontier-infrastructure]
+related_themes: [2026-05-10-traffic-physics-and-flow, 2026-05-23-grading-frontier-infrastructure, 2026-05-23-elevation-models-that-over-yielded]
 ---
 
 # Binary elevation model
@@ -102,31 +103,6 @@ route distance walked forward — at MAX_SPEED 450 px/s that's ~0.9 s
 of braking headroom, enough for IDM to react smoothly. Without it,
 the follower accelerates into the leader's tail at the ramp.
 
-## Why three failed attempts came first
-
-1. **3-level elevation coloring** — `ElevationGraphColorizer` was
-   originally designed for 0/1/2. Capped to 0/1 with one accepted
-   same-level adjacency on odd cycles. Two levels is enough for every
-   topology the operator wants to draw (split-grid, bypass-bays, the
-   bypass-shell hand-drawn design).
-2. **Body-aware footprint** — `currentSegElevation` initially returned
-   the union of route segment endpoints + `currentElevation` + next
-   segment's elevation if the front (centre + 19 px) had passed the
-   next waypoint. This was conservative and "safe" but produced
-   spurious yields near ramps because a car right at the ramp CP
-   looked like `{0, 1}` and conflicted with anything at either level.
-   Throughput plateau hit ~2.9 v/sim-s.
-3. **Route-segment span elevations for future walk** — using
-   `{min(elevs[i], elevs[i+1]), max(elevs[i], elevs[i+1])}` for each
-   future walk segment made ramp transitions span both levels, which
-   was correct geometrically but again over-yielded.
-
-The binary model collapses all three of these into one rule: trust
-`currentElevation` for the present, trust `routeElevations[i+1]` for
-the future. Throughput went from 2.905 (body-aware peak at s=250) to
-**3.314 v/sim-s at s=400 with 0 severe** — locked baseline
-preserved exactly at roundabout r=300 = 1.921 v/sim-s.
-
 ## Sources
 
 - [`docs/decisions/adr-collision-architecture-2026-05-22.md`](../../../../projects/trafficGame/docs/decisions/adr-collision-architecture-2026-05-22.md) — the parent ADR.
@@ -136,5 +112,6 @@ preserved exactly at roundabout r=300 = 1.921 v/sim-s.
 
 ## See also
 
+- [[2026-05-23-elevation-models-that-over-yielded]] — the three models this one replaced, and the throughput each reached.
 - [[2026-05-23-grading-frontier-infrastructure]] — what locks the throughput numbers in.
 - [[2026-05-10-traffic-physics-and-flow]] — the surrounding IDM stack.
