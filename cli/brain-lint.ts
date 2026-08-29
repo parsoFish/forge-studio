@@ -651,11 +651,18 @@ export function checkSourceLinks(forgeRoot: string): Finding[] {
 
 /**
  * For each theme citing a path in `## Sources` (or anywhere in the body):
- * - For project themes (`brain/projects/<n>/themes/<file>.md`): resolve the
- *   project repo path as `<forgeRoot>/projects/<n>/`. If the path exists, OK.
- *   If the path is missing AND the project repo exists, flag as stale.
- * - For forge themes: resolve relative to `<forgeRoot>/`. Flag missing files
+ * - For FORGE themes: resolve relative to `<forgeRoot>/`. Flag missing files
  *   that look like source paths.
+ * - For a theme in any OTHER brain — a project brain (ADR 035) or an
+ *   operator-created KB — a bare `docs/…` citation names THAT project's docs,
+ *   which live in its ground clone under `projects/<name>/`: gitignored,
+ *   absent in CI, another repository's tree. Forge cannot resolve it, so it is
+ *   not checked. Resolving it against the forge root instead produced 27 flags
+ *   naming files that were sitting in the project all along —
+ *   `brain/projects/trafficGame/themes/2026-05-10-*` cite `docs/LEARNINGS.md`,
+ *   which is `projects/trafficGame/docs/LEARNINGS.md` and present, while forge
+ *   has no such file. This is what the docblock above already described and
+ *   the code never did.
  *
  * Citations are detected as backtick-wrapped paths that look like file paths:
  *   `src/foo.ts` `orchestrator/cycle.ts` `tests/x.test.ts`
@@ -694,6 +701,9 @@ export function checkStaleness(forgeRoot: string): Finding[] {
       // Skip references to forge brain paths themselves — those are linked,
       // and checkSourceLinks already handles those.
       if (p.startsWith('brain/')) continue;
+
+      // Only a FORGE theme's citation is a forge path (see the docblock).
+      if (!isForgeTheme(brainRoot, file)) continue;
       if (p.startsWith('docs/') || p.startsWith('orchestrator/') || p.startsWith('skills/') || p.startsWith('loops/')) {
         // Forge-internal path. Resolve against forge root.
         const target = resolve(forgeRoot, p);

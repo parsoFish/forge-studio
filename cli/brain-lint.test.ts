@@ -1598,3 +1598,37 @@ test('checkDuplicateThemes: a recurrence declaration exempts only its own series
     cleanup(root);
   }
 });
+
+test('checkStaleness: a project theme\'s citation is NOT resolved against the forge repo', () => {
+  // `docs/LEARNINGS.md` in a trafficGame theme names trafficGame's docs, which
+  // live in its ground clone at projects/trafficGame/ — gitignored, absent in
+  // CI, and another repo's tree. Resolved against the forge root it is
+  // "missing" and the theme is flagged stale, which is how lighting up Brain 3
+  // produced 27 flags naming files that were sitting in the project all along.
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'projects/demo/themes/cites-project-docs.md', fm: { category: 'antipattern' }, body: '# t\n\nSee `docs/LEARNINGS.md` for the detail.\n' },
+    ],
+    extra: [{ path: 'projects/demo/antipatterns.md', content: '# a\n\n- [`cites-project-docs`](./themes/cites-project-docs.md) — d\n' }],
+  });
+  try {
+    assert.deepEqual(checkStaleness(root), []);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkStaleness: a FORGE theme citing a missing forge path is still flagged', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/cites-forge-docs.md', body: '# t\n\nSee `docs/gone-for-good.md` for the detail.\n' },
+    ],
+  });
+  try {
+    const findings = checkStaleness(root);
+    assert.equal(findings.length, 1);
+    assert.match(findings[0].message, /stale citation \(missing\): docs\/gone-for-good\.md/);
+  } finally {
+    cleanup(root);
+  }
+});
