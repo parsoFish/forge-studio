@@ -36,18 +36,74 @@
 set -euo pipefail
 
 die() { echo "lanes.sh: $*" >&2; exit 2; }
-sess() { printf 'forge-%s' "$1"; }
+sess() { printf '%s%s' "${LANES_SESSION_PREFIX:-forge-}" "$1"; }
+
+# --- relay confirmation -------------------------------------------------------
+# CONFIRM A RELAY BY ITS EFFECT, NEVER BY THE PAYLOAD'S PRESENCE.
+# Measured 2026-08-29 (_1.0/ledger.md, three instances in one afternoon): `send`
+# printed "sent to forge-m1-d" and `launch` printed "launched forge-m1-a" over a
+# payload that was STAGED and never submitted -- `â¯ [Pasted text #1 +1 lines]`,
+# $0.00 session, 0 context -- because nothing looked. Reproduced deterministically
+# against a real Claude TUI: tmux delivers every byte, but a terminator landing in
+# the SAME read chunk as the payload is taken as pasted CONTENT rather than a
+# keypress. So the payload and its terminator are written separately, the gap
+# between them is a condition (the payload is on the input line) and not a sleep,
+# and the input line is then watched until the payload LEAVES it.
+CONFIRM_TIMEOUT_S="${LANES_CONFIRM_TIMEOUT_S:-45}"   # how long an effect may take to appear
+SETTLE_S="${LANES_SETTLE_S:-8}"                      # how long the payload may take to reach the input line
+GLYPH=$'\xe2\x9d\xaf'                                 # the lane TUI's input-line marker
+
+# 0 = the input line is holding something, 1 = present and empty, 2 = no input line
+input_state() { # <session>
+  local l
+  l="$(tmux capture-pane -p -t "$1" 2>/dev/null | { grep "^[[:space:]]*$GLYPH" || true; } | tail -1)"
+  [ -n "$l" ] || return 2
+  l="${l#*"$GLYPH"}"
+  [ -n "$(printf '%s' "$l" | tr -d '[:space:]')" ]
+}
+await_state() { # <session> <wanted 0|1> <deadline-epoch>
+  local s="$1" want="$2" deadline="$3" rc
+  while :; do
+    input_state "$s" && rc=0 || rc=$?
+    [ "$rc" = "$want" ] && return 0
+    [ "$(date +%s)" -ge "$deadline" ] && return 1
+    sleep 0.3
+  done
+}
+# Drive the terminator until the input line drains. Silent on success; dies naming
+# the lane when the effect cannot be confirmed. NEVER reports success it did not see.
+#   require_pending=1 (send): the payload we just wrote must appear on the input line
+#     first -- otherwise "empty" only means the pane has not caught up, and treating
+#     that as submitted would be the very fail-open this function exists to close.
+#   require_pending=0 (launch): the prompt arrives as argv, so a lane that already
+#     submitted it shows an empty line and is working; one still holding it is driven.
+confirm_submitted() { # <session> <lane> <what> <require_pending>
+  local s="$1" lane="$2" what="$3" need="$4" attempt=0 rc
+  if ! await_state "$s" 0 "$(( $(date +%s) + SETTLE_S ))"; then
+    input_state "$s" && rc=0 || rc=$?
+    [ "$need" = 0 ] && [ "$rc" = 1 ] && return 0
+    [ "$rc" = 2 ] && die "$what NOT CONFIRMED for $lane: $s never showed an input line within ${SETTLE_S}s, so submission cannot be confirmed. Attach with 'tmux attach -t $s'."
+    die "$what NOT CONFIRMED for $lane: the payload never reached $s's input line within ${SETTLE_S}s. Attach with 'tmux attach -t $s'."
+  fi
+  while [ "$attempt" -lt 2 ]; do
+    tmux send-keys -t "$s" Enter
+    await_state "$s" 1 "$(( $(date +%s) + CONFIRM_TIMEOUT_S ))" && return 0
+    attempt=$((attempt + 1))
+  done
+  die "$what NOT CONFIRMED for $lane: the payload is still on $s's input line, unsubmitted after ${CONFIRM_TIMEOUT_S}s and 2 terminators. Attach with 'tmux attach -t $s' and submit it by hand."
+}
 
 active_add() { # <campaign-dir> <lane>
   local f="$1/heartbeat/ACTIVE" cur
-  mkdir -p "$1/heartbeat"
-  cur="$(tr ',' ' ' < "$f" 2>/dev/null | tr -s ' \n' ' ' | sed 's/\bNONE\b//g; s/^ *//; s/ *$//')" || cur=""
+  mkdir -p "$1/heartbeat"; [ -f "$f" ] || : > "$f"
+  cur="$(tr ',' ' ' < "$f" | tr -s ' \n' ' ' | sed 's/\bNONE\b//g; s/^ *//; s/ *$//')" || cur=""
   case " $cur " in *" $2 "*) ;; *) cur="${cur:+$cur }$2" ;; esac
   printf '%s\n' "${cur:-NONE}" > "$f"
 }
 active_drop() { # <campaign-dir> <lane>
   local f="$1/heartbeat/ACTIVE" cur
-  cur="$(tr ',' ' ' < "$f" 2>/dev/null | tr -s ' \n' ' ' | sed "s/\b$2\b//g; s/\bNONE\b//g" | tr -s ' ' | sed 's/^ *//; s/ *$//')" || cur=""
+  [ -f "$f" ] || return 0
+  cur="$(tr ',' ' ' < "$f" | tr -s ' \n' ' ' | sed "s/\b$2\b//g; s/\bNONE\b//g" | tr -s ' ' | sed 's/^ *//; s/ *$//')" || cur=""
   printf '%s\n' "${cur:-NONE}" > "$f"
 }
 
@@ -92,8 +148,9 @@ cmd_launch() {
   tmux new-session -d -s "$s" -c "$cwd" -x 200 -y 50
   tmux pipe-pane -o -t "$s" "cat >> '$camp/heartbeat/$lane.tmux.log'"
   tmux send-keys -t "$s" "$bin --model $model --permission-mode $pm \"\$(cat '$prompt')\"" Enter
+  confirm_submitted "$s" "$lane" "launch" 0
   active_add "$camp" "$lane"
-  echo "launched $s  model=$model permission-mode=$pm cwd=$cwd"
+  echo "launched $s and confirmed working  model=$model permission-mode=$pm cwd=$cwd"
   echo "attach:  tmux attach -t $s   (detach: C-b d)"
   echo "peek:    $0 peek $lane"
   echo "log:     $camp/heartbeat/$lane.tmux.log"
@@ -104,11 +161,15 @@ cmd_launch() {
 cmd_peek() { tmux capture-pane -p -t "$(sess "$1")" -S "-${2:-40}"; }
 
 cmd_send() {
-  local s; s="$(sess "$1")"; shift
+  local lane="$1" s; s="$(sess "$1")"; shift
   tmux has-session -t "$s" 2>/dev/null || die "no session $s"
-  tmux send-keys -t "$s" -l "$*"
-  tmux send-keys -t "$s" Enter
-  echo "sent to $s: $*"
+  # An explicit bracketed paste declares where the payload ends, so the consumer
+  # does not have to guess from timing; the terminator is a separate write.
+  printf '%s' "$*" | tmux load-buffer -b lanes-relay -
+  tmux paste-buffer -p -b lanes-relay -t "$s"
+  tmux delete-buffer -b lanes-relay 2>/dev/null || true
+  confirm_submitted "$s" "$lane" "send" 1
+  echo "sent to $s and confirmed submitted: $*"
 }
 
 cmd_open() {
