@@ -2,7 +2,7 @@
  * Home dashboard — PURE derivation module (R6-07).
  *
  * THE DEFECT CLASS THIS MODULE KILLS: declared-data-fails-open. The mockup
- * (mockups/studio-endstate-v2/views-home.jsx + data.jsx) invents
+ * (recorded in docs/reference/studio-copy.md) invented
  * `flow.status` / `agent.status` / `kb.status` fields that do not exist on
  * the real wire types (`Flow`, `Agent`, `Project`, `Kb` in ./studio-client —
  * none carry a `status` field). Live status on Home is DERIVED from the
@@ -644,8 +644,8 @@ export function buildHomeLedgerRows(
 }
 
 // ---------------------------------------------------------------------------
-// W6-B11 — the Home active-sessions strip (mockups/session-surface-v1/
-// sessions-index.html's "Home active-sessions strip" variant)
+// W6-B11 — the Home active-sessions strip (recorded in
+// docs/reference/studio-copy.md as the "Home active-sessions strip" variant)
 // ---------------------------------------------------------------------------
 
 /** The strip's card budget before overflow — mirrors the mock's own "4-card

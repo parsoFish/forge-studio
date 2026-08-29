@@ -1010,7 +1010,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // session'`, in the PIN test just below) as its "own reasoned, flagged
 // choice, not a verified contract". This section re-measures ALL SIX (when
 // + what × three paths) against real server data AND the mockup's own
-// design intent (`mockups/studio-endstate-v2/data.jsx`'s `AGENT_HISTORY`),
+// design intent (recorded in docs/reference/studio-copy.md as `AGENT_HISTORY`),
 // per this round's brief. CONCLUSION UP FRONT: both flagged values were
 // ALREADY correct — nothing below changes the PIN test's literals. What
 // changes is their status, from "unverified guess" to "measured fact",

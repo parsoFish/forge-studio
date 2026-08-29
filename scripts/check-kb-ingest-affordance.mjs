@@ -129,7 +129,7 @@ const GLOBAL_SKIP = (p) =>
   // test-local mirror of this function already skipped them; the SHIPPED
   // checker did not — the mirror had drifted from the thing it backstops.
   p.includes(`${join('.claude', 'worktrees')}`) ||
-  p.includes(`${join('brain')}`) || p.includes(`${join('mockups')}`) ||
+  p.includes(`${join('brain')}`) ||
   p.includes(`${join('demos')}`) || isTestFile(p);
 
 /**

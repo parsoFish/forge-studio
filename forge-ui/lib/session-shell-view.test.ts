@@ -34,7 +34,7 @@
  *    need the ROUTE to change first, not just this view module.
  *
  *    RATIFIED by T2 (2026-08-05, Correction 2), verified against the
- *    acceptance reference `mockups/studio-endstate-v2/views-session.jsx`: a
+ *    acceptance reference recorded in docs/reference/studio-copy.md: a
  *    session has ONE artifact kind, and a future multi-stage renderer (the
  *    reserved `contract-buildout` row, R4-17) is a STAGE-AWARE renderer that
  *    switches its own sub-view on the selected stage — not a different

@@ -242,8 +242,8 @@ export type ContractBuildoutView =
   | { kind: 'contract-buildout'; mode: 'detail'; row: ContractStageRow | null };
 
 /**
- * Stage-aware, mirroring the mockup (`mockups/studio-endstate-v2/
- * views-session.jsx:77-158`) exactly: the `contract` stage renders the
+ * Stage-aware, mirroring the mockup (recorded in docs/reference/studio-copy.md)
+ * exactly: the `contract` stage renders the
  * CHECKLIST of all five stage rows (the "which components are present"
  * overview, `:139-157`); every other stage renders THAT stage's own row
  * detail (`:80-138`). An `activeStage` naming a stage with no matching row

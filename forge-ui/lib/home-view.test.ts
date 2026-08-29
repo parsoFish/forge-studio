@@ -2,7 +2,7 @@
  * Acceptance tests — Home dashboard derivation (R6-07).
  *
  * THE DEFECT CLASS: declared-data-fails-open. The mockup
- * (mockups/studio-endstate-v2/views-home.jsx + data.jsx) invents
+ * (recorded in docs/reference/studio-copy.md) invented
  * `flow.status` / `agent.status` / `kb.status` fields that do not exist on
  * the real wire types (`Flow`, `Agent`, `Project`, `Kb` in ./studio-client —
  * none carry a `status` field). Live status on Home MUST be DERIVED from the
