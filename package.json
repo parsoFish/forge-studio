@@ -30,7 +30,6 @@
     "ui:walkthrough:gate": "node scripts/ui-walkthrough/crawl.mjs --assert --baseline scripts/ui-walkthrough/baseline.json",
     "verify:cycle": "node scripts/verify-cycle.mjs",
     "perf:snapshot": "node scripts/perf-snapshot.mjs",
-    "parity:stories": "node scripts/story-parity.mjs",
     "test:ui": "npm run test --workspace=forge-ui",
     "test:ui:typecheck": "tsc -p forge-ui/tsconfig.tests.json"
   },
