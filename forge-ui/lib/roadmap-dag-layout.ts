@@ -8,7 +8,7 @@
  * depth, NOT a hop count along a single dependency chain.
  *
  * Generalises the mockup's single-`dep` walk
- * (mockups/studio-endstate-v2/views-projects.jsx:282) to `string[]` parents,
+ * (recorded in docs/reference/studio-copy.md) to `string[]` parents,
  * and hardens it: the walk is memoised and cycle-guarded so a dependency cycle
  * terminates instead of hanging, and every column is clamped to `MAX_COLUMN`
  * so a pathological deep chain never explodes the column count.
@@ -17,7 +17,7 @@
 import type { RoadmapInitiative } from '@/lib/bridge-client';
 
 /**
- * Column cap — mirrors the mockup DAG cap (studio-endstate-v2 round-6/7 notes).
+ * Column cap — mirrors the mockup DAG cap (recorded in docs/reference/studio-copy.md).
  * A node whose natural depth would exceed this clamps to it; a cycle can never
  * push a column past it.
  */
