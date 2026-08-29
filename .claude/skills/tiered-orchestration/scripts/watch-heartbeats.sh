@@ -13,22 +13,29 @@
 #   liveness = max(mtime of <lane>.log and every declared path). The tmux pane log is NOT a
 #   liveness signal: an idle Claude TUI redraws its status bar, so the pane never goes quiet
 #   (measured 2026-08-28: a 2-hour idle lane never flagged).
-#   ceiling 30 min from max(arm-time, liveness)
+#   ceiling 30 min from max(that lane's OWN arm-time, its liveness)
 #   stall    → HB/STALL-<lane> written (T1 polls, relays, deletes); recovery removes it
-#   arm      → HB/.watcher-armed re-stamped whenever ACTIVE changes (grace for new lanes)
+#   arm      → HB/.armed-<lane>, stamped when THAT lane first appears in ACTIVE, dropped when
+#              it leaves. Per-lane on purpose: a single global arm stamp re-stamped on every
+#              ACTIVE change meant one lane finishing well silently re-armed all the others,
+#              and the watcher went blind for 79 minutes (2026-08-29, forge-8vfn.2.14).
+#              A lane's liveness reference must not be derivable from a file another lane writes.
 set -euo pipefail
-HB="${1:-}"; [ -n "$HB" ] && [ -d "$HB" ] || exit 0
+HB="${1:-}"
+# A watcher that cannot see its campaign must say so. Exiting 0 here would be the
+# same fail-open it exists to catch; cron captures stderr to .watcher-cron.log.
+if [ -z "$HB" ] || [ ! -d "$HB" ]; then
+  echo "watch-heartbeats.sh: not a heartbeat dir: ${1:-<no argument>}" >&2
+  exit 2
+fi
 CEILING_S=$((30 * 60))
-ARM="$HB/.watcher-armed"; SNAP="$HB/.active-snapshot"
-active_raw="$(cat "$HB/ACTIVE" 2>/dev/null || echo NONE)"
-active="$(printf '%s' "$active_raw" | tr ',' ' ')"
 now="$(date -u +%s)"
-prev="$(cat "$SNAP" 2>/dev/null || echo '')"
-if [ "$active_raw" != "$prev" ]; then printf '%s' "$now" > "$ARM"; printf '%s' "$active_raw" > "$SNAP"; fi
-arm="$(cat "$ARM" 2>/dev/null || printf '%s' "$now")"
+active="$(tr ',' ' ' < "$HB/ACTIVE" 2>/dev/null || echo NONE)"
 for lane in $active; do
   [ "$lane" = "NONE" ] && continue
-  last="$arm"
+  arm="$HB/.armed-$lane"
+  [ -f "$arm" ] || printf '%s' "$now" > "$arm"     # grace, from this lane's own arrival
+  last="$(cat "$arm")"
   paths="$HB/$lane.log"
   [ -f "$HB/$lane.liveness" ] && paths="$paths $(tr '\n' ' ' < "$HB/$lane.liveness")"
   for pat in $paths; do
@@ -37,8 +44,7 @@ for lane in $active; do
       m="$(stat -c %Y "$f")"; [ "$m" -gt "$last" ] && last="$m"
     done
   done
-  ref="$last"; [ "$arm" -gt "$ref" ] && ref="$arm"
-  gap=$((now - ref)); flag="$HB/STALL-$lane"
+  gap=$((now - last)); flag="$HB/STALL-$lane"
   if [ "$gap" -gt "$CEILING_S" ]; then
     {
       echo "STALL $lane gap=$((gap / 60))min ceiling=$((CEILING_S / 60))min"
@@ -48,5 +54,12 @@ for lane in $active; do
   else
     [ -f "$flag" ] && rm -f "$flag"
   fi
+done
+# A lane that has left ACTIVE is no longer watched: drop its arm stamp and any flag,
+# so T1 is never left polling a STALL flag for a lane that closed cleanly.
+for f in "$HB"/.armed-*; do
+  [ -f "$f" ] || continue
+  lane="${f##*/.armed-}"
+  case " $active " in *" $lane "*) ;; *) rm -f "$f" "$HB/STALL-$lane" ;; esac
 done
 exit 0
