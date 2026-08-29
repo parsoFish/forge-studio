@@ -1094,7 +1094,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   [`docs/community-registry-writes.md`](../community-registry-writes.md) and the
   2026-07-16 bridge-self-merge incident that `cli/dry-bridge.ts` exists to prevent.
   The consequences are live and named:
-  `docs/roadmaps/wave-7-walkthrough-findings.md` `library-07` (*"Studio writes
+  the wave-7 walkthrough findings record (retired M1-A) `library-07` (*"Studio writes
   authored skills straight into the live forge working tree with no commit — they
   show up as untracked churn"*); `cli/studio-provenance.ts`'s `AGENT_PROVENANCE`
   and `PROJECT_PROVENANCE` hard-coded to `'unknown'` because an OOTB and an
@@ -1218,7 +1218,7 @@ third connection kind above); `npm run parity:stories` exits 0.
   - **R3-09-F4 — Preview before push.** Promotion shows the operator the exact
     diff, the target branch name, and the files that will be included, and
     requires an explicit confirm. This is the affordance whose absence
-    `docs/roadmaps/wave-7-walkthrough-findings.md` `library-14` and `community-19`
+    the wave-7 walkthrough findings record (retired M1-A) `library-14` and `community-19`
     both record for other real-acting buttons. Acceptance: the preview renders the
     real diff (not a summary of it) for a `_local/` object and for an uncommitted
     edit to a tracked path; cancelling leaves no branch, no worktree and no PR.
@@ -1537,7 +1537,7 @@ rather than deferred within it:
   the library *machinery* (registries, resolvers, surfaces, protections),
   *"editable (where safe)"*, and *provenance* as its scope. These are the first
   specs for the standing findings `library-07` and `community-23` in
-  `docs/roadmaps/wave-7-walkthrough-findings.md`, which had no design home. The
+  the wave-7 walkthrough findings record (retired M1-A), which had no design home. The
   companion operator-facing surface is R6-10. Both new initiatives are **design
   only so far** — the wave-8 spike shipped an ADR, roadmap entries and beads by
   explicit operator decision, and no production code.

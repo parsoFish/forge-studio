@@ -26,7 +26,7 @@ An agent IS a skill directory: `skills/<name>/SKILL.md` frontmatter is parsed by
 
 ### R2-B5 Runtime-adapter seam (ADR-029, proof pending per ADR-032)
 
-`loops/_adapters/` — `registry.ts` + `conformance.ts` contract tests over `claude` (live; wraps `loops/ralph/claude-agent.ts`, wrap-not-move), `gemini` and `aider` (registered, `available: false` — deps/creds unprovisioned; Gemini tool executor missing), plus `example`. Tier escalation (haiku→sonnet→opus by catalog cost) resolves **Claude tiers only** (`orchestrator/model-range.ts`). ADR-032 names the realization gap: no *running* non-Claude cycle exists yet — also operator-journey gap #12 and the differentiation proof (`docs/forge-studio-market-and-differentiation.md`).
+`loops/_adapters/` — `registry.ts` + `conformance.ts` contract tests over `claude` (live; wraps `loops/ralph/claude-agent.ts`, wrap-not-move), `gemini` and `aider` (registered, `available: false` — deps/creds unprovisioned; Gemini tool executor missing), plus `example`. Tier escalation (haiku→sonnet→opus by catalog cost) resolves **Claude tiers only** (`orchestrator/model-range.ts`). ADR-032 names the realization gap: no *running* non-Claude cycle exists yet — also operator-journey gap #12 and the differentiation proof (`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`).
 
 ### R2-B6 Fanout as a static topology hint
 
@@ -385,7 +385,7 @@ with zero stubs, because their payload shapes could not be corpus-grounded.
 - **Status:** planned  ·  **Wave:** 4 (as deps/provisioning land)
 - **Depends on:** R2-01 (soft — the generic primitive should be adapter-agnostic from birth; light-up can start any time provisioning allows).
 - **Depended on by:** — (differentiation proof; nothing structurally blocks on it).
-- **Context:** ADR-029 built the seam; ADR-032 names the standing **realization gap**: no *running* non-Claude cycle. `gemini`/`aider` registered `available: false` (`loops/_adapters/registry.ts`); the Gemini tool executor is missing; per-adapter tier resolution is Claude-only (`orchestrator/model-range.ts`). A cross-adapter live cycle is operator-journey gap #12 and the "second adapter shipped" differentiation proof (`docs/forge-studio-market-and-differentiation.md`; memory: Forge Studio differentiation).
+- **Context:** ADR-029 built the seam; ADR-032 names the standing **realization gap**: no *running* non-Claude cycle. `gemini`/`aider` registered `available: false` (`loops/_adapters/registry.ts`); the Gemini tool executor is missing; per-adapter tier resolution is Claude-only (`orchestrator/model-range.ts`). A cross-adapter live cycle is operator-journey gap #12 and the "second adapter shipped" differentiation proof (`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`; memory: Forge Studio differentiation).
 - **Features:**
   - **R2-06-F1 Gemini adapter live.** Implement the missing tool executor in `loops/_adapters/gemini/`, provision dep + creds, flip `available: true`; conformance suite (`loops/_adapters/conformance.ts`) passes against the real adapter. ACs: conformance green live; `available` truthfully reflects provisioning in CI (stays false there — existing `registry.test.ts` contract).
   - **R2-06-F2 Per-adapter tier resolution.** Generalize `orchestrator/model-range.ts` from Claude-tier escalation to an adapter-declared tier ladder (each adapter names its model tiers + costs in the catalog); strategy `fixed | range` works on any adapter. ACs: tier escalation unit-tested against a mock second adapter; Claude behavior unchanged.

@@ -363,7 +363,7 @@ the dirty check on across the whole declared set, against a repo that has been a
 uncommitted Studio writes, will surface a backlog. Showing it is the deliverable.
 
 **This ADR closes two standing walkthrough findings that had no design home.**
-`docs/roadmaps/wave-7-walkthrough-findings.md` records `library-07` (*"Studio writes authored skills
+the wave-7 walkthrough findings record (retired M1-A) records `library-07` (*"Studio writes authored skills
 straight into the live forge working tree with no commit — they show up as untracked churn"*) and
 `community-23` (*"the only writer is an agent whose commit path has never once executed"*). Both were
 filed as findings against wave-7 execution buckets and never promoted to an initiative; R3-08/R3-09

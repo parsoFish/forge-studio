@@ -2008,7 +2008,7 @@ architect-accept path by `orchestrator/project-manager-shared-pipeline.test.ts`)
 Materially non-zero ⇒ the interactive-decomposition case is real and earns an
 initiative; zero ⇒ it was a naming question. Brief (committed, not in the
 gitignored campaign dir):
-[`docs/architect-pm-merger-brief.md`](../architect-pm-merger-brief.md).
+the R4-15-F2 architect + PM merger brief (retired 2026-08-29 in M1-A; its ratified outcome is the R4-D1 note above).
 
 ## Change log
 

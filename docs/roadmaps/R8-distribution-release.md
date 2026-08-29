@@ -39,7 +39,7 @@ AGPL-3.0 (relicensed during the Studio M-arc); community-health files + CI
 
 ### R8-B4 Positioning corpus
 
-`docs/forge-studio-market-and-differentiation.md` — self-flagged perishable
+`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md` — self-flagged perishable
 (dated 2026-06-14; §10: re-check figures before external publication);
 differentiation thesis = intersection moat + modularity-as-subsumption
 flywheel, with the shipped-second-adapter proof outstanding (R2-06-F4) and
