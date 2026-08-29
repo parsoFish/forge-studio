@@ -11,7 +11,6 @@
  *   4. checkStaleness          — cited forge-internal paths still exist
  *   5. checkOrphans            — themes reachable from INDEX.md → category index → theme
  *   6. checkLengthSoftCap      — > 60 lines warn; > 100 lines error
- *   7. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
  *   8. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
  *   9. checkReflectorLoss      — advisory: `_queue/done/` initiatives missing a reflection archive
  *  10. checkProjectBrainIndexes — project-brain (Brain 3) category-index sync
@@ -104,7 +103,6 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
   ['checkOrphans', checkOrphans],
   ['checkProjectBrainIndexes', checkProjectBrainIndexes],
   ['checkLengthSoftCap', checkLengthSoftCap],
-  ['checkContradictions', checkContradictions],
   ['checkCategoryScope', checkCategoryScope],
   ['checkReflectorLoss', checkReflectorLoss],
   ['checkDanglingEdges', checkDanglingEdges],
@@ -157,7 +155,6 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
   checkOrphans: 'themes',
   checkProjectBrainIndexes: 'project-indexes',
   checkLengthSoftCap: 'themes',
-  checkContradictions: 'themes',
   checkCategoryScope: 'forge-themes',
   checkReflectorLoss: 'global',
   checkDanglingEdges: 'themes',
@@ -912,56 +909,6 @@ export function checkCleanupCandidates(forgeRoot: string): Finding[] {
   return findings;
 }
 
-// ---------- checkContradictions (warn-only stretch) ----------
-
-export function checkContradictions(forgeRoot: string): Finding[] {
-  const findings: Finding[] = [];
-  const brainRoot = join(forgeRoot, 'brain');
-
-  type ThemeMeta = {
-    file: string;
-    category: string;
-    keywords: string[];
-  };
-
-  const themes: ThemeMeta[] = [];
-  for (const file of readThemeFiles(brainRoot)) {
-    const parsed = parseTheme(file);
-    if (!parsed) continue;
-    const kw = Array.isArray(parsed.data.keywords) ? parsed.data.keywords.map(String) : [];
-    themes.push({ file, category: String(parsed.data.category ?? ''), keywords: kw });
-  }
-
-  const seen = new Set<string>();
-  for (let i = 0; i < themes.length; i++) {
-    for (let j = i + 1; j < themes.length; j++) {
-      const a = themes[i];
-      const b = themes[j];
-      const aIsPattern = a.category === 'pattern' || a.file.includes('-pattern');
-      const aIsAnti = a.category === 'antipattern' || a.file.includes('-antipattern');
-      const bIsPattern = b.category === 'pattern' || b.file.includes('-pattern');
-      const bIsAnti = b.category === 'antipattern' || b.file.includes('-antipattern');
-      const opposing = (aIsPattern && bIsAnti) || (aIsAnti && bIsPattern);
-      if (!opposing) continue;
-
-      const overlap = a.keywords.filter((k) => b.keywords.includes(k));
-      if (overlap.length >= 3) {
-        const key = [a.file, b.file].sort().join('::');
-        if (seen.has(key)) continue;
-        seen.add(key);
-        findings.push({
-          category: 'flag',
-          file: a.file,
-          message: `possible contradiction with ${relative(forgeRoot, b.file)} (${overlap.length} keyword overlaps: ${overlap.slice(0, 5).join(', ')})`,
-          check: 'checkContradictions',
-        });
-      }
-    }
-  }
-
-  return findings;
-}
-
 // ---------- checkCategoryScope (brain gap #8) ----------
 
 /**
@@ -1273,7 +1220,7 @@ export function checkDuplicateThemes(forgeRoot: string): Finding[] {
  * `checkSourceLinks`, `checkCategoryScope`, `checkIndexSync`,
  * `checkDanglingEdges`, `checkDuplicateThemes` (mirrors the `check:` literals
  * in the function body — never `checkStaleness`/`checkOrphans`/
- * `checkLengthSoftCap`/`checkContradictions`/`checkProjectBrainIndexes`/
+ * `checkLengthSoftCap`/`checkProjectBrainIndexes`/
  * `checkReflectorLoss`, which `lintThemeFiles` does not implement). A per-KB
  * consumer (`buildKbHealth`) uses this to know which checks get a REAL
  * verdict from a KB's OWN theme files even when the shared
@@ -1493,8 +1440,6 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
     case 'checkLengthSoftCap':
       if (/hard cap/.test(msg)) return { kind: 'length.hard-cap', resolution: 'agent', fixHint: 'Condense the theme under 100 body lines (tighten prose; do not drop load-bearing facts).' };
       return { kind: 'length.soft-cap', resolution: 'agent', fixHint: 'Condense the theme toward 60 body lines without losing substance.' };
-    case 'checkContradictions':
-      return { kind: 'contradiction', resolution: 'user' };
     case 'checkCategoryScope':
       return { kind: 'category.mis-routed', resolution: 'auto' };
     case 'checkCleanupCandidates':

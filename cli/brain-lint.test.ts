@@ -20,7 +20,6 @@ import { join } from 'node:path';
 
 import {
   checkCategoryScope,
-  checkContradictions,
   checkDanglingEdges,
   checkDuplicateThemes,
   checkFrontmatter,
@@ -166,7 +165,6 @@ test('classifyFinding: AGENT tier — LLM-resolvable, carries a fixHint', () => 
 
 test('classifyFinding: USER tier — needs a human decision', () => {
   assert.equal(classifyFinding(cf('checkFrontmatter', 'category "bug" not in whitelist {pattern|...}')).resolution, 'user');
-  assert.equal(classifyFinding(cf('checkContradictions', 'possible contradiction with x (3 keyword overlaps)')).resolution, 'user');
   assert.equal(classifyFinding(cf('checkCleanupCandidates', 'cleanup: tier-C (load-bearing — never auto)')).resolution, 'user');
   assert.equal(classifyFinding(cf('checkCleanupCandidates', 'cleanup: tier-B (routine, > 30 days old)')).resolution, 'user');
 });
@@ -180,7 +178,7 @@ test('resolutionCounts: tallies by tier (classifies unstamped findings)', () => 
   const counts = resolutionCounts([
     cf('checkOrphans', 'orphan: x'),
     cf('checkSourceLinks', 'broken wikilink: [[y]]'),
-    cf('checkContradictions', 'possible contradiction with z'),
+    cf('checkFrontmatter', 'category "bug" not in whitelist {pattern|...}'),
   ]);
   assert.deepEqual(counts, { auto: 1, agent: 1, user: 1 });
 });
@@ -430,162 +428,6 @@ test('checkLengthSoftCap: counts body lines, not frontmatter', () => {
   try {
     const finding = checkLengthSoftCap(root).find((f) => f.file.endsWith('bodycap.md'));
     assert.ok(finding && finding.category === 'flag', 'expected a soft-cap flag, not an error');
-  } finally {
-    cleanup(root);
-  }
-});
-
-// ---------- checkContradictions (stretch, warn-only) ----------
-
-test('checkContradictions: pattern + antipattern with overlapping keywords flags', () => {
-  const root = buildBrainFixture({
-    themes: [
-      {
-        path: 'cycles/themes/x-pattern.md',
-        fm: { category: 'pattern', keywords: ['k1', 'k2', 'k3'] },
-      },
-      {
-        path: 'cycles/themes/x-antipattern.md',
-        fm: { category: 'antipattern', keywords: ['k1', 'k2', 'k3'] },
-      },
-    ],
-  });
-  try {
-    const findings = checkContradictions(root);
-    // Contradictions are warn-only — flag category.
-    assert.ok(findings.some((f) => f.category === 'flag' && f.message.toLowerCase().includes('contradict')));
-    // Never errors.
-    assert.equal(findings.filter((f) => f.category === 'error').length, 0);
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('checkContradictions: pattern + antipattern with no keyword overlap produces no finding', () => {
-  const root = buildBrainFixture({
-    themes: [
-      {
-        path: 'cycles/themes/y-pattern.md',
-        fm: { category: 'pattern', keywords: ['a', 'b', 'c'] },
-      },
-      {
-        path: 'cycles/themes/y-antipattern.md',
-        fm: { category: 'antipattern', keywords: ['d', 'e', 'f'] },
-      },
-    ],
-  });
-  try {
-    const findings = checkContradictions(root);
-    assert.equal(findings.filter((f) => f.message.toLowerCase().includes('contradict')).length, 0);
-  } finally {
-    cleanup(root);
-  }
-});
-
-// ---------- runBrainLint (end-to-end) ----------
-
-test('runBrainLint: full scope catches a mix of violations + clean themes', () => {
-  const root = buildBrainFixture({
-    themes: [
-      { path: 'cycles/themes/snap.md', fm: { category: 'snapshot' } }, // 1 category error
-      { path: 'cycles/themes/ok.md', fm: { category: 'pattern' } }, // orphan flag (not in patterns.md)
-    ],
-  });
-  try {
-    const result = runBrainLint({ cwd: root, scope: 'full' });
-    assert.ok(result.findings.some((f) => f.category === 'error' && /category/i.test(f.message)));
-    assert.ok(result.exitCode === 1, 'errors → exit 1');
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('runBrainLint: clean corpus exits 0', () => {
-  const root = buildBrainFixture({
-    themes: [{ path: 'cycles/themes/c1.md', fm: { category: 'pattern' } }],
-    extra: [
-      { path: 'cycles/patterns.md', content: '# patterns\n\n- [`c1`](./themes/c1.md) — yes.\n' },
-      {
-        path: 'INDEX.md',
-        content: '# Brain\n\n- [c1](./cycles/themes/c1.md)\n',
-      },
-    ],
-  });
-  try {
-    const result = runBrainLint({ cwd: root, scope: 'full' });
-    const errors = result.findings.filter((f) => f.category === 'error');
-    assert.equal(errors.length, 0, `errors: ${JSON.stringify(errors)}`);
-    assert.equal(result.exitCode, 0);
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('runBrainLint: single-file scope walks one file only', () => {
-  const root = buildBrainFixture({
-    themes: [
-      { path: 'cycles/themes/snap.md', fm: { category: 'snapshot' } },
-      { path: 'cycles/themes/proc.md', fm: { category: 'process' } },
-    ],
-  });
-  try {
-    const result = runBrainLint({
-      cwd: root,
-      scope: 'single-file',
-      file: 'brain/cycles/themes/snap.md',
-    });
-    const violationFiles = new Set(result.findings.map((f) => f.file));
-    assert.ok(Array.from(violationFiles).every((f) => f.endsWith('snap.md')), 'only snap.md walked');
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('runBrainLint: forge-only scope skips project themes', () => {
-  const root = buildBrainFixture({
-    themes: [
-      { path: 'cycles/themes/forge-snap.md', fm: { category: 'snapshot' } },
-      { path: 'projects/myproj/themes/proj-snap.md', fm: { category: 'snapshot' } },
-    ],
-    extra: [{ path: 'projects/myproj/profile.md', content: '# x\n' }],
-  });
-  try {
-    const result = runBrainLint({ cwd: root, scope: 'forge-only' });
-    assert.ok(result.findings.some((f) => f.file.endsWith('forge-snap.md')));
-    assert.ok(!result.findings.some((f) => f.file.endsWith('proj-snap.md')));
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('runBrainLint: project-only scope returns no findings (project themes are in separate repos)', () => {
-  // After the three-brain restructure, project themes live inside the project repo's own
-  // brain/ directory and are NOT scanned by forge-side brain-lint. The project-only scope
-  // is preserved for CLI backwards compat but returns no findings from forge.
-  const root = buildBrainFixture({
-    themes: [
-      { path: 'cycles/themes/forge-snap.md', fm: { category: 'snapshot' } },
-    ],
-  });
-  try {
-    const result = runBrainLint({ cwd: root, scope: 'project-only', project: 'p1' });
-    assert.ok(!result.findings.some((f) => f.file.endsWith('forge-snap.md')), 'forge themes excluded from project-only scope');
-    assert.equal(result.findings.filter((f) => /p1/.test(f.file)).length, 0);
-  } finally {
-    cleanup(root);
-  }
-});
-
-test('runBrainLint: cleanup-dry-run scope is inventory-only — exits 0', () => {
-  // cleanup-dry-run surfaces flags but never errors, so exitCode is always 0.
-  const root = buildBrainFixture({
-    themes: [{ path: 'cycles/themes/x.md', fm: { category: 'snapshot' } }],
-  });
-  try {
-    const result = runBrainLint({ cwd: root, scope: 'cleanup-dry-run' });
-    // All findings downgraded to flag — no errors.
-    assert.equal(result.findings.filter((f) => f.category === 'error').length, 0);
-    assert.equal(result.exitCode, 0);
   } finally {
     cleanup(root);
   }
@@ -883,18 +725,6 @@ test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits find
         path: 'cycles/themes/max-c.md',
         fm: { category: 'pattern' },
         body: '# Max C\n\n' + Array.from({ length: 110 }, (_, i) => `line ${i}`).join('\n') + '\n',
-      },
-
-      // checkContradictions — a pattern/antipattern pair sharing >=3 keywords.
-      {
-        path: 'cycles/themes/max-d-pattern.md',
-        fm: { category: 'pattern', keywords: ['alpha', 'beta', 'gamma', 'delta'] },
-        body: '# Max D Pattern\n',
-      },
-      {
-        path: 'cycles/themes/max-e-antipattern.md',
-        fm: { category: 'antipattern', keywords: ['alpha', 'beta', 'gamma', 'epsilon'] },
-        body: '# Max E Antipattern\n',
       },
 
       // checkCategoryScope — a `decision` theme mis-routed into cycles/themes/
@@ -1285,7 +1115,7 @@ test('SEVERITY LOCK: a fixture whose ONLY problems are one dangling edge and one
 // Registration contract (R4-19-F2) — CHECK_NAMES / CHECK_SCOPE / LINT_THEME_FILE_CHECKS.
 // =============================================================================
 
-test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a registration that adds the check function but forgets to append it to FULL_SCOPE_CHECKS)', () => {
+test('CHECK_NAMES: exactly the 11 expected full-scope check names (kills a registration that adds the check function but forgets to append it to FULL_SCOPE_CHECKS)', () => {
   const expected = [
     'checkFrontmatter',
     'checkIndexSync',
@@ -1294,17 +1124,16 @@ test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a regis
     'checkOrphans',
     'checkProjectBrainIndexes',
     'checkLengthSoftCap',
-    'checkContradictions',
     'checkCategoryScope',
     'checkReflectorLoss',
     'checkDanglingEdges',
     'checkDuplicateThemes',
   ];
-  assert.equal(CHECK_NAMES.length, 12, `expected 12 full-scope checks, got ${CHECK_NAMES.length}: ${JSON.stringify(CHECK_NAMES)}`);
+  assert.equal(CHECK_NAMES.length, 11, `expected 11 full-scope checks, got ${CHECK_NAMES.length}: ${JSON.stringify(CHECK_NAMES)}`);
   assert.deepEqual(
     [...CHECK_NAMES].sort(),
     [...expected].sort(),
-    `CHECK_NAMES must be exactly the expected 12-name set, got ${JSON.stringify(CHECK_NAMES)}`,
+    `CHECK_NAMES must be exactly the expected 11-name set, got ${JSON.stringify(CHECK_NAMES)}`,
   );
 });
 

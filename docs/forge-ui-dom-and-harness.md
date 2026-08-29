@@ -4381,7 +4381,7 @@ inventory rather than one shared page-level contract:
       (`errorCount+flagCount`) — for the 12 checks in `CHECK_NAMES`
       (`cli/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
       `checkSourceLinks`, `checkStaleness`, `checkOrphans`,
-      `checkProjectBrainIndexes`, `checkLengthSoftCap`, `checkContradictions`,
+      `checkProjectBrainIndexes`, `checkLengthSoftCap`,
       `checkCategoryScope`, `checkReflectorLoss`, `checkDanglingEdges`,
       `checkDuplicateThemes` (the last two added by R4-19-F2). **`status:'pass'` means the
       check genuinely ran over THIS KB's own content and found nothing** —

@@ -945,7 +945,7 @@ const FULL_SCOPE_CHECK_NAMES = CHECK_NAMES;
 
 type CheckHealthEntry = { check: string; status: string; errorCount: number; flagCount: number };
 
-test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 12 full-scope checks (set-equality) — RED today (checks absent)', async () => {
+test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the full-scope checks (set-equality) — RED today (checks absent)', async () => {
   // Mirrors the existing R1-06 health test's harness (~:534-559): the shared
   // `get()` helper against the never-mutated HEALTH_KB_ID fixture.
   const detail = await get(`/api/studio/kbs/${HEALTH_KB_ID}`);
@@ -958,7 +958,7 @@ test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 12 full-scope che
   assert.deepEqual(
     names,
     expected,
-    `health.checks must itemize exactly the 12 full-scope checks (checkCleanupCandidates excluded — cleanup-dry-run only). Expected ${JSON.stringify(expected)}, got ${JSON.stringify(names)}`,
+    `health.checks must itemize exactly the full-scope checks (checkCleanupCandidates excluded — cleanup-dry-run only). Expected ${JSON.stringify(expected)}, got ${JSON.stringify(names)}`,
   );
 });
 
@@ -1180,7 +1180,7 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     // has not earned a 'pass' over an empty set.
     const FORGE_THEME_CHECKS = [
       'checkFrontmatter', 'checkIndexSync', 'checkSourceLinks', 'checkStaleness',
-      'checkOrphans', 'checkLengthSoftCap', 'checkContradictions', 'checkCategoryScope',
+      'checkOrphans', 'checkLengthSoftCap', 'checkCategoryScope',
       'checkDanglingEdges', 'checkDuplicateThemes',
     ] as const;
     for (const name of FORGE_THEME_CHECKS) {

@@ -208,7 +208,6 @@ const REPRESENTATIVE_MESSAGES: Readonly<Record<string, readonly string[]>> = {
   checkOrphans: ['theme is unreachable from INDEX.md'],
   checkProjectBrainIndexes: ['theme missing from project category index'],
   checkLengthSoftCap: ['theme exceeds hard cap of 100 body lines', 'theme exceeds soft cap of 60 body lines'],
-  checkContradictions: ['contradicts theme other.md'],
   checkCategoryScope: ['theme category mis-routed to the wrong sub-wiki'],
   checkReflectorLoss: ['cycle X produced no reflection archive'],
   checkDanglingEdges: ['related_themes entry points at a non-existent slug'],

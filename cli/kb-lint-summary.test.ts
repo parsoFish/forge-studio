@@ -75,7 +75,7 @@ async function get(base: string, path: string): Promise<{ status: number; json: 
 
 /** A theme file with valid, complete frontmatter by default. No links, no
  *  keywords, short body — deliberately clean so every OTHER full-scope check
- *  (checkSourceLinks/checkStaleness/checkContradictions/checkLengthSoftCap)
+ *  (checkSourceLinks/checkStaleness/checkLengthSoftCap)
  *  reports nothing, keeping fixture finding-counts hand-verifiable.
  *  `withUpdatedAt: false` drops the `updated_at` field, the ONE deliberate
  *  defect checkFrontmatter's REQUIRED_FRONTMATTER_FIELDS really flags. */

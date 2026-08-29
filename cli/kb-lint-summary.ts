@@ -233,7 +233,6 @@ export function computeKbLintChecks(
  *   checkProjectBrainIndexes   readdirSync(brain/projects) + per-project themes/
  *                              index files                                       → confined to brain/projects/
  *   checkLengthSoftCap         readThemeFiles(brain/)                            → confined to brain/
- *   checkContradictions        readThemeFiles(brain/)                            → confined to brain/
  *   checkCategoryScope         readThemeFiles(brain/)                            → confined to brain/
  *   checkReflectorLoss         readdirSync(_queue/done) + readdirSync(brain/
  *                              cycles/_raw)                                      → _queue/done is OUTSIDE
