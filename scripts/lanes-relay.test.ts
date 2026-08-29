@@ -96,7 +96,7 @@ const fs = require('node:fs');
 const MARK = ${opts.marker ? JSON.stringify(opts.marker) : 'null'};
 let pending = ${opts.fromArgv ? 'process.argv[process.argv.length - 1]' : "''"};
 let inPaste = false, tail = '';
-const draw = () => process.stdout.write('\\r\\x1b[K\\u276f ' + pending.replace(/\\s+/g, ' ').slice(0, 60));
+const draw = () => process.stdout.write('\\r\\x1b[K\\u276f\\u00a0' + pending.replace(/\\s+/g, ' ').slice(0, 60));
 process.stdout.write('\\x1b[?2004h');            // ask for bracketed paste, as the TUI does
 draw();
 const submit = () => {
@@ -170,7 +170,7 @@ describe('lanes.sh send — the relay is confirmed by its effect', () => {
     // lane exists to end.
     assert.ok(awaitPane(s, '\u276f'), 'precondition: the lane must be showing an input line');
     tmux('send-keys', '-t', s, '-l', 'an operator draft nobody submitted');
-    assert.ok(awaitPane(s, '\u276f an operator draft'), 'precondition: the draft must be ON the input line');
+    assert.ok(awaitPane(s, '\u276f\u00a0an operator draft'), 'precondition: the draft must be ON the input line');
 
     const r = lanes(['send', lane, 'a ruling that must not be merged into that draft']);
 
