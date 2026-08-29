@@ -18,6 +18,7 @@ Studio opens on Home — the operator pulse across every project, flow, agent an
 
 - `data-page` is `home`
 - `data-page-ready` is `true`
+- `data-fetch-status` is `ok`
 
 </details>
 
@@ -31,5 +32,6 @@ The Projects pillar lists every project forge manages, with its health and activ
 
 - `data-page` is `projects-index`
 - `data-page-ready` is `true`
+- `data-fetch-status` is `ok`
 
 </details>
