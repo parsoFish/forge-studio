@@ -204,7 +204,7 @@ describe('lanes.sh launch — the lane is confirmed to be working', () => {
     const prompt = join(dir, 'prompt.md');
     writeFileSync(prompt, `KICKOFF HEAD LINE\n${Array.from({ length: 30 }, (_, i) => `body line ${i + 1}`).join('\n')}\n`);
 
-    const r = lanes(['launch', join(dir, 'camp'), lane, prompt], { LANES_CLAUDE_BIN: bin });
+    const r = lanes(['launch', join(dir, 'camp'), lane, prompt, '--cwd', dir], { LANES_CLAUDE_BIN: bin });
 
     assert.equal(r.status, 0, `launch should succeed; stderr=${r.stderr}`);
     assert.ok(existsSync(marker), 'the lane never processed its prompt — it was staged and launch reported success anyway');
@@ -219,7 +219,7 @@ describe('lanes.sh launch — the lane is confirmed to be working', () => {
     const prompt = join(dir, 'prompt2.md');
     writeFileSync(prompt, 'a kickoff that will never be consumed\n');
 
-    const r = lanes(['launch', join(dir, 'camp'), lane, prompt], { LANES_CLAUDE_BIN: bin });
+    const r = lanes(['launch', join(dir, 'camp'), lane, prompt, '--cwd', dir], { LANES_CLAUDE_BIN: bin });
 
     assert.notEqual(r.status, 0, 'launch must exit non-zero when the lane cannot be confirmed working');
     assert.doesNotMatch(r.stdout, /^launched/im, 'launch must not print a success line it did not verify');
