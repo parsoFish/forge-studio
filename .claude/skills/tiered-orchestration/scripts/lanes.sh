@@ -62,7 +62,11 @@ input_state() { # <session>
   l="$(input_line "$1")"
   [ -n "$l" ] || return 2
   l="${l#*"$GLYPH"}"
-  [ -n "$(printf '%s' "$l" | tr -d '[:space:]')" ]
+  # The TUI pads an EMPTY input line with U+00A0, which `tr -d '[:space:]'` does not
+  # strip -- measured from a live pane, where an empty line captures as $'\u276f\u00a0'.
+  # Missing this read every empty line as occupied: `launch` reported NOT CONFIRMED over
+  # a lane that had actually worked, and `send` refused every relay.
+  [ -n "$(printf '%s' "$l" | sed 's/\xc2\xa0/ /g' | tr -d '[:space:]')" ]
 }
 await_state() { # <session> <wanted 0|1> <deadline-epoch>
   local s="$1" want="$2" deadline="$3" rc
