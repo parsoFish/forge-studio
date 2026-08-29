@@ -53,6 +53,7 @@ type ThemeSpec = {
     category: string;
     created_at: string;
     updated_at: string;
+    recurrence: string;
     keywords: string[];
     related_themes: string[];
   }>;
@@ -106,6 +107,7 @@ function buildBrainFixture(spec: BrainFixtureSpec): string {
       updated_at: t.fm?.updated_at ?? '2026-01-01T00:00:00Z',
       keywords: t.fm?.keywords ?? [],
       related_themes: t.fm?.related_themes ?? [],
+      ...(t.fm?.recurrence ? { recurrence: t.fm.recurrence } : {}),
     };
     const lines = ['---'];
     for (const [k, v] of Object.entries(fm)) {
@@ -1520,6 +1522,78 @@ test('runBrainLint(full): a broken source link in a project brain (Brain 3) is R
     assert.equal(broken.length, 1, `expected the project theme's dead link to be reported, got ${JSON.stringify(findings, null, 2)}`);
     assert.equal(broken[0].category, 'error');
     assert.match(broken[0].message, /broken link: \.\.\/\.\.\/\.\.\/\.\.\/docs\/gone\.md/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- deliberate recurrence series (M1-D scope 3) ----------
+//
+// gitpulse's brain records the SAME antipattern once per cycle it recurred in
+// — six themes, each the Nth consecutive occurrence. checkDuplicateThemes
+// cannot tell that from a brain that quietly re-captured one lesson twice, so
+// it flags the series. Merging them would delete the argument they exist to
+// make: M0-A cited the sixth instance as the evidence for the M5-A
+// decomposition-time fix (forge-6gv.17), and the evidence IS the count.
+// A theme may therefore declare which recurrence series it is a record of.
+// The check is not weakened — an undeclared near-duplicate pair still flags,
+// and the exemption is an author's statement in the data, never a list of
+// paths in the checker.
+
+test('checkDuplicateThemes: two themes declaring the SAME recurrence series are records, not duplicates', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/2026-06-21-scratch-files.md', fm: { title: 'Gitignored scratch files', recurrence: 'gitignored-scratch-files' } },
+      { path: 'cycles/themes/2026-06-22-scratch-files-third-cycle.md', fm: { title: 'Gitignored scratch files', recurrence: 'gitignored-scratch-files' } },
+    ],
+  });
+  try {
+    assert.deepEqual(checkDuplicateThemes(root), []);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: an UNDECLARED near-duplicate pair still flags (the check is not weakened)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/a-thing.md', fm: { title: 'Gitignored scratch files' } },
+      { path: 'cycles/themes/b-thing.md', fm: { title: 'Gitignored scratch files' } },
+    ],
+  });
+  try {
+    assert.equal(checkDuplicateThemes(root).length, 1);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: themes declaring DIFFERENT recurrence series still flag each other', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/x-thing.md', fm: { title: 'Gitignored scratch files', recurrence: 'series-one' } },
+      { path: 'cycles/themes/y-thing.md', fm: { title: 'Gitignored scratch files', recurrence: 'series-two' } },
+    ],
+  });
+  try {
+    assert.equal(checkDuplicateThemes(root).length, 1);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: a recurrence declaration exempts only its own series, never the declaring theme wholesale', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/p-one.md', fm: { title: 'Gitignored scratch files', recurrence: 'gitignored-scratch-files' } },
+      { path: 'cycles/themes/p-two.md', fm: { title: 'Gitignored scratch files', recurrence: 'gitignored-scratch-files' } },
+      { path: 'cycles/themes/q-undeclared.md', fm: { title: 'Gitignored scratch files' } },
+    ],
+  });
+  try {
+    // The two series records do not flag each other; both still flag against
+    // the undeclared third theme.
+    assert.equal(checkDuplicateThemes(root).length, 2);
   } finally {
     cleanup(root);
   }

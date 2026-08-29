@@ -14,6 +14,8 @@
 4. **No source link broken.** Every link target must exist (`checkSourceLinks`).
 5. **No orphan.** Every theme page must be reachable from `INDEX.md` via category indexes.
 6. **Stale citations flagged.** Backtick-wrapped forge-internal paths (`orchestrator/`, `skills/`, `docs/`, `loops/`) that no longer exist in the repo are flagged as stale (`checkStaleness`).
+7. **Near-duplicate themes flagged.** A normalized-title collision, or a keyword Jaccard overlap above the threshold, flags the pair for a merge decision (`checkDuplicateThemes`). Flag severity — merging needs the fuller content of both files, so it never gates.
+   - **`recurrence: <series>`** (optional) declares that a theme is one record of a named recurrence series — the same failure captured once per cycle it recurred in, where the count is the evidence. Two themes declaring the *same* series are not duplicates of each other; every other pairing, including against an undeclared near-duplicate, still flags. Declare it on **every** member of the series. It is a statement about the brain's content, not a lint suppression: use it only where merging the pages would destroy an argument that rests on the number of occurrences (gitpulse's `gitignored-scratch-files` series is the worked example — its sixth record is the evidence cited for a decomposition-time fix).
 
 ### Raw sources
 
@@ -30,10 +32,21 @@
 
 ### Per-project brains (Brain 3)
 
-Project brains now live in each project's **own repo** at `projects/<name>/brain/`
-(three-brain model, ADR 018) — they are not part of the forge repo and are linted
-inside the project repo, not forge-side. Each carries its own `profile.md` +
-`themes/` and follows the same theme-page + category-index discipline.
+Project brains are **forge-owned and central**, at `brain/projects/<name>/`
+([ADR 035](../docs/decisions/035-forge-owned-central-artifacts.md), which
+reversed ADR 018's in-repo location so the reflector can write one post-merge
+without an open project worktree). They are part of this repo and are linted
+by `forge brain lint` like any other brain. Each carries its own category
+indexes + `themes/` and follows the same theme-page discipline, with two
+deliberate exemptions: the category→sub-wiki routing rule (`pattern`→`cycles`,
+`decision`→`forge-dev`) governs the two forge sub-wikis only, and a project
+brain's category-index sync is checked by `checkProjectBrainIndexes` against
+its OWN indexes rather than by `checkIndexSync` against the forge ones.
+
+A relative link into `projects/<name>/` — the managed project's **ground
+clone** — is not checked. Those clones are gitignored working copies of other
+repositories, present locally and absent in CI, so a link into one would
+resolve or break according to the environment rather than the brain.
 
 ### INDEX.md
 

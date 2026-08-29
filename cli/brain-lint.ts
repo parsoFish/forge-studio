@@ -1153,7 +1153,7 @@ function jaccardSimilarity(a: ReadonlySet<string>, b: ReadonlySet<string>): numb
  * earlier (partner) file in the message.
  */
 function duplicateThemeFindings(files: string[]): Finding[] {
-  type ThemeDupMeta = { file: string; normTitle: string; keywords: Set<string> };
+  type ThemeDupMeta = { file: string; normTitle: string; keywords: Set<string>; recurrence: string };
   const metas: ThemeDupMeta[] = [];
   for (const file of files) {
     const parsed = parseTheme(file);
@@ -1163,6 +1163,7 @@ function duplicateThemeFindings(files: string[]): Finding[] {
       file,
       normTitle: normalizeThemeTitle(parsed.data.title),
       keywords: new Set(kwArr),
+      recurrence: String(parsed.data.recurrence ?? '').trim(),
     });
   }
 
@@ -1172,6 +1173,25 @@ function duplicateThemeFindings(files: string[]): Finding[] {
     for (let j = i + 1; j < metas.length; j++) {
       const a = metas[i];
       const b = metas[j];
+
+      // A DELIBERATE RECURRENCE SERIES. Some brains record the same failure
+      // once per cycle it recurred in, and the count is the point: gitpulse
+      // carries six `gitignored-scratch-*` themes, and M0-A cited the sixth as
+      // the evidence for the M5-A decomposition-time fix (forge-6gv.17).
+      // Merged into one theme, that argument no longer exists. This checker
+      // cannot tell such a series from a brain that quietly re-captured one
+      // lesson twice, so the theme says which it is: `recurrence: <series>` in
+      // its frontmatter names the series it is a record of, and two records of
+      // the SAME series are not duplicates of each other.
+      //
+      // The check is not weakened by it. The exemption is an author's explicit
+      // statement in the data, it costs a declaration on BOTH files, it is
+      // scoped to that one pair, and every other pairing of a declaring theme
+      // — including against an undeclared near-duplicate — still flags. It is
+      // deliberately not a list of paths in this file: an allowlist would
+      // exempt those exact three files forever and teach the next series
+      // nothing.
+      if (a.recurrence !== '' && a.recurrence === b.recurrence) continue;
 
       // An empty normalized title never participates in a title collision.
       const titleCollision = a.normTitle !== '' && a.normTitle === b.normTitle;

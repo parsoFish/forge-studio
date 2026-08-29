@@ -15,6 +15,7 @@ related_themes: [2026-07-11-gitignored-scratch-fourth-cycle, 2026-08-28-gitignor
 created_at: 2026-07-12T00:00:00.000Z
 updated_at: 2026-07-12T00:00:00.000Z
 status: historical
+recurrence: gitignored-scratch-files
 ---
 
 # Gitignored scratch files — fifth consecutive cycle
