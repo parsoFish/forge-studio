@@ -92,3 +92,57 @@ test('the verdict is frozen and does not mutate the beat it judged', () => {
   assert.ok(Object.isFrozen(v));
   assert.deepEqual(input, beat);
 });
+
+// ---------------------------------------------------------------------------
+// Settled != succeeded. Found by adversarial review, 2026-08-29.
+// ---------------------------------------------------------------------------
+
+test('a page that SETTLED INTO AN ERROR is red, even though every declared expectation holds', () => {
+  // THE DEFECT THIS KILLS, and it is the campaign's headline class. The
+  // product's own convention (`components/PageLoadError.tsx`, and
+  // `ProjectsIndex.tsx:115`: `error ? 'error' : ready ? 'ok' : 'loading'`) is
+  // that a route whose fetch THREW still renders its own data-page and
+  // `data-page-ready="true"` — it HAS settled, into an honest failure — and
+  // says so via `data-fetch-status="error"`.
+  //
+  // So a beat asserting only {page, page-ready} — which is exactly what the
+  // shipped smoke story asserted — goes GREEN against a visibly broken page.
+  // The runner must judge the error sentinels whether or not the story
+  // author remembered them; relying on nine story authors to each remember
+  // is how this class survives.
+  const v = beatVerdict(beat, {
+    route: '/projects',
+    data: { 'page-ready': 'true', 'project-count': '3', 'fetch-status': 'error' },
+  });
+  assert.equal(v.status, 'red');
+  assert.match(v.failures.join(' '), /fetch-status/);
+});
+
+test('data-load-error="true" is red on the same grounds', () => {
+  const v = beatVerdict(beat, {
+    route: '/projects',
+    data: { 'page-ready': 'true', 'project-count': '3', 'load-error': 'true' },
+  });
+  assert.equal(v.status, 'red');
+  assert.match(v.failures.join(' '), /load-error/);
+});
+
+test('a story that DELIBERATELY asserts the error state is honoured, not overridden', () => {
+  // The escape hatch: a story about the error surface itself must be able to
+  // assert it. The invariant only fires on an error the story did not ask for.
+  const errorBeat = {
+    act: 'See the honest failure when the roster read fails',
+    expect: { route: '/projects', data: { 'fetch-status': 'error' } },
+    say: 'The page says it could not load, instead of pretending to be empty.',
+  };
+  const v = beatVerdict(errorBeat, { route: '/projects', data: { 'fetch-status': 'error' } });
+  assert.equal(v.status, 'green');
+});
+
+test('fetch-status "ok" and "loading" are not treated as errors', () => {
+  const ok = beatVerdict(beat, {
+    route: '/projects',
+    data: { 'page-ready': 'true', 'project-count': '3', 'fetch-status': 'ok' },
+  });
+  assert.equal(ok.status, 'green');
+});

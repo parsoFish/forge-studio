@@ -39,6 +39,27 @@ export function beatVerdict(beat, observed) {
     }
   }
 
+  // SETTLED IS NOT SUCCEEDED. The product's convention is that a route whose
+  // fetch THREW still renders its own `data-page` and `data-page-ready="true"`
+  // — it HAS settled, into an honest failure — and reports it via
+  // `data-fetch-status="error"` / `data-load-error="true"`
+  // (`components/PageLoadError.tsx`; `ProjectsIndex.tsx`:
+  // `error ? 'error' : ready ? 'ok' : 'loading'`).
+  //
+  // So a beat asserting only {page, page-ready} passes against a visibly
+  // broken page. The runner judges these sentinels on EVERY beat rather than
+  // trusting each story author to remember them — a rule that depends on nine
+  // authors remembering is how this class survives. A story that deliberately
+  // asserts an error surface simply declares it, and is honoured.
+  for (const [attr, bad] of ERROR_SENTINELS) {
+    if (observed.data[attr] !== bad) continue;
+    if (beat.expect.data[attr] === bad) continue; // the story asked for it
+    failures.push(
+      `data-${attr} is "${bad}": the page settled into an error, so this beat cannot pass. ` +
+        'Assert it deliberately if the story is about the failure surface.',
+    );
+  }
+
   return Object.freeze({
     act: beat.act,
     say: beat.say,
@@ -46,6 +67,12 @@ export function beatVerdict(beat, observed) {
     failures: Object.freeze(failures),
   });
 }
+
+/** Attributes whose value means "this page is not working", checked on every beat. */
+const ERROR_SENTINELS = [
+  ['fetch-status', 'error'],
+  ['load-error', 'true'],
+];
 
 /** How long to wait for a page to declare itself ready before judging it. */
 const READY_TIMEOUT_MS = 15_000;
@@ -94,14 +121,37 @@ export async function driveBeat(page, beat, index, baseUrl) {
     // navigation — a false RED, and in the mirror case it would be a false
     // GREEN for any beat whose expectations the previous page happens to
     // satisfy.
+    // The click itself is guarded. An obscured or non-actionable control (a
+    // leftover modal, toast or backdrop from the previous beat) makes
+    // playwright throw, and an unguarded throw here propagates past the beat
+    // loop and aborts the WHOLE run — dropping every later story's doc and
+    // gallery row, with a raw stack trace instead of an attributable verdict.
+    // Found by adversarial review, reproduced with a full-viewport overlay
+    // over a real [data-nav] link.
+    let clickError = null;
     await Promise.all([
       page
         .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
         .catch(() => {
           /* did not navigate — the verdict below reports that honestly */
         }),
-      clickable.click(),
+      clickable.click().catch((e) => {
+        clickError = e?.message ?? String(e);
+      }),
     ]);
+
+    if (clickError !== null) {
+      const observed = await readObserved(page, beat);
+      return Object.freeze({
+        ...beatVerdict(beat, observed),
+        status: 'red',
+        failures: Object.freeze([
+          `could not click through to "${target}" from "${observed.route}": ${clickError}. ` +
+            'The control exists but was not actionable — obscured, disabled or detached.',
+        ]),
+        data: observed.data,
+      });
+    }
   }
 
   await page
@@ -116,7 +166,9 @@ export async function driveBeat(page, beat, index, baseUrl) {
 
 /** Read the route and only the `data-*` keys this beat asked about. */
 async function readObserved(page, beat) {
-  const keys = Object.keys(beat.expect.data);
+  // Always read the error sentinels alongside the beat's own keys — the
+  // verdict cannot judge what was never collected.
+  const keys = [...new Set([...Object.keys(beat.expect.data), ...ERROR_SENTINELS.map(([a]) => a)])];
   const data = await page.evaluate((wanted) => {
     const root = document.querySelector('main[data-page]') ?? document.body;
     const out = {};

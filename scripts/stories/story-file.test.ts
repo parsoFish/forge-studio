@@ -110,3 +110,19 @@ test('a beat missing its narration is rejected — the doc fragment needs it', (
     /beats\[0\]\.say/,
   );
 });
+
+test('a story id that is not a safe single path segment is rejected AT LOAD, naming the field', () => {
+  // Found by adversarial review. `sweep.mjs` guards the id correctly, but it
+  // does so from inside the leading-sweep loop, which is not per-story — so a
+  // malformed id aborted the WHOLE batch with a sweep-level error instead of
+  // being rejected here, with the field named, like every other bad field.
+  for (const bad of ['a/b', '..', 'a b', '', '/abs', '.']) {
+    assert.throws(() => validateStory({ ...ok, id: bad }), /\bid\b/, `id ${JSON.stringify(bad)} must be rejected`);
+  }
+});
+
+test('ordinary story ids still validate', () => {
+  for (const good of ['smoke', 'S1', 'S10', 'my-story', 'a_b.c']) {
+    assert.equal(validateStory({ ...ok, id: good }).id, good);
+  }
+});

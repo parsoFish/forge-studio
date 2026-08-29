@@ -31,6 +31,13 @@ export function validateStory(raw) {
   if (raw === null || typeof raw !== 'object') fail('story', 'expected an object');
 
   requireNonEmptyString(raw.id, 'id');
+  // The id is interpolated into paths that are later removed recursively, and
+  // it names the generated doc and demo dir. Validate its shape HERE, with the
+  // field named, rather than letting the sweep's own guard abort the whole
+  // batch from inside a loop that is not per-story.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw.id) || raw.id.includes('..')) {
+    fail('id', `expected a single path segment of [A-Za-z0-9._-], got ${JSON.stringify(raw.id)}`);
+  }
 
   const g = raw.ground;
   if (g === null || typeof g !== 'object') fail('ground', 'expected an object');

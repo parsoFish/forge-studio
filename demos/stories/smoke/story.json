@@ -43,7 +43,8 @@
       "failures": [],
       "data": {
         "page": "home",
-        "page-ready": "true"
+        "page-ready": "true",
+        "fetch-status": "ok"
       },
       "frame": "frames/01-open-studio-on-home.png"
     },
@@ -54,7 +55,8 @@
       "failures": [],
       "data": {
         "page": "projects-index",
-        "page-ready": "true"
+        "page-ready": "true",
+        "fetch-status": "ok"
       },
       "frame": "frames/02-click-through-to-the-projects-pillar.png"
     }

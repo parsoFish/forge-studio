@@ -58,8 +58,10 @@ test('the host lock lives OUTSIDE the worktree, so two worktrees contend for one
   // worktree its OWN lock file, so two lanes each acquire "the" lock and both
   // run — while the thing being guarded, ports 4123/4124, is host-global.
   // A per-repo lock on a host-global resource is not a lock at all.
-  const a = hostLockPath('/home/parso/forge');
-  const b = hostLockPath('/home/parso/forge-m1-b');
+  // hostLockPath takes no argument BY DESIGN — that is the property:
+  // it cannot vary with the tree it is called from.
+  const a = hostLockPath();
+  const b = hostLockPath();
   assert.equal(a, b, 'every tree on this host must resolve the SAME lock path');
   assert.ok(!a.startsWith('/home/parso/forge'), 'the lock must not live inside any worktree');
 });
