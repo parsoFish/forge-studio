@@ -513,9 +513,14 @@ test('W8-F1 (ON-3): a structural edit the PRODUCTION turn gate refused still sho
 });
 
 test('W8-F1 (ON-3, S2): an AUTO-tier row carries its diff — the tier that mutates with no approval gate is the one that must show its work', async () => {
-  // A theme that is NOT listed in its category index → the real `index.not-listed`
-  // auto-fixer rewrites the curated `antipatterns.md`. The C4 refuter watched a
-  // real drain do exactly this with `outcome=cleared` and no diff on the row.
+  // A theme that is NOT listed in its category index and is reachable from no
+  // index at all → a real auto-fixer rewrites the curated `antipatterns.md` to
+  // link it. The C4 refuter watched a real drain do exactly this with
+  // `outcome=cleared` and no diff on the row. The row is selected by WHAT IT
+  // DID (an auto row that rewrote the index), not by a finding kind: for a
+  // project brain the same rewrite is now driven by the `orphan` finding the
+  // full scan raises, since the scan reads brain/projects/<name>/themes (ADR
+  // 035) instead of a second per-KB lens reporting it as index.not-listed.
   const ORPHAN = '2026-06-21-orphan';
   const { root, brainDir } = makeKbRoot(GITPULSE_KB, []);
   mkdirSync(join(brainDir, 'themes'), { recursive: true });
@@ -530,7 +535,9 @@ test('W8-F1 (ON-3, S2): an AUTO-tier row carries its diff — the tier that muta
       runFixTurn: async (input) => ({ runId: input.runId, cleared: false, costUsd: 0, editAudit: noKbEdits() }),
     });
     assert.notEqual(readFileSync(indexPath, 'utf8'), indexBefore, 'precondition: the auto tier must really have rewritten the index');
-    const autoRow = status.perFinding.find((f) => f.tier === 'auto' && f.kind === 'index.not-listed');
+    const autoRow = status.perFinding.find(
+      (f) => f.tier === 'auto' && (f.proposedChanges ?? []).some((p) => p.file.endsWith('antipatterns.md')),
+    );
     assert.ok(autoRow, `expected an auto row for the index rewrite — got ${JSON.stringify(status.perFinding)}`);
     assert.equal(autoRow.outcome, 'cleared', 'precondition: the row really did land unattended');
     const proposals = autoRow.proposedChanges ?? [];

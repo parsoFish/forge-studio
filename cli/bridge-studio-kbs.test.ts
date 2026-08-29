@@ -347,7 +347,7 @@ test('GET fix-agent/:runId for an unknown run → running', async () => {
 async function pollUntilTerminal(
   kbId: string,
   runId: string,
-  maxAttempts = 40,
+  maxAttempts = 240,
   intervalMs = 250,
 ): Promise<{ state: string; cleared: boolean }> {
   for (let i = 0; i < maxAttempts; i++) {
@@ -402,11 +402,17 @@ async function getAt(base: string, path: string): Promise<{ status: number; json
 
 /** Poll an isolated bridge's fix-agent state until terminal (or budget spent —
  *  returned as-is so the caller's assertion, not a silent timeout, reports). */
+/** The assertion these helpers serve is "the run reaches a terminal state",
+ *  never "within N seconds" — the budget is harness headroom, not an
+ *  acceptance criterion. Raised from 40 when the lint began walking Brain 3
+ *  too (M1-D): a drain round re-lints the whole corpus, and this file's forge
+ *  root seeds a dozen project brains, so a full consolidate settles in ~13s
+ *  against the old 10s ceiling. */
 async function pollTerminalAt(
   base: string,
   kbId: string,
   runId: string,
-  maxAttempts = 40,
+  maxAttempts = 240,
   intervalMs = 250,
 ): Promise<{ state: string; cleared: boolean }> {
   for (let i = 0; i < maxAttempts; i++) {
@@ -612,23 +618,29 @@ test('R1-06 WI-3 MAJOR 1 red-pin: GET health for a project KB reports the REAL c
   );
 
   // Verdict: the health object's lintFlags must reflect those same 3 findings
-  // — PLUS, since R6-08 4on, 3 MORE from checkIndexSync: buildKbHealth now also
-  // runs lintThemeFiles over this KB's own 3 theme files (F1 fix — a project
-  // KB's own themes get a REAL lintThemeFiles-covered verdict, not a silent
-  // 'pass'/absence), and lintThemeFiles' checkIndexSync independently
-  // rediscovers the SAME "theme not listed in patterns.md" defect under its
-  // own (non-project-aware) check identity. Two genuinely distinct, both-real
-  // checks (checkProjectBrainIndexes + checkIndexSync) flagging the same
-  // underlying theme is not double-counting a single check — each is its own
-  // honest, independently-computed verdict. 3 + 3 = 6.
+  // — PLUS 6 more, all from the ONE full-scope scan now that it walks
+  // brain/projects/<id>/themes (M1-D, ADR 035). By hand, over this fixture's 3
+  // unlisted, near-identically-titled themes:
+  //   3  checkProjectBrainIndexes — not listed in the project category index
+  //   3  checkOrphans             — not reachable from INDEX.md or any index
+  //   3  checkDuplicateThemes     — normalized-title collision across the trio
+  // 3 + 3 + 3 = 9. Each is a distinct check's own honest verdict on the same
+  // three files, not one check counted three times.
+  //
+  // It used to be 6: 3 checkProjectBrainIndexes plus 3 from a SECOND lens
+  // (lintThemeFiles over the KB's own theme files), whose non-project-aware
+  // checkIndexSync rediscovered the "not listed in patterns.md" defect under a
+  // different check name. That lens existed only because the shared scan never
+  // walked this KB at all; with the scan fixed it is gone, and with it the
+  // possibility of Studio counting a flag `forge brain lint` does not report.
   const detail = await get(`/api/studio/kbs/${HEALTH_KB_ID}`);
   assert.equal(detail.status, 200, JSON.stringify(detail.json));
   const health = detail.json['health'] as { lintFlags?: number; lintErrors?: number } | undefined;
   assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
   assert.equal(
     health!.lintFlags,
-    6,
-    `expected health.lintFlags=6 for a project KB with 3 checkProjectBrainIndexes flags + 3 checkIndexSync flags (own-theme lintThemeFiles coverage, R6-08 4on), got ${health!.lintFlags} — the health filter is mis-scoped to brain/<id> instead of brain/projects/<id>`,
+    9,
+    `expected health.lintFlags=9 for a project KB with 3 checkProjectBrainIndexes + 3 checkOrphans + 3 checkDuplicateThemes flags, got ${health!.lintFlags} — the health filter is mis-scoped to brain/<id> instead of brain/projects/<id>`,
   );
 });
 
@@ -1162,10 +1174,10 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     const emptyHealth = emptyDetail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
     assert.ok(emptyHealth, `health object must be present, got ${JSON.stringify(emptyDetail.json)}`);
     const emptyByName = new Map(emptyHealth!.checks!.map((c) => [c.check, c]));
-    // R4-19-F2: brain-lint's two new forge-themes-scoped checks
-    // (checkDanglingEdges, checkDuplicateThemes) join the other 8 here — a
-    // project kb with 0 own theme files has nothing for either to inspect,
-    // so both must report 'n/a' too, same as the pre-existing 8.
+    // A project kb with 0 theme files has nothing for any of these to inspect.
+    // The scan walks its themes/ dir now (ADR 035) but reads no file out of
+    // it, so every one of them must report 'n/a' — a check that opened nothing
+    // has not earned a 'pass' over an empty set.
     const FORGE_THEME_CHECKS = [
       'checkFrontmatter', 'checkIndexSync', 'checkSourceLinks', 'checkStaleness',
       'checkOrphans', 'checkLengthSoftCap', 'checkContradictions', 'checkCategoryScope',
@@ -1217,11 +1229,21 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme
     );
     assert.equal(fm!.errorCount, 1, `checkFrontmatter errorCount must be 1, got ${JSON.stringify(fm)}`);
 
-    // checkIndexSync stays clean (real 'pass') — the theme IS linked — proving
-    // this is a genuine per-check computation, not every check going red together.
+    // The index verdict stays clean (real 'pass') — the theme IS linked —
+    // proving this is a genuine per-check computation, not every check going
+    // red together. For a project brain that verdict is
+    // checkProjectBrainIndexes': it resolves the index in the project's OWN
+    // dir. checkIndexSync resolves it through the ADR 018 category→sub-wiki
+    // routing map (pattern→brain/cycles), which governs the forge brains
+    // alone, so for this KB it is honestly 'n/a' — it would otherwise look for
+    // this theme in brain/cycles/patterns.md and flag every project theme in
+    // the repo as unindexed.
+    const pbi = defectHealth!.checks!.find((c) => c.check === 'checkProjectBrainIndexes');
+    assert.ok(pbi, `checks[] must include a checkProjectBrainIndexes entry, got ${JSON.stringify(defectHealth!.checks)}`);
+    assert.equal(pbi!.status, 'pass', `checkProjectBrainIndexes must be a real 'pass' (theme correctly linked in its own index), got ${JSON.stringify(pbi)}`);
     const idx = defectHealth!.checks!.find((c) => c.check === 'checkIndexSync');
     assert.ok(idx, `checks[] must include a checkIndexSync entry, got ${JSON.stringify(defectHealth!.checks)}`);
-    assert.equal(idx!.status, 'pass', `checkIndexSync must be a real 'pass' (theme correctly linked), got ${JSON.stringify(idx)}`);
+    assert.equal(idx!.status, 'n/a', `checkIndexSync is the forge category→sub-wiki index rule — must be 'n/a' for a project brain, never a verdict it did not compute. Got ${JSON.stringify(idx)}`);
 
     // checkCategoryScope is 'n/a' even though this KB has an own theme carrying
     // `category: pattern`: the category→sub-wiki routing rule is a three-brain

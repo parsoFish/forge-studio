@@ -127,31 +127,68 @@ export const CHECK_NAMES = FULL_SCOPE_CHECKS.map(([name]) => name) as readonly s
  * reporting `pass` for a check that never scanned the KB is exactly the
  * declared-data-fails-open defect this hardens against.
  *
- *   - `forge-themes`    — `readThemeFiles`-based; scans ONLY
- *                          `brain/cycles/themes/` and `brain/forge-dev/themes/`
- *                          (see `readThemeFiles` below). Never sees a project
- *                          or band KB's own themes.
+ *   - `themes`          — `readThemeFiles`-based; scans EVERY theme dir
+ *                          `themeScanDirs` yields, which since ADR 035
+ *                          includes `brain/projects/<name>/themes/`. Applicable
+ *                          to any KB whose own `themes/` dir the scan walks.
+ *   - `forge-themes`    — `readThemeFiles`-based, but the rule itself is the
+ *                          ADR 018 category→sub-wiki routing convention, which
+ *                          governs `brain/cycles` and `brain/forge-dev` alone.
+ *                          Genuinely inapplicable to any other KB — a project
+ *                          brain indexes its own themes in its own dir and gets
+ *                          its verdict from `checkProjectBrainIndexes`.
  *   - `project-indexes` — `checkProjectBrainIndexes`; scans `brain/projects/*`.
  *   - `global`          — `checkReflectorLoss`; scans `_queue/done` —  an
  *                          advisory over the WHOLE queue, not scoped to any
  *                          single KB's brain dir. Never applicable per-KB.
+ *
+ * The `themes`/`forge-themes` split is load-bearing for the honesty invariant.
+ * Before it, all ten theme checks claimed the forge-only domain, which was true
+ * of the scan but not of the rules — so a per-KB consumer could only report
+ * `n/a` for a project brain on checks that in fact apply to it perfectly well.
  */
-export type CheckScope = 'forge-themes' | 'project-indexes' | 'global';
+export type CheckScope = 'themes' | 'forge-themes' | 'project-indexes' | 'global';
 
 export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
-  checkFrontmatter: 'forge-themes',
+  checkFrontmatter: 'themes',
   checkIndexSync: 'forge-themes',
-  checkSourceLinks: 'forge-themes',
-  checkStaleness: 'forge-themes',
-  checkOrphans: 'forge-themes',
+  checkSourceLinks: 'themes',
+  checkStaleness: 'themes',
+  checkOrphans: 'themes',
   checkProjectBrainIndexes: 'project-indexes',
-  checkLengthSoftCap: 'forge-themes',
-  checkContradictions: 'forge-themes',
+  checkLengthSoftCap: 'themes',
+  checkContradictions: 'themes',
   checkCategoryScope: 'forge-themes',
   checkReflectorLoss: 'global',
-  checkDanglingEdges: 'forge-themes',
-  checkDuplicateThemes: 'forge-themes',
+  checkDanglingEdges: 'themes',
+  checkDuplicateThemes: 'themes',
 };
+
+/**
+ * Every theme file a `scope:'full'` run actually reads, absolute. THE export a
+ * per-KB consumer asks "did the scan open anything in this KB?" with — so
+ * Studio can never hold its own copy of the answer, which is how it came to
+ * hardcode `brainDir === brain/cycles || brainDir === brain/forge-dev` and
+ * report `n/a` for four checks that scan a project brain perfectly well.
+ *
+ * FILES, not dirs, deliberately: a KB with a `themes/` dir and nothing in it
+ * has had no content examined, so its checks are `n/a` — not a `pass` earned
+ * over an empty set. That is the same reasoning `checkProjectBrainIndexes`
+ * already applies when it skips a themeless project brain.
+ */
+export function themeScanFiles(forgeRoot: string): string[] {
+  return readThemeFiles(join(forgeRoot, 'brain'));
+}
+
+/**
+ * Is this KB dir one of the two FORGE sub-wikis — the domain of the ADR 018
+ * category→sub-wiki routing rules (`CHECK_SCOPE: 'forge-themes'`)? Derived from
+ * `THEME_SUBDIRS`, never re-listed by a caller.
+ */
+export function isForgeBrainDir(forgeRoot: string, brainDir: string): boolean {
+  const brainRoot = join(forgeRoot, 'brain');
+  return (THEME_SUBDIRS as readonly string[]).some((sub) => join(brainRoot, sub) === brainDir);
+}
 
 const ALLOWED_CATEGORIES = new Set([
   'pattern',
@@ -1575,27 +1612,21 @@ export type AutoFixStableResult = {
  *
  * `filter` scopes which findings are eligible (e.g. one kb); defaults to all.
  *
- * `extraFindings` (W7-B2, knowledge-10): an additional CLASSIFIED finding
- * source re-evaluated every round alongside the internal full-scope re-lint —
- * the per-KB own-theme lens (`ownThemeFindingsLens`, cli/kb-lint-summary.ts)
- * rides in here so a project/band KB's own auto-tier findings (which the
- * full-scope scan structurally never surfaces) are visible to the fixed-point
- * loop. Deduped against the full-scan findings by (check, file, message).
+ * It also took an `extraFindings` source (W7-B2, knowledge-10), through which
+ * the per-KB own-theme lens rode in so a project KB's own auto-tier findings
+ * were visible to the fixed-point loop — the full-scope scan structurally
+ * never surfaced them. The scan covers every theme dir now (ADR 035), so that
+ * option had no caller and no test; it is gone rather than left as a second
+ * way for a finding to reach the fixers.
  */
 export function applyAutoFixesUntilStable(
   forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean; extraFindings?: () => Finding[] } = {},
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean } = {},
 ): AutoFixStableResult {
   const maxRounds = opts.maxRounds ?? 12;
   const filter = opts.filter ?? (() => true);
-  const extraFindings = opts.extraFindings ?? (() => []);
-  const identity = (f: Finding): string => `${f.check ?? ''}::${f.file}::${f.message}`;
-  const lintOnce = (): Finding[] => {
-    const base = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
-    const seen = new Set(base.map(identity));
-    const extras = extraFindings().filter((f) => !seen.has(identity(f)));
-    return [...base, ...extras].filter(filter);
-  };
+  const lintOnce = (): Finding[] =>
+    runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings.filter(filter);
   const applied: AutoFixStableResult['applied'] = [];
   const skipped: AutoFixStableResult['skipped'] = [];
   let rounds = 0;

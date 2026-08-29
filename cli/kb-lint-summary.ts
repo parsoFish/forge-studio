@@ -9,21 +9,17 @@
  * (derive-don't-store, brain/cycles/themes/derive-status-dont-store-it.md).
  *
  * The findings-scoping helpers below (`findingUnderDir`, `scopeFindingsToKb`)
- * and the per-check itemization helpers (`listOwnThemeFiles`,
- * `findingIdentity`, `unionFindings`, the `KB_OWN_THEME_INDEX_FILES` set, and
- * the `CheckHealthStatus`/`CheckHealthEntry` types) moved here VERBATIM from
- * cli/bridge-studio-kbs.ts — `buildKbHealth` there still uses
- * `scopeFindingsToKb`/`findingUnderDir` directly (re-exported), and now calls
- * `computeKbLintChecks` instead of carrying its own copy of the itemization
- * logic, so there is exactly ONE derivation.
+ * and the `CheckHealthStatus`/`CheckHealthEntry` types moved here from
+ * cli/bridge-studio-kbs.ts — `buildKbHealth` there calls `computeKbLintChecks`
+ * instead of carrying its own copy of the itemization logic, so there is
+ * exactly ONE derivation.
  */
 
 import { existsSync, realpathSync, readdirSync, statSync, type Dirent } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
-import { guardedReadDir } from './studio-path-guard.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
-import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, lintThemeFiles, type Finding, type RunBrainLintResult } from './brain-lint.ts';
+import { runBrainLint, classify, CHECK_NAMES, CHECK_SCOPE, themeScanFiles, isForgeBrainDir, type Finding, type RunBrainLintResult } from './brain-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Findings-scoping helpers (moved verbatim from cli/bridge-studio-kbs.ts)
@@ -75,49 +71,27 @@ export function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: rea
 }
 
 /**
- * W7-B2 (knowledge-10) — THE one per-KB finding lens. Unions the full-scan
- * findings scoped to this KB's dir with the KB's OWN theme-file lens
- * (`lintThemeFiles(listOwnThemeFiles(brainDir))` — the ONLY lens that ever
- * sees a project/band KB's themes, since the shared `readThemeFiles`-based
- * scan only walks brain/cycles + brain/forge-dev). `buildKbHealth`'s
- * `computeKbLintChecks` already unioned exactly these two lenses; the drain
- * (`runKbDrain`) and the maintenance `op:'lint'` route used
- * `scopeFindingsToKb` ALONE — so for every project-bound KB the drain saw an
- * empty set and reported an instant false GREEN while the health readout on
- * the same screen still counted real flags. Every read AND every fix path
- * derives from THIS function now, so the two can never diverge again
- * (derive-don't-store; also closes the forge-9hq skew class).
+ * THE one per-KB finding lens: the single full-scope scan, scoped to this KB's
+ * own resolved brain dir. Every read AND every fix path derives from here, so
+ * the two can never diverge (derive-don't-store).
  *
- * Every returned finding carries a `resolution` — an unstamped finding (the
- * own-theme lens emits raw ones) is `classify()`-stamped; an
- * already-classified finding is passed through UNTOUCHED (classify()
- * re-derives kind/resolution from the check name, which would clobber a
- * caller-supplied classification).
+ * It used to union that scan with a SECOND lens over the KB's own theme files
+ * (`lintThemeFiles(listOwnThemeFiles(brainDir))`), because the shared
+ * `readThemeFiles` scan walked `brain/cycles` + `brain/forge-dev` only and a
+ * project or band KB was therefore never scanned at all. The scan now covers
+ * every theme dir (ADR 035), so the compensator is not merely redundant but
+ * actively wrong: `lintThemeFiles` resolves a project theme's category index in
+ * the project's own dir and emits `checkIndexSync` for it, a finding the
+ * full-scope lint does not report — Studio counted a flag `forge brain lint`
+ * did not have, and the drain would have been dispatched to fix it.
+ *
+ * Every returned finding carries a `resolution` — an unstamped finding is
+ * `classify()`-stamped; an already-classified one is passed through UNTOUCHED
+ * (classify() re-derives kind/resolution from the check name, which would
+ * clobber a caller-supplied classification).
  */
 export function collectKbFindings(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!brainDir) return [];
-  const scoped = findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
-  const ownThemeFiles = listOwnThemeFiles(brainDir);
-  const own = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
-  return unionFindings(scoped, own).map((f) => (f.resolution ? f : classify(f)));
-}
-
-/**
- * The own-theme half of `collectKbFindings` alone, classified — injected into
- * `applyAutoFixesUntilStable` (its `extraFindings` option) so the auto-fix
- * fixed-point loop can SEE (and therefore fix) a project/band KB's own
- * auto-tier findings, which its internal full-scope re-lint never surfaces.
- */
-export function ownThemeFindingsLens(forgeRoot: string, kbId: string): () => Finding[] {
-  return () => {
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-    if (!brainDir) return [];
-    const ownThemeFiles = listOwnThemeFiles(brainDir);
-    return ownThemeFiles.length > 0
-      ? lintThemeFiles(forgeRoot, ownThemeFiles).map((f) => (f.resolution ? f : classify(f)))
-      : [];
-  };
+  return scopeFindingsToKb(forgeRoot, kbId, findings).map((f) => (f.resolution ? f : classify(f)));
 }
 
 // ---------------------------------------------------------------------------
@@ -136,61 +110,6 @@ export function ownThemeFindingsLens(forgeRoot: string, kbId: string): () => Fin
  *  silent `'pass'`. */
 export type CheckHealthStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
 export type CheckHealthEntry = { check: string; status: CheckHealthStatus; errorCount: number; flagCount: number };
-
-/** Index/category pages that live alongside a KB's `themes/` dir siblings but
- *  are never themselves a theme — excluded from the KB's OWN theme-file list.
- *  Mirrors `orchestrator/kb-health.ts`'s `THEME_INDEX_FILES` listing style
- *  (kept local rather than imported — that module lives under `orchestrator/`,
- *  which this fix does not touch). */
-const KB_OWN_THEME_INDEX_FILES = new Set([
-  'README.md',
-  'patterns.md',
-  'antipatterns.md',
-  'operations.md',
-  'decisions.md',
-  'reference.md',
-]);
-
-/**
- * R6-08 4on — a KB's OWN theme files (`<brainDir>/themes/*.md`, index pages
- * excluded), for ANY KB kind — including project/band KBs whose themes the
- * shared `readThemeFiles`-based checks (cli/brain-lint.ts) never scan. This is
- * what lets `buildKbHealth` give those KBs a REAL (not silently-passing)
- * verdict on the `LINT_THEME_FILE_CHECKS` subset via `lintThemeFiles`.
- *
- * Routed through `guardedReadDir` (a recognized containment-guard producer,
- * cli/studio-path-guard.ts) rather than a raw `readdirSync` — `brainDir` is
- * split back into its trusted base + its own leaf segment (mirrors this
- * file's `guardKbTail` convention) so the leaf re-enters as a `segments[]`
- * element and is identity-checked, never folded into the guard's `root`.
- */
-export function listOwnThemeFiles(brainDir: string): string[] {
-  const names = guardedReadDir(dirname(brainDir), [basename(brainDir), 'themes']);
-  if (!names) return [];
-  return names
-    .filter((name) => name.endsWith('.md') && !KB_OWN_THEME_INDEX_FILES.has(name))
-    .map((name) => join(brainDir, 'themes', name));
-}
-
-/** Stable identity for a Finding, used to union `scopedFull` and `ownFindings`
- *  without double-counting the SAME defect surfaced by both lenses (e.g. a
- *  forge-side KB's theme scanned by both the shared `readThemeFiles`-based
- *  check and `lintThemeFiles` emit byte-identical check/file/message). Two
- *  DIFFERENT checks (e.g. `checkProjectBrainIndexes` vs `checkIndexSync`)
- *  independently flagging the same underlying theme are NOT deduped — they
- *  are two genuinely distinct, now-real per-check verdicts. */
-function findingIdentity(f: Finding): string {
-  return `${f.check ?? ''}::${f.file}::${f.message}`;
-}
-
-/** Union two finding lists by `findingIdentity`, preserving `a`'s findings
- *  first then any of `b`'s not already present. */
-export function unionFindings(a: readonly Finding[], b: readonly Finding[]): Finding[] {
-  const seen = new Map<string, Finding>();
-  for (const f of a) seen.set(findingIdentity(f), f);
-  for (const f of b) if (!seen.has(findingIdentity(f))) seen.set(findingIdentity(f), f);
-  return [...seen.values()];
-}
 
 // ---------------------------------------------------------------------------
 // computeKbLintChecks — the itemization lifted out of buildKbHealth
@@ -223,18 +142,23 @@ export function computeKbLintChecks(
 
   const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
 
-  const ownThemeFiles = brainDir ? listOwnThemeFiles(brainDir) : [];
-  const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
-
-  // Is this KB's brain dir within a given check's CHECK_SCOPE domain?
+  // Is this KB's brain dir within a given check's CHECK_SCOPE domain? Every
+  // arm DERIVES the answer from cli/brain-lint.ts — this function holds no
+  // copy of what the scan covers. It used to hardcode the two forge sub-wikis
+  // here, which stayed silently correct only for as long as `readThemeFiles`
+  // walked exactly those two.
+  const ownThemesDir = brainDir ? join(brainDir, 'themes') : '';
+  const scanReadThisKb =
+    brainDir !== null && themeScanFiles(forgeRoot).some((f) => dirname(f) === ownThemesDir);
   const isApplicableScoped = (name: string): boolean => {
     if (!brainDir) return false;
     switch (CHECK_SCOPE[name]) {
+      case 'themes':
+        // Applicable iff the full-scope scan actually READ a theme of this KB.
+        return scanReadThisKb;
       case 'forge-themes':
-        // readThemeFiles (brain-lint.ts) only ever walks brain/cycles/themes
-        // and brain/forge-dev/themes — a project/band KB's dir is never one
-        // of these two exact top-level dirs.
-        return brainDir === join(brainRoot, 'cycles') || brainDir === join(brainRoot, 'forge-dev');
+        // The ADR 018 category→sub-wiki routing rules; forge sub-wikis only.
+        return isForgeBrainDir(forgeRoot, brainDir);
       case 'project-indexes':
         // checkProjectBrainIndexes walks brain/projects/* — applicable iff
         // this KB's dir is a direct child of brain/projects/.
@@ -245,31 +169,24 @@ export function computeKbLintChecks(
         return false;
     }
   };
-  const isCoveredByOwn = (name: string): boolean => LINT_THEME_FILE_CHECKS.has(name) && ownThemeFiles.length > 0;
 
   const checks: CheckHealthEntry[] = CHECK_NAMES.map((name) => {
-    const applicable = isApplicableScoped(name);
-    const coveredByOwn = isCoveredByOwn(name);
-    if (!applicable && !coveredByOwn) {
+    if (!isApplicableScoped(name)) {
       // Never scanned THIS kb for this check — honest 'n/a', never 'pass'.
       return { check: name, status: 'n/a' as const, errorCount: 0, flagCount: 0 };
     }
-    const fromScoped = applicable ? scopedFull.filter((f) => f.check === name) : [];
-    const fromOwn = coveredByOwn ? ownFindings.filter((f) => f.check === name) : [];
-    const list = unionFindings(fromScoped, fromOwn);
+    const list = scopedFull.filter((f) => f.check === name);
     const errorCount = list.filter((f) => f.category === 'error').length;
     const flagCount = list.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
     const status: CheckHealthStatus = errorCount > 0 ? 'fail' : flagCount > 0 ? 'warn' : 'pass';
     return { check: name, status, errorCount, flagCount };
   });
 
-  // The aggregate rolls up over the FULL union of scopedFull ∪ ownFindings —
-  // EVERY finding, regardless of whether its `check` is one of CHECK_NAMES —
-  // so a finding whose check name isn't itemized is never silently dropped
-  // from the totals.
-  const allFindings = unionFindings(scopedFull, ownFindings);
-  const lintErrors = allFindings.filter((f) => f.category === 'error').length;
-  const lintFlags = allFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+  // The aggregate rolls up over EVERY finding scoped to this KB, regardless of
+  // whether its `check` is one of CHECK_NAMES — so a finding whose check name
+  // isn't itemized is never silently dropped from the totals.
+  const lintErrors = scopedFull.filter((f) => f.category === 'error').length;
+  const lintFlags = scopedFull.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
 
   return { checks, lintErrors, lintFlags };
 }

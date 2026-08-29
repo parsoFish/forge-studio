@@ -1306,11 +1306,21 @@ test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a regis
   );
 });
 
-test('CHECK_SCOPE: both new checks map to "forge-themes", and every CHECK_NAMES entry has a CHECK_SCOPE mapping (kills a registration that updates CHECK_NAMES but forgets CHECK_SCOPE, silently defaulting per-KB health to a false verdict)', () => {
-  assert.equal(CHECK_SCOPE['checkDanglingEdges'], 'forge-themes');
-  assert.equal(CHECK_SCOPE['checkDuplicateThemes'], 'forge-themes');
+test('CHECK_SCOPE: every CHECK_NAMES entry has a CHECK_SCOPE mapping, and every mapping is a known scope (kills a registration that updates CHECK_NAMES but forgets CHECK_SCOPE, silently defaulting per-KB health to a false verdict)', () => {
+  // `themes` = the readThemeFiles domain, which since ADR 035 includes
+  // brain/projects/<name>/themes. `forge-themes` is narrower and means the
+  // RULE — the ADR 018 category→sub-wiki routing — governs the two forge
+  // sub-wikis only. The split is what lets a per-KB consumer tell "scanned and
+  // clean" from "does not apply here"; before it, all ten theme checks claimed
+  // the forge-only domain and a project brain could only be reported n/a.
+  assert.equal(CHECK_SCOPE['checkDanglingEdges'], 'themes');
+  assert.equal(CHECK_SCOPE['checkDuplicateThemes'], 'themes');
+  assert.equal(CHECK_SCOPE['checkCategoryScope'], 'forge-themes');
+  assert.equal(CHECK_SCOPE['checkIndexSync'], 'forge-themes');
+  const KNOWN = new Set(['themes', 'forge-themes', 'project-indexes', 'global']);
   for (const name of CHECK_NAMES) {
     assert.ok(name in CHECK_SCOPE, `CHECK_SCOPE is missing an entry for "${name}" (CHECK_NAMES/CHECK_SCOPE drift)`);
+    assert.ok(KNOWN.has(CHECK_SCOPE[name]), `CHECK_SCOPE["${name}"] is "${CHECK_SCOPE[name]}", not one of ${[...KNOWN].join('|')}`);
   }
 });
 

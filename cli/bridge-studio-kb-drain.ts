@@ -98,7 +98,7 @@ import {
   type AutoFixStableResult,
   type Finding,
 } from './brain-lint.ts';
-import { collectKbFindings, ownThemeFindingsLens, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
+import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { enqueueConsolidate, KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { diffKbSnapshot, buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import {
@@ -251,7 +251,7 @@ export type KbDrainLintFn = (forgeRoot: string) => { findings: Finding[] };
  *  injectable for the same reason as `KbDrainLintFn`. */
 export type KbDrainApplyAutoFixesFn = (
   forgeRoot: string,
-  opts: { maxRounds?: number; filter?: (f: Finding) => boolean; extraFindings?: () => Finding[] },
+  opts: { maxRounds?: number; filter?: (f: Finding) => boolean },
 ) => AutoFixStableResult;
 
 /** Same input as `runBrainFixTurn` (orchestrator/brain-fix-runner.ts), but
@@ -1086,11 +1086,10 @@ export async function runKbDrain(
     // never even seen.
     const brainRoot = brainRootDir(forgeRoot);
     const inKb = (f: Finding): boolean => findingUnderDir(forgeRoot, brainDir, f);
-    // W7-B2 (knowledge-10): ONE lint lens — the same full-scan ∪ own-theme
-    // union buildKbHealth counts from, so the drain can never report green
-    // while the health readout on the same screen still counts flags.
+    // W7-B2 (knowledge-10): ONE lint lens — the same one buildKbHealth counts
+    // from, so the drain can never report green while the health readout on
+    // the same screen still counts flags.
     const lintKb = (): Finding[] => collectKbFindings(forgeRoot, kbId, lint(forgeRoot).findings);
-    const ownLens = ownThemeFindingsLens(forgeRoot, kbId);
 
     let costUsd = 0;
     let round = 0;
@@ -1146,7 +1145,7 @@ export async function runKbDrain(
       // changed on disk — the same derivation the agent tier uses, never a
       // description of what a fixer says it did.
       const autoSnapshot = snapshotBrainTree(forgeRoot);
-      const autoResult = applyAutoFixes(forgeRoot, { filter: inKb, extraFindings: ownLens });
+      const autoResult = applyAutoFixes(forgeRoot, { filter: inKb });
       const autoProposals = buildAutoProposedChanges(forgeRoot, brainRoot, diffKbSnapshot(brainRoot, autoSnapshot));
       const autoRows = autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals));
       // W8-F1 review round 2 — a mutation NO row claims is a mutation the

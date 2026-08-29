@@ -43,11 +43,11 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { startBridge } from './ui-bridge.ts';
-import { CHECK_NAMES } from './brain-lint.ts';
+import { CHECK_NAMES, runBrainLint } from './brain-lint.ts';
 // The module under test. This import throws at load time (module not found)
 // until cli/kb-lint-summary.ts exists — the intended "module missing" RED
 // for the WHOLE file, not a syntax error.
-import { attachKbLintSummaries } from './kb-lint-summary.ts';
+import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from './kb-lint-summary.ts';
 import type { KbLintSummary } from './kb-lint-summary.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -654,5 +654,135 @@ describe('kb-lint-summary — derived, not stored (AT-6)', () => {
       snapAfterMutation,
       `GET /api/studio/kbs must not write to brain/ — snapshot changed: before=${JSON.stringify(snapAfterMutation)} after=${JSON.stringify(snapAfterSecondRead)}`,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M1-D — CLI ↔ Studio agreement (exit row 2)
+//
+// `forge brain lint` and `GET /api/studio/kbs` are two views of ONE lint. They
+// disagreed: the CLI walked brain/cycles + brain/forge-dev only, and Studio
+// compensated with a SECOND lens over each KB's own theme files
+// (`listOwnThemeFiles` + `lintThemeFiles`, unioned in `computeKbLintChecks`).
+// The compensator is what made Studio report 2 errors and 3 flags on a tree
+// where the CLI reported 0 and 0 (campaign ledger, "OPEN RULE result —
+// 2026-08-29"). Two lenses is two places for a stale copy of what gets
+// checked; this asserts there is one, by requiring Studio's per-KB numbers to
+// be exactly the CLI's own findings scoped to that KB — nothing added, nothing
+// hidden.
+// ---------------------------------------------------------------------------
+
+describe('kb-lint-summary — the CLI and Studio derive from ONE scan (M1-D)', () => {
+  let forgeRoot: string;
+
+  before(() => {
+    forgeRoot = tmp('kb-lint-agreement-');
+    initQueueDirs(forgeRoot);
+
+    const cyclesDir = join(forgeRoot, 'brain', 'cycles');
+    mkdirSync(join(cyclesDir, 'themes'), { recursive: true });
+    writeFileSync(join(cyclesDir, 'kb.yaml'), 'id: cycles\nname: Cycles Brain\nbinding: { kind: unique }\ndesc: M1-D agreement fixture.\n');
+    writeFileSync(join(cyclesDir, 'patterns.md'), '# Patterns\n\n- [`forge-theme`](./themes/forge-theme.md) — d\n');
+    writeFileSync(join(cyclesDir, 'themes', 'forge-theme.md'), themeMd({ title: 'Forge Theme', desc: 'clean.' }));
+
+    // A project brain (Brain 3, ADR 035) carrying the shape of the real
+    // incident: a theme whose relative link points at a file that is not there.
+    const demoDir = join(forgeRoot, 'brain', 'projects', 'demo');
+    mkdirSync(join(demoDir, 'themes'), { recursive: true });
+    writeFileSync(join(demoDir, 'kb.yaml'), 'id: demo\nname: Demo Project Brain\nbinding: { kind: project, ref: demo }\ndesc: M1-D agreement fixture.\n');
+    writeFileSync(join(demoDir, 'antipatterns.md'), '# Antipatterns\n\n- [`dead-link`](./themes/dead-link.md) — d\n');
+    writeFileSync(
+      join(demoDir, 'themes', 'dead-link.md'),
+      themeMd({ title: 'Dead Link Theme', desc: 'cites a file that is not there.', category: 'antipattern' }).replace(
+        'No links, no keywords',
+        'Sources: [`gone.md`](../../../../docs/gone.md). No keywords',
+      ),
+    );
+  });
+
+  after(() => {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  });
+
+  test('every KB: Studio\'s errors/flags equal the CLI\'s full-scan findings scoped to that KB', () => {
+    const cliFindings = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
+
+    for (const kbId of ['cycles', 'demo']) {
+      const cliScoped = scopeFindingsToKb(forgeRoot, kbId, cliFindings);
+      const cliErrors = cliScoped.filter((f) => f.category === 'error').length;
+      const cliFlags = cliScoped.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+
+      const studio = computeKbLintChecks(forgeRoot, kbId, cliFindings);
+
+      assert.equal(
+        studio.lintErrors,
+        cliErrors,
+        `KB ${kbId}: Studio reports ${studio.lintErrors} error(s), the CLI ${cliErrors} — a second lens is adding or hiding findings`,
+      );
+      assert.equal(
+        studio.lintFlags,
+        cliFlags,
+        `KB ${kbId}: Studio reports ${studio.lintFlags} flag(s), the CLI ${cliFlags}`,
+      );
+    }
+  });
+
+  test('the project brain\'s dead link is one finding in BOTH views, not one in either', () => {
+    const cliFindings = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
+    const cliScoped = scopeFindingsToKb(forgeRoot, 'demo', cliFindings);
+    assert.equal(cliScoped.filter((f) => f.check === 'checkSourceLinks').length, 1);
+    const studio = computeKbLintChecks(forgeRoot, 'demo', cliFindings);
+    const row = studio.checks.find((c) => c.check === 'checkSourceLinks');
+    assert.equal(row?.status, 'fail');
+    assert.equal(row?.errorCount, 1);
+  });
+
+  test('a check that now genuinely scans a project brain no longer reports n/a', () => {
+    const cliFindings = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
+    const { checks } = computeKbLintChecks(forgeRoot, 'demo', cliFindings);
+    const na = checks.filter((c) => c.status === 'n/a').map((c) => c.check).sort();
+    // Only the three that genuinely cannot apply to a project brain:
+    // the two ADR 018 category→sub-wiki routing checks, and the global one.
+    assert.deepEqual(na, ['checkCategoryScope', 'checkIndexSync', 'checkReflectorLoss']);
+  });
+});
+
+describe('kb-lint-summary — no second lens over a project brain (M1-D)', () => {
+  let forgeRoot: string;
+
+  before(() => {
+    forgeRoot = tmp('kb-lint-secondlens-');
+    initQueueDirs(forgeRoot);
+    // A project theme that its own category index does NOT list. The CLI
+    // reports this once, as checkProjectBrainIndexes ("not listed in PROJECT
+    // category index"). Studio's own-theme lens reported it a SECOND time as
+    // checkIndexSync ("not listed in category index") — a different check name
+    // and a different message, so the union could not dedupe them and Studio
+    // counted a flag the CLI did not have.
+    const demoDir = join(forgeRoot, 'brain', 'projects', 'demo');
+    mkdirSync(join(demoDir, 'themes'), { recursive: true });
+    writeFileSync(join(demoDir, 'kb.yaml'), 'id: demo\nname: Demo\nbinding: { kind: project, ref: demo }\ndesc: M1-D second-lens fixture.\n');
+    writeFileSync(join(demoDir, 'antipatterns.md'), '# Antipatterns\n\n- [`other`](./themes/other.md) — d\n');
+    writeFileSync(
+      join(demoDir, 'themes', 'unindexed.md'),
+      themeMd({ title: 'Unindexed Theme', desc: 'absent from its own index.', category: 'antipattern' }),
+    );
+  });
+
+  after(() => {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  });
+
+  test('an unindexed project theme is counted ONCE — Studio adds no finding of its own', () => {
+    const cliFindings = runBrainLint({ cwd: forgeRoot, scope: 'full' }).findings;
+    const cliScoped = scopeFindingsToKb(forgeRoot, 'demo', cliFindings);
+    const studio = computeKbLintChecks(forgeRoot, 'demo', cliFindings);
+    assert.equal(
+      studio.lintFlags,
+      cliScoped.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length,
+      `Studio counted ${studio.lintFlags} flag(s) against the CLI's ${cliScoped.length} finding(s): ${JSON.stringify(studio.checks.filter((c) => c.flagCount > 0))}`,
+    );
+    assert.equal(studio.checks.find((c) => c.check === 'checkProjectBrainIndexes')?.flagCount, 1);
+    assert.equal(studio.checks.find((c) => c.check === 'checkIndexSync')?.status, 'n/a');
   });
 });
