@@ -859,6 +859,52 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 
 ## Later sweeps — rows added after the original tables
 
+### Extended in M2 — the `@forge/kernel` move, and the sinks it made VISIBLE
+
+The M2 kernel quarry moved five modules out of `cli/` and `orchestrator/` into
+`packages/kernel/`, and taught this lint's walker two new things: `packages/`
+and `apps/` are inside `WALK_ALLOWED_PREFIXES`, and a `@forge/<pkg>` bare
+specifier resolves to `packages/<pkg>/index.ts`.
+
+**Why the walker had to learn that.** The only edge from the legacy trees into a
+package is `orchestrator/_pkg/<pkg>.ts`, which re-exports a BARE specifier. The
+walker followed relative specifiers only, so it stopped dead at the shim. The
+measured consequence: `cli/studio-path-guard.ts` — the containment guard this
+lint exists to backstop — moved to `packages/kernel/path-guard.ts`, its six raw
+fs sinks silently became `tighten … -> 0` rows, and **both this ratchet and
+`check-raw-fs-guarded.mjs` went on reporting PASS with the guard entirely
+outside their universe**. A lint that loses sight of its subject when the
+subject moves is worse than no lint, because it still says green.
+
+**Eleven rows are a rename and nothing more** — same file, same sinks, same
+counts, new path: `cli/studio-path-guard.ts` → `packages/kernel/path-guard.ts`
+(6), `orchestrator/config.ts` → `packages/kernel/config.ts` (2),
+`orchestrator/logging.ts` → `packages/kernel/logging.ts` (3). Re-keyed rather
+than `--write`-accepted, so the debt keeps its history.
+
+**Four rows are genuinely new to this lint, and none is request-derived.**
+`packages/kernel/init.ts` (`execSync` 1, `existsSync` 2, `mkdirSync` 1,
+`writeFileSync` 1) had **no** baseline rows before, because it was not reachable
+from any request-handling entry. It is reachable now only because
+`packages/kernel/index.ts` is a barrel and `orchestrator/_pkg/kernel.ts`
+re-exports it wholesale, so any reachable legacy module that wanted `logging`
+now drags `init` into the static reachable set. The reachability is an
+over-approximation; the sinks themselves are not request-derived:
+
+- **`runInit(root)` has exactly one caller** — `orchestrator/cli.ts:176`, which
+  passes the module constant `FORGE_ROOT`. No route, no handler, and no
+  request-derived value reaches it.
+- **`execSync('gh auth status', { stdio: 'ignore' })`** is a fixed literal with
+  no interpolation of any kind.
+- **`mkdirSync` / `existsSync` / `writeFileSync`** operate on `layoutDirs(root)`
+  and `join(root, 'forge.config.json')` — literal leaf names under that same
+  constant root.
+
+Classification: **accidentally-safe by call-site, not by guard** — the accident
+named explicitly, per this document's own rule. If `runInit` ever gains a
+second caller that passes a request-derived root, every one of these four
+becomes live and must be guarded; that is the precondition to watch.
+
 ### Extended in R4-19-F2 — the two new brain-lint checks (`[read]`)
 
 R4-19-F2 added `checkDanglingEdges` and `checkDuplicateThemes` to

@@ -130,7 +130,25 @@ import { fileURLToPath } from 'node:url';
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sinks.baseline.txt');
 
-const WALK_ALLOWED_PREFIXES = ['cli/', 'orchestrator/'];
+/**
+ * The trees this walk may enter. `packages/` and `apps/` joined in M2: the
+ * kernel move took `cli/studio-path-guard.ts` — the containment guard this
+ * lint exists to watch — to `packages/kernel/path-guard.ts`, and with only
+ * `cli/` and `orchestrator/` here the guard's own six raw fs sinks silently
+ * became "tighten" rows and both ratchets went on reporting PASS. A lint that
+ * loses sight of its subject when the subject moves is worse than no lint,
+ * because it still says green.
+ */
+const WALK_ALLOWED_PREFIXES = ['cli/', 'orchestrator/', 'packages/', 'apps/'];
+
+/**
+ * A workspace package specifier — `@forge/kernel` -> `packages/kernel/index.ts`.
+ * The ONLY edge from the legacy tree into a package is
+ * `orchestrator/_pkg/<pkg>.ts`, which re-exports a BARE specifier. A walker
+ * that follows relative specifiers only stops dead at that shim, so every
+ * package would sit outside this lint's universe forever.
+ */
+const WORKSPACE_SPEC_RE = /^@forge\/([^/]+)(\/.*)?$/;
 
 /** Fixed, explicit sink list — see header. Do not derive this from any
  *  runtime introspection of node:fs / node:child_process; it must stay a
@@ -310,6 +328,8 @@ const IMPORT_SPEC_RES = [
   /\bfrom\s+['"](\.[^'"]+)['"]/g,
   /^\s*import\s+['"](\.[^'"]+)['"]/gm,
   /\bimport\(\s*['"](\.[^'"]+)['"]\s*\)/g,
+  /\bfrom\s+['"](@forge\/[^'"]+)['"]/g,
+  /\bimport\(\s*['"](@forge\/[^'"]+)['"]\s*\)/g,
 ];
 
 function extractRelativeImportSpecs(text) {
@@ -329,6 +349,11 @@ function extractRelativeImportSpecs(text) {
  *  the walker honest if that ever lapses). Returns null if the resolved
  *  target falls outside cli/ or orchestrator/, or isn't a `.ts` file. */
 function resolveImportTarget(fromRelFile, spec) {
+  const pkg = WORKSPACE_SPEC_RE.exec(spec);
+  if (pkg) {
+    const target = `packages/${pkg[1]}/${pkg[2] ? pkg[2].slice(1) : 'index.ts'}`;
+    return target.endsWith('.ts') ? target : `${target}.ts`;
+  }
   const fromDir = dirname(fromRelFile);
   let target = join(fromDir, spec).split('\\').join('/');
   if (!extname(target)) target = `${target}.ts`;
