@@ -1,0 +1,10 @@
+[
+  "studio-beyond-contracts|forge-ui/components/studio/session/SessionInteractivePanel.test.ts|orchestrator/studio/session-kinds.ts",
+  "studio-beyond-contracts|forge-ui/lib/flow-header-render.test.ts|orchestrator/flow-trigger.ts",
+  "studio-beyond-contracts|forge-ui/lib/kickoff-form.test.ts|orchestrator/config.ts",
+  "studio-beyond-contracts|forge-ui/lib/session-shell-view.test.ts|cli/bridge-studio-sessions.ts",
+  "studio-beyond-contracts|forge-ui/lib/studio-client.test.ts|orchestrator/studio/types.ts",
+  "studio-beyond-contracts|forge-ui/lib/studio-client.test.ts|orchestrator/studio/validate-triggers.ts",
+  "studio-beyond-contracts|forge-ui/lib/trigger-kind-parity.test.ts|orchestrator/flow-trigger.ts",
+  "studio-beyond-contracts|forge-ui/lib/wi-status-parity.test.ts|orchestrator/work-item.ts"
+]
