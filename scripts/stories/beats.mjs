@@ -224,19 +224,32 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}) {
     return stuckVerdict(beat, await readObserved(page, beat), stepError);
   }
 
-  // A press that saves asynchronously mints its route, or the link to it, a
-  // moment later. Wait for whichever arrives — but only for a beat that acted,
-  // so a beat that simply cannot reach its route still fails fast.
+  // A press that saves asynchronously mints its route a moment later, so a beat
+  // that ACTED waits for that route before anything below reads where it is.
+  //
+  // It waits on the URL and NOTHING ELSE. The shipped wait raced this against
+  // "a link to the target became visible", and on every beat whose pressed
+  // control IS that link — `new-agent`, `new-skill`, `new-hook`, `new-kb`,
+  // `create-project-cta` — the link was already visible ON THE PAGE BEING
+  // NAVIGATED AWAY FROM. `Promise.any` resolved instantly, `page.url()` still
+  // read the SOURCE route because Next commits a client-side navigation after
+  // its transition, and the block below clicked the same link a second time
+  // into a detaching DOM. Two faces, one cause: a double click that reds
+  // `could not click through to "/agents/new" from "/agents/new"` (S5 beat 2),
+  // and a false `no real-nav path to "/skills/new" from "/skills/new"` where
+  // the destination carries no link to itself (S7 beats 2 and 6). Both name the
+  // same route as source and target, which is the tell. Bead `forge-8vfn.2.28`.
+  //
+  // A WAIT THE STATE IT IS LEAVING CAN SATISFY IS NOT A WAIT — the class M1-G
+  // and M1-B closed one layer up, where `data-page-ready` could not tell
+  // "not yet" from "already done" either. The URL can: it is the one signal
+  // the source page cannot answer for the destination.
   if (steps.length > 0 && new URL(page.url()).pathname !== target) {
-    await Promise.any([
-      page.waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS }),
-      page
-        .locator(`[data-nav][href="${target}"], a[href="${target}"]`)
-        .first()
-        .waitFor({ state: 'visible', timeout: READY_TIMEOUT_MS }),
-    ]).catch(() => {
-      /* neither arrived — the nav resolution below reports it honestly */
-    });
+    await page
+      .waitForURL((u) => new URL(u).pathname === target, { timeout: READY_TIMEOUT_MS })
+      .catch(() => {
+        /* the press did not navigate here — the nav resolution below reports it honestly */
+      });
   }
 
   // Already there: the operator acted on this page and stayed on it, or the

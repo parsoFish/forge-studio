@@ -209,15 +209,14 @@
     {
       "act": "Press \"+ New agent\"",
       "say": "A new agent starts from a starter — a ready-made shape the operator edits — or from nothing at all. The empty `agent-id` is the page saying, honestly, that nothing has been minted yet.",
-      "status": "red",
-      "failures": [
-        "could not click through to \"/agents/new\" from \"/agents/new\": locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/agents/new\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/agents/new\" class=\"btn btn-primary\" data-action=\"new-agent\">+ New agent</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n. The control exists but was not actionable — obscured, disabled or detached."
-      ],
+      "status": "green",
+      "failures": [],
       "bindings": {},
       "data": {
         "page": "agents",
         "agent-id": "",
-        "page-ready": "true"
+        "page-ready": "true",
+        "section": "starter-picker"
       },
       "frame": "frames/02-press-new-agent.png"
     },

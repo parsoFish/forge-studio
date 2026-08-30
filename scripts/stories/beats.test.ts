@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beatVerdict, resolveBeatRoute, stuckVerdict } from './beats.mjs';
+import { beatVerdict, driveBeat, resolveBeatRoute, stuckVerdict } from './beats.mjs';
 
 const beat = {
   act: 'Click through to the Projects pillar',
@@ -312,4 +312,226 @@ test('the verdict carries the NESTED values it judged, so the generated doc docu
   assert.equal(v.data['card-id'], 'gitweave');
   assert.equal(v.data.health, 'attention');
   assert.equal(v.data.page, 'projects-index');
+});
+
+// ── M1-H: the post-press wait, and the state it is leaving (bead `forge-8vfn.2.28`)
+//
+// THE INCIDENT. S5 reached 1 of 12 beats and S7 3 of 15, both dying at the
+// first press, both reporting the same route as source AND target:
+//
+//   could not click through to "/agents/new" from "/agents/new": locator.click:
+//     - element was detached from the DOM, retrying
+//
+// The press had worked. `driveBeat` raced `waitForURL(target)` against "a link
+// to the target is visible", and `new-agent` — like `new-skill`, `new-hook`,
+// `new-kb` and `create-project-cta` — IS that link, sitting on the page being
+// navigated AWAY from. `Promise.any` resolved on it instantly, `page.url()`
+// still read the SOURCE route because Next commits a client-side navigation
+// after the transition, and the runner clicked the same link a second time into
+// a detaching DOM. Recorded in `_1.0/stories/S5.md` and `S7.md`.
+//
+// THE CLASS, and why these cases are worth their weight: **a signal that cannot
+// tell "not yet" from "already done"** — the same family as `data-page-ready`
+// reporting settled-before-its-fetch (M1-G) and settled-not-succeeded (M1-B,
+// above). A WAIT THE STATE IT IS LEAVING CAN SATISFY IS NOT A WAIT.
+//
+// These drive `driveBeat` against a fake Studio whose navigation commits a
+// moment AFTER the click that starts it, which is the whole of the defect. The
+// pure verdict above cannot see it: the bug lives in the browser choreography.
+
+/** One element: a tag, its attributes, and the route clicking it navigates to. */
+const el = (tag: string, attrs: Record<string, string>, navigatesTo: string | null = null) => ({
+  tag,
+  attrs,
+  navigatesTo,
+});
+
+const READY_MAIN = (page: string) => el('main', { 'data-page': page, 'data-page-ready': 'true' });
+
+/** Does one element answer one selector clause? Handles the four shapes `driveBeat` builds. */
+function matchesClause(node: ReturnType<typeof el>, clause: string): boolean {
+  const tag = /^[a-z]+/.exec(clause)?.[0] ?? null;
+  if (tag !== null && node.tag !== tag) return false;
+  for (const [, key, want] of clause.matchAll(/\[([a-z-]+)(?:="([^"]*)")?\]/g)) {
+    const got = node.attrs[key];
+    if (got === undefined) return false;
+    if (want !== undefined && got !== want) return false;
+  }
+  return true;
+}
+
+/** Poll until `pred` holds, or reject the way playwright does when it never does. */
+function until(pred: () => boolean, timeout: number, what: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if (pred()) return resolve();
+      if (Date.now() - started >= timeout) return reject(new Error(`Timeout exceeded waiting for ${what}`));
+      setTimeout(tick, 5);
+    };
+    tick();
+  });
+}
+
+/**
+ * Enough of playwright's page for `driveBeat`, with ONE deliberate fidelity:
+ * a click that navigates leaves `page.url()` reading the OLD route until the
+ * commit lands `commitMs` later, and any control on the page being left throws
+ * "element was detached from the DOM" while that is in flight. That is the
+ * measured behaviour of Next's App Router and the whole of `forge-8vfn.2.28`.
+ */
+function fakeStudio(spec: {
+  start: string;
+  commitMs: number;
+  pages: Record<string, { elements: ReturnType<typeof el>[]; data?: Record<string, string>; nested?: Record<string, string>[] }>;
+}) {
+  let route = spec.start;
+  let committingTo: string | null = null;
+  const clicks: string[] = [];
+  const here = () => spec.pages[route] ?? { elements: [] };
+  const find = (sel: string) =>
+    here().elements.find((n) => sel.split(',').some((c) => matchesClause(n, c.trim()))) ?? null;
+
+  const locator = (sel: string): any => ({
+    first: () => locator(sel),
+    count: async () => (find(sel) === null ? 0 : 1),
+    async click() {
+      const node = find(sel);
+      if (node === null) throw new Error(`locator.click: Timeout 5000ms exceeded waiting for ${sel}`);
+      if (committingTo !== null) throw new Error('locator.click: element was detached from the DOM, retrying');
+      clicks.push(sel);
+      if (node.navigatesTo !== null) {
+        const to = node.navigatesTo;
+        committingTo = to;
+        setTimeout(() => {
+          route = to;
+          committingTo = null;
+        }, spec.commitMs);
+      }
+    },
+    waitFor: ({ timeout }: { timeout: number }) => until(() => find(sel) !== null, timeout, sel),
+    evaluate: async () => find(sel)?.tag.toUpperCase() ?? 'INPUT',
+    async fill() {
+      if (find(sel) === null) throw new Error(`locator.fill: Timeout 5000ms exceeded waiting for ${sel}`);
+    },
+    selectOption: async () => {},
+  });
+
+  return {
+    clicks,
+    url: () => `http://localhost:4124${route}`,
+    goto: async (u: string) => {
+      route = new URL(u).pathname;
+    },
+    locator,
+    waitForURL: (pred: (u: string) => boolean, o: { timeout: number }) =>
+      until(() => pred(`http://localhost:4124${route}`), o.timeout, 'the URL'),
+    waitForSelector: (sel: string, o: { timeout: number }) => until(() => find(sel) !== null, o.timeout, sel),
+    evaluate: async () => ({ data: here().data ?? {}, nested: here().nested ?? [] }),
+  };
+}
+
+/** S5 beat 2, verbatim from the pinned story. */
+const pressNewAgent = {
+  act: 'Press "+ New agent"',
+  do: [{ press: 'new-agent' }],
+  expect: {
+    route: '/agents/new',
+    data: { page: 'agents', 'agent-id': '', 'page-ready': 'true', section: 'starter-picker' },
+  },
+  say: 'A new agent starts from a starter.',
+};
+
+/** `/agents` and `/agents/new` as the product renders them, read off the live DOM in S5. */
+const agentsPages = {
+  '/agents': {
+    elements: [READY_MAIN('agents-index'), el('a', { href: '/agents/new', 'data-action': 'new-agent' }, '/agents/new')],
+    data: { page: 'agents-index', 'page-ready': 'true' },
+  },
+  '/agents/new': {
+    elements: [READY_MAIN('agents')],
+    data: { page: 'agents', 'agent-id': '', 'page-ready': 'true' },
+    nested: [{ section: 'starter-picker' }],
+  },
+};
+
+test('a beat whose PRESSED CONTROL IS the link to its target goes green, and is pressed exactly once', async () => {
+  // THE DEFECT. Kills the `Promise.any([waitForURL, linkToTargetVisible])`
+  // shipped wait: on this beat the link IS the control just pressed, so it is
+  // already visible on `/agents`, the race resolves before the navigation
+  // commits, and the runner clicks it again into a detaching DOM. Reproduced
+  // three times live — S5 beat 2, S7 beats 2 and 6.
+  const page = fakeStudio({ start: '/agents', commitMs: 200, pages: agentsPages });
+  const v = await driveBeat(page, pressNewAgent, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.clicks, ['[data-action="new-agent"]']);
+});
+
+test('the post-press wait is not satisfied by the page being LEFT, however slowly the route commits', async () => {
+  // The invariant, stated on its own: lengthening the commit must not change
+  // the verdict. Any wait a pre-existing element can win is a wait whose
+  // outcome is decided by a race, and this one is deliberately unwinnable
+  // within 800ms — the shipped implementation fails here by construction.
+  const page = fakeStudio({ start: '/agents', commitMs: 800, pages: agentsPages });
+  const v = await driveBeat(page, pressNewAgent, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.clicks, ['[data-action="new-agent"]']);
+});
+
+test('a press that mints a route NOTHING linked to still arrives — the proof story beat 5 shape', async () => {
+  // The capability the cut fallback was written for, held from the other side:
+  // `onboard-project` is a BUTTON, no link to `/projects/story-proof` exists
+  // anywhere before it, and the route must still be reached by waiting.
+  const page = fakeStudio({
+    start: '/projects/new',
+    commitMs: 250,
+    pages: {
+      '/projects/new': {
+        elements: [
+          READY_MAIN('projects'),
+          el('button', { 'data-action': 'onboard-project' }, '/projects/story-proof'),
+        ],
+        data: { page: 'projects', 'project-id': 'new', 'page-ready': 'true' },
+      },
+      '/projects/story-proof': {
+        elements: [READY_MAIN('projects')],
+        data: { page: 'projects', 'project-id': 'story-proof', 'page-ready': 'true' },
+      },
+    },
+  });
+  const beat = {
+    act: 'Press "Onboard project →"',
+    do: [{ press: 'onboard-project' }],
+    expect: {
+      route: '/projects/story-proof',
+      data: { page: 'projects', 'project-id': 'story-proof', 'page-ready': 'true' },
+    },
+    say: 'Registering the project lands the operator on its page.',
+  };
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.clicks, ['[data-action="onboard-project"]']);
+});
+
+test('a beat with NO do block still reaches its route by clicking the link — the smoke story path', async () => {
+  // The sweep: every story authored before this lane navigates by link alone,
+  // and the wait this lane changed must not touch that path at all.
+  const page = fakeStudio({ start: '/agents', commitMs: 50, pages: agentsPages });
+  const v = await driveBeat(page, { ...pressNewAgent, do: undefined }, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.clicks, ['a[href="/agents/new"]']);
+});
+
+test('a route nothing links to and no press reaches is still RED, naming where it was stuck', async () => {
+  // Fail-CLOSED. Kills a fix that reports green whenever it stopped waiting:
+  // an unreachable route must never pass as a beat.
+  const page = fakeStudio({ start: '/agents', commitMs: 50, pages: agentsPages });
+  const beat = {
+    act: 'Reach a route nothing points at',
+    expect: { route: '/nowhere', data: { page: 'nowhere' } },
+    say: 'It cannot be reached.',
+  };
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  assert.match(v.failures.join(' | '), /no real-nav path to "\/nowhere" from "\/agents"/);
 });
