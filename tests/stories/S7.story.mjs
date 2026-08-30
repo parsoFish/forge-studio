@@ -60,10 +60,14 @@
  *     a `router.push`, as does the instructions kickoff — two of the six
  *     surviving mint-then-navigate sites in `forge-8vfn.5.10`. Cited, not
  *     re-diagnosed here.
- *   - Beat 12 binds the hook to an agent, and binding means clicking a
+ *   - The bind beat carries the hook to an agent, and binding means clicking a
  *     `.catalog-chip[data-id][data-kind]` in the agent builder — no
  *     `data-action`, so no `do` verb can name it. That is S5's finding, on the
- *     same surface, and `_1.0/stories/S5.md` carries it.
+ *     same surface, and `_1.0/stories/S5.md` carries it. The agent is
+ *     `brain-ingest`, a real one off the shipped roster, NOT the agent S5
+ *     creates: §3.1 allows no seeded state except what a PRIOR BEAT OF THIS
+ *     STORY made, and reaching across stories would make S7 pass or fail on
+ *     whether S5 ran first.
  *   - Beat 13 is the one §3's row ends on, and it has no attribute at all.
  *     Every `data-*` in `forge-ui` naming a hook is `data-hook-count`,
  *     `-event`, `-id`, `-runnable`, `-trust`, `-url`, `-verdict` and
@@ -170,10 +174,22 @@ export default {
       say: 'The agent drafts; the operator names and approves. Nothing an agent wrote enters the library on the agent’s own say-so, and the id the operator types is the directory it lands in.',
     },
     {
-      // Fully expressible. Back to the Library through the nav, then the
-      // Hooks shelf's own create CTA. A separate beat from 6 because the
-      // operator genuinely goes back to the parts bin between kinds.
-      act: 'Back to the Library, and press "+ New hook"',
+      // AMENDED after the first run (2026-08-30, same authoring session,
+      // re-pinned). The first draft folded "go back to the Library" and "press
+      // + New hook" into one beat, and the runner was right to red it: `do`
+      // acts on the page the operator is STANDING on, and the hook CTA is not
+      // on the skill page. Going back to the parts bin is its own act. NOT ONE
+      // ASSERTION CHANGED — the story got truer, not easier.
+      act: 'Go back to the Library',
+      expect: {
+        route: '/library',
+        data: { page: 'library', 'page-ready': 'true', section: 'hooks' },
+      },
+      say: 'The Library is where the operator returns between kinds. Each shelf is a different sort of part, and the next one is the only sort that is executable code.',
+    },
+    {
+      // Fully expressible — the Hooks shelf's own create CTA.
+      act: 'Press "+ New hook"',
       do: [{ press: 'new-hook' }],
       expect: {
         route: '/hooks/new',
@@ -270,7 +286,17 @@ export default {
       // Fully expressible — the manual door again, and every field declares a
       // real `data-field`. `/templates/new` is reached from the Library's own
       // Templates shelf CTA.
-      act: 'Back to the Library, press "+ New template", and write the template the hook’s output is filed into',
+      act: 'Go back to the Library once more',
+      expect: {
+        route: '/library',
+        data: { page: 'library', 'page-ready': 'true', section: 'templates' },
+      },
+      say: 'Third kind, same parts bin.',
+    },
+    {
+      // Fully expressible — the Templates shelf's create CTA, then the form,
+      // every field of which declares a real `data-field`.
+      act: 'Press "+ New template" and write the template the hook’s output is filed into',
       do: [
         { press: 'new-template' },
         { fill: 'template-category', with: 'studio/artifact-templates' },
@@ -314,10 +340,10 @@ export default {
       // the same zone, so one element answers both. The guard and hook zones
       // are DISTINCT by design and must never merge, which is why this beat
       // names the hook zone specifically.
-      act: 'Bind the hook to an agent',
+      act: 'Open an agent from the Agents pillar and bind the hook to it',
       expect: {
-        route: '/agents/story-s5',
-        data: { page: 'agents', 'agent-id': 'story-s5', accepts: 'hook', count: '1' },
+        route: '/agents/brain-ingest',
+        data: { page: 'agents', 'agent-id': 'brain-ingest', accepts: 'hook', count: '1' },
       },
       say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
     },
@@ -335,10 +361,10 @@ export default {
       act: 'Run the agent, and watch the hook fire on the session ending',
       do: [{ press: 'run-agent' }],
       expect: {
-        route: '/agents/story-s5',
+        route: '/agents/brain-ingest',
         data: {
           page: 'agents',
-          'agent-id': 'story-s5',
+          'agent-id': 'brain-ingest',
           'run-status': 'running',
           'run-id': '<hookRunId>',
         },

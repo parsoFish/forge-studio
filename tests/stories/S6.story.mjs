@@ -12,7 +12,7 @@
  * WHAT THIS STORY IS ACTUALLY FOR. Forge's whole claim is that it compounds:
  * a cycle reflects, a theme lands, the next planner reads it and plans better.
  * §3's row states that as an observable — "a planner run reads it (a
- * `brain-index` event is visible)" — and beat 10 is that observable. It is the
+ * `brain-index` event is visible)" — and beat 13 is that observable. It is the
  * one beat in this story that cannot be written against any attribute the
  * product has: `brain-index` appears NOWHERE in `forge-ui`. Every `data-*`
  * naming a brain fact is `data-ingest-*`, and ingest is the REFLECTOR'S WRITE,
@@ -35,7 +35,7 @@
  * on 2026-08-30).
  *
  * `ground.project` is `mdtoc` — the schema requires a project id, this story's
- * subject is a KB, and mdtoc is the project beat 8's planner run is pointed
+ * subject is a KB, and mdtoc is the project beat 11's planner run is pointed
  * at. It is the one project committed to this repo, so it is the only one a
  * CLEAN CHECKOUT has, which is the condition 1.0 exits on.
  *
@@ -59,13 +59,21 @@
  *     href and in the query string, never as a `data-*` VALUE an earlier beat
  *     could observe. Bead `forge-8vfn.5.10` (the six surviving mint-then-
  *     navigate sites), cited, not re-diagnosed here.
- *   - Beats 11 and 12 need the Health tab, and the three tabs are
+ *
+ * AMENDED after this story's first run (2026-08-30, same authoring session,
+ * re-pinned). The first draft stepped straight from `/knowledge` to
+ * `/architect/new`, and the runner was right to red it: no nav pillar and no
+ * link on the Knowledge page points there, so it is not a step an operator can
+ * take. Three beats now carry the real path — Projects, mdtoc, "Architect →" —
+ * and NOT ONE ASSERTION CHANGED. The amendment made the story truer about the
+ * operator's journey; it did not make it easier to pass.
+ *   - Beats 14 and 15 need the Health tab, and the three tabs are
  *     `[data-tab="explore"|"health"|"ingest-activity"]` with NO `data-action`
  *     anywhere on them. The drain — the entire second half of §3's row — has
  *     no reachable door. The same page's KB picker (`#kb-select`) carries
  *     `data-kb-select-empty` and no `data-field`, so the operator also cannot
  *     say WHICH knowledge base they are working on.
- *   - Beat 10, as above, has no attribute at all.
+ *   - Beat 13, as above, has no attribute at all.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
  * `brain/projects/story-<id>`. A flow-bound KB writes `brain/story-s6` and
@@ -221,12 +229,44 @@ export default {
       say: 'Seeded means there is something in it. One theme with a name the operator can read is the difference between a knowledge base and an empty promise.',
     },
     {
-      // Fully expressible. `/architect/new` is the native "start a run" entry;
+      // AMENDED after the first run (2026-08-30, same authoring session, re-pinned).
+      // The first draft went straight from `/knowledge` to `/architect/new`,
+      // and the runner was right to red it: there is no Architect nav pillar
+      // and the Knowledge page carries no link to one, so that is not a step
+      // the operator can take. The real path is through the project — which is
+      // the honest shape anyway, because a planner run is always ABOUT a
+      // project. Two beats, not one act pretending to be one.
+      act: 'Go to the Projects pillar to find the project on the other end of that binding',
+      expect: {
+        route: '/projects',
+        data: { page: 'projects-index', 'page-ready': 'true' },
+      },
+      say: 'A knowledge base is bound to a Flow, and a Flow runs against projects. To prove the binding does anything, the operator has to go to one of them.',
+    },
+    {
+      // Fully expressible, and deliberately with NO `do`: the project card is a
+      // real `a[href="/projects/mdtoc"]`, so the runner reaches it by the link
+      // the operator clicks. The card carries `data-card-type`/`data-card-id`
+      // and no `data-action`, and naming a handle that does not exist would be
+      // inventing one.
+      act: 'Open mdtoc',
+      expect: {
+        route: '/projects/mdtoc',
+        data: { page: 'projects', 'project-id': 'mdtoc', 'page-ready': 'true' },
+      },
+      say: 'mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.',
+    },
+    {
+      // Fully expressible, but only because the exit is itself a `data-action`:
+      // `start-work-architect` is an <a> whose href carries a query string
+      // (`/architect/new?project=mdtoc`), which the runner's `a[href="<route>"]`
+      // fallback cannot match. `/architect/new` is the native "start a run" entry;
       // `section`, `roster-state` and `new-idea-ready` all live on the same
       // `[data-section="new-idea"]` element. `roster-state: 'ok'` is the
       // M1-G-derived readiness — this route used to declare `page-ready`
       // literally true over a loading roster, and no longer does.
-      act: 'Point the planner at mdtoc — the project whose Flow this knowledge base is bound to',
+      act: 'Press "Architect →" to plan a piece of work on it',
+      do: [{ press: 'start-work-architect' }],
       expect: {
         route: '/architect/new',
         data: {
