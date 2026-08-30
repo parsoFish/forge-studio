@@ -1,0 +1,468 @@
+{
+  "story": {
+    "id": "S9",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Drive forge through the assistant"
+    },
+    "beats": [
+      {
+        "act": "Open Studio",
+        "say": "Nothing is running. Every one of S1 through S8 is something the operator can do with their own hands from here; this story hands the same work to the assistant instead, and the difference has to be visible in what it costs.",
+        "do": [],
+        "expect": {
+          "route": "/",
+          "data": {
+            "page": "home",
+            "page-ready": "true",
+            "section": "sessions-needing-you",
+            "active-session-count": "0"
+          }
+        }
+      },
+      {
+        "act": "Press \"View all sessions\"",
+        "say": "This is the spine, and it is S9’s whole subject: seven doors, one per session kind, and behind them the assistant-driven variant of most of the other eight stories. `fetch-status` is here on purpose — an empty list and an unreachable bridge are different facts and this page refuses to render them the same.",
+        "do": [
+          {
+            "press": "view-all-sessions"
+          }
+        ],
+        "expect": {
+          "route": "/sessions",
+          "data": {
+            "page": "sessions-index",
+            "page-ready": "true",
+            "session-count": "0",
+            "fetch-status": "ok"
+          }
+        }
+      },
+      {
+        "act": "Ask the assistant to do S7’s job — author a library component",
+        "say": "Same work as S7, different hands. The operator is not going to write the package, name its directory or check its frontmatter — they are going to say what they want and pay for a turn.",
+        "do": [
+          {
+            "press": "kickoff-authoring"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/authoring/new",
+          "data": {
+            "page": "session-kickoff",
+            "page-ready": "true",
+            "kickoff-kind": "authoring"
+          }
+        }
+      },
+      {
+        "act": "Point it at a project and tell it what to build",
+        "say": "The brief is the whole instruction — there is no second turn where the operator fills in what they meant. Every other kickoff kind takes its brief later; this one takes it here, because the agent has nothing else to go on.",
+        "do": [
+          {
+            "fill": "kickoff-project",
+            "with": "mdtoc"
+          },
+          {
+            "fill": "kickoff-prompt",
+            "with": "A skill that checks every relative link in a markdown file resolves to a real path in the repo, and reports the ones that do not with their line numbers."
+          }
+        ],
+        "expect": {
+          "route": "/sessions/authoring/new",
+          "data": {
+            "page": "session-kickoff",
+            "page-ready": "true",
+            "kickoff-kind": "authoring",
+            "action": "start-session",
+            "existing-count": "0",
+            "confirming": "false"
+          }
+        }
+      },
+      {
+        "act": "Set the SDK, the model and the effort this session will run on",
+        "say": "Three knobs is what §3 promises and one is what the page offers. Which model a turn runs on is the cheapest of the three to get right, and it is the only one an operator can touch — the SDK the session runs under and how hard it is allowed to think are decided somewhere the operator never sees.",
+        "do": [
+          {
+            "fill": "kickoff-model-tier-option",
+            "with": "opus"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/authoring/new",
+          "data": {
+            "page": "session-kickoff",
+            "page-ready": "true",
+            "kickoff-kind": "authoring",
+            "section": "kickoff-model-tier",
+            "model-tier-picker": "range",
+            "model-tier": "opus"
+          }
+        }
+      },
+      {
+        "act": "Start it",
+        "say": "From here the assistant is doing S7’s work: reading the project, drafting the package, and stopping at the approval S7’s operator would have reached by typing. The operator’s job for the next few minutes is to watch what it costs.",
+        "do": [
+          {
+            "press": "start-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/authoring/<authoringSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "authoring",
+            "session-phase": "working"
+          }
+        }
+      },
+      {
+        "act": "Check the session is running on the model the operator chose",
+        "say": "This is the one part of the promise that already works end to end: a choice made on the kickoff form is a fact the running session states about itself, not a hope. The other two knobs have nothing to state because nothing set them.",
+        "do": [],
+        "expect": {
+          "route": "/sessions/authoring/<authoringSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "authoring",
+            "component": "session-model-chip",
+            "model-tier": "opus"
+          }
+        }
+      },
+      {
+        "act": "Read what the session has cost so far",
+        "say": "A session the operator is paying for by the token should be able to say what it has spent, while it is spending it. This is the beat that decides whether \"cost is recorded\" means anything, and the operator asking the question has nowhere to look.",
+        "do": [],
+        "expect": {
+          "route": "/sessions/authoring/<authoringSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "authoring",
+            "ledger-cost-usd": "<authoringCostUsd>"
+          }
+        }
+      },
+      {
+        "act": "Go back to Studio’s front page",
+        "say": "One assistant working, counted in the one place the operator looks first. Beat 1 pinned this at zero for exactly this comparison.",
+        "do": [],
+        "expect": {
+          "route": "/",
+          "data": {
+            "page": "home",
+            "page-ready": "true",
+            "section": "sessions-needing-you",
+            "active-session-count": "1"
+          }
+        }
+      },
+      {
+        "act": "Press \"View all sessions\" and find it on the spine",
+        "say": "The spine lists what it started. Kind, project, phase, state, model tier, last update — six columns, and not one of them is money.",
+        "do": [
+          {
+            "press": "view-all-sessions"
+          }
+        ],
+        "expect": {
+          "route": "/sessions",
+          "data": {
+            "page": "sessions-index",
+            "page-ready": "true",
+            "session-count": "1",
+            "session-kind": "authoring",
+            "session-state": "working",
+            "needs-you": "false"
+          }
+        }
+      },
+      {
+        "act": "Ask the assistant to do S1’s job, and choose ITS model too",
+        "say": "Second variant, and the promise comes apart on it. One kind lets the operator pick a model and the next fixes it read-only — same spine, same form, same words on the page, opposite amount of control. \"Per session\" has to mean per session, or the operator has to know which kinds it is untrue for.",
+        "do": [
+          {
+            "press": "kickoff-onboarding"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/onboarding/new",
+          "data": {
+            "page": "session-kickoff",
+            "page-ready": "true",
+            "kickoff-kind": "onboarding",
+            "section": "kickoff-model-tier",
+            "model-tier-picker": "range"
+          }
+        }
+      },
+      {
+        "act": "Start it and let both of them run",
+        "say": "Two assistants now, on two different jobs, one of which the operator chose a model for and one of which chose for itself. Whatever else is true, they are both spending real money right now.",
+        "do": [
+          {
+            "fill": "kickoff-project",
+            "with": "mdtoc"
+          },
+          {
+            "press": "start-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/onboarding/<onboardingSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "onboarding"
+          }
+        }
+      },
+      {
+        "act": "Open the Monitor and read what the two of them cost",
+        "say": "The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever.",
+        "do": [],
+        "expect": {
+          "route": "/monitor",
+          "data": {
+            "page": "monitor",
+            "page-ready": "true",
+            "ledger-total": "2",
+            "section": "history-ledger",
+            "ledger-count": "2"
+          }
+        }
+      },
+      {
+        "act": "Read the authoring session’s own figure, against the ceiling it was given",
+        "say": "This is where S9 ends, on the one claim that makes the other eight stories affordable to run through an assistant at all: that the operator can see, per session, what they were charged for handing the work over. Until they can, \"ask the assistant to do it\" is a bill with no itemisation.",
+        "do": [],
+        "expect": {
+          "route": "/monitor",
+          "data": {
+            "page": "monitor",
+            "page-ready": "true",
+            "ledger-agent": "creation-agent",
+            "ledger-cost-usd": "<authoringCostUsd>"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio",
+      "say": "Nothing is running. Every one of S1 through S8 is something the operator can do with their own hands from here; this story hands the same work to the assistant instead, and the difference has to be visible in what it costs.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "home",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "sessions-needing-you",
+        "active-session-count": "0"
+      },
+      "frame": "frames/01-open-studio.png"
+    },
+    {
+      "act": "Press \"View all sessions\"",
+      "say": "This is the spine, and it is S9’s whole subject: seven doors, one per session kind, and behind them the assistant-driven variant of most of the other eight stories. `fetch-status` is here on purpose — an empty list and an unreachable bridge are different facts and this page refuses to render them the same.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "sessions-index",
+        "page-ready": "true",
+        "session-count": "0",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/02-press-view-all-sessions.png"
+    },
+    {
+      "act": "Ask the assistant to do S7’s job — author a library component",
+      "say": "Same work as S7, different hands. The operator is not going to write the package, name its directory or check its frontmatter — they are going to say what they want and pay for a turn.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring"
+      },
+      "frame": "frames/03-ask-the-assistant-to-do-s7-s-job-author-.png"
+    },
+    {
+      "act": "Point it at a project and tell it what to build",
+      "say": "The brief is the whole instruction — there is no second turn where the operator fills in what they meant. Every other kickoff kind takes its brief later; this one takes it here, because the agent has nothing else to go on.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring",
+        "action": "start-session",
+        "existing-count": "0",
+        "confirming": "false"
+      },
+      "frame": "frames/04-point-it-at-a-project-and-tell-it-what-t.png"
+    },
+    {
+      "act": "Set the SDK, the model and the effort this session will run on",
+      "say": "Three knobs is what §3 promises and one is what the page offers. Which model a turn runs on is the cheapest of the three to get right, and it is the only one an operator can touch — the SDK the session runs under and how hard it is allowed to think are decided somewhere the operator never sees.",
+      "status": "red",
+      "failures": [
+        "could not fill [data-field=\"kickoff-model-tier-option\"] with \"opus\": locator.fill: Error: Input of type \"radio\" cannot be filled\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"kickoff-model-tier-option\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <label data-field=\"kickoff-model-tier-option\">…</label>\u001b[22m\n\u001b[2m    - fill(\"opus\")\u001b[22m\n\u001b[2m  - attempting fill action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and editable\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "authoring"
+      },
+      "frame": "frames/05-set-the-sdk-the-model-and-the-effort-thi.png"
+    },
+    {
+      "act": "Start it",
+      "say": "From here the assistant is doing S7’s work: reading the project, drafting the package, and stopping at the approval S7’s operator would have reached by typing. The operator’s job for the next few minutes is to watch what it costs.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/authoring/<authoringSessionId>\" needs <authoringSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/06-start-it.png"
+    },
+    {
+      "act": "Check the session is running on the model the operator chose",
+      "say": "This is the one part of the promise that already works end to end: a choice made on the kickoff form is a fact the running session states about itself, not a hope. The other two knobs have nothing to state because nothing set them.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/authoring/<authoringSessionId>\" needs <authoringSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/07-check-the-session-is-running-on-the-mode.png"
+    },
+    {
+      "act": "Read what the session has cost so far",
+      "say": "A session the operator is paying for by the token should be able to say what it has spent, while it is spending it. This is the beat that decides whether \"cost is recorded\" means anything, and the operator asking the question has nowhere to look.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/authoring/<authoringSessionId>\" needs <authoringSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/08-read-what-the-session-has-cost-so-far.png"
+    },
+    {
+      "act": "Go back to Studio’s front page",
+      "say": "One assistant working, counted in the one place the operator looks first. Beat 1 pinned this at zero for exactly this comparison.",
+      "status": "red",
+      "failures": [
+        "data-active-session-count: expected \"1\", got \"0\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "home",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "section": "sessions-needing-you",
+        "active-session-count": "0"
+      },
+      "frame": "frames/09-go-back-to-studio-s-front-page.png"
+    },
+    {
+      "act": "Press \"View all sessions\" and find it on the spine",
+      "say": "The spine lists what it started. Kind, project, phase, state, model tier, last update — six columns, and not one of them is money.",
+      "status": "red",
+      "failures": [
+        "data-session-count: expected \"1\", got \"0\"",
+        "data-session-kind: expected \"authoring\", absent from the page",
+        "data-session-state: expected \"working\", absent from the page",
+        "data-needs-you: expected \"false\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "sessions-index",
+        "page-ready": "true",
+        "session-count": "0",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/10-press-view-all-sessions-and-find-it-on-t.png"
+    },
+    {
+      "act": "Ask the assistant to do S1’s job, and choose ITS model too",
+      "say": "Second variant, and the promise comes apart on it. One kind lets the operator pick a model and the next fixes it read-only — same spine, same form, same words on the page, opposite amount of control. \"Per session\" has to mean per session, or the operator has to know which kinds it is untrue for.",
+      "status": "red",
+      "failures": [
+        "data-model-tier-picker: expected \"range\", got \"fixed\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "session-kickoff",
+        "page-ready": "true",
+        "kickoff-kind": "onboarding",
+        "section": "kickoff-model-tier",
+        "model-tier-picker": "fixed"
+      },
+      "frame": "frames/11-ask-the-assistant-to-do-s1-s-job-and-cho.png"
+    },
+    {
+      "act": "Start it and let both of them run",
+      "say": "Two assistants now, on two different jobs, one of which the operator chose a model for and one of which chose for itself. Whatever else is true, they are both spending real money right now.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/onboarding/<onboardingSessionId>\" needs <onboardingSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/12-start-it-and-let-both-of-them-run.png"
+    },
+    {
+      "act": "Open the Monitor and read what the two of them cost",
+      "say": "The Monitor is where forge shows what it has spent, and it is honest about knowing nothing — an empty ledger, not a fabricated zero row. It is also the only place an operator could look, so a kind of work that never reaches it is a kind of work that costs an unknown amount forever.",
+      "status": "red",
+      "failures": [
+        "data-ledger-total: expected \"2\", got \"0\"",
+        "data-ledger-count: expected \"2\", got \"0\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "ledger-total": "0",
+        "fetch-status": "ok",
+        "section": "history-ledger",
+        "ledger-count": "0"
+      },
+      "frame": "frames/13-open-the-monitor-and-read-what-the-two-o.png"
+    },
+    {
+      "act": "Read the authoring session’s own figure, against the ceiling it was given",
+      "say": "This is where S9 ends, on the one claim that makes the other eight stories affordable to run through an assistant at all: that the operator can see, per session, what they were charged for handing the work over. Until they can, \"ask the assistant to do it\" is a bill with no itemisation.",
+      "status": "red",
+      "failures": [
+        "data-ledger-agent: expected \"creation-agent\", absent from the page",
+        "data-ledger-cost-usd: expected \"<authoringCostUsd>\", absent from the page"
+      ],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/14-read-the-authoring-session-s-own-figure-.png"
+    }
+  ]
+}
