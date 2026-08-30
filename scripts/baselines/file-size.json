@@ -65,7 +65,6 @@
   "orchestrator/demo-builder-skill-prompt.test.ts": 803,
   "orchestrator/failure-classifier.test.ts": 1235,
   "orchestrator/flow-runner.test.ts": 1523,
-  "orchestrator/flow-runner.ts": 1608,
   "orchestrator/interactive-finalizers.test.ts": 1255,
   "orchestrator/interactive-runner.test.ts": 1848,
   "orchestrator/interactive-runner.ts": 883,

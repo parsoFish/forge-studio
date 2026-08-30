@@ -22,10 +22,10 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 224 |
+| `verbatim` | moves unchanged | 220 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 5 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 11 |
-| `deleted` | not carried forward | 1 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 14 |
+| `deleted` | not carried forward | 8 |
 
 ## Per-package LOC caps
 
@@ -42,7 +42,7 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 22 | 7,841 | **8,000** | seeded from the quarried total, rounded up to the next 500. |
 | `agents` | 30 | 8,798 | **9,000** | seeded from the quarried total, rounded up to the next 500. |
 | `sessions` | 20 | 13,078 | **13,500** | seeded from the quarried total, rounded up to the next 500. |
-| `flows` | 58 | 22,131 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
+| `flows` | 62 | 22,199 | **22,500** | seeded from the quarried total, rounded up to the next 500. |
 | `factory` | 35 | 12,044 | **12,500** | seeded from the quarried total, rounded up to the next 500. This package is deletable; its cap is a ceiling on the EXAMPLE, not on the platform. |
 | `apps/forge` | 4 | 10,089 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
@@ -76,7 +76,7 @@ operator-ratified new cap — never a silent raise.
 | `cli/studio-provenance.ts` | `kernel` | 54 | a 54-line pure mapping whose ONLY test is a 642-line bridge integration test that imports `ui-bridge.ts`; the test cannot follow it into a package without dragging the bridge across the boundary, and a kernel module with no package-level test is the shape this campaign exists to stop. Needs its pure-mapping test extracted from the integration test first |
 | `cli/ui-bridge.ts` | `apps/forge` | 6,602 | the 6,602-line host: agent spawn, session index and authoring routes in one file |
 | `orchestrator/band-agent-run.ts` | `agents` | 242 | generic band dispatch that hardcodes two `orchestrator/phases/` imports — the port must exist first |
-| `orchestrator/flow-runner.ts` | `flows` | 1,608 | imports ten phases directly; M2-B replaces them with the `PhaseExecutor` port |
+| `orchestrator/flow-runner.ts` | `flows` | 615 | M2-B replaced its ten phase imports with the `PhaseExecutor` port; the table it shed is `phases/executor-{table,deps}.ts` |
 | `orchestrator/project-brain-builder-runner.ts` | `knowledge` | 448 | a knowledge concern wrapped in the sessions turn-loop plumbing it must shed |
 | `orchestrator/studio/registry.ts` | `kernel` | 1,180 | one loader for Agent, Flow, KB, Catalog, Community, Template and Project — five packages in one file |
 | `orchestrator/studio/validate.ts` | `kernel` | 1,066 | the same five-way split on the validation side |
@@ -85,6 +85,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | disposition | LOC | what is dropped |
 |---|---|---|---|---|
+| `cli/preflight.ts` | `projects` | `pruned` | 1,135 | M2-B moved its four pure report types (`ClauseId`, `ClauseResult`, `PreflightReport`, `PreflightOptions`) to `packages/kernel/project-contract.ts`, because the `ProjectGate` port declares them and flows may not import this file (SPEC.md §6); the module re-exports them |
 | `orchestrator/brain-paths.ts` | `knowledge` | `pruned` | 141 | the project-side `.forge/` artifact-root read goes to `projects` |
 | `orchestrator/cli.ts` | `apps/forge` | `pruned` | 998 | every subcommand body goes to the package that owns it; only the router stays |
 | `orchestrator/flow-artifacts.ts` | `flows` | `pruned` | 437 | the develop-flow-specific artifact schemas go to `factory` |
@@ -149,7 +150,7 @@ operator-ratified new cap — never a silent raise.
 | cli/metrics.ts | flows | verbatim | 142 |
 | cli/preflight-fix-auto.ts | projects | verbatim | 171 |
 | cli/preflight-resolve.ts | projects | verbatim | 67 |
-| cli/preflight.ts | projects | verbatim | 1135 |
+| cli/preflight.ts | projects | pruned | 1135 |
 | cli/project-migrate.ts | projects | verbatim | 197 |
 | cli/reflect-reconcile.ts | factory | verbatim | 167 |
 | cli/reflection-doc.ts | factory | verbatim | 354 |
@@ -209,7 +210,9 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/flow-artifacts.ts | flows | pruned | 437 |
 | orchestrator/flow-budgets.ts | flows | verbatim | 450 |
 | orchestrator/flow-run-requests.ts | flows | verbatim | 397 |
-| orchestrator/flow-runner.ts | flows | rewritten | 1608 |
+| orchestrator/flow-node-context.ts | flows | verbatim | 51 |
+| orchestrator/flow-node-kind.ts | flows | verbatim | 66 |
+| orchestrator/flow-runner.ts | flows | rewritten | 615 |
 | orchestrator/flow-trigger.ts | flows | verbatim | 214 |
 | orchestrator/gate-fix-loop.ts | flows | verbatim | 163 |
 | orchestrator/gate-recipes.ts | projects | verbatim | 146 |
@@ -233,6 +236,8 @@ operator-ratified new cap — never a silent raise.
 | orchestrator/phases/adversarial-review.ts | factory | verbatim | 393 |
 | orchestrator/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | orchestrator/phases/closure.ts | flows | verbatim | 438 |
+| orchestrator/phases/executor-deps.ts | flows | rewritten | 273 |
+| orchestrator/phases/executor-table.ts | flows | rewritten | 671 |
 | orchestrator/phases/decompose-completeness.ts | factory | verbatim | 197 |
 | orchestrator/phases/demo-agent-binding.ts | factory | verbatim | 214 |
 | orchestrator/phases/demo-agent.ts | factory | verbatim | 740 |

@@ -13,7 +13,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { flowPathForId, resolveNodeKind } from './flow-runner.ts';
+import { runFlowT, type TestDeps, type TestDepsPartial, type EnqueueFlowRun, type NodeExecutor, type FlowRunnerDeps } from './test-fixtures/flow-runner-port.ts';
 import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from './flow-run-requests.ts';
 import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { parseManifest } from './manifest.ts';
@@ -68,7 +69,7 @@ function makeCallTracker() {
 }
 
 /** Build a complete FlowRunnerDeps set where all fns are call-tracking spies. */
-function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
+function makeMockDeps(tracker: { calls: string[] }): TestDeps {
   return {
     runProjectManager: async (_input, _logger) => {
       tracker.calls.push('runProjectManager');
@@ -113,7 +114,6 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     assertNonEmptyDelivery: (_outcome, _id, _wt, _logger) => { /* no-op */ },
     enforceFinalCiGate: (_input, _logger) => { /* no-op */ },
     rebaseForResume: (_input, _logger) => { tracker.calls.push('rebaseForResume'); },
-    // Trigger enqueue — no-op in tests; trigger-specific tests inject a spy
     enqueueFlowRun: (_flowId, _opts) => { /* no-op */ },
   };
 }
@@ -170,7 +170,7 @@ describe('flow-runner nodeExecutors override', () => {
     const customCalls: string[] = [];
     const customReview: NodeExecutor = async () => { customCalls.push('custom-review'); };
 
-    await runFlow({ flow, input, logger, deps, nodeExecutors: { review: customReview } });
+    await runFlowT({ flow, input, logger, deps, nodeExecutors: { review: customReview } });
 
     assert.deepEqual(customCalls, ['custom-review'], 'the injected review executor must run');
     assert.ok(!tracker.calls.includes('openPrInline'), 'the default review executor (openPrInline) must be bypassed');
@@ -207,7 +207,7 @@ describe('flow-runner full run', () => {
     deps.runClosure = async (inp, logger, ro) => { seenInputs.push(inp); return origClosure(inp, logger, ro); };
     deps.runReflector = async (inp, logger) => { seenInputs.push(inp); return origReflect(inp, logger); };
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     // Correct sequence: architect node is a silent marker — no dep call.
     // The unifier node was retired from this fixture (R4-01-F4) — review runs
@@ -252,7 +252,7 @@ describe('flow-runner full run', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
-    const result = await runFlow({ flow, input, logger, deps });
+    const result = await runFlowT({ flow, input, logger, deps });
 
     assert.strictEqual(result.cycleOutcome, 'merged');
     assert.strictEqual(result.reflectionStatus, 'complete');
@@ -274,7 +274,7 @@ describe('flow-runner resumeFrom=demo', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on a demo resume');
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs on resume (self-no-ops per-WI, emits start/end{resumed:true})');
@@ -302,7 +302,7 @@ describe('flow-runner resumeFrom=demo', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.ok(tracker.calls.includes('openPrInline'));
     assert.ok(tracker.calls.includes('runClosure'));
@@ -330,7 +330,7 @@ describe('flow-runner reflect skipped when not merged', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
-    const result = await runFlow({ flow, input, logger, deps });
+    const result = await runFlowT({ flow, input, logger, deps });
 
     assert.ok(!tracker.calls.includes('runReflector'), 'runReflector must NOT be called when merged:false');
     assert.ok(
@@ -364,7 +364,7 @@ describe('flow-runner reflect throw → cycle.reflection-lost (2.10)', () => {
     const flow = makeForgeCycleFlow();
 
     await assert.rejects(
-      () => runFlow({ flow, input, logger, deps }),
+      () => runFlowT({ flow, input, logger, deps }),
       /ECONNRESET/,
       'the throw must still propagate — instrument-only, no swallowed failures',
     );
@@ -423,7 +423,7 @@ describe('flow-runner with real forge-architect.yaml', () => {
     const input = makeInput();
     const logger = makeLogger();
 
-    const result = await runFlow({ flow, input, logger, deps });
+    const result = await runFlowT({ flow, input, logger, deps });
 
     // Architect is a silent marker; pm runs; no dev/unifier/review/reflect.
     assert.deepEqual(tracker.calls, ['runProjectManager'],
@@ -481,7 +481,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const input = makeInput();
     const logger = makeLogger();
 
-    const result = await runFlow({ flow, input, logger, deps });
+    const result = await runFlowT({ flow, input, logger, deps });
 
     // dev → demo (pipeline + relocated delivery stats/gates) → adversarial-review
     // → verdict(openPr → closure). No unifier/pm/architect/reflect.
@@ -510,7 +510,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const input = makeInput({ resumeFrom: 'develop' });
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     // The dev node (execDev → the ONE develop executor) re-dispatches; the demo
     // node re-authors demo.json + the PR body; the verdict re-presents. No
@@ -536,7 +536,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const input = makeInput({ resumeFrom: 'demo' });
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a demo resume)');
     assert.ok(tracker.calls.includes('runDemoAgent'), 'the demo node re-authors the bundle (the resume target now)');
@@ -557,7 +557,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const input = makeInput();
     const logger = makeLogger();
 
-    await assert.rejects(runFlow({ flow, input, logger, deps }), /delivery gate: demo pipeline failed/);
+    await assert.rejects(runFlowT({ flow, input, logger, deps }), /delivery gate: demo pipeline failed/);
     assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed demo');
     assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed demo');
   });
@@ -596,7 +596,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       const input = makeInput({ initiativeId: 'INIT-2026-08-02-mg', worktreePath: wt, projectRepoPath: wt, manifestPath, qualityGateCmd: ['npm', 'test'], dryRun: false });
       const logger = makeLogger();
 
-      await runFlow({ flow, input, logger, deps });
+      await runFlowT({ flow, input, logger, deps });
 
       // No demo, no adversarial review, NO PR — a red baseline never merges.
       assert.ok(!tracker.calls.includes('runDemoAgent'), 'demo does not run on a red merge-gate');
@@ -634,7 +634,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const input = makeInput();
     const logger = makeLogger();
 
-    await assert.rejects(runFlow({ flow, input, logger, deps }), /adversarial review pipeline failed/);
+    await assert.rejects(runFlowT({ flow, input, logger, deps }), /adversarial review pipeline failed/);
     assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens when the review pipeline failed');
   });
 });
@@ -670,7 +670,7 @@ describe('flow-runner wedge-kill race', () => {
 
     let capturedSignal: AbortSignal | undefined;
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async (_inp, nodeLogger, sig) => {
         capturedSignal = sig;
         // Emit a heartbeat to seed the WedgeDetector (starts the progress clock).
@@ -703,7 +703,7 @@ describe('flow-runner wedge-kill race', () => {
     ]);
 
     await assert.rejects(
-      () => runFlow({ flow, input, logger, deps, nodeBudgets }),
+      () => runFlowT({ flow, input, logger, deps, nodeBudgets }),
       (err: unknown) => {
         assert.ok(err instanceof WedgeKillError, `expected WedgeKillError, got ${String(err)}`);
         assert.strictEqual(err.nodeId, 'pm');
@@ -728,7 +728,7 @@ describe('flow-runner wedge-kill race', () => {
     const input = makeInput();
     const logger = makeLogger();
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async (_inp, nodeLogger, _sig) => {
         // Heartbeat → tool progress → resolve after short delay.
         nodeLogger.emit({
@@ -763,7 +763,7 @@ describe('flow-runner wedge-kill race', () => {
 
     // Must NOT throw — tool progress reset the clock so wedge never fires.
     await assert.doesNotReject(
-      () => runFlow({ flow, input, logger, deps, nodeBudgets }),
+      () => runFlowT({ flow, input, logger, deps, nodeBudgets }),
     );
   });
 
@@ -774,7 +774,7 @@ describe('flow-runner wedge-kill race', () => {
 
     let capturedSignal: AbortSignal | undefined | 'not-called' = 'not-called';
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async (_inp, _logger, sig) => {
         capturedSignal = sig;
       },
@@ -786,7 +786,7 @@ describe('flow-runner wedge-kill race', () => {
     };
 
     // No nodeBudgets → wedgeDetector.active === false → no race, signal is undefined.
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.strictEqual(capturedSignal, undefined, 'signal must be undefined when wedgeKillMs is not set');
   });
@@ -831,7 +831,7 @@ describe('flow-runner trigger firing', () => {
     const input = makeInput();
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when triggers is empty');
   });
@@ -840,7 +840,7 @@ describe('flow-runner trigger firing', () => {
     const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'retro-flow' } }]);
     const enqueueCalls: Array<{ flowId: string; opts: { origin: string; triggeredBy: string } }> = [];
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async () => { /* no-op */ },
       commitDevLoopBoundary: () => { /* no-op */ },
       enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -853,7 +853,7 @@ describe('flow-runner trigger firing', () => {
     const input = makeInput();
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.equal(enqueueCalls.length, 1, 'enqueueFlowRun must be called exactly once');
     assert.equal(enqueueCalls[0].flowId, 'retro-flow');
@@ -865,7 +865,7 @@ describe('flow-runner trigger firing', () => {
     const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'retro-flow' } }]);
     const enqueueCalls: string[] = [];
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async () => { throw new Error('pm-failed'); },
       commitDevLoopBoundary: () => { /* no-op */ },
       enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -879,7 +879,7 @@ describe('flow-runner trigger firing', () => {
     const logger = makeLogger();
 
     await assert.rejects(
-      () => runFlow({ flow, input, logger, deps }),
+      () => runFlowT({ flow, input, logger, deps }),
       /pm-failed/,
     );
 
@@ -893,7 +893,7 @@ describe('flow-runner trigger firing', () => {
     ]);
     const enqueueCalls: string[] = [];
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       runProjectManager: async () => { /* no-op */ },
       commitDevLoopBoundary: () => { /* no-op */ },
       enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -906,7 +906,7 @@ describe('flow-runner trigger firing', () => {
     const input = makeInput();
     const logger = makeLogger();
 
-    await runFlow({ flow, input, logger, deps });
+    await runFlowT({ flow, input, logger, deps });
 
     assert.deepEqual(enqueueCalls.sort(), ['retro-flow', 'other-flow'].sort());
   });
@@ -952,7 +952,7 @@ describe('flow-runner trigger firing', () => {
   /** The BUG-2 fix: forwards the WHOLE opts object structurally (minus
    *  `targetKind`, which builds `target` rather than riding along itself) —
    *  never enumerates field names, so it cannot silently drop a future one. */
-  function makeQueueRootEnqueueFlowRun(queueRoot: string): FlowRunnerDeps['enqueueFlowRun'] {
+  function makeQueueRootEnqueueFlowRun(queueRoot: string): EnqueueFlowRun {
     return (flowId, opts) => {
       const { targetKind, ...rest } = opts;
       stageFlowRunRequest(
@@ -990,7 +990,7 @@ describe('flow-runner trigger firing', () => {
 
     const queueRoot = mkdtempSync(join(tmpdir(), 'flow-runner-real-path-queue-'));
     try {
-      const deps: Partial<FlowRunnerDeps> = {
+      const deps: TestDepsPartial = {
         runProjectManager: async () => { /* no-op */ },
         commitDevLoopBoundary: () => { /* no-op */ },
         enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -1003,7 +1003,7 @@ describe('flow-runner trigger firing', () => {
       const input = makeInput({ projectRepoPath: '/tmp/test/gitpulse' });
       const logger = makeLogger();
 
-      await runFlow({ flow, input, logger, deps });
+      await runFlowT({ flow, input, logger, deps });
 
       // Stage-time: ALL THREE must land in the queue — no filtering at the
       // fire site. This is the assertion that must currently FAIL: today the
@@ -1100,7 +1100,7 @@ describe('flow-runner trigger firing', () => {
         path: '/fake/trigger-test-n1.yaml',
       };
 
-      const deps: Partial<FlowRunnerDeps> = {
+      const deps: TestDepsPartial = {
         runProjectManager: async () => { /* no-op */ },
         commitDevLoopBoundary: () => { /* no-op */ },
         enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -1116,7 +1116,7 @@ describe('flow-runner trigger firing', () => {
       const input = makeInput({ projectRepoPath: join(projectsRoot, rawDirName) });
       const logger = makeLogger();
 
-      await runFlow({ flow, input, logger, deps });
+      await runFlowT({ flow, input, logger, deps });
 
       const staged = listFlowRunRequests({ queueRoot });
       assert.equal(staged.length, 1, 'expected the single trigger to stage');
@@ -1182,7 +1182,7 @@ describe('single-node flow with an unknown agent — graceful skip', () => {
     const logger = makeLogger();
     const enqueueCalls: string[] = [];
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       enqueueFlowRun: (flowId, _opts) => { enqueueCalls.push(flowId); },
       // No other deps needed — single node, no cycle executors involved.
       commitDevLoopBoundary: () => { /* no-op */ },
@@ -1192,7 +1192,7 @@ describe('single-node flow with an unknown agent — graceful skip', () => {
       rebaseForResume: () => { /* no-op */ },
     };
 
-    const result = await runFlow({ flow, input, logger, deps });
+    const result = await runFlowT({ flow, input, logger, deps });
 
     // No gate/closure → cycleOutcome stays at its initial 'ready-for-review'.
     assert.strictEqual(result.cycleOutcome, 'ready-for-review');
@@ -1252,7 +1252,7 @@ describe('single-node flow with a generic (non-legacy, no-executor) agent — ex
     const input = makeInput();
     const logger = makeLogger();
 
-    const deps: Partial<FlowRunnerDeps> = {
+    const deps: TestDepsPartial = {
       enqueueFlowRun: () => { /* no-op */ },
       commitDevLoopBoundary: () => { /* no-op */ },
       enforceDevLoopCloseInvariant: () => { /* no-op */ },
@@ -1273,7 +1273,7 @@ describe('single-node flow with a generic (non-legacy, no-executor) agent — ex
     const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
     process.env.FORGE_DRY_BRIDGE = '1';
     try {
-      const result = await runFlow({ flow, input, logger, deps });
+      const result = await runFlowT({ flow, input, logger, deps });
 
       assert.strictEqual(result.cycleOutcome, 'ready-for-review');
 
@@ -1458,7 +1458,7 @@ describe('flow-runner per-run cost ceiling override', () => {
   it('flow ceiling stops the run when no override is supplied ($8 spent ≥ $5 flow ceiling)', async () => {
     const flow = { ...makePmOnlyFlow(), costCeilingUsd: 5 };
     await assert.rejects(
-      () => runFlow({ flow, input: makeInput(), logger: makeLogger(), deps: depsEmittingCost(8) }),
+      () => runFlowT({ flow, input: makeInput(), logger: makeLogger(), deps: depsEmittingCost(8) }),
       (err: unknown) => err instanceof CostCeilingError && err.ceilingUsd === 5,
     );
   });
@@ -1467,7 +1467,7 @@ describe('flow-runner per-run cost ceiling override', () => {
     const flow = { ...makePmOnlyFlow(), costCeilingUsd: 5 };
     const logger = makeLogger();
     // $8 spent; flow ceiling $5 would stop, but the $1000 override wins → completes.
-    await runFlow({ flow, input: makeInput(), logger, deps: depsEmittingCost(8), costCeilingUsd: 1000 });
+    await runFlowT({ flow, input: makeInput(), logger, deps: depsEmittingCost(8), costCeilingUsd: 1000 });
     const stops = logger.events.filter((e) => (e as { message?: string }).message === 'flow.cost-ceiling-stop');
     assert.strictEqual(stops.length, 0, 'no cost-ceiling-stop when the override raises the ceiling above spend');
   });
@@ -1499,7 +1499,7 @@ describe('flow-runner fan-out enforcement (G6)', () => {
     };
 
     await assert.rejects(
-      () => runFlow({ flow, input: makeInput(), logger, deps }),
+      () => runFlowT({ flow, input: makeInput(), logger, deps }),
       /fanOut/,
     );
 
@@ -1516,7 +1516,7 @@ describe('flow-runner fan-out enforcement (G6)', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow(); // 'dev' fanOut:'work-items' is fed by pm→dev artifact:'work-items'
 
-    await runFlow({ flow, input: makeInput(), logger, deps });
+    await runFlowT({ flow, input: makeInput(), logger, deps });
 
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'a legally-fed fanOut node must still run');
   });

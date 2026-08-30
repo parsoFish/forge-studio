@@ -8,6 +8,7 @@
  */
 
 import type { CycleOutcome } from '@forge/contracts';
+import type { PreflightOptions, PreflightReport } from './project-contract.ts';
 
 /**
  * SPEC.md §2 Station: "The runner holds the port, not the phases. A station is
@@ -21,6 +22,16 @@ import type { CycleOutcome } from '@forge/contracts';
  */
 export interface PhaseExecutor<Ctx = unknown> {
   run(nodeId: string, ctx: Ctx): Promise<CycleOutcome>;
+}
+
+/**
+ * SPEC.md §6 Project: "Flows reach the preflight through a port.
+ * `ProjectGate { runPreflight }` is injected; a flow does not import the
+ * project package." The preflight is pure — it returns a structured report and
+ * runs no quality gate — so the port is one call and no lifecycle.
+ */
+export interface ProjectGate {
+  runPreflight(projectDir: string, opts?: PreflightOptions): PreflightReport;
 }
 
 /** What a band contributes: a pre/post band around the generic spawn (ADR 039). */

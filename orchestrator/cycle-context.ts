@@ -267,7 +267,20 @@ export type ReviewerOutcome = 'pr-open' | 'ready-for-review';
  * the `PhaseExecutor` port (SPEC.md §2), which lives in kernel and may not
  * import this module.
  */
-export type { CycleOutcome } from './_pkg/contracts.ts';
+import type { CycleOutcome } from './_pkg/contracts.ts';
+export type { CycleOutcome };
+
+/**
+ * What the closure step returns. It lives here, not in `phases/closure.ts`,
+ * because the flow runner's per-node state carries it and the runner must not
+ * import a phase (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station).
+ */
+export type ClosureResult = {
+  /** Final cycle outcome after folding in the operator-merge confirmation. */
+  outcome: CycleOutcome;
+  /** True iff `gh pr view` reported MERGED (the ONLY merge signal). */
+  merged: boolean;
+};
 
 /**
  * Brain-first runtime gate. CLAUDE.md and every SKILL.md require each phase's
