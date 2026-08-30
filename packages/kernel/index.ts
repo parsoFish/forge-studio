@@ -23,3 +23,6 @@ export * from './config.ts';
 export * from './init.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+
+/** The ports M2-B cuts, and the closed band registry (SPEC.md §2 Station). */
+export * from './ports.ts';
