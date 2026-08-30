@@ -1,0 +1,13 @@
+{
+  "name": "@forge/agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Running ONE agent: dispatch, band guards, the Ralph loop and its stop conditions, the adapter registry, the per-spawn runtime.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@forge/projects",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The project contract: config, preflight clauses, contract stages, create, repo transactions.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@forge/factory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "THE example: the develop flow, its agents and SKILL.mds, its artifact templates, its class-to-gate table. Deleting this package leaves `forge studio` bootable.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

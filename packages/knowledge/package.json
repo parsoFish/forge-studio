@@ -1,0 +1,13 @@
+{
+  "name": "@forge/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "KbBackend, brain paths, index, lint, fix, drain, consolidate, the theme frontmatter contract.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

@@ -12,6 +12,8 @@
     "node": ">=20"
   },
   "workspaces": [
+    "packages/*",
+    "apps/*",
     "forge-ui"
   ],
   "scripts": {

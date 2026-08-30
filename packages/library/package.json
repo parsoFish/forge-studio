@@ -1,0 +1,13 @@
+{
+  "name": "@forge/library",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Skills, hooks, connections, templates, seeds, community: author, scan, approve, list.",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}
