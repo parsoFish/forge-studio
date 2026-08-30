@@ -43,6 +43,12 @@ export function fixturePathsFor(storyId, root) {
     join(root, '_queue', 'in-flight', `STORY-${storyId}.md`),
     join(root, '_queue', 'failed', `STORY-${storyId}.md`),
     join(root, '_logs', `STORY-${storyId}`),
+    // A story that onboards a project owns that project — the repo AND the
+    // Brain 3 profile onboarding scaffolds beside it. The `story-` prefix is
+    // reserved and no real project carries it, so a story named after its own
+    // ground can never delete the repo it exists to prove things about.
+    join(root, 'projects', `story-${storyId}`),
+    join(root, 'brain', 'projects', `story-${storyId}`),
   ];
 }
 

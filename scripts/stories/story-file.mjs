@@ -24,6 +24,51 @@ function requireNonEmptyString(value, field) {
 }
 
 /**
+ * Validate a beat's `do` — the ordered list of what the operator DOES on the
+ * page they are standing on, before this beat's state is judged.
+ *
+ * Ordered, and one action per step, because S1 beat 3 presses the Advanced
+ * toggle BETWEEN two fills: `{fill: {...}, press: '...'}` cannot say that, and
+ * a step doing two things reintroduces the ambiguity the array removes.
+ *
+ * A step names a `data-field` or a `data-action` VALUE — forge-ui's own
+ * declared contract (`docs/forge-ui-dom-and-harness.md`), the same vocabulary
+ * `expect.data` reads. Never a CSS selector: a story that names markup is
+ * coupled to markup, which §3.1 deliberately avoids.
+ *
+ * Absent means an empty list, not undefined — every story authored before this
+ * existed omits it, and downstream must not have to test for undefined.
+ */
+function validateDoSteps(raw, at) {
+  if (raw === undefined) return Object.freeze([]);
+  if (!Array.isArray(raw)) fail(`${at}.do`, `expected an array of steps, got ${JSON.stringify(raw)}`);
+
+  return Object.freeze(
+    raw.map((step, i) => {
+      const where = `${at}.do[${i}]`;
+      if (step === null || typeof step !== 'object') fail(where, 'expected an object');
+      const isFill = Object.hasOwn(step, 'fill');
+      const isPress = Object.hasOwn(step, 'press');
+      if (isFill === isPress) {
+        fail(where, `expected exactly one of {fill, with} or {press}, got ${JSON.stringify(step)}`);
+      }
+      if (isPress) {
+        requireNonEmptyString(step.press, `${where}.press`);
+        return Object.freeze({ press: step.press });
+      }
+      requireNonEmptyString(step.fill, `${where}.fill`);
+      // `with` is checked as a string, not for truthiness: clearing a field to
+      // "" is a real operator action, and coercing a missing value to "" would
+      // silently type nothing into a required field.
+      if (typeof step.with !== 'string') {
+        fail(`${where}.with`, `expected a string value to fill, got ${JSON.stringify(step.with)}`);
+      }
+      return Object.freeze({ fill: step.fill, with: step.with });
+    }),
+  );
+}
+
+/**
  * Validate a raw story object and return a deep-frozen structural copy.
  * Never returns, and never mutates, the input.
  */
@@ -80,6 +125,7 @@ export function validateStory(raw) {
     return Object.freeze({
       act: b.act,
       say: b.say,
+      do: validateDoSteps(b.do, at),
       expect: Object.freeze({ route: e.route, data: Object.freeze({ ...e.data }) }),
     });
   });

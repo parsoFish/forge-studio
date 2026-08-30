@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beatVerdict } from './beats.mjs';
+import { beatVerdict, resolveBeatRoute, stuckVerdict } from './beats.mjs';
 
 const beat = {
   act: 'Click through to the Projects pillar',
@@ -145,4 +145,171 @@ test('fetch-status "ok" and "loading" are not treated as errors', () => {
     data: { 'page-ready': 'true', 'project-count': '3', 'fetch-status': 'ok' },
   });
   assert.equal(ok.status, 'green');
+});
+
+// ── M1-F: nested `data-*` and prior-beat route segments (bead forge-8vfn.2.17)
+//
+// `docs/forge-ui-dom-and-harness.md` states that nested `data-*` IS the
+// contract — the project card is
+// `a[data-card-type="project"][data-card-id][data-health]`, not an attribute of
+// `main[data-page]`. The shipped reader queried `main[data-page]` only, so the
+// runner's read scope was narrower than the contract it judged, and S1 beat 1
+// reported "absent from the page" about state the page plainly rendered.
+//
+// The split is deliberate: the READER stays value-blind (it collects by key),
+// and every value judgement lives here, in the pure function.
+
+const cardBeat = {
+  act: 'Open Studio on the Projects pillar',
+  expect: {
+    route: '/projects',
+    data: { page: 'projects-index', 'card-id': 'gitweave', health: 'attention' },
+  },
+  say: 'GitWeave is discovered from disk but needs attention.',
+};
+
+// The live DOM of `/projects`, booted from this lane's worktree on 2026-08-30.
+const liveProjectsIndex = {
+  route: '/projects',
+  data: { page: 'projects-index' },
+  nested: [
+    { 'card-id': 'gitweave', health: 'attention' },
+    { 'card-id': 'mdtoc', health: 'healthy' },
+  ],
+};
+
+test('a data-* expectation the page renders on a NESTED element is satisfied', () => {
+  // Kills the shipped reader's scope: `card-id` and `health` live on the card,
+  // never on `main`, and reporting them absent is a false red about the harness
+  // dressed as a product gap.
+  const v = beatVerdict(cardBeat, liveProjectsIndex);
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('nested expectations must be satisfied by ONE element, not assembled from two', () => {
+  // Kills per-key existential matching. With gitweave healthy and mdtoc needing
+  // attention, "the gitweave card needs attention" is FALSE, but a reader that
+  // answers each key independently reports it true — the fail-open shape this
+  // module exists to prevent, one layer down from the root.
+  const v = beatVerdict(cardBeat, {
+    route: '/projects',
+    data: { page: 'projects-index' },
+    nested: [
+      { 'card-id': 'gitweave', health: 'healthy' },
+      { 'card-id': 'mdtoc', health: 'attention' },
+    ],
+  });
+  assert.equal(v.status, 'red');
+});
+
+test('a nested expectation nothing on the page carries is still red, and says absent', () => {
+  const v = beatVerdict(cardBeat, { route: '/projects', data: { page: 'projects-index' }, nested: [] });
+  assert.equal(v.status, 'red');
+  assert.ok(v.failures.some((f) => /card-id.*absent from the page/.test(f)), v.failures.join(' | '));
+});
+
+test('main\'s own attribute still wins over a nested element carrying the same key', () => {
+  // The page root is the page's own statement about itself. A nested element
+  // must never be able to overrule it — that would let a stale card satisfy a
+  // page-level assertion.
+  const v = beatVerdict(
+    { ...cardBeat, expect: { route: '/projects', data: { page: 'projects-index' } } },
+    { route: '/projects', data: { page: 'projects-index' }, nested: [{ page: 'not-found' }] },
+  );
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+test('an observation with no nested records at all behaves exactly as before', () => {
+  // Every story authored before this lane, and every beat asserting only
+  // page-root state, must be judged identically.
+  const v = beatVerdict(beat, { route: '/projects', data: { 'page-ready': 'true', 'project-count': '3' } });
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+});
+
+// ── Binding a route segment a prior beat produced.
+//
+// The pinned S1 already writes the convention: beat 4 declares
+// `'onboard-session-id': '<sessionId>'` and beats 5-6 route
+// `/sessions/onboarding/<sessionId>`. The shipped shape is that one.
+
+const bindBeat = {
+  act: 'Press "Run onboarding agent"',
+  expect: { route: '/projects/gitweave', data: { 'onboard-session-id': '<sessionId>' } },
+  say: 'An Agent fills the contract in.',
+};
+
+test('a <name> expectation is satisfied by any value and binds it for later beats', () => {
+  const v = beatVerdict(bindBeat, {
+    route: '/projects/gitweave',
+    data: {},
+    nested: [{ 'onboard-session-id': 'onb-7f3c1a' }],
+  });
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.equal(v.bindings.sessionId, 'onb-7f3c1a');
+});
+
+test('a <name> expectation the page answers with an EMPTY value is red, not bound', () => {
+  // Kills "any value at all": an id attribute rendered as "" is a product that
+  // minted nothing, and binding it would put an empty segment in a later route.
+  const v = beatVerdict(bindBeat, { route: '/projects/gitweave', data: { 'onboard-session-id': '' }, nested: [] });
+  assert.equal(v.status, 'red');
+  assert.deepEqual(v.bindings, {});
+});
+
+test('a <name> expectation the page does not render at all is red and says absent', () => {
+  const v = beatVerdict(bindBeat, { route: '/projects/gitweave', data: {}, nested: [] });
+  assert.equal(v.status, 'red');
+  assert.ok(v.failures.some((f) => /onboard-session-id.*absent/.test(f)), v.failures.join(' | '));
+});
+
+test('resolveBeatRoute substitutes a segment an earlier beat bound', () => {
+  const beat5 = { ...bindBeat, expect: { route: '/sessions/onboarding/<sessionId>', data: { page: 'session' } } };
+  const r = resolveBeatRoute(beat5, { sessionId: 'onb-7f3c1a' });
+  assert.equal(r.route, '/sessions/onboarding/onb-7f3c1a');
+  assert.equal(r.unbound, null);
+});
+
+test('resolveBeatRoute refuses a placeholder no earlier beat bound, naming it', () => {
+  // Kills a silent literal: navigating to the text "/sessions/demo/<demoSessionId>"
+  // would 404 and the beat would blame the product for a story-authoring gap.
+  const beat7 = { ...bindBeat, expect: { route: '/sessions/demo/<demoSessionId>', data: { page: 'session' } } };
+  const r = resolveBeatRoute(beat7, { sessionId: 'onb-7f3c1a' });
+  assert.equal(r.unbound, 'demoSessionId');
+});
+
+test('resolveBeatRoute leaves a route with no placeholder untouched', () => {
+  const r = resolveBeatRoute(beat, {});
+  assert.equal(r.route, '/projects');
+  assert.equal(r.unbound, null);
+});
+
+test('a beat that never reached its page exports NO bindings', () => {
+  // A beat can be red for three reasons that all leave the browser on the
+  // PREVIOUS page: a `do` step that could not act, no real-nav path, and a
+  // control that was not actionable. All three read that previous page to
+  // report it honestly — and must not export a `<name>` binding harvested
+  // there, or a later beat navigates to a segment the wrong page supplied and
+  // can go GREEN on it. That is the fail-open this module exists to prevent,
+  // reached through the new verb.
+  const v = stuckVerdict(bindBeat, { route: '/projects/new', data: { 'onboard-session-id': 'stale-id' }, nested: [] }, 'could not press it');
+  assert.equal(v.status, 'red');
+  assert.deepEqual(v.failures, ['could not press it']);
+  assert.deepEqual(v.bindings, {});
+});
+
+test('stuckVerdict still reports the page it was stuck on, for the operator reading the run', () => {
+  const v = stuckVerdict(bindBeat, { route: '/projects/new', data: { page: 'projects' }, nested: [] }, 'no real-nav path');
+  assert.equal(v.data.page, 'projects');
+});
+
+test('the verdict carries the NESTED values it judged, so the generated doc documents them', () => {
+  // The how-to fragment renders `verdict.data` as its "what you should see"
+  // list. Reading only the page root there means a beat can assert
+  // `data-card-id="gitweave"` and the generated documentation never mentions
+  // it — the tests, demos and docs drifting apart inside the one script §3
+  // built to stop exactly that.
+  const v = beatVerdict(cardBeat, liveProjectsIndex);
+  assert.equal(v.data['card-id'], 'gitweave');
+  assert.equal(v.data.health, 'attention');
+  assert.equal(v.data.page, 'projects-index');
 });

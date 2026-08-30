@@ -146,3 +146,71 @@ test('a non-empty selection passes through untouched', () => {
   const set = [validateStory(ok)];
   assert.equal(assertNonEmptySelection(set, {}), set);
 });
+
+// ── M1-F: the beat schema can express a form-driven flow (bead forge-8vfn.2.17)
+//
+// S1 ran `red — 0/10` with not one red beat a product gap: the runner had no
+// way to say "fill these fields and press that button", so every beat after
+// the registration form died on a nav path that only appears once the form is
+// submitted. `do` is the ordered list of what the operator does.
+
+const withDo = (steps) => ({
+  ...ok,
+  beats: [{ ...ok.beats[0], do: steps }],
+});
+
+test('a beat\'s do steps survive validation, in order', () => {
+  // Kills the shipped validator, which built each beat from {act, say, expect}
+  // and dropped every other field on the floor — silently, so a story that
+  // declared a press ran as a story that pressed nothing.
+  const s = validateStory(
+    withDo([
+      { fill: 'project-name', with: 'gitweave' },
+      { press: 'toggle-onboard-advanced' },
+      { fill: 'repo-path', with: 'projects/gitweave' },
+      { press: 'onboard-project' },
+    ]),
+  );
+  assert.deepEqual(s.beats[0].do, [
+    { fill: 'project-name', with: 'gitweave' },
+    { press: 'toggle-onboard-advanced' },
+    { fill: 'repo-path', with: 'projects/gitweave' },
+    { press: 'onboard-project' },
+  ]);
+});
+
+test('a beat with no do at all still validates, and declares an empty step list', () => {
+  // Every story authored before this lane omits `do`. They must keep working,
+  // and downstream must not have to test for undefined.
+  const s = validateStory(ok);
+  assert.deepEqual(s.beats[0].do, []);
+});
+
+test('a do step that is neither a fill nor a press is rejected, naming its index', () => {
+  assert.throws(
+    () => validateStory(withDo([{ press: 'onboard-project' }, { scroll: 'down' }])),
+    /beats\[0\]\.do\[1\]/,
+  );
+});
+
+test('a fill step with no value is rejected rather than filling the field with undefined', () => {
+  assert.throws(() => validateStory(withDo([{ fill: 'project-name' }])), /beats\[0\]\.do\[0\]\.with/);
+});
+
+test('a step that is BOTH a fill and a press is rejected — the order would be ambiguous', () => {
+  // The whole reason `do` is an ordered array is that S1 beat 3 presses the
+  // Advanced toggle BETWEEN two fills. A step that does two things reintroduces
+  // exactly the ambiguity the array shape exists to remove.
+  assert.throws(
+    () => validateStory(withDo([{ fill: 'project-name', with: 'x', press: 'onboard-project' }])),
+    /beats\[0\]\.do\[0\]/,
+  );
+});
+
+test('do steps come back frozen, like the rest of the story', () => {
+  const s = validateStory(withDo([{ press: 'onboard-project' }]));
+  assert.ok(Array.isArray(s.beats[0].do), 'do must be an array before freezing means anything');
+  assert.throws(() => {
+    s.beats[0].do.push({ press: 'anything' });
+  }, TypeError);
+});

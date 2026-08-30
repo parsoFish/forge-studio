@@ -1,0 +1,175 @@
+{
+  "story": {
+    "id": "proof",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": false,
+      "budget_usd": 0
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Onboard a project from the Projects pillar"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Projects pillar",
+        "say": "The Projects pillar lists every project forge manages. Each card carries the project it stands for, so the operator can pick one without reading the page.",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true",
+            "card-type": "project",
+            "card-id": "<someProjectId>"
+          }
+        }
+      },
+      {
+        "act": "Click the first project card",
+        "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.",
+        "do": [],
+        "expect": {
+          "route": "/projects/<someProjectId>",
+          "data": {
+            "page": "projects",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Go back to the Projects pillar",
+        "say": "The Projects pillar is one click away from anywhere in Studio.",
+        "do": [],
+        "expect": {
+          "route": "/projects",
+          "data": {
+            "page": "projects-index",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Click \"Onboard a project\"",
+        "say": "Onboarding asks for the few things a Factory needs before it can build a repo: what to call it, the quality gate that judges its work, and the north star that tells a planner what it is for.",
+        "do": [],
+        "expect": {
+          "route": "/projects/new",
+          "data": {
+            "page": "projects",
+            "project-id": "new",
+            "page-ready": "true",
+            "section": "project-onboard"
+          }
+        }
+      },
+      {
+        "act": "Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press \"Onboard project →\"",
+        "say": "Registering the project lands the operator on its page. Nothing linked here a moment ago — the route exists because the button was pressed, which is how every one of forge’s operator flows works.",
+        "do": [
+          {
+            "fill": "project-name",
+            "with": "story-proof"
+          },
+          {
+            "fill": "quality-gate",
+            "with": "npm test"
+          },
+          {
+            "fill": "north-star",
+            "with": "A throwaway project proving the story runner can fill a form and press a button."
+          },
+          {
+            "press": "toggle-onboard-advanced"
+          },
+          {
+            "fill": "repo-path",
+            "with": "projects/story-proof"
+          },
+          {
+            "press": "onboard-project"
+          }
+        ],
+        "expect": {
+          "route": "/projects/story-proof",
+          "data": {
+            "page": "projects",
+            "project-id": "story-proof",
+            "page-ready": "true"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Projects pillar",
+      "say": "The Projects pillar lists every project forge manages. Each card carries the project it stands for, so the operator can pick one without reading the page.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "someProjectId": "gitweave"
+      },
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok",
+        "card-type": "project",
+        "card-id": "gitweave"
+      },
+      "frame": "frames/01-open-studio-on-the-projects-pillar.png"
+    },
+    {
+      "act": "Click the first project card",
+      "say": "The card is a real link to that project’s own page — the route is the project the previous beat found, not one written down in advance.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "page-ready": "true"
+      },
+      "frame": "frames/02-click-the-first-project-card.png"
+    },
+    {
+      "act": "Go back to the Projects pillar",
+      "say": "The Projects pillar is one click away from anywhere in Studio.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/03-go-back-to-the-projects-pillar.png"
+    },
+    {
+      "act": "Click \"Onboard a project\"",
+      "say": "Onboarding asks for the few things a Factory needs before it can build a repo: what to call it, the quality gate that judges its work, and the north star that tells a planner what it is for.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-onboard"
+      },
+      "frame": "frames/04-click-onboard-a-project.png"
+    },
+    {
+      "act": "Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press \"Onboard project →\"",
+      "say": "Registering the project lands the operator on its page. Nothing linked here a moment ago — the route exists because the button was pressed, which is how every one of forge’s operator flows works.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "projects",
+        "project-id": "story-proof",
+        "page-ready": "true"
+      },
+      "frame": "frames/05-fill-in-the-name-the-quality-gate-and-th.png"
+    }
+  ]
+}
