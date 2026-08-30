@@ -1,0 +1,405 @@
+{
+  "story": {
+    "id": "S4",
+    "ground": {
+      "project": "gitpulse",
+      "realSpawn": true,
+      "budget_usd": 25
+    },
+    "docs": {
+      "kind": "tutorial",
+      "title": "Create a new flow"
+    },
+    "beats": [
+      {
+        "act": "Open Studio on the Flows pillar",
+        "say": "Two flows, both shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
+        "do": [],
+        "expect": {
+          "route": "/flows",
+          "data": {
+            "page": "flows-index",
+            "page-ready": "true",
+            "flow-count": "2"
+          }
+        }
+      },
+      {
+        "act": "Press \"+ New flow\"",
+        "say": "The builder opens on a skeleton rather than an empty page: plan, then dev, then review. It is the shape almost every delivery pipeline has, and it is a starting point, not the answer — the whole reason to build a flow is that this particular codebase wants something the starter does not do.",
+        "do": [
+          {
+            "press": "new-flow"
+          }
+        ],
+        "expect": {
+          "route": "/flows/new",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "new",
+            "page-ready": "true",
+            "active-tab": "build",
+            "component": "flow-builder-canvas",
+            "node-count": "3",
+            "edge-count": "2"
+          }
+        }
+      },
+      {
+        "act": "Name the flow and say what it is for",
+        "say": "A flow’s goal is not decoration: it is what every agent in it is told it is working towards, so it is written before the stations are. The operator says what the flow is for in one sentence, and the header records that the flow now has one.",
+        "do": [
+          {
+            "fill": "flow-name",
+            "with": "story-s4"
+          },
+          {
+            "fill": "flow-goal",
+            "with": "Plan a change to gitpulse and take it to a reviewed verdict, with the architect drafting the initiative before any code is written."
+          }
+        ],
+        "expect": {
+          "route": "/flows/new",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "new",
+            "component": "flow-header",
+            "goal-set": "true"
+          }
+        }
+      },
+      {
+        "act": "Drag the \"architect\" agent out of the palette onto the canvas, and wire it into \"plan\"",
+        "say": "This is the act the builder exists for. The starter’s \"plan\" station is a stub; this flow wants the real Architect in front of it, so that a run can begin from an idea instead of from an initiative somebody already planned. Four stations now, three edges — and the flow has stopped being a copy of the starter.",
+        "do": [],
+        "expect": {
+          "route": "/flows/new",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "new",
+            "component": "flow-builder-canvas",
+            "node-count": "4",
+            "edge-count": "3"
+          }
+        }
+      },
+      {
+        "act": "Open Advanced and bind gitpulse’s knowledge base to the flow",
+        "say": "A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.",
+        "do": [
+          {
+            "press": "toggle-flow-advanced"
+          },
+          {
+            "fill": "kb-select",
+            "with": "gitpulse"
+          }
+        ],
+        "expect": {
+          "route": "/flows/new",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "new",
+            "section": "flow-advanced"
+          }
+        }
+      },
+      {
+        "act": "Press \"Save Flow\"",
+        "say": "Saving is where forge judges the flow rather than the operator: the stations have to resolve to real agents, the edges have to carry artifacts the next station can read, and a name already taken is refused rather than overwritten. The flow now exists as a thing with its own page.",
+        "do": [
+          {
+            "press": "save-flow"
+          }
+        ],
+        "expect": {
+          "route": "/flows/story-s4",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "story-s4",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Check the flow came out clean and can be started",
+        "say": "A saved flow is not necessarily a runnable one. This is the check the operator makes before spending money on it: forge raised no findings against any station, and it says the flow can be started — which is the same question `forge studio lint` answers at a terminal, asked from the page the flow was built on.",
+        "do": [],
+        "expect": {
+          "route": "/flows/story-s4",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "story-s4",
+            "can-start": "true"
+          }
+        }
+      },
+      {
+        "act": "Open the launcher",
+        "say": "How a flow is launched follows from what its first station is. This one begins with the Architect, so forge asks for an idea rather than for an initiative someone has already planned — which is what makes it startable against a project that has never been planned against before.",
+        "do": [],
+        "expect": {
+          "route": "/flows/story-s4",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "story-s4",
+            "section": "flow-kickoff",
+            "kickoff-kind": "idea"
+          }
+        }
+      },
+      {
+        "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
+        "say": "A flow built ten minutes ago is now dispatching a real Agent against a real repository, so the operator sets the ceiling before starting rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on.",
+        "do": [
+          {
+            "fill": "project",
+            "with": "gitpulse"
+          },
+          {
+            "fill": "idea",
+            "with": "Add a --since flag so the report covers only commits after a given date, with the date parsing tested and a documented default."
+          },
+          {
+            "fill": "cost-ceiling-usd",
+            "with": "25"
+          },
+          {
+            "press": "start-architect"
+          }
+        ],
+        "expect": {
+          "route": "/flows/story-s4",
+          "data": {
+            "page": "flow-monitor",
+            "flow-id": "story-s4",
+            "section": "new-idea",
+            "architect-session-id": "<architectSessionId>"
+          }
+        }
+      },
+      {
+        "act": "While it works, check Monitor",
+        "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". One thing is live on it — a run of a flow that did not exist at the start of this story, against a project forge has never planned against. That is the whole of S4 in a single number.",
+        "do": [],
+        "expect": {
+          "route": "/monitor",
+          "data": {
+            "page": "monitor",
+            "page-ready": "true",
+            "monitor-live": "1"
+          }
+        }
+      },
+      {
+        "act": "Open the session from Monitor and wait for the Architect to finish drafting",
+        "say": "The session is the same shared surface every kind of agent run uses, so a flow the operator built themselves is watched exactly the way the shipped ones are. When the plan is drafted the session stops and waits for a human.",
+        "do": [
+          {
+            "press": "open-session"
+          }
+        ],
+        "expect": {
+          "route": "/sessions/architect/<architectSessionId>",
+          "data": {
+            "page": "session",
+            "page-ready": "true",
+            "session-kind": "architect",
+            "session-phase": "awaiting-verdict"
+          }
+        }
+      },
+      {
+        "act": "Open the plan and stand at the verdict",
+        "say": "This is where S4 ends: a flow the operator assembled, linted and launched has produced a plan, and forge is holding it at a gate for a decision. Nothing is approved — that decision belongs to the operator, and it is S10 that makes it. What this story proves is that a flow built in the builder runs like a flow that shipped with forge.",
+        "do": [
+          {
+            "press": "open-plan"
+          }
+        ],
+        "expect": {
+          "route": "/artifact",
+          "data": {
+            "section": "architect-plan",
+            "architect-phase": "awaiting-verdict",
+            "gate-armed": "true",
+            "plan-mode": "gate"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open Studio on the Flows pillar",
+      "say": "Two flows, both shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flows-index",
+        "page-ready": "true",
+        "flow-count": "2",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/01-open-studio-on-the-flows-pillar.png"
+    },
+    {
+      "act": "Press \"+ New flow\"",
+      "say": "The builder opens on a skeleton rather than an empty page: plan, then dev, then review. It is the shape almost every delivery pipeline has, and it is a starting point, not the answer — the whole reason to build a flow is that this particular codebase wants something the starter does not do.",
+      "status": "red",
+      "failures": [
+        "could not click through to \"/flows/new\" from \"/flows/new\": locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('a[href=\"/flows/new\"]').first()\u001b[22m\n\u001b[2m    - locator resolved to <a href=\"/flows/new\" data-action=\"new-flow\" class=\"btn btn-primary\">+ New flow</a>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n. The control exists but was not actionable — obscured, disabled or detached."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "page-ready": "true",
+        "active-tab": "build"
+      },
+      "frame": "frames/02-press-new-flow.png"
+    },
+    {
+      "act": "Name the flow and say what it is for",
+      "say": "A flow’s goal is not decoration: it is what every agent in it is told it is working towards, so it is written before the stations are. The operator says what the flow is for in one sentence, and the header records that the flow now has one.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "component": "flow-header",
+        "goal-set": "true"
+      },
+      "frame": "frames/03-name-the-flow-and-say-what-it-is-for.png"
+    },
+    {
+      "act": "Drag the \"architect\" agent out of the palette onto the canvas, and wire it into \"plan\"",
+      "say": "This is the act the builder exists for. The starter’s \"plan\" station is a stub; this flow wants the real Architect in front of it, so that a run can begin from an idea instead of from an initiative somebody already planned. Four stations now, three edges — and the flow has stopped being a copy of the starter.",
+      "status": "red",
+      "failures": [
+        "data-node-count: expected \"4\", got \"3\"",
+        "data-edge-count: expected \"3\", got \"2\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "component": "flow-builder-canvas",
+        "node-count": "3",
+        "edge-count": "2"
+      },
+      "frame": "frames/04-drag-the-architect-agent-out-of-the-pale.png"
+    },
+    {
+      "act": "Open Advanced and bind gitpulse’s knowledge base to the flow",
+      "say": "A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "section": "flow-advanced"
+      },
+      "frame": "frames/05-open-advanced-and-bind-gitpulse-s-knowle.png"
+    },
+    {
+      "act": "Press \"Save Flow\"",
+      "say": "Saving is where forge judges the flow rather than the operator: the stations have to resolve to real agents, the edges have to carry artifacts the next station can read, and a name already taken is refused rather than overwritten. The flow now exists as a thing with its own page.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "page-ready": "true"
+      },
+      "frame": "frames/06-press-save-flow.png"
+    },
+    {
+      "act": "Check the flow came out clean and can be started",
+      "say": "A saved flow is not necessarily a runnable one. This is the check the operator makes before spending money on it: forge raised no findings against any station, and it says the flow can be started — which is the same question `forge studio lint` answers at a terminal, asked from the page the flow was built on.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "can-start": "true"
+      },
+      "frame": "frames/07-check-the-flow-came-out-clean-and-can-be.png"
+    },
+    {
+      "act": "Open the launcher",
+      "say": "How a flow is launched follows from what its first station is. This one begins with the Architect, so forge asks for an idea rather than for an initiative someone has already planned — which is what makes it startable against a project that has never been planned against before.",
+      "status": "red",
+      "failures": [
+        "data-kickoff-kind: expected \"idea\", got \"generic\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "section": "flow-kickoff",
+        "kickoff-kind": "generic"
+      },
+      "frame": "frames/08-open-the-launcher.png"
+    },
+    {
+      "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
+      "say": "A flow built ten minutes ago is now dispatching a real Agent against a real repository, so the operator sets the ceiling before starting rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on.",
+      "status": "red",
+      "failures": [
+        "could not fill [data-field=\"project\"] with \"gitpulse\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"project\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4"
+      },
+      "frame": "frames/09-point-the-flow-at-gitpulse-describe-the-.png"
+    },
+    {
+      "act": "While it works, check Monitor",
+      "say": "Monitor is the one surface that answers \"what is running, and what is stuck\". One thing is live on it — a run of a flow that did not exist at the start of this story, against a project forge has never planned against. That is the whole of S4 in a single number.",
+      "status": "red",
+      "failures": [
+        "data-monitor-live: expected \"1\", got \"0\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "monitor",
+        "page-ready": "true",
+        "monitor-live": "0",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/10-while-it-works-check-monitor.png"
+    },
+    {
+      "act": "Open the session from Monitor and wait for the Architect to finish drafting",
+      "say": "The session is the same shared surface every kind of agent run uses, so a flow the operator built themselves is watched exactly the way the shipped ones are. When the plan is drafted the session stops and waits for a human.",
+      "status": "red",
+      "failures": [
+        "route \"/sessions/architect/<architectSessionId>\" needs <architectSessionId>, which no earlier beat bound. A beat binds a segment by expecting `<name>` for a data-* key the product mints."
+      ],
+      "bindings": {},
+      "data": {},
+      "frame": "frames/11-open-the-session-from-monitor-and-wait-f.png"
+    },
+    {
+      "act": "Open the plan and stand at the verdict",
+      "say": "This is where S4 ends: a flow the operator assembled, linted and launched has produced a plan, and forge is holding it at a gate for a decision. Nothing is approved — that decision belongs to the operator, and it is S10 that makes it. What this story proves is that a flow built in the builder runs like a flow that shipped with forge.",
+      "status": "red",
+      "failures": [
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
+      ],
+      "bindings": {},
+      "data": {
+        "fetch-status": "ok"
+      },
+      "frame": "frames/12-open-the-plan-and-stand-at-the-verdict.png"
+    }
+  ]
+}
