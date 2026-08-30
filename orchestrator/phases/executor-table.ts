@@ -21,7 +21,7 @@ import { resolveBandGuard, BAND_CANONICAL_SLUG } from '../agent-bands.ts';
 import { runAgent } from '../run-agent.ts';
 import type { PhaseExecutor } from '../_pkg/kernel.ts';
 import { createBandRegistry } from '../_pkg/kernel.ts';
-import { BAND_GUARD_IDS } from '../_pkg/contracts.ts';
+import { BAND_GUARD_IDS, type BandGuardId } from '../_pkg/contracts.ts';
 import type { NodeExecContext } from '../flow-node-context.ts';
 import type { NodeKind } from '../flow-node-kind.ts';
 import { type FlowRunnerDeps, DEFAULT_DEPS, raceWithWedge, FORGE_ROOT } from './executor-deps.ts';
@@ -626,11 +626,22 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
  * this same change-set so the table is total over BAND_GUARD_IDS.
  */
 const AGENT_BANDS = createBandRegistry<ExecContext>(BAND_GUARD_IDS);
-AGENT_BANDS.registerBand('wi-contract', execPm);
-AGENT_BANDS.registerBand('reflection-close', execReflect);
-AGENT_BANDS.registerBand('demo-band', execDemo);
-AGENT_BANDS.registerBand('review-band', execAdversarialReview);
-AGENT_BANDS.registerBand('onboard-preflight', execOnboardPreflight);
+
+/**
+ * The registry's own `registerBand` takes a `string` — kernel cannot depend on
+ * the band vocabulary, only be handed it. Narrowing the id HERE keeps the
+ * compile-time typo check the retired `Record<BandGuardId, NodeExecutor>` table
+ * gave us, so the registry's runtime throw is a backstop for a dynamic caller
+ * rather than the only thing standing between a typo and a silently
+ * unreachable band.
+ */
+const registerBand = (id: BandGuardId, exec: NodeExecutor): void => AGENT_BANDS.registerBand(id, exec);
+
+registerBand('wi-contract', execPm);
+registerBand('reflection-close', execReflect);
+registerBand('demo-band', execDemo);
+registerBand('review-band', execAdversarialReview);
+registerBand('onboard-preflight', execOnboardPreflight);
 
 /** Exactly what is registered — the totality assertion reads this. */
 export function registeredBandIds(): readonly string[] {
