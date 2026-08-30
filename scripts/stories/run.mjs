@@ -7,7 +7,10 @@
  *
  *   npm run stories                      every story, in id order
  *   npm run stories -- --story smoke     one story
- *   npm run stories -- --costless-only   what CI runs
+ *   npm run stories -- --costless-only   every story that reaches no agent
+ *                                        (NOT what CI runs — CI names `smoke`
+ *                                        and `proof`, the two harness proofs;
+ *                                        see .github/workflows/ci.yml)
  *   npm run stories -- --approve-spend   authorise a story that spends (H2)
  *   npm run stories -- --list            print the shape, boot nothing
  *

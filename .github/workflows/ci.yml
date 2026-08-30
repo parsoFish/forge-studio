@@ -183,15 +183,30 @@ jobs:
   # `ui:journey` deliberately stays OUT: 17 journeys, host-global ports and a
   # full rewrite of demos/e2e/ make it a wave/manual gate, not a per-PR one
   # (recorded in docs/forge-ui-dom-and-harness.md).
-  # Costless operator stories (1.0.md §3.1). A story is simultaneously the
+  # The harness proof stories (1.0.md §3.1). A story is simultaneously the
   # end-to-end test, the demo clip and the usage doc, so this job is the gate
   # that keeps all three honest at once.
   #
-  # `--costless-only` is the whole selection rule: a story declaring a real
-  # spawn or a budget refuses to start without `--approve-spend` (H2), so it
-  # can never run here. FORGE_ARCHITECT_NO_SPAWN is deliberately NOT set —
-  # §3.1 forbids it for stories; the spend gate is the control, not an env
-  # var that would quietly neuter a story that is supposed to spawn.
+  # WHY THIS NAMES TWO STORIES RATHER THAN SELECTING WITH `--costless-only`.
+  # That flag's whole selection rule is "declares no real spawn and no
+  # budget", and it was written when the only two stories matching it were
+  # `smoke` and `proof` — both harness fixtures, both green. From S8 onward
+  # that stopped being true: S8 dispatches no agent, so it honestly declares
+  # `realSpawn: false, budget_usd: 0`, and it is `red — 12/18` ON PURPOSE
+  # until the library work at M4 turns it green. §3.1 says CI runs the
+  # stories that cost nothing and §3 says every story is authored red; both
+  # cannot hold for a costless gate. Running one here would leave this job
+  # red for months, and a job that is always red cannot tell a NEW regression
+  # from a known gap — the presence-of-green rule, one layer up.
+  #
+  # So CI runs the two stories that exist to prove the RUNNER, and the nine
+  # pinned operator gates are read by the M1/M4/M5/M6 exit gates, where a red
+  # story is the expected verdict rather than a broken build. Operator
+  # ruling, 2026-08-30, taken while landing S8 and S9.
+  #
+  # FORGE_ARCHITECT_NO_SPAWN is deliberately NOT set — §3.1 forbids it for
+  # stories; the spend gate is the control, not an env var that would quietly
+  # neuter a story that is supposed to spawn.
   stories:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -211,8 +226,10 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright-core install --with-deps chromium
 
-      - name: Run the costless stories
-        run: npm run stories -- --costless-only
+      - name: Run the harness proof stories
+        run: |
+          npm run stories -- --story smoke
+          npm run stories -- --story proof
 
       - name: Upload story artifacts
         if: always()
