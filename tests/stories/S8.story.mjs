@@ -123,7 +123,10 @@ const AGENT_ID = 'brain-ingest';
 
 export default {
   id: 'S8',
-  ground: { project: 'mdtoc', realSpawn: false },
+  // `budget_usd: 0` is not an omission — `validateStory` requires the field on
+  // every story, and 0 is the form `smoke` and `proof` already use for a flow
+  // that reaches no agent. It is the honest figure: nothing here spends.
+  ground: { project: 'mdtoc', realSpawn: false, budget_usd: 0 },
   docs: { kind: 'how-to', title: 'Install library components from the community' },
   beats: [
     {
