@@ -1,0 +1,644 @@
+{
+  "story": {
+    "id": "S8",
+    "ground": {
+      "project": "mdtoc",
+      "realSpawn": false,
+      "budget_usd": 0
+    },
+    "docs": {
+      "kind": "how-to",
+      "title": "Install library components from the community"
+    },
+    "beats": [
+      {
+        "act": "Open the Library and look at the shelf forge did not write",
+        "say": "Four of the Library’s shelves hold parts forge ships. The fifth holds what other people published, and nothing on it is installed — it is a catalogue, not an inventory.",
+        "do": [],
+        "expect": {
+          "route": "/library",
+          "data": {
+            "page": "library",
+            "page-ready": "true",
+            "section": "community",
+            "count": "20"
+          }
+        }
+      },
+      {
+        "act": "Press \"Browse community\"",
+        "say": "One browser over four kinds — skills, hooks, MCPs and tools. It owns no trust decision at all: everything here either installs through the page that owns it, or says exactly why it cannot.",
+        "do": [
+          {
+            "press": "browse-community"
+          }
+        ],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "item-count": "20",
+            "hub-count": "9",
+            "kind-filter": "all",
+            "last-refresh": "never"
+          }
+        }
+      },
+      {
+        "act": "Read where the twenty items actually come from",
+        "say": "Nine sources are declared and four of them contribute nothing. The count on each chip is derived per request, never claimed — so the strip is forge admitting, in the DOM, that its list of what the community publishes is a hand-curated seed rather than the sources’ own contents.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "hub-count": "9",
+            "action": "filter-hub",
+            "hub-id": "skills-sh",
+            "hub-item-count": "0",
+            "hub-declared-only": "true"
+          }
+        }
+      },
+      {
+        "act": "Refresh the registry against those sources",
+        "say": "forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.",
+        "do": [
+          {
+            "press": "refresh-community-registry"
+          }
+        ],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "section": "refresh-result",
+            "refresh-state": "refreshed"
+          }
+        }
+      },
+      {
+        "act": "Check that every declared source now contributes what it publishes",
+        "say": "This is what \"browse the registry\" has to mean: the list the operator browses is what the declared sources actually publish, not the subset somebody typed into a yaml file. A source that stays at zero after a refresh is a source forge has never really consumed.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "hub-count": "9",
+            "action": "filter-hub",
+            "hub-id": "skills-sh",
+            "hub-declared-only": "false"
+          }
+        }
+      },
+      {
+        "act": "Check that no row is still a hand-curated seed",
+        "say": "Every row currently reads \"seed — never verified\", which is the truth and is exactly the problem. A registry the operator is about to install executable code from should be able to say when it last checked.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "component": "freshness-badge",
+            "freshness": "fresh"
+          }
+        }
+      },
+      {
+        "act": "Take the first door in — press \"+ Add item\" to install by URL",
+        "say": "The registry is a declared list, and this is how the operator declares something into it. Curation is not trust: adding a row says what is browsable, never what is safe to run.",
+        "do": [
+          {
+            "press": "add-registry-item"
+          }
+        ],
+        "expect": {
+          "route": "/community/new",
+          "data": {
+            "page": "community-registry-form",
+            "form-mode": "add",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Give forge nothing but the upstream URL and what to call it",
+        "say": "Star counts and last-checked dates are not on this form on purpose — they are facts a fetch establishes, not claims an operator types. A row added here reads \"seed — never verified\" until a refresh actually checks it.",
+        "do": [
+          {
+            "fill": "registry-id",
+            "with": "story-s8-skill"
+          },
+          {
+            "fill": "registry-name",
+            "with": "Story S8 skill"
+          },
+          {
+            "fill": "registry-desc",
+            "with": "A skill the operator found in the wild and gave forge the address of, rather than one forge already vendored."
+          },
+          {
+            "fill": "registry-category",
+            "with": "testing"
+          },
+          {
+            "fill": "registry-source-url",
+            "with": "https://github.com/parsoFish/forge-studio"
+          },
+          {
+            "fill": "registry-provenance",
+            "with": "parsoFish/forge-studio"
+          },
+          {
+            "fill": "registry-tier",
+            "with": "sonnet"
+          },
+          {
+            "fill": "registry-attributed-to",
+            "with": "parsoFish/forge-studio"
+          },
+          {
+            "press": "submit-registry-item"
+          }
+        ],
+        "expect": {
+          "route": "/community/skill/story-s8-skill",
+          "data": {
+            "page": "community-detail",
+            "item-id": "story-s8-skill",
+            "page-ready": "true",
+            "item-kind": "skill",
+            "install-state": "not-installed"
+          }
+        }
+      },
+      {
+        "act": "Install the thing that URL names",
+        "say": "This is where §3’s two paths turn out to be one. forge can install what it has already vendored into its own repo; for everything else the answer is a link to somebody else’s website. Adding a row by URL makes an item browsable and never makes it installable.",
+        "do": [],
+        "expect": {
+          "route": "/community/skill/story-s8-skill",
+          "data": {
+            "page": "community-detail",
+            "item-id": "story-s8-skill",
+            "page-ready": "true",
+            "section": "install",
+            "install-action": "install"
+          }
+        }
+      },
+      {
+        "act": "Go back to the browser",
+        "say": "Back to the catalogue, to take the door that does end in an install.",
+        "do": [],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Find the one item in the registry that is executable code",
+        "say": "Twenty items and exactly one of them is a script. Skills, MCP entries and tools are instructions and addresses; a hook is code that will run with the operator’s own credentials, which is why the next two beats exist and the others do not need them.",
+        "do": [
+          {
+            "fill": "community-search",
+            "with": "block-protected"
+          }
+        ],
+        "expect": {
+          "route": "/community",
+          "data": {
+            "page": "community-browser",
+            "page-ready": "true",
+            "item-count": "1",
+            "card-type": "community-item",
+            "item-id": "block-protected-branch-push",
+            "item-kind": "hook",
+            "item-hub": "forge-seed",
+            "install-state": "not-installed"
+          }
+        }
+      },
+      {
+        "act": "Open it and read every file in the package before trusting any of it",
+        "say": "Two files: the manifest that declares what it runs on and what it may touch, and the script itself. Both are readable here, before anything is written to disk.",
+        "do": [],
+        "expect": {
+          "route": "/community/hook/block-protected-branch-push",
+          "data": {
+            "page": "community-detail",
+            "item-id": "block-protected-branch-push",
+            "page-ready": "true",
+            "item-kind": "hook",
+            "install-state": "not-installed",
+            "component": "file-package",
+            "file-count": "2",
+            "active-file": "hook.yaml"
+          }
+        }
+      },
+      {
+        "act": "Read the security scan that runs before the install exists",
+        "say": "The order is the whole point: scanned before installed, not installed then scanned. An operator who has to install something to find out whether it is safe has already run it.",
+        "do": [],
+        "expect": {
+          "route": "/community/hook/block-protected-branch-push",
+          "data": {
+            "page": "community-detail",
+            "item-id": "block-protected-branch-push",
+            "page-ready": "true",
+            "section": "security-scan",
+            "scan-verdict": "clean",
+            "finding-count": "0",
+            "critical-count": "0"
+          }
+        }
+      },
+      {
+        "act": "Take the second door in — install it by id",
+        "say": "Installed, and trusted by nobody. The browser hands the operator straight to the page that owns the decision it deliberately cannot make here.",
+        "do": [
+          {
+            "press": "install-community-item"
+          }
+        ],
+        "expect": {
+          "route": "/community/hook/block-protected-branch-push",
+          "data": {
+            "page": "community-detail",
+            "item-id": "block-protected-branch-push",
+            "page-ready": "true",
+            "install-state": "needs-review",
+            "section": "install",
+            "install-action": "open-owning"
+          }
+        }
+      },
+      {
+        "act": "Follow it to the page that owns the trust decision",
+        "say": "A hook that came from a stranger arrives in the same state as one the operator wrote by hand: on disk, described, scanned, and refused permission to run. Provenance buys it nothing.",
+        "do": [
+          {
+            "press": "open-owning-page"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/block-protected-branch-push",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "block-protected-branch-push",
+            "page-ready": "true",
+            "hook-event": "PreToolUse",
+            "hook-trust": "needs-review",
+            "hook-runnable": "false"
+          }
+        }
+      },
+      {
+        "act": "Approve it",
+        "say": "One press, and a file somebody else wrote becomes something forge will execute. That is the whole reason every beat since the search box was about reading rather than clicking.",
+        "do": [
+          {
+            "press": "approve-hook"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/block-protected-branch-push",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "block-protected-branch-push",
+            "page-ready": "true",
+            "hook-trust": "approved",
+            "hook-runnable": "true"
+          }
+        }
+      },
+      {
+        "act": "Open the Agents pillar",
+        "say": "A library part is inert until something composes it. The last question this story asks is whether the thing the operator just approved is now available to build with.",
+        "do": [],
+        "expect": {
+          "route": "/agents",
+          "data": {
+            "page": "agents-index",
+            "page-ready": "true"
+          }
+        }
+      },
+      {
+        "act": "Find the installed hook in the palette an agent composes from",
+        "say": "This is where S8 ends and where a community install becomes real: not when the bytes land, and not when the operator approves them, but when the thing shows up in the bin an agent is built out of. Anything short of that is a download.",
+        "do": [],
+        "expect": {
+          "route": "/agents/brain-ingest",
+          "data": {
+            "page": "agents",
+            "page-ready": "true",
+            "agent-id": "brain-ingest",
+            "id": "block-protected-branch-push",
+            "kind": "hook"
+          }
+        }
+      }
+    ]
+  },
+  "beats": [
+    {
+      "act": "Open the Library and look at the shelf forge did not write",
+      "say": "Four of the Library’s shelves hold parts forge ships. The fifth holds what other people published, and nothing on it is installed — it is a catalogue, not an inventory.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "community",
+        "count": "20"
+      },
+      "frame": "frames/01-open-the-library-and-look-at-the-shelf-f.png"
+    },
+    {
+      "act": "Press \"Browse community\"",
+      "say": "One browser over four kinds — skills, hooks, MCPs and tools. It owns no trust decision at all: everything here either installs through the page that owns it, or says exactly why it cannot.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-count": "20",
+        "hub-count": "9",
+        "kind-filter": "all",
+        "last-refresh": "never"
+      },
+      "frame": "frames/02-press-browse-community.png"
+    },
+    {
+      "act": "Read where the twenty items actually come from",
+      "say": "Nine sources are declared and four of them contribute nothing. The count on each chip is derived per request, never claimed — so the strip is forge admitting, in the DOM, that its list of what the community publishes is a hand-curated seed rather than the sources’ own contents.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "hub-count": "9",
+        "action": "filter-hub",
+        "hub-id": "skills-sh",
+        "hub-item-count": "0",
+        "hub-declared-only": "true"
+      },
+      "frame": "frames/03-read-where-the-twenty-items-actually-com.png"
+    },
+    {
+      "act": "Refresh the registry against those sources",
+      "say": "forge crawls nothing on its own — a refresh happens exactly when an operator asks for one, and this is the ask. It is deterministic and LLM-free: real outbound calls to the hubs, no agent turn, no verdict step, no spend.",
+      "status": "red",
+      "failures": [
+        "data-refresh-state: expected \"refreshed\", got \"refused\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "section": "refresh-result",
+        "refresh-state": "refused"
+      },
+      "frame": "frames/04-refresh-the-registry-against-those-sourc.png"
+    },
+    {
+      "act": "Check that every declared source now contributes what it publishes",
+      "say": "This is what \"browse the registry\" has to mean: the list the operator browses is what the declared sources actually publish, not the subset somebody typed into a yaml file. A source that stays at zero after a refresh is a source forge has never really consumed.",
+      "status": "red",
+      "failures": [
+        "data-hub-id: expected \"skills-sh\", got \"superpowers\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "hub-count": "9",
+        "action": "filter-hub",
+        "hub-id": "superpowers",
+        "hub-declared-only": "false"
+      },
+      "frame": "frames/05-check-that-every-declared-source-now-con.png"
+    },
+    {
+      "act": "Check that no row is still a hand-curated seed",
+      "say": "Every row currently reads \"seed — never verified\", which is the truth and is exactly the problem. A registry the operator is about to install executable code from should be able to say when it last checked.",
+      "status": "red",
+      "failures": [
+        "data-freshness: expected \"fresh\", got \"seed\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "component": "freshness-badge",
+        "freshness": "seed"
+      },
+      "frame": "frames/06-check-that-no-row-is-still-a-hand-curate.png"
+    },
+    {
+      "act": "Take the first door in — press \"+ Add item\" to install by URL",
+      "say": "The registry is a declared list, and this is how the operator declares something into it. Curation is not trust: adding a row says what is browsable, never what is safe to run.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-registry-form",
+        "form-mode": "add",
+        "page-ready": "true"
+      },
+      "frame": "frames/07-take-the-first-door-in-press-add-item-to.png"
+    },
+    {
+      "act": "Give forge nothing but the upstream URL and what to call it",
+      "say": "Star counts and last-checked dates are not on this form on purpose — they are facts a fetch establishes, not claims an operator types. A row added here reads \"seed — never verified\" until a refresh actually checks it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-detail",
+        "item-id": "story-s8-skill",
+        "page-ready": "true",
+        "item-kind": "skill",
+        "install-state": "not-installed"
+      },
+      "frame": "frames/08-give-forge-nothing-but-the-upstream-url-.png"
+    },
+    {
+      "act": "Install the thing that URL names",
+      "say": "This is where §3’s two paths turn out to be one. forge can install what it has already vendored into its own repo; for everything else the answer is a link to somebody else’s website. Adding a row by URL makes an item browsable and never makes it installable.",
+      "status": "red",
+      "failures": [
+        "data-install-action: expected \"install\", got \"browse-upstream\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "community-detail",
+        "item-id": "story-s8-skill",
+        "page-ready": "true",
+        "section": "install",
+        "install-action": "browse-upstream"
+      },
+      "frame": "frames/09-install-the-thing-that-url-names.png"
+    },
+    {
+      "act": "Go back to the browser",
+      "say": "Back to the catalogue, to take the door that does end in an install.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true"
+      },
+      "frame": "frames/10-go-back-to-the-browser.png"
+    },
+    {
+      "act": "Find the one item in the registry that is executable code",
+      "say": "Twenty items and exactly one of them is a script. Skills, MCP entries and tools are instructions and addresses; a hook is code that will run with the operator’s own credentials, which is why the next two beats exist and the others do not need them.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-browser",
+        "page-ready": "true",
+        "item-count": "1",
+        "card-type": "community-item",
+        "item-id": "block-protected-branch-push",
+        "item-kind": "hook",
+        "item-hub": "forge-seed",
+        "install-state": "not-installed"
+      },
+      "frame": "frames/11-find-the-one-item-in-the-registry-that-i.png"
+    },
+    {
+      "act": "Open it and read every file in the package before trusting any of it",
+      "say": "Two files: the manifest that declares what it runs on and what it may touch, and the script itself. Both are readable here, before anything is written to disk.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "item-kind": "hook",
+        "install-state": "not-installed",
+        "component": "file-package",
+        "file-count": "2",
+        "active-file": "hook.yaml"
+      },
+      "frame": "frames/12-open-it-and-read-every-file-in-the-packa.png"
+    },
+    {
+      "act": "Read the security scan that runs before the install exists",
+      "say": "The order is the whole point: scanned before installed, not installed then scanned. An operator who has to install something to find out whether it is safe has already run it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "section": "security-scan",
+        "scan-verdict": "clean",
+        "finding-count": "0",
+        "critical-count": "0"
+      },
+      "frame": "frames/13-read-the-security-scan-that-runs-before-.png"
+    },
+    {
+      "act": "Take the second door in — install it by id",
+      "say": "Installed, and trusted by nobody. The browser hands the operator straight to the page that owns the decision it deliberately cannot make here.",
+      "status": "red",
+      "failures": [
+        "data-install-state: expected \"needs-review\", got \"not-installed\"",
+        "data-install-action: expected \"open-owning\", got \"install\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "community-detail",
+        "item-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "install-state": "not-installed",
+        "section": "install",
+        "install-action": "install"
+      },
+      "frame": "frames/14-take-the-second-door-in-install-it-by-id.png"
+    },
+    {
+      "act": "Follow it to the page that owns the trust decision",
+      "say": "A hook that came from a stranger arrives in the same state as one the operator wrote by hand: on disk, described, scanned, and refused permission to run. Provenance buys it nothing.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "hook-detail",
+        "hook-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "hook-event": "PreToolUse",
+        "hook-trust": "needs-review",
+        "hook-runnable": "false"
+      },
+      "frame": "frames/15-follow-it-to-the-page-that-owns-the-trus.png"
+    },
+    {
+      "act": "Approve it",
+      "say": "One press, and a file somebody else wrote becomes something forge will execute. That is the whole reason every beat since the search box was about reading rather than clicking.",
+      "status": "red",
+      "failures": [
+        "data-hook-trust: expected \"approved\", got \"needs-review\"",
+        "data-hook-runnable: expected \"true\", got \"false\""
+      ],
+      "bindings": {},
+      "data": {
+        "page": "hook-detail",
+        "hook-id": "block-protected-branch-push",
+        "page-ready": "true",
+        "hook-trust": "needs-review",
+        "hook-runnable": "false"
+      },
+      "frame": "frames/16-approve-it.png"
+    },
+    {
+      "act": "Open the Agents pillar",
+      "say": "A library part is inert until something composes it. The last question this story asks is whether the thing the operator just approved is now available to build with.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "agents-index",
+        "page-ready": "true",
+        "fetch-status": "ok"
+      },
+      "frame": "frames/17-open-the-agents-pillar.png"
+    },
+    {
+      "act": "Find the installed hook in the palette an agent composes from",
+      "say": "This is where S8 ends and where a community install becomes real: not when the bytes land, and not when the operator approves them, but when the thing shows up in the bin an agent is built out of. Anything short of that is a download.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "agents",
+        "page-ready": "true",
+        "agent-id": "brain-ingest",
+        "id": "block-protected-branch-push",
+        "kind": "hook"
+      },
+      "frame": "frames/18-find-the-installed-hook-in-the-palette-a.png"
+    }
+  ]
+}
