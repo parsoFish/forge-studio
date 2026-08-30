@@ -42,7 +42,30 @@
       {
         "act": "Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press \"Onboard project →\"",
         "say": "Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. The Contract Buildout checklist says why — the contract itself is absent, and so are the secrets, demo and roadmap stages. Only the instructions are present, read from the repo's own CLAUDE.md. No Flow can be pointed at a project in this state.",
-        "do": [],
+        "do": [
+          {
+            "fill": "project-name",
+            "with": "gitweave"
+          },
+          {
+            "fill": "quality-gate",
+            "with": "python -m pytest tests/"
+          },
+          {
+            "fill": "north-star",
+            "with": "A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling."
+          },
+          {
+            "press": "toggle-onboard-advanced"
+          },
+          {
+            "fill": "repo-path",
+            "with": "projects/gitweave"
+          },
+          {
+            "press": "onboard-project"
+          }
+        ],
         "expect": {
           "route": "/projects/gitweave",
           "data": {
@@ -58,7 +81,19 @@
       {
         "act": "Open \"Brief the agent\", give it the north star and the gate command, and press \"Run onboarding agent\"",
         "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the two things only the operator knows: what the project is for, and the command that tells the truth about whether it works.",
-        "do": [],
+        "do": [
+          {
+            "fill": "northStar",
+            "with": "A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling."
+          },
+          {
+            "fill": "gateCommand",
+            "with": "python -m pytest tests/"
+          },
+          {
+            "press": "run-onboarding-agent"
+          }
+        ],
         "expect": {
           "route": "/projects/gitweave",
           "data": {
@@ -72,7 +107,11 @@
       {
         "act": "Follow \"View onboarding session\"",
         "say": "The onboarding session opens on the shared session surface. Its live artifact is the same five-stage Contract Buildout the project page shows — contract, instructions, secrets, demo, roadmap — so the operator watches the Agent close the gaps in the same vocabulary the gate will judge.",
-        "do": [],
+        "do": [
+          {
+            "press": "view-onboarding-session"
+          }
+        ],
         "expect": {
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
@@ -88,7 +127,15 @@
       {
         "act": "Answer the Agent's questions about the quality gate and what GitWeave must never touch, stage by stage, until the contract and secrets stages read present",
         "say": "This is the part only a human can supply. The Agent runs the contract criteria and invokes the Skills built for the purpose, but the decisions — what the done-signal is, which files are untouchable, which credentials the acceptance tier needs — are the operator's. The secrets stage names the environment variables and never their values.",
-        "do": [],
+        "do": [
+          {
+            "fill": "session-answer",
+            "with": "The quality gate is `python -m pytest tests/`. Never touch infra/ state or config/orgs/*.yaml — GitWeave applies those to a real GitHub organisation."
+          },
+          {
+            "press": "submit-answers"
+          }
+        ],
         "expect": {
           "route": "/sessions/onboarding/<sessionId>",
           "data": {
@@ -117,7 +164,17 @@
       {
         "act": "Return to the project, apply the auto-fixable clauses and record a decision on the ones that need your judgement",
         "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
-        "do": [],
+        "do": [
+          {
+            "press": "back-to-project"
+          },
+          {
+            "press": "apply-preflight-auto"
+          },
+          {
+            "press": "apply-clause-decision"
+          }
+        ],
         "expect": {
           "route": "/projects/gitweave",
           "data": {
@@ -146,7 +203,14 @@
       {
         "act": "Read the plan and press Approve",
         "say": "The plan is approved and committed. An existing repo that forge knew nothing about half an hour ago is now an onboarded project with a contract, a demo, a knowledge profile and an approved roadmap — ready for a Factory to build.",
-        "do": [],
+        "do": [
+          {
+            "press": "open-plan"
+          },
+          {
+            "press": "approve-plan"
+          }
+        ],
         "expect": {
           "route": "/artifact",
           "data": {
@@ -169,7 +233,9 @@
       "data": {
         "page": "projects-index",
         "page-ready": "true",
-        "fetch-status": "ok"
+        "fetch-status": "ok",
+        "card-id": "gitweave",
+        "health": "attention"
       },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
     },
@@ -182,7 +248,8 @@
       "data": {
         "page": "projects",
         "project-id": "new",
-        "page-ready": "true"
+        "page-ready": "true",
+        "section": "project-onboard"
       },
       "frame": "frames/02-click-onboard-a-project.png"
     },
@@ -206,7 +273,7 @@
       "say": "The operator does not fill the contract in by hand. An Agent does it, briefed with the two things only the operator knows: what the project is for, and the command that tells the truth about whether it works.",
       "status": "red",
       "failures": [
-        "no real-nav path to \"/projects/gitweave\" from \"/projects/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+        "could not fill [data-field=\"northStar\"] with \"A single control repository that configures and weaves together a GitHub organisation using in-repo modules, overlays and provider-native tooling.\": locator.evaluate: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-field=\"northStar\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
       "data": {},
@@ -250,7 +317,7 @@
       "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
       "status": "red",
       "failures": [
-        "no real-nav path to \"/projects/gitweave\" from \"/projects/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+        "could not press [data-action=\"back-to-project\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"back-to-project\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
       "data": {
@@ -275,7 +342,7 @@
       "say": "The plan is approved and committed. An existing repo that forge knew nothing about half an hour ago is now an onboarded project with a contract, a demo, a knowledge profile and an approved roadmap — ready for a Factory to build.",
       "status": "red",
       "failures": [
-        "no real-nav path to \"/artifact\" from \"/projects/new\": no [data-nav] pillar and no link points at it. The runner does not fall back to page.goto — an unreachable route must not pass as a beat."
+        "could not press [data-action=\"open-plan\"]: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-action=\"open-plan\"]').first()\u001b[22m\n. The control is absent, disabled, obscured or not yet rendered."
       ],
       "bindings": {},
       "data": {},
