@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf 'BLOCKED: AskUserQuestion is disabled in lane %s — the operator answers only in the orchestrator session. Send the question with SendMessage(to: \"%s\"), first line \"PARK %s: <the question>\", then END YOUR TURN; the ruling arrives as a cross-session message and wakes you.\\n' \"${LANES_LANE:-?}\" \"${LANES_T1:-?}\" \"${LANES_LANE:-?}\" >&2; exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}
