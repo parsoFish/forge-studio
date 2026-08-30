@@ -33,12 +33,36 @@
  * asserts a combination no single element makes.
  *
  * WHERE A BEAT CANNOT BE EXPRESSED it says so in a comment and stands anyway,
- * per the operator's 2026-08-29 ruling ("author the true flow"). Beats 7 and 9
- * route to `/sessions/architect/<architectSessionId>`, and that segment cannot
- * be bound: `start-architect`'s POST returns the id straight into a
+ * per the operator's 2026-08-29 ruling ("author the true flow"). Beats 10 and
+ * 12 route to `/sessions/architect/<architectSessionId>`, and that segment
+ * cannot be bound: `start-architect`'s POST returns the id straight into a
  * `router.push`, so no earlier beat can observe it — bead `forge-8vfn.5.5`,
  * already filed, not re-diagnosed here. `_1.0/stories/S2.md` names every gap
  * and its owner.
+ *
+ * OPERATOR DESIGN RULING, 2026-08-30, taken during this authoring session and
+ * pinned by beats 4-8. Asked whether the story should show contract gaps being
+ * REPAIRED after creation, the operator ruled the opposite: **the starters and
+ * project creation together should fill every contract element by default, so
+ * a created project is green on creation** — and the journey that follows is
+ * the operator REVIEWING each element for the changes this particular project
+ * wants, never closing red checks. So beats 4 and 5 keep `flow-ready: 'true'`
+ * and `resolution-failing-count: '0'` as the target state, beat 7 expects all
+ * five contract elements `present` (the scaffold leaves `secrets` absent
+ * today), and beat 8 is a review that CHANGES an element. That is the whole
+ * difference between S1 and S2: onboarding fills a contract in, creation
+ * reviews one that is already filled.
+ *
+ * THE FORK, and why it is declared rather than unrolled. §3's S2 is "a starter
+ * → repo created", singular, but the operator ruled on 2026-08-30 that the
+ * story must cover **every** project template type. §3.1's `beats[]` is a flat
+ * list with no fork, so beat 3 declares `fork` — the branch point, the field
+ * it varies and the three cases — and the runner, which keeps only the fields
+ * it knows, silently drops it and runs the `typescript-cli` case alone. The
+ * requirement therefore stands in the pinned artifact while the schema catches
+ * up, exactly as S1 stood with `do` blocks it could not yet perform. Recorded
+ * in `_1.0/stories/S2.md` as a `stories` gap: today S2 covers 1 of 3 declared
+ * starters.
  */
 
 /** The project's own reason to exist — what the operator types into the create form. */
@@ -51,6 +75,14 @@ const IDEA =
 
 /** This run's ceiling, in dollars — the same figure the ground declares. */
 const CEILING = '25';
+
+/**
+ * Every project template forge ships, read off the live create form's own
+ * `<select data-field="create-app-type">` (`data-app-type-count="3"`). Beat 3
+ * forks over all three; the runner performs `STARTERS[1]` until §3.1 gains the
+ * verb.
+ */
+const STARTERS = ['typescript-api', 'typescript-cli', 'typescript-web'];
 
 export default {
   id: 'S2',
@@ -95,9 +127,14 @@ export default {
       do: [
         { fill: 'create-name', with: 'story-S2' },
         { fill: 'create-north-star', with: NORTH_STAR },
-        { fill: 'create-app-type', with: 'typescript-cli' },
+        { fill: 'create-app-type', with: STARTERS[1] },
         { press: 'create-project' },
       ],
+      // Not in §3.1's schema yet, and dropped by `validateStory` — see THE
+      // FORK above. Every starter forge ships must reach the same green
+      // contract, and a story that proves one of three proves the flow, not
+      // the promise.
+      fork: { over: 'create-app-type', cases: STARTERS },
       expect: {
         route: '/projects/story-s2',
         data: { page: 'projects', 'project-id': 'story-s2', 'page-ready': 'true' },
@@ -137,6 +174,56 @@ export default {
         },
       },
       say: 'The panel that catches a half-onboarded repo has nothing to show. Every clause the forge project contract asks about was answered by the starter, so there is no gap for the operator to close by hand and no Agent to dispatch at one.',
+    },
+    {
+      // Fully expressible. `section` and `checklist-row-count` are the same
+      // <ul>, so the pair is answerable by one element.
+      act: 'Review the contract the starter filled in, element by element',
+      expect: {
+        route: '/projects/story-s2',
+        data: {
+          page: 'projects',
+          'project-id': 'story-s2',
+          section: 'contract-checklist',
+          'checklist-row-count': '5',
+        },
+      },
+      say: 'This is the act that makes creating a project different from onboarding one. Onboarding fills a contract in, question by question, with an Agent. Creation hands the operator one that is already filled — contract, instructions, secrets, demo, roadmap — and asks them to read it. Five elements, every one already answered by the starter.',
+    },
+    {
+      // Fully expressible; `checklist-row` and `checklist-status` are the same
+      // <li>. The scaffold leaves `secrets` `absent` today. Under the
+      // operator's 2026-08-30 ruling the starter and creation together fill
+      // EVERY element, so the beat expects `present` and the element is filled
+      // in the owning lane — the story is not bent to today's scaffold.
+      act: 'Read the secrets element — the one a starter cannot guess from a template',
+      expect: {
+        route: '/projects/story-s2',
+        data: {
+          page: 'projects',
+          'project-id': 'story-s2',
+          'checklist-row': 'secrets',
+          'checklist-status': 'present',
+        },
+      },
+      say: 'Secrets is the element a template has the least right to assume, so it is the one worth reading first. Present does not mean forge invented credentials: the element names the environment variables the acceptance tier will need, and never a value. If the starter guessed wrong, this is where the operator sees it.',
+    },
+    {
+      // NOT expressible, and deliberately left so. The project editor declares
+      // NO `data-field` on ANY input — verified live on this page: north star,
+      // gate command, demo step text, the skills search and both clause
+      // decision boxes are all bare, and the only declared handles are
+      // buttons. So a review that CHANGES an element has nothing to name, and
+      // writing an invented `data-field` would be inventing the contract this
+      // story exists to hold the product to. The beat states the operator's
+      // real act and the state it produces; `save-project` is a real
+      // `data-action`, but there is nothing to make dirty before pressing it.
+      act: 'Adjust the demo the starter wrote — this CLI needs a third step that runs the built binary — and save the project',
+      expect: {
+        route: '/projects/story-s2',
+        data: { page: 'projects', 'project-id': 'story-s2', 'step-count': '3' },
+      },
+      say: 'Reviewing is only half of it. The starter wrote a demo good enough for any typescript CLI; this project measures build stages, so its demo has to run the built binary against a fixture and show the timings. The operator changes it here and saves, and the contract the gates judge against is the one they just read.',
     },
     {
       // Fully expressible, but only because the exit is itself a
