@@ -118,3 +118,15 @@ test('it FAILS when QUARRY.md is absent — ownership has no other source', () =
   assert.equal(code, 1, out);
   assert.match(out, /does not exist/);
 });
+
+test('an UNTRACKED production file is still unowned — a file cannot dodge the gate by not being committed', () => {
+  const victim = join(ROOT, 'orchestrator/__untracked_owner_probe__.ts');
+  writeFileSync(victim, 'export const probe = 1;\n');
+  try {
+    const { code, out } = run();
+    assert.equal(code, 1, `an untracked production file must be counted unowned — got exit 0:\n${out}`);
+    assert.match(out, /unowned: orchestrator\/__untracked_owner_probe__\.ts/);
+  } finally {
+    rmSync(victim, { force: true });
+  }
+});

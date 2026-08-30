@@ -54,7 +54,15 @@ const NOT_PRODUCTION = /(\.test\.[cm]?[jt]sx?$)|(^|\/)test-fixtures\//;
  * artifacts (ADR 024 — the SKILL.md IS the agent) and move as such.
  */
 export function productionFiles(root) {
-  const out = execFileSync('git', ['ls-files', ...QUARRIED_TREES], { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  // `--others --exclude-standard` for the same reason `check-file-size.mjs`
+  // uses it: a file must not dodge the gate by not being committed yet. The
+  // two lints landed together and must see the same tree, or "unowned: 0"
+  // means something different from "115 baselined".
+  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', ...QUARRIED_TREES], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
   return out
     .split('\n')
     .filter(Boolean)

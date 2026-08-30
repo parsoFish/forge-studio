@@ -27,9 +27,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-boundaries.mjs');
 const BASELINE = join(ROOT, 'scripts/baselines/boundaries.json');
 
-const { classify, PACKAGE_RANK } = (await import(
+const { classify, PACKAGE_RANK, normalizeTarget } = (await import(
   new URL('./check-boundaries.mjs', import.meta.url).href
-)) as { classify: (from: string, to: string) => string | null; PACKAGE_RANK: Record<string, number> };
+)) as {
+  classify: (from: string, to: string) => string | null;
+  PACKAGE_RANK: Record<string, number>;
+  normalizeTarget: (from: string, resolved: string, couldNotResolve: boolean) => string | null;
+};
 
 function run(args: string[] = []): { code: number; out: string } {
   try {
@@ -125,5 +129,59 @@ test('it FAILS on a stale baseline entry — the ratchet must be tightened when 
     assert.match(out, /stale baseline entry/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('normalizeTarget applies the forge-ui tsconfig alias — an aliased escape is still an escape', () => {
+  assert.equal(normalizeTarget('forge-ui/lib/x.ts', '@/../orchestrator/config', true), 'orchestrator/config');
+  // `@/` is rooted at the studio DIRECTORY, so the escape needs one `..` per
+  // segment of that directory's path: one from `forge-ui/`, two from `apps/studio/`.
+  assert.equal(normalizeTarget('apps/studio/lib/x.ts', '@/../orchestrator/config', true), 'apps/orchestrator/config');
+  assert.equal(normalizeTarget('apps/studio/lib/x.ts', '@/../../orchestrator/config', true), 'orchestrator/config');
+  assert.equal(normalizeTarget('forge-ui/lib/x.ts', '@/components/Foo', true), 'forge-ui/components/Foo');
+  assert.equal(
+    classify('forge-ui/lib/x.ts', normalizeTarget('forge-ui/lib/x.ts', '@/../orchestrator/config', true)!),
+    'studio-beyond-contracts',
+  );
+});
+
+test('normalizeTarget maps a workspace specifier — this is how packages will import each other', () => {
+  assert.equal(normalizeTarget('packages/flows/a.ts', '@forge/kernel', true), 'packages/kernel/index.ts');
+  assert.equal(normalizeTarget('packages/flows/a.ts', '@forge/kernel/config.ts', true), 'packages/kernel/config.ts');
+  assert.equal(classify('packages/contracts/i.ts', normalizeTarget('packages/contracts/i.ts', '@forge/kernel', true)!), 'package-layer-order');
+  assert.equal(classify('apps/studio/x.ts', normalizeTarget('apps/studio/x.ts', '@forge/kernel', true)!), 'studio-beyond-contracts');
+});
+
+test('a bare npm specifier is not a path and is left alone; an unresolvable PATH is a violation', () => {
+  assert.equal(normalizeTarget('orchestrator/x.ts', '@octokit/webhooks-methods', true), '@octokit/webhooks-methods');
+  assert.equal(normalizeTarget('orchestrator/x.ts', 'gray-matter', true), 'gray-matter');
+  assert.equal(normalizeTarget('orchestrator/x.ts', './does-not-exist.ts', true), null, 'a path this lint cannot resolve is not silence');
+  assert.equal(normalizeTarget('forge-ui/lib/x.ts', '@/nope', true), 'forge-ui/nope');
+  assert.equal(normalizeTarget('orchestrator/x.ts', '@/nope', true), null, 'the alias binds only inside the studio tree');
+});
+
+test('it FAILS on an ALIASED studio -> legacy import — the shape a relative-path-only test cannot see', () => {
+  const victim = join(ROOT, 'forge-ui/lib/__alias_probe__.ts');
+  writeFileSync(victim, "import { MAX_KICKOFF_COST_CEILING_USD } from '@/../orchestrator/config';\nexport const probe = MAX_KICKOFF_COST_CEILING_USD;\n");
+  try {
+    const { code, out } = run();
+    assert.equal(code, 1, `an aliased forge-ui -> orchestrator import must fail — got exit 0:\n${out}`);
+    assert.match(out, /studio-beyond-contracts/);
+    assert.match(out, /__alias_probe__\.ts -> orchestrator\/config/);
+  } finally {
+    rmSync(victim, { force: true });
+  }
+});
+
+test('it FAILS on a workspace-specifier import from the studio tree', () => {
+  const victim = join(ROOT, 'forge-ui/lib/__ws_probe__.ts');
+  writeFileSync(victim, "import { x } from '@forge/kernel';\nexport const probe = x;\n");
+  try {
+    const { code, out } = run();
+    assert.equal(code, 1, `apps/studio may import contracts only — got exit 0:\n${out}`);
+    assert.match(out, /studio-beyond-contracts/);
+    assert.match(out, /packages\/kernel/);
+  } finally {
+    rmSync(victim, { force: true });
   }
 });

@@ -76,8 +76,10 @@ jobs:
       - name: Disabled-CTA reason ratchet
         run: node scripts/check-disabled-reason.mjs
 
-      # ADR 046 — the three structural ratchets. Each enforces a constraint
-      # docs/roadmaps/1.0.md §0 already stated as prose and nothing checked:
+      # The three structural ratchets (ADR 046, proposed — parked at H5; the
+      # constraints themselves are already on main in docs/roadmaps/1.0.md §0
+      # and the blueprint spec §8). Each enforces something §0 stated as prose
+      # and nothing checked:
       # the allow-graph, the 800-line file cap, and one owner per production
       # file. All three baseline today's tree and may only shrink; none has a
       # --write-baseline, so tightening is a deliberate, reviewable edit.

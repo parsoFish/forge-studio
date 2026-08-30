@@ -11,9 +11,14 @@ which are production artifacts ([ADR 024](docs/decisions/024-phases-as-subagents
 the `SKILL.md` **is** the agent). Test files and fixtures are excluded — a test
 travels with the module it tests.
 
-**Owner** is one of the nine packages plus the two apps of
-[ADR 046](docs/decisions/046-package-layout-and-boundary-lint.md). **Disposition** is
-how the file reaches its package at M3:
+**Owner** is one of the nine packages plus the two apps named by
+[`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md) §0 and §4 M2, and described in the
+blueprint spec
+[§3](docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md). ADR 046
+ratifies that layout and is **proposed, not yet accepted** — it is parked at the
+operator gate H5 (`1.0.md` §5), so this file cites the roadmap and the spec,
+which are on `main`, rather than an ADR that is not. **Disposition** is how the
+file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
